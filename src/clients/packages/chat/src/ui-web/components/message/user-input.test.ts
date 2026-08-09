@@ -17,9 +17,18 @@ test("composer defaults to one text line with a floating circular action", () =>
   assert.match(source, /className="[^"]*\bbg-background\b[^"]*\bshadow-sm\b[^"]*"/);
   assert.doesNotMatch(source, /bg-backgroundshadow-sm/);
   assert.match(source, /\bagw-scrollbar\b/);
-  assert.match(source, /className="absolute left-2 right-2 bottom-2 flex justify-between"/);
-  assert.match(source, /size="icon-sm"[\s\S]*?className="rounded-full"/);
+  assert.match(source, /className="absolute left-2 right-2 bottom-2 h-7 flex justify-between"/);
+  assert.match(source, /UserInput\.BottomLeft/);
+  assert.match(source, /size="icon-sm"[\s\S]*?className="rounded-full size-7"/);
   assert.match(source, /<ArrowUp className="size-5" \/>/);
+});
+
+test("insertText preserves the draft and inserts at the current selection", () => {
+  assert.match(source, /textarea\?\.selectionStart \?\? input\.length/);
+  assert.match(
+    source,
+    /input\.slice\(0, selectionStart\) \+ insertedText \+ input\.slice\(selectionEnd\)/,
+  );
 });
 
 test("suggestion descriptions use phrasing elements inside ItemDescription", () => {

@@ -17,6 +17,7 @@ public sealed class TodoToolBlock : IToolBlock
         CancellationToken cancellationToken)
     {
         var contribution = new ToolContribution();
+        contribution.PlanModeAllowedToolNames.UnionWith(Descriptor.MemberToolNames);
         contribution.ContextProviders.Add(new TodoProvider());
         var evaluatorOptions = context.EnabledToolBlockNames.Contains(ToolBlockNames.Mode)
             ? new TodoCompletionLoopEvaluatorOptions

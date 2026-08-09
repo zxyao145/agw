@@ -5,6 +5,8 @@ using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.Commands.Interrupt;
+using Agw.Agents.Execution.Commands.Mode;
+using Agw.Agents.Execution.Commands.Permission;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Shared.Exceptions;
 
@@ -24,6 +26,9 @@ public static class ExecutionCommandRegistrationExtensions
             .AddExecutionCommand<SettingCommand, SettingCommandHandler>(nameof(SettingCommand))
             .AddExecutionCommand<ExecCommand, ExecCommandHandler>(nameof(ExecCommand))
             .AddExecutionCommand<InterruptCommand, InterruptCommandHandler>(nameof(InterruptCommand))
+            .AddExecutionCommand<SetModeCommand, SetModeCommandHandler>(nameof(SetModeCommand))
+            .AddExecutionCommand<SetPermissionModeCommand, SetPermissionModeCommandHandler>(
+                nameof(SetPermissionModeCommand))
             .AddExecutionCommand<HumanResponseCommand, HumanResponseCommandHandler>(nameof(HumanResponseCommand));
 
     public static IServiceCollection AddExecutionCommand<TCommand, THandler>(

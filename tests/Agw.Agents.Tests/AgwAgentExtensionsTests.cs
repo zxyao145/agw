@@ -77,6 +77,110 @@ public sealed class AgwAgentExtensionsTests
     }
 
     [Fact]
+    public async Task AsAgwAgent_PlanModeModelRequestsPnpmFmt_DoesNotInvokeShellOrRequestApproval()
+    {
+        var invocationCount = 0;
+        var shellFunction = AIFunctionFactory.Create(
+            (Func<string, string>)(command =>
+            {
+                invocationCount++;
+                return command;
+            }),
+            new AIFunctionFactoryOptions { Name = "run_shell" });
+        var modeProvider = new AgentModeProvider(
+            new AgentModeProviderOptions { DefaultMode = "plan" });
+        var client = new IllegalShellCallChatClient();
+        var agent = client.AsAgwAgent(
+            CreateDefinition(),
+            CreateCapabilities(
+                tools: [new ApprovalRequiredAIFunction(shellFunction)],
+                contextProviders: [modeProvider, new DynamicSkillToolsProvider()],
+                planModeAllowedToolNames: new HashSet<string>(
+                    ["mode_get", "mode_set", "load_skill", "read_skill_resource"],
+                    StringComparer.OrdinalIgnoreCase)),
+            NullLoggerFactory.Instance,
+            new ServiceCollection().BuildServiceProvider());
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+
+        var response = await agent.RunAsync(
+            [new ChatMessage(ChatRole.User, "Run pnpm fmt")],
+            session,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, invocationCount);
+        Assert.DoesNotContain(
+            client.ExposedToolNames,
+            name => string.Equals(name, "run_shell", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("load_skill", client.ExposedToolNames);
+        Assert.Contains("read_skill_resource", client.ExposedToolNames);
+        Assert.DoesNotContain("run_skill_script", client.ExposedToolNames);
+        Assert.DoesNotContain(
+            response.Messages.SelectMany(static message => message.Contents),
+            static content => content is ToolApprovalRequestContent);
+        var planModeResult = Assert.Single(
+            response.Messages
+                .SelectMany(static message => message.Contents)
+                .OfType<FunctionResultContent>());
+        Assert.Contains("403_0003 PlanModeToolNotAllowed", planModeResult.Result?.ToString());
+    }
+
+    [Fact]
+    public async Task AsAgwAgent_ApprovedExecuteToolAfterSwitchingToPlan_DoesNotInvokeTool()
+    {
+        var invocationCount = 0;
+        var shellFunction = AIFunctionFactory.Create(
+            (Func<string>)(() =>
+            {
+                invocationCount++;
+                return "formatted";
+            }),
+            new AIFunctionFactoryOptions { Name = "run_shell" });
+        var modeProvider = new AgentModeProvider(
+            new AgentModeProviderOptions { DefaultMode = "execute" });
+        var client = new ApprovalShellCallChatClient();
+        var agent = client.AsAgwAgent(
+            CreateDefinition(),
+            CreateCapabilities(
+                tools: [new ApprovalRequiredAIFunction(shellFunction)],
+                contextProviders: [modeProvider],
+                planModeAllowedToolNames: new HashSet<string>(
+                    ["mode_get", "mode_set"],
+                    StringComparer.OrdinalIgnoreCase)),
+            NullLoggerFactory.Instance,
+            new ServiceCollection().BuildServiceProvider());
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var firstResponse = await agent.RunAsync(
+            [new ChatMessage(ChatRole.User, "Run pnpm fmt")],
+            session,
+            cancellationToken: TestContext.Current.CancellationToken);
+        var approvalRequest = Assert.Single(
+            firstResponse.Messages
+                .SelectMany(static message => message.Contents)
+                .OfType<ToolApprovalRequestContent>());
+
+        await modeProvider.SetModeAsync(
+            session,
+            "plan",
+            TestContext.Current.CancellationToken);
+        var secondResponse = await agent.RunAsync(
+            [
+                new ChatMessage(
+                    ChatRole.User,
+                    [approvalRequest.CreateResponse(approved: true)])
+            ],
+            session,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(0, invocationCount);
+        var result = Assert.Single(
+            secondResponse.Messages
+                .SelectMany(static message => message.Contents)
+                .OfType<FunctionResultContent>());
+        Assert.Contains("403_0003 PlanModeToolNotAllowed", result.Result?.ToString());
+        Assert.Contains("Plan mode", result.Result?.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task AsAgwAgent_InvocationWarning_EmitsOnlyAfterToolResult()
     {
         var tool = AIFunctionFactory.Create(
@@ -537,6 +641,7 @@ public sealed class AgwAgentExtensionsTests
         IReadOnlyList<AITool>? tools = null,
         IReadOnlyList<AIContextProvider>? contextProviders = null,
         IReadOnlyList<LoopEvaluator>? loopEvaluators = null,
+        IReadOnlySet<string>? planModeAllowedToolNames = null,
         IReadOnlyList<string>? toolWarnings = null,
         IReadOnlyDictionary<string, string>? toolInvocationWarnings = null) =>
         new(
@@ -546,6 +651,7 @@ public sealed class AgwAgentExtensionsTests
             contextProviders: contextProviders ?? [],
             loopEvaluators: loopEvaluators ?? [],
             autoApprovalRules: [],
+            planModeAllowedToolNames: planModeAllowedToolNames ?? new HashSet<string>(),
             toolWarnings: toolWarnings ?? [],
             toolInvocationWarnings: toolInvocationWarnings ??
                 new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
@@ -643,6 +749,113 @@ public sealed class AgwAgentExtensionsTests
                         "web_search",
                         new Dictionary<string, object?>())
                 ]);
+    }
+
+    private sealed class IllegalShellCallChatClient : IChatClient
+    {
+        public List<string> ExposedToolNames { get; } = [];
+
+        public void Dispose()
+        {
+        }
+
+        public object? GetService(Type serviceType, object? serviceKey = null) =>
+            serviceType.IsInstanceOfType(this) ? this : null;
+
+        public Task<ChatResponse> GetResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            ExposedToolNames.AddRange(options?.Tools?.Select(static tool => tool.Name) ?? []);
+            return Task.FromResult(new ChatResponse(CreateResponse(messages)));
+        }
+
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            ExposedToolNames.AddRange(options?.Tools?.Select(static tool => tool.Name) ?? []);
+            var response = CreateResponse(messages);
+            yield return new ChatResponseUpdate(response.Role, response.Contents);
+        }
+
+        private static ChatMessage CreateResponse(IEnumerable<ChatMessage> messages) =>
+            messages.SelectMany(static message => message.Contents)
+                .OfType<FunctionResultContent>()
+                .Any()
+                ? new ChatMessage(ChatRole.Assistant, "done")
+                : new ChatMessage(
+                    ChatRole.Assistant,
+                    [
+                        new FunctionCallContent(
+                            "format-call",
+                            "run_shell",
+                            new Dictionary<string, object?> { ["command"] = "pnpm fmt" })
+                    ]);
+    }
+
+    private sealed class DynamicSkillToolsProvider : AIContextProvider
+    {
+        protected override ValueTask<AIContext> ProvideAIContextAsync(
+            InvokingContext context,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(new AIContext
+            {
+                Tools =
+                [
+                    CreateFunction("load_skill"),
+                    CreateFunction("read_skill_resource"),
+                    CreateFunction("run_skill_script")
+                ]
+            });
+
+        private static AIFunction CreateFunction(string name) =>
+            AIFunctionFactory.Create(
+                (Func<string>)(() => name),
+                new AIFunctionFactoryOptions { Name = name });
+    }
+
+    private sealed class ApprovalShellCallChatClient : IChatClient
+    {
+        public void Dispose()
+        {
+        }
+
+        public object? GetService(Type serviceType, object? serviceKey = null) =>
+            serviceType.IsInstanceOfType(this) ? this : null;
+
+        public Task<ChatResponse> GetResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ChatResponse(CreateResponse(messages)));
+
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            var response = CreateResponse(messages);
+            yield return new ChatResponseUpdate(response.Role, response.Contents);
+        }
+
+        private static ChatMessage CreateResponse(IEnumerable<ChatMessage> messages) =>
+            messages.SelectMany(static message => message.Contents)
+                .OfType<FunctionResultContent>()
+                .Any()
+                ? new ChatMessage(ChatRole.Assistant, "done")
+                : new ChatMessage(
+                    ChatRole.Assistant,
+                    [
+                        new FunctionCallContent(
+                            "format-call",
+                            "run_shell",
+                            new Dictionary<string, object?>())
+                    ]);
     }
 
     private sealed class TodoFunctionCallingStubChatClient : IChatClient

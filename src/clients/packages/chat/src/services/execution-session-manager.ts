@@ -3,6 +3,8 @@ import {
   getPendingHumanGate,
   getTurnFinishedStatus,
   type ExecutionHubHandlers,
+  type AgentMode,
+  type PermissionMode,
   type ExecutionRequest,
   type ExecutionSetting,
 } from "./execution-hub";
@@ -16,7 +18,14 @@ import {
 
 type ExecutionClient = Pick<
   ExecutionHubClient,
-  "configure" | "execute" | "interrupt" | "interruptAndWait" | "submitHumanResponse" | "dispose"
+  | "configure"
+  | "execute"
+  | "setMode"
+  | "setPermissionMode"
+  | "interrupt"
+  | "interruptAndWait"
+  | "submitHumanResponse"
+  | "dispose"
 >;
 
 type ClientFactory = (handlers: ExecutionHubHandlers) => ExecutionClient;
@@ -31,6 +40,8 @@ type Entry = {
 export type ManagedExecutionHandle = {
   configure(setting: ExecutionSetting): Promise<void>;
   execute(request: ExecutionRequest): Promise<void>;
+  setMode(agentId: string, mode: AgentMode): Promise<void>;
+  setPermissionMode(permissionMode: PermissionMode): Promise<void>;
   interrupt(reason?: string): Promise<void>;
   interruptAndWait(reason?: string): Promise<void>;
   submitHumanResponse(args: {
@@ -98,6 +109,8 @@ export class ExecutionSessionManager {
           throw error;
         }
       },
+      setMode: (agentId, mode) => attachedEntry.client.setMode(agentId, mode),
+      setPermissionMode: (permissionMode) => attachedEntry.client.setPermissionMode(permissionMode),
       interrupt: (reason) => attachedEntry.client.interrupt(reason),
       interruptAndWait: (reason) => attachedEntry.client.interruptAndWait(reason),
       submitHumanResponse: (args) => attachedEntry.client.submitHumanResponse(args),

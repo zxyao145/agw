@@ -27,6 +27,10 @@ public sealed class TodoToolBlockTests
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
         var evaluator = Assert.Single(contribution.LoopEvaluators);
 
+        Assert.Equal(
+            ["todos_add", "todos_complete", "todos_get_all", "todos_get_remaining", "todos_remove"],
+            contribution.PlanModeAllowedToolNames.Order(StringComparer.Ordinal));
+
         var result = await evaluator.EvaluateAsync(
             CreateLoopContext(agent, session),
             TestContext.Current.CancellationToken);

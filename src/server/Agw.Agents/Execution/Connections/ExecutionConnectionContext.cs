@@ -1,5 +1,6 @@
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
+using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Turns;
@@ -9,10 +10,13 @@ using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
 using Agw.Shared.Exceptions;
 
+using Microsoft.Extensions.AI;
+
 namespace Agw.Agents.Execution.Connections;
 
 public sealed class ExecutionConnectionContext : IAsyncDisposable
 {
+    private const string SetModeAfterTurnActionKey = "set-mode";
     internal const string BusyMessage =
         "The previous execution is currently in progress, please wait and execute again.";
 
@@ -26,6 +30,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     private TaskProjection? _resolvedTask;
     private string? _workspace;
     private ExecutionTarget? _target;
+    private PendingModeChange? _pendingModeChange;
     private volatile bool _waitingForHuman;
 
     internal ExecutionConnectionContext(
@@ -98,6 +103,11 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             return;
         }
 
+        if (_runtime != null)
+        {
+            await _runtime.WhenIdleAsync();
+        }
+
         var agentId = command.AgentId
             ?? throw new AgwException(ErrorCodes.InvalidParam, "ExecCommand.agentId is required.");
         if (agentId == Guid.Empty)
@@ -122,20 +132,80 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             _workspace!,
             _messageSink,
             pending => _waitingForHuman = pending != null);
+        var requestedMode = command.AgentType == AgentRuntimeType.Agent &&
+            _pendingModeChange is { } pendingModeChange &&
+            pendingModeChange.AgentId == agentId
+                ? pendingModeChange.Mode
+                : null;
         var start = await _runtimeFactory.StartAsync(
             new RuntimeStartRequest(
                 target.AgentId,
                 _resolvedTask!,
                 command,
                 _runtime,
-                turnContext),
+                turnContext)
+            {
+                RequestedMode = requestedMode,
+            },
             _hostToken);
         _runtime = start.Runtime;
         _target = start.Runtime == null ? null : target;
+        if (requestedMode != null && start.Runtime != null)
+        {
+            _pendingModeChange = null;
+            await SendModeStatusAsync(agentId, requestedMode);
+        }
+
         if (start.ActiveTurn == null)
         {
             await SendErrorAsync("Agent execution could not be started.");
         }
+    }
+
+    public async Task SetModeAsync(
+        Guid agentId,
+        string mode,
+        CancellationToken cancellationToken)
+    {
+        var change = new PendingModeChange(agentId, mode);
+        _pendingModeChange = change;
+        if (_runtime is not AgentRuntime runtime ||
+            _target is not { AgentId: var targetAgentId } ||
+            targetAgentId != agentId)
+        {
+            return;
+        }
+
+        if (runtime.TryScheduleAfterTurn(
+                SetModeAfterTurnActionKey,
+                _ => ApplyQueuedModeAsync(runtime, change)))
+        {
+            return;
+        }
+
+        await _runtimeFactory.SetModeAsync(runtime, mode, cancellationToken);
+        if (_pendingModeChange == change)
+        {
+            _pendingModeChange = null;
+        }
+
+        await SendModeStatusAsync(agentId, mode);
+    }
+
+    public async Task SetPermissionModeAsync(
+        PermissionMode permissionMode,
+        CancellationToken cancellationToken)
+    {
+        Settings = (Settings ?? ExecutionSettings.CreateDefault())
+            .WithPermissionMode(permissionMode);
+        var runtime = _runtime;
+        if (runtime == null)
+        {
+            return;
+        }
+
+        await runtime.TrySetActivePermissionModeAsync(permissionMode, cancellationToken);
+        await _runtimeFactory.SetPermissionModeAsync(runtime, permissionMode, cancellationToken);
     }
 
     public async Task InterruptTurnAsync(
@@ -171,6 +241,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         _resolvedTask = null;
         _workspace = null;
         Settings = null;
+        _pendingModeChange = null;
     }
 
     internal bool PrepareForDetach()
@@ -239,10 +310,74 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             CreateMessage(new AgwTextContent { Content = message }),
             CancellationToken.None).AsTask();
 
-    private static AgwMessage CreateMessage(AgwContent content) =>
+    private async Task ApplyQueuedModeAsync(
+        AgentRuntime runtime,
+        PendingModeChange change)
+    {
+        if (!ReferenceEquals(_runtime, runtime) ||
+            _target is not { AgentId: var targetAgentId } ||
+            targetAgentId != change.AgentId ||
+            _pendingModeChange != change)
+        {
+            return;
+        }
+
+        try
+        {
+            await _runtimeFactory.SetModeAsync(runtime, change.Mode, CancellationToken.None);
+            if (_pendingModeChange != change)
+            {
+                return;
+            }
+
+            _pendingModeChange = null;
+            await SendModeStatusAsync(change.AgentId, change.Mode);
+        }
+        catch (Exception exception)
+        {
+            if (_pendingModeChange != change)
+            {
+                return;
+            }
+
+            _pendingModeChange = null;
+            await SendModeFailureAsync(change.AgentId, change.Mode, exception.Message);
+        }
+    }
+
+    private Task SendModeStatusAsync(Guid agentId, string mode) =>
+        _messageSink.WriteAsync(
+            CreateMessage(
+                new AgwTextContent { Content = $"Agent mode changed to '{mode}'." },
+                new AdditionalPropertiesDictionary
+                {
+                    ["type"] = "mode-status",
+                    ["agentId"] = agentId,
+                    ["mode"] = mode,
+                }),
+            CancellationToken.None).AsTask();
+
+    private Task SendModeFailureAsync(Guid agentId, string mode, string message) =>
+        _messageSink.WriteAsync(
+            CreateMessage(
+                new AgwTextContent { Content = message },
+                new AdditionalPropertiesDictionary
+                {
+                    ["type"] = "mode-change-failed",
+                    ["agentId"] = agentId,
+                    ["mode"] = mode,
+                }),
+            CancellationToken.None).AsTask();
+
+    private static AgwMessage CreateMessage(
+        AgwContent content,
+        AdditionalPropertiesDictionary? additionalProperties = null) =>
         new(
             Guid.CreateVersion7().ToString("D"),
             Constants.DefaultAgentAuthor,
             AiRole.System,
-            [content]);
+            [content],
+            additionalProperties);
+
+    private sealed record PendingModeChange(Guid AgentId, string Mode);
 }

@@ -104,7 +104,10 @@ export function prepareClaudeHistory(messages: AiMessage[]): {
   for (const message of messages) {
     const init = parseClaudeInitMessage(message);
     if (!init.isInit) {
-      if (!ControlMessageTypes.has(String(message.additionalProperties?.type))) {
+      if (
+        !ControlMessageTypes.has(String(message.additionalProperties?.type)) &&
+        message.additionalProperties?.presentation !== "control"
+      ) {
         visibleMessages.push(message);
       }
       continue;

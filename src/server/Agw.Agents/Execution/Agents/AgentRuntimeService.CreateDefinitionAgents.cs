@@ -88,6 +88,11 @@ public partial class AgentRuntimeService
                 capabilities.AddResource(skillsProvider);
                 capabilities.AddContextProvider(skillsProvider);
                 capabilities.AddAutoApprovalRule(AgentSkillsProvider.ReadOnlyToolsAutoApprovalRule);
+                capabilities.AddPlanModeAllowedToolNames(
+                    [
+                        AgentSkillsProvider.LoadSkillToolName,
+                        AgentSkillsProvider.ReadSkillResourceToolName
+                    ]);
             }
 
             var chatClient = provider.ProviderType switch

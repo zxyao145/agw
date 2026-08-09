@@ -21,5 +21,5 @@ public sealed class CreateAiAgentRequest
 
     public bool Resume { get; init; }
 
-    public string DefaultMode { get; init; } = "plan";
+    public string DefaultMode { get; init; } = "execute";
 }

@@ -24,6 +24,7 @@ public sealed class AgentCapabilityComposition : IAsyncDisposable
     private readonly AgentResourceLease _lease;
     private readonly List<AIContextProvider> _contextProviders;
     private readonly List<Func<ToolAutoApprovalRuleContext, ValueTask<bool>>> _autoApprovalRules;
+    private readonly HashSet<string> _planModeAllowedToolNames;
 
     internal AgentCapabilityComposition(
         IReadOnlyList<AITool> tools,
@@ -32,6 +33,7 @@ public sealed class AgentCapabilityComposition : IAsyncDisposable
         IReadOnlyList<AIContextProvider> contextProviders,
         IReadOnlyList<LoopEvaluator> loopEvaluators,
         IReadOnlyList<Func<ToolAutoApprovalRuleContext, ValueTask<bool>>> autoApprovalRules,
+        IReadOnlySet<string> planModeAllowedToolNames,
         IReadOnlyList<string> toolWarnings,
         IReadOnlyDictionary<string, string> toolInvocationWarnings,
         AgentResourceLease lease)
@@ -42,6 +44,9 @@ public sealed class AgentCapabilityComposition : IAsyncDisposable
         _contextProviders = contextProviders.ToList();
         LoopEvaluators = loopEvaluators;
         _autoApprovalRules = autoApprovalRules.ToList();
+        _planModeAllowedToolNames = new HashSet<string>(
+            planModeAllowedToolNames,
+            StringComparer.OrdinalIgnoreCase);
         ToolWarnings = toolWarnings;
         ToolInvocationWarnings = toolInvocationWarnings;
         _lease = lease;
@@ -60,6 +65,8 @@ public sealed class AgentCapabilityComposition : IAsyncDisposable
     public IReadOnlyList<Func<ToolAutoApprovalRuleContext, ValueTask<bool>>> AutoApprovalRules =>
         _autoApprovalRules;
 
+    public IReadOnlySet<string> PlanModeAllowedToolNames => _planModeAllowedToolNames;
+
     public IReadOnlyList<string> ToolWarnings { get; }
 
     public IReadOnlyDictionary<string, string> ToolInvocationWarnings { get; }
@@ -74,6 +81,21 @@ public sealed class AgentCapabilityComposition : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(rule);
         _autoApprovalRules.Add(rule);
+    }
+
+    public void AddPlanModeAllowedToolName(string toolName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(toolName);
+        _planModeAllowedToolNames.Add(toolName);
+    }
+
+    public void AddPlanModeAllowedToolNames(IEnumerable<string> toolNames)
+    {
+        ArgumentNullException.ThrowIfNull(toolNames);
+        foreach (var toolName in toolNames)
+        {
+            AddPlanModeAllowedToolName(toolName);
+        }
     }
 
     public void AddResource(IDisposable resource)

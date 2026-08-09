@@ -1,13 +1,21 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 const globalsCss = readFileSync(
   new URL("../../../../../../components/src/ui-tokens/tokens.css", import.meta.url),
   "utf8",
 );
 const mdCardSource = readFileSync(new URL("./md-card.tsx", import.meta.url), "utf8");
+const reasoningSource = readFileSync(new URL("./reasoning.tsx", import.meta.url), "utf8");
 const mathCss = readFileSync(new URL("../../../../math.css", import.meta.url), "utf8");
+
+async function renderMdCard(mdText: string, enableMath?: boolean): Promise<string> {
+  const { default: MdCard } = await import("./md-card.tsx");
+  return renderToStaticMarkup(React.createElement(MdCard, { mdText, enableMath }));
+}
 
 function getRuleBody(selector: string): string {
   const match = globalsCss.match(new RegExp(`${selector.replaceAll(".", "\\.")}\\s*\\{([^}]*)\\}`));
@@ -93,10 +101,35 @@ test("markdown tables use a bordered responsive data-table surface", () => {
 });
 
 test("markdown math uses remark-math and KaTeX", () => {
-  assert.match(mdCardSource, /remarkPlugins=\{\[remarkGfm, remarkMath\]\}/);
-  assert.match(mdCardSource, /rehypePlugins=\{\[rehypeKatex\]\}/);
+  assert.match(
+    mdCardSource,
+    /remarkPlugins=\{enableMath \? \[remarkGfm, remarkMath\] : \[remarkGfm\]\}/,
+  );
+  assert.match(mdCardSource, /rehypePlugins=\{enableMath \? \[rehypeKatex\] : \[\]\}/);
   assert.match(mdCardSource, /normalizeMathDelimiters\(mdText\)/);
   assert.match(mathCss, /@import "katex\/dist\/katex\.min\.css"/);
+});
+
+test("reasoning disables KaTeX rendering", () => {
+  assert.match(
+    reasoningSource,
+    /<MdCard mdText=\{expanded \? node\.content : preview\} enableMath=\{false\} \/>/,
+  );
+});
+
+test("markdown math remains enabled by default", async () => {
+  const html = await renderMdCard(String.raw`公式：\(x + 1\)`);
+
+  assert.match(html, /class="katex"/);
+});
+
+test("reasoning text can render without KaTeX", async () => {
+  const html = await renderMdCard("$PATH and \\alpha plus `\\beta`", false);
+
+  assert.doesNotMatch(html, /katex/);
+  assert.match(html, /\$PATH/);
+  assert.match(html, /\\alpha/);
+  assert.match(html, /\\beta/);
 });
 
 test("display math scrolls instead of overflowing the message", () => {

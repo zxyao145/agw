@@ -45,8 +45,15 @@ Execution/
 │   ├── Interrupt/
 │   │   ├── InterruptCommand.cs
 │   │   └── InterruptCommandHandler.cs
+│   ├── Mode/
+│   │   ├── SetModeCommand.cs
+│   │   └── SetModeCommandHandler.cs
+│   ├── Permission/
+│   │   ├── SetPermissionModeCommand.cs
+│   │   └── SetPermissionModeCommandHandler.cs
 │   ├── Setting/
 │   │   ├── SettingCommand.cs
+│   │   ├── PermissionMode.cs
 │   │   └── SettingCommandHandler.cs
 │   ├── ExecutionCommandDispatcher.cs
 │   └── ExecutionCommandRegistration.cs
@@ -87,13 +94,15 @@ Execution/
 
 这里按 command 垂直切片：每个子目录共置 transport contract 与对应 handler，修改一种 command 时不需要跨 `Contracts/` 和 `Commands/` 两棵目录跳转。`Abstracts/` 只保存所有切片共享的 `AgentRunCommand` 和 handler 接口；dispatcher 与注册 seam 留在 `Commands/` 根目录。
 
-`AgentRunCommand` 使用 `type` 作为 JSON discriminator，目前包含四种命令。派生类型映射不写在 contract 基类上，而由 command 的 DI 注册统一提供：
+`AgentRunCommand` 使用 `type` 作为 JSON discriminator，目前包含六种命令。派生类型映射不写在 contract 基类上，而由 command 的 DI 注册统一提供：
 
 | Command | 作用 | 是否改变 connection 状态 |
 | --- | --- | --- |
-| `SettingCommand` | 设置 project、context 和环境变量 | 是；settings 变化时清理旧 runtime、task 和 target |
+| `SettingCommand` | 设置 project、context、环境变量和默认权限策略 | 是；settings 变化时清理旧 runtime、task 和 target |
 | `ExecCommand` | 指定 Agent/Agentflow 目标和用户输入，启动一个 turn | 是；解析 task，并创建或复用 runtime |
 | `InterruptCommand` | 请求中断当前 turn | 否；只转发给当前 `ActiveTurn` |
+| `SetModeCommand` | 切换支持 mode 的 Agent | 是；空闲时立即应用，活动 turn 结束后应用最后一次请求 |
+| `SetPermissionModeCommand` | 切换工具审批策略 | 是；立即更新 settings 和当前活动 turn，不重建 runtime |
 | `HumanResponseCommand` | 提交审批或用户信息交互响应 | 否；只转发给当前 turn 的协调器 |
 
 `SettingCommand.Resume` 是服务端属性，带有 `[JsonIgnore]`。transport command 自身的等价性不包含 `Resume`；复制出的 `ExecutionSettings` 会包含它，因为 resume 变化需要使 connection-owned runtime 失效。
@@ -177,11 +186,15 @@ flowchart TB
     Dispatcher --> Setting["SettingCommandHandler"]
     Dispatcher --> Exec["ExecCommandHandler"]
     Dispatcher --> Interrupt["InterruptCommandHandler"]
+    Dispatcher --> Mode["SetModeCommandHandler"]
+    Dispatcher --> Permission["SetPermissionModeCommandHandler"]
     Dispatcher --> Human["HumanResponseCommandHandler"]
 
     Setting --> Context["ExecutionConnectionContext"]
     Exec --> Context
     Interrupt --> Context
+    Mode --> Context
+    Permission --> Context
     Human --> Context
     Context --> ProjectService["IProjectAppService"]
     Context --> TaskService["ITaskAppService"]
@@ -210,6 +223,8 @@ flowchart TB
 ### 应用 Settings
 
 `SettingCommandHandler` 只把 transport contract 转换为不可变 `ExecutionSettings`，然后调用 `ExecutionConnectionContext.ApplySettingsAsync`。Context 在活动 turn 期间返回 busy error；空闲且内容变化时释放旧 runtime，并清空 resolved task、workspace 和 target。
+
+权限策略的初始值仍由 `SettingCommand.permissionMode` 保存。运行中切换通过 `SetPermissionModeCommand` 完成，因此不会触发 settings 的 busy 检查或重建 runtime；新的策略会立即应用到当前 turn。切换到 `FullAccess` 时，待处理及后续 Tool 审批均由服务端使用 `always-tool` 自动同意，普通 HumanGate 与用户信息交互不受影响。
 
 ### 执行 Agent 或 Agentflow
 

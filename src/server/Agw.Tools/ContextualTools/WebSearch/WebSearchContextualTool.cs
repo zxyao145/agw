@@ -31,6 +31,7 @@ public sealed class WebSearchContextualTool : IContextualTool
         }
 
         var contribution = new ToolContribution();
+        contribution.PlanModeAllowedToolNames.Add(Descriptor.Name);
 
         if (context.SupportsHostedWebSearch)
         {

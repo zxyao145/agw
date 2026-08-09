@@ -65,7 +65,7 @@ public sealed class AgentCapabilityComposer
         IReadOnlyDictionary<string, string> environmentVariables,
         CancellationToken cancellationToken,
         bool supportsHostedWebSearch = false,
-        string defaultMode = "plan",
+        string defaultMode = "execute",
         Func<IReadOnlyList<Guid>, CancellationToken, ValueTask<IReadOnlyList<Microsoft.Agents.AI.AIAgent>>>?
             backgroundAgentFactory = null,
         Guid conversationId = default)
@@ -79,6 +79,7 @@ public sealed class AgentCapabilityComposer
         var loopEvaluators = new List<Microsoft.Agents.AI.LoopEvaluator>();
         var autoApprovalRules =
             new List<Func<Microsoft.Agents.AI.ToolAutoApprovalRuleContext, ValueTask<bool>>>();
+        var planModeAllowedToolNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var toolWarnings = new List<string>();
         var toolInvocationWarnings = new Dictionary<string, string>(
             StringComparer.OrdinalIgnoreCase);
@@ -94,6 +95,7 @@ public sealed class AgentCapabilityComposer
                     contextProviders,
                     loopEvaluators,
                     autoApprovalRules,
+                    planModeAllowedToolNames,
                     toolWarnings,
                     toolInvocationWarnings,
                     lease);
@@ -141,6 +143,7 @@ public sealed class AgentCapabilityComposer
                 contextProviders,
                 loopEvaluators,
                 autoApprovalRules,
+                planModeAllowedToolNames,
                 toolWarnings,
                 toolInvocationWarnings,
                 lease);
@@ -200,6 +203,7 @@ public sealed class AgentCapabilityComposer
                 contextProviders,
                 loopEvaluators,
                 autoApprovalRules,
+                planModeAllowedToolNames,
                 toolWarnings,
                 toolInvocationWarnings,
                 lease);
@@ -218,6 +222,7 @@ public sealed class AgentCapabilityComposer
                 contextProviders,
                 loopEvaluators,
                 autoApprovalRules,
+                planModeAllowedToolNames,
                 toolWarnings,
                 toolInvocationWarnings,
                 lease);
@@ -338,12 +343,14 @@ public sealed class AgentCapabilityComposer
         ICollection<Microsoft.Agents.AI.LoopEvaluator> loopEvaluators,
         ICollection<Func<Microsoft.Agents.AI.ToolAutoApprovalRuleContext, ValueTask<bool>>>
             autoApprovalRules,
+        ISet<string> planModeAllowedToolNames,
         ICollection<string> warnings,
         IDictionary<string, string> invocationWarnings,
         AgentResourceLease lease)
     {
         lease.Add(contribution);
         AddTools(tools, registeredToolNames, contribution.Tools, source);
+        planModeAllowedToolNames.UnionWith(contribution.PlanModeAllowedToolNames);
         foreach (var provider in contribution.ContextProviders)
         {
             contextProviders.Add(provider);

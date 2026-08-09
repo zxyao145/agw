@@ -37,6 +37,7 @@ export interface UserInputProps {
 interface UserInputSlots {
   topLeft: ReactNode[];
   topRight: ReactNode[];
+  bottomLeft: ReactNode[];
   help: ReactNode[];
   sender: ReactNode[];
 }
@@ -70,7 +71,7 @@ function UserInputRoot({
   onStop,
   textareaRef,
 }: UserInputRootProps) {
-  const { topLeft, topRight, help, sender } = slots;
+  const { topLeft, topRight, bottomLeft, help, sender } = slots;
   const canStop = isExecuting && Boolean(onStop);
   const isDisabled = isExecuting ? !canStop : !input.trim();
   const handleClick = () => {
@@ -111,7 +112,7 @@ function UserInputRoot({
             rows={rows}
             className={`${maxHeight} agw-scrollbar min-h-[1lh] resize-none overflow-x-hidden
             overflow-y-auto rounded-none 
-            border-0 p-0
+            border-0 p-0 mb-4
             shadow-none 
             focus-visible:ring-0 
             focus-visible:ring-offset-0`}
@@ -119,11 +120,11 @@ function UserInputRoot({
           />
 
           {/* Action button - comment mode or regular send */}
-          <div className="absolute left-2 right-2 bottom-2 flex justify-between">
-            <div></div>
+          <div className="absolute left-2 right-2 bottom-2 h-7 flex justify-between">
+            <div className="flex min-w-0 items-center">{bottomLeft}</div>
             <Button
               size="icon-sm"
-              className="rounded-full"
+              className="rounded-full size-7"
               onClick={handleClick}
               disabled={isDisabled}
             >
@@ -144,6 +145,7 @@ function getUserInputSlots(children?: ReactNode): UserInputSlots {
   const slots: UserInputSlots = {
     topLeft: [],
     topRight: [],
+    bottomLeft: [],
     help: [],
     sender: [],
   };
@@ -165,6 +167,9 @@ function getUserInputSlots(children?: ReactNode): UserInputSlots {
         break;
       case "UserInput.TopRight":
         slots.topRight.push(child);
+        break;
+      case "UserInput.BottomLeft":
+        slots.bottomLeft.push(child);
         break;
       case "UserInput.Help":
         slots.help.push(child);
@@ -264,15 +269,20 @@ function UserInputContainer({
         setSuggestions([]);
       },
       insertText: (text: string) => {
-        const newValue = text + " ";
+        const textarea = textareaRef.current;
+        const selectionStart = textarea?.selectionStart ?? input.length;
+        const selectionEnd = textarea?.selectionEnd ?? selectionStart;
+        const insertedText = `${text} `;
+        const newValue = input.slice(0, selectionStart) + insertedText + input.slice(selectionEnd);
+        const nextCursor = selectionStart + insertedText.length;
         suggestionRequestRef.current += 1;
         setInput(newValue);
         setSuggestions([]);
         setTimeout(() => {
-          const textarea = textareaRef.current;
-          if (textarea) {
-            textarea.focus();
-            textarea.setSelectionRange(newValue.length, newValue.length);
+          const currentTextarea = textareaRef.current;
+          if (currentTextarea) {
+            currentTextarea.focus();
+            currentTextarea.setSelectionRange(nextCursor, nextCursor);
           }
         }, 0);
       },
@@ -387,6 +397,15 @@ function TopRight({ children }: TopRightProps) {
 }
 TopRight.displayName = "UserInput.TopRight";
 
+interface BottomLeftProps {
+  children: ReactNode;
+}
+
+function BottomLeft({ children }: BottomLeftProps) {
+  return <>{children}</>;
+}
+BottomLeft.displayName = "UserInput.BottomLeft";
+
 // Help component
 interface HelpProps {
   children: ReactNode;
@@ -422,6 +441,7 @@ UserInputWithRef.displayName = "UserInput";
 export const UserInput = Object.assign(UserInputWithRef, {
   TopLeft: TopLeft,
   TopRight: TopRight,
+  BottomLeft: BottomLeft,
   Help: Help,
   Sender: Sender,
 });

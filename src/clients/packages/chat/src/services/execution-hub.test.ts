@@ -9,13 +9,55 @@ test("buildSettingCommand keeps target data out of settings", async () => {
       projectId: "project-1",
       contextId: "context-1",
       environmentVariables: { TOKEN: "value" },
+      permissionMode: "fullAccess",
     }),
     {
       type: "SettingCommand",
       projectId: "project-1",
       contextId: "context-1",
       environmentVariables: { TOKEN: "value" },
+      permissionMode: "fullAccess",
     },
+  );
+});
+
+test("buildSetModeCommand uses the direct execution command protocol", async () => {
+  const { buildSetModeCommand } = await import("./execution-hub" + ".ts");
+
+  assert.deepEqual(buildSetModeCommand("agent-1", "execute"), {
+    type: "SetModeCommand",
+    agentId: "agent-1",
+    mode: "execute",
+  });
+});
+
+test("buildSetPermissionModeCommand uses the dynamic permission protocol", async () => {
+  const { buildSetPermissionModeCommand } = await import("./execution-hub" + ".ts");
+
+  assert.deepEqual(buildSetPermissionModeCommand("allowSameArguments"), {
+    type: "SetPermissionModeCommand",
+    permissionMode: "allowSameArguments",
+  });
+});
+
+test("getAgentMode reads direct and tool mode status messages", async () => {
+  const { getAgentMode, isModeControlMessage } = await import("./execution-hub" + ".ts");
+  const directStatus = {
+    messageId: "mode-1",
+    role: "system" as const,
+    author: "$agw",
+    contents: [],
+    additionalProperties: { type: "mode-status", mode: "plan" },
+  };
+
+  assert.equal(getAgentMode(directStatus), "plan");
+  assert.equal(isModeControlMessage(directStatus), true);
+  assert.equal(
+    getAgentMode({
+      ...directStatus,
+      additionalProperties: { type: "tool-mode-status", mode: "execute" },
+    }),
+    "execute",
   );
 });
 
@@ -106,6 +148,37 @@ test("getPendingHumanGate parses a structured question interaction", async () =>
         ],
       },
     ],
+  });
+});
+
+test("getPendingHumanGate parses a mode change interaction", async () => {
+  const { getPendingHumanGate } = await import("./execution-hub" + ".ts");
+
+  const request = getPendingHumanGate({
+    messageId: "mode-interaction-message-1",
+    role: "system",
+    author: "Agw",
+    contents: [{ type: "TextContent", content: "Confirm mode change" }],
+    additionalProperties: {
+      type: "human-interaction-request",
+      requestId: "mode-interaction-1",
+      interactionKind: "mode-change",
+      toolName: "mode_set",
+      callId: "mode-call-1",
+      prompt: "The agent wants to switch to Execute mode.",
+      payload: { mode: "execute" },
+    },
+  });
+
+  assert.deepEqual(request, {
+    requestType: "human-interaction",
+    requestId: "mode-interaction-1",
+    mode: "interaction",
+    interactionKind: "mode-change",
+    toolName: "mode_set",
+    callId: "mode-call-1",
+    prompt: "The agent wants to switch to Execute mode.",
+    modeChange: { mode: "execute" },
   });
 });
 

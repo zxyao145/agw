@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Utils;
 
@@ -97,8 +99,21 @@ public static class AgentRunResponseUpdateExtensions
     private static AgwContent CreateFunctionResultContent(FunctionResultContent result, AdditionalPropertiesDictionary props)
     {
         props["callId"] = result.CallId;
-        var content = result.Result == null ? "" : JsonUtil.Serialize(result.Result);
+        var content = Obj2String(result.Result);
         return new AgwFunctionResultContent { Content = content, AdditionalProperties = props };
+    }
+
+
+    private static string Obj2String(object? obj)
+    {
+        var content = obj switch
+        {
+            null => "",
+            string text => text,
+            JsonElement { ValueKind: JsonValueKind.String } element => element.GetString() ?? "",
+            _ => JsonUtil.Serialize(obj)
+        };
+        return content;
     }
 }
 

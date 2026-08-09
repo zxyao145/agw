@@ -1,20 +1,26 @@
+import React from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import { normalizeMathDelimiters } from "./math-markdown";
 
-const MdCard = ({ mdText }: { mdText: string }) => {
+type MdCardProps = {
+  mdText: string;
+  enableMath?: boolean;
+};
+
+const MdCard = ({ mdText, enableMath = true }: MdCardProps) => {
   // console.log("MdCard mdText", typeof content, Array.isArray(content), content);
   // console.trace("MdCard stack");
 
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[rehypeKatex]}
+      remarkPlugins={enableMath ? [remarkGfm, remarkMath] : [remarkGfm]}
+      rehypePlugins={enableMath ? [rehypeKatex] : []}
       // ReactMarkdown  code-inspector-plugin 有冲突
       // 大概率是 code-inspector-plugin 在 dev 下改写了 JSX。
-      children={normalizeMathDelimiters(mdText)}
+      children={enableMath ? normalizeMathDelimiters(mdText) : mdText}
       components={{
         pre: ({ children }) => (
           <pre className="msg-content-md-code overflow-x-auto agw-scrollbar">{children}</pre>

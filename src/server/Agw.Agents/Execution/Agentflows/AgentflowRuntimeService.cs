@@ -4,6 +4,7 @@ using System.Text.Json;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Store;
+using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
@@ -103,16 +104,63 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
     /// <summary>
     /// 为指定 Agentflow 创建或恢复 context，并以流式消息执行工作流和处理人工审批。
     /// </summary>
-    public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
+    public IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         Guid agentflowId,
         string input,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default,
+        CancellationToken cancellationToken = default,
         Guid? projectId = null,
         string? contextId = null,
         Guid? taskId = null,
         IHumanGateApprovalHandler? humanGateApprovalHandler = null,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
-        Guid? conversationId = null)
+        Guid? conversationId = null,
+        PermissionMode? permissionMode = null) =>
+        ExecuteStreamingCoreAsync(
+            agentflowId,
+            input,
+            cancellationToken,
+            projectId,
+            contextId,
+            taskId,
+            humanGateApprovalHandler,
+            environmentVariables,
+            conversationId,
+            new PermissionModeState(permissionMode));
+
+    internal IAsyncEnumerable<AgwMessage> ExecuteStreamingWithPermissionStateAsync(
+        Guid agentflowId,
+        string input,
+        CancellationToken cancellationToken,
+        Guid? projectId,
+        string? contextId,
+        Guid? taskId,
+        IHumanGateApprovalHandler? humanGateApprovalHandler,
+        IReadOnlyDictionary<string, string>? environmentVariables,
+        Guid? conversationId,
+        PermissionModeState permissionState) =>
+        ExecuteStreamingCoreAsync(
+            agentflowId,
+            input,
+            cancellationToken,
+            projectId,
+            contextId,
+            taskId,
+            humanGateApprovalHandler,
+            environmentVariables,
+            conversationId,
+            permissionState);
+
+    private async IAsyncEnumerable<AgwMessage> ExecuteStreamingCoreAsync(
+        Guid agentflowId,
+        string input,
+        [EnumeratorCancellation] CancellationToken cancellationToken,
+        Guid? projectId,
+        string? contextId,
+        Guid? taskId,
+        IHumanGateApprovalHandler? humanGateApprovalHandler,
+        IReadOnlyDictionary<string, string>? environmentVariables,
+        Guid? conversationId,
+        PermissionModeState permissionState)
     {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
         if (agentflow == null)
@@ -132,7 +180,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                 resolvedContextId,
                 resolvedTaskId,
                 conversationId,
-                cancellationToken)
+                cancellationToken,
+                permissionState)
             .ConfigureAwait(false);
         var workflowLease = await CreateAiWorkflow(
             agentflow,
@@ -202,7 +251,11 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                             var toolApprovalGate = ToolApprovalSupport.CreateRequest(
                                 toolApprovalRequest,
                                 externalRequest.PortInfo.PortId);
-                            yield return ToolApprovalSupport.CreateMessage(toolApprovalGate);
+                            if (humanGateApprovalHandler.RequiresHumanResponse(toolApprovalGate))
+                            {
+                                yield return ToolApprovalSupport.CreateMessage(toolApprovalGate);
+                            }
+
                             var toolDecision = await humanGateApprovalHandler
                                 .WaitForApprovalAsync(toolApprovalGate, cancellationToken);
                             var response = ToolApprovalSupport.CreateResponse(toolApprovalRequest, toolDecision);
@@ -391,7 +444,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         string contextId,
         Guid? taskId,
         Guid? conversationId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        PermissionModeState permissionState)
     {
         var resolvedConversationId =
             conversationId.HasValue && conversationId.Value != Guid.Empty
@@ -405,7 +459,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             taskId,
             _sessionStateStore,
             _conversationHistoryWriter,
-            resolvedConversationId);
+            resolvedConversationId,
+            permissionState);
     }
 
     private async Task<Guid> ResolveProjectConversationIdAsync(
@@ -476,7 +531,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                 resolvedContextId,
                 taskId,
                 conversationId: null,
-                cancellationToken)
+                cancellationToken,
+                new PermissionModeState(permissionMode: null))
             .ConfigureAwait(false);
         var workflowLease = await CreateAiWorkflow(
             agentflow,

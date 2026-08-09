@@ -32,6 +32,17 @@ namespace Agw.Agents.Tests;
 public class AgentAppServiceCapabilityTests
 {
     [Fact]
+    public void CreateAiAgentRequest_DefaultMode_IsExecute()
+    {
+        var request = new CreateAiAgentRequest
+        {
+            Agent = new Agent()
+        };
+
+        Assert.Equal("execute", request.DefaultMode);
+    }
+
+    [Fact]
     public async Task ListEnabledMcpToolServersAsync_AgentAndProjectIds_DeduplicatesAndFiltersDisabledServers()
     {
         var agentServerId = Guid.CreateVersion7();

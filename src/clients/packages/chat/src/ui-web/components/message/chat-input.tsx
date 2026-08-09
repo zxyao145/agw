@@ -8,6 +8,8 @@ import { Button } from "@agw/components";
 import { Separator } from "@agw/components";
 import { searchCommand, type CommandSource } from "../../../lib/chat/search-command";
 import { searchFile } from "../../../lib/chat/search-file";
+import type { AgentMode, PermissionMode } from "../../../services/execution-hub";
+import { ChatInputToolbar } from "./chat-input-toolbar";
 import { getTrailingSuggestionTrigger } from "./suggestion-trigger";
 import { UserInput, type UserInputRef } from "./user-input";
 
@@ -21,6 +23,10 @@ interface ChatInputProps {
   onScrollToTop: () => void;
   projectId: string | null;
   commandSource: CommandSource;
+  permissionMode: PermissionMode;
+  agentMode: AgentMode;
+  onPermissionModeChange: (mode: PermissionMode) => void;
+  onAgentModeChange: (mode: AgentMode) => void;
   placeholder?: string;
   userInputRef?: React.RefObject<UserInputRef | null>;
 }
@@ -35,6 +41,10 @@ export function ChatInput({
   onScrollToTop,
   projectId,
   commandSource,
+  permissionMode,
+  agentMode,
+  onPermissionModeChange,
+  onAgentModeChange,
   placeholder,
   userInputRef: externalUserInputRef,
 }: ChatInputProps) {
@@ -71,6 +81,18 @@ export function ChatInput({
       onSuggestion={handleSuggestion}
       placeholder={placeholder}
     >
+      <UserInput.BottomLeft>
+        <ChatInputToolbar
+          commandSource={commandSource}
+          isExecuting={isExecuting}
+          isTransitioning={isTransitioning}
+          permissionMode={permissionMode}
+          agentMode={agentMode}
+          onCommandSelect={handleQuickCommand}
+          onPermissionModeChange={onPermissionModeChange}
+          onAgentModeChange={onAgentModeChange}
+        />
+      </UserInput.BottomLeft>
       <UserInput.TopRight>
         <QuickTextDialog onCommandSelect={handleQuickCommand} />
         <Separator orientation="vertical" />

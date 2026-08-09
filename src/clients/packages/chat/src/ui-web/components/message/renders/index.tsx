@@ -5,8 +5,13 @@ import Reasoning from "./reasoning";
 import TextContent from "./text-content";
 import SystemMessage from "./system-message";
 import { isResultMessage } from "../../../../lib/chat/ai-message-handlers";
+import PlanCard from "./plan-card";
 
 const renderContent = (node: MessageNode, msg: AiMessage): React.ReactNode => {
+  if (node.proposedPlan) {
+    return <PlanCard {...node.proposedPlan} />;
+  }
+
   const isTextNode = (
     [
       MessageContentType.TextContent,

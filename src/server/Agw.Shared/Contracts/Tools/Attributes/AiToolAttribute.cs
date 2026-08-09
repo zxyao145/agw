@@ -41,6 +41,11 @@ public sealed class AiToolAttribute : Attribute
     public bool RequiresConfirmation { get; set; }
 
     /// <summary>
+    /// Gets or sets whether the tool is trusted for use in Plan mode.
+    /// </summary>
+    public bool AllowInPlanMode { get; set; }
+
+    /// <summary>
     /// Gets or sets the execution timeout in milliseconds.
     /// Default is 30000 (30 seconds). Set to 0 for no timeout.
     /// </summary>

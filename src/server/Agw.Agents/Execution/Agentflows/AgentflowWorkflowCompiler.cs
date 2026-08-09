@@ -5,6 +5,7 @@ using Agw.Agents.Execution.Agentflows.Builders;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Summaries;
+using Agw.Agents.Execution.Turns;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
 
@@ -24,7 +25,8 @@ internal sealed class AgentflowAgentSessionScope
         Guid? taskId,
         AgentSessionStateStore? sessionStateStore = null,
         IConversationHistoryWriter? conversationHistoryWriter = null,
-        Guid conversationId = default)
+        Guid conversationId = default,
+        PermissionModeState? permissionState = null)
     {
         ProviderSessionState = providerSessionState;
         ProjectId = projectId;
@@ -33,6 +35,7 @@ internal sealed class AgentflowAgentSessionScope
         TaskId = taskId;
         SessionStateStore = sessionStateStore;
         ConversationHistoryWriter = conversationHistoryWriter;
+        PermissionState = permissionState ?? new PermissionModeState(permissionMode: null);
     }
 
     public IProviderSessionState ProviderSessionState { get; }
@@ -44,6 +47,8 @@ internal sealed class AgentflowAgentSessionScope
     public string ContextId { get; }
 
     public Guid? TaskId { get; }
+
+    public PermissionModeState PermissionState { get; }
 
     private AgentSessionStateStore? SessionStateStore { get; }
 
@@ -92,6 +97,7 @@ internal sealed class AgentflowAgentSessionScope
         }
 
         Initialize(session, agentflowId, nodeId);
+        PermissionState.Register(session);
         return session;
     }
 

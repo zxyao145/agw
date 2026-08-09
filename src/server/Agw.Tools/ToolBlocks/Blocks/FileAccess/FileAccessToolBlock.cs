@@ -37,6 +37,8 @@ public sealed class FileAccessToolBlock : IToolBlock
         CancellationToken cancellationToken)
     {
         var contribution = new ToolContribution();
+        contribution.PlanModeAllowedToolNames.UnionWith(
+            ["file_access_read", "file_access_ls", "file_access_grep"]);
         contribution.ContextProviders.Add(new FileAccessProvider(
             new ProjectAgentFileStore(_fileSystemResolver, context.ProjectId)));
         contribution.AutoApprovalRules.Add(FileAccessProvider.ReadOnlyToolsAutoApprovalRule);

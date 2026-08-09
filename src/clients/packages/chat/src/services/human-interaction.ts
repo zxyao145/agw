@@ -23,6 +23,14 @@ export type HumanInteractionQuestionResponse = {
   annotations?: Record<string, HumanInteractionQuestionAnnotation>;
 };
 
+export type HumanInteractionModeChange = {
+  mode: "plan" | "execute";
+};
+
+export type HumanInteractionModeChangeResponse = {
+  confirmed: true;
+};
+
 export type HumanInteractionQuestionResultItem = {
   question: string;
   answer: string | null;
@@ -72,6 +80,13 @@ export function parseHumanInteractionQuestions(
   }
 
   return questions;
+}
+
+export function parseHumanInteractionModeChange(
+  payload: unknown,
+): HumanInteractionModeChange | null {
+  if (!isRecord(payload)) return null;
+  return payload.mode === "plan" || payload.mode === "execute" ? { mode: payload.mode } : null;
 }
 
 export function getHumanInteractionQuestionResult(

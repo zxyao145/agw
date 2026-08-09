@@ -82,6 +82,15 @@ test("shared Chat owns canonical message filtering, grouping, usage, and managed
   assert.match(managerSource, /private readonly entries = new Map/);
 });
 
+test("shared Chat defaults agent mode to Execute without a persisted mode snapshot", async () => {
+  const source = await readFile(CHAT_URL, "utf8");
+
+  assert.match(source, /const DEFAULT_AGENT_MODE: AgentMode = "execute"/);
+  assert.match(source, /return DEFAULT_AGENT_MODE;/);
+  assert.match(source, /confirmedAgentModeRef\.current = DEFAULT_AGENT_MODE/);
+  assert.match(source, /setAgentMode\(DEFAULT_AGENT_MODE\)/);
+});
+
 test("shared Chat keeps unmatched human interactions in the fallback approval overlay", async () => {
   const source = await readFile(CHAT_URL, "utf8");
 

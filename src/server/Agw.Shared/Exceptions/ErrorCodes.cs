@@ -79,6 +79,7 @@ public static class ErrorCodes
     public static readonly ErrorCode InvalidAdminCredentials = new(401_0004, "Invalid administrator credentials.", HttpStatusCode.Unauthorized);
 
     public static readonly ErrorCode InteractiveAdminRequired = new(403_0002, "An interactive administrator session is required.", HttpStatusCode.Forbidden);
+    public static readonly ErrorCode PlanModeToolNotAllowed = new(403_0003, "Tool is not available in plan mode.", HttpStatusCode.Forbidden);
 
     public static readonly ErrorCode FileNotFound = new(404_0001, "File was not found.", HttpStatusCode.NotFound);
     public static readonly ErrorCode DirectoryNotFound = new(404_0002, "Directory was not found.", HttpStatusCode.NotFound);

@@ -1,8 +1,12 @@
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
+using System.Text.Json;
 
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.Commands.Interrupt;
+using Agw.Agents.Execution.Commands.Mode;
+using Agw.Agents.Execution.Commands.Permission;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Messaging;
@@ -13,6 +17,10 @@ using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Projects;
+
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
@@ -124,6 +132,132 @@ public class ExecutionCommandHandlerTests
 
         var content = Assert.IsType<AgwTextContent>(Assert.Single(sink.Messages).Contents[0]);
         Assert.Equal("No matching HumanGate request is waiting for this response.", content.Content);
+    }
+
+    [Fact]
+    public async Task SetModeCommand_BeforeRuntime_IsAppliedBeforeFirstTurn()
+    {
+        var sink = new CapturingSink();
+        var runtimeFactory = new FakeRuntimeFactory();
+        var agentId = Guid.CreateVersion7();
+        await using var context = CreateContext(
+            runtimeFactory,
+            CreateTask("mode-context"),
+            sink: sink);
+
+        await new SetModeCommandHandler().HandleAsync(
+            new SetModeCommand { AgentId = agentId, Mode = "execute" },
+            context,
+            TestContext.Current.CancellationToken);
+        await context.StartTurnAsync(
+            CreateExecCommand(agentId),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("execute", Assert.Single(runtimeFactory.StartRequests).RequestedMode);
+        var status = Assert.Single(sink.Messages);
+        Assert.Equal("mode-status", status.AdditionalProperties?["type"]?.ToString());
+        Assert.Equal("execute", status.AdditionalProperties?["mode"]?.ToString());
+    }
+
+    [Fact]
+    public async Task SetModeCommand_DuringActiveTurn_AppliesLatestModeAfterTurnFinishes()
+    {
+        var sink = new CapturingSink();
+        var runtimeFactory = new ModeTestRuntimeFactory();
+        var agentId = Guid.CreateVersion7();
+        await using var context = CreateContext(
+            runtimeFactory,
+            CreateTask("mode-context"),
+            sink: sink);
+        await context.StartTurnAsync(
+            CreateExecCommand(agentId),
+            TestContext.Current.CancellationToken);
+        var handler = new SetModeCommandHandler();
+
+        await handler.HandleAsync(
+            new SetModeCommand { AgentId = agentId, Mode = "plan" },
+            context,
+            TestContext.Current.CancellationToken);
+        await handler.HandleAsync(
+            new SetModeCommand { AgentId = agentId, Mode = "execute" },
+            context,
+            TestContext.Current.CancellationToken);
+
+        Assert.Empty(runtimeFactory.ModeChanges);
+        runtimeFactory.CompleteHeldTurn();
+        await runtimeFactory.Runtime.WhenIdleAsync();
+
+        Assert.Equal(["execute"], runtimeFactory.ModeChanges);
+        var status = Assert.Single(sink.Messages);
+        Assert.Equal("mode-status", status.AdditionalProperties?["type"]?.ToString());
+        Assert.Equal("execute", status.AdditionalProperties?["mode"]?.ToString());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("unknown")]
+    public async Task SetModeCommand_InvalidMode_ThrowsInvalidParam(string mode)
+    {
+        await using var context = CreateContext(new FakeRuntimeFactory(), CreateTask("mode-context"));
+
+        var exception = await Assert.ThrowsAsync<Agw.Shared.Exceptions.AgwException>(() =>
+            new SetModeCommandHandler().HandleAsync(
+                new SetModeCommand { AgentId = Guid.CreateVersion7(), Mode = mode },
+                context,
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(Agw.Shared.Exceptions.ErrorCodes.InvalidParam.Code, exception.Code);
+    }
+
+    [Fact]
+    public async Task SetPermissionModeCommand_BeforeRuntime_UpdatesSettings()
+    {
+        await using var context = CreateContext(new FakeRuntimeFactory(), CreateTask("permission-context"));
+
+        await new SetPermissionModeCommandHandler().HandleAsync(
+            new SetPermissionModeCommand { PermissionMode = PermissionMode.AllowSameArguments },
+            context,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(PermissionMode.AllowSameArguments, context.Settings!.PermissionMode);
+    }
+
+    [Fact]
+    public async Task SetPermissionModeCommand_DuringActiveTurn_AppliesImmediately()
+    {
+        var runtimeFactory = new PermissionTestRuntimeFactory();
+        await using var context = CreateContext(
+            runtimeFactory,
+            CreateTask("permission-context"));
+        await context.StartTurnAsync(
+            CreateExecCommand(Guid.CreateVersion7()),
+            TestContext.Current.CancellationToken);
+
+        await new SetPermissionModeCommandHandler().HandleAsync(
+            new SetPermissionModeCommand { PermissionMode = PermissionMode.FullAccess },
+            context,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(PermissionMode.FullAccess, context.Settings!.PermissionMode);
+        Assert.Equal([PermissionMode.FullAccess], runtimeFactory.ActiveChanges);
+        Assert.Equal([PermissionMode.FullAccess], runtimeFactory.RuntimeChanges);
+
+        runtimeFactory.CompleteHeldTurn();
+        await runtimeFactory.Runtime.WhenIdleAsync();
+    }
+
+    [Fact]
+    public async Task SetPermissionModeCommand_MissingMode_ThrowsInvalidParam()
+    {
+        await using var context = CreateContext(new FakeRuntimeFactory(), CreateTask("permission-context"));
+
+        var exception = await Assert.ThrowsAsync<Agw.Shared.Exceptions.AgwException>(() =>
+            new SetPermissionModeCommandHandler().HandleAsync(
+                new SetPermissionModeCommand(),
+                context,
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(Agw.Shared.Exceptions.ErrorCodes.InvalidParam.Code, exception.Code);
     }
 
     [Fact]
@@ -314,6 +448,128 @@ public class ExecutionCommandHandlerTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
     }
+
+    private sealed class ModeTestRuntimeFactory : IRuntimeFactory
+    {
+        private readonly TaskCompletionSource _turnCompletion = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public ModeTestRuntimeFactory()
+        {
+            Runtime = new AgentRuntime(
+                NullLogger.Instance,
+                new ModeTestAgent(),
+                new ModeTestSession(),
+                Guid.CreateVersion7(),
+                "mode-context",
+                sessionStateScope: null);
+        }
+
+        public AgentRuntime Runtime { get; }
+
+        public List<string> ModeChanges { get; } = [];
+
+        public Task<RuntimeStartResult> StartAsync(
+            RuntimeStartRequest request,
+            CancellationToken cancellationToken)
+        {
+            var activeTurn = new ActiveTurn(
+                _turnCompletion.Task,
+                new CancellationTokenSource());
+            Runtime.TryStartTurn(activeTurn);
+            return Task.FromResult(new RuntimeStartResult(Runtime, activeTurn));
+        }
+
+        public Task SetModeAsync(
+            RuntimeBase runtime,
+            string mode,
+            CancellationToken cancellationToken)
+        {
+            Assert.Same(Runtime, runtime);
+            ModeChanges.Add(mode);
+            return Task.CompletedTask;
+        }
+
+        public void CompleteHeldTurn() => _turnCompletion.TrySetResult();
+    }
+
+    private sealed class PermissionTestRuntimeFactory : IRuntimeFactory
+    {
+        private readonly TaskCompletionSource _turnCompletion = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TestRuntime Runtime { get; } = new();
+
+        public List<PermissionMode> ActiveChanges { get; } = [];
+
+        public List<PermissionMode> RuntimeChanges { get; } = [];
+
+        public Task<RuntimeStartResult> StartAsync(
+            RuntimeStartRequest request,
+            CancellationToken cancellationToken)
+        {
+            var activeTurn = new ActiveTurn(
+                _turnCompletion.Task,
+                new CancellationTokenSource(),
+                setPermissionModeAsync: (permissionMode, _) =>
+                {
+                    ActiveChanges.Add(permissionMode);
+                    return ValueTask.CompletedTask;
+                });
+            Runtime.TryStartTurn(activeTurn);
+            return Task.FromResult(new RuntimeStartResult(Runtime, activeTurn));
+        }
+
+        public Task SetPermissionModeAsync(
+            RuntimeBase runtime,
+            PermissionMode permissionMode,
+            CancellationToken cancellationToken)
+        {
+            Assert.Same(Runtime, runtime);
+            RuntimeChanges.Add(permissionMode);
+            return Task.CompletedTask;
+        }
+
+        public void CompleteHeldTurn() => _turnCompletion.TrySetResult();
+    }
+
+    private sealed class ModeTestAgent : AIAgent
+    {
+        protected override ValueTask<AgentSession> CreateSessionCoreAsync(
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult<AgentSession>(new ModeTestSession());
+
+        protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
+            AgentSession session,
+            JsonSerializerOptions? jsonSerializerOptions,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
+
+        protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
+            JsonElement sessionState,
+            JsonSerializerOptions? jsonSerializerOptions,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult<AgentSession>(new ModeTestSession());
+
+        protected override Task<AgentResponse> RunCoreAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session,
+            AgentRunOptions? options,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session,
+            AgentRunOptions? options,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            await Task.Yield();
+            yield break;
+        }
+    }
+
+    private sealed class ModeTestSession : AgentSession;
 
     private sealed class FakeProjectAppService : IProjectAppService
     {

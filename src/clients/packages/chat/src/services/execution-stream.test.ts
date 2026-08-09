@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import ts from "typescript";
+import { parseProposedPlan } from "../ui-web/components/message/proposed-plan";
 
 const EXECUTION_STREAM_URL = new URL("./execution-stream.ts", import.meta.url);
 
@@ -149,6 +150,44 @@ test("text deltas merge only when scope, id, role, and author all match", async 
   assert.equal(merged.length, 1);
   assert.equal(merged[0].contents[0].content, "hello");
   assert.equal(differentAuthor.length, 3);
+});
+
+test("streamed proposed plan tags merge into one restorable Plan Card payload", async () => {
+  const { mergeStreamingMessage } = await loadExecutionStream();
+  const first = textMessage({
+    messageId: "plan-1",
+    role: "assistant",
+    author: "agent",
+    content: "<proposed_plan>\n# Pl",
+    streamingScopeId: "user-1",
+  });
+  const withBody = mergeStreamingMessage(
+    [first],
+    textMessage({
+      messageId: "plan-1",
+      role: "assistant",
+      author: "agent",
+      content: "an\n\n1. Inspect\n</proposed_",
+      streamingScopeId: "user-1",
+    }),
+  );
+  const completed = mergeStreamingMessage(
+    withBody,
+    textMessage({
+      messageId: "plan-1",
+      role: "assistant",
+      author: "agent",
+      content: "plan>",
+      streamingScopeId: "user-1",
+    }),
+  );
+
+  assert.equal(completed.length, 1);
+  assert.deepEqual(parseProposedPlan(completed[0].contents[0].content as string), {
+    markdown: "# Plan\n\n1. Inspect",
+    trailingMarkdown: "",
+    isClosed: true,
+  });
 });
 
 test("messages before the first user receive independent fallback scopes", async () => {
