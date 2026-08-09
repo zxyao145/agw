@@ -17,10 +17,7 @@ public static class AgentRunResponseUpdateExtensions
     {
         if (chatMessage == null) return null;
 
-        var contents = chatMessage.Contents
-            .Select(ConvertContent)
-            .OfType<AgwContent>()
-            .ToList();
+        var contents = ConvertContents(chatMessage.Contents, chatMessage.AdditionalProperties);
 
         return new AgwMessage(
             chatMessage.MessageId ?? "",
@@ -38,10 +35,7 @@ public static class AgentRunResponseUpdateExtensions
     {
         if (update == null) return null;
 
-        var contents = update.Contents
-            .Select(ConvertContent)
-            .OfType<AgwContent>()
-            .ToList();
+        var contents = ConvertContents(update.Contents, update.AdditionalProperties);
 
         return new AgwMessage(
             update.MessageId ?? "",
@@ -50,6 +44,17 @@ public static class AgentRunResponseUpdateExtensions
             contents,
             update.AdditionalProperties
         );
+    }
+
+    private static List<AgwContent> ConvertContents(
+        IEnumerable<AIContent> contents,
+        AdditionalPropertiesDictionary? messageProperties)
+    {
+        return contents
+            .WithoutBlankTextualContent(messageProperties)
+            .Select(ConvertContent)
+            .OfType<AgwContent>()
+            .ToList();
     }
 
     private static AgwContent? ConvertContent(AIContent content)
