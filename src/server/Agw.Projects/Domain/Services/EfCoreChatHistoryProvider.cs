@@ -4,11 +4,11 @@ using System.Text.Json.Serialization.Metadata;
 
 using Agw.Projects.Domain.Services;
 using Agw.Shared;
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
 
 using Microsoft.Agents.AI;
@@ -269,7 +269,10 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(messages);
-        var persistableMessages = messages.Where(HasContent).ToList();
+        var persistableMessages = messages
+            .Select(RemoveBlankTextualContent)
+            .OfType<ChatMessage>()
+            .ToList();
         if (persistableMessages.Count == 0)
         {
             return;
@@ -373,14 +376,25 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         IsResult(message) || IsToolMessage(message);
 
     private static bool IsToolMessage(ChatMessage message) =>
-        message.AdditionalProperties?.TryGetValue("type", out var type) == true &&
-        ToolMessageTypes.IsToolMessage(type?.ToString());
+        message.AdditionalProperties.IsToolMessage();
 
-    private static bool HasContent(ChatMessage message) =>
-        IsToolMessage(message) ||
-        message.Contents.Any(content =>
-            content is not TextContent textContent ||
-            !string.IsNullOrWhiteSpace(textContent.Text));
+    private static ChatMessage? RemoveBlankTextualContent(ChatMessage message)
+    {
+        var contents = message.Contents.WithoutBlankTextualContent(message.AdditionalProperties);
+        if (contents.Count == 0)
+        {
+            return null;
+        }
+
+        if (contents.Count == message.Contents.Count)
+        {
+            return message;
+        }
+
+        var filteredMessage = message.Clone();
+        filteredMessage.Contents = contents;
+        return filteredMessage;
+    }
 
     private static bool HasHistoryScope(ProjectConversationChatHistory record, string? historyScope)
     {

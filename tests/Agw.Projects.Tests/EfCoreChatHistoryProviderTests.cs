@@ -722,18 +722,43 @@ public class EfCoreChatHistoryProviderTests
                 new ChatMessage(ChatRole.Assistant, "   "),
                 new ChatMessage(
                     ChatRole.Assistant,
-                    [new FunctionCallContent("call-1", "read_file", new Dictionary<string, object?>())])
+                    [new TextReasoningContent("\t")]),
+                new ChatMessage(
+                    ChatRole.Assistant,
+                    [
+                        new TextContent(string.Empty),
+                        new TextReasoningContent(" "),
+                        new FunctionCallContent("call-1", "read_file", new Dictionary<string, object?>())
+                    ]),
+                new ChatMessage(
+                    ChatRole.Assistant,
+                    [new TextContent(string.Empty), new TextContent("hello")]),
+                new ChatMessage(
+                    ChatRole.Assistant,
+                    [new TextReasoningContent("kept reasoning")])
             ],
             cancellationToken);
 
         await using var verifyContext = new AgwDbContext(options);
-        var record = await verifyContext.ProjectConversationChatHistories.SingleAsync(cancellationToken);
-        var persisted = JsonSerializer.Deserialize<ChatMessage>(
-            record.ConversationPayload!,
-            new JsonSerializerOptions(JsonSerializerDefaults.Web));
-        Assert.NotNull(persisted);
-        var functionCall = Assert.IsType<FunctionCallContent>(Assert.Single(persisted.Contents));
-        Assert.Equal("call-1", functionCall.CallId);
+        var records = await verifyContext.ProjectConversationChatHistories
+            .OrderBy(record => record.ConversationSequence)
+            .ToListAsync(cancellationToken);
+        var persisted = records
+            .Select(record => JsonSerializer.Deserialize<ChatMessage>(
+                record.ConversationPayload!,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web))!)
+            .ToList();
+        Assert.Collection(
+            persisted,
+            message => Assert.Equal(
+                "call-1",
+                Assert.IsType<FunctionCallContent>(Assert.Single(message.Contents)).CallId),
+            message => Assert.Equal(
+                "hello",
+                Assert.IsType<TextContent>(Assert.Single(message.Contents)).Text),
+            message => Assert.Equal(
+                "kept reasoning",
+                Assert.IsType<TextReasoningContent>(Assert.Single(message.Contents)).Text));
     }
 
     [Fact]
