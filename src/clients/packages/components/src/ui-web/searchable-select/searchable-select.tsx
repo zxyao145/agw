@@ -1,12 +1,24 @@
 "use client";
 
 import * as React from "react";
-import { CheckIcon, ChevronDownIcon } from "lucide-react";
 
 import { Button } from "../shadcn/button";
-import { Input } from "../shadcn/input";
+import {
+  Combobox,
+  ComboboxCollection,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxGroup,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxLabel,
+  ComboboxList,
+  ComboboxTrigger,
+} from "../shadcn/combobox";
 import { Label } from "../shadcn/label";
-import { Popover, PopoverContent, PopoverTrigger } from "../shadcn/popover";
+
+const MODAL_CONTENT_SELECTOR =
+  '[data-slot="dialog-content"], [data-slot="sheet-content"], [data-slot="drawer-content"]';
 
 export type SearchableSelectOption = {
   value: string;
@@ -61,19 +73,9 @@ export function SearchableSelect(props: SearchableSelectProps) {
   } = props;
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
+  const rootRef = React.useRef<HTMLDivElement | null>(null);
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
-
-  React.useEffect(() => {
-    if (!open) return;
-
-    const t = window.setTimeout(() => {
-      searchInputRef.current?.focus();
-    }, 0);
-
-    return () => {
-      window.clearTimeout(t);
-    };
-  }, [open]);
+  const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(null);
 
   const selectedValues = React.useMemo(
     () => (props.multiple ? props.value : props.value ? [props.value] : []),
@@ -84,31 +86,30 @@ export function SearchableSelect(props: SearchableSelectProps) {
     [options, selectedValues],
   );
 
-  const filteredOptions = React.useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q.length) return options;
-    return options.filter((opt) => {
-      const haystack =
-        `${opt.title} ${opt.subtitle ?? ""} ${opt.group ?? ""} ${opt.value}`.toLowerCase();
-      return haystack.includes(q);
-    });
-  }, [options, search]);
+  const optionsByValue = React.useMemo(
+    () => new Map(options.map((option) => [option.value, option])),
+    [options],
+  );
   const groupedOptions = React.useMemo(() => {
-    const groups: { label: string | null; options: SearchableSelectOption[] }[] = [];
+    const groups: { value: string; label: string | null; items: string[] }[] = [];
 
-    for (const option of filteredOptions) {
+    for (const option of options) {
       const groupLabel = option.group ?? null;
       let group = groups.find((item) => item.label === groupLabel);
       if (!group) {
-        group = { label: groupLabel, options: [] };
+        group = {
+          value: groupLabel ?? "__searchable-select-ungrouped__",
+          label: groupLabel,
+          items: [],
+        };
         groups.push(group);
       }
 
-      group.options.push(option);
+      group.items.push(option.value);
     }
 
     return groups;
-  }, [filteredOptions]);
+  }, [options]);
 
   const triggerText = props.multiple
     ? (props.selectionText ??
@@ -117,6 +118,10 @@ export function SearchableSelect(props: SearchableSelectProps) {
   const hasSelection = selectedValues.length > 0;
 
   const handleOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) {
+      setPortalContainer(rootRef.current?.closest<HTMLElement>(MODAL_CONTENT_SELECTOR) ?? null);
+    }
+
     setOpen(nextOpen);
     if (!nextOpen) {
       setSearch("");
@@ -134,32 +139,13 @@ export function SearchableSelect(props: SearchableSelectProps) {
     setSearch("");
   };
 
-  const handleOptionSelect = (optionValue: string) => {
-    if (props.multiple) {
-      props.onValueChange(
-        props.value.includes(optionValue)
-          ? props.value.filter((value) => value !== optionValue)
-          : [...props.value, optionValue],
-      );
-      return;
-    }
-
-    props.onValueChange(optionValue);
-    if (!props.multiple) {
-      setOpen(false);
-      setSearch("");
-    }
-  };
-
   const itemClassName =
-    "flex w-full cursor-pointer select-none items-start gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground";
+    "cursor-pointer items-start py-1.5 text-left data-highlighted:bg-accent data-highlighted:text-accent-foreground";
 
-  return (
-    <div className="grid gap-2">
-      {label ? <Label htmlFor={id}>{label}</Label> : null}
-
-      <Popover modal open={open} onOpenChange={handleOpenChange}>
-        <PopoverTrigger asChild>
+  const comboboxContent = (
+    <>
+      <ComboboxTrigger
+        render={
           <Button
             id={id}
             type="button"
@@ -167,99 +153,140 @@ export function SearchableSelect(props: SearchableSelectProps) {
             size={size}
             className="w-full justify-between gap-2 overflow-hidden font-normal"
             disabled={disabled}
-            aria-haspopup="listbox"
-            aria-expanded={open}
             aria-label={ariaLabel ?? label}
-          >
-            <span className={hasSelection ? "truncate" : "truncate text-muted-foreground"}>
-              {triggerText}
-            </span>
-            <ChevronDownIcon className="size-4 opacity-50" />
-          </Button>
-        </PopoverTrigger>
+          />
+        }
+      >
+        <span className={hasSelection ? "truncate" : "truncate text-muted-foreground"}>
+          {triggerText}
+        </span>
+      </ComboboxTrigger>
 
-        <PopoverContent
-          className="w-(--radix-popover-trigger-width) p-2"
-          align="start"
-          role="listbox"
-          aria-label={ariaLabel ?? label}
-          aria-multiselectable={props.multiple || undefined}
-        >
-          <div className="pb-2">
-            <Input
-              ref={searchInputRef}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={searchPlaceholder}
-              onKeyDown={(e) => {
-                e.stopPropagation();
-                if (e.key === "Escape") {
-                  setOpen(false);
-                  setSearch("");
-                }
-              }}
-            />
-          </div>
+      <ComboboxContent
+        portalContainer={portalContainer}
+        initialFocus={searchInputRef}
+        className="min-w-(--anchor-width)"
+        aria-label={ariaLabel ?? label}
+      >
+        <ComboboxInput
+          ref={searchInputRef}
+          showTrigger={false}
+          placeholder={searchPlaceholder}
+          aria-label={searchPlaceholder}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.stopPropagation();
+            }
+          }}
+        />
 
-          {errorMessage ? (
-            <div className="px-2 py-1.5 text-sm text-destructive">{errorMessage}</div>
-          ) : isLoading ? (
-            <div className="px-2 py-1.5 text-sm text-muted-foreground">Loading...</div>
-          ) : (
-            <div className="max-h-64 overflow-auto agw-scrollbar">
-              {clearable && hasSelection && (
-                <button
-                  type="button"
-                  className={`${itemClassName} text-muted-foreground`}
-                  onClick={handleClear}
-                >
-                  Clear selection
-                </button>
-              )}
+        {errorMessage ? (
+          <div className="px-3 py-2 text-sm text-destructive">{errorMessage}</div>
+        ) : isLoading ? (
+          <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>
+        ) : (
+          <>
+            {clearable && hasSelection ? (
+              <button
+                type="button"
+                className="mx-1 mt-1 flex w-[calc(100%-0.5rem)] cursor-pointer items-center rounded-sm px-2 py-1.5 text-left text-sm text-muted-foreground outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground"
+                onClick={handleClear}
+              >
+                Clear selection
+              </button>
+            ) : null}
 
-              {filteredOptions.length === 0 ? (
-                <div className="px-2 py-1.5 text-sm text-muted-foreground">No results.</div>
-              ) : (
-                groupedOptions.map((group) => (
-                  <React.Fragment key={group.label ?? "ungrouped"}>
-                    {group.label ? (
-                      <div className="mt-3 px-2 py-1.5 text-xs text-muted-foreground">
-                        {group.label}
-                      </div>
-                    ) : null}
-                    {group.options.map((opt) => {
-                      const isSelected = selectedValues.includes(opt.value);
+            <ComboboxEmpty>No results.</ComboboxEmpty>
+            <ComboboxList
+              className="max-h-64 agw-scrollbar"
+              aria-label={ariaLabel ?? label}
+              aria-multiselectable={props.multiple || undefined}
+            >
+              {(group: (typeof groupedOptions)[number]) => (
+                <ComboboxGroup key={group.value} items={group.items}>
+                  {group.label ? <ComboboxLabel>{group.label}</ComboboxLabel> : null}
+                  <ComboboxCollection>
+                    {(optionValue: string) => {
+                      const option = optionsByValue.get(optionValue);
+                      if (!option) return null;
 
                       return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          role="option"
-                          aria-selected={isSelected}
+                        <ComboboxItem
+                          key={option.value}
+                          value={option.value}
                           className={itemClassName}
-                          onClick={() => handleOptionSelect(opt.value)}
                         >
                           <div className="min-w-0">
-                            <div className="truncate text-sm">{opt.title}</div>
-                            {opt.subtitle ? (
+                            <div className="truncate text-sm">{option.title}</div>
+                            {option.subtitle ? (
                               <div className="truncate font-mono text-xs text-muted-foreground">
-                                {opt.subtitle}
+                                {option.subtitle}
                               </div>
                             ) : null}
                           </div>
-                          <span className="ml-auto flex size-4 shrink-0 items-center justify-center">
-                            {isSelected ? <CheckIcon className="size-4" /> : null}
-                          </span>
-                        </button>
+                        </ComboboxItem>
                       );
-                    })}
-                  </React.Fragment>
-                ))
+                    }}
+                  </ComboboxCollection>
+                </ComboboxGroup>
               )}
-            </div>
-          )}
-        </PopoverContent>
-      </Popover>
+            </ComboboxList>
+          </>
+        )}
+      </ComboboxContent>
+    </>
+  );
+
+  const comboboxProps = {
+    items: groupedOptions,
+    open,
+    onOpenChange: handleOpenChange,
+    inputValue: search,
+    onInputValueChange: (nextSearch: string, details: { reason: string }) => {
+      if (details.reason !== "item-press") {
+        setSearch(nextSearch);
+      }
+    },
+    filter: (optionValue: string, query: string) => {
+      const option = optionsByValue.get(optionValue);
+      if (!option) return false;
+
+      const haystack =
+        `${option.title} ${option.subtitle ?? ""} ${option.group ?? ""} ${option.value}`.toLowerCase();
+      return haystack.includes(query.trim().toLowerCase());
+    },
+    itemToStringLabel: (optionValue: string) =>
+      optionsByValue.get(optionValue)?.title ?? optionValue,
+    itemToStringValue: (optionValue: string) => optionValue,
+    disabled,
+    modal: true,
+  };
+
+  return (
+    <div ref={rootRef} className="grid gap-2">
+      {label ? <Label htmlFor={id}>{label}</Label> : null}
+      {props.multiple ? (
+        <Combobox<string, true>
+          {...comboboxProps}
+          multiple
+          value={props.value}
+          onValueChange={props.onValueChange}
+        >
+          {comboboxContent}
+        </Combobox>
+      ) : (
+        <Combobox<string>
+          {...comboboxProps}
+          value={props.value || null}
+          onValueChange={(nextValue) => {
+            props.onValueChange(nextValue ?? "");
+            setOpen(false);
+            setSearch("");
+          }}
+        >
+          {comboboxContent}
+        </Combobox>
+      )}
     </div>
   );
 }
