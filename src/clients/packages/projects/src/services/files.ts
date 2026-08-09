@@ -5,13 +5,18 @@
 
 import { ApiError, apiDelete, apiGet, apiPost } from "@agw/api";
 
+export type FileGitStatus = "added" | "modified" | "deleted" | "untracked";
+export type GitDiffScope = "staged" | "unstaged";
+
 export interface FileItem {
   name: string;
   path: string;
   type: "file" | "directory";
   size?: number;
   modifiedTime?: string;
-  gitStatus?: "added" | "modified" | "deleted" | "untracked";
+  gitStatus?: FileGitStatus | null;
+  gitStagedStatus?: FileGitStatus | null;
+  gitUnstagedStatus?: FileGitStatus | null;
   children?: FileItem[]; // For tree structure support (used in recursive mode)
 }
 
@@ -99,10 +104,14 @@ export interface GitDiffResponse {
 /**
  * Get git diff for the specified file
  */
-export async function getFileDiff(projectId: string, path: string): Promise<GitDiffResponse> {
+export async function getFileDiff(
+  projectId: string,
+  path: string,
+  scope?: GitDiffScope,
+): Promise<GitDiffResponse> {
   try {
     return (await apiGet("/api/files/diff", {
-      params: { query: { projectId, path } },
+      params: { query: { projectId, path, scope } },
     })) as GitDiffResponse;
   } catch (err) {
     throw toFileApiError(err, "Failed to get diff");

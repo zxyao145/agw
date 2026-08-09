@@ -1,4 +1,4 @@
-import type { FileItem, GitDiffResponse } from "../../../services/files";
+import type { FileItem, GitDiffResponse, GitDiffScope } from "../../../services/files";
 
 export const CommentSide = {
   Current: "current",
@@ -24,6 +24,19 @@ export const GitStatus = {
 
 export type GitStatus = NonNullable<FileItem["gitStatus"]>;
 
+export interface FileTreeItem extends Omit<FileItem, "children"> {
+  children?: FileTreeItem[];
+  changeCount?: number;
+  gitScope?: GitDiffScope;
+}
+
+export interface GitChangeGroup {
+  scope: GitDiffScope;
+  label: string;
+  fileCount: number;
+  items: FileTreeItem[];
+}
+
 export const CommentSideLabel: Record<CommentSide, string> = {
   [CommentSide.Current]: "current",
   [CommentSide.Original]: "original",
@@ -48,8 +61,8 @@ export interface LineComment {
 
 export interface FileTreeNodeProps {
   projectId: string;
-  item: FileItem;
-  onFileSelect?: (path: string) => void;
+  item: FileTreeItem;
+  onFileSelect?: (path: string, scope?: GitDiffScope) => void;
   level: number;
   diffMode: boolean;
   recursiveMode: boolean;
@@ -73,6 +86,7 @@ export interface DiffViewerProps {
   filePath?: string;
   comments?: LineComment[];
   setComments?: React.Dispatch<React.SetStateAction<LineComment[]>>;
+  scope?: GitDiffScope;
 }
 
 export interface UnChangedFileProps {
