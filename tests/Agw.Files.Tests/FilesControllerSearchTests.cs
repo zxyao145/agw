@@ -139,7 +139,8 @@ public class FilesControllerSearchTests
 
         public Task<GitDiffResult> GetDiffAsync(
             string filePath,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            GitDiffScope scope = GitDiffScope.All)
         {
             return Task.FromResult(new GitDiffResult(false, "", false, null, null));
         }

@@ -1996,6 +1996,13 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -7935,7 +7942,9 @@
           "name",
           "path",
           "type",
-          "gitStatus"
+          "gitStatus",
+          "gitStagedStatus",
+          "gitUnstagedStatus"
         ],
         "type": "object",
         "properties": {
@@ -7965,6 +7974,18 @@
             "format": "date-time"
           },
           "gitStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "gitStagedStatus": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "gitUnstagedStatus": {
             "type": [
               "null",
               "string"

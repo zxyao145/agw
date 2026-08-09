@@ -16,7 +16,13 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { cn } from "@agw/components";
-import { deleteFile, listFiles, resetFile, type FileItem } from "../../../services/files";
+import {
+  deleteFile,
+  listFiles,
+  resetFile,
+  type FileItem,
+  type GitDiffScope,
+} from "../../../services/files";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +33,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@agw/components";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@agw/components";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -35,7 +42,15 @@ import {
   ContextMenuTrigger,
 } from "@agw/components";
 import { toast } from "sonner";
-import { FileItemType, FileTreeNodeProps, GitStatus, GitStatusBadgeLabel } from "./types";
+import { formatFileCount } from "./git-change-tree";
+import {
+  FileItemType,
+  FileTreeNodeProps,
+  GitStatus,
+  GitStatusBadgeLabel,
+  type FileTreeItem,
+  type GitChangeGroup,
+} from "./types";
 
 const getFileIcon = (fileName: string) => {
   const ext = fileName.split(".").pop()?.toLowerCase();
@@ -93,7 +108,7 @@ function FileTreeNode({
   );
   // Use item.children if available (pre-built tree), otherwise empty for lazy loading
   const initialChildren = item.children || [];
-  const [children, setChildren] = React.useState<FileItem[]>(initialChildren);
+  const [children, setChildren] = React.useState<FileTreeItem[]>(initialChildren);
   const [isLoading, setIsLoading] = React.useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
@@ -134,7 +149,7 @@ function FileTreeNode({
 
   const handleClick = () => {
     if (item.type === FileItemType.File && onFileSelect) {
-      onFileSelect(item.path);
+      onFileSelect(item.path, item.gitScope);
     } else {
       handleToggle();
     }
@@ -228,6 +243,12 @@ function FileTreeNode({
             >
               {item.name}
             </span>
+
+            {item.type === FileItemType.Directory && item.changeCount !== undefined && (
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {formatFileCount(item.changeCount)}
+              </span>
+            )}
 
             {/* Git status indicator */}
             {item.gitStatus && (
@@ -339,7 +360,7 @@ export function ExplorerFileTree({
   rootItems: FileItem[];
   onlyDiff: boolean;
   recursiveMode: boolean;
-  onFileSelect: (filePath: string) => void;
+  onFileSelect: (filePath: string, scope?: GitDiffScope) => void;
   onFileDeleted: (filePath: string) => void;
   onFileReset: (filePath: string) => void;
 }) {
@@ -355,6 +376,86 @@ export function ExplorerFileTree({
           diffMode={onlyDiff}
           recursiveMode={recursiveMode}
           defaultExpanded={onlyDiff && recursiveMode}
+          onFileDeleted={onFileDeleted}
+          onFileReset={onFileReset}
+        />
+      ))}
+    </div>
+  );
+}
+
+function GitChangeGroupSection({
+  projectId,
+  group,
+  onFileSelect,
+  onFileDeleted,
+  onFileReset,
+}: {
+  projectId: string;
+  group: GitChangeGroup;
+  onFileSelect: (filePath: string, scope?: GitDiffScope) => void;
+  onFileDeleted: (filePath: string) => void;
+  onFileReset: (filePath: string) => void;
+}) {
+  const [isExpanded, setIsExpanded] = React.useState(true);
+
+  return (
+    <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="flex w-full items-center gap-1 rounded-sm px-2 py-1.5 text-left hover:bg-accent hover:text-accent-foreground"
+        >
+          {isExpanded ? (
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+          )}
+          <span className="text-sm font-semibold">{group.label}</span>
+          <span className="text-sm text-muted-foreground">{formatFileCount(group.fileCount)}</span>
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        {group.items.map((item) => (
+          <FileTreeNode
+            projectId={projectId}
+            key={`${group.scope}:${item.path}`}
+            item={item}
+            onFileSelect={onFileSelect}
+            level={0}
+            diffMode={true}
+            recursiveMode={true}
+            defaultExpanded={true}
+            onFileDeleted={onFileDeleted}
+            onFileReset={onFileReset}
+          />
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+export function ExplorerGitChangeTree({
+  projectId,
+  groups,
+  onFileSelect,
+  onFileDeleted,
+  onFileReset,
+}: {
+  projectId: string;
+  groups: GitChangeGroup[];
+  onFileSelect: (filePath: string, scope?: GitDiffScope) => void;
+  onFileDeleted: (filePath: string) => void;
+  onFileReset: (filePath: string) => void;
+}) {
+  return (
+    <div className="file-tree space-y-1">
+      {groups.map((group) => (
+        <GitChangeGroupSection
+          projectId={projectId}
+          key={group.scope}
+          group={group}
+          onFileSelect={onFileSelect}
           onFileDeleted={onFileDeleted}
           onFileReset={onFileReset}
         />

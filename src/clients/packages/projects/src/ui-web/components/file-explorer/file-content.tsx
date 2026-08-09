@@ -1,4 +1,4 @@
-import type { GitDiffResponse } from "../../../services/files";
+import type { GitDiffResponse, GitDiffScope } from "../../../services/files";
 import { DiffViewer } from "./diff-viewer";
 import FileError from "./file-error";
 import FileHeader from "./file-header";
@@ -17,6 +17,7 @@ interface FileContentProps {
   comments: LineComment[];
   setComments: React.Dispatch<React.SetStateAction<LineComment[]>>;
   fileContent: string;
+  diffScope?: GitDiffScope;
 }
 
 export default function FileContent({
@@ -28,6 +29,7 @@ export default function FileContent({
   comments,
   setComments,
   fileContent,
+  diffScope,
 }: FileContentProps) {
   return (
     <div className="flex h-full min-w-0 w-full flex-col px-2">
@@ -56,6 +58,7 @@ export default function FileContent({
                     filePath={selectedFile}
                     comments={comments}
                     setComments={setComments}
+                    scope={diffScope}
                   />
                 )
               ) : (

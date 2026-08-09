@@ -93,18 +93,22 @@ public sealed class FileAppService
                            cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            string? gitStatus = null;
+            GitFileStatus? gitStatus = null;
             if (changedFiles != null && local != null)
             {
                 var physicalEntryPath = local.ResolvePhysicalPath(entry.Path);
                 if (entry.IsDirectory)
                 {
-                    var hasChangedDescendant = changedFiles.FileStatuses.Keys.Any(
-                        changedPath => IsPathUnderDirectory(changedPath, physicalEntryPath));
-                    if (!hasChangedDescendant)
+                    var descendantStatuses = changedFiles.FileStatuses
+                        .Where(change => IsPathUnderDirectory(change.Key, physicalEntryPath))
+                        .Select(change => change.Value)
+                        .ToList();
+                    if (descendantStatuses.Count == 0)
                     {
                         continue;
                     }
+
+                    gitStatus = CombineGitStatuses(descendantStatuses);
                 }
                 else if (!changedFiles.FileStatuses.TryGetValue(physicalEntryPath, out gitStatus))
                 {
@@ -130,13 +134,22 @@ public sealed class FileAppService
                 }
 
                 var relativePath = local.GetRelativePath(deletedFile);
+                var normalizedPath = NormalizePath(relativePath);
+                if (items.Any(item => string.Equals(item.Path, normalizedPath, PathComparison)))
+                {
+                    continue;
+                }
+
+                var gitStatus = changedFiles.FileStatuses[deletedFile];
                 items.Add(new FileListEntry(
                     GetFileName(relativePath),
-                    NormalizePath(relativePath),
+                    normalizedPath,
                     "file",
                     null,
                     null,
-                    "deleted"));
+                    gitStatus.AggregateStatus,
+                    gitStatus.StagedStatus,
+                    gitStatus.UnstagedStatus));
             }
         }
 
@@ -176,6 +189,7 @@ public sealed class FileAppService
     public async Task<FileOperationResult<FileDiffOutput>> DiffAsync(
         Guid projectId,
         string? path,
+        string? scope,
         CancellationToken cancellationToken = default)
     {
         var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
@@ -194,13 +208,30 @@ public sealed class FileAppService
             return FileOperationResult<FileDiffOutput>.Invalid(GitRequiresLocalFileSystem);
         }
 
-        if (!await fileSystem.ExistsFileAsync(path, cancellationToken))
+        if (!TryParseDiffScope(scope, out var diffScope))
         {
-            return FileOperationResult<FileDiffOutput>.Missing("File not found");
+            return FileOperationResult<FileDiffOutput>.Invalid(
+                "Scope must be 'staged' or 'unstaged'");
         }
 
         var physicalPath = localFileSystem.ResolvePhysicalPath(path);
-        var result = await _gitCommandService.GetDiffAsync(physicalPath, cancellationToken);
+        if (!await fileSystem.ExistsFileAsync(path, cancellationToken))
+        {
+            var changedFiles = await _gitCommandService.GetChangedFilesAsync(
+                physicalPath,
+                cancellationToken);
+            if (changedFiles == null
+                || !changedFiles.FileStatuses.TryGetValue(physicalPath, out var gitStatus)
+                || gitStatus.GetStatus(diffScope) == null)
+            {
+                return FileOperationResult<FileDiffOutput>.Missing("File not found");
+            }
+        }
+
+        var result = await _gitCommandService.GetDiffAsync(
+            physicalPath,
+            cancellationToken,
+            diffScope);
         if (!result.Success)
         {
             _logger.LogWarning("Git diff failed: {Error}", result.Error);
@@ -397,7 +428,9 @@ public sealed class FileAppService
                     "file",
                     null,
                     null,
-                    status)
+                    status.AggregateStatus,
+                    status.StagedStatus,
+                    status.UnstagedStatus)
                 : ToListEntry(entry, status));
         }
 
@@ -407,7 +440,7 @@ public sealed class FileAppService
         return FileOperationResult<FileListOutput>.Succeeded(new FileListOutput(sortedItems));
     }
 
-    private static FileListEntry ToListEntry(FileEntry entry, string? gitStatus)
+    private static FileListEntry ToListEntry(FileEntry entry, GitFileStatus? gitStatus)
     {
         var path = NormalizePath(entry.Path);
         return new FileListEntry(
@@ -416,7 +449,51 @@ public sealed class FileAppService
             entry.IsDirectory ? "directory" : "file",
             entry.IsDirectory ? null : entry.Size,
             entry.LastModifiedUtc,
-            gitStatus);
+            gitStatus?.AggregateStatus,
+            gitStatus?.StagedStatus,
+            gitStatus?.UnstagedStatus);
+    }
+
+    private static GitFileStatus CombineGitStatuses(IEnumerable<GitFileStatus> statuses)
+    {
+        var values = statuses.ToList();
+        return new GitFileStatus(
+            GetAggregatedStatus(values.Select(status => status.StagedStatus)),
+            GetAggregatedStatus(values.Select(status => status.UnstagedStatus)));
+    }
+
+    private static string? GetAggregatedStatus(IEnumerable<string?> statuses)
+    {
+        var values = statuses.Where(status => status != null).ToHashSet();
+        if (values.Contains("modified")) return "modified";
+        if (values.Contains("added")) return "added";
+        if (values.Contains("untracked")) return "untracked";
+        if (values.Contains("deleted")) return "deleted";
+        return null;
+    }
+
+    private static bool TryParseDiffScope(string? value, out GitDiffScope scope)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Equals("all", StringComparison.OrdinalIgnoreCase))
+        {
+            scope = GitDiffScope.All;
+            return true;
+        }
+
+        if (value.Equals("staged", StringComparison.OrdinalIgnoreCase))
+        {
+            scope = GitDiffScope.Staged;
+            return true;
+        }
+
+        if (value.Equals("unstaged", StringComparison.OrdinalIgnoreCase))
+        {
+            scope = GitDiffScope.Unstaged;
+            return true;
+        }
+
+        scope = GitDiffScope.All;
+        return false;
     }
 
     private static bool IsPathUnderDirectory(string candidatePath, string directoryPath)

@@ -52,8 +52,15 @@ export function DiffViewer({
   filePath = "",
   comments = [],
   setComments,
+  scope,
 }: DiffViewerProps) {
   const { original, modified } = React.useMemo(() => parseDiffToFiles(diff), [diff]);
+  const [originalLabel, modifiedLabel] =
+    scope === "staged"
+      ? ["HEAD", "Staged"]
+      : scope === "unstaged"
+        ? ["Staged", "Working Tree"]
+        : ["Original", "Modified"];
 
   // Filter comments for each side
   const originalComments = React.useMemo(
@@ -118,10 +125,10 @@ export function DiffViewer({
       {/* Header row */}
       <div className="flex shrink-0 border-b border-border">
         <div className="flex-1 bg-red-50 dark:bg-red-950 px-3 py-1.5 border-r border-border text-sm font-medium text-red-900 dark:text-red-100">
-          Original
+          {originalLabel}
         </div>
         <div className="flex-1 bg-green-50 dark:bg-green-950 px-3 py-1.5 text-sm font-medium text-green-900 dark:text-green-100">
-          Modified
+          {modifiedLabel}
         </div>
       </div>
 

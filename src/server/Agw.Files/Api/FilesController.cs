@@ -51,7 +51,9 @@ public class FilesController : ControllerBase
                 Type = entry.Type,
                 Size = entry.Size,
                 ModifiedTime = entry.ModifiedTime,
-                GitStatus = entry.GitStatus
+                GitStatus = entry.GitStatus,
+                GitStagedStatus = entry.GitStagedStatus,
+                GitUnstagedStatus = entry.GitUnstagedStatus
             })
             .ToList();
         return ApiResult.Ok(new FileListResponse { Items = items });
@@ -81,12 +83,14 @@ public class FilesController : ControllerBase
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DiffAsync(
         [FromQuery, BindRequired] Guid projectId,
-        [FromQuery] string? path)
+        [FromQuery] string? path,
+        [FromQuery] string? scope = null)
     {
         TrackRequestedPath(projectId, path);
         var result = await _fileAppService.DiffAsync(
             projectId,
             path,
+            scope,
             RequestCancellationToken);
         if (result.Status != FileOperationStatus.Success)
         {

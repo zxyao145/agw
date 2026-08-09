@@ -6,7 +6,7 @@ import { useQuery } from "@agw/components/query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
-import { getFileDiff, readFile, type GitDiffResponse } from "@agw/projects";
+import { getFileDiff, readFile, type GitDiffResponse, type GitDiffScope } from "@agw/projects";
 import { apiGet } from "@agw/api";
 import { getProjectContextDetails, type ContextSummary } from "@agw/projects";
 import { AgentSelector, type AgentSelection } from "../../components/agent-selector";
@@ -329,6 +329,7 @@ export function ChatWorkspace({
   const [conversationListRefreshSignal, setConversationListRefreshSignal] = React.useState(0);
   const [drawerContent, setDrawerContent] = React.useState<"chat" | "files" | null>(null);
   const [selectedFile, setSelectedFile] = React.useState<string | null>(null);
+  const [selectedDiffScope, setSelectedDiffScope] = React.useState<GitDiffScope | undefined>();
   const [fileContent, setFileContent] = React.useState("");
   const [isLoadingContent, setIsLoadingContent] = React.useState(false);
   const [contentError, setContentError] = React.useState<string | null>(null);
@@ -414,6 +415,7 @@ export function ChatWorkspace({
 
   const clearFilePreview = React.useCallback(() => {
     setSelectedFile(null);
+    setSelectedDiffScope(undefined);
     setFileContent("");
     setContentError(null);
     setDiffContentData(null);
@@ -457,7 +459,7 @@ export function ChatWorkspace({
   }, [envVars]);
 
   const loadFileContent = React.useCallback(
-    async (filePath: string) => {
+    async (filePath: string, diffScope?: GitDiffScope) => {
       setIsLoadingContent(true);
       setContentError(null);
       setDiffContentData(null);
@@ -467,10 +469,11 @@ export function ChatWorkspace({
           if (!selectedProjectId) {
             throw new Error("Select a project before loading files");
           }
-          const diff = await getFileDiff(selectedProjectId, filePath);
+          const diff = await getFileDiff(selectedProjectId, filePath, diffScope);
           setDiffContentData(diff);
           setFileContent("");
           setSelectedFile(filePath);
+          setSelectedDiffScope(diffScope);
         } else {
           if (!selectedProjectId) {
             throw new Error("Select a project before loading files");
@@ -479,6 +482,7 @@ export function ChatWorkspace({
           setFileContent(content);
           setDiffContentData(null);
           setSelectedFile(filePath);
+          setSelectedDiffScope(undefined);
         }
       } catch (error) {
         console.error("Error loading file:", error);
@@ -502,8 +506,8 @@ export function ChatWorkspace({
   );
 
   const handleOnLoadFileContent = React.useCallback(
-    (filePath: string) => {
-      void loadFileContent(filePath);
+    (filePath: string, scope?: GitDiffScope) => {
+      void loadFileContent(filePath, scope);
     },
     [loadFileContent],
   );
@@ -511,22 +515,22 @@ export function ChatWorkspace({
   const handleOnFileReseted = React.useCallback(
     (filePath: string | null) => {
       if (selectedFile && selectedFile === filePath) {
-        void loadFileContent(selectedFile);
+        void loadFileContent(selectedFile, selectedDiffScope);
       }
     },
-    [loadFileContent, selectedFile],
+    [loadFileContent, selectedDiffScope, selectedFile],
   );
 
   const handleOnFileSelected = React.useCallback(
-    (filePath: string | null) => {
-      if (filePath && filePath !== selectedFile) {
-        void loadFileContent(filePath);
+    (filePath: string | null, scope?: GitDiffScope) => {
+      if (filePath && (filePath !== selectedFile || scope !== selectedDiffScope)) {
+        void loadFileContent(filePath, scope);
         if (isMobile) {
           setIsDrawerOpen(false);
         }
       }
     },
-    [isMobile, loadFileContent, selectedFile],
+    [isMobile, loadFileContent, selectedDiffScope, selectedFile],
   );
 
   const clearLocalSessionState = React.useCallback(() => {
@@ -594,9 +598,9 @@ export function ChatWorkspace({
 
   React.useEffect(() => {
     if (selectedFile) {
-      void loadFileContent(selectedFile);
+      void loadFileContent(selectedFile, selectedDiffScope);
     }
-  }, [loadFileContent, onlyDiff, selectedFile]);
+  }, [loadFileContent, onlyDiff, selectedDiffScope, selectedFile]);
 
   React.useEffect(() => {
     clearFilePreview();
@@ -1092,6 +1096,7 @@ export function ChatWorkspace({
                     comments={comments}
                     setComments={setComments}
                     fileContent={fileContent}
+                    diffScope={selectedDiffScope}
                   />
                 ) : (
                   <ProjectRequiredState />

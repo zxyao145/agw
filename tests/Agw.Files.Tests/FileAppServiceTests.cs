@@ -28,11 +28,11 @@ public class FileAppServiceTests
         var git = new FakeGitCommandService
         {
             ChangedFiles = new GitChangedFiles(
-                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                new Dictionary<string, GitFileStatus>(StringComparer.OrdinalIgnoreCase)
                 {
-                    [nestedFile] = "modified",
-                    [changedFile] = "added",
-                    [deletedFile] = "deleted"
+                    [nestedFile] = new GitFileStatus(null, "modified"),
+                    [changedFile] = new GitFileStatus("added", null),
+                    [deletedFile] = new GitFileStatus(null, "deleted")
                 },
                 new HashSet<string>([deletedFile], StringComparer.OrdinalIgnoreCase))
         };
@@ -48,9 +48,9 @@ public class FileAppServiceTests
         Assert.Equal(FileOperationStatus.Success, result.Status);
         Assert.Collection(
             result.Value!.Items,
-            item => AssertListEntry(item, "changed-dir", "directory", null),
-            item => AssertListEntry(item, "changed.txt", "file", "added"),
-            item => AssertListEntry(item, "deleted.txt", "file", "deleted"));
+            item => AssertListEntry(item, "changed-dir", "directory", "modified", null, "modified"),
+            item => AssertListEntry(item, "changed.txt", "file", "added", "added", null),
+            item => AssertListEntry(item, "deleted.txt", "file", "deleted", null, "deleted"));
     }
 
     [Fact]
@@ -64,10 +64,10 @@ public class FileAppServiceTests
         var git = new FakeGitCommandService
         {
             ChangedFiles = new GitChangedFiles(
-                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                new Dictionary<string, GitFileStatus>(StringComparer.OrdinalIgnoreCase)
                 {
-                    [nestedFile] = "modified",
-                    [deletedFile] = "deleted"
+                    [nestedFile] = new GitFileStatus(null, "modified"),
+                    [deletedFile] = new GitFileStatus("deleted", null)
                 },
                 new HashSet<string>([deletedFile], StringComparer.OrdinalIgnoreCase))
         };
@@ -170,6 +170,7 @@ public class FileAppServiceTests
         var result = await service.DiffAsync(
             ProjectId,
             "changed.txt",
+            null,
             TestContext.Current.CancellationToken);
 
         Assert.Equal(FileOperationStatus.Success, result.Status);
@@ -192,6 +193,7 @@ public class FileAppServiceTests
         var result = await service.DiffAsync(
             ProjectId,
             "unchanged.txt",
+            null,
             TestContext.Current.CancellationToken);
 
         Assert.Equal(FileOperationStatus.Success, result.Status);
@@ -214,11 +216,73 @@ public class FileAppServiceTests
         var result = await service.DiffAsync(
             ProjectId,
             "changed.txt",
+            null,
             TestContext.Current.CancellationToken);
 
         Assert.Equal(FileOperationStatus.InvalidRequest, result.Status);
         Assert.Equal("Git diff failed", result.Message);
         Assert.Equal("git failed", result.Details);
+    }
+
+    [Fact]
+    public async Task DiffAsync_StagedScope_ForwardsScopeToGitService()
+    {
+        using var scope = TempDirectoryScope.Create();
+        var filePath = Path.Combine(scope.Path, "changed.txt");
+        await File.WriteAllTextAsync(filePath, "content", TestContext.Current.CancellationToken);
+        var git = new FakeGitCommandService();
+        var service = CreateService(scope.Path, git);
+
+        var result = await service.DiffAsync(
+            ProjectId,
+            "changed.txt",
+            "staged",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(FileOperationStatus.Success, result.Status);
+        Assert.Equal(GitDiffScope.Staged, git.LastDiffScope);
+    }
+
+    [Fact]
+    public async Task DiffAsync_StagedDeletedFile_ReturnsGitDiffWithoutPhysicalFile()
+    {
+        using var scope = TempDirectoryScope.Create();
+        var deletedFile = Path.Combine(scope.Path, "deleted.txt");
+        var git = new FakeGitCommandService
+        {
+            ChangedFiles = new GitChangedFiles(
+                new Dictionary<string, GitFileStatus>(StringComparer.OrdinalIgnoreCase)
+                {
+                    [deletedFile] = new GitFileStatus("deleted", null)
+                },
+                new HashSet<string>([deletedFile], StringComparer.OrdinalIgnoreCase))
+        };
+        var service = CreateService(scope.Path, git);
+
+        var result = await service.DiffAsync(
+            ProjectId,
+            "deleted.txt",
+            "staged",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(FileOperationStatus.Success, result.Status);
+        Assert.Equal(GitDiffScope.Staged, git.LastDiffScope);
+    }
+
+    [Fact]
+    public async Task DiffAsync_InvalidScope_ReturnsInvalidRequest()
+    {
+        using var scope = TempDirectoryScope.Create();
+        var service = CreateService(scope.Path);
+
+        var result = await service.DiffAsync(
+            ProjectId,
+            "changed.txt",
+            "invalid",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(FileOperationStatus.InvalidRequest, result.Status);
+        Assert.Equal("Scope must be 'staged' or 'unstaged'", result.Message);
     }
 
     [Fact]
@@ -232,6 +296,7 @@ public class FileAppServiceTests
         var result = await service.DiffAsync(
             ProjectId,
             "file.txt",
+            null,
             TestContext.Current.CancellationToken);
 
         Assert.Equal(FileOperationStatus.InvalidRequest, result.Status);
@@ -249,6 +314,7 @@ public class FileAppServiceTests
         var result = await service.DiffAsync(
             ProjectId,
             "",
+            null,
             TestContext.Current.CancellationToken);
 
         Assert.Equal(FileOperationStatus.InvalidRequest, result.Status);
@@ -557,11 +623,15 @@ public class FileAppServiceTests
         FileListEntry entry,
         string name,
         string type,
-        string? gitStatus)
+        string? gitStatus,
+        string? gitStagedStatus,
+        string? gitUnstagedStatus)
     {
         Assert.Equal(name, entry.Name);
         Assert.Equal(type, entry.Type);
         Assert.Equal(gitStatus, entry.GitStatus);
+        Assert.Equal(gitStagedStatus, entry.GitStagedStatus);
+        Assert.Equal(gitUnstagedStatus, entry.GitUnstagedStatus);
     }
 
     private static void AssertSearchEntry(FileSearchEntry entry, string relativePath, string type)
@@ -580,6 +650,8 @@ public class FileAppServiceTests
         public GitResetResult ResetResult { get; set; } =
             new(true, "File reset successfully", null, false);
 
+        public GitDiffScope LastDiffScope { get; private set; } = GitDiffScope.All;
+
         public Task<GitChangedFiles?> GetChangedFilesAsync(
             string directory,
             CancellationToken cancellationToken = default)
@@ -589,8 +661,10 @@ public class FileAppServiceTests
 
         public Task<GitDiffResult> GetDiffAsync(
             string filePath,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            GitDiffScope scope = GitDiffScope.All)
         {
+            LastDiffScope = scope;
             return Task.FromResult(DiffResult);
         }
 
