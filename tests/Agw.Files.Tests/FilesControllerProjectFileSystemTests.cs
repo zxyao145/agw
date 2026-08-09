@@ -51,6 +51,19 @@ public class FilesControllerProjectFileSystemTests
         AssertApiResult(result, "File not found");
     }
 
+    [Fact]
+    public async Task DiffAsync_WhenScopeIsInvalid_ReturnsBadRequestEnvelope()
+    {
+        var controller = CreateController();
+
+        var result = await controller.DiffAsync(
+            Guid.CreateVersion7(),
+            "file.txt",
+            "invalid");
+
+        AssertApiResult(result, "Scope must be 'staged' or 'unstaged'");
+    }
+
     private static void AssertApiResult(IActionResult result, string expectedTitle)
     {
         Assert.StartsWith("Bens.Results.ApiResult", result.GetType().FullName);
@@ -89,7 +102,10 @@ public class FilesControllerProjectFileSystemTests
             return Task.FromResult<GitChangedFiles?>(null);
         }
 
-        public Task<GitDiffResult> GetDiffAsync(string filePath, CancellationToken cancellationToken = default)
+        public Task<GitDiffResult> GetDiffAsync(
+            string filePath,
+            CancellationToken cancellationToken = default,
+            GitDiffScope scope = GitDiffScope.All)
         {
             return Task.FromResult(new GitDiffResult(false, "", false, null, null));
         }

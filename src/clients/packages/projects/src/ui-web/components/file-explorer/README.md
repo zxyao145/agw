@@ -22,7 +22,8 @@ Left-panel file tree for:
 
 - listing workspace files
 - switching between full listing and git diff mode
-- building a recursive tree in diff mode
+- grouping recursive diff results into `Staged` and `Unstaged` trees
+- compacting single-child directory paths and showing recursive file counts
 - selecting a file
 - deleting a file or directory
 - resetting a file back to git `HEAD`
@@ -39,8 +40,8 @@ Left-panel file tree for:
   recursiveMode: boolean;
   onOnlyDiffChange?: (value: boolean) => void;
   onFileDeleted: (filePath: string) => void;
-  onLoadFileContent: (filePath: string) => void;
-  onFileSelected: (filePath: string | null) => void;
+  onLoadFileContent: (filePath: string, scope?: GitDiffScope) => void;
+  onFileSelected: (filePath: string | null, scope?: GitDiffScope) => void;
   onFileReseted: (filePath: string | null) => void;
 }
 ```
@@ -57,6 +58,8 @@ Right-panel viewer for the currently selected file. It handles:
 - line comment editing
 
 `FileContent` does not fetch by itself. The parent provides the selected file, raw content, diff payload, and comments.
+When `diffScope` is provided, its headers identify `HEAD → Staged` or
+`Staged → Working Tree` content.
 
 ## Types
 
@@ -99,6 +102,8 @@ The module also centralizes repeated string values for:
 - `GitStatus`
 - `CommentSideLabel`
 - `GitStatusBadgeLabel`
+- `GitChangeGroup`
+- `GitDiffScope`
 
 These are intended to reduce local magic strings and keep rendering logic consistent.
 
@@ -133,6 +138,8 @@ Because of that, it assumes:
 - paths are relative to the selected project's file-system root
 - the selected project's workspace is a host-visible local directory
 - file reset means reset to git `HEAD`
+- `gitStagedStatus` and `gitUnstagedStatus` identify which diff groups contain a file
+- `getFileDiff(projectId, path, scope)` uses `staged` or `unstaged` to load that group's diff
 
 Remote storage must first be mounted or materialized as `Project.Workspace` by the host or container platform. Injecting a different frontend file-service interface alone would not give Git or external agent processes a usable working directory.
 
@@ -141,7 +148,7 @@ Remote storage must first be mounted or materialized as `Project.Workspace` by t
 ```tsx
 import * as React from "react";
 import { Explorer, FileContent, type LineComment } from "@agw/projects";
-import { getFileDiff, readFile, type GitDiffResponse } from "@agw/projects";
+import { getFileDiff, readFile, type GitDiffResponse, type GitDiffScope } from "@agw/projects";
 
 export function ExampleFileExplorer({
   projectId,
@@ -151,6 +158,7 @@ export function ExampleFileExplorer({
   rootDirectory: string;
 }) {
   const [selectedFile, setSelectedFile] = React.useState<string | null>(null);
+  const [selectedDiffScope, setSelectedDiffScope] = React.useState<GitDiffScope>();
   const [onlyDiff, setOnlyDiff] = React.useState(true);
   const [fileContent, setFileContent] = React.useState("");
   const [diffContentData, setDiffContentData] = React.useState<GitDiffResponse | null>(null);
@@ -159,15 +167,16 @@ export function ExampleFileExplorer({
   const [contentError, setContentError] = React.useState<string | null>(null);
 
   const loadFileContent = React.useCallback(
-    async (filePath: string) => {
+    async (filePath: string, scope?: GitDiffScope) => {
       setIsLoadingContent(true);
       setContentError(null);
 
       try {
         if (onlyDiff) {
-          const diff = await getFileDiff(projectId, filePath);
+          const diff = await getFileDiff(projectId, filePath, scope);
           setDiffContentData(diff);
           setFileContent("");
+          setSelectedDiffScope(scope);
         } else {
           const content = await readFile(projectId, filePath);
           setFileContent(content);
@@ -191,19 +200,19 @@ export function ExampleFileExplorer({
         recursiveMode={true}
         onOnlyDiffChange={setOnlyDiff}
         onFileDeleted={() => {}}
-        onFileSelected={(filePath) => {
+        onFileSelected={(filePath, scope) => {
           if (filePath) {
             setSelectedFile(filePath);
-            void loadFileContent(filePath);
+            void loadFileContent(filePath, scope);
           }
         }}
         onFileReseted={(filePath) => {
           if (filePath) {
-            void loadFileContent(filePath);
+            void loadFileContent(filePath, selectedDiffScope);
           }
         }}
-        onLoadFileContent={(filePath) => {
-          void loadFileContent(filePath);
+        onLoadFileContent={(filePath, scope) => {
+          void loadFileContent(filePath, scope);
         }}
       />
 
@@ -216,6 +225,7 @@ export function ExampleFileExplorer({
         comments={comments}
         setComments={setComments}
         fileContent={fileContent}
+        diffScope={selectedDiffScope}
       />
     </div>
   );

@@ -1806,6 +1806,7 @@ export interface paths {
         query: {
           projectId: string;
           path?: string;
+          scope?: string;
         };
         header?: never;
         path?: never;
@@ -4523,6 +4524,8 @@ export interface components {
       /** Format: date-time */
       modifiedTime?: null | string;
       gitStatus: null | string;
+      gitStagedStatus: null | string;
+      gitUnstagedStatus: null | string;
     };
     FileListResponse: {
       items?: components["schemas"]["FileItem"][];

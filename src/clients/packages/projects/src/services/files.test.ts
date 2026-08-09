@@ -23,3 +23,25 @@ test("listFiles uses same-origin cookie credentials", async (t) => {
   assert.equal(requests[0].init?.credentials, "same-origin");
   assert.equal(requests[0].url, "/api/files/list?projectId=project-1&diff=true&recursive=true");
 });
+
+test("getFileDiff includes the selected git scope", async (t) => {
+  const { getFileDiff } = await import("./files" + ".ts");
+  const originalFetch = globalThis.fetch;
+  const requests: string[] = [];
+
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    requests.push(String(input));
+    return new Response(JSON.stringify({ diff: "", unchanged: false }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  await getFileDiff("project-1", "src/file.ts", "staged");
+
+  assert.equal(requests[0], "/api/files/diff?projectId=project-1&path=src%2Ffile.ts&scope=staged");
+});

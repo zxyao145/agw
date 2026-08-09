@@ -6,7 +6,9 @@ public sealed record FileListEntry(
     string Type,
     long? Size,
     DateTimeOffset? ModifiedTime,
-    string? GitStatus);
+    string? GitStatus,
+    string? GitStagedStatus,
+    string? GitUnstagedStatus);
 
 public sealed record FileListOutput(IReadOnlyList<FileListEntry> Items);
 
