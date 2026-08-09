@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Extensions;
 
@@ -18,6 +20,21 @@ public sealed class AgentRunResponseUpdateExtensionsTests
 
         var content = Assert.IsType<AgwFunctionResultContent>(Assert.Single(result!.Contents));
         Assert.Equal("Mode changed to \"execute\".", content.Content);
+    }
+
+    [Fact]
+    public void ToAiMessage_JsonElementStringFunctionResult_PreservesPlainText()
+    {
+        var message = new ChatMessage(
+            ChatRole.Tool,
+            [new FunctionResultContent(
+                "call-1",
+                JsonSerializer.SerializeToElement("Mode changed to \"plan\"."))]);
+
+        var result = message.ToAiMessage();
+
+        var content = Assert.IsType<AgwFunctionResultContent>(Assert.Single(result!.Contents));
+        Assert.Equal("Mode changed to \"plan\".", content.Content);
     }
 
     [Fact]

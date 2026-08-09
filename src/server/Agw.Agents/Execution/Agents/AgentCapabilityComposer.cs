@@ -65,7 +65,7 @@ public sealed class AgentCapabilityComposer
         IReadOnlyDictionary<string, string> environmentVariables,
         CancellationToken cancellationToken,
         bool supportsHostedWebSearch = false,
-        string defaultMode = "plan",
+        string defaultMode = "execute",
         Func<IReadOnlyList<Guid>, CancellationToken, ValueTask<IReadOnlyList<Microsoft.Agents.AI.AIAgent>>>?
             backgroundAgentFactory = null,
         Guid conversationId = default)

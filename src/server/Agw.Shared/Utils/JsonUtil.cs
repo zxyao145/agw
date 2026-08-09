@@ -15,8 +15,8 @@ public static class JsonUtil
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
             WriteIndented = false,
-            //Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
-            Encoder = JavaScriptEncoder.Create(UnicodeRanges.BasicLatin, UnicodeRanges.CjkUnifiedIdeographs),
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+            // Encoder = JavaScriptEncoder.Create(UnicodeRanges.BasicLatin, UnicodeRanges.CjkUnifiedIdeographs),
             AllowOutOfOrderMetadataProperties = true,
         };
 

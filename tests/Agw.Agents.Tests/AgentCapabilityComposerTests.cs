@@ -296,12 +296,13 @@ public class AgentCapabilityComposerTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var database = await TestDatabase.CreateAsync(cancellationToken);
+        var toolBlock = new TestToolBlock();
         var composer = CreateComposer(
             database.Context,
             CreateToolRegistry(),
             new StubConnectionCapabilityResolver((_, _, _) => CreateResolution()),
             new StubMcpToolMaterializer((_, _, _) => CreateToolLease([], [])),
-            [new TestToolBlock()]);
+            [toolBlock]);
         var agent = new Agent
         {
             Type = AgentType.System,
@@ -319,6 +320,7 @@ public class AgentCapabilityComposerTests
 
         Assert.Equal("test_block_tool", Assert.Single(composition.Tools).Name);
         Assert.Equal(["test_block_tool"], composition.PlanModeAllowedToolNames);
+        Assert.Equal("execute", toolBlock.MaterializedDefaultMode);
     }
 
     private static AgentCapabilityComposer CreateComposer(
@@ -474,6 +476,8 @@ public class AgentCapabilityComposerTests
 
     private sealed class TestToolBlock : IToolBlock
     {
+        public string? MaterializedDefaultMode { get; private set; }
+
         public ToolBlockDescriptor Descriptor { get; } = new(
             "test-block",
             "Test Block",
@@ -486,6 +490,7 @@ public class AgentCapabilityComposerTests
             ToolMaterializationContext context,
             CancellationToken cancellationToken)
         {
+            MaterializedDefaultMode = context.DefaultMode;
             var contribution = new ToolContribution();
             contribution.Tools.Add(CreateTool("test_block_tool"));
             contribution.PlanModeAllowedToolNames.Add("test_block_tool");

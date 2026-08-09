@@ -72,6 +72,8 @@ export interface ChatProps {
   active?: boolean;
 }
 
+const DEFAULT_AGENT_MODE: AgentMode = "execute";
+
 function prepareChatHistory(messages: AiMessage[]) {
   const preparedHistory = prepareClaudeHistory(messages);
   return {
@@ -86,7 +88,7 @@ function getLatestAgentMode(messages: AiMessage[]): AgentMode {
     if (mode) return mode;
   }
 
-  return "plan";
+  return DEFAULT_AGENT_MODE;
 }
 
 /**
@@ -222,8 +224,8 @@ export function Chat({
     detachExecution();
     setPendingHumanGate(null);
     setClaudeCommands([]);
-    confirmedAgentModeRef.current = "plan";
-    setAgentMode("plan");
+    confirmedAgentModeRef.current = DEFAULT_AGENT_MODE;
+    setAgentMode(DEFAULT_AGENT_MODE);
   }, [detachExecution, targetKey]);
 
   React.useEffect(() => {
