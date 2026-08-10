@@ -75,7 +75,7 @@ export function SearchableSelect(props: SearchableSelectProps) {
   const [search, setSearch] = React.useState("");
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
-  const [portalContainer, setPortalContainer] = React.useState<HTMLElement | null>(null);
+  const [portalContainer, setPortalContainer] = React.useState<HTMLElement | undefined>(undefined);
 
   const selectedValues = React.useMemo(
     () => (props.multiple ? props.value : props.value ? [props.value] : []),
@@ -119,7 +119,9 @@ export function SearchableSelect(props: SearchableSelectProps) {
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (nextOpen) {
-      setPortalContainer(rootRef.current?.closest<HTMLElement>(MODAL_CONTENT_SELECTOR) ?? null);
+      setPortalContainer(
+        rootRef.current?.closest<HTMLElement>(MODAL_CONTENT_SELECTOR) ?? undefined,
+      );
     }
 
     setOpen(nextOpen);

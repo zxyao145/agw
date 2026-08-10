@@ -124,6 +124,11 @@ function compactDirectoryChain(item: FileTreeItem): FileTreeItem {
 }
 
 function getScopedStatus(item: FileItem, scope: GitDiffScope): FileGitStatus | null | undefined {
+  const hasScopedStatuses = "gitStagedStatus" in item || "gitUnstagedStatus" in item;
+  if (!hasScopedStatuses) {
+    return scope === "unstaged" ? item.gitStatus : undefined;
+  }
+
   return scope === "staged" ? item.gitStagedStatus : item.gitUnstagedStatus;
 }
 

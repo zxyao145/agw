@@ -12,6 +12,8 @@ import {
   ChevronRight,
   ChevronDown,
   Loader2,
+  Minus,
+  Plus,
   Trash2,
   RotateCcw,
 } from "lucide-react";
@@ -20,6 +22,7 @@ import {
   deleteFile,
   listFiles,
   resetFile,
+  setFileStaged,
   type FileItem,
   type GitDiffScope,
 } from "../../../services/files";
@@ -101,6 +104,7 @@ function FileTreeNode({
   recursiveMode,
   onFileDeleted,
   onFileReset,
+  onGitScopeChanged,
   defaultExpanded,
 }: FileTreeNodeProps) {
   const [isExpanded, setIsExpanded] = React.useState(
@@ -112,6 +116,7 @@ function FileTreeNode({
   const [isLoading, setIsLoading] = React.useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
+  const [isUpdatingGitScope, setIsUpdatingGitScope] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
   // Update children when item.children change (for pre-built trees)
@@ -205,6 +210,28 @@ function FileTreeNode({
     }
   };
 
+  const handleGitScopeChange = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!item.gitScope || isUpdatingGitScope) return;
+
+    const targetScope: GitDiffScope = item.gitScope === "staged" ? "unstaged" : "staged";
+    setIsUpdatingGitScope(true);
+    try {
+      const result = await setFileStaged(projectId, item.path, targetScope === "staged");
+      if (result.success) {
+        onGitScopeChanged?.(item.path, targetScope);
+      } else {
+        toast.error(result.message || `Failed to move changes to ${targetScope}`);
+      }
+    } catch (err) {
+      console.error(`Error moving changes to ${targetScope}:`, err);
+      toast.error((err as Error).message);
+    } finally {
+      setIsUpdatingGitScope(false);
+    }
+  };
+
   const FileIcon = item.type === FileItemType.File ? getFileIcon(item.name) : null;
   const FolderIcon = isExpanded ? FolderOpen : Folder;
   const ChevronIcon = isExpanded ? ChevronDown : ChevronRight;
@@ -276,6 +303,31 @@ function FileTreeNode({
             )}
 
             {isLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+
+            {item.gitScope && (
+              <button
+                type="button"
+                className={cn(
+                  "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-sm",
+                  "opacity-0 transition-[opacity,color,background-color]",
+                  "group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100",
+                  "hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  isUpdatingGitScope && "cursor-wait opacity-100",
+                )}
+                aria-label={`${item.gitScope === "staged" ? "Unstage" : "Stage"} ${item.type} ${item.name}`}
+                title={item.gitScope === "staged" ? "Unstage changes" : "Stage changes"}
+                disabled={isUpdatingGitScope}
+                onClick={handleGitScopeChange}
+              >
+                {isUpdatingGitScope ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : item.gitScope === "staged" ? (
+                  <Minus className="h-4 w-4" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+              </button>
+            )}
           </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
@@ -339,6 +391,7 @@ function FileTreeNode({
               defaultExpanded={defaultExpanded}
               onFileDeleted={onFileDeleted}
               onFileReset={onFileReset}
+              onGitScopeChanged={onGitScopeChanged}
             />
           ))}
         </div>
@@ -390,12 +443,14 @@ function GitChangeGroupSection({
   onFileSelect,
   onFileDeleted,
   onFileReset,
+  onGitScopeChanged,
 }: {
   projectId: string;
   group: GitChangeGroup;
   onFileSelect: (filePath: string, scope?: GitDiffScope) => void;
   onFileDeleted: (filePath: string) => void;
   onFileReset: (filePath: string) => void;
+  onGitScopeChanged: (path: string, targetScope: GitDiffScope) => void;
 }) {
   const [isExpanded, setIsExpanded] = React.useState(true);
 
@@ -428,6 +483,7 @@ function GitChangeGroupSection({
             defaultExpanded={true}
             onFileDeleted={onFileDeleted}
             onFileReset={onFileReset}
+            onGitScopeChanged={onGitScopeChanged}
           />
         ))}
       </CollapsibleContent>
@@ -441,12 +497,14 @@ export function ExplorerGitChangeTree({
   onFileSelect,
   onFileDeleted,
   onFileReset,
+  onGitScopeChanged,
 }: {
   projectId: string;
   groups: GitChangeGroup[];
   onFileSelect: (filePath: string, scope?: GitDiffScope) => void;
   onFileDeleted: (filePath: string) => void;
   onFileReset: (filePath: string) => void;
+  onGitScopeChanged: (path: string, targetScope: GitDiffScope) => void;
 }) {
   return (
     <div className="file-tree space-y-1">
@@ -458,6 +516,7 @@ export function ExplorerGitChangeTree({
           onFileSelect={onFileSelect}
           onFileDeleted={onFileDeleted}
           onFileReset={onFileReset}
+          onGitScopeChanged={onGitScopeChanged}
         />
       ))}
     </div>

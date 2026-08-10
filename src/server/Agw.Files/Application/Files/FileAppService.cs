@@ -334,6 +334,22 @@ public sealed class FileAppService
             new FileMutationOutput(true, result.Message));
     }
 
+    public Task<FileOperationResult<FileMutationOutput>> StageAsync(
+        Guid projectId,
+        string? path,
+        CancellationToken cancellationToken = default)
+    {
+        return SetStagedAsync(projectId, path, staged: true, cancellationToken);
+    }
+
+    public Task<FileOperationResult<FileMutationOutput>> UnstageAsync(
+        Guid projectId,
+        string? path,
+        CancellationToken cancellationToken = default)
+    {
+        return SetStagedAsync(projectId, path, staged: false, cancellationToken);
+    }
+
     public async Task<FileOperationResult<FileSearchOutput>> SearchAsync(
         Guid projectId,
         string? path,
@@ -393,6 +409,62 @@ public sealed class FileAppService
         return projectId == Guid.Empty
             ? null
             : await _fileSystemResolver.ResolveAsync(projectId, cancellationToken);
+    }
+
+    private async Task<FileOperationResult<FileMutationOutput>> SetStagedAsync(
+        Guid projectId,
+        string? path,
+        bool staged,
+        CancellationToken cancellationToken)
+    {
+        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
+        if (fileSystem == null)
+        {
+            return FileOperationResult<FileMutationOutput>.Invalid("Project ID is required");
+        }
+
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return FileOperationResult<FileMutationOutput>.Invalid("Path parameter is required");
+        }
+
+        if (fileSystem is not LocalFileSystem localFileSystem)
+        {
+            return FileOperationResult<FileMutationOutput>.Invalid(GitRequiresLocalFileSystem);
+        }
+
+        if (TargetsWorkspaceRoot(path))
+        {
+            return FileOperationResult<FileMutationOutput>.Invalid(
+                "Workspace root cannot be staged or unstaged");
+        }
+
+        var physicalPath = localFileSystem.ResolvePhysicalPath(path);
+        var result = await _gitCommandService.SetStagedAsync(
+            physicalPath,
+            staged,
+            cancellationToken);
+        if (!result.Success && result.IsClientError)
+        {
+            return FileOperationResult<FileMutationOutput>.Invalid(result.Message, result.Error);
+        }
+
+        if (!result.Success)
+        {
+            _logger.LogError(
+                "Git {Operation} failed: {Error}",
+                staged ? "stage" : "unstage",
+                result.Error);
+            return FileOperationResult<FileMutationOutput>.Failed(result.Message, result.Error);
+        }
+
+        _logger.LogInformation(
+            "{Operation} changes in project {ProjectId}: {Path}",
+            staged ? "Staged" : "Unstaged",
+            projectId,
+            path);
+        return FileOperationResult<FileMutationOutput>.Succeeded(
+            new FileMutationOutput(true, result.Message));
     }
 
     private async Task<FileOperationResult<FileListOutput>> GetAllChangedFilesAsync(
@@ -702,6 +774,33 @@ public sealed class FileAppService
         var normalized = NormalizePath(path).TrimEnd('/');
         var separatorIndex = normalized.LastIndexOf('/');
         return separatorIndex >= 0 ? normalized[(separatorIndex + 1)..] : normalized;
+    }
+
+    private static bool TargetsWorkspaceRoot(string path)
+    {
+        var depth = 0;
+        foreach (var segment in NormalizePath(path).Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment == ".")
+            {
+                continue;
+            }
+
+            if (segment == "..")
+            {
+                if (depth == 0)
+                {
+                    return false;
+                }
+
+                depth -= 1;
+                continue;
+            }
+
+            depth += 1;
+        }
+
+        return depth == 0;
     }
 
     private static string NormalizePath(string path)

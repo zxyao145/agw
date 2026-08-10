@@ -333,7 +333,7 @@ export function ChatWorkspace({
   const [fileContent, setFileContent] = React.useState("");
   const [isLoadingContent, setIsLoadingContent] = React.useState(false);
   const [contentError, setContentError] = React.useState<string | null>(null);
-  const [onlyDiff, setOnlyDiff] = React.useState(true);
+  const [onlyDiff, setOnlyDiff] = React.useState(false);
   const [recursiveMode] = React.useState(true);
   const [diffContentData, setDiffContentData] = React.useState<GitDiffResponse | null>(null);
   const [comments, setComments] = React.useState<LineComment[]>([]);
@@ -482,7 +482,7 @@ export function ChatWorkspace({
           setFileContent(content);
           setDiffContentData(null);
           setSelectedFile(filePath);
-          setSelectedDiffScope(undefined);
+          setSelectedDiffScope(diffScope);
         }
       } catch (error) {
         console.error("Error loading file:", error);
@@ -519,6 +519,16 @@ export function ChatWorkspace({
       }
     },
     [loadFileContent, selectedDiffScope, selectedFile],
+  );
+
+  const handleOnFileGitScopeChanged = React.useCallback(
+    (path: string, targetScope: GitDiffScope) => {
+      const directoryPrefix = `${path.replace(/\/+$/u, "")}/`;
+      if (selectedFile === path || selectedFile?.startsWith(directoryPrefix)) {
+        setSelectedDiffScope(targetScope);
+      }
+    },
+    [selectedFile],
   );
 
   const handleOnFileSelected = React.useCallback(
@@ -1079,6 +1089,7 @@ export function ChatWorkspace({
                   onFileDeleted={handleOnFileDeleted}
                   onFileSelected={handleOnFileSelected}
                   onFileReseted={handleOnFileReseted}
+                  onFileGitScopeChanged={handleOnFileGitScopeChanged}
                   onLoadFileContent={handleOnLoadFileContent}
                 />
               </ColResizeSplit.Left>
@@ -1126,6 +1137,7 @@ export function ChatWorkspace({
                   onFileDeleted={handleOnFileDeleted}
                   onFileSelected={handleOnFileSelected}
                   onFileReseted={handleOnFileReseted}
+                  onFileGitScopeChanged={handleOnFileGitScopeChanged}
                   onLoadFileContent={handleOnLoadFileContent}
                 />
               ) : (

@@ -45,3 +45,37 @@ test("getFileDiff includes the selected git scope", async (t) => {
 
   assert.equal(requests[0], "/api/files/diff?projectId=project-1&path=src%2Ffile.ts&scope=staged");
 });
+
+test("setFileStaged calls the stage and unstage endpoints", async (t) => {
+  const { clearAntiforgeryToken } = await import("@agw/api");
+  const { setFileStaged } = await import("./files" + ".ts");
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  clearAntiforgeryToken();
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    requests.push({ url, init });
+    const body =
+      url === "/api/auth/antiforgery"
+        ? { requestToken: "csrf-token" }
+        : { success: true, message: "Updated" };
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    clearAntiforgeryToken();
+  });
+
+  await setFileStaged("project-1", "src/file.ts", true);
+  await setFileStaged("project-1", "src/file.ts", false);
+
+  assert.equal(requests[1].url, "/api/files/stage?projectId=project-1&path=src%2Ffile.ts");
+  assert.equal(requests[1].init?.method, "POST");
+  assert.equal(requests[2].url, "/api/files/unstage?projectId=project-1&path=src%2Ffile.ts");
+  assert.equal(requests[2].init?.method, "POST");
+});

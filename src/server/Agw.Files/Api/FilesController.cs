@@ -128,16 +128,7 @@ public class FilesController : ControllerBase
             projectId,
             path,
             RequestCancellationToken);
-        if (result.Status != FileOperationStatus.Success)
-        {
-            return MapError(result);
-        }
-
-        return ApiResult.Ok(new
-        {
-            success = result.Value!.Success,
-            message = result.Value.Message
-        });
+        return MapMutationResult(result);
     }
 
     [HttpPost("reset")]
@@ -154,16 +145,41 @@ public class FilesController : ControllerBase
             projectId,
             path,
             RequestCancellationToken);
-        if (result.Status != FileOperationStatus.Success)
-        {
-            return MapError(result);
-        }
+        return MapMutationResult(result);
+    }
 
-        return ApiResult.Ok(new
-        {
-            success = result.Value!.Success,
-            message = result.Value.Message
-        });
+    [HttpPost("stage")]
+    [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> StageAsync(
+        [FromQuery, BindRequired] Guid projectId,
+        [FromQuery] string? path)
+    {
+        return await SetStagedAsync(projectId, path, staged: true);
+    }
+
+    [HttpPost("unstage")]
+    [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResult), StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> UnstageAsync(
+        [FromQuery, BindRequired] Guid projectId,
+        [FromQuery] string? path)
+    {
+        return await SetStagedAsync(projectId, path, staged: false);
+    }
+
+    private async Task<IActionResult> SetStagedAsync(
+        Guid projectId,
+        string? path,
+        bool staged)
+    {
+        TrackRequestedPath(projectId, path);
+        var result = staged
+            ? await _fileAppService.StageAsync(projectId, path, RequestCancellationToken)
+            : await _fileAppService.UnstageAsync(projectId, path, RequestCancellationToken);
+        return MapMutationResult(result);
     }
 
     [HttpGet("search")]
@@ -239,6 +255,20 @@ public class FilesController : ControllerBase
             result.Message ?? "Failed to process file request.",
             StatusCodes.Status500InternalServerError,
             result.Details);
+    }
+
+    private IActionResult MapMutationResult(FileOperationResult<FileMutationOutput> result)
+    {
+        if (result.Status != FileOperationStatus.Success)
+        {
+            return MapError(result);
+        }
+
+        return ApiResult.Ok(new
+        {
+            success = result.Value!.Success,
+            message = result.Value.Message
+        });
     }
 
     private static IActionResult CreateError(

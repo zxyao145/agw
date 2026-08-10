@@ -13,3 +13,9 @@ test("file content fills the available preview panel width", async () => {
   assert.ok(classes.includes("w-full"));
   assert.ok(classes.includes("min-w-0"));
 });
+
+test("file content does not reserve space below the preview panel", async () => {
+  const source = await readFile(FILE_CONTENT_URL, "utf8");
+
+  assert.doesNotMatch(source, /className="flex-1 min-h-0 pb-36"/);
+});

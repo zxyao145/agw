@@ -58,6 +58,14 @@ test("SearchableSelect keeps its Combobox focus scope inside modal surfaces", as
   assert.match(comboboxSource, /<ComboboxPrimitive\.Portal container=\{portalContainer\}>/);
 });
 
+test("SearchableSelect renders its popup in the document body outside modal surfaces", async () => {
+  const source = await readFile(COMPONENT_URL, "utf8");
+
+  assert.match(source, /useState<HTMLElement \| undefined>\(undefined\)/);
+  assert.match(source, /closest<HTMLElement>\(MODAL_CONTENT_SELECTOR\) \?\? undefined/);
+  assert.doesNotMatch(source, /useState<HTMLElement \| null>\(null\)/);
+});
+
 test("AgentSelector forwards the optional Select size to SearchableSelect", async () => {
   const source = await readFile(COMPONENT_URL, "utf8");
   const agentSelectorSource = await readFile(AGENT_SELECTOR_URL, "utf8");

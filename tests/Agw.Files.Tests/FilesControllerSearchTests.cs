@@ -152,6 +152,14 @@ public class FilesControllerSearchTests
             return Task.FromResult(new GitResetResult(false, "Not implemented by test fake.", null, false));
         }
 
+        public Task<GitIndexResult> SetStagedAsync(
+            string path,
+            bool staged,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new GitIndexResult(false, "Not implemented by test fake.", null, false));
+        }
+
         public Task<GitCloneResult> CloneRepositoryAsync(
             string gitAddress,
             string workingDirectory,

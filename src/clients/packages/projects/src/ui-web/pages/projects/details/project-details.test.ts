@@ -316,10 +316,11 @@ test("project conversation UI uses conversation terminology", async () => {
 
   assert.match(conversationListSource, />Conversations<\/h2>/);
   assert.match(conversationListSource, /aria-label="Refresh conversations"/);
-  assert.match(conversationListSource, />Total conversations:<\/span>/);
+  assert.match(conversationListSource, /aria-label="Delete All History"/);
+  assert.match(conversationListSource, /<TooltipContent>Delete All History<\/TooltipContent>/);
   assert.doesNotMatch(
     conversationListSource,
-    /Chat Contexts|Refresh chat contexts|Total contexts:/,
+    /Chat Contexts|Refresh chat contexts|Total contexts:|Chat History Storage|Total conversations:/,
   );
 
   assert.match(projectDetailsSource, /Conversation ID:/);

@@ -59,6 +59,20 @@ export interface LineComment {
   timestamp: Date;
 }
 
+export type DiffLineKind =
+  | "context"
+  | "addition"
+  | "deletion"
+  | "placeholder"
+  | "hunk"
+  | "annotation";
+
+export interface CodeViewerLine {
+  content: string;
+  kind: DiffLineKind;
+  lineNumber?: number;
+}
+
 export interface FileTreeNodeProps {
   projectId: string;
   item: FileTreeItem;
@@ -68,11 +82,13 @@ export interface FileTreeNodeProps {
   recursiveMode: boolean;
   onFileDeleted?: (filePath: string) => void;
   onFileReset?: (filePath: string) => void;
+  onGitScopeChanged?: (path: string, targetScope: GitDiffScope) => void;
   defaultExpanded?: boolean;
 }
 
 export interface CodeViewerProps {
   content: string;
+  lines?: CodeViewerLine[];
   filePath: string;
   comments: LineComment[];
   setComments: React.Dispatch<React.SetStateAction<LineComment[]>>;

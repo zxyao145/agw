@@ -65,6 +65,48 @@ test("chat page refreshes the conversation list after an execution completes", a
   assert.match(pageSource, /onConversationChange=\{refreshConversationList\}/);
 });
 
+test("chat file explorer starts with diff mode disabled", async () => {
+  const workspaceSource = await readFile(CHAT_WORKSPACE_URL, "utf8");
+
+  assert.match(workspaceSource, /const \[onlyDiff, setOnlyDiff\] = React\.useState\(false\)/);
+});
+
+test("chat keeps a file's git scope while diff mode is disabled", async () => {
+  const workspaceSource = await readFile(CHAT_WORKSPACE_URL, "utf8");
+  const nonDiffBranchStart = workspaceSource.indexOf(
+    "} else {",
+    workspaceSource.indexOf("if (onlyDiff)"),
+  );
+  const nonDiffBranchEnd = workspaceSource.indexOf("} catch", nonDiffBranchStart);
+  const nonDiffBranch = workspaceSource.slice(nonDiffBranchStart, nonDiffBranchEnd);
+
+  assert.match(nonDiffBranch, /setSelectedDiffScope\(diffScope\)/);
+  assert.doesNotMatch(nonDiffBranch, /setSelectedDiffScope\(undefined\)/);
+  assert.match(workspaceSource, /setSelectedDiffScope\(targetScope\)/);
+});
+
+test("conversation toolbar owns the delete-all-history action and tooltip", async () => {
+  const [workspaceSource, conversationListSource] = await Promise.all([
+    readFile(CHAT_WORKSPACE_URL, "utf8"),
+    readFile(CONVERSATION_LIST_URL, "utf8"),
+  ]);
+
+  const settingsDialogStart = workspaceSource.indexOf("function ChatSettingsDialog");
+  const settingsDialogEnd = workspaceSource.indexOf("function ProjectRequiredState");
+  const settingsDialogSource = workspaceSource.slice(settingsDialogStart, settingsDialogEnd);
+
+  assert.doesNotMatch(settingsDialogSource, /Delete All History/);
+  assert.doesNotMatch(settingsDialogSource, /onDeleteAllHistory/);
+  assert.doesNotMatch(settingsDialogSource, /Chat History/);
+  assert.doesNotMatch(settingsDialogSource, /conversationCount/);
+  assert.match(conversationListSource, /aria-label="Delete All History"/);
+  assert.match(conversationListSource, /<TooltipContent>Delete All History<\/TooltipContent>/);
+  assert.match(conversationListSource, /onClick=\{\(\) => setClearAllDialogOpen\(true\)\}/);
+  assert.match(conversationListSource, /className="cursor-pointer hover:text-destructive"/);
+  assert.doesNotMatch(conversationListSource, /<Info /);
+  assert.doesNotMatch(conversationListSource, /Chat History Storage/);
+});
+
 test("shared chat preserves streamed messages after an execution completes", async () => {
   const chatSource = await readFile(CHAT_COMPONENT_URL, "utf8");
   const terminalBranchStart = chatSource.indexOf("const terminalStatus =");
