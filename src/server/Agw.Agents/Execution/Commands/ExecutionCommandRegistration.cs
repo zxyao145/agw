@@ -8,6 +8,7 @@ using Agw.Agents.Execution.Commands.Interrupt;
 using Agw.Agents.Execution.Commands.Mode;
 using Agw.Agents.Execution.Commands.Permission;
 using Agw.Agents.Execution.Commands.Setting;
+using Agw.Agents.Execution.Commands.Subscribe;
 using Agw.Shared.Exceptions;
 
 using Microsoft.AspNetCore.SignalR;
@@ -29,6 +30,8 @@ public static class ExecutionCommandRegistrationExtensions
             .AddExecutionCommand<SetModeCommand, SetModeCommandHandler>(nameof(SetModeCommand))
             .AddExecutionCommand<SetPermissionModeCommand, SetPermissionModeCommandHandler>(
                 nameof(SetPermissionModeCommand))
+            .AddExecutionCommand<SubscribeExecutionCommand, SubscribeExecutionCommandHandler>(
+                nameof(SubscribeExecutionCommand))
             .AddExecutionCommand<HumanResponseCommand, HumanResponseCommandHandler>(nameof(HumanResponseCommand));
 
     public static IServiceCollection AddExecutionCommand<TCommand, THandler>(

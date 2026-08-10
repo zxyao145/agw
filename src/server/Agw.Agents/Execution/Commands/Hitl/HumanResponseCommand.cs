@@ -17,13 +17,15 @@ public class HumanResponseCommand : AgentRunCommand
         bool approved,
         string? responseText = null,
         string approvalScope = "once",
-        JsonElement? responseData = null)
+        JsonElement? responseData = null,
+        Guid? executionId = null)
     {
         RequestId = requestId;
         Approved = approved;
         ResponseText = responseText;
         ApprovalScope = approvalScope;
         ResponseData = responseData;
+        ExecutionId = executionId;
     }
 
     public string RequestId { get; set; }
@@ -33,6 +35,11 @@ public class HumanResponseCommand : AgentRunCommand
     public string? ResponseText { get; set; }
 
     public JsonElement? ResponseData { get; set; }
+
+    /// <summary>
+    /// 获取或设置回答所属的 durable execution，防止响应被提交到其他执行。
+    /// </summary>
+    public Guid? ExecutionId { get; set; }
 
     public string ApprovalScope
     {

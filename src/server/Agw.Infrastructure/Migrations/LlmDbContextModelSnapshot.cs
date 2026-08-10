@@ -548,6 +548,132 @@ namespace Agw.Infrastructure.Migrations
                     b.ToTable("mcp_server", (string)null);
                 });
 
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Executions.DurableExecutionEventRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<Guid>("ExecutionId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("execution_id");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("payload_json");
+
+                    b.Property<int>("SegmentIndex")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("segment_index");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("sequence");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("Id")
+                        .HasName("pk_execution_stream_entry");
+
+                    b.HasIndex("ExecutionId", "SegmentIndex", "Sequence")
+                        .IsUnique()
+                        .HasDatabaseName("ix_execution_stream_entry_execution_id_segment_index_sequence");
+
+                    b.ToTable("execution_stream_entry", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Executions.DurableExecutionRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CheckpointJson")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("checkpoint_json");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("error_message");
+
+                    b.Property<string>("ManifestJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("manifest_json");
+
+                    b.Property<string>("PendingInteractionsJson")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("pending_interactions_json");
+
+                    b.Property<string>("ResponsesJson")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("responses_json");
+
+                    b.Property<int>("SegmentIndex")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("segment_index");
+
+                    b.Property<DateTimeOffset>("StateChangedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("state_changed_at");
+
+                    b.Property<Guid>("StateVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("state_version");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("status");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("user_name");
+
+                    b.HasKey("Id")
+                        .HasName("pk_durable_execution");
+
+                    b.HasIndex("Status", "StateChangedAt")
+                        .HasDatabaseName("ix_durable_execution_status_state_changed_at");
+
+                    b.ToTable("durable_execution", (string)null);
+                });
+
             modelBuilder.Entity("Agw.Shared.Data.Entities.Integrations.Connection", b =>
                 {
                     b.Property<Guid>("Id")

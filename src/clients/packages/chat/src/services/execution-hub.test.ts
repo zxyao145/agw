@@ -74,6 +74,38 @@ test("buildExecCommand includes target and streaming mode", async () => {
   });
 });
 
+test("buildExecCommand includes a durable execution identity when supplied", async () => {
+  const { buildExecCommand } = await import("./execution-hub" + ".ts");
+  const input = { messageId: "message-1", author: "$agw", contents: [] };
+
+  assert.deepEqual(
+    buildExecCommand({
+      executionId: "execution-1",
+      agentId: "agent-1",
+      agentType: 0,
+      input,
+    }),
+    {
+      type: "ExecCommand",
+      executionId: "execution-1",
+      agentId: "agent-1",
+      agentType: 0,
+      stream: true,
+      input,
+    },
+  );
+});
+
+test("buildSubscribeExecutionCommand resumes a Redis stream cursor", async () => {
+  const { buildSubscribeExecutionCommand } = await import("./execution-hub" + ".ts");
+
+  assert.deepEqual(buildSubscribeExecutionCommand("execution-1", "3-9"), {
+    type: "SubscribeExecutionCommand",
+    executionId: "execution-1",
+    cursor: "3-9",
+  });
+});
+
 test("getTurnFinishedStatus reads terminal AgwMessage", async () => {
   const { getTurnFinishedStatus } = await import("./execution-hub" + ".ts");
 

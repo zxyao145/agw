@@ -22,4 +22,9 @@ public sealed class CreateAiAgentRequest
     public bool Resume { get; init; }
 
     public string DefaultMode { get; init; } = "execute";
+
+    /// <summary>
+    /// 获取是否把人机交互 Tool 包装为可由 durable runtime checkpoint 的 approval 请求。
+    /// </summary>
+    public bool DeferHumanInteractions { get; init; }
 }

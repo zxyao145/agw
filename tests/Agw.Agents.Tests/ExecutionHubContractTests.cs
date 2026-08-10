@@ -21,9 +21,21 @@ public class ExecutionHubContractTests
             .ToArray();
 
         Assert.Contains(nameof(ExecutionHub.DispatchCommand), publicMethods);
+        Assert.Contains(nameof(ExecutionHub.GetExecutionProvider), publicMethods);
         Assert.DoesNotContain("StartExecution", publicMethods);
         Assert.DoesNotContain("AttachExecution", publicMethods);
         Assert.DoesNotContain("InterruptExecution", publicMethods);
+    }
+
+    [Fact]
+    public void GetExecutionProvider_ReturnsAStringCapability()
+    {
+        var method = typeof(ExecutionHub)
+            .GetMethod(nameof(ExecutionHub.GetExecutionProvider));
+
+        Assert.NotNull(method);
+        Assert.Equal(typeof(Task<string>), method.ReturnType);
+        Assert.Empty(method.GetParameters());
     }
 
     [Fact]

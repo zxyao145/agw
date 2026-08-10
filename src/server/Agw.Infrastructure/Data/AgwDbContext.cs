@@ -2,6 +2,7 @@ using Agw.Infrastructure.Data.Encryption;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
@@ -58,6 +59,17 @@ public class AgwDbContext : EFContext
     public DbSet<Agent> Agents => Set<Agent>();
     public DbSet<AgentConnectionRelation> AgentConnectionRelations => Set<AgentConnectionRelation>();
     public DbSet<AgentSessionStateEntry> AgentSessionStates => Set<AgentSessionStateEntry>();
+
+    /// <summary>
+    /// 获取 distributed execution 的 PostgreSQL 单行状态机集合。
+    /// </summary>
+    public DbSet<DurableExecutionRecord> DurableExecutions => Set<DurableExecutionRecord>();
+
+    /// <summary>
+    /// 获取 PostgreSQL event stream 实现的 append-only execution 消息集合。
+    /// </summary>
+    public DbSet<DurableExecutionEventRecord> DurableExecutionEvents =>
+        Set<DurableExecutionEventRecord>();
 
     public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<RemoteSkillCache> RemoteSkillCaches => Set<RemoteSkillCache>();

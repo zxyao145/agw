@@ -15,11 +15,42 @@ public partial class AgentRuntimeService
     /// <summary>
     /// 根据任务、Agent 配置和归一化 context 创建可恢复的 Agent 运行时。
     /// </summary>
-    public async Task<AgentRuntime?> CreateRuntimeAsync(
+    public Task<AgentRuntime?> CreateRuntimeAsync(
         Guid agentId,
         TaskProjection task,
         SettingCommand settings,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        CreateRuntimeCoreAsync(
+            agentId,
+            task,
+            settings,
+            deferHumanInteractions: false,
+            cancellationToken);
+
+    /// <summary>
+    /// 创建会把人机交互 Tool 延迟为可 checkpoint approval 边界的 Agent runtime。
+    /// </summary>
+    internal Task<AgentRuntime?> CreateDurableRuntimeAsync(
+        Guid agentId,
+        TaskProjection task,
+        SettingCommand settings,
+        CancellationToken cancellationToken = default) =>
+        CreateRuntimeCoreAsync(
+            agentId,
+            task,
+            settings,
+            deferHumanInteractions: true,
+            cancellationToken);
+
+    /// <summary>
+    /// 复用普通和 durable runtime 的创建流程，并由 deferHumanInteractions 控制 Tool 包装策略。
+    /// </summary>
+    private async Task<AgentRuntime?> CreateRuntimeCoreAsync(
+        Guid agentId,
+        TaskProjection task,
+        SettingCommand settings,
+        bool deferHumanInteractions,
+        CancellationToken cancellationToken)
     {
         var agent = await _agentAppService.GetAgentAsync(agentId);
         if (agent == null)
@@ -60,6 +91,7 @@ public partial class AgentRuntimeService
             ProjectId = projectId,
             ConversationId = conversationId,
             Resume = resume,
+            DeferHumanInteractions = deferHumanInteractions,
             OnExternalSessionStartedAsync = CreateExternalSessionStartedCallback(agent, task, resolvedContextId),
         }, cancellationToken);
         if (aiAgent == null)

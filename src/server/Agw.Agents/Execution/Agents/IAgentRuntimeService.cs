@@ -51,6 +51,23 @@ public interface IAgentRuntimeService
             environmentVariables,
             cancellationToken);
 
+    /// <summary>
+    /// 创建 Agentflow node Agent，并允许 durable 调用方延迟人机交互 Tool。
+    /// </summary>
+    Task<AIAgent?> CreateAgentflowNodeAgentAsync(
+        Guid agentId,
+        Guid? projectId,
+        Guid conversationId,
+        IReadOnlyDictionary<string, string>? environmentVariables,
+        bool deferHumanInteractions,
+        CancellationToken cancellationToken = default) =>
+        CreateAgentflowNodeAgentAsync(
+            agentId,
+            projectId,
+            conversationId,
+            environmentVariables,
+            cancellationToken);
+
     Task<AgentRuntime?> CreateRuntimeAsync(
         Guid agentId,
         TaskProjection task,

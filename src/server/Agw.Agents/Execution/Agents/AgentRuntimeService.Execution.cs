@@ -80,6 +80,48 @@ public partial class AgentRuntimeService
         return await ExecuteAsync(session, input, approvalHandler: null, cancellationToken);
     }
 
+    /// <summary>
+    /// 使用恢复后的 MAF session 执行 approval 响应分段，并在结束时保存 Agent session。
+    /// </summary>
+    internal async IAsyncEnumerable<AgwMessage> ExecuteDurableSegmentStreamingAsync(
+        AgentRuntime session,
+        ChatMessage message,
+        AgwUserInput summaryInput,
+        IHumanGateApprovalHandler approvalHandler,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(summaryInput);
+        ArgumentNullException.ThrowIfNull(approvalHandler);
+
+        try
+        {
+            await foreach (var output in session
+                               .ExecuteStreamingSegmentAsync(
+                                   message,
+                                   summaryInput,
+                                   approvalHandler,
+                                   cancellationToken)
+                               .ConfigureAwait(false))
+            {
+                yield return AgwMessageUtil.PostAgwMessage(session, output);
+            }
+        }
+        finally
+        {
+            if (session.SessionStateScope != null)
+            {
+                await _sessionStateStore.SaveAsync(
+                    session.AgentType,
+                    session.SessionStateScope,
+                    session.Agent,
+                    session.Session,
+                    CancellationToken.None);
+            }
+        }
+    }
+
     public async Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
         AgentRuntime session,
         AgwUserInput input,

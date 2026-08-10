@@ -68,7 +68,8 @@ public sealed class AgentCapabilityComposer
         string defaultMode = "execute",
         Func<IReadOnlyList<Guid>, CancellationToken, ValueTask<IReadOnlyList<Microsoft.Agents.AI.AIAgent>>>?
             backgroundAgentFactory = null,
-        Guid conversationId = default)
+        Guid conversationId = default,
+        bool deferHumanInteractions = false)
     {
         var lease = new AgentResourceLease();
         var tools = new List<AITool>();
@@ -126,7 +127,8 @@ public sealed class AgentCapabilityComposer
                 DefaultMode = defaultMode,
                 EnvironmentVariables = environmentVariables,
                 BackgroundAgentFactory = backgroundAgentFactory,
-                SupportsHostedWebSearch = supportsHostedWebSearch
+                SupportsHostedWebSearch = supportsHostedWebSearch,
+                DeferHumanInteractions = deferHumanInteractions
             };
 
             var toolContribution = await _toolRegistry
