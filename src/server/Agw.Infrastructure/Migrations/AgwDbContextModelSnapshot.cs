@@ -3,7 +3,6 @@ using System;
 using Agw.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,11 +10,9 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Agw.Infrastructure.Migrations
 {
     [DbContext(typeof(AgwDbContext))]
-    [Migration("20260807151950_ReplaceFileMemoryWithProjectMemory")]
-    partial class ReplaceFileMemoryWithProjectMemory
+    partial class AgwDbContextModelSnapshot : ModelSnapshot
     {
-        /// <inheritdoc />
-        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
@@ -418,9 +415,9 @@ namespace Agw.Infrastructure.Migrations
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentSessionStateEntry", b =>
                 {
-                    b.Property<Guid>("ProjectContextId")
+                    b.Property<Guid>("ProjectConversationId")
                         .HasColumnType("TEXT")
-                        .HasColumnName("project_context_id");
+                        .HasColumnName("project_conversation_id");
 
                     b.Property<Guid>("AgentId")
                         .HasColumnType("TEXT")
@@ -440,7 +437,7 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("updated_at");
 
-                    b.HasKey("ProjectContextId", "AgentId", "AgentflowNodeId")
+                    b.HasKey("ProjectConversationId", "AgentId", "AgentflowNodeId")
                         .HasName("pk_agent_session_state");
 
                     b.HasIndex("AgentId")
@@ -549,6 +546,132 @@ namespace Agw.Infrastructure.Migrations
                         .HasName("pk_mcp_server");
 
                     b.ToTable("mcp_server", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Executions.DurableExecutionEventRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<Guid>("ExecutionId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("execution_id");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("payload_json");
+
+                    b.Property<int>("SegmentIndex")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("segment_index");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("sequence");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("Id")
+                        .HasName("pk_execution_stream_entry");
+
+                    b.HasIndex("ExecutionId", "SegmentIndex", "Sequence")
+                        .IsUnique()
+                        .HasDatabaseName("ix_execution_stream_entry_execution_id_segment_index_sequence");
+
+                    b.ToTable("execution_stream_entry", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Executions.DurableExecutionRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("CheckpointJson")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("checkpoint_json");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("error_message");
+
+                    b.Property<string>("ManifestJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("manifest_json");
+
+                    b.Property<string>("PendingInteractionsJson")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("pending_interactions_json");
+
+                    b.Property<string>("ResponsesJson")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("responses_json");
+
+                    b.Property<int>("SegmentIndex")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("segment_index");
+
+                    b.Property<DateTimeOffset>("StateChangedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("state_changed_at");
+
+                    b.Property<Guid>("StateVersion")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("state_version");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("status");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("user_name");
+
+                    b.HasKey("Id")
+                        .HasName("pk_durable_execution");
+
+                    b.HasIndex("Status", "StateChangedAt")
+                        .HasDatabaseName("ix_durable_execution_status_state_changed_at");
+
+                    b.ToTable("durable_execution", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Integrations.Connection", b =>
@@ -1147,7 +1270,7 @@ namespace Agw.Infrastructure.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectContext", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectConversation", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1193,22 +1316,101 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_project_context");
+                        .HasName("pk_project_conversation");
 
                     b.HasIndex("JobId")
-                        .HasDatabaseName("ix_project_context_job_id");
+                        .HasDatabaseName("ix_project_conversation_job_id");
 
                     b.HasIndex("ProjectId")
-                        .HasDatabaseName("ix_project_context_project_id");
+                        .HasDatabaseName("ix_project_conversation_project_id");
 
                     b.HasIndex("UpdateTime")
-                        .HasDatabaseName("ix_project_context_update_time");
+                        .HasDatabaseName("ix_project_conversation_update_time");
 
                     b.HasIndex("ProjectId", "ContextId")
                         .IsUnique()
-                        .HasDatabaseName("ix_project_context_project_id_context_id");
+                        .HasDatabaseName("ix_project_conversation_project_id_context_id");
 
-                    b.ToTable("project_context", (string)null);
+                    b.ToTable("project_conversation", (string)null);
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectConversationChatHistory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AgentName")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("agent_name");
+
+                    b.Property<Guid>("ConversationId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_conversation_id");
+
+                    b.Property<string>("ConversationPayload")
+                        .HasColumnType("text")
+                        .HasColumnName("conversation_payload");
+
+                    b.Property<long?>("ConversationSequence")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("conversation_sequence");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("text")
+                        .HasColumnName("error");
+
+                    b.Property<DateTimeOffset?>("FinishedTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("finished_time");
+
+                    b.Property<Guid?>("JobId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("job_id");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("metadata");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("status");
+
+                    b.Property<string>("TaskErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("task_error_message");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("task_id");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.HasKey("Id")
+                        .HasName("pk_project_conversation_chat_history");
+
+                    b.HasIndex("ConversationId")
+                        .HasDatabaseName("ix_project_conversation_chat_history_project_conversation_id");
+
+                    b.HasIndex("ConversationId", "ConversationSequence")
+                        .HasDatabaseName("ix_project_conversation_chat_history_project_conversation_id_conversation_sequence");
+
+                    b.HasIndex("TaskId", "ConversationSequence")
+                        .HasDatabaseName("ix_project_conversation_chat_history_task_id_conversation_sequence");
+
+                    b.HasIndex("TaskId", "CreateTime")
+                        .HasDatabaseName("ix_project_conversation_chat_history_task_id_create_time");
+
+                    b.ToTable("project_conversation_chat_history", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectMcpServerRelation", b =>
@@ -1288,85 +1490,6 @@ namespace Agw.Infrastructure.Migrations
                     b.ToTable("project_skill_relation", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.TaskRecord", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
-                        .HasColumnName("id");
-
-                    b.Property<string>("AgentName")
-                        .HasMaxLength(200)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("agent_name");
-
-                    b.Property<string>("ConversationPayload")
-                        .HasColumnType("text")
-                        .HasColumnName("conversation_payload");
-
-                    b.Property<long?>("ConversationSequence")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("conversation_sequence");
-
-                    b.Property<DateTimeOffset>("CreateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("create_time");
-
-                    b.Property<string>("Error")
-                        .HasColumnType("text")
-                        .HasColumnName("error");
-
-                    b.Property<DateTimeOffset?>("FinishedTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("finished_time");
-
-                    b.Property<Guid?>("JobId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("job_id");
-
-                    b.Property<string>("Metadata")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("metadata");
-
-                    b.Property<Guid>("ProjectContextId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("project_context_id");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("status");
-
-                    b.Property<string>("TaskErrorMessage")
-                        .HasMaxLength(2000)
-                        .HasColumnType("TEXT")
-                        .HasColumnName("task_error_message");
-
-                    b.Property<Guid>("TaskId")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("task_id");
-
-                    b.Property<DateTimeOffset?>("UpdateTime")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("update_time");
-
-                    b.HasKey("Id")
-                        .HasName("pk_project_task_record");
-
-                    b.HasIndex("ProjectContextId")
-                        .HasDatabaseName("ix_project_task_record_project_context_id");
-
-                    b.HasIndex("ProjectContextId", "ConversationSequence")
-                        .HasDatabaseName("ix_project_task_record_project_context_id_conversation_sequence");
-
-                    b.HasIndex("TaskId", "ConversationSequence")
-                        .HasDatabaseName("ix_project_task_record_task_id_conversation_sequence");
-
-                    b.HasIndex("TaskId", "CreateTime")
-                        .HasDatabaseName("ix_project_task_record_task_id_create_time");
-
-                    b.ToTable("project_task_record", (string)null);
-                });
-
             modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.TaskSessionBinding", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1392,9 +1515,9 @@ namespace Agw.Infrastructure.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("external_agent_name");
 
-                    b.Property<Guid>("ProjectContextId")
+                    b.Property<Guid>("ProjectConversationId")
                         .HasColumnType("TEXT")
-                        .HasColumnName("project_context_id");
+                        .HasColumnName("project_conversation_id");
 
                     b.Property<string>("ProviderSessionId")
                         .IsRequired()
@@ -1416,14 +1539,14 @@ namespace Agw.Infrastructure.Migrations
                     b.HasIndex("ExternalAgentName", "ProviderSessionId")
                         .HasDatabaseName("ix_task_session_binding_external_agent_name_provider_session_id");
 
-                    b.HasIndex("ProjectContextId", "AgentId", "ExternalAgentName")
+                    b.HasIndex("ProjectConversationId", "AgentId", "ExternalAgentName")
                         .IsUnique()
-                        .HasDatabaseName("ix_task_session_binding_project_context_id_agent_id_external_agent_name");
+                        .HasDatabaseName("ix_task_session_binding_project_conversation_id_agent_id_external_agent_name");
 
                     b.ToTable("task_session_binding", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.LlmModel", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.AgwAiModel", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1828,16 +1951,16 @@ namespace Agw.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_agent_session_state_agent_agent_id");
 
-                    b.HasOne("Agw.Shared.Data.Entities.Projects.ProjectContext", "ProjectContext")
+                    b.HasOne("Agw.Shared.Data.Entities.Projects.ProjectConversation", "ProjectConversation")
                         .WithMany()
-                        .HasForeignKey("ProjectContextId")
+                        .HasForeignKey("ProjectConversationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_agent_session_state_project_context_project_context_id");
+                        .HasConstraintName("fk_agent_session_state_project_conversation_project_conversation_id");
 
                     b.Navigation("Agent");
 
-                    b.Navigation("ProjectContext");
+                    b.Navigation("ProjectConversation");
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Agents.AgentSkillRelation", b =>
@@ -1904,16 +2027,28 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("Project");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectContext", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectConversation", b =>
                 {
                     b.HasOne("Agw.Shared.Data.Entities.Projects.Project", "Project")
-                        .WithMany("Contexts")
+                        .WithMany("Conversations")
                         .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_project_context_project_project_id");
+                        .HasConstraintName("fk_project_conversation_project_project_id");
 
                     b.Navigation("Project");
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectConversationChatHistory", b =>
+                {
+                    b.HasOne("Agw.Shared.Data.Entities.Projects.ProjectConversation", "ProjectConversation")
+                        .WithMany("ChatHistories")
+                        .HasForeignKey("ConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_project_conversation_chat_history_project_conversation_project_conversation_id");
+
+                    b.Navigation("ProjectConversation");
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectMcpServerRelation", b =>
@@ -1958,33 +2093,21 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("Skill");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.TaskRecord", b =>
-                {
-                    b.HasOne("Agw.Shared.Data.Entities.Projects.ProjectContext", "ProjectContext")
-                        .WithMany("Records")
-                        .HasForeignKey("ProjectContextId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_project_task_record_project_context_project_context_id");
-
-                    b.Navigation("ProjectContext");
-                });
-
             modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.TaskSessionBinding", b =>
                 {
-                    b.HasOne("Agw.Shared.Data.Entities.Projects.ProjectContext", "ProjectContext")
+                    b.HasOne("Agw.Shared.Data.Entities.Projects.ProjectConversation", "ProjectConversation")
                         .WithMany()
-                        .HasForeignKey("ProjectContextId")
+                        .HasForeignKey("ProjectConversationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_task_session_binding_project_context_project_context_id");
+                        .HasConstraintName("fk_task_session_binding_project_conversation_project_conversation_id");
 
-                    b.Navigation("ProjectContext");
+                    b.Navigation("ProjectConversation");
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.ModelProviderRelation", b =>
                 {
-                    b.HasOne("Agw.Shared.Data.Entities.Providers.LlmModel", "Model")
+                    b.HasOne("Agw.Shared.Data.Entities.Providers.AgwAiModel", "Model")
                         .WithMany("Providers")
                         .HasForeignKey("ModelId")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -2065,7 +2188,7 @@ namespace Agw.Infrastructure.Migrations
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.Project", b =>
                 {
-                    b.Navigation("Contexts");
+                    b.Navigation("Conversations");
 
                     b.Navigation("ProjectConnectionRelations");
 
@@ -2074,12 +2197,12 @@ namespace Agw.Infrastructure.Migrations
                     b.Navigation("ProjectSkillRelations");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectContext", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectConversation", b =>
                 {
-                    b.Navigation("Records");
+                    b.Navigation("ChatHistories");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.LlmModel", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.AgwAiModel", b =>
                 {
                     b.Navigation("Providers");
                 });

@@ -89,7 +89,7 @@ public sealed class AgwAgentArchitectureTests
                 SearchOption.TopDirectoryOnly)
             .Where(path =>
                 Path.GetFileName(path).StartsWith("20260729", StringComparison.Ordinal) ||
-                path.EndsWith("LlmDbContextModelSnapshot.cs", StringComparison.Ordinal));
+                path.EndsWith("AgwDbContextModelSnapshot.cs", StringComparison.Ordinal));
         var violations = migrationFiles
             .Where(path => File.ReadAllText(path).Contains("tool_blocks", StringComparison.Ordinal))
             .Select(path => Path.GetRelativePath(repositoryRoot, path))
