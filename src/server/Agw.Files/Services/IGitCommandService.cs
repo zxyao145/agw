@@ -11,5 +11,10 @@ public interface IGitCommandService
 
     Task<GitResetResult> ResetFileAsync(string filePath, CancellationToken cancellationToken = default);
 
+    Task<GitIndexResult> SetStagedAsync(
+        string path,
+        bool staged,
+        CancellationToken cancellationToken = default);
+
     Task<GitCloneResult> CloneRepositoryAsync(string gitAddress, string workingDirectory, CancellationToken cancellationToken = default);
 }

@@ -2,48 +2,35 @@
 
 import * as React from "react";
 import { cn } from "@agw/components";
+import { parseUnifiedDiff } from "./diff-parser";
 import FileViewer from "./file-viewer";
 import { CommentSide, DiffViewerProps, LineComment } from "./types";
 
-/**
- * Parse unified diff format into original and modified file contents
- */
-function parseDiffToFiles(diffText: string): { original: string; modified: string } {
-  const lines = diffText.split("\n");
-  const originalLines: string[] = [];
-  const modifiedLines: string[] = [];
+const DEFAULT_SPLIT_PERCENTAGE = 50;
+const MIN_SPLIT_PERCENTAGE = 20;
+const MAX_SPLIT_PERCENTAGE = 80;
+const KEYBOARD_RESIZE_STEP = 2;
+const SCROLL_SYNC_TOLERANCE = 1;
 
-  for (const line of lines) {
-    // Skip diff header lines
-    if (
-      line.startsWith("diff --git") ||
-      line.startsWith("index ") ||
-      line.startsWith("--- ") ||
-      line.startsWith("+++ ") ||
-      line.startsWith("@@")
-    ) {
-      continue;
-    }
+interface ScrollPosition {
+  top: number;
+  left: number;
+}
 
-    if (line.startsWith("-")) {
-      // Removed line (only in original)
-      originalLines.push(line.substring(1));
-    } else if (line.startsWith("+")) {
-      // Added line (only in modified)
-      modifiedLines.push(line.substring(1));
-    } else if (line.startsWith(" ")) {
-      // Context line (in both)
-      const content = line.substring(1);
-      originalLines.push(content);
-      modifiedLines.push(content);
-    }
-    // Empty lines are preserved as-is
-  }
+function clampSplitPercentage(value: number): number {
+  return Math.min(MAX_SPLIT_PERCENTAGE, Math.max(MIN_SPLIT_PERCENTAGE, value));
+}
 
-  return {
-    original: originalLines.join("\n"),
-    modified: modifiedLines.join("\n"),
-  };
+function mapScrollOffset(offset: number, sourceRange: number, targetRange: number): number {
+  if (sourceRange <= 0 || targetRange <= 0) return 0;
+  return Math.min(targetRange, Math.max(0, (offset / sourceRange) * targetRange));
+}
+
+function hasScrollPosition(element: HTMLDivElement, position: ScrollPosition): boolean {
+  return (
+    Math.abs(element.scrollTop - position.top) <= SCROLL_SYNC_TOLERANCE &&
+    Math.abs(element.scrollLeft - position.left) <= SCROLL_SYNC_TOLERANCE
+  );
 }
 
 export function DiffViewer({
@@ -54,13 +41,30 @@ export function DiffViewer({
   setComments,
   scope,
 }: DiffViewerProps) {
-  const { original, modified } = React.useMemo(() => parseDiffToFiles(diff), [diff]);
+  const { original: originalLines, modified: modifiedLines } = React.useMemo(
+    () => parseUnifiedDiff(diff),
+    [diff],
+  );
   const [originalLabel, modifiedLabel] =
     scope === "staged"
       ? ["HEAD", "Staged"]
       : scope === "unstaged"
         ? ["Staged", "Working Tree"]
         : ["Original", "Modified"];
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const originalScrollRef = React.useRef<HTMLDivElement>(null);
+  const modifiedScrollRef = React.useRef<HTMLDivElement>(null);
+  const programmaticScrollPositionsRef = React.useRef(
+    new WeakMap<HTMLDivElement, ScrollPosition>(),
+  );
+  const [splitPercentage, setSplitPercentage] = React.useState(DEFAULT_SPLIT_PERCENTAGE);
+  const [isResizing, setIsResizing] = React.useState(false);
+  const hasRenderableDiffLines = React.useMemo(
+    () =>
+      originalLines.some((line) => line.kind !== "hunk" && line.kind !== "placeholder") ||
+      modifiedLines.some((line) => line.kind !== "hunk" && line.kind !== "placeholder"),
+    [modifiedLines, originalLines],
+  );
 
   // Filter comments for each side
   const originalComments = React.useMemo(
@@ -110,6 +114,92 @@ export function DiffViewer({
     [setComments],
   );
 
+  const updateSplitPosition = React.useCallback((clientX: number) => {
+    const containerRect = containerRef.current?.getBoundingClientRect();
+    if (!containerRect || containerRect.width === 0) return;
+
+    const nextPercentage = ((clientX - containerRect.left) / containerRect.width) * 100;
+    setSplitPercentage(clampSplitPercentage(nextPercentage));
+  }, []);
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setIsResizing(true);
+    updateSplitPosition(event.clientX);
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!isResizing) return;
+
+    event.preventDefault();
+    updateSplitPosition(event.clientX);
+  };
+
+  const handlePointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    setIsResizing(false);
+  };
+
+  const handleSeparatorKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+
+    event.preventDefault();
+    const direction = event.key === "ArrowLeft" ? -1 : 1;
+    setSplitPercentage((current) =>
+      clampSplitPercentage(current + direction * KEYBOARD_RESIZE_STEP),
+    );
+  };
+
+  const syncScroll = React.useCallback(
+    (event: React.UIEvent<HTMLDivElement>, targetRef: React.RefObject<HTMLDivElement | null>) => {
+      const source = event.currentTarget;
+      const programmedPosition = programmaticScrollPositionsRef.current.get(source);
+      if (programmedPosition) {
+        programmaticScrollPositionsRef.current.delete(source);
+        if (hasScrollPosition(source, programmedPosition)) return;
+      }
+
+      const target = targetRef.current;
+      if (!target) return;
+
+      const nextPosition = {
+        top: mapScrollOffset(
+          source.scrollTop,
+          source.scrollHeight - source.clientHeight,
+          target.scrollHeight - target.clientHeight,
+        ),
+        left: mapScrollOffset(
+          source.scrollLeft,
+          source.scrollWidth - source.clientWidth,
+          target.scrollWidth - target.clientWidth,
+        ),
+      };
+      if (hasScrollPosition(target, nextPosition)) return;
+
+      programmaticScrollPositionsRef.current.set(target, nextPosition);
+      target.scrollTop = nextPosition.top;
+      target.scrollLeft = nextPosition.left;
+    },
+    [],
+  );
+
+  React.useEffect(() => {
+    if (!isResizing) return;
+
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    return () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+    };
+  }, [isResizing]);
+
   if (!diff.trim()) {
     return (
       <div
@@ -120,43 +210,94 @@ export function DiffViewer({
     );
   }
 
+  if (!hasRenderableDiffLines) {
+    return (
+      <div
+        className={cn("h-full overflow-auto bg-muted/10 agw-scrollbar", className)}
+        aria-label="Git diff metadata"
+      >
+        <pre className="min-w-max p-4 font-mono text-sm whitespace-pre text-muted-foreground">
+          {diff.trimEnd()}
+        </pre>
+      </div>
+    );
+  }
+
   return (
-    <div className={cn("flex flex-col h-full overflow-hidden", className)}>
-      {/* Header row */}
-      <div className="flex shrink-0 border-b border-border">
-        <div className="flex-1 bg-red-50 dark:bg-red-950 px-3 py-1.5 border-r border-border text-sm font-medium text-red-900 dark:text-red-100">
-          {originalLabel}
-        </div>
-        <div className="flex-1 bg-green-50 dark:bg-green-950 px-3 py-1.5 text-sm font-medium text-green-900 dark:text-green-100">
-          {modifiedLabel}
-        </div>
+    <div
+      ref={containerRef}
+      className={cn("grid h-full min-w-0 overflow-hidden", className)}
+      style={{
+        gridTemplateColumns: `calc(${splitPercentage}% - 2px) 4px minmax(0, 1fr)`,
+        gridTemplateRows: "auto minmax(0, 1fr)",
+      }}
+    >
+      <div className="col-start-1 row-start-1 min-w-0 border-b border-border bg-red-50 px-3 py-1.5 text-sm font-medium text-red-900 dark:bg-red-950 dark:text-red-100">
+        {originalLabel}
       </div>
 
-      {/* File viewers */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Original side */}
-        <div className="flex-1 overflow-auto agw-scrollbar border-r border-border">
-          <FileViewer
-            content={original}
-            filePath={filePath}
-            comments={originalComments}
-            setComments={handleSetOriginalComments}
-            isDiffView={true}
-            commentSide={CommentSide.Original}
-          />
-        </div>
+      <div
+        role="separator"
+        aria-label="Resize diff panels"
+        aria-orientation="vertical"
+        aria-valuemin={MIN_SPLIT_PERCENTAGE}
+        aria-valuemax={MAX_SPLIT_PERCENTAGE}
+        aria-valuenow={Math.round(splitPercentage)}
+        tabIndex={0}
+        className={cn(
+          "group relative z-10 col-start-2 row-span-2 row-start-1 touch-none cursor-col-resize outline-none",
+          "focus-visible:ring-2 focus-visible:ring-primary/40",
+        )}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerEnd}
+        onPointerCancel={handlePointerEnd}
+        onLostPointerCapture={() => setIsResizing(false)}
+        onKeyDown={handleSeparatorKeyDown}
+      >
+        <div
+          className={cn(
+            "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors",
+            "group-hover:bg-primary/60 group-focus-visible:bg-primary/60",
+            isResizing && "bg-primary",
+          )}
+        />
+      </div>
 
-        {/* Modified side */}
-        <div className="flex-1 overflow-auto agw-scrollbar">
-          <FileViewer
-            content={modified}
-            filePath={filePath}
-            comments={modifiedComments}
-            setComments={handleSetModifiedComments}
-            isDiffView={true}
-            commentSide={CommentSide.Modified}
-          />
-        </div>
+      <div className="col-start-3 row-start-1 min-w-0 border-b border-border bg-green-50 px-3 py-1.5 text-sm font-medium text-green-900 dark:bg-green-950 dark:text-green-100">
+        {modifiedLabel}
+      </div>
+
+      <div
+        ref={originalScrollRef}
+        className="col-start-1 row-start-2 min-h-0 min-w-0 overflow-auto agw-scrollbar"
+        onScroll={(event) => syncScroll(event, modifiedScrollRef)}
+      >
+        <FileViewer
+          content=""
+          lines={originalLines}
+          filePath={filePath}
+          comments={originalComments}
+          setComments={handleSetOriginalComments}
+          isDiffView={true}
+          commentSide={CommentSide.Original}
+        />
+      </div>
+
+      <div
+        ref={modifiedScrollRef}
+        className="col-start-3 row-start-2 min-h-0 min-w-0 overflow-auto agw-scrollbar"
+        onScroll={(event) => syncScroll(event, originalScrollRef)}
+      >
+        <FileViewer
+          content=""
+          lines={modifiedLines}
+          filePath={filePath}
+          comments={modifiedComments}
+          setComments={handleSetModifiedComments}
+          isDiffView={true}
+          commentSide={CommentSide.Modified}
+        />
       </div>
     </div>
   );

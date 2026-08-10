@@ -90,6 +90,123 @@ public class GitCommandServiceTests
         Assert.Contains("+new content", result.Diff, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task SetStagedAsync_File_MovesChangesBetweenIndexAndWorkingTree()
+    {
+        using var repository = TempGitRepository.Create();
+        repository.Write("changed.txt", "base\n");
+        repository.CommitAll();
+        repository.Write("changed.txt", "changed\n");
+        var service = new GitCommandService(NullLogger<GitCommandService>.Instance);
+        var filePath = repository.GetPath("changed.txt");
+
+        var stageResult = await service.SetStagedAsync(
+            filePath,
+            staged: true,
+            TestContext.Current.CancellationToken);
+        var stagedFiles = await service.GetChangedFilesAsync(
+            repository.Path,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(stageResult.Success, $"{stageResult.Message}: {stageResult.Error}");
+        Assert.NotNull(stagedFiles);
+        AssertStatus(stagedFiles, repository, "changed.txt", "modified", null);
+
+        var unstageResult = await service.SetStagedAsync(
+            filePath,
+            staged: false,
+            TestContext.Current.CancellationToken);
+        var unstagedFiles = await service.GetChangedFilesAsync(
+            repository.Path,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(unstageResult.Success);
+        Assert.NotNull(unstagedFiles);
+        AssertStatus(unstagedFiles, repository, "changed.txt", null, "modified");
+    }
+
+    [Fact]
+    public async Task SetStagedAsync_Directory_MovesAllDescendantChanges()
+    {
+        using var repository = TempGitRepository.Create();
+        Directory.CreateDirectory(repository.GetPath("src"));
+        repository.Write("src/first.txt", "base\n");
+        repository.Write("src/second.txt", "base\n");
+        repository.CommitAll();
+        repository.Write("src/first.txt", "first change\n");
+        repository.Write("src/second.txt", "second change\n");
+        var service = new GitCommandService(NullLogger<GitCommandService>.Instance);
+
+        var result = await service.SetStagedAsync(
+            repository.GetPath("src"),
+            staged: true,
+            TestContext.Current.CancellationToken);
+        var changedFiles = await service.GetChangedFilesAsync(
+            repository.Path,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(result.Success, $"{result.Message}: {result.Error}");
+        Assert.NotNull(changedFiles);
+        AssertStatus(changedFiles, repository, "src/first.txt", "modified", null);
+        AssertStatus(changedFiles, repository, "src/second.txt", "modified", null);
+
+        var unstageResult = await service.SetStagedAsync(
+            repository.GetPath("src"),
+            staged: false,
+            TestContext.Current.CancellationToken);
+        var unstagedFiles = await service.GetChangedFilesAsync(
+            repository.Path,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(unstageResult.Success, $"{unstageResult.Message}: {unstageResult.Error}");
+        Assert.NotNull(unstagedFiles);
+        AssertStatus(unstagedFiles, repository, "src/first.txt", null, "modified");
+        AssertStatus(unstagedFiles, repository, "src/second.txt", null, "modified");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SetStagedAsync_MissingPath_ReturnsClientError(bool staged)
+    {
+        using var repository = TempGitRepository.Create();
+        repository.Write("tracked.txt", "content\n");
+        repository.CommitAll();
+        var service = new GitCommandService(NullLogger<GitCommandService>.Instance);
+
+        var result = await service.SetStagedAsync(
+            repository.GetPath("missing.txt"),
+            staged,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(result.Success);
+        Assert.True(result.IsClientError);
+        Assert.Null(result.Error);
+    }
+
+    [Fact]
+    public async Task SetStagedAsync_IndexLockFailure_RemainsServerError()
+    {
+        using var repository = TempGitRepository.Create();
+        repository.Write("changed.txt", "base\n");
+        repository.CommitAll();
+        repository.Write("changed.txt", "changed\n");
+        await File.WriteAllTextAsync(
+            repository.GetPath(".git/index.lock"),
+            "locked",
+            TestContext.Current.CancellationToken);
+        var service = new GitCommandService(NullLogger<GitCommandService>.Instance);
+
+        var result = await service.SetStagedAsync(
+            repository.GetPath("changed.txt"),
+            staged: true,
+            TestContext.Current.CancellationToken);
+
+        Assert.False(result.Success);
+        Assert.False(result.IsClientError);
+        Assert.Contains("index.lock", result.Error, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static void AssertStatus(
         GitChangedFiles changedFiles,
         TempGitRepository repository,

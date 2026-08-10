@@ -487,6 +487,68 @@ public class FileAppServiceTests
     }
 
     [Fact]
+    public async Task StageAsync_DeletedPath_ForwardsToGitWithoutRequiringPhysicalEntry()
+    {
+        using var scope = TempDirectoryScope.Create();
+        var git = new FakeGitCommandService
+        {
+            IndexResult = new GitIndexResult(true, "Changes staged successfully", null, false)
+        };
+        var service = CreateService(scope.Path, git);
+
+        var result = await service.StageAsync(
+            ProjectId,
+            "deleted.txt",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(FileOperationStatus.Success, result.Status);
+        Assert.True(result.Value!.Success);
+        Assert.True(git.LastStaged);
+        Assert.Equal(Path.Combine(scope.Path, "deleted.txt"), git.LastIndexPath);
+    }
+
+    [Fact]
+    public async Task UnstageAsync_Directory_ForwardsDirectoryPathToGit()
+    {
+        using var scope = TempDirectoryScope.Create();
+        var git = new FakeGitCommandService
+        {
+            IndexResult = new GitIndexResult(true, "Changes unstaged successfully", null, false)
+        };
+        var service = CreateService(scope.Path, git);
+
+        var result = await service.UnstageAsync(
+            ProjectId,
+            "src/features",
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(FileOperationStatus.Success, result.Status);
+        Assert.True(result.Value!.Success);
+        Assert.False(git.LastStaged);
+        Assert.Equal(Path.Combine(scope.Path, "src/features"), git.LastIndexPath);
+    }
+
+    [Theory]
+    [InlineData(".")]
+    [InlineData("./")]
+    [InlineData("src/..")]
+    public async Task StageAsync_WorkspaceRoot_ReturnsInvalidRequest(string path)
+    {
+        using var scope = TempDirectoryScope.Create();
+        var git = new FakeGitCommandService();
+        var service = CreateService(scope.Path, git);
+
+        var result = await service.StageAsync(
+            ProjectId,
+            path,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(FileOperationStatus.InvalidRequest, result.Status);
+        Assert.Equal("Workspace root cannot be staged or unstaged", result.Message);
+        Assert.Null(git.LastIndexPath);
+    }
+
+    [Fact]
     public async Task SearchAsync_Recursive_AppliesIgnoreRulesAndLimit()
     {
         using var scope = TempDirectoryScope.Create();
@@ -650,7 +712,14 @@ public class FileAppServiceTests
         public GitResetResult ResetResult { get; set; } =
             new(true, "File reset successfully", null, false);
 
+        public GitIndexResult IndexResult { get; set; } =
+            new(true, "Changes staged successfully", null, false);
+
         public GitDiffScope LastDiffScope { get; private set; } = GitDiffScope.All;
+
+        public string? LastIndexPath { get; private set; }
+
+        public bool LastStaged { get; private set; }
 
         public Task<GitChangedFiles?> GetChangedFilesAsync(
             string directory,
@@ -673,6 +742,16 @@ public class FileAppServiceTests
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult(ResetResult);
+        }
+
+        public Task<GitIndexResult> SetStagedAsync(
+            string path,
+            bool staged,
+            CancellationToken cancellationToken = default)
+        {
+            LastIndexPath = path;
+            LastStaged = staged;
+            return Task.FromResult(IndexResult);
         }
 
         public Task<GitCloneResult> CloneRepositoryAsync(

@@ -150,6 +150,24 @@ export async function resetFile(
   }
 }
 
+/**
+ * Move file or directory changes between the working tree and Git index.
+ */
+export async function setFileStaged(
+  projectId: string,
+  path: string,
+  staged: boolean,
+): Promise<{ success: boolean; message: string }> {
+  try {
+    const endpoint = staged ? "/api/files/stage" : "/api/files/unstage";
+    return (await apiPost(endpoint, {
+      params: { query: { projectId, path } },
+    })) as { success: boolean; message: string };
+  } catch (err) {
+    throw toFileApiError(err, staged ? "Failed to stage changes" : "Failed to unstage changes");
+  }
+}
+
 export interface FileSearchResult {
   fullPath: string;
   relativePath: string;

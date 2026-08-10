@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Info, Pencil, Plus, RotateCw, Trash2 } from "lucide-react";
+import { Pencil, Plus, RotateCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -22,6 +22,7 @@ import {
 } from "@agw/components";
 import { Input } from "@agw/components";
 import { formatFriendlyLocalDateTime } from "@agw/components";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@agw/components";
 import { cn } from "@agw/components";
 
 interface ConversationListProps {
@@ -46,7 +47,6 @@ export function ConversationList({
   headerActions,
 }: ConversationListProps) {
   const [contexts, setContexts] = React.useState<ContextSummary[]>([]);
-  const [infoModalOpen, setInfoModalOpen] = React.useState(false);
   const [clearAllDialogOpen, setClearAllDialogOpen] = React.useState(false);
   const [contextToDelete, setContextToDelete] = React.useState<ContextSummary | null>(null);
   const [contextToRename, setContextToRename] = React.useState<ContextSummary | null>(null);
@@ -243,14 +243,22 @@ export function ConversationList({
           >
             <Plus className="h-4 w-4" />
           </Button>
-          <Button
-            className="cursor-pointer"
-            size="sm"
-            variant="ghost"
-            onClick={() => setInfoModalOpen(true)}
-          >
-            <Info className="h-4 w-4 " />
-          </Button>
+          {contexts.length > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  className="cursor-pointer hover:text-destructive"
+                  size="sm"
+                  variant="ghost"
+                  aria-label="Delete All History"
+                  onClick={() => setClearAllDialogOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Delete All History</TooltipContent>
+            </Tooltip>
+          )}
           {headerActions}
         </div>
       </div>
@@ -324,41 +332,6 @@ export function ConversationList({
           })
         )}
       </div>
-
-      <Dialog open={infoModalOpen} onOpenChange={setInfoModalOpen}>
-        <DialogContent size="sm">
-          <DialogHeader>
-            <DialogTitle>Chat History Storage</DialogTitle>
-            <DialogDescription>Storage statistics and management options</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Total conversations:</span>
-                <span className="font-mono font-medium">{contexts.length}</span>
-              </div>
-            </div>
-
-            {contexts.length > 0 && (
-              <Button
-                variant="destructive"
-                className="w-full"
-                onClick={() => {
-                  setInfoModalOpen(false);
-                  setClearAllDialogOpen(true);
-                }}
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete All History
-              </Button>
-            )}
-
-            <div className="text-xs text-muted-foreground border-t pt-4">
-              <p className="mb-2">Chat history is stored on the server.</p>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <Dialog
         open={Boolean(contextToRename)}

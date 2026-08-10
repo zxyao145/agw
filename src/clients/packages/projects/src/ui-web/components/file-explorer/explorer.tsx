@@ -8,6 +8,8 @@ import React from "react";
 import { buildGitChangeGroups } from "./git-change-tree";
 import type { GitChangeGroup } from "./types";
 
+const ROOT_RELOAD_DEBOUNCE_MS = 150;
+
 export default function Explorer({
   projectId,
   rootDirectory,
@@ -18,6 +20,7 @@ export default function Explorer({
   onLoadFileContent,
   onFileSelected,
   onFileReseted,
+  onFileGitScopeChanged,
 }: {
   projectId: string;
   rootDirectory: string;
@@ -29,11 +32,13 @@ export default function Explorer({
   onLoadFileContent: (filePath: string, scope?: GitDiffScope) => void;
   onFileSelected: (filePath: string | null, scope?: GitDiffScope) => void;
   onFileReseted: (filePath: string | null) => void;
+  onFileGitScopeChanged: (path: string, targetScope: GitDiffScope) => void;
 }): React.ReactNode {
   const [rootItems, setRootItems] = React.useState<FileItem[]>([]);
   const [changeGroups, setChangeGroups] = React.useState<GitChangeGroup[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const reloadTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadRootDirectory = React.useCallback(async () => {
     setIsLoading(true);
@@ -64,6 +69,27 @@ export default function Explorer({
     loadRootDirectory();
   }, [loadRootDirectory]);
 
+  const scheduleRootDirectoryReload = React.useCallback(() => {
+    if (reloadTimeoutRef.current !== null) {
+      clearTimeout(reloadTimeoutRef.current);
+    }
+
+    reloadTimeoutRef.current = setTimeout(() => {
+      reloadTimeoutRef.current = null;
+      void loadRootDirectory();
+    }, ROOT_RELOAD_DEBOUNCE_MS);
+  }, [loadRootDirectory]);
+
+  React.useEffect(
+    () => () => {
+      if (reloadTimeoutRef.current !== null) {
+        clearTimeout(reloadTimeoutRef.current);
+        reloadTimeoutRef.current = null;
+      }
+    },
+    [loadRootDirectory],
+  );
+
   const handleFileDeleted = React.useCallback(
     (path: string) => {
       // Reload the directory after deletion
@@ -86,6 +112,14 @@ export default function Explorer({
       onFileSelected(path, scope);
     },
     [onFileSelected],
+  );
+
+  const handleGitScopeChanged = React.useCallback(
+    (path: string, targetScope: GitDiffScope) => {
+      onFileGitScopeChanged(path, targetScope);
+      scheduleRootDirectoryReload();
+    },
+    [onFileGitScopeChanged, scheduleRootDirectoryReload],
   );
 
   return (
@@ -118,6 +152,7 @@ export default function Explorer({
               onFileSelect={handleFileSelect}
               onFileDeleted={handleFileDeleted}
               onFileReset={handleFileReset}
+              onGitScopeChanged={handleGitScopeChanged}
             />
           )}
 

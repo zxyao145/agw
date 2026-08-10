@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 using Agw.Files.Utils;
 
 using CliWrap;
@@ -66,6 +68,12 @@ public record GitResetResult(
     string? Error,
     bool IsClientError);
 
+public record GitIndexResult(
+    bool Success,
+    string Message,
+    string? Error,
+    bool IsClientError);
+
 public record GitCloneResult(
     bool Success,
     string? Error,
@@ -74,6 +82,9 @@ public record GitCloneResult(
 
 public class GitCommandService : IGitCommandService
 {
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> IndexMutationLocks =
+        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
     private readonly ILogger<GitCommandService> _logger;
 
     public GitCommandService(ILogger<GitCommandService> logger)
@@ -289,6 +300,93 @@ public class GitCommandService : IGitCommandService
         }
 
         return new GitResetResult(true, "File reset successfully", null, false);
+    }
+
+    public async Task<GitIndexResult> SetStagedAsync(
+        string path,
+        bool staged,
+        CancellationToken cancellationToken = default)
+    {
+        var gitDirectory = FindGitDirectory(path);
+        if (gitDirectory == null)
+        {
+            return new GitIndexResult(false, "Path is not in a git repository", null, true);
+        }
+
+        var indexMutationLock = IndexMutationLocks.GetOrAdd(
+            Path.GetFullPath(gitDirectory),
+            static _ => new SemaphoreSlim(1, 1));
+        await indexMutationLock.WaitAsync(cancellationToken);
+        try
+        {
+            var relativePath = Path.GetRelativePath(gitDirectory, path).Replace("\\", "/");
+            var statusResult = await RunGitAsync(
+                gitDirectory,
+                ["status", "--porcelain", "--", relativePath],
+                cancellationToken);
+            if (statusResult.ExitCode != 0)
+            {
+                return new GitIndexResult(
+                    false,
+                    "Failed to check git status",
+                    statusResult.StandardError,
+                    false);
+            }
+
+            if (string.IsNullOrWhiteSpace(statusResult.StandardOutput))
+            {
+                return new GitIndexResult(
+                    false,
+                    staged ? "Path has no changes to stage" : "Path has no staged changes to unstage",
+                    null,
+                    true);
+            }
+
+            if (!staged && !HasStagedChanges(statusResult.StandardOutput))
+            {
+                return new GitIndexResult(
+                    false,
+                    "Path has no staged changes to unstage",
+                    null,
+                    true);
+            }
+
+            IReadOnlyCollection<string> arguments = staged
+                ? ["add", "--", relativePath]
+                : ["restore", "--staged", "--", relativePath];
+            var result = await RunGitAsync(gitDirectory, arguments, cancellationToken);
+            if (result.ExitCode != 0)
+            {
+                return new GitIndexResult(
+                    false,
+                    staged ? "Failed to stage changes" : "Failed to unstage changes",
+                    result.StandardError,
+                    IsPathspecError(result.StandardError));
+            }
+
+            return new GitIndexResult(
+                true,
+                staged ? "Changes staged successfully" : "Changes unstaged successfully",
+                null,
+                false);
+        }
+        finally
+        {
+            indexMutationLock.Release();
+        }
+    }
+
+    private static bool HasStagedChanges(string porcelainOutput)
+    {
+        return porcelainOutput
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Any(line => line.Length >= 2 && line[0] is not ' ' and not '?');
+    }
+
+    private static bool IsPathspecError(string standardError)
+    {
+        return standardError.Contains("pathspec", StringComparison.OrdinalIgnoreCase)
+            && standardError.Contains("did not match", StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task<GitCloneResult> CloneRepositoryAsync(string gitAddress, string workingDirectory, CancellationToken cancellationToken = default)
