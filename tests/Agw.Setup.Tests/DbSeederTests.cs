@@ -36,6 +36,7 @@ public class DbSeederTests
                 .UseSnakeCaseNamingConvention()
                 .Options;
             await using var context = new AgwDbContext(options);
+            await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
             var seeder = new DbSeeder(
                 context,
                 NullLogger<DbSeeder>.Instance,

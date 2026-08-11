@@ -3,7 +3,6 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Setup.Contracts;
-using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
 using Agw.Skills.Contracts.Registration;
 
@@ -63,13 +62,17 @@ public class SetupInitializationService : ISetupInitializationService
             AdminPassword = request.AdminPassword,
             SetupCode = request.SetupCode
         };
-        ConfigureDatabaseProvider(dbOptions, resolvedRequest);
+        AgwDbContextOptionsConfigurator.Configure(
+            dbOptions,
+            resolvedRequest.Provider,
+            resolvedRequest.ConnectionString);
         dbOptions.AddInterceptors(
             _entityCreatorInterceptor,
             _entityModifierInterceptor,
             _entitySoftDeleteInterceptor);
 
         await using var context = new AgwDbContext(dbOptions.Options, _encryptedDataProtector);
+        await context.Database.MigrateAsync(cancellationToken);
         var seeder = new DbSeeder(
             context,
             _loggerFactory.CreateLogger<DbSeeder>(),
@@ -80,16 +83,5 @@ public class SetupInitializationService : ISetupInitializationService
 
         var passwordHash = _passwordHasher.HashPassword(new object(), request.AdminPassword);
         await _stateStore.PersistAsync(resolvedRequest, passwordHash, cancellationToken);
-    }
-
-    private static void ConfigureDatabaseProvider(DbContextOptionsBuilder<AgwDbContext> dbOptions, SetupRequest request)
-    {
-        if (request.Provider == DatabaseProvider.Postgres)
-        {
-            dbOptions.UseNpgsql(request.ConnectionString).UseSnakeCaseNamingConvention();
-            return;
-        }
-
-        dbOptions.UseSqlite(request.ConnectionString).UseSnakeCaseNamingConvention();
     }
 }

@@ -111,6 +111,7 @@ public class AgwDbContext : EFContext
     {
         base.OnModelCreating(modelBuilder);
         ConfigureVersion7GuidKeys(modelBuilder);
+        ConfigureProviderSpecificColumnTypes(modelBuilder);
         EncryptedEntityMetadata.Validate(modelBuilder);
         modelBuilder.ApplySoftDeleteQueryFilters();
     }
@@ -218,6 +219,16 @@ public class AgwDbContext : EFContext
             modelBuilder.Entity(entityType.ClrType)
                 .Property(primaryKey.Properties[0].Name)
                 .HasValueGenerator<GuidVersion7ValueGenerator>();
+        }
+    }
+
+    private void ConfigureProviderSpecificColumnTypes(ModelBuilder modelBuilder)
+    {
+        if (Database.IsNpgsql())
+        {
+            modelBuilder.Entity<ProjectConversationChatHistory>()
+                .Property(history => history.Metadata)
+                .HasColumnType("jsonb");
         }
     }
 

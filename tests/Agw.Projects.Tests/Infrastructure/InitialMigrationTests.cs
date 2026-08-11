@@ -1,4 +1,5 @@
 using Agw.Infrastructure.Data;
+using Agw.Shared.Configuration;
 
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -15,16 +16,13 @@ public sealed class InitialMigrationTests
     public void GenerateScript_SqliteAndPostgres_CreatesCurrentSchema(bool usePostgres)
     {
         var options = new DbContextOptionsBuilder<AgwDbContext>();
-        if (usePostgres)
-        {
-            options.UseNpgsql("Host=localhost;Database=agw;Username=agw;Password=unused");
-        }
-        else
-        {
-            options.UseSqlite("Data Source=:memory:");
-        }
-
-        options.UseSnakeCaseNamingConvention();
+        var provider = usePostgres
+            ? DatabaseProvider.Postgres
+            : DatabaseProvider.Sqlite;
+        var connectionString = usePostgres
+            ? "Host=localhost;Database=agw;Username=agw;Password=unused"
+            : "Data Source=:memory:";
+        AgwDbContextOptionsConfigurator.Configure(options, provider, connectionString);
         using var dbContext = new AgwDbContext(options.Options);
 
         var initialMigration = Assert.Single(dbContext.Database.GetMigrations());
@@ -44,6 +42,18 @@ public sealed class InitialMigrationTests
         Assert.Contains("durable_execution", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("execution_stream_entry", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("tools", script, StringComparison.OrdinalIgnoreCase);
+        if (usePostgres)
+        {
+            Assert.Contains("metadata jsonb", script, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("uuid", script, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("timestamp with time zone", script, StringComparison.OrdinalIgnoreCase);
+        }
+        else
+        {
+            Assert.Contains("\"metadata\" TEXT", script, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("jsonb", script, StringComparison.OrdinalIgnoreCase);
+        }
+
         Assert.DoesNotContain("agent_file_memory", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("building_blocks", script, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("project_context", script, StringComparison.OrdinalIgnoreCase);
@@ -59,7 +69,10 @@ public sealed class InitialMigrationTests
         await connection.OpenAsync(cancellationToken);
 
         var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(connection)
+            .UseSqlite(
+                connection,
+                migrations => migrations.MigrationsAssembly(
+                    AgwDbContextOptionsConfigurator.SqliteMigrationsAssembly))
             .UseSnakeCaseNamingConvention()
             .Options;
         await using var dbContext = new AgwDbContext(options);

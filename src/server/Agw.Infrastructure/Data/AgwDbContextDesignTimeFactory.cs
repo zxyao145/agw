@@ -1,6 +1,7 @@
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Shared.Configuration;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 
 using Microsoft.EntityFrameworkCore;
@@ -14,18 +15,29 @@ public class AgwDbContextDesignTimeFactory : IDesignTimeDbContextFactory<AgwDbCo
     public AgwDbContext CreateDbContext(string[] args)
     {
         var configuration = BuildConfiguration();
-        var configuredProvider = configuration[$"{DatabaseSettings.SectionName}:Provider"];
-        if (configuredProvider != null)
-        {
-            DatabaseProviderResolver.Parse(configuredProvider);
-        }
-
         var settings = configuration
             .GetSection(DatabaseSettings.SectionName)
             .Get<DatabaseSettings>() ?? new DatabaseSettings();
+        var configuredProvider = configuration[$"{DatabaseSettings.SectionName}:Provider"];
+        if (!string.IsNullOrWhiteSpace(configuredProvider))
+        {
+            settings.Provider = DatabaseProviderResolver.Parse(configuredProvider);
+        }
+
+        var providerArgument = GetArgumentValue(args, "--provider");
+        var provider = string.IsNullOrWhiteSpace(providerArgument)
+            ? settings.Provider
+            : DatabaseProviderResolver.Parse(providerArgument);
+        var connectionString = provider == settings.Provider
+            ? settings.ConnectionString
+            : string.Empty;
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            connectionString = GetDesignTimeConnectionString(provider);
+        }
 
         var options = new DbContextOptionsBuilder<AgwDbContext>();
-        ConfigureDatabaseProvider(options, settings);
+        AgwDbContextOptionsConfigurator.Configure(options, provider, connectionString);
 
         var dataPaths = AgwDataPaths.ResolveFromEnvironment();
         dataPaths.EnsureCreated();
@@ -75,18 +87,36 @@ public class AgwDbContextDesignTimeFactory : IDesignTimeDbContextFactory<AgwDbCo
         return null;
     }
 
-    private static void ConfigureDatabaseProvider(DbContextOptionsBuilder options, DatabaseSettings settings)
+    private static string GetDesignTimeConnectionString(DatabaseProvider provider)
     {
-        if (settings.Provider == DatabaseProvider.Postgres)
+        return provider == DatabaseProvider.Postgres
+            ? "Host=localhost;Database=agw;Username=postgres"
+            : "Data Source=agw.db";
+    }
+
+    private static string? GetArgumentValue(string[] args, string name)
+    {
+        for (var index = 0; index < args.Length; index++)
         {
-            options.UseNpgsql(settings.ConnectionString)
-                .UseSnakeCaseNamingConvention();
-            return;
+            var argument = args[index];
+            if (argument.StartsWith($"{name}=", StringComparison.OrdinalIgnoreCase))
+            {
+                return argument[(name.Length + 1)..];
+            }
+
+            if (!string.Equals(argument, name, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (index + 1 >= args.Length || args[index + 1].StartsWith("--", StringComparison.Ordinal))
+            {
+                throw new AgwException(ErrorCodes.InvalidParam, $"{name} requires a value.");
+            }
+
+            return args[index + 1];
         }
 
-        options.UseSqlite(string.IsNullOrWhiteSpace(settings.ConnectionString)
-                ? "Data Source=d_system.db"
-                : settings.ConnectionString)
-            .UseSnakeCaseNamingConvention();
+        return null;
     }
 }

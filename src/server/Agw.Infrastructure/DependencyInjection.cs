@@ -8,7 +8,6 @@ using Agw.Infrastructure.Repositories;
 using Agw.Infrastructure.Skills;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
-using Agw.Shared.Configuration;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
@@ -80,7 +79,10 @@ public static class DependencyInjection
                 ConnectionString = DatabaseConnectionStringResolver.Resolve(settings.Provider, settings.ConnectionString, paths)
             };
 
-            ConfigureDatabaseProvider(options, settings);
+            AgwDbContextOptionsConfigurator.Configure(
+                options,
+                settings.Provider,
+                settings.ConnectionString);
             options.AddInterceptors(
                 serviceProvider.GetRequiredService<EntityCreatorInterceptor>(),
                 serviceProvider.GetRequiredService<EntityModifierInterceptor>(),
@@ -116,20 +118,5 @@ public static class DependencyInjection
         services.AddSingleton<IApplicationLock, ApplicationLockRouter>();
 
         return services;
-    }
-
-    private static void ConfigureDatabaseProvider(DbContextOptionsBuilder options, DatabaseSettings settings)
-    {
-        if (settings.Provider == DatabaseProvider.Postgres)
-        {
-            options.UseNpgsql(settings.ConnectionString)
-                .UseSnakeCaseNamingConvention();
-            return;
-        }
-
-        options.UseSqlite(string.IsNullOrWhiteSpace(settings.ConnectionString)
-                ? "Data Source=d_system.db"
-                : settings.ConnectionString)
-            .UseSnakeCaseNamingConvention();
     }
 }

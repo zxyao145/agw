@@ -29,6 +29,5 @@
 	<ItemGroup>
 	  <EmbeddedResource Include="Data/SeedData/Skills/xhs-explore.zip"
 	                    LogicalName="Agw.Infrastructure.SeedData.xhs-explore.zip" />
-	  <Folder Include="Migrations\" />
 	</ItemGroup>
 </Project>

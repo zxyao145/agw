@@ -16,6 +16,7 @@ using Agw.Host.Data;
 using Agw.Host.Middleware;
 using Agw.Host.Runtime;
 using Agw.Infrastructure;
+using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Integrations.Controllers;
@@ -47,6 +48,7 @@ using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
 
 using OpenTelemetry.Logs;
@@ -300,6 +302,15 @@ try
     builder.Services.AddHybridCache();
 
     var app = builder.Build();
+    var databaseSettings = app.Services.GetRequiredService<IOptions<DatabaseSettings>>().Value;
+    Log.Information("Database provider: {DatabaseProvider}", databaseSettings.Provider);
+    var databaseConnectionString = DatabaseConnectionStringResolver.Resolve(
+        databaseSettings.Provider,
+        databaseSettings.ConnectionString,
+        dataPaths);
+    Log.Debug(
+        "Database connection string: {DatabaseConnectionString}",
+        DatabaseConnectionStringResolver.ToSafeLogValue(databaseConnectionString));
     var iocUtil = app.Services.GetRequiredService<IocUtil>();
 
     // Seed database on startup after initialization has been completed.

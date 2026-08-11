@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace Agw.Infrastructure.Migrations
+namespace Agw.Migrations.Sqlite.Migrations
 {
     /// <inheritdoc />
     public partial class Init : Migration
@@ -547,7 +547,7 @@ namespace Agw.Infrastructure.Migrations
                     agent_name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: true),
                     conversation_sequence = table.Column<long>(type: "INTEGER", nullable: true),
                     conversation_payload = table.Column<string>(type: "text", nullable: true),
-                    metadata = table.Column<string>(type: "jsonb", nullable: true),
+                    metadata = table.Column<string>(type: "TEXT", nullable: true),
                     error = table.Column<string>(type: "text", nullable: true),
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true)

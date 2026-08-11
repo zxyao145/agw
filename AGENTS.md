@@ -15,7 +15,9 @@ The repository is a modular monolith with an ASP.NET Core and EF Core backend pl
 ```text
 Agw.Host/            # ASP.NET Core entry point, composition root, middleware, OpenAPI, static files, websockets, and DB seeding
 Agw.Data/            # Persisted entities, EF configurations, repository abstractions, and unit-of-work contracts
-Agw.Infrastructure/  # EF Core DbContext, repositories, migrations, and seeding
+Agw.Infrastructure/  # EF Core DbContext, repositories, provider configuration, and seeding
+Agw.Migrations.Sqlite/   # SQLite migrations and provider-specific model snapshot
+Agw.Migrations.Postgres/ # PostgreSQL migrations and provider-specific model snapshot
 Agw.Shared/          # Shared contracts, exceptions, results, and utilities
 Agw.A2A/             # A2A protocol types, discovery, communication endpoints, and route builders
 Agw.Auth/            # Administrator Cookie/Bearer authentication, LocalTrusted, CSRF, and authorization guards
@@ -88,16 +90,30 @@ The development backend listens on `http://localhost:30816` by default through `
 
 Run a focused project with `dotnet test tests/Agw.Files.Tests` (or the matching `Agw.*.Tests` project), and use `--filter "FullyQualifiedName~MethodName"` for a specific test.
 
-Do not add or apply EF Core migrations automatically. When the user explicitly requests a migration, use:
+Do not add or apply EF Core migrations automatically. Each model change needs matching SQLite and PostgreSQL migrations. When the user explicitly requests migrations, use:
 
 ```bash
 dotnet ef migrations add <MigrationName> \
-  -p src/server/Agw.Infrastructure \
-  -s src/server/Agw.Host
+  -p src/server/Agw.Migrations.Sqlite \
+  -s src/server/Agw.Host \
+  -- --provider sqlite
+
+dotnet ef migrations add <MigrationName> \
+  -p src/server/Agw.Migrations.Postgres \
+  -s src/server/Agw.Host \
+  -- --provider postgres
 
 dotnet ef database update \
-  -p src/server/Agw.Infrastructure \
-  -s src/server/Agw.Host
+  --connection "<sqlite-connection-string>" \
+  -p src/server/Agw.Migrations.Sqlite \
+  -s src/server/Agw.Host \
+  -- --provider sqlite
+
+dotnet ef database update \
+  --connection "<postgres-connection-string>" \
+  -p src/server/Agw.Migrations.Postgres \
+  -s src/server/Agw.Host \
+  -- --provider postgres
 ```
 
 ### Web and Desktop Clients
