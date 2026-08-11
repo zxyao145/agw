@@ -3,6 +3,7 @@ import {
   getPendingHumanGate,
   getTurnFinishedStatus,
   type ExecutionHubHandlers,
+  type ExecutionReconnectState,
   type AgentMode,
   type PermissionMode,
   type ExecutionRequest,
@@ -25,6 +26,7 @@ type ExecutionClient = Pick<
   | "interrupt"
   | "interruptAndWait"
   | "submitHumanResponse"
+  | "retryConnection"
   | "dispose"
 >;
 
@@ -35,6 +37,7 @@ type Entry = {
   client: ExecutionClient;
   handler: ExecutionHubHandlers | null;
   pendingMessages: AiMessage[];
+  reconnectState: ExecutionReconnectState | null;
 };
 
 export type ManagedExecutionHandle = {
@@ -52,6 +55,7 @@ export type ManagedExecutionHandle = {
     responseData?: unknown;
   }): Promise<void>;
   getStatus(): ExecutionStatus;
+  getReconnectState(): ExecutionReconnectState | null;
   detach(): void;
   dispose(): Promise<void>;
 };
@@ -74,12 +78,16 @@ export class ExecutionSessionManager {
         onMessage: (message) => this.handleMessage(nextEntry, message),
         onError: (error) => nextEntry.handler?.onError?.(error),
         onClose: (error) => this.handleClose(nextEntry, error),
+        onReconnecting: (state) => this.handleReconnecting(nextEntry, state),
+        onReconnectFailed: (state) => this.handleReconnectFailed(nextEntry, state),
+        onReconnected: () => this.handleReconnected(nextEntry),
       });
       nextEntry = {
         key,
         client,
         handler,
         pendingMessages: [],
+        reconnectState: null,
       };
       entry = nextEntry;
       this.entries.set(id, entry);
@@ -115,6 +123,7 @@ export class ExecutionSessionManager {
       interruptAndWait: (reason) => attachedEntry.client.interruptAndWait(reason),
       submitHumanResponse: (args) => attachedEntry.client.submitHumanResponse(args),
       getStatus: () => this.activity.getStatus(key),
+      getReconnectState: () => attachedEntry.reconnectState,
       detach: () => {
         if (attachedEntry.handler === handler) {
           attachedEntry.handler = null;
@@ -142,6 +151,13 @@ export class ExecutionSessionManager {
     return this.activity.getActiveCount();
   }
 
+  /** 请求指定会话在自动重试耗尽后立即重新建立连接。 */
+  public async retryConnection(key: ExecutionSessionKey): Promise<void> {
+    const entry = this.entries.get(getExecutionSessionKey(key));
+    if (!entry) throw new Error("Execution session is not available.");
+    await entry.client.retryConnection();
+  }
+
   public subscribe = this.activity.subscribe;
 
   public getSnapshot = this.activity.getSnapshot;
@@ -166,8 +182,27 @@ export class ExecutionSessionManager {
   }
 
   private handleClose(entry: Entry, error?: Error): void {
+    entry.reconnectState = null;
     this.activity.connectionClosed(entry.key, error);
     entry.handler?.onClose?.(error);
+  }
+
+  /** 保存当前重试计划，并通知正在展示该会话的 Chat。 */
+  private handleReconnecting(entry: Entry, state: ExecutionReconnectState): void {
+    entry.reconnectState = state;
+    entry.handler?.onReconnecting?.(state);
+  }
+
+  /** 保存自动重试耗尽状态，并通知 Chat 展示手动重试入口。 */
+  private handleReconnectFailed(entry: Entry, state: ExecutionReconnectState): void {
+    entry.reconnectState = state;
+    entry.handler?.onReconnectFailed?.(state);
+  }
+
+  /** 清理重试状态，并通知 Chat 可以恢复操作。 */
+  private handleReconnected(entry: Entry): void {
+    entry.reconnectState = null;
+    entry.handler?.onReconnected?.();
   }
 }
 

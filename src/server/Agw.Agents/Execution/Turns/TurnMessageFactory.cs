@@ -11,10 +11,12 @@ namespace Agw.Agents.Execution.Turns;
 internal static class TurnMessageFactory
 {
     /// <summary>
-    /// 创建 Turn 已启动消息，并在 durable 模式下携带稳定的 executionId。
+    /// 创建 Turn 已启动消息，并在 durable 模式下携带稳定的 executionId 与渲染作用域。
     /// </summary>
-    public static AgwMessage CreateStarted(Guid? executionId = null) =>
-        CreateState("turn-start", status: null, executionId);
+    public static AgwMessage CreateStarted(
+        Guid? executionId = null,
+        string? streamingScopeId = null) =>
+        CreateState("turn-start", status: null, executionId, streamingScopeId);
 
     /// <summary>
     /// 创建 Turn 已结束消息，并在 durable 模式下携带最终状态和 executionId。
@@ -22,7 +24,7 @@ internal static class TurnMessageFactory
     public static AgwMessage CreateFinished(
         string status = "completed",
         Guid? executionId = null) =>
-        CreateState("turn-finished", status, executionId);
+        CreateState("turn-finished", status, executionId, streamingScopeId: null);
 
     /// <summary>
     /// 按统一协议构造 Turn 状态消息，避免启动与结束消息的字段发生漂移。
@@ -30,7 +32,8 @@ internal static class TurnMessageFactory
     private static AgwMessage CreateState(
         string type,
         string? status,
-        Guid? executionId)
+        Guid? executionId,
+        string? streamingScopeId)
     {
         var properties = new AdditionalPropertiesDictionary
         {
@@ -43,6 +46,10 @@ internal static class TurnMessageFactory
         if (executionId.HasValue)
         {
             properties["executionId"] = executionId.Value.ToString("D");
+        }
+        if (!string.IsNullOrWhiteSpace(streamingScopeId))
+        {
+            properties["streamingScopeId"] = streamingScopeId;
         }
 
         return new AgwMessage(

@@ -222,6 +222,9 @@ public sealed class DurableExecutionStoreTests
         Assert.Equal(
             DurableExecutionStatus.Interrupted,
             DurableExecutionCoordinator.ToStatus(persisted).Status);
+        Assert.Equal(
+            persisted.Manifest.Input.MessageId,
+            DurableExecutionCoordinator.ToStatus(persisted).StreamingScopeId);
     }
 
     [Fact]
@@ -411,13 +414,29 @@ public sealed class DurableExecutionStoreTests
     [Fact]
     public void DurableHumanInteractionMapper_ToMessage_RecreatesQuestionPresentation()
     {
-        var message = DurableHumanInteractionMapper.ToMessage(CreateInteraction("request-1"));
+        var message = DurableHumanInteractionMapper.ToMessage(
+            CreateInteraction("request-1"),
+            Guid.CreateVersion7(),
+            "message-1");
 
         Assert.Equal("human-interaction-request", message.AdditionalProperties?["type"]);
         Assert.Equal("request-1", message.AdditionalProperties?["requestId"]);
         Assert.Equal("call-request-1", message.AdditionalProperties?["callId"]);
+        Assert.Equal("message-1", message.AdditionalProperties?["streamingScopeId"]);
         var payload = Assert.IsType<JsonElement>(message.AdditionalProperties?["payload"]);
         Assert.Equal("Color?", payload.GetProperty("questions")[0].GetProperty("question").GetString());
+    }
+
+    [Fact]
+    public void TurnMessageFactory_CreateStarted_PreservesDurableRenderingScope()
+    {
+        var executionId = Guid.CreateVersion7();
+
+        var message = TurnMessageFactory.CreateStarted(executionId, "message-1");
+
+        Assert.Equal("turn-start", message.AdditionalProperties?["type"]);
+        Assert.Equal(executionId.ToString("D"), message.AdditionalProperties?["executionId"]);
+        Assert.Equal("message-1", message.AdditionalProperties?["streamingScopeId"]);
     }
 
     [Fact]

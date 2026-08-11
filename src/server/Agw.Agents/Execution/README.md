@@ -199,6 +199,8 @@ turn 是一次用户输入到执行结束的完整过程。`RuntimeTurnContext` 
 
 SignalR Hub 路由为 `/api/hubs/exec`，公开命令入口和一个只读能力探测方法：
 
+客户端固定使用 WebSocket 并跳过 negotiate，避免负载均衡把协商和握手分配到不同 Server。Desktop 的 Bearer Token 在 WebSocket 握手中按 SignalR 约定通过 `access_token` 查询参数传递；服务端只在该 Hub 的 WebSocket 请求中接受此参数，其他 HTTP 或 WebSocket 路径仍只接受 `Authorization` Header。反向代理访问日志不得记录查询参数。
+
 ```text
 DispatchCommand(AgentRunCommand)
 GetExecutionProvider() -> "InProcess" | "Distributed"
@@ -368,6 +370,7 @@ Execution.Provider
 | 跨 Server 排他权 | PostgreSQL advisory lock | 同一 execution 同时只有一个 Server 执行 segment |
 | token/message replay cursor | `IExecutionEventStream` | PostgreSQL 或 Redis Stream 实现，支持实时输出与断线重放，不参与执行判定 |
 | 当前 executionId/cursor | 客户端 localStorage | 页面刷新后发现并重新订阅执行 |
+| Card 渲染作用域 | 启动清单中的原始用户消息 ID | Server B 恢复时仍能用 `streamingScopeId + callId` 命中历史 Tool call |
 
 状态机只使用一张 `durable_execution` 表，没有为 checkpoint、pending 或 response 分表。除 `BaseEntity` 审计列外，核心字段为：
 
@@ -439,7 +442,7 @@ sequenceDiagram
     W->>PG: Completed or next WaitingForHuman
 ```
 
-问题只在 checkpoint、pending 和 `WaitingForHuman` 已经提交后展示，因此回答不会指向尚未持久化的请求。模型 Tool 参数中的 `answers` 不会被当作用户回答；客户端只接收 questions/metadata，真正回答由 `HumanResponseCommand.responseData` 提交。
+问题只在 checkpoint、pending 和 `WaitingForHuman` 已经提交后展示，因此回答不会指向尚未持久化的请求。恢复消息同时携带启动清单中的原始用户消息 ID 作为 `streamingScopeId`；它与持久化的 `callId` 一起把 Card 精确放回原 Tool call，不能使用 Server B 新建的 `turn-start.messageId`。模型 Tool 参数中的 `answers` 不会被当作用户回答；客户端只接收 questions/metadata，真正回答由 `HumanResponseCommand.responseData` 提交。
 
 恢复路径分两种：
 

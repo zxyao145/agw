@@ -355,9 +355,11 @@ internal sealed record DurableResolvedInteraction(
 /// </summary>
 /// <param name="ExecutionId">业务执行标识。</param>
 /// <param name="Status">当前执行状态。</param>
+/// <param name="StreamingScopeId">原始用户消息标识，用于把恢复消息绑定到同一轮历史。</param>
 internal sealed record DurableExecutionStatusResponse(
     Guid ExecutionId,
-    DurableExecutionStatus Status);
+    DurableExecutionStatus Status,
+    string StreamingScopeId);
 
 /// <summary>
 /// 从 SignalR HumanResponseCommand 映射得到的 durable 回答请求。

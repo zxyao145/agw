@@ -29,3 +29,10 @@ test("title-bar interactive controls use a pointer cursor", () => {
     /\.agw-server-pill,\s*\.agw-task-button\s*\{\s*@apply[^;]*\bcursor-pointer\b/,
   );
 });
+
+test("Desktop Toast controls opt out of the titlebar drag region", () => {
+  assert.match(
+    tokensCss,
+    /:root\[data-agw-desktop="true"\] \[data-sonner-toaster\],[\s\S]*?\[data-sonner-toaster\] :is\(button, \[role="button"\]\) \{\s*-webkit-app-region: no-drag;\s*\}/,
+  );
+});

@@ -228,7 +228,10 @@ internal sealed class DurableExecutionCoordinator
 
                         yield return new ExecutionStreamEntry(
                             cursor ?? "0-0",
-                            DurableHumanInteractionMapper.ToMessage(interaction, executionId));
+                            DurableHumanInteractionMapper.ToMessage(
+                                interaction,
+                                executionId,
+                                ResolveStreamingScopeId(snapshot.Manifest)));
                     }
                 }
                 if (IsTerminal(snapshot.Status))
@@ -260,7 +263,18 @@ internal sealed class DurableExecutionCoordinator
     /// 将 PostgreSQL 快照映射为连接层使用的最小状态响应。
     /// </summary>
     internal static DurableExecutionStatusResponse ToStatus(DurableExecutionSnapshot snapshot) =>
-        new(snapshot.Manifest.ExecutionId, snapshot.Status);
+        new(
+            snapshot.Manifest.ExecutionId,
+            snapshot.Status,
+            ResolveStreamingScopeId(snapshot.Manifest));
+
+    /// <summary>
+    /// 获取跨 Server 稳定的前端消息作用域；旧客户端未提供消息标识时退回 executionId。
+    /// </summary>
+    private static string ResolveStreamingScopeId(DurableExecutionManifest manifest) =>
+        string.IsNullOrWhiteSpace(manifest.Input.MessageId)
+            ? manifest.ExecutionId.ToString("D")
+            : manifest.Input.MessageId;
 
     /// <summary>
     /// 在独立 DI scope 中加载 execution 快照，避免后台订阅持有 request scope DbContext。

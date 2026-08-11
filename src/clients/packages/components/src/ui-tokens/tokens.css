@@ -261,6 +261,11 @@ div[role="option"]:hover {
     -webkit-app-region: no-drag;
   }
 
+  :root[data-agw-desktop="true"] [data-sonner-toaster],
+  :root[data-agw-desktop="true"] [data-sonner-toaster] :is(button, [role="button"]) {
+    -webkit-app-region: no-drag;
+  }
+
   .agw-project-tabs {
     @apply flex min-w-0 flex-1 items-center gap-1 overflow-hidden;
   }

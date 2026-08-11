@@ -253,9 +253,7 @@ try
         options.AddPolicy("AgwDesktop", policy =>
         {
             policy.SetIsOriginAllowed(origin =>
-                LocalTrustedRequest.IsDesktopOrigin(origin)
-                || (builder.Environment.IsDevelopment()
-                    && string.Equals(origin, "http://localhost:3000", StringComparison.OrdinalIgnoreCase)))
+                LocalTrustedRequest.IsDesktopOrigin(origin, builder.Environment.IsDevelopment()))
                 .AllowAnyHeader()
                 .AllowAnyMethod()
                 .AllowCredentials();

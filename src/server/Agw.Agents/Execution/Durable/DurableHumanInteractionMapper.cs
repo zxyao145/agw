@@ -63,7 +63,8 @@ internal static class DurableHumanInteractionMapper
     /// </summary>
     public static AgwMessage ToMessage(
         DurableHumanInteractionSnapshot interaction,
-        Guid? executionId = null)
+        Guid? executionId = null,
+        string? streamingScopeId = null)
     {
         ArgumentNullException.ThrowIfNull(interaction);
 
@@ -75,6 +76,10 @@ internal static class DurableHumanInteractionMapper
         if (executionId.HasValue)
         {
             properties["executionId"] = executionId.Value.ToString("D");
+        }
+        if (!string.IsNullOrWhiteSpace(streamingScopeId))
+        {
+            properties["streamingScopeId"] = streamingScopeId;
         }
         if (!string.IsNullOrWhiteSpace(interaction.NodeId))
         {

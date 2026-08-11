@@ -11,6 +11,10 @@ const EXECUTION_SESSION_MANAGER_URL = new URL(
   "../../../services/execution-session-manager.ts",
   import.meta.url,
 );
+const EXECUTION_RECONNECTING_DIALOG_URL = new URL(
+  "./execution-reconnecting-dialog.tsx",
+  import.meta.url,
+);
 const CHAT_WORKSPACE_URL = new URL("../../pages/chat/chat-workspace.tsx", import.meta.url);
 const AGENT_DRAWER_URL = new URL(
   "agents/src/ui-web/pages/agents/components/execute-agent-drawer.tsx",
@@ -109,7 +113,7 @@ test("shared Chat scopes history and merges only the incoming streaming message"
   assert.match(source, /const activeStreamingScopeRef = React\.useRef<string \| null>\(null\)/);
   assert.match(
     source,
-    /activeStreamingScopeRef\.current \?\?= message\.messageId;[\s\S]*?setIsExecuting\(true\)/,
+    /activeStreamingScopeRef\.current \?\?=[\s\S]*?getMessageStreamingScopeId\(message\) \?\? message\.messageId;[\s\S]*?setIsExecuting\(true\)/,
   );
   assert.match(source, /activeStreamingScopeRef\.current = userMessage\.messageId/);
   assert.match(
@@ -178,6 +182,44 @@ test("shared Chat rejects stale async continuations and reports operation errors
   assert.match(source, /await client\.interruptAndWait\(reason\)/);
   assert.match(source, /<ChatInput[\s\S]*?isTransitioning=\{isTransitioning\}/);
   assert.match(executionHubSource, /public async interruptAndWait\(reason\?: string\)/);
+  assert.match(
+    executionHubSource,
+    /HubConnectionState\.Reconnecting[\s\S]*?await this\.waitForReconnect\(\)/,
+  );
+});
+
+test("shared Chat blocks the full chat workspace while SignalR reconnects", async () => {
+  const [source, dialogSource, managerSource, workspaceSource] = await Promise.all([
+    readFile(CHAT_URL, "utf8"),
+    readFile(EXECUTION_RECONNECTING_DIALOG_URL, "utf8"),
+    readFile(EXECUTION_SESSION_MANAGER_URL, "utf8"),
+    readFile(CHAT_WORKSPACE_URL, "utf8"),
+  ]);
+
+  assert.match(source, /onReconnecting: \(state\) =>/);
+  assert.match(source, /onReconnectFailed: \(state\) =>/);
+  assert.match(source, /onReconnected: \(\) =>/);
+  assert.match(source, /inert=\{reconnectState !== null\}/);
+  assert.doesNotMatch(source, /ExecutionReconnectingDialog/);
+  assert.match(managerSource, /getReconnectState: \(\) => attachedEntry\.reconnectState/);
+  assert.match(managerSource, /public async retryConnection\(key: ExecutionSessionKey\)/);
+  assert.match(dialogSource, /role="dialog"/);
+  assert.match(dialogSource, /items-start justify-center/);
+  assert.match(dialogSource, /pt-\[150px\]/);
+  assert.match(dialogSource, /Reconnecting to Server…/);
+  assert.match(dialogSource, /state\.status === "failed"/);
+  assert.match(dialogSource, /Failed to rejoin\. Please retry or reload the page\./);
+  assert.match(dialogSource, /!isFailed && "animate-spin/);
+  assert.match(dialogSource, /onClick=\{onRetry\}/);
+  assert.match(dialogSource, />\s*Retry\s*</);
+  assert.match(dialogSource, /You can still switch Server or open Settings/);
+  assert.match(workspaceSource, /inert=\{executionReconnectState !== null\}/);
+  assert.match(workspaceSource, /onReconnectStateChange=\{setExecutionReconnectState\}/);
+  assert.match(workspaceSource, /onRetry=\{handleReconnectRetry\}/);
+  assert.match(
+    workspaceSource,
+    /\{executionReconnectState \? \([\s\S]*?<ExecutionReconnectingDialog[\s\S]*?state=\{executionReconnectState\}/,
+  );
 });
 
 test("shared Chat input provides slash and project file suggestions", async () => {

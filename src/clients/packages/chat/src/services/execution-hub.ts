@@ -4,6 +4,7 @@ import {
   HubConnectionState,
   HttpTransportType,
   LogLevel,
+  type IRetryPolicy,
 } from "@microsoft/signalr";
 
 import type { AiMessage } from "@agw/api";
@@ -20,6 +21,31 @@ export type ExecutionRuntimeConfig = {
 };
 
 let executionRuntime: ExecutionRuntimeConfig = { baseUrl: "", token: null };
+
+/** SignalR 断线后的重试间隔；数组耗尽后结束自动重试。 */
+export const executionReconnectDelaysMs = [0, 2_000, 5_000, 7_000, 10_000, 20_000, 30_000] as const;
+
+/** 描述当前 SignalR 自动重连尝试。 */
+export type ExecutionReconnectState = {
+  /** 当前处于自动重试，或所有自动重试均已失败。 */
+  status: "reconnecting" | "failed";
+  /** 即将进行的重连次数，从 1 开始。 */
+  retryAttempt: number;
+  /** 距离本次重连尝试的等待时间。 */
+  retryDelayMs: number;
+};
+
+/** 按已配置的重试序列返回等待时间，序列耗尽时停止自动重试。 */
+export function getExecutionReconnectDelay(previousRetryCount: number): number | null {
+  return executionReconnectDelaysMs[previousRetryCount] ?? null;
+}
+
+/** 判断 SignalR 是否已经完成最后一次自动重连尝试。 */
+export function isExecutionReconnectExhausted(state: ExecutionReconnectState | null): boolean {
+  return (
+    state?.status === "reconnecting" && state.retryAttempt === executionReconnectDelaysMs.length
+  );
+}
 
 export function configureExecutionRuntime(config: ExecutionRuntimeConfig): void {
   executionRuntime = config;
@@ -72,14 +98,23 @@ export type ExecutionHubHandlers = {
   onMessage: (message: AiMessage) => void;
   onError?: (error: Error) => void;
   onClose?: (error?: Error) => void;
+  /** SignalR 进入重连，或准备下一次重试时触发。 */
+  onReconnecting?: (state: ExecutionReconnectState) => void;
+  /** SignalR 已耗尽自动重试，或手动重试仍然失败时触发。 */
+  onReconnectFailed?: (state: ExecutionReconnectState) => void;
+  /** SignalR 重连并恢复服务端执行上下文后触发。 */
+  onReconnected?: () => void;
 };
 
+/** 构建固定使用 WebSocket 的 SignalR 连接参数，并按当前运行环境附加 Bearer Token。 */
 export function buildExecutionHubOptions(runtime: ExecutionRuntimeConfig = executionRuntime) {
   const baseUrl = runtime.baseUrl.replace(/\/+$/u, "");
   return {
     url: `${baseUrl}/api/hubs/exec`,
     options: {
       transport: HttpTransportType.WebSockets,
+      // 服务端只开放 WebSocket；直连可避免 negotiate 与握手被负载均衡到不同节点。
+      skipNegotiation: true,
       withCredentials: !baseUrl,
       ...(runtime.token ? { accessTokenFactory: async () => runtime.token! } : {}),
     },
@@ -157,6 +192,14 @@ function readString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
+/** 读取服务端持久化的作用域；该值在跨 Server 恢复后仍指向原始用户消息。 */
+export function getMessageStreamingScopeId(message: AiMessage): string | undefined {
+  return (
+    readString(message.additionalProperties?.streamingScopeId) ??
+    readString(message.streamingScopeId)
+  );
+}
+
 export function getPendingHumanGate(message: AiMessage): PendingHumanGate | null {
   const properties = message.additionalProperties;
   if (!properties) return null;
@@ -175,6 +218,7 @@ export function getPendingHumanGate(message: AiMessage): PendingHumanGate | null
       interactionKind === "mode-change"
         ? (parseHumanInteractionModeChange(properties.payload) ?? undefined)
         : undefined;
+    const streamingScopeId = getMessageStreamingScopeId(message);
     return {
       requestType: "human-interaction",
       requestId,
@@ -186,6 +230,7 @@ export function getPendingHumanGate(message: AiMessage): PendingHumanGate | null
         "The agent needs your input to continue.",
       toolName: readString(properties.toolName),
       callId: readString(properties.callId),
+      ...(streamingScopeId ? { streamingScopeId } : {}),
       ...(questions ? { questions } : {}),
       ...(modeChange ? { modeChange } : {}),
     };
@@ -308,6 +353,15 @@ export class ExecutionHubClient {
   private durableConfirmed = false;
   /** 服务端选择的执行提供程序能力。 */
   private executionProvider: ExecutionProviderCapability = null;
+  /** 当前自动重连状态，用于通知 UI 每一次重试计划。 */
+  private reconnectState: ExecutionReconnectState | null = null;
+  /** 标记 SignalR 已进入自动重连生命周期。 */
+  private reconnecting = false;
+  /** 让业务命令等待重连和执行上下文恢复完成。 */
+  private reconnectCompletion: {
+    promise: Promise<Error | null>;
+    resolve: (error: Error | null) => void;
+  } | null = null;
 
   public constructor(
     handlers: ExecutionHubHandlers,
@@ -316,10 +370,23 @@ export class ExecutionHubClient {
     this.handlers = handlers;
     this.runtime = runtime;
     const hub = buildExecutionHubOptions(runtime);
+    const reconnectPolicy: IRetryPolicy = {
+      nextRetryDelayInMilliseconds: (context) => {
+        const retryDelayMs = getExecutionReconnectDelay(context.previousRetryCount);
+        if (retryDelayMs !== null) {
+          this.updateReconnectState({
+            status: "reconnecting",
+            retryAttempt: context.previousRetryCount + 1,
+            retryDelayMs,
+          });
+        }
+        return retryDelayMs;
+      },
+    };
     this.connection = new HubConnectionBuilder()
       .withUrl(hub.url, hub.options)
       .configureLogging(LogLevel.Warning)
-      .withAutomaticReconnect()
+      .withAutomaticReconnect(reconnectPolicy)
       .build();
 
     this.connection.on("ReceiveMessage", (message: AiMessage) => {
@@ -332,16 +399,35 @@ export class ExecutionHubClient {
 
       if (!this.disposed) this.handlers.onMessage(message);
     });
+    this.connection.onreconnecting(() => {
+      this.reconnecting = true;
+      this.beginReconnect();
+      this.updateReconnectState(
+        this.reconnectState ?? {
+          status: "reconnecting",
+          retryAttempt: 1,
+          retryDelayMs: 0,
+        },
+      );
+    });
     this.connection.onclose((error) => {
+      const reconnectExhausted =
+        this.reconnecting && isExecutionReconnectExhausted(this.reconnectState);
+      this.reconnecting = false;
       if (this.durableConfirmed) this.hasActiveTurn = false;
       else this.finishActiveTurn();
+
+      if (reconnectExhausted && !this.disposed) {
+        this.failReconnect(new Error("Execution connection retries exhausted."));
+        return;
+      }
+
+      this.reconnectState = null;
+      this.finishReconnect(error ?? new Error("Execution connection closed."));
       if (!this.disposed) this.handlers.onClose?.(error);
     });
     this.connection.onreconnected(() => {
-      void this.restoreAfterReconnect().catch((error) => {
-        const normalized = error instanceof Error ? error : new Error(String(error));
-        this.handlers.onError?.(normalized);
-      });
+      void this.completeReconnectAfterRestore();
     });
   }
 
@@ -448,9 +534,37 @@ export class ExecutionHubClient {
     });
   }
 
+  /** 在自动重试耗尽后立即重连，并恢复当前 execution 上下文。 */
+  public async retryConnection(): Promise<void> {
+    if (this.disposed) throw new Error("Execution connection is disposed");
+    if (this.reconnecting || this.reconnectState?.status !== "failed") return;
+
+    this.reconnecting = true;
+    this.beginReconnect();
+    this.updateReconnectState({
+      status: "reconnecting",
+      retryAttempt: 1,
+      retryDelayMs: 0,
+    });
+
+    try {
+      if (this.connection.state === HubConnectionState.Disconnected) {
+        await this.connection.start();
+      } else if (this.connection.state !== HubConnectionState.Connected) {
+        throw new Error(`Execution connection is ${this.connection.state}`);
+      }
+      await this.restoreAfterReconnect();
+      this.finishReconnectSuccessfully();
+    } catch (error) {
+      const normalized = error instanceof Error ? error : new Error(String(error));
+      this.failReconnect(normalized);
+    }
+  }
+
   public async dispose(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
+    this.finishReconnect(new Error("Execution connection is disposed"));
     if (this.connection.state !== HubConnectionState.Disconnected) {
       await this.connection.stop();
     }
@@ -469,11 +583,90 @@ export class ExecutionHubClient {
 
   private async ensureConnected(): Promise<void> {
     if (this.disposed) throw new Error("Execution connection is disposed");
+    if (this.reconnectCompletion) {
+      await this.waitForReconnect();
+      return;
+    }
     if (this.connection.state === HubConnectionState.Connected) return;
+    if (this.connection.state === HubConnectionState.Reconnecting) {
+      this.beginReconnect();
+      await this.waitForReconnect();
+      return;
+    }
     if (this.connection.state !== HubConnectionState.Disconnected) {
       throw new Error(`Execution connection is ${this.connection.state}`);
     }
     await this.connection.start();
+  }
+
+  /** 创建一个可被业务命令等待的重连完成信号。 */
+  private beginReconnect(): void {
+    if (this.reconnectCompletion) return;
+    let resolve!: (error: Error | null) => void;
+    const promise = new Promise<Error | null>((complete) => {
+      resolve = complete;
+    });
+    this.reconnectCompletion = { promise, resolve };
+  }
+
+  /** 完成当前重连等待，并把恢复错误传递给等待中的业务命令。 */
+  private finishReconnect(error: Error | null): void {
+    const completion = this.reconnectCompletion;
+    this.reconnectCompletion = null;
+    completion?.resolve(error);
+  }
+
+  /** 等待 SignalR 重连及服务端执行上下文恢复完成。 */
+  private async waitForReconnect(): Promise<void> {
+    const completion = this.reconnectCompletion;
+    if (!completion) return;
+    const error = await completion.promise;
+    if (error) throw error;
+    if (this.connection.state !== HubConnectionState.Connected) {
+      throw new Error(`Execution connection is ${this.connection.state}`);
+    }
+  }
+
+  /** 更新重试计划，并在重连期间同步给当前 UI。 */
+  private updateReconnectState(state: ExecutionReconnectState): void {
+    this.reconnectState = state;
+    if (this.reconnecting && !this.disposed) this.handlers.onReconnecting?.(state);
+  }
+
+  /** 重连成功后先恢复设置和 durable 订阅，再解除 Chat 阻塞。 */
+  private async completeReconnectAfterRestore(): Promise<void> {
+    try {
+      await this.restoreAfterReconnect();
+      this.finishReconnectSuccessfully();
+    } catch (error) {
+      const normalized = error instanceof Error ? error : new Error(String(error));
+      this.reconnecting = false;
+      this.reconnectState = null;
+      this.finishReconnect(normalized);
+      if (!this.disposed) this.handlers.onError?.(normalized);
+      await this.connection.stop();
+    }
+  }
+
+  /** 清理重连状态，并在 execution 上下文恢复后解除 Chat 阻塞。 */
+  private finishReconnectSuccessfully(): void {
+    this.reconnecting = false;
+    this.reconnectState = null;
+    this.finishReconnect(null);
+    if (!this.disposed) this.handlers.onReconnected?.();
+  }
+
+  /** 保留可手动重试的失败状态，并结束当前重连等待。 */
+  private failReconnect(error: Error): void {
+    this.reconnecting = false;
+    const failedState: ExecutionReconnectState = {
+      status: "failed",
+      retryAttempt: executionReconnectDelaysMs.length,
+      retryDelayMs: 0,
+    };
+    this.reconnectState = failedState;
+    this.finishReconnect(error);
+    if (!this.disposed) this.handlers.onReconnectFailed?.(failedState);
   }
 
   /** SignalR 自动重连后恢复设置，再按服务端能力重新附着 durable execution。 */

@@ -316,7 +316,9 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
                 TurnMessageFactory.CreateFinished("failed", status.ExecutionId),
             DurableExecutionStatus.Interrupted =>
                 TurnMessageFactory.CreateFinished("interrupted", status.ExecutionId),
-            _ => TurnMessageFactory.CreateStarted(status.ExecutionId)
+            _ => TurnMessageFactory.CreateStarted(
+                status.ExecutionId,
+                status.StreamingScopeId)
         };
         return _messageSink.WriteAsync(message, cancellationToken).AsTask();
     }
