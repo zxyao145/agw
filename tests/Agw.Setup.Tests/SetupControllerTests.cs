@@ -16,8 +16,20 @@ namespace Agw.Setup.Tests;
 
 public sealed class SetupControllerTests
 {
+#if DEBUG
     [Fact]
-    public void Index_WhenSetupIsComplete_ReturnsApiResult()
+    public void Index_WhenSetupIsCompleteInDebug_ReturnsSetupView()
+    {
+        var controller = CreateController();
+
+        var result = controller.Index();
+
+        var view = Assert.IsType<ViewResult>(result);
+        Assert.IsType<SetupRequest>(view.Model);
+    }
+#else
+    [Fact]
+    public void Index_WhenSetupIsCompleteInRelease_ReturnsApiResult()
     {
         var controller = CreateController();
 
@@ -25,6 +37,7 @@ public sealed class SetupControllerTests
 
         AssertApiResult(result);
     }
+#endif
 
     [Fact]
     public async Task IndexPost_WhenSetupIsComplete_ReturnsApiResult()

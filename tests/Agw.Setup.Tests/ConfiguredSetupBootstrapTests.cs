@@ -1,6 +1,7 @@
 using Agw.Setup.Contracts;
 using Agw.Setup.Services;
 using Agw.Shared.Configuration;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 
 using Microsoft.Data.Sqlite;
@@ -95,9 +96,10 @@ public sealed class ConfiguredSetupBootstrapTests
             ["Setup:AdminPassword"] = "administrator-password"
         });
 
-        var exception = Assert.Throws<InvalidOperationException>(() =>
+        var exception = Assert.Throws<AgwException>(() =>
             ConfiguredSetupBootstrap.FromConfiguration(configuration, CreatePaths()));
 
+        Assert.Equal(ErrorCodes.InvalidSetupConfiguration.Code, exception.Code);
         Assert.Contains("Cluster deployments require PostgreSQL", exception.Message);
         Assert.DoesNotContain("administrator-password", exception.Message);
     }

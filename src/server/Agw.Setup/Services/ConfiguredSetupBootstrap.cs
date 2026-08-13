@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 using Agw.Setup.Contracts;
 using Agw.Shared.Configuration;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 
 using Microsoft.Extensions.Configuration;
@@ -29,7 +30,9 @@ public sealed class ConfiguredSetupBootstrap
     public bool IsConfigured => _request != null;
 
     public SetupRequest Request => _request
-        ?? throw new InvalidOperationException("Setup bootstrap is not configured.");
+        ?? throw new AgwException(
+            ErrorCodes.InvalidSetupConfiguration,
+            "Setup bootstrap is not configured.");
 
     public IReadOnlyDictionary<string, string?> RuntimeConfiguration { get; }
 
@@ -47,7 +50,8 @@ public sealed class ConfiguredSetupBootstrap
         }
         catch (InvalidOperationException ex)
         {
-            throw new InvalidOperationException(
+            throw new AgwException(
+                ErrorCodes.InvalidSetupConfiguration,
                 $"The '{SectionName}' configuration could not be parsed.",
                 ex);
         }
@@ -73,7 +77,8 @@ public sealed class ConfiguredSetupBootstrap
                     ? result.ErrorMessage
                     : $"{members}: {result.ErrorMessage}";
             });
-            throw new InvalidOperationException(
+            throw new AgwException(
+                ErrorCodes.InvalidSetupConfiguration,
                 $"The '{SectionName}' configuration is invalid: {string.Join(" ", errors)}");
         }
 

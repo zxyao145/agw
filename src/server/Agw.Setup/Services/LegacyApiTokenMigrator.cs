@@ -1,6 +1,7 @@
 using Agw.Infrastructure.Data;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Auth;
+using Agw.Shared.Exceptions;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -95,7 +96,8 @@ public sealed class LegacyApiTokenMigrator
     {
         if (!IsSameToken(existingToken, legacyToken))
         {
-            throw new InvalidOperationException(
+            throw new AgwException(
+                ErrorCodes.LegacyApiTokenConflict,
                 $"API Token '{legacyToken.Id}' conflicts with its legacy server-state record.");
         }
     }

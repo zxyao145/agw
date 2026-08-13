@@ -5,6 +5,7 @@ using Agw.Infrastructure.Data;
 using Agw.Setup.Services;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Auth;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 
 using Microsoft.Data.Sqlite;
@@ -110,6 +111,51 @@ public sealed class LegacyApiTokenMigratorTests
             Assert.Empty(stateStore.GetLegacyApiTokens());
             Assert.Equal(1, await context.ApiTokens.CountAsync(
                 TestContext.Current.CancellationToken));
+        }
+        finally
+        {
+            Directory.Delete(paths.Root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task MigrateAsync_WhenPersistedTokenConflictsWithLegacyState_ThrowsConflict()
+    {
+        var paths = CreatePaths();
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        try
+        {
+            var token = "agw_legacy-secret";
+            await WriteLegacyStateAsync(paths, token);
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+            var options = new DbContextOptionsBuilder<AgwDbContext>()
+                .UseSqlite(connection)
+                .UseSnakeCaseNamingConvention()
+                .Options;
+            await using var context = new AgwDbContext(options);
+            await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+            context.ApiTokens.Add(new ApiToken
+            {
+                Id = LegacyTokenId,
+                Name = "Conflicting token",
+                NormalizedName = "CONFLICTING TOKEN",
+                Prefix = token[..12],
+                SecretHash = Hash(token),
+                CreateBy = Constants.AdminUserId,
+                CreateTime = LegacyCreatedAt
+            });
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+            var stateStore = new JsonInitializationStateStore(paths);
+            var migrator = new LegacyApiTokenMigrator(
+                stateStore,
+                context,
+                NullLogger<LegacyApiTokenMigrator>.Instance);
+
+            var exception = await Assert.ThrowsAsync<AgwException>(() =>
+                migrator.MigrateAsync(TestContext.Current.CancellationToken));
+
+            Assert.Equal(ErrorCodes.LegacyApiTokenConflict.Code, exception.Code);
+            Assert.NotEmpty(stateStore.GetLegacyApiTokens());
         }
         finally
         {

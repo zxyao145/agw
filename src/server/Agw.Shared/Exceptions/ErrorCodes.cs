@@ -73,6 +73,7 @@ public static class ErrorCodes
     public static readonly ErrorCode RemoteSkillUrlRequired = new(400_0068, "Remote skill URL is required.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode RemoteSkillUrlInvalid = new(400_0069, "Remote skill URL must be an absolute HTTP or HTTPS URL no longer than 2048 characters.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode RemoteSkillArchiveNotAllowed = new(400_0070, "Remote skills cannot include an archive.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode InvalidSetupConfiguration = new(400_0071, "Setup configuration is invalid.", HttpStatusCode.BadRequest);
 
     public static readonly ErrorCode GitHubOAuthTokenNotFound = new(401_0001, "GitHub OAuth token was not found.", HttpStatusCode.Unauthorized);
     public static readonly ErrorCode AuthenticationRequired = new(401_0003, "Authentication is required.", HttpStatusCode.Unauthorized);
@@ -108,6 +109,7 @@ public static class ErrorCodes
     public static readonly ErrorCode BuiltInSkillImmutable = new(409_0012, "Built-in skills cannot be updated or deleted.", HttpStatusCode.Conflict);
     public static readonly ErrorCode RemoteSkillIdentityChanged = new(409_0013, "Remote skill name no longer matches the configured skill.", HttpStatusCode.Conflict);
     public static readonly ErrorCode DurableExecutionConflict = new(409_0014, "Durable execution conflicts with an existing request.", HttpStatusCode.Conflict);
+    public static readonly ErrorCode LegacyApiTokenConflict = new(409_0015, "API token conflicts with its legacy server-state record.", HttpStatusCode.Conflict);
 
     public static readonly ErrorCode TooManyAuthenticationAttempts = new(429_0001, "Too many authentication attempts.", HttpStatusCode.TooManyRequests);
 
