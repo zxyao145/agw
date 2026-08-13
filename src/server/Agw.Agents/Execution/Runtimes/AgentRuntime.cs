@@ -230,6 +230,54 @@ public sealed class AgentRuntime : RuntimeBase
             AuthorName = string.IsNullOrWhiteSpace(author) ? Constants.DefaultInputAuthor : author
         };
 
+        var summaryInput = new AgwUserInput
+        {
+            MessageId = message.MessageId!,
+            Author = message.AuthorName,
+            Contents = contents
+        };
+        await foreach (var output in ExecuteStreamingCoreAsync(
+                           message,
+                           summaryInput,
+                           approvalHandler,
+                           cancellationToken))
+        {
+            yield return output;
+        }
+    }
+
+    /// <summary>
+    /// 从已构造的 ChatMessage 继续执行同一 Agent session，供 durable approval 恢复使用。
+    /// </summary>
+    internal async IAsyncEnumerable<AgwMessage> ExecuteStreamingSegmentAsync(
+        ChatMessage message,
+        AgwUserInput summaryInput,
+        IHumanGateApprovalHandler approvalHandler,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(summaryInput);
+        ArgumentNullException.ThrowIfNull(approvalHandler);
+
+        await foreach (var output in ExecuteStreamingCoreAsync(
+                           message,
+                           summaryInput,
+                           approvalHandler,
+                           cancellationToken))
+        {
+            yield return output;
+        }
+    }
+
+    /// <summary>
+    /// 执行普通输入与 durable 恢复输入共享的流式 Tool approval 循环和摘要逻辑。
+    /// </summary>
+    private async IAsyncEnumerable<AgwMessage> ExecuteStreamingCoreAsync(
+        ChatMessage message,
+        AgwUserInput summaryInput,
+        IHumanGateApprovalHandler? approvalHandler,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
         var assistantText = new List<string>();
         var turnPersistence = new ToolTurnPersistence(
             Agent,
@@ -305,7 +353,7 @@ public sealed class AgentRuntime : RuntimeBase
             }
 
             var result = await CreateSummaryAsync(
-                input: new AgwUserInput { MessageId = message.MessageId!, Author = message.AuthorName, Contents = contents },
+                input: summaryInput,
                 assistantMessages: [new ChatMessage(ChatRole.Assistant, string.Concat(assistantText))],
                 cancellationToken)
                 .ConfigureAwait(false);

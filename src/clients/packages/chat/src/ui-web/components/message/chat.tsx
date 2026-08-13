@@ -7,10 +7,12 @@ import { toast } from "sonner";
 import { apiGet } from "@agw/api";
 import {
   getAgentMode,
+  getMessageStreamingScopeId,
   getPendingHumanGate,
   getTurnFinishedStatus,
   isModeControlMessage,
   type AgentMode,
+  type ExecutionReconnectState,
   type PendingHumanGate,
   type PermissionMode,
 } from "../../../services/execution-hub";
@@ -69,6 +71,8 @@ export interface ChatProps {
   onContextIdChange?: (contextId: string | null) => void;
   onConversationChange?: () => void | Promise<void>;
   onExecutionError?: (error: unknown) => void;
+  /** 将 SignalR 重连状态同步给更高层的工作区遮罩。 */
+  onReconnectStateChange?: (state: ExecutionReconnectState | null) => void;
   active?: boolean;
 }
 
@@ -105,6 +109,7 @@ export function Chat({
   onContextIdChange,
   onConversationChange,
   onExecutionError,
+  onReconnectStateChange,
 }: ChatProps) {
   const executionServerId = useExecutionPlatform().serverId;
   const initialHistory = React.useMemo(
@@ -113,6 +118,7 @@ export function Chat({
   );
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [isTransitioning, setIsTransitioning] = React.useState(false);
+  const [reconnectState, setReconnectState] = React.useState<ExecutionReconnectState | null>(null);
   const [messages, setMessages] = React.useState<AiMessage[]>(initialHistory.messages);
   const [claudeCommands, setClaudeCommands] = React.useState<string[]>(initialHistory.commands);
   const [conversationUsage, setConversationUsage] = React.useState<TokenUsage>(sessionSeed.usage);
@@ -141,6 +147,10 @@ export function Chat({
   });
   const targetKey = target ? `${target.type}:${target.id}` : "";
   const previousTargetKeyRef = React.useRef(targetKey);
+
+  React.useEffect(() => {
+    onReconnectStateChange?.(reconnectState);
+  }, [onReconnectStateChange, reconnectState]);
 
   const suggestionQueryParams = React.useMemo(
     () => getAgentSuggestionQueryParams(projectId, target),
@@ -188,6 +198,7 @@ export function Chat({
     const client = executionClientRef.current;
     executionClientRef.current = null;
     configuredSessionRef.current = null;
+    setReconnectState(null);
     pendingTeardownCountRef.current += 1;
     setIsTransitioning(true);
 
@@ -211,6 +222,7 @@ export function Chat({
     executionClientRef.current?.detach();
     executionClientRef.current = null;
     configuredSessionRef.current = null;
+    setReconnectState(null);
     setIsExecuting(false);
     setIsTransitioning(false);
   }, []);
@@ -312,7 +324,7 @@ export function Chat({
             ? {
                 ...humanGate,
                 streamingScopeId:
-                  message.streamingScopeId ?? activeStreamingScopeRef.current ?? undefined,
+                  humanGate.streamingScopeId ?? activeStreamingScopeRef.current ?? undefined,
               }
             : humanGate,
         );
@@ -320,7 +332,8 @@ export function Chat({
       }
 
       if (message.additionalProperties?.type === "turn-start") {
-        activeStreamingScopeRef.current ??= message.messageId;
+        activeStreamingScopeRef.current ??=
+          getMessageStreamingScopeId(message) ?? message.messageId;
         setIsExecuting(true);
         return;
       }
@@ -349,10 +362,16 @@ export function Chat({
   );
 
   React.useEffect(() => {
-    if (!projectId || !contextId) return;
+    if (!projectId || !contextId) {
+      setReconnectState(null);
+      return;
+    }
     if (executionClientRef.current) return;
     const key = { serverId: executionServerId, projectId, contextId };
-    if (!executionSessionManager.has(key)) return;
+    if (!executionSessionManager.has(key)) {
+      setReconnectState(null);
+      return;
+    }
 
     const generation = executionGenerationRef.current;
     let client: ManagedExecutionHandle;
@@ -367,12 +386,38 @@ export function Chat({
         }
         executionClientRef.current = null;
         configuredSessionRef.current = null;
+        setReconnectState(null);
         setIsExecuting(false);
         setPendingHumanGate(null);
         if (error) notifyExecutionError(error);
       },
+      onReconnecting: (state) => {
+        if (
+          generation === executionGenerationRef.current &&
+          executionClientRef.current === client
+        ) {
+          setReconnectState(state);
+        }
+      },
+      onReconnectFailed: (state) => {
+        if (
+          generation === executionGenerationRef.current &&
+          executionClientRef.current === client
+        ) {
+          setReconnectState(state);
+        }
+      },
+      onReconnected: () => {
+        if (
+          generation === executionGenerationRef.current &&
+          executionClientRef.current === client
+        ) {
+          setReconnectState(null);
+        }
+      },
     });
     executionClientRef.current = client;
+    setReconnectState(client.getReconnectState());
     setIsExecuting(["running", "waiting-approval", "detached"].includes(client.getStatus()));
 
     return () => {
@@ -409,14 +454,40 @@ export function Chat({
               executionClientRef.current = null;
               configuredSessionRef.current = null;
               activeStreamingScopeRef.current = null;
+              setReconnectState(null);
               setIsExecuting(false);
               setPendingHumanGate(null);
               if (error) notifyExecutionError(error);
+            },
+            onReconnecting: (state) => {
+              if (
+                generation === executionGenerationRef.current &&
+                executionClientRef.current === attachedClient
+              ) {
+                setReconnectState(state);
+              }
+            },
+            onReconnectFailed: (state) => {
+              if (
+                generation === executionGenerationRef.current &&
+                executionClientRef.current === attachedClient
+              ) {
+                setReconnectState(state);
+              }
+            },
+            onReconnected: () => {
+              if (
+                generation === executionGenerationRef.current &&
+                executionClientRef.current === attachedClient
+              ) {
+                setReconnectState(null);
+              }
             },
           },
         );
         client = attachedClient;
         executionClientRef.current = client;
+        setReconnectState(client.getReconnectState());
       }
 
       const configurationKey = JSON.stringify({
@@ -472,6 +543,7 @@ export function Chat({
 
   const handleExecute = React.useCallback(
     async (value: string) => {
+      if (reconnectState) return;
       if (isTransitioning) {
         toast.error("Please wait for the previous execution to stop");
         return;
@@ -555,6 +627,7 @@ export function Chat({
       notifyExecutionError,
       onConversationChange,
       projectId,
+      reconnectState,
       target,
     ],
   );
@@ -741,6 +814,8 @@ export function Chat({
     <div className={cn("@container relative h-full min-h-0 w-full overflow-hidden", className)}>
       <div
         ref={conversationScrollRef}
+        inert={reconnectState !== null}
+        aria-hidden={reconnectState !== null}
         className="h-full w-full overflow-y-auto agw-scrollbar"
         onScroll={handleConversationScroll}
       >
@@ -764,7 +839,11 @@ export function Chat({
         </div>
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center">
+      <div
+        inert={reconnectState !== null}
+        aria-hidden={reconnectState !== null}
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center"
+      >
         <div className="relative min-h-30 min-w-0 max-w-5xl flex-1 bg-linear-to-t from-background from-50% via-background/80 via-70% to-transparent px-6">
           {/* 用户确认 */}
           {floatingHumanGate ? (

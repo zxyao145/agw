@@ -28,7 +28,8 @@ public partial class AgentRuntimeService
         IReadOnlyDictionary<string, string> environmentVariables,
         string defaultMode,
         CancellationToken cancellationToken,
-        int backgroundDepth = 0)
+        int backgroundDepth = 0,
+        bool deferHumanInteractions = false)
     {
         if (!agentDefinition.ModelProviderId.HasValue)
         {
@@ -73,7 +74,8 @@ public partial class AgentRuntimeService
                 supportsHostedWebSearch,
                 defaultMode,
                 backgroundAgentFactory,
-                conversationId)
+                conversationId,
+                deferHumanInteractions)
             .ConfigureAwait(false);
         AIAgent? aiAgent = null;
         try

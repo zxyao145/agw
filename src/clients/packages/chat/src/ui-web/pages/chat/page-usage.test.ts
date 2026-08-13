@@ -83,7 +83,7 @@ test("shared chat shows the usage panel only when its container reaches the lg w
   assert.ok(!usageAsideClasses.includes("lg:block"));
   assert.match(
     chatSource,
-    /<div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center">/,
+    /<div[\s\S]*?className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center"\s*>/,
   );
   assert.match(chatSource, /className="relative min-h-30 min-w-0 max-w-5xl flex-1/);
 });

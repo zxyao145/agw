@@ -5,6 +5,7 @@ using Agw.Setup.Services;
 using Agw.Shared.Configuration;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
+using Agw.Shared.Runtime;
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -19,19 +20,22 @@ public class SetupController : Controller
     private readonly SetupCodeService _setupCodeService;
     private readonly AuthenticationAttemptLimiter _attemptLimiter;
     private readonly TimeProvider _timeProvider;
+    private readonly AgwDataPaths _paths;
 
     public SetupController(
         IInitializationStateStore stateStore,
         ISetupInitializationService setupInitializationService,
         SetupCodeService setupCodeService,
         AuthenticationAttemptLimiter attemptLimiter,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        AgwDataPaths paths)
     {
         _stateStore = stateStore;
         _setupInitializationService = setupInitializationService;
         _setupCodeService = setupCodeService;
         _attemptLimiter = attemptLimiter;
         _timeProvider = timeProvider;
+        _paths = paths;
     }
 
     [HttpGet("")]
@@ -39,17 +43,21 @@ public class SetupController : Controller
     [ProducesApiResult(StatusCodes.Status404NotFound)]
     public IActionResult Index()
     {
-        // 初始化后，setup 页面将返回 404
+#if !DEBUG
+       // 初始化后，setup 页面将返回 404
         if (_stateStore.IsInitialized)
         {
             return ErrorCodes.ResourceNotFound.ToApiResult();
         }
+#endif
+
 
         ViewData["RequireSetupCode"] = !LocalTrustedRequest.IsLocalTrusted(HttpContext);
         return View(new SetupRequest
         {
+            DeploymentMode = DeploymentMode.Standalone,
             Provider = DatabaseProvider.Sqlite,
-            ConnectionString = "Data Source=agw.db"
+            SqlitePath = _paths.DatabaseFile
         });
     }
 
@@ -81,7 +89,8 @@ public class SetupController : Controller
             if (requiresSetupCode && _attemptLimiter.IsBlocked(clientKey, now))
             {
                 Response.StatusCode = StatusCodes.Status429TooManyRequests;
-                ModelState.AddModelError(nameof(request.SetupCode), "Too many failed Setup Code attempts. Try again later.");
+                ModelState.AddModelError(nameof(request.SetupCode),
+                    "Too many failed Setup Code attempts. Try again later.");
                 ViewData["RequireSetupCode"] = true;
                 return View(request);
             }
@@ -99,11 +108,17 @@ public class SetupController : Controller
             {
                 _setupCodeService.Consume(request.SetupCode);
             }
+
+            if (request.DeploymentMode == DeploymentMode.Cluster)
+            {
+                return View("RestartRequired");
+            }
+
             return Redirect("/");
         }
         catch (Exception ex)
         {
-            ModelState.AddModelError(string.Empty, $"初始化失败：{ex.Message}");
+            ModelState.AddModelError(string.Empty, $"Initialization failed: {ex.Message}");
             return View(request);
         }
     }

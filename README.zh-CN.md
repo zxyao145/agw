@@ -101,7 +101,7 @@ dotnet restore Agw.slnx
 dotnet run --project src/server/Agw.Host
 ```
 
-开发环境后端默认监听 `http://localhost:30816`。首次运行时，打开 `http://localhost:30816/setup`，选择数据库 Provider、连接字符串和管理员密码。运行数据统一保存在当前用户主目录下的 `agw`；通过域名初始化还需要 Server 启动日志中的一次性 Setup Code。
+开发环境后端默认监听 `http://localhost:30816`。首次运行时，打开 `http://localhost:30816/setup`，选择部署模式、填写结构化数据库设置并创建管理员密码。无人值守部署可在不存在 `server-state.json` 时通过 `Setup` 配置节提供相同字段，密码应使用环境变量或 Secret 注入。运行数据统一保存在当前用户主目录下的 `agw`；通过域名初始化还需要 Server 启动日志中的一次性 Setup Code。
 
 在另一个终端启动前端：
 

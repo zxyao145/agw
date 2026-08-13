@@ -88,9 +88,6 @@ public class DbSeeder
         {
             _logger.LogInformation("Starting database seeding");
 
-            // Ensure database is created
-            await _context.Database.EnsureCreatedAsync();
-
             await SeedBuiltInProjectsAsync();
             await SeedExternalAgentsAsync();
             var providers = await SeedProvidersAsync();

@@ -21,6 +21,7 @@ namespace Agw.Auth.Api;
 public sealed class AuthController : ControllerBase
 {
     private readonly IAuthenticationStateStore _stateStore;
+    private readonly IApiTokenStore _tokenStore;
     private readonly IPasswordHasher<object> _passwordHasher;
     private readonly IAntiforgery _antiforgery;
     private readonly AuthenticationAttemptLimiter _attemptLimiter;
@@ -28,12 +29,14 @@ public sealed class AuthController : ControllerBase
 
     public AuthController(
         IAuthenticationStateStore stateStore,
+        IApiTokenStore tokenStore,
         IPasswordHasher<object> passwordHasher,
         IAntiforgery antiforgery,
         AuthenticationAttemptLimiter attemptLimiter,
         TimeProvider timeProvider)
     {
         _stateStore = stateStore;
+        _tokenStore = tokenStore;
         _passwordHasher = passwordHasher;
         _antiforgery = antiforgery;
         _attemptLimiter = attemptLimiter;
@@ -148,10 +151,10 @@ public sealed class AuthController : ControllerBase
     [ProducesApiResult(typeof(ApiTokenSummary[]))]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public IActionResult ListTokens()
+    public async Task<IActionResult> ListTokens(CancellationToken cancellationToken)
     {
         return IsInteractiveAdmin()
-            ? ApiResult.Ok(_stateStore.GetAuthenticationSnapshot().Tokens)
+            ? ApiResult.Ok(await _tokenStore.ListTokensAsync(cancellationToken))
             : ErrorCodes.InteractiveAdminRequired.ToApiResult();
     }
 
@@ -169,7 +172,7 @@ public sealed class AuthController : ControllerBase
             return ApiResult.BadRequest(
                 "Token name must be between 1 and 64 characters.",
                 ErrorCodes.InvalidParam.Code);
-        return ApiResult.Ok(await _stateStore.CreateTokenAsync(request.Name, cancellationToken));
+        return ApiResult.Ok(await _tokenStore.CreateTokenAsync(request.Name, cancellationToken));
     }
 
     [HttpDelete("tokens/{id:guid}")]
@@ -181,7 +184,7 @@ public sealed class AuthController : ControllerBase
     public async Task<IActionResult> RevokeToken(Guid id, CancellationToken cancellationToken)
     {
         if (!IsInteractiveAdmin()) return ErrorCodes.InteractiveAdminRequired.ToApiResult();
-        return await _stateStore.RevokeTokenAsync(id, cancellationToken)
+        return await _tokenStore.RevokeTokenAsync(id, cancellationToken)
             ? ApiResult.Ok()
             : ErrorCodes.ApiTokenNotFound.ToApiResult();
     }

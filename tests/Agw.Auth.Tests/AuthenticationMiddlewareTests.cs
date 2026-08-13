@@ -52,13 +52,19 @@ public sealed class AuthenticationMiddlewareTests
     }
 
     [Theory]
-    [InlineData("agw://app", true)]
-    [InlineData("agw://app/", true)]
-    [InlineData("https://evil.example.com", false)]
-    [InlineData("agw://evil", false)]
-    public void IsDesktopOrigin_WhenOriginVaries_ReturnsExpected(string origin, bool expected)
+    [InlineData("agw://app", false, true)]
+    [InlineData("agw://app/", false, true)]
+    [InlineData("http://localhost:3000", false, false)]
+    [InlineData("http://localhost:3000", true, true)]
+    [InlineData("http://localhost:3001", true, false)]
+    [InlineData("https://evil.example.com", true, false)]
+    [InlineData("agw://evil", true, false)]
+    public void IsDesktopOrigin_WhenOriginVaries_ReturnsExpected(
+        string origin,
+        bool allowDevelopmentOrigin,
+        bool expected)
     {
-        Assert.Equal(expected, LocalTrustedRequest.IsDesktopOrigin(origin));
+        Assert.Equal(expected, LocalTrustedRequest.IsDesktopOrigin(origin, allowDevelopmentOrigin));
     }
 
     [Fact]
@@ -79,9 +85,9 @@ public sealed class AuthenticationMiddlewareTests
     {
         var context = new DefaultHttpContext();
         context.Request.Headers.Authorization = "Bearer agw_desktop";
-        var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask);
+        var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask, false);
 
-        await middleware.InvokeAsync(context, new StateStoreStub("agw_desktop"));
+        await InvokeAsync(middleware, context, new StateStoreStub("agw_desktop"));
 
         Assert.True(context.User.Identity?.IsAuthenticated);
         Assert.Equal(AgwAuthDefaults.BearerScheme, context.User.Identity?.AuthenticationType);
@@ -95,9 +101,9 @@ public sealed class AuthenticationMiddlewareTests
         context.Connection.RemoteIpAddress = IPAddress.Parse("192.0.2.1");
         context.Request.Host = new HostString("agw.example.com");
         context.Request.Headers.Authorization = "Bearer agw_invalid";
-        var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask);
+        var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask, false);
 
-        await middleware.InvokeAsync(context, new StateStoreStub("agw_valid"));
+        await InvokeAsync(middleware, context, new StateStoreStub("agw_valid"));
 
         Assert.False(context.User.Identity?.IsAuthenticated);
     }
@@ -109,9 +115,9 @@ public sealed class AuthenticationMiddlewareTests
         context.Connection.RemoteIpAddress = IPAddress.Loopback;
         context.Request.Host = new HostString("localhost", 5015);
         context.Request.Headers.Authorization = "Bearer agw_invalid";
-        var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask);
+        var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask, false);
 
-        await middleware.InvokeAsync(context, new StateStoreStub("agw_valid"));
+        await InvokeAsync(middleware, context, new StateStoreStub("agw_valid"));
 
         Assert.Equal(AgwAuthDefaults.LocalTrustedScheme, context.User.Identity?.AuthenticationType);
     }
@@ -122,9 +128,9 @@ public sealed class AuthenticationMiddlewareTests
         var context = new DefaultHttpContext();
         context.Connection.RemoteIpAddress = IPAddress.Loopback;
         context.Request.Host = new HostString("localhost", 5015);
-        var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask);
+        var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask, false);
 
-        await middleware.InvokeAsync(context, new StateStoreStub());
+        await InvokeAsync(middleware, context, new StateStoreStub());
 
         Assert.Equal(AgwAuthDefaults.LocalTrustedScheme, context.User.Identity?.AuthenticationType);
     }
@@ -145,9 +151,9 @@ public sealed class AuthenticationMiddlewareTests
         {
             nextCalled = true;
             return Task.CompletedTask;
-        });
+        }, false);
 
-        await middleware.InvokeAsync(context, new StateStoreStub());
+        await InvokeAsync(middleware, context, new StateStoreStub());
 
         Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
         Assert.False(nextCalled);
@@ -167,12 +173,93 @@ public sealed class AuthenticationMiddlewareTests
         {
             nextCalled = true;
             return Task.CompletedTask;
-        });
+        }, false);
 
-        await middleware.InvokeAsync(context, new StateStoreStub("agw_desktop"));
+        await InvokeAsync(middleware, context, new StateStoreStub("agw_desktop"));
 
         Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
         Assert.True(nextCalled);
+    }
+
+    /// <summary>
+    /// 验证 Execution Hub 的 WebSocket 握手可以使用 SignalR 查询参数建立 Bearer 身份。
+    /// </summary>
+    [Fact]
+    public async Task InvokeAsync_ExecutionHubWebSocketWithDevelopmentOriginAndQueryToken_CreatesBearerPrincipal()
+    {
+        var context = new DefaultHttpContext();
+        context.Features.Set<IHttpWebSocketFeature>(new WebSocketFeature());
+        context.Request.Path = "/api/hubs/exec";
+        context.Request.QueryString = new QueryString("?access_token=agw_desktop");
+        context.Request.Headers.Origin = "http://localhost:3000";
+        var nextCalled = false;
+        var middleware = new AgwAuthenticationMiddleware(_ =>
+        {
+            nextCalled = true;
+            return Task.CompletedTask;
+        }, true);
+
+        await InvokeAsync(middleware, context, new StateStoreStub("agw_desktop"));
+
+        Assert.Equal(AgwAuthDefaults.BearerScheme, context.User.Identity?.AuthenticationType);
+        Assert.True(nextCalled);
+    }
+
+    /// <summary>
+    /// 验证生产环境不会接受仅供 Desktop 开发服务器使用的 Origin。
+    /// </summary>
+    [Fact]
+    public async Task InvokeAsync_ExecutionHubWebSocketWithDevelopmentOriginInProduction_RejectsUpgrade()
+    {
+        var context = new DefaultHttpContext();
+        context.Features.Set<IHttpWebSocketFeature>(new WebSocketFeature());
+        context.Request.Path = "/api/hubs/exec";
+        context.Request.QueryString = new QueryString("?access_token=agw_desktop");
+        context.Request.Headers.Origin = "http://localhost:3000";
+        var nextCalled = false;
+        var middleware = new AgwAuthenticationMiddleware(_ =>
+        {
+            nextCalled = true;
+            return Task.CompletedTask;
+        }, false);
+
+        await InvokeAsync(middleware, context, new StateStoreStub("agw_desktop"));
+
+        Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
+        Assert.False(nextCalled);
+    }
+
+    /// <summary>
+    /// 验证普通 HTTP 请求不能通过查询参数绕过 Header 鉴权。
+    /// </summary>
+    [Fact]
+    public async Task InvokeAsync_NonWebSocketRequestWithQueryToken_DoesNotCreatePrincipal()
+    {
+        var context = new DefaultHttpContext();
+        context.Request.Path = "/api/hubs/exec";
+        context.Request.QueryString = new QueryString("?access_token=agw_desktop");
+        var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask, false);
+
+        await InvokeAsync(middleware, context, new StateStoreStub("agw_desktop"));
+
+        Assert.False(context.User.Identity?.IsAuthenticated);
+    }
+
+    /// <summary>
+    /// 验证其他 WebSocket 路径不能复用 Execution Hub 的查询参数鉴权。
+    /// </summary>
+    [Fact]
+    public async Task InvokeAsync_OtherWebSocketWithQueryToken_DoesNotCreatePrincipal()
+    {
+        var context = new DefaultHttpContext();
+        context.Features.Set<IHttpWebSocketFeature>(new WebSocketFeature());
+        context.Request.Path = "/api/hubs/other";
+        context.Request.QueryString = new QueryString("?access_token=agw_desktop");
+        var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask, false);
+
+        await InvokeAsync(middleware, context, new StateStoreStub("agw_desktop"));
+
+        Assert.False(context.User.Identity?.IsAuthenticated);
     }
 
     private sealed class WebSocketFeature : IHttpWebSocketFeature
@@ -182,7 +269,12 @@ public sealed class AuthenticationMiddlewareTests
         public Task<WebSocket> AcceptAsync(WebSocketAcceptContext context) => throw new NotImplementedException();
     }
 
-    private sealed class StateStoreStub : IAuthenticationStateStore
+    private static Task InvokeAsync(
+        AgwAuthenticationMiddleware middleware,
+        HttpContext context,
+        StateStoreStub store) => middleware.InvokeAsync(context, store, store);
+
+    private sealed class StateStoreStub : IAuthenticationStateStore, IApiTokenStore
     {
         private readonly string? _validToken;
 
@@ -191,7 +283,11 @@ public sealed class AuthenticationMiddlewareTests
             _validToken = validToken;
         }
 
-        public AuthenticationSnapshot GetAuthenticationSnapshot() => new("hash", 1, []);
+        public AuthenticationSnapshot GetAuthenticationSnapshot() => new("hash", 1);
+
+        public Task<IReadOnlyList<ApiTokenSummary>> ListTokensAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ApiTokenSummary>>([]);
 
         public Task<CreatedApiToken> CreateTokenAsync(
             string name,
@@ -201,7 +297,10 @@ public sealed class AuthenticationMiddlewareTests
             Guid id,
             CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-        public bool ValidateToken(string token) => string.Equals(token, _validToken, StringComparison.Ordinal);
+        public Task<bool> ValidateTokenAsync(
+            string token,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(string.Equals(token, _validToken, StringComparison.Ordinal));
 
         public Task UpdatePasswordAsync(
             string passwordHash,

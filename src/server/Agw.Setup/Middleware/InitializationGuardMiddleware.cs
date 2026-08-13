@@ -35,10 +35,12 @@ public class InitializationGuardMiddleware
                 return;
             }
 
-            if (path.StartsWithSegments("/api") || path.StartsWithSegments("/openapi") || path.StartsWithSegments("/scalar"))
+            if (path.StartsWithSegments("/api") || path.StartsWithSegments("/openapi") ||
+                path.StartsWithSegments("/scalar"))
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                await context.Response.WriteAsJsonAsync(new { message = "System is not initialized yet. Complete /setup first." });
+                await context.Response.WriteAsJsonAsync(new
+                { message = "System is not initialized yet. Complete /setup first." });
                 return;
             }
 
@@ -52,12 +54,15 @@ public class InitializationGuardMiddleware
             return;
         }
 
+#if !DEBUG
         // 初始化后，setup 页面将返回 404
         if (path.StartsWithSegments(SetupPath))
         {
             context.Response.StatusCode = StatusCodes.Status404NotFound;
             return;
         }
+#endif
+
 
         await _next(context);
     }

@@ -2,6 +2,7 @@ using System.Text.Json;
 
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands.Hitl;
+using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Turns;
 
 using Microsoft.Extensions.AI;
@@ -142,5 +143,49 @@ public class HumanGateApprovalCoordinatorTests
         var response = ToolApprovalSupport.CreateResponse(request, decision);
 
         Assert.IsType<ToolApprovalResponseContent>(response);
+    }
+
+    [Fact]
+    public void DurableMapper_AskUserQuestion_UsesInteractionPayloadWithoutModelAnswers()
+    {
+        var approval = new ToolApprovalRequestContent(
+            "approval-questions",
+            new FunctionCallContent(
+                "call-questions",
+                "ask_user_question",
+                new Dictionary<string, object?>
+                {
+                    ["questions"] = new[]
+                    {
+                        new
+                        {
+                            question = "Which database?",
+                            header = "Database",
+                            multiSelect = false,
+                            options = new[]
+                            {
+                                new { label = "PostgreSQL", description = "Cluster deployment" }
+                            }
+                        }
+                    },
+                    ["answers"] = new Dictionary<string, string>
+                    {
+                        ["Which database?"] = "forged-by-model"
+                    },
+                    ["metadata"] = new { source = "test" }
+                }));
+
+        var request = ToolApprovalSupport.CreateRequest(approval, "agent", "Agent");
+        var snapshot = DurableHumanInteractionMapper.FromRequest(request);
+        var message = DurableHumanInteractionMapper.ToMessage(snapshot);
+
+        Assert.Equal("interaction", request.Mode);
+        Assert.Equal("human-interaction-request", message.AdditionalProperties!["type"]);
+        Assert.Equal("ask_user_question", message.AdditionalProperties["toolName"]);
+        var payload = Assert.IsType<JsonElement>(message.AdditionalProperties["payload"]);
+        Assert.True(payload.TryGetProperty("questions", out _));
+        Assert.True(payload.TryGetProperty("metadata", out _));
+        Assert.False(payload.TryGetProperty("answers", out _));
+        Assert.Null(snapshot.Arguments);
     }
 }

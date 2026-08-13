@@ -74,6 +74,38 @@ test("buildExecCommand includes target and streaming mode", async () => {
   });
 });
 
+test("buildExecCommand includes a durable execution identity when supplied", async () => {
+  const { buildExecCommand } = await import("./execution-hub" + ".ts");
+  const input = { messageId: "message-1", author: "$agw", contents: [] };
+
+  assert.deepEqual(
+    buildExecCommand({
+      executionId: "execution-1",
+      agentId: "agent-1",
+      agentType: 0,
+      input,
+    }),
+    {
+      type: "ExecCommand",
+      executionId: "execution-1",
+      agentId: "agent-1",
+      agentType: 0,
+      stream: true,
+      input,
+    },
+  );
+});
+
+test("buildSubscribeExecutionCommand resumes a Redis stream cursor", async () => {
+  const { buildSubscribeExecutionCommand } = await import("./execution-hub" + ".ts");
+
+  assert.deepEqual(buildSubscribeExecutionCommand("execution-1", "3-9"), {
+    type: "SubscribeExecutionCommand",
+    executionId: "execution-1",
+    cursor: "3-9",
+  });
+});
+
 test("getTurnFinishedStatus reads terminal AgwMessage", async () => {
   const { getTurnFinishedStatus } = await import("./execution-hub" + ".ts");
 
@@ -112,6 +144,7 @@ test("getPendingHumanGate parses a structured question interaction", async () =>
       interactionKind: "questions",
       toolName: "ask_user_question",
       callId: "call-1",
+      streamingScopeId: "user-message-1",
       prompt: "Choose before continuing.",
       payload: {
         questions: [
@@ -136,6 +169,7 @@ test("getPendingHumanGate parses a structured question interaction", async () =>
     interactionKind: "questions",
     toolName: "ask_user_question",
     callId: "call-1",
+    streamingScopeId: "user-message-1",
     prompt: "Choose before continuing.",
     questions: [
       {
@@ -149,6 +183,25 @@ test("getPendingHumanGate parses a structured question interaction", async () =>
       },
     ],
   });
+});
+
+test("getMessageStreamingScopeId keeps a restored turn bound to its original user message", async () => {
+  const { getMessageStreamingScopeId } = await import("./execution-hub" + ".ts");
+
+  assert.equal(
+    getMessageStreamingScopeId({
+      messageId: "server-b-turn-start",
+      role: "system",
+      author: "$agw-server",
+      contents: [],
+      additionalProperties: {
+        type: "turn-start",
+        executionId: "execution-1",
+        streamingScopeId: "user-message-1",
+      },
+    }),
+    "user-message-1",
+  );
 });
 
 test("getPendingHumanGate parses a mode change interaction", async () => {
@@ -201,5 +254,38 @@ test("buildExecutionHubOptions uses the selected desktop Server and token", asyn
 
   assert.equal(result.url, "https://agw.example.test/api/hubs/exec");
   assert.equal(await result.options.accessTokenFactory?.(), "agw_remote-token");
+  assert.equal(result.options.skipNegotiation, true);
   assert.equal(result.options.withCredentials, false);
+});
+
+test("execution reconnect uses the configured retry schedule and then stops", async () => {
+  const { executionReconnectDelaysMs, getExecutionReconnectDelay, isExecutionReconnectExhausted } =
+    await import("./execution-hub" + ".ts");
+
+  assert.deepEqual(
+    [...executionReconnectDelaysMs],
+    [0, 2_000, 5_000, 7_000, 10_000, 20_000, 30_000],
+  );
+  assert.deepEqual(
+    Array.from({ length: executionReconnectDelaysMs.length + 1 }, (_, retryCount) =>
+      getExecutionReconnectDelay(retryCount),
+    ),
+    [0, 2_000, 5_000, 7_000, 10_000, 20_000, 30_000, null],
+  );
+  assert.equal(
+    isExecutionReconnectExhausted({
+      status: "reconnecting",
+      retryAttempt: executionReconnectDelaysMs.length,
+      retryDelayMs: 0,
+    }),
+    true,
+  );
+  assert.equal(
+    isExecutionReconnectExhausted({
+      status: "failed",
+      retryAttempt: executionReconnectDelaysMs.length,
+      retryDelayMs: 0,
+    }),
+    false,
+  );
 });

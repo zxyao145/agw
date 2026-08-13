@@ -4,6 +4,8 @@ using System.Reflection;
 using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Auth;
+using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
@@ -40,6 +42,12 @@ public class EntityTypeConfigurationTests
             typeof(ModelProviderRelation),
             typeof(Skill),
             typeof(RemoteSkillCache));
+    }
+
+    [Fact]
+    public void AuthEntities_DeclareMatchingConfigurations()
+    {
+        AssertConfigured(typeof(ApiToken));
     }
 
     [Fact]
@@ -162,6 +170,14 @@ public class EntityTypeConfigurationTests
     }
 
     [Fact]
+    public void ExecutionEntities_DeclareMatchingConfigurations()
+    {
+        AssertConfigured(
+            typeof(DurableExecutionRecord),
+            typeof(DurableExecutionEventRecord));
+    }
+
+    [Fact]
     public void PersistedEntities_AllDeclareMatchingConfigurations()
     {
         var entityTypes = typeof(Project).Assembly
@@ -170,7 +186,7 @@ public class EntityTypeConfigurationTests
             .OrderBy(type => type.FullName)
             .ToArray();
 
-        Assert.Equal(31, entityTypes.Length);
+        Assert.Equal(34, entityTypes.Length);
         AssertConfigured(entityTypes);
     }
 

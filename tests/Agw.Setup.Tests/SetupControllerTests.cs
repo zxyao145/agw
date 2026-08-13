@@ -1,7 +1,11 @@
+using System.Net;
+
 using Agw.Auth.Application;
 using Agw.Setup.Contracts;
 using Agw.Setup.Controllers;
 using Agw.Setup.Services;
+using Agw.Shared.Configuration;
+using Agw.Shared.Runtime;
 
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -12,8 +16,20 @@ namespace Agw.Setup.Tests;
 
 public sealed class SetupControllerTests
 {
+#if DEBUG
     [Fact]
-    public void Index_WhenSetupIsComplete_ReturnsApiResult()
+    public void Index_WhenSetupIsCompleteInDebug_ReturnsSetupView()
+    {
+        var controller = CreateController();
+
+        var result = controller.Index();
+
+        var view = Assert.IsType<ViewResult>(result);
+        Assert.IsType<SetupRequest>(view.Model);
+    }
+#else
+    [Fact]
+    public void Index_WhenSetupIsCompleteInRelease_ReturnsApiResult()
     {
         var controller = CreateController();
 
@@ -21,6 +37,7 @@ public sealed class SetupControllerTests
 
         AssertApiResult(result);
     }
+#endif
 
     [Fact]
     public async Task IndexPost_WhenSetupIsComplete_ReturnsApiResult()
@@ -32,20 +49,107 @@ public sealed class SetupControllerTests
         AssertApiResult(result);
     }
 
-    private static SetupController CreateController()
+    [Fact]
+    public void Index_WhenSetupIsRequired_PrefillsStandaloneSqlitePath()
     {
+        var paths = CreatePaths();
+        var controller = CreateController(isInitialized: false, paths: paths);
+
+        var result = Assert.IsType<ViewResult>(controller.Index());
+        var model = Assert.IsType<SetupRequest>(result.Model);
+
+        Assert.Equal(DeploymentMode.Standalone, model.DeploymentMode);
+        Assert.Equal(DatabaseProvider.Sqlite, model.Provider);
+        Assert.Equal(paths.DatabaseFile, model.SqlitePath);
+    }
+
+    [Fact]
+    public async Task IndexPost_WhenStandaloneInitializationSucceeds_RedirectsToRoot()
+    {
+        var initializationService = new StubSetupInitializationService();
+        var controller = CreateController(isInitialized: false, initializationService: initializationService);
+        var request = CreateRequest(DeploymentMode.Standalone);
+
+        var result = await controller.Index(request, TestContext.Current.CancellationToken);
+
+        var redirect = Assert.IsType<RedirectResult>(result);
+        Assert.Equal("/", redirect.Url);
+        Assert.Same(request, initializationService.LastRequest);
+    }
+
+    [Fact]
+    public async Task IndexPost_WhenClusterInitializationSucceeds_ReturnsRestartView()
+    {
+        var initializationService = new StubSetupInitializationService();
+        var controller = CreateController(isInitialized: false, initializationService: initializationService);
+        var request = CreateRequest(DeploymentMode.Cluster);
+
+        var result = await controller.Index(request, TestContext.Current.CancellationToken);
+
+        var view = Assert.IsType<ViewResult>(result);
+        Assert.Equal("RestartRequired", view.ViewName);
+        Assert.Same(request, initializationService.LastRequest);
+    }
+
+    [Fact]
+    public async Task IndexPost_WhenRemoteSetupCodeIsMissing_ReturnsFormWithoutInitializing()
+    {
+        var initializationService = new StubSetupInitializationService();
+        var controller = CreateController(isInitialized: false, initializationService: initializationService);
+        controller.HttpContext.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.10");
+        controller.HttpContext.Request.Host = new HostString("agw.example.com");
+
+        var result = await controller.Index(
+            CreateRequest(DeploymentMode.Standalone),
+            TestContext.Current.CancellationToken);
+
+        Assert.IsType<ViewResult>(result);
+        Assert.Null(initializationService.LastRequest);
+        Assert.True(controller.ModelState.ContainsKey(nameof(SetupRequest.SetupCode)));
+    }
+
+    private static SetupController CreateController(
+        bool isInitialized = true,
+        StubSetupInitializationService? initializationService = null,
+        AgwDataPaths? paths = null)
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.Connection.RemoteIpAddress = IPAddress.Loopback;
+        httpContext.Request.Host = new HostString("localhost");
         return new SetupController(
-            new InitializedStateStore(),
-            new StubSetupInitializationService(),
+            new StubInitializationStateStore(isInitialized),
+            initializationService ?? new StubSetupInitializationService(),
             new SetupCodeService("TEST-CODE"),
             new AuthenticationAttemptLimiter(),
-            TimeProvider.System)
+            TimeProvider.System,
+            paths ?? CreatePaths())
         {
-            ControllerContext = new ControllerContext
-            {
-                HttpContext = new DefaultHttpContext()
-            }
+            ControllerContext = new ControllerContext { HttpContext = httpContext }
         };
+    }
+
+    private static SetupRequest CreateRequest(DeploymentMode deploymentMode)
+    {
+        return new SetupRequest
+        {
+            DeploymentMode = deploymentMode,
+            Provider = deploymentMode == DeploymentMode.Cluster
+                ? DatabaseProvider.Postgres
+                : DatabaseProvider.Sqlite,
+            SqlitePath = "/data/agw.db",
+            PostgresHost = "db.internal",
+            PostgresDatabase = "agw",
+            PostgresUsername = "agw",
+            PostgresPassword = "database-password",
+            AdminPassword = "administrator-password"
+        };
+    }
+
+    private static AgwDataPaths CreatePaths()
+    {
+        return AgwDataPaths.Resolve(
+            Path.Combine(Path.GetTempPath(), "agw-controller-tests"),
+            "/unused");
     }
 
     private static void AssertApiResult(IActionResult result)
@@ -53,20 +157,31 @@ public sealed class SetupControllerTests
         Assert.StartsWith("Bens.Results.ApiResult", result.GetType().FullName);
     }
 
-    private sealed class InitializedStateStore : IInitializationStateStore
+    private sealed class StubInitializationStateStore : IInitializationStateStore
     {
-        public bool IsInitialized => true;
+        public StubInitializationStateStore(bool isInitialized)
+        {
+            IsInitialized = isInitialized;
+        }
+
+        public bool IsInitialized { get; }
 
         public Task PersistAsync(
-            SetupRequest request,
+            SetupConfiguration configuration,
             string passwordHash,
             CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private sealed class StubSetupInitializationService : ISetupInitializationService
     {
+        public SetupRequest? LastRequest { get; private set; }
+
         public Task InitializeAsync(
             SetupRequest request,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
+            CancellationToken cancellationToken = default)
+        {
+            LastRequest = request;
+            return Task.CompletedTask;
+        }
     }
 }

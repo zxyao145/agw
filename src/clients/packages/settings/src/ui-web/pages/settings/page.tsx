@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { Copy, KeyRound, LogOut, Plus, Trash2 } from "lucide-react";
-import { toast } from "sonner";
 
 import {
   changePassword,
@@ -23,6 +22,7 @@ import {
   Input,
   Label,
   formatLocalDateTime,
+  toast,
 } from "@agw/components";
 
 function encodeBase64Config(token: string): string {
@@ -136,7 +136,10 @@ export default function SettingsPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => navigator.clipboard.writeText(created.token)}
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(created.token);
+                    toast.success("API token copied");
+                  }}
                 >
                   <Copy className="mr-2 h-4 w-4" />
                   Copy token

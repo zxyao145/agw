@@ -14,5 +14,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/server/Agw.Auth/Agw.Auth.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

@@ -91,6 +91,26 @@ public partial class AgentRuntimeService
         IReadOnlyDictionary<string, string>? environmentVariables,
         CancellationToken cancellationToken = default)
     {
+        return await CreateAgentflowNodeAgentAsync(
+            agentId,
+            projectId,
+            conversationId,
+            environmentVariables,
+            deferHumanInteractions: false,
+            cancellationToken);
+    }
+
+    /// <summary>
+    /// 创建指定 conversation 的 Agentflow node Agent，并选择是否延迟人机交互 Tool。
+    /// </summary>
+    public async Task<AIAgent?> CreateAgentflowNodeAgentAsync(
+        Guid agentId,
+        Guid? projectId,
+        Guid conversationId,
+        IReadOnlyDictionary<string, string>? environmentVariables,
+        bool deferHumanInteractions,
+        CancellationToken cancellationToken = default)
+    {
         var agent = await _agentAppService.GetAgentAsync(agentId);
         if (agent == null)
         {
@@ -104,7 +124,8 @@ public partial class AgentRuntimeService
             ProjectId = projectId,
             ConversationId = conversationId,
             Resume = false,
-            DefaultMode = "execute"
+            DefaultMode = "execute",
+            DeferHumanInteractions = deferHumanInteractions
         }, cancellationToken);
     }
 
@@ -134,7 +155,8 @@ public partial class AgentRuntimeService
                 request.ConversationId,
                 environmentVariables,
                 request.DefaultMode,
-                cancellationToken)
+                cancellationToken,
+                deferHumanInteractions: request.DeferHumanInteractions)
             .ConfigureAwait(false);
     }
 }

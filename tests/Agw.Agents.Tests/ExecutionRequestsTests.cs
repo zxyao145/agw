@@ -6,6 +6,7 @@ using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.Commands.Interrupt;
 using Agw.Agents.Execution.Commands.Setting;
+using Agw.Agents.Execution.Commands.Subscribe;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data;
 
@@ -175,6 +176,45 @@ public class ExecutionRequestsTests
         var executionRequest = Assert.IsType<ExecCommand>(request);
         Assert.Null(executionRequest.AgentId);
         Assert.True(executionRequest.Stream);
+    }
+
+    [Fact]
+    public void Deserialize_ExecCommand_WithExecutionId_PreservesExecutionIdentity()
+    {
+        var executionId = Guid.CreateVersion7();
+        var payload = $$"""
+                        {
+                          "type": "ExecCommand",
+                          "executionId": "{{executionId}}",
+                          "agentType": 0,
+                          "input": {
+                            "messageId": "msg-1",
+                            "contents": []
+                          }
+                        }
+                        """;
+
+        var request = Assert.IsType<ExecCommand>(Deserialize(payload));
+
+        Assert.Equal(executionId, request.ExecutionId);
+    }
+
+    [Fact]
+    public void Deserialize_SubscribeExecutionCommand_ReturnsCursor()
+    {
+        var executionId = Guid.CreateVersion7();
+        var payload = $$"""
+                        {
+                          "type": "SubscribeExecutionCommand",
+                          "executionId": "{{executionId}}",
+                          "cursor": "4-7"
+                        }
+                        """;
+
+        var request = Assert.IsType<SubscribeExecutionCommand>(Deserialize(payload));
+
+        Assert.Equal(executionId, request.ExecutionId);
+        Assert.Equal("4-7", request.Cursor);
     }
 
     [Fact]

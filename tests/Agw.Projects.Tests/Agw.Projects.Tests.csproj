@@ -24,6 +24,8 @@
     <ProjectReference Include="../../src/server/Agw.Integrations/Agw.Integrations.csproj" />
     <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
     <ProjectReference Include="../../src/server/Agw.Jobs/Agw.Jobs.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Migrations.Postgres/Agw.Migrations.Postgres.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Migrations.Sqlite/Agw.Migrations.Sqlite.csproj" />
     <ProjectReference Include="../../src/server/Agw.Providers/Agw.Providers.csproj" />
     <ProjectReference Include="../../src/server/Agw.Projects/Agw.Projects.csproj" />
   </ItemGroup>

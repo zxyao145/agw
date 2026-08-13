@@ -2,6 +2,8 @@ using Agw.Infrastructure.Data.Encryption;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Auth;
+using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
@@ -51,6 +53,7 @@ public class AgwDbContext : EFContext
 
     public DbSet<Provider> Providers => Set<Provider>();
     public DbSet<ProviderAuthConfig> ProviderAuthConfigs => Set<ProviderAuthConfig>();
+    public DbSet<ApiToken> ApiTokens => Set<ApiToken>();
 
     public DbSet<AgwAiModel> Models => Set<AgwAiModel>();
     public DbSet<ModelProviderRelation> ModelProviders => Set<ModelProviderRelation>();
@@ -58,6 +61,17 @@ public class AgwDbContext : EFContext
     public DbSet<Agent> Agents => Set<Agent>();
     public DbSet<AgentConnectionRelation> AgentConnectionRelations => Set<AgentConnectionRelation>();
     public DbSet<AgentSessionStateEntry> AgentSessionStates => Set<AgentSessionStateEntry>();
+
+    /// <summary>
+    /// 获取 distributed execution 的 PostgreSQL 单行状态机集合。
+    /// </summary>
+    public DbSet<DurableExecutionRecord> DurableExecutions => Set<DurableExecutionRecord>();
+
+    /// <summary>
+    /// 获取 PostgreSQL event stream 实现的 append-only execution 消息集合。
+    /// </summary>
+    public DbSet<DurableExecutionEventRecord> DurableExecutionEvents =>
+        Set<DurableExecutionEventRecord>();
 
     public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<RemoteSkillCache> RemoteSkillCaches => Set<RemoteSkillCache>();
@@ -99,6 +113,7 @@ public class AgwDbContext : EFContext
     {
         base.OnModelCreating(modelBuilder);
         ConfigureVersion7GuidKeys(modelBuilder);
+        ConfigureProviderSpecificColumnTypes(modelBuilder);
         EncryptedEntityMetadata.Validate(modelBuilder);
         modelBuilder.ApplySoftDeleteQueryFilters();
     }
@@ -206,6 +221,16 @@ public class AgwDbContext : EFContext
             modelBuilder.Entity(entityType.ClrType)
                 .Property(primaryKey.Properties[0].Name)
                 .HasValueGenerator<GuidVersion7ValueGenerator>();
+        }
+    }
+
+    private void ConfigureProviderSpecificColumnTypes(ModelBuilder modelBuilder)
+    {
+        if (Database.IsNpgsql())
+        {
+            modelBuilder.Entity<ProjectConversationChatHistory>()
+                .Property(history => history.Metadata)
+                .HasColumnType("jsonb");
         }
     }
 

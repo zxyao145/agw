@@ -1,6 +1,7 @@
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.Commands.Setting;
+using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Turns;
@@ -26,6 +27,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     private readonly IRuntimeFactory _runtimeFactory;
     private readonly ITaskAppService _taskAppService;
     private readonly IProjectAppService _projectAppService;
+    private readonly DurableExecutionSession? _durableSession;
     private RuntimeBase? _runtime;
     private TaskProjection? _resolvedTask;
     private string? _workspace;
@@ -39,7 +41,8 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         CancellationToken hostToken,
         IRuntimeFactory runtimeFactory,
         ITaskAppService taskAppService,
-        IProjectAppService projectAppService)
+        IProjectAppService projectAppService,
+        DurableExecutionSession? durableSession = null)
     {
         _userName = userName;
         _messageSink = messageSink;
@@ -47,6 +50,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         _runtimeFactory = runtimeFactory;
         _taskAppService = taskAppService;
         _projectAppService = projectAppService;
+        _durableSession = durableSession;
     }
 
     public ExecutionSettings? Settings { get; private set; }
@@ -69,7 +73,18 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     public AgentRuntimeType? AgentType => _target?.AgentType;
 
-    public bool HasActiveTurn => _runtime is { HasActiveTurn: true };
+    public bool HasActiveTurn
+    {
+        get
+        {
+            if (_runtime is { HasActiveTurn: true })
+            {
+                return true;
+            }
+
+            return _durableSession?.HasActiveExecution == true;
+        }
+    }
 
     public async Task ApplySettingsAsync(
         ExecutionSettings settings,
@@ -99,6 +114,14 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(command);
         if (HasActiveTurn)
         {
+            if (_durableSession != null
+                && command.ExecutionId.HasValue
+                && command.ExecutionId == _durableSession.ActiveExecutionId)
+            {
+                await SubscribeExecutionAsync(command.ExecutionId.Value, cursor: null, cancellationToken);
+                return;
+            }
+
             await SendErrorAsync(BusyMessage);
             return;
         }
@@ -119,6 +142,17 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         await ResolveExecutionContextAsync(command, cancellationToken);
 
         var target = new ExecutionTarget(agentId, command.AgentType);
+        if (_durableSession != null)
+        {
+            await _durableSession.StartAsync(
+                command,
+                _resolvedTask!,
+                Settings,
+                cancellationToken);
+            _target = target;
+            return;
+        }
+
         if (_target.HasValue && _target.Value != target)
         {
             await ReleaseRuntimeAsync();
@@ -208,10 +242,28 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         await _runtimeFactory.SetPermissionModeAsync(runtime, permissionMode, cancellationToken);
     }
 
+    /// <summary>
+    /// 中断当前连接内的活动执行；进程内模式无需显式 executionId。
+    /// </summary>
+    public Task InterruptTurnAsync(
+        string? reason,
+        CancellationToken cancellationToken) =>
+        InterruptTurnAsync(executionId: null, reason, cancellationToken);
+
+    /// <summary>
+    /// 中断指定 durable execution；进程内模式仍退化为中断当前 Turn。
+    /// </summary>
     public async Task InterruptTurnAsync(
+        Guid? executionId,
         string? reason,
         CancellationToken cancellationToken)
     {
+        if (_durableSession != null)
+        {
+            await _durableSession.InterruptAsync(executionId, reason, cancellationToken);
+            return;
+        }
+
         if (!HasActiveTurn)
         {
             await SendSystemMessageAsync(
@@ -227,6 +279,12 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
+        if (_durableSession != null)
+        {
+            await _durableSession.RespondAsync(command, cancellationToken);
+            return;
+        }
+
         if (_runtime == null
             || !await _runtime.TrySubmitHumanResponseAsync(command, cancellationToken))
         {
@@ -237,6 +295,10 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        if (_durableSession != null)
+        {
+            await _durableSession.DisposeAsync();
+        }
         await ReleaseRuntimeAsync();
         _resolvedTask = null;
         _workspace = null;
@@ -246,6 +308,12 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     internal bool PrepareForDetach()
     {
+        if (_durableSession != null)
+        {
+            _durableSession.PrepareForDetach();
+            return false;
+        }
+
         var hasActiveTurn = HasActiveTurn;
         if (hasActiveTurn && _waitingForHuman)
         {
@@ -255,7 +323,27 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         return hasActiveTurn;
     }
 
-    internal Task WhenIdleAsync() => _runtime?.WhenIdleAsync() ?? Task.CompletedTask;
+    /// <summary>
+    /// 等待连接内进程执行结束；durable execution 不依赖当前连接存活，因此无需等待。
+    /// </summary>
+    internal Task WhenIdleAsync() => _durableSession != null
+        ? Task.CompletedTask
+        : _runtime?.WhenIdleAsync() ?? Task.CompletedTask;
+
+    /// <summary>
+    /// 将当前连接附着到已有 durable execution，并从指定 cursor 继续回放消息。
+    /// </summary>
+    public async Task SubscribeExecutionAsync(
+        Guid executionId,
+        string? cursor,
+        CancellationToken cancellationToken)
+    {
+        var session = _durableSession
+            ?? throw new AgwException(
+                ErrorCodes.DurableExecutionUnavailable,
+                "Durable execution services are not configured.");
+        await session.AttachAsync(executionId, cursor, cancellationToken);
+    }
 
     private async Task ResolveExecutionContextAsync(
         ExecCommand command,

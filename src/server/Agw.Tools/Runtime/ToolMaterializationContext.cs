@@ -37,4 +37,9 @@ public sealed class ToolMaterializationContext
     { get; init; }
 
     public bool SupportsHostedWebSearch { get; init; }
+
+    /// <summary>
+    /// 指示是否把人机交互工具转换为审批边界，使 durable runtime 能先持久化 Tool 调用再等待回答。
+    /// </summary>
+    public bool DeferHumanInteractions { get; init; }
 }

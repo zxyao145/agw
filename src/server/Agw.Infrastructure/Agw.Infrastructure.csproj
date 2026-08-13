@@ -6,6 +6,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Agw.Agents\Agw.Agents.csproj" />
+		<ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
 		<ProjectReference Include="..\Agw.Integrations\Agw.Integrations.csproj" />
 		<ProjectReference Include="..\Agw.Providers\Agw.Providers.csproj" />
 		<ProjectReference Include="..\Agw.Projects\Agw.Projects.csproj" />
@@ -29,6 +30,5 @@
 	<ItemGroup>
 	  <EmbeddedResource Include="Data/SeedData/Skills/xhs-explore.zip"
 	                    LogicalName="Agw.Infrastructure.SeedData.xhs-explore.zip" />
-	  <Folder Include="Migrations\" />
 	</ItemGroup>
 </Project>

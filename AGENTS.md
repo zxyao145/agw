@@ -15,7 +15,9 @@ The repository is a modular monolith with an ASP.NET Core and EF Core backend pl
 ```text
 Agw.Host/            # ASP.NET Core entry point, composition root, middleware, OpenAPI, static files, websockets, and DB seeding
 Agw.Data/            # Persisted entities, EF configurations, repository abstractions, and unit-of-work contracts
-Agw.Infrastructure/  # EF Core DbContext, repositories, migrations, and seeding
+Agw.Infrastructure/  # EF Core DbContext, repositories, provider configuration, and seeding
+Agw.Migrations.Sqlite/   # SQLite migrations and provider-specific model snapshot
+Agw.Migrations.Postgres/ # PostgreSQL migrations and provider-specific model snapshot
 Agw.Shared/          # Shared contracts, exceptions, results, and utilities
 Agw.A2A/             # A2A protocol types, discovery, communication endpoints, and route builders
 Agw.Auth/            # Administrator Cookie/Bearer authentication, LocalTrusted, CSRF, and authorization guards
@@ -24,7 +26,7 @@ Agw.Files/           # File and workspace APIs, path security, request validatio
 Agw.Integrations/    # Plugin catalog, installations, connections, credentials, OAuth, MCP, and connection-bound tools
 Agw.Jobs/            # Scheduled jobs, project leases, execution logs, and hosted scheduling
 Agw.Providers/       # LLM models, providers, model-provider links, and auth configuration
-Agw.Setup/           # First-run setup, initialization state, and the combined server-state persistence adapter
+Agw.Setup/           # First-run setup, initialization state, server-state persistence, and legacy Token import
 Agw.Skills/          # Skill definitions, local/remote content, execution adapters, and agent-skill relations
 Agw.Projects/         # Projects, project tasks, task records, contexts, and task APIs
 Agw.Tools/           # Tool discovery, metadata, and AI tool factory and registry
@@ -88,16 +90,30 @@ The development backend listens on `http://localhost:30816` by default through `
 
 Run a focused project with `dotnet test tests/Agw.Files.Tests` (or the matching `Agw.*.Tests` project), and use `--filter "FullyQualifiedName~MethodName"` for a specific test.
 
-Do not add or apply EF Core migrations automatically. When the user explicitly requests a migration, use:
+Do not add or apply EF Core migrations automatically. Each model change needs matching SQLite and PostgreSQL migrations. When the user explicitly requests migrations, use:
 
 ```bash
 dotnet ef migrations add <MigrationName> \
-  -p src/server/Agw.Infrastructure \
-  -s src/server/Agw.Host
+  -p src/server/Agw.Migrations.Sqlite \
+  -s src/server/Agw.Host \
+  -- --provider sqlite
+
+dotnet ef migrations add <MigrationName> \
+  -p src/server/Agw.Migrations.Postgres \
+  -s src/server/Agw.Host \
+  -- --provider postgres
 
 dotnet ef database update \
-  -p src/server/Agw.Infrastructure \
-  -s src/server/Agw.Host
+  --connection "<sqlite-connection-string>" \
+  -p src/server/Agw.Migrations.Sqlite \
+  -s src/server/Agw.Host \
+  -- --provider sqlite
+
+dotnet ef database update \
+  --connection "<postgres-connection-string>" \
+  -p src/server/Agw.Migrations.Postgres \
+  -s src/server/Agw.Host \
+  -- --provider postgres
 ```
 
 ### Web and Desktop Clients
@@ -133,7 +149,7 @@ After the first clone, configure hooks with `git config core.hooksPath .githooks
 
 ## Local Setup and Configuration
 
-On the first backend run, open `http://localhost:30816/setup` to choose the database provider, connection string, and administrator password. Setup seeds the database and writes `server-state.json` below the Agw data directory.
+On the first backend run, open `http://localhost:30816/setup` to choose Standalone or Cluster deployment, enter structured SQLite or PostgreSQL settings, and create the administrator password. Standalone supports both databases; Cluster requires PostgreSQL and takes effect after a Server restart. Setup seeds the database and writes `server-state.json` below the Agw data directory.
 
 Remote web access uses the administrator session cookie. Desktop, mobile, and automation clients use named `Authorization: Bearer agw_...` API tokens. The legacy `X-API-Key` setting is not supported.
 
@@ -143,10 +159,11 @@ Configuration guidance:
 
 - `Database:Provider` supports `sqlite` and `postgres`.
 - `Database:ConnectionString` defaults to `Data Source=agw.db`.
+- An optional `Setup` section can perform unattended first-run initialization when `server-state.json` is absent. It uses the same structured fields as the Setup form; inject `Setup:AdminPassword` and `Setup:PostgresPassword` through environment variables or Secrets. Existing state always wins and Setup configuration must not overwrite credentials or runtime setup choices.
 - `DistributedLock:Provider` supports `inmemory` and `postgres`; null or missing follows `Database:Provider`.
 - When `DistributedLock:ConnectionString` is empty, a PostgreSQL lock reuses `Database:ConnectionString`.
 - `OpenTelemetry:OtlpEndpoint` defaults to `http://localhost:4317`.
-- First-run and authentication state, including API Tokens, live in `server-state.json` through the `Agw.Setup` persistence adapter; do not reintroduce static `SystemInitialization` configuration.
+- First-run configuration plus administrator password/session state live in `server-state.json` through the `Agw.Setup` persistence adapter. API Token hashes and audit metadata live in the `api_token` database table; do not reintroduce static `SystemInitialization` configuration.
 - Keep secrets out of `appsettings*.json` and frontend environment files; prefer environment-variable overrides.
 - All backend projects target `.NET 10.0` and use nullable reference types, implicit usings, central package management, and code-style enforcement during builds.
 

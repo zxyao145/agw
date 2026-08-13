@@ -19,6 +19,10 @@
   <Folder Name="/3.Infrastructure/">
     <Project Path="src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
   </Folder>
+  <Folder Name="/3.Infrastructure/Migrations/">
+    <Project Path="src/server/Agw.Migrations.Postgres/Agw.Migrations.Postgres.csproj" />
+    <Project Path="src/server/Agw.Migrations.Sqlite/Agw.Migrations.Sqlite.csproj" />
+  </Folder>
   <Folder Name="/4.Modules/">
     <Project Path="src/server/Agw.Agents/Agw.Agents.csproj" />
     <Project Path="src/server/Agw.Files/Agw.Files.csproj" />

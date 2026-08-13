@@ -26,9 +26,11 @@ The Host must call `UseAuthorization()` after `UseRouting()` so endpoint authori
 
 ## State seam
 
-`IAuthenticationStateStore` is the module's persistence seam. It exposes password hash and session version snapshots plus named Token creation, validation, and revocation.
+`IAuthenticationStateStore` exposes administrator password-hash and Web-session-version state. `IApiTokenStore` separately owns named Token listing, creation, validation, and revocation.
 
-`Agw.Setup.JsonInitializationStateStore` is the production Adapter. Authentication state remains in the existing `server-state.json` document so upgrades require no data migration and all writes continue through one lock and atomic file replacement. Token plaintext is returned only at creation; the file stores only Token hashes and metadata.
+`Agw.Setup.JsonInitializationStateStore` remains the production Adapter for password and session state. `Agw.Infrastructure.Auth.EfApiTokenStore` stores Token hashes in the `api_token` database table. Each row also records `create_by` and UTC `create_time` through the standard entity-audit interceptor. Token plaintext is returned only once at creation and is never persisted.
+
+On startup, `LegacyApiTokenMigrator` imports any hashed Token records from an older `server-state.json`. Old records did not include a creator, so they are attributed to the built-in administrator while retaining their original creation time. The JSON `tokens` property is removed only after the database write succeeds; retrying after an interrupted write is idempotent.
 
 ## Compatibility
 

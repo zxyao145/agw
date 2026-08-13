@@ -5,6 +5,7 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Shared.Data.Encryption;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Exceptions;
@@ -270,6 +271,12 @@ public class EncryptedDataPersistenceTests
             new[]
             {
                 $"{typeof(McpServer).FullName}.{nameof(McpServer.Headers)}",
+                $"{typeof(DurableExecutionRecord).FullName}.{nameof(DurableExecutionRecord.CheckpointJson)}",
+                $"{typeof(DurableExecutionRecord).FullName}.{nameof(DurableExecutionRecord.ErrorMessage)}",
+                $"{typeof(DurableExecutionRecord).FullName}.{nameof(DurableExecutionRecord.ManifestJson)}",
+                $"{typeof(DurableExecutionRecord).FullName}.{nameof(DurableExecutionRecord.PendingInteractionsJson)}",
+                $"{typeof(DurableExecutionRecord).FullName}.{nameof(DurableExecutionRecord.ResponsesJson)}",
+                $"{typeof(DurableExecutionEventRecord).FullName}.{nameof(DurableExecutionEventRecord.PayloadJson)}",
                 $"{typeof(ConnectionCredential).FullName}.{nameof(ConnectionCredential.Value)}",
                 $"{typeof(PluginInstallationCredential).FullName}.{nameof(PluginInstallationCredential.Value)}",
                 $"{typeof(ProviderAuthConfig).FullName}.{nameof(ProviderAuthConfig.ApiKey)}"

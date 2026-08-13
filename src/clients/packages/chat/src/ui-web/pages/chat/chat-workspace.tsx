@@ -13,6 +13,7 @@ import { AgentSelector, type AgentSelection } from "../../components/agent-selec
 import { Explorer, FileContent } from "@agw/projects";
 import type { LineComment } from "@agw/projects";
 import { Chat, type ChatSessionSeed } from "../../components/message/chat";
+import { ExecutionReconnectingDialog } from "../../components/message/execution-reconnecting-dialog";
 import { ConversationList } from "@agw/projects";
 import { Button } from "@agw/components";
 import { Card } from "@agw/components";
@@ -53,6 +54,9 @@ import {
 } from "./lib/target-options";
 import type { ChatProjectSettingsStorageValues, ChatTargetOption, EnvVar } from "./types";
 import { getApiErrorMessage } from "@agw/api";
+import type { ExecutionReconnectState } from "../../../services/execution-hub";
+import { executionSessionManager } from "../../../services/execution-session-manager";
+import { useExecutionPlatform } from "../../execution-platform";
 
 type ProjectDto = {
   id: string;
@@ -305,6 +309,7 @@ export function ChatWorkspace({
 }: ChatWorkspaceProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const executionServerId = useExecutionPlatform().serverId;
   const queryProjectId = searchParams.get("projectId");
   const queryContextId = searchParams.get("contextId");
 
@@ -313,6 +318,8 @@ export function ChatWorkspace({
   }, []);
 
   const [currentTab, setCurrentTab] = React.useState("chat");
+  const [executionReconnectState, setExecutionReconnectState] =
+    React.useState<ExecutionReconnectState | null>(null);
   const [isMobile, setIsMobile] = React.useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
   const [selectedProjectId, setSelectedProjectId] = React.useState<string | null>(queryProjectId);
@@ -957,8 +964,22 @@ export function ChatWorkspace({
         ? `Hide ${activeSidebarTitle}`
         : `Show ${activeSidebarTitle}`;
 
+  /** 手动重新连接当前 Server，并继续恢复对应的 execution 会话。 */
+  const handleReconnectRetry = React.useCallback(() => {
+    if (!selectedProjectId || !contextId) return;
+    void executionSessionManager
+      .retryConnection({
+        serverId: executionServerId,
+        projectId: selectedProjectId,
+        contextId,
+      })
+      .catch((error) => {
+        toast.error(error instanceof Error ? error.message : "Failed to retry connection");
+      });
+  }, [contextId, executionServerId, selectedProjectId]);
+
   return (
-    <div className="flex h-full w-full min-w-0 flex-col gap-3 pt-2">
+    <div className="relative flex h-full w-full min-w-0 flex-col gap-3 pt-2">
       {projectsQuery.isError || agentsQuery.isError || agentflowsQuery.isError ? (
         <div className="text-sm text-destructive">
           Failed to load chat dependencies:{" "}
@@ -969,6 +990,8 @@ export function ChatWorkspace({
       <Tabs
         value={currentTab}
         onValueChange={handleTabChange}
+        inert={executionReconnectState !== null}
+        aria-hidden={executionReconnectState !== null}
         className="flex min-h-0 flex-1 flex-col"
       >
         <div className="flex flex-wrap items-center gap-2">
@@ -1069,6 +1092,7 @@ export function ChatWorkspace({
                     environmentVariables={environmentVariables}
                     onContextIdChange={handleChatContextIdChange}
                     onConversationChange={refreshConversationList}
+                    onReconnectStateChange={setExecutionReconnectState}
                   />
                 </div>
               </div>
@@ -1149,6 +1173,13 @@ export function ChatWorkspace({
           </div>
         </DrawerContent>
       </Drawer>
+
+      {executionReconnectState ? (
+        <ExecutionReconnectingDialog
+          state={executionReconnectState}
+          onRetry={handleReconnectRetry}
+        />
+      ) : null}
     </div>
   );
 }

@@ -7,21 +7,37 @@ using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Connections;
+using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Transport.SignalR;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.Contracts.Agents;
+using Agw.Shared.Exceptions;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+
+using StackExchange.Redis;
 
 namespace Agw.Agents;
 
+/// <summary>
+/// 注册 Agent 定义、执行运行时与其传输边界。
+/// </summary>
 public static class DependencyInjection
 {
+    /// <summary>
+    /// 根据配置注册 InProcess 或 Distributed execution 实现。
+    /// </summary>
     public static IServiceCollection AddAgents(this IServiceCollection services, IConfiguration configuration)
     {
+        var executionOptions = configuration
+            .GetSection(ExecutionRuntimeOptions.SectionName)
+            .Get<ExecutionRuntimeOptions>() ?? new ExecutionRuntimeOptions();
+        services.Configure<ExecutionRuntimeOptions>(
+            configuration.GetSection(ExecutionRuntimeOptions.SectionName));
         services.AddSingleton<IAgentInstructionsSource, ProjectInstructionsSource>();
         services.AddScoped<AgentflowDomainService>();
         services.AddScoped<AgentflowAppService>();
@@ -35,7 +51,9 @@ public static class DependencyInjection
         services.AddScoped<McpToolServerAppService>();
         services.AddScoped<AgentSessionStateStore>();
         services.AddScoped<AgentCapabilityComposer>();
-        services.AddScoped<IAgentRuntimeService, AgentRuntimeService>();
+        services.AddScoped<AgentRuntimeService>();
+        services.AddScoped<IAgentRuntimeService>(serviceProvider =>
+            serviceProvider.GetRequiredService<AgentRuntimeService>());
         services.AddScoped<ISummaryChatClientFactory, SummaryChatClientFactory>();
         services.AddScoped<IAgentTurnSummaryService, AgentTurnSummaryService>();
         services.AddScoped<IRuntimeFactory, RuntimeFactory>();
@@ -55,6 +73,95 @@ public static class DependencyInjection
         services.AddHostedService(serviceProvider =>
             serviceProvider.GetRequiredService<AgentflowNodeExecutionTraceCollector>());
 
+        if (executionOptions.Provider == ExecutionProvider.Distributed)
+        {
+            ValidateDistributedConfiguration(configuration, executionOptions);
+            services.AddScoped<DurableExecutionStore>();
+            services.AddScoped<DurableAgentSegmentRunner>();
+            services.AddScoped<DurableExecutionSegmentExecutor>();
+            services.TryAddSingleton(TimeProvider.System);
+            AddExecutionEventStream(services, executionOptions);
+            services.AddSingleton<DurableExecutionCoordinator>();
+            services.AddHostedService<DistributedExecutionWorker>();
+        }
+
         return services;
+    }
+
+    /// <summary>
+    /// 按 distributed event stream provider 注册 PostgreSQL 或 Redis Stream 实现。
+    /// </summary>
+    private static void AddExecutionEventStream(
+        IServiceCollection services,
+        ExecutionRuntimeOptions options)
+    {
+        if (options.Distributed.EventStream.Provider == ExecutionEventStreamProvider.Postgres)
+        {
+            services.AddSingleton<IExecutionEventStream, PostgresExecutionEventStream>();
+            return;
+        }
+
+        services.AddSingleton<IConnectionMultiplexer>(_ =>
+        {
+            var redisOptions = ConfigurationOptions.Parse(
+                options.Distributed.EventStream.Redis.ConnectionString);
+            redisOptions.AbortOnConnectFail = false;
+            return ConnectionMultiplexer.Connect(redisOptions);
+        });
+        services.AddSingleton<IExecutionEventStream, RedisExecutionEventStream>();
+    }
+
+    /// <summary>
+    /// 在应用启动阶段验证 distributed execution 依赖，避免请求运行后才暴露不完整配置。
+    /// </summary>
+    private static void ValidateDistributedConfiguration(
+        IConfiguration configuration,
+        ExecutionRuntimeOptions options)
+    {
+        var databaseProvider = configuration["Database:Provider"] ?? "sqlite";
+        if (!string.Equals(databaseProvider, "postgres", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new AgwException(
+                ErrorCodes.DurableExecutionUnavailable,
+                "Execution:Provider=Distributed requires Database:Provider=postgres.");
+        }
+        var distributedLockProvider = configuration["DistributedLock:Provider"];
+        if (!string.IsNullOrWhiteSpace(distributedLockProvider)
+            && !string.Equals(
+                distributedLockProvider,
+                "postgres",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            throw new AgwException(
+                ErrorCodes.DurableExecutionUnavailable,
+                "Execution:Provider=Distributed requires DistributedLock:Provider=postgres or an empty value that follows the PostgreSQL database provider.");
+        }
+        var eventStream = options.Distributed.EventStream;
+        if (!Enum.IsDefined(eventStream.Provider))
+        {
+            throw new AgwException(
+                ErrorCodes.DurableExecutionUnavailable,
+                $"Execution event stream provider '{eventStream.Provider}' is not supported.");
+        }
+        if (eventStream.Provider == ExecutionEventStreamProvider.Redis
+            && string.IsNullOrWhiteSpace(eventStream.Redis.ConnectionString))
+        {
+            throw new AgwException(
+                ErrorCodes.DurableExecutionUnavailable,
+                "Execution:Distributed:EventStream:Redis:ConnectionString is required when the event stream provider is Redis.");
+        }
+        if (options.Distributed.WorkerPollingMilliseconds <= 0
+            || options.Distributed.MaxConcurrentExecutions <= 0
+            || options.Distributed.RecoveryProbeSeconds <= 0
+            || options.Distributed.LockAcquireTimeoutMilliseconds <= 0
+            || eventStream.ReadPollingMilliseconds <= 0
+            || eventStream.ReadBatchSize <= 0
+            || (eventStream.Provider == ExecutionEventStreamProvider.Redis
+                && eventStream.Redis.StreamTtlMinutes <= 0))
+        {
+            throw new AgwException(
+                ErrorCodes.DurableExecutionUnavailable,
+                "Distributed execution worker, lock, event stream polling, batch, and Redis TTL settings must be positive.");
+        }
     }
 }

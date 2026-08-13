@@ -13,6 +13,7 @@ const webRoot = dirname(require.resolve("./package.json"));
 const clientsRoot = resolve(webRoot, "..");
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ["agw.local"],
   transpilePackages: [
     "@agw/agents",
     "@agw/api",

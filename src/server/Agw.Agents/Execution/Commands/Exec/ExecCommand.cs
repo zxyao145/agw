@@ -23,6 +23,11 @@ public class ExecCommand : AgentRunCommand
 
     public Guid? AgentId { get; set; }
 
+    /// <summary>
+    /// 获取或设置客户端生成的稳定执行标识，用于 durable 启动幂等和断线恢复。
+    /// </summary>
+    public Guid? ExecutionId { get; set; }
+
     public bool Stream { get; set; } = true;
 
     public AgwUserInput Input { get; set; }

@@ -15,6 +15,7 @@
         <PackageReference Include="Microsoft.Agents.AI.OpenAI"/>
         <PackageReference Include="Microsoft.Agents.AI.Anthropic"/>
         <PackageReference Include="ModelContextProtocol"/>
+        <PackageReference Include="StackExchange.Redis"/>
         <ProjectReference Include="..\Agw.Files\Agw.Files.csproj"/>
         <ProjectReference Include="..\Agw.Integrations\Agw.Integrations.csproj"/>
         <ProjectReference Include="..\Agw.Providers\Agw.Providers.csproj"/>

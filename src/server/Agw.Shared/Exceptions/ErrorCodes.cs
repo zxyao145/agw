@@ -73,6 +73,7 @@ public static class ErrorCodes
     public static readonly ErrorCode RemoteSkillUrlRequired = new(400_0068, "Remote skill URL is required.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode RemoteSkillUrlInvalid = new(400_0069, "Remote skill URL must be an absolute HTTP or HTTPS URL no longer than 2048 characters.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode RemoteSkillArchiveNotAllowed = new(400_0070, "Remote skills cannot include an archive.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode InvalidSetupConfiguration = new(400_0071, "Setup configuration is invalid.", HttpStatusCode.BadRequest);
 
     public static readonly ErrorCode GitHubOAuthTokenNotFound = new(401_0001, "GitHub OAuth token was not found.", HttpStatusCode.Unauthorized);
     public static readonly ErrorCode AuthenticationRequired = new(401_0003, "Authentication is required.", HttpStatusCode.Unauthorized);
@@ -91,6 +92,8 @@ public static class ErrorCodes
     public static readonly ErrorCode ApiTokenNotFound = new(404_0008, "API token was not found.", HttpStatusCode.NotFound);
     public static readonly ErrorCode ConnectionNotFound = new(404_0009, "Connection was not found.", HttpStatusCode.NotFound);
     public static readonly ErrorCode GitHubProjectWorkspaceNotFound = new(404_0010, "The project workspace was not found.", HttpStatusCode.NotFound);
+    public static readonly ErrorCode DurableExecutionNotFound = new(404_0011, "Durable execution was not found.", HttpStatusCode.NotFound);
+    public static readonly ErrorCode HumanInteractionNotFound = new(404_0012, "Human interaction request was not found.", HttpStatusCode.NotFound);
 
     public static readonly ErrorCode SkillAlreadyExists = new(409_0001, "Skill already exists.", HttpStatusCode.Conflict);
     public static readonly ErrorCode A2ATaskIdAlreadyUsed = new(409_0002, "Task id is already used by a non-A2A task.", HttpStatusCode.Conflict);
@@ -105,6 +108,8 @@ public static class ErrorCodes
     public static readonly ErrorCode ModelProviderInUse = new(409_0011, "The model provider is currently in use.", HttpStatusCode.Conflict);
     public static readonly ErrorCode BuiltInSkillImmutable = new(409_0012, "Built-in skills cannot be updated or deleted.", HttpStatusCode.Conflict);
     public static readonly ErrorCode RemoteSkillIdentityChanged = new(409_0013, "Remote skill name no longer matches the configured skill.", HttpStatusCode.Conflict);
+    public static readonly ErrorCode DurableExecutionConflict = new(409_0014, "Durable execution conflicts with an existing request.", HttpStatusCode.Conflict);
+    public static readonly ErrorCode LegacyApiTokenConflict = new(409_0015, "API token conflicts with its legacy server-state record.", HttpStatusCode.Conflict);
 
     public static readonly ErrorCode TooManyAuthenticationAttempts = new(429_0001, "Too many authentication attempts.", HttpStatusCode.TooManyRequests);
 
@@ -145,4 +150,6 @@ public static class ErrorCodes
     public static readonly ErrorCode ProviderModelDiscoveryFailed = new(502_0003, "Provider model discovery failed.", HttpStatusCode.BadGateway);
     public static readonly ErrorCode RemoteSkillFetchFailed = new(502_0004, "Failed to fetch the remote skill.", HttpStatusCode.BadGateway);
     public static readonly ErrorCode RemoteSkillResponseInvalid = new(502_0005, "The remote skill ZIP archive is invalid.", HttpStatusCode.BadGateway);
+
+    public static readonly ErrorCode DurableExecutionUnavailable = new(503_0001, "Durable execution is unavailable.", HttpStatusCode.ServiceUnavailable);
 }

@@ -5,6 +5,8 @@ using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Commands.Setting;
+using Agw.Agents.Execution.Durable;
+using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
@@ -53,6 +55,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
     private readonly IAgentTurnSummaryService _summaryService;
     private readonly IConversationHistoryWriter? _conversationHistoryWriter;
     private readonly AgentSessionStateStore? _sessionStateStore;
+    private readonly HumanInteractionContextAccessor? _humanInteractionContextAccessor;
     private readonly AgentflowWorkflowCompiler _workflowCompiler = new();
 
     public AgentflowRuntimeService(
@@ -65,7 +68,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         IProviderSessionState providerSessionState,
         IAgentTurnSummaryService summaryService,
         AgentSessionStateStore? sessionStateStore = null,
-        IConversationHistoryWriter? conversationHistoryWriter = null)
+        IConversationHistoryWriter? conversationHistoryWriter = null,
+        HumanInteractionContextAccessor? humanInteractionContextAccessor = null)
     {
         _logger = logger;
         _agentflowRepository = agentflowRepository;
@@ -77,6 +81,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         _summaryService = summaryService;
         _sessionStateStore = sessionStateStore;
         _conversationHistoryWriter = conversationHistoryWriter;
+        _humanInteractionContextAccessor = humanInteractionContextAccessor;
     }
 
     public async Task<string?> GetMermaidAsync(Guid agentflowId, CancellationToken cancellationToken = default)
@@ -389,6 +394,220 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         yield return TurnMessageFactory.CreateFinished();
     }
 
+    /// <summary>
+    /// 执行或恢复一个 Agentflow durable 分段，并把 pending 请求与最新 checkpoint 返回给 PostgreSQL 状态机。
+    /// </summary>
+    internal async Task<DurableExecutionSegmentResult> ExecuteDurableSegmentAsync(
+        DurableExecutionManifest manifest,
+        DurableExecutionSegmentInput input,
+        IExecutionMessageSink sink,
+        CancellationToken cancellationToken)
+    {
+        if (_humanInteractionContextAccessor == null)
+        {
+            return CreateDurableFailure(input, "Human interaction context is unavailable.");
+        }
+
+        var agentflow = await _agentflowRepository.GetByIdAsync(manifest.AgentId);
+        if (agentflow == null)
+        {
+            return CreateDurableFailure(input, "Agentflow could not be found.");
+        }
+
+        var resolvedProjectId = ProjectDefaults.GetDefaultProjectIdentifier(manifest.Task.ProjectId);
+        var resolvedContextId = ContextIdUtil.ResolveContextId(manifest.Task.ContextId);
+        var executionTraceContext = new AgentflowExecutionTraceContext(
+            resolvedProjectId,
+            resolvedContextId,
+            manifest.Task.TaskId);
+        var sessionScope = await CreateSessionScopeAsync(
+                resolvedProjectId,
+                resolvedContextId,
+                manifest.Task.TaskId,
+                manifest.Task.ProjectConversationId,
+                cancellationToken,
+                new PermissionModeState(manifest.Settings.PermissionMode))
+            .ConfigureAwait(false);
+        var workflowLease = await CreateAiWorkflow(
+            agentflow,
+            cancellationToken,
+            sessionScope,
+            executionTraceContext,
+            manifest.Settings.EnvironmentVariables,
+            deferHumanInteractions: true);
+        if (workflowLease == null)
+        {
+            return CreateDurableFailure(input, "Agentflow could not be constructed.");
+        }
+
+        await using var workflowResources = workflowLease;
+        using var interactionScope = _humanInteractionContextAccessor.Push(
+            new ResolvedHumanInteractionChannel(input.ResolvedInteractions));
+        var workflow = workflowLease.Workflow;
+        var humanGateNodes = (await _agentflowNodeRepository.ListAsync(
+                item => item.AgentflowId == agentflow.Id && item.Kind == AgentflowNodeKind.HumanGate))
+            .ToDictionary(node => node.NodeId, StringComparer.Ordinal);
+        var sessionId = $"durable-{manifest.ExecutionId:N}";
+        var checkpointStore = new DurableAgentflowCheckpointStore(input.Checkpoint);
+        var checkpointManager = CheckpointManager.CreateJson(checkpointStore);
+        StreamingRun run;
+        if (input.SegmentIndex == 0)
+        {
+            run = await InProcessExecution.RunStreamingAsync(
+                workflow,
+                CreateWorkflowInputMessages(AgwMessageUtil.ExtractInputText(manifest.Input)),
+                checkpointManager,
+                sessionId,
+                cancellationToken);
+        }
+        else
+        {
+            var checkpoint = await checkpointManager
+                .GetLatestCheckpointAsync(sessionId, cancellationToken)
+                .ConfigureAwait(false);
+            if (checkpoint == null)
+            {
+                return CreateDurableFailure(input, "Agentflow checkpoint could not be found.");
+            }
+
+            run = await InProcessExecution.ResumeStreamingAsync(
+                workflow,
+                checkpoint,
+                checkpointManager,
+                cancellationToken);
+        }
+
+        await using (run)
+        {
+            await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+            var responses = input.ResolvedInteractions.ToDictionary(
+                item => item.Request.RequestId,
+                StringComparer.Ordinal);
+            var consumed = new HashSet<string>(StringComparer.Ordinal);
+            var pending = new Dictionary<string, DurableHumanInteractionSnapshot>(StringComparer.Ordinal);
+            var executorsWithUpdates = new HashSet<string>(StringComparer.Ordinal);
+            await foreach (var evt in run.WatchStreamAsync(cancellationToken).ConfigureAwait(false))
+            {
+                switch (evt)
+                {
+                    case RequestInfoEvent requestInfo:
+                        {
+                            var externalRequest = requestInfo.Request;
+                            var approvalRequest = CreateDurableApprovalRequest(
+                                externalRequest,
+                                humanGateNodes);
+                            if (approvalRequest == null)
+                            {
+                                return CreateDurableFailure(
+                                    input,
+                                    $"External request '{externalRequest.RequestId}' is unsupported.");
+                            }
+
+                            if (responses.TryGetValue(approvalRequest.RequestId, out var resolved))
+                            {
+                                await SendDurableResponseAsync(
+                                        run,
+                                        externalRequest,
+                                        approvalRequest,
+                                        resolved.Response,
+                                        sink,
+                                        cancellationToken)
+                                    .ConfigureAwait(false);
+                                consumed.Add(approvalRequest.RequestId);
+                                break;
+                            }
+
+                            pending.TryAdd(
+                                approvalRequest.RequestId,
+                                DurableHumanInteractionMapper.FromRequest(approvalRequest));
+                            break;
+                        }
+
+                    case AgentResponseUpdateEvent updateEvent
+                        when updateEvent.Data is AgentResponseUpdate update:
+                        executorsWithUpdates.Add(updateEvent.ExecutorId);
+                        if (update.ToAiMessage() is { } updateMessage)
+                        {
+                            await sink.WriteAsync(updateMessage, cancellationToken).ConfigureAwait(false);
+                        }
+                        break;
+
+                    case AgentResponseEvent responseEvent
+                        when responseEvent.Data is AgentResponse response:
+                        if (!executorsWithUpdates.Contains(responseEvent.ExecutorId))
+                        {
+                            foreach (var message in response.Messages
+                                         .Select(item => item.ToAiMessage())
+                                         .OfType<AgwMessage>())
+                            {
+                                await sink.WriteAsync(message, cancellationToken).ConfigureAwait(false);
+                            }
+                        }
+                        break;
+
+                    case WorkflowOutputEvent outputEvent:
+                        foreach (var message in CreateWorkflowOutputMessages(outputEvent.Data))
+                        {
+                            await sink.WriteAsync(message, cancellationToken).ConfigureAwait(false);
+                        }
+                        break;
+
+                    case WorkflowErrorEvent error:
+                        await sink.WriteAsync(
+                                CreateWorkflowErrorMessage(error.Exception),
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                        return CreateDurableFailure(
+                            input,
+                            error.Exception?.Message ?? "Agentflow execution failed.");
+
+                    case SuperStepCompletedEvent completed
+                        when completed.CompletionInfo is { HasPendingRequests: true } completion
+                             && pending.Count > 0:
+                        if (completion.Checkpoint == null)
+                        {
+                            return CreateDurableFailure(
+                                input,
+                                "Agentflow reached a human interaction without a checkpoint.");
+                        }
+
+                        await run.CancelRunAsync().ConfigureAwait(false);
+                        var durableCheckpoint = checkpointStore.Latest;
+                        if (durableCheckpoint == null)
+                        {
+                            return CreateDurableFailure(
+                                input,
+                                "Agentflow checkpoint was not persisted.");
+                        }
+
+                        return new DurableExecutionSegmentResult
+                        {
+                            ExecutionId = input.ExecutionId,
+                            SegmentIndex = input.SegmentIndex,
+                            Status = DurableExecutionSegmentStatus.WaitingForHuman,
+                            PendingInteractions = pending.Values.ToArray(),
+                            Checkpoint = durableCheckpoint
+                        };
+                }
+            }
+
+            var missingResponses = responses.Keys.Except(consumed, StringComparer.Ordinal).ToArray();
+            if (missingResponses.Length > 0)
+            {
+                return CreateDurableFailure(
+                    input,
+                    $"Agentflow did not restore human request '{missingResponses[0]}'.");
+            }
+
+            return new DurableExecutionSegmentResult
+            {
+                ExecutionId = input.ExecutionId,
+                SegmentIndex = input.SegmentIndex,
+                Status = DurableExecutionSegmentStatus.Completed
+            };
+        }
+    }
+
     public async Task<AgentflowExecutionResult?> ExecuteAsync(
         Guid agentflowId,
         Guid taskId,
@@ -483,7 +702,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         CancellationToken cancellationToken,
         AgentflowAgentSessionScope? sessionScope,
         AgentflowExecutionTraceContext? executionTraceContext = null,
-        IReadOnlyDictionary<string, string>? environmentVariables = null)
+        IReadOnlyDictionary<string, string>? environmentVariables = null,
+        bool deferHumanInteractions = false)
     {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
         if (agentflow == null)
@@ -496,7 +716,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             cancellationToken,
             sessionScope,
             executionTraceContext,
-            environmentVariables);
+            environmentVariables,
+            deferHumanInteractions);
     }
 
     /// <summary>
@@ -627,7 +848,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         CancellationToken cancellationToken,
         AgentflowAgentSessionScope? sessionScope = null,
         AgentflowExecutionTraceContext? executionTraceContext = null,
-        IReadOnlyDictionary<string, string>? environmentVariables = null)
+        IReadOnlyDictionary<string, string>? environmentVariables = null,
+        bool deferHumanInteractions = false)
     {
         var agentflowNodes = await _agentflowNodeRepository.ListAsync(x => x.AgentflowId == agentflow.Id);
         var agentflowEdges = await _agentflowEdgeRepository.ListAsync(x => x.AgentflowId == agentflow.Id);
@@ -652,6 +874,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                         sessionScope?.ProjectId,
                         sessionScope?.ConversationId ?? Guid.Empty,
                         environmentVariables,
+                        deferHumanInteractions,
                         cancellationToken: cancellationToken);
                     if (aiAgent != null)
                     {
@@ -665,7 +888,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                         cancellationToken,
                         sessionScope,
                         executionTraceContext,
-                        environmentVariables);
+                        environmentVariables,
+                        deferHumanInteractions);
                     if (flowNode == null)
                     {
                         await DisposeWorkflowResourcesWithoutThrowingAsync(resources).ConfigureAwait(false);
@@ -735,6 +959,86 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         {
         }
     }
+
+    /// <summary>
+    /// 将 Agentflow external request 映射为可持久化的 Tool approval 或 HumanGate 请求。
+    /// </summary>
+    private static HumanGateApprovalRequest? CreateDurableApprovalRequest(
+        ExternalRequest externalRequest,
+        IReadOnlyDictionary<string, AgentflowNode> humanGateNodes)
+    {
+        if (externalRequest.TryGetDataAs(
+                out Microsoft.Extensions.AI.ToolApprovalRequestContent? toolApprovalRequest))
+        {
+            return ToolApprovalSupport.CreateRequest(
+                toolApprovalRequest,
+                externalRequest.PortInfo.PortId);
+        }
+
+        return humanGateNodes.TryGetValue(externalRequest.PortInfo.PortId, out var humanGateNode)
+            ? CreateHumanGateApprovalRequest(externalRequest, humanGateNode)
+            : null;
+    }
+
+    /// <summary>
+    /// 把 PostgreSQL 中持久化的人工回答发送给恢复后的 Agentflow external request。
+    /// </summary>
+    private static async Task SendDurableResponseAsync(
+        StreamingRun run,
+        ExternalRequest externalRequest,
+        HumanGateApprovalRequest request,
+        DurableHumanResponseEnvelope response,
+        IExecutionMessageSink sink,
+        CancellationToken cancellationToken)
+    {
+        if (request.ToolApprovalRequest is { } toolApprovalRequest)
+        {
+            var decision = new HumanGateApprovalDecision(
+                response.RequestId,
+                response.Approved,
+                response.ResponseText,
+                response.ApprovalScope,
+                response.ResponseData);
+            await run.SendResponseAsync(
+                    externalRequest.CreateResponse(
+                        ToolApprovalSupport.CreateResponse(toolApprovalRequest, decision)))
+                .ConfigureAwait(false);
+            return;
+        }
+
+        var humanDecision = new HumanGateApprovalDecision(
+            response.RequestId,
+            response.Approved,
+            response.ResponseText,
+            response.ApprovalScope,
+            response.ResponseData);
+        if (!response.Approved)
+        {
+            await sink.WriteAsync(CreateHumanGateRejectedMessage(request), cancellationToken)
+                .ConfigureAwait(false);
+            await run.CancelRunAsync().ConfigureAwait(false);
+            return;
+        }
+
+        await run.SendResponseAsync(
+                externalRequest.CreateResponse(
+                    CreateHumanGateResponseMessages(request.Messages, humanDecision)))
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 创建与当前 execution 和 segment 对齐的 Agentflow 失败结果。
+    /// </summary>
+    private static DurableExecutionSegmentResult CreateDurableFailure(
+        DurableExecutionSegmentInput input,
+        string error) =>
+        new()
+        {
+            ExecutionId = input.ExecutionId,
+            SegmentIndex = input.SegmentIndex,
+            Status = DurableExecutionSegmentStatus.Failed,
+            ErrorMessage = error
+        };
 
     private static HumanGateApprovalRequest CreateHumanGateApprovalRequest(
         ExternalRequest externalRequest,

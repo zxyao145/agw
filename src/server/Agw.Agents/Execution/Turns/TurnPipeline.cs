@@ -1,8 +1,6 @@
 using Agw.Agents.Execution.Messaging;
 using Agw.Shared.AgwMsgVm;
 
-using Microsoft.Extensions.AI;
-
 namespace Agw.Agents.Execution.Turns;
 
 public static class TurnPipeline
@@ -13,7 +11,7 @@ public static class TurnPipeline
         IExecutionMessageSink sink,
         CancellationToken cancellationToken)
     {
-        await sink.WriteAsync(CreateTurnStateMessage("turn-start"), CancellationToken.None);
+        await sink.WriteAsync(TurnMessageFactory.CreateStarted(), CancellationToken.None);
         var bufferedMessages = new List<AgwMessage>();
         var status = "completed";
         var fatalErrorReceived = false;
@@ -76,7 +74,7 @@ public static class TurnPipeline
         }
         finally
         {
-            await sink.WriteAsync(CreateTurnStateMessage("turn-finished", status), CancellationToken.None);
+            await sink.WriteAsync(TurnMessageFactory.CreateFinished(status), CancellationToken.None);
         }
     }
 
@@ -95,19 +93,6 @@ public static class TurnPipeline
         message.AdditionalProperties?.TryGetValue("type", out var value) == true
             ? value as string
             : null;
-
-    private static AgwMessage CreateTurnStateMessage(string type, string? status = null)
-    {
-        var properties = new AdditionalPropertiesDictionary { ["type"] = type };
-        if (status != null) properties["status"] = status;
-
-        return new AgwMessage(
-            Guid.CreateVersion7().ToString("D"),
-            Constants.DefaultAgentAuthor,
-            AiRole.System,
-            [new AgwTextContent { Content = "" }],
-            properties);
-    }
 
     private static AgwMessage CreateErrorMessage(string message) =>
         new(

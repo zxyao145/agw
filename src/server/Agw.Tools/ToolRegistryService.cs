@@ -4,6 +4,7 @@ using Agw.Shared.Contracts.Tools;
 using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Exceptions;
 using Agw.Tools.ContextualTools;
+using Agw.Tools.HumanInteraction;
 using Agw.Tools.ToolBlocks;
 
 using Microsoft.Extensions.AI;
@@ -250,10 +251,15 @@ public class ToolRegistryService
                     throw new AgwException(ErrorCodes.InvalidParam, $"Unknown Tool '{name}'.");
                 }
 
-                result.Tools.Add(tool);
+                // durable Activity 不能在进程内等待用户，因此复用 MAF approval 边界把调用交还 orchestration。
+                var materializedTool =
+                    context.DeferHumanInteractions && tool is HumanInteractionRequiredAIFunction interaction
+                        ? new ApprovalRequiredAIFunction(interaction)
+                        : tool;
+                result.Tools.Add(materializedTool);
                 if (IsAllowedInPlanMode(name))
                 {
-                    result.PlanModeAllowedToolNames.Add(tool.Name);
+                    result.PlanModeAllowedToolNames.Add(materializedTool.Name);
                 }
             }
 
