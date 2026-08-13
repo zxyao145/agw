@@ -66,6 +66,7 @@ test("trace enum labels remain readable", () => {
   assert.equal(getTraceStatusLabel(0), "Succeeded");
   assert.equal(getTraceStatusLabel(9), "Unknown (9)");
   assert.equal(getNodeKindLabel(3), "Human Gate");
+  assert.equal(getNodeKindLabel(11), "Clear Messages");
   assert.equal(getNodeKindLabel(99), "Unknown (99)");
 });
 

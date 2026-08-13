@@ -13,4 +13,5 @@ public enum AgentflowNodeKind
     MagenticBlock = 8,
     Output = 9,
     Input = 10,
+    ClearMessages = 11,
 }

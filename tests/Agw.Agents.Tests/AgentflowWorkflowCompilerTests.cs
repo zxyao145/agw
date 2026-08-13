@@ -892,6 +892,56 @@ public class AgentflowWorkflowCompilerTests
     }
 
     [Fact]
+    public async Task Compile_ClearMessagesBeforeAgent_DiscardsUpstreamMessagesAndContinuesTurn()
+    {
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "clear-messages-flow" };
+        var chatClient = new CapturingChatClient("agent output");
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input, Name = "Input" },
+            new AgentflowNode
+            {
+                NodeId = "adapter",
+                Kind = AgentflowNodeKind.PromptAdapter,
+                Instructions = "Add a second upstream message.",
+            },
+            new AgentflowNode { NodeId = "clear", Kind = AgentflowNodeKind.ClearMessages },
+            new AgentflowNode { NodeId = "agent", Kind = AgentflowNodeKind.Agent, Name = "Agent" },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var edges = new[]
+        {
+            Edge("input-adapter", "input", "adapter", AgentflowEdgeKind.FanOut),
+            Edge("adapter-clear", "adapter", "clear"),
+            Edge("clear-agent", "clear", "agent"),
+            Edge("agent-output", "agent", "output"),
+        };
+
+        var workflow = _compiler.Compile(
+            agentflow,
+            nodes,
+            edges,
+            new Dictionary<string, AIAgent> { ["agent"] = CreateAgent("agent", "Agent", chatClient) });
+
+        Assert.NotNull(workflow);
+
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow!,
+            new List<ChatMessage> { new(ChatRole.User, "Original input") },
+            cancellationToken: TestContext.Current.CancellationToken);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+        var events = new List<WorkflowEvent>();
+        await foreach (var evt in run.WatchStreamAsync(TestContext.Current.CancellationToken))
+        {
+            events.Add(evt);
+        }
+
+        Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
+        Assert.Equal(1, chatClient.TotalCalls);
+        Assert.Empty(chatClient.Messages);
+    }
+
+    [Fact]
     public async Task Compile_SequentialAgents_ReassignsOnlyUpstreamAgentResponseAsUser()
     {
         var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "sequential-flow" };
@@ -1369,6 +1419,10 @@ public class AgentflowWorkflowCompilerTests
 
     private sealed class CapturingChatClient(string responseText) : IChatClient
     {
+        private int _totalCalls;
+
+        public int TotalCalls => _totalCalls;
+
         public List<ChatMessage> Messages { get; } = [];
 
         public void Dispose()
@@ -1385,6 +1439,7 @@ public class AgentflowWorkflowCompilerTests
             ChatOptions? options = null,
             CancellationToken cancellationToken = default)
         {
+            Interlocked.Increment(ref _totalCalls);
             Messages.AddRange(messages);
             return Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, responseText)]));
         }
@@ -1394,6 +1449,7 @@ public class AgentflowWorkflowCompilerTests
             ChatOptions? options = null,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
+            Interlocked.Increment(ref _totalCalls);
             Messages.AddRange(messages);
             await Task.Yield();
             yield return new ChatResponseUpdate(ChatRole.Assistant, responseText);

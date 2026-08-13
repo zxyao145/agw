@@ -84,3 +84,25 @@ test("Agentflow agent nodes default to the agent name and keep it editable", asy
   );
   assert.match(source, /name: node\.data\.title \|\| null/);
 });
+
+test("Agentflow Clear Messages is a configuration-free primitive node", async () => {
+  const source = await readFile(BUILDER_URL, "utf8");
+
+  assert.match(
+    source,
+    /\[AgentflowNodeKind\.ClearMessages\]: \{[\s\S]*?label: "Clear Messages",[\s\S]*?symbol: "Ø",[\s\S]*?body: "Discard upstream messages and continue with empty input",[\s\S]*?\}/,
+  );
+  assert.match(
+    source,
+    /label="Clear Messages"[\s\S]*?onClick=\{\(\) => onAddNode\(AgentflowNodeKind\.ClearMessages, "Clear Messages"\)\}/,
+  );
+  assert.match(
+    source,
+    /const usesInstructions =[\s\S]*?node\.data\.kind !== AgentflowNodeKind\.ClearMessages/,
+  );
+  assert.match(
+    source,
+    /const usesAdvancedConfig = node\.data\.kind !== AgentflowNodeKind\.ClearMessages/,
+  );
+  assert.match(source, /\{usesAdvancedConfig \? \([\s\S]*?<Label>Advanced Config JSON<\/Label>/);
+});

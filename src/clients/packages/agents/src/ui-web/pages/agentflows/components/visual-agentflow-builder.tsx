@@ -161,6 +161,12 @@ const NODE_META: Record<
     tone: "border-zinc-200 bg-zinc-50 text-zinc-800",
     body: "Transform upstream output before the next node",
   },
+  [AgentflowNodeKind.ClearMessages]: {
+    label: "Clear Messages",
+    symbol: "Ø",
+    tone: "border-orange-200 bg-orange-50 text-orange-900",
+    body: "Discard upstream messages and continue with empty input",
+  },
   [AgentflowNodeKind.HumanGate]: {
     label: "Human Gate",
     symbol: "H",
@@ -1389,6 +1395,10 @@ function RootScopePalette({
             onClick={() => onAddNode(AgentflowNodeKind.PromptAdapter, "Prompt Adapter")}
           />
           <PaletteButton
+            label="Clear Messages"
+            onClick={() => onAddNode(AgentflowNodeKind.ClearMessages, "Clear Messages")}
+          />
+          <PaletteButton
             label="Human Gate"
             onClick={() => onAddNode(AgentflowNodeKind.HumanGate, "Human Gate")}
           />
@@ -1609,8 +1619,11 @@ function NodeInspector({
   onSelectBlockParticipant: (blockId: string, participantNodeId: string) => void;
 }) {
   const meta = NODE_META[node.data.kind];
+  const usesAdvancedConfig = node.data.kind !== AgentflowNodeKind.ClearMessages;
   const configIsInvalid =
-    node.data.configJson.trim().length > 0 && readConfigJson(node.data.configJson) === null;
+    usesAdvancedConfig &&
+    node.data.configJson.trim().length > 0 &&
+    readConfigJson(node.data.configJson) === null;
   if (node.data.kind === AgentflowNodeKind.Input) {
     return (
       <div className="space-y-3">
@@ -1632,7 +1645,8 @@ function NodeInspector({
   const usesInstructions =
     node.data.kind !== AgentflowNodeKind.Output &&
     node.data.kind !== AgentflowNodeKind.HumanGate &&
-    node.data.kind !== AgentflowNodeKind.CheckpointMarker;
+    node.data.kind !== AgentflowNodeKind.CheckpointMarker &&
+    node.data.kind !== AgentflowNodeKind.ClearMessages;
 
   return (
     <div className="space-y-3">
@@ -1709,15 +1723,17 @@ function NodeInspector({
         />
       ) : null}
 
-      <div className="space-y-2">
-        <Label>Advanced Config JSON</Label>
-        <Textarea
-          value={node.data.configJson}
-          onChange={(event) => onChange(node.id, { configJson: event.target.value })}
-          placeholder='{ "key": "value" }'
-          className="min-h-24 font-mono text-xs"
-        />
-      </div>
+      {usesAdvancedConfig ? (
+        <div className="space-y-2">
+          <Label>Advanced Config JSON</Label>
+          <Textarea
+            value={node.data.configJson}
+            onChange={(event) => onChange(node.id, { configJson: event.target.value })}
+            placeholder='{ "key": "value" }'
+            className="min-h-24 font-mono text-xs"
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

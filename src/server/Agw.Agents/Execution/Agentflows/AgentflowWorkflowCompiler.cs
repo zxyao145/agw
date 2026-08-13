@@ -329,6 +329,8 @@ public sealed class AgentflowWorkflowCompiler
                 BindChatProtocolTransform(
                     node.NodeId,
                     messages => AgentflowMessageTransforms.ApplyInstructions(messages, node.Instructions)),
+            AgentflowNodeKind.ClearMessages =>
+                BindChatProtocolTransform(node.NodeId, _ => []),
             AgentflowNodeKind.CheckpointMarker =>
                 BindChatTransform(node.NodeId, messages => messages),
             AgentflowNodeKind.Input =>
