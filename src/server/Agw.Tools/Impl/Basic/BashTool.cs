@@ -47,11 +47,24 @@ public class BashToolResult
     public string Stderr { get; set; } = "";
     public int ExitCode { get; set; }
     public long DurationMs { get; set; }
+    public int? ErrorCode { get; set; }
+    public string? ErrorMessage { get; set; }
 }
 
 [Obsolete("Use BuiltIn ShellTool instead")]
 internal class BashTool : IAgwTool
 {
+    private readonly string? _shell;
+
+    public BashTool()
+    {
+    }
+
+    internal BashTool(string shell)
+    {
+        _shell = shell;
+    }
+
     public string Name => "bash";
 
     public string Category => "Bash";
@@ -75,7 +88,7 @@ internal class BashTool : IAgwTool
         var stopwatch = Stopwatch.StartNew();
 
         var isWindows = OperatingSystem.IsWindows();
-        var shell = isWindows ? "cmd.exe" : "/bin/bash";
+        var shell = _shell ?? (isWindows ? "cmd.exe" : "/bin/bash");
         var shellArg = isWindows ? "/c" : "-c";
 
         var processInfo = new ProcessStartInfo
@@ -98,7 +111,10 @@ internal class BashTool : IAgwTool
         }
         catch (Exception ex)
         {
-            throw new AgwException(ErrorCodes.CommandExecutionFailed, $"Failed to start process: {ex.Message}");
+            return CreateErrorResult(
+                ErrorCodes.CommandExecutionFailed,
+                $"Failed to start process: {ex.Message}",
+                stopwatch);
         }
 
         var timeoutMs = toolParams.Timeout ?? 20000;
@@ -108,13 +124,17 @@ internal class BashTool : IAgwTool
         {
             try
             {
-                process.Kill();
+                process.Kill(entireProcessTree: true);
             }
             catch
             {
                 // Ignore kill errors
             }
-            throw new AgwException(ErrorCodes.CommandTimeout, $"Command timed out after {timeoutMs}ms.");
+
+            return CreateErrorResult(
+                ErrorCodes.CommandTimeout,
+                $"Command timed out after {timeoutMs}ms.",
+                stopwatch);
         }
 
         var stdout = process.StandardOutput.ReadToEnd();
@@ -136,5 +156,20 @@ internal class BashTool : IAgwTool
     {
         Func<BashToolParams, BashToolResult> func = Execute;
         return AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
+    }
+
+    private static BashToolResult CreateErrorResult(
+        ErrorCode errorCode,
+        string errorMessage,
+        Stopwatch stopwatch)
+    {
+        stopwatch.Stop();
+        return new BashToolResult
+        {
+            ExitCode = -1,
+            DurationMs = stopwatch.ElapsedMilliseconds,
+            ErrorCode = errorCode.Code,
+            ErrorMessage = errorMessage
+        };
     }
 }
