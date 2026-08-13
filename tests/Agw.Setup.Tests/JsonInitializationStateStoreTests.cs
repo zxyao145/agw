@@ -3,7 +3,6 @@ using Agw.Setup.Contracts;
 using Agw.Setup.Services;
 using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
-using Agw.Testing;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,34 +13,36 @@ namespace Agw.Setup.Tests;
 
 public class JsonInitializationStateStoreTests
 {
-    private static readonly DateTimeOffset UtcNow = new(2026, 7, 13, 10, 0, 0, TimeSpan.Zero);
-    private static readonly TimeProvider TimeProvider = new TestTimeProvider(UtcNow);
-
     [Fact]
     public async Task PersistAsync_WhenInitialized_WritesReloadableServerState()
     {
         var paths = CreatePaths();
         try
         {
-            var store = new JsonInitializationStateStore(paths, TimeProvider);
+            var store = new JsonInitializationStateStore(paths);
 
-            await store.PersistAsync(new SetupRequest
-            {
-                Provider = DatabaseProvider.Sqlite,
-                ConnectionString = "Data Source=agw.db",
-                AdminPassword = "password-password"
-            }, "hashed-password", TestContext.Current.CancellationToken);
+            await store.PersistAsync(
+                CreateStandaloneConfiguration(),
+                "hashed-password",
+                TestContext.Current.CancellationToken);
 
-            var reloadedStore = new JsonInitializationStateStore(paths, TimeProvider);
+            var reloadedStore = new JsonInitializationStateStore(paths);
             var reloaded = reloadedStore.GetAuthenticationSnapshot();
             Assert.True(reloadedStore.IsInitialized);
             Assert.Equal("hashed-password", reloaded.PasswordHash);
             Assert.Equal(1, reloaded.SessionVersion);
             Assert.Equal(DatabaseProvider.Sqlite, reloadedStore.DatabaseProvider);
             Assert.True(File.Exists(paths.StateFile));
+            var persistedJson = await File.ReadAllTextAsync(
+                paths.StateFile,
+                TestContext.Current.CancellationToken);
+            Assert.Contains("\"schemaVersion\": 2", persistedJson);
             Assert.Contains(
                 "\"provider\": \"sqlite\"",
-                await File.ReadAllTextAsync(paths.StateFile, TestContext.Current.CancellationToken));
+                persistedJson);
+            Assert.Contains("\"provider\": \"inProcess\"", persistedJson);
+            Assert.DoesNotContain("\"distributedLock\"", persistedJson);
+            Assert.DoesNotContain("\"tokens\"", persistedJson);
             if (!OperatingSystem.IsWindows())
             {
                 Assert.Equal(
@@ -56,26 +57,49 @@ public class JsonInitializationStateStoreTests
     }
 
     [Fact]
-    public async Task CreateTokenAsync_ReturnsSecretOnceAndStoresOnlyHash()
+    public async Task ClearLegacyApiTokensAsync_WhenLegacyTokensExist_RemovesOnlyTokens()
     {
         var paths = CreatePaths();
         try
         {
-            var store = new JsonInitializationStateStore(paths, TimeProvider);
-            await store.PersistAsync(new SetupRequest
-            {
-                Provider = DatabaseProvider.Sqlite,
-                ConnectionString = "Data Source=agw.db",
-                AdminPassword = "password-password"
-            }, "hashed-password", TestContext.Current.CancellationToken);
+            await File.WriteAllTextAsync(
+                paths.StateFile,
+                """
+                {
+                  "schemaVersion": 1,
+                  "isInitialized": true,
+                  "database": {
+                    "provider": "postgres",
+                    "connectionString": "Host=db;Database=agw"
+                  },
+                  "passwordHash": "old-hash",
+                  "sessionVersion": 3,
+                  "tokens": [
+                    {
+                      "id": "0198b7b8-a50c-7f6e-a50d-b46e722a6622",
+                      "name": "Automation",
+                      "prefix": "agw_legacy12",
+                      "secretHash": "ABCD",
+                      "createdAt": "2026-07-13T10:00:00+00:00"
+                    }
+                  ]
+                }
+                """,
+                TestContext.Current.CancellationToken);
+            var store = new JsonInitializationStateStore(paths);
 
-            var created = await store.CreateTokenAsync("Mobile", TestContext.Current.CancellationToken);
+            var legacyToken = Assert.Single(store.GetLegacyApiTokens());
+            await store.ClearLegacyApiTokensAsync(TestContext.Current.CancellationToken);
 
-            Assert.StartsWith("agw_", created.Token);
-            Assert.Equal(UtcNow, created.CreatedAt);
-            Assert.True(store.ValidateToken(created.Token));
-            Assert.DoesNotContain(created.Token, await File.ReadAllTextAsync(paths.StateFile, TestContext.Current.CancellationToken));
-            Assert.Single(store.GetAuthenticationSnapshot().Tokens);
+            Assert.Equal("Automation", legacyToken.Name);
+            Assert.Equal("old-hash", store.GetAuthenticationSnapshot().PasswordHash);
+            Assert.Equal(DatabaseProvider.Postgres, store.DatabaseProvider);
+            Assert.Empty(store.GetLegacyApiTokens());
+            Assert.DoesNotContain(
+                "\"tokens\"",
+                await File.ReadAllTextAsync(
+                    paths.StateFile,
+                    TestContext.Current.CancellationToken));
         }
         finally
         {
@@ -84,24 +108,30 @@ public class JsonInitializationStateStoreTests
     }
 
     [Fact]
-    public async Task RevokeTokenAsync_WhenTokenExists_InvalidatesSecret()
+    public async Task PersistAsync_ForCluster_WritesRuntimeConfigurationAndPreservesItAcrossAuthWrites()
     {
         var paths = CreatePaths();
         try
         {
-            var store = new JsonInitializationStateStore(paths, TimeProvider);
-            await store.PersistAsync(new SetupRequest
-            {
-                Provider = DatabaseProvider.Sqlite,
-                ConnectionString = "Data Source=agw.db",
-                AdminPassword = "password-password"
-            }, "hashed-password", TestContext.Current.CancellationToken);
-            var created = await store.CreateTokenAsync("CLI", TestContext.Current.CancellationToken);
+            var store = new JsonInitializationStateStore(paths);
+            await store.PersistAsync(
+                new SetupConfiguration(
+                    DeploymentMode.Cluster,
+                    DatabaseProvider.Postgres,
+                    "Host=db;Database=agw;Username=agw;Password=secret"),
+                "hashed-password",
+                TestContext.Current.CancellationToken);
+            await store.UpdatePasswordAsync("new-hash", TestContext.Current.CancellationToken);
 
-            var revoked = await store.RevokeTokenAsync(created.Id, TestContext.Current.CancellationToken);
+            var configuration = new ConfigurationBuilder()
+                .AddJsonFile(paths.StateFile, optional: false)
+                .Build();
 
-            Assert.True(revoked);
-            Assert.False(store.ValidateToken(created.Token));
+            Assert.Equal("2", configuration["SchemaVersion"]);
+            Assert.Equal("postgres", configuration["Database:Provider"]);
+            Assert.Equal("distributed", configuration["Execution:Provider"]);
+            Assert.Equal("postgres", configuration["DistributedLock:Provider"]);
+            Assert.Equal(string.Empty, configuration["DistributedLock:ConnectionString"]);
         }
         finally
         {
@@ -131,16 +161,20 @@ public class JsonInitializationStateStoreTests
                 }
                 """,
                 TestContext.Current.CancellationToken);
-            var store = new JsonInitializationStateStore(paths, TimeProvider);
+            var store = new JsonInitializationStateStore(paths);
 
-            var token = await store.CreateTokenAsync("Automation", TestContext.Current.CancellationToken);
             await store.UpdatePasswordAsync("new-hash", TestContext.Current.CancellationToken);
-            var reloaded = new JsonInitializationStateStore(paths, TimeProvider);
+            var reloaded = new JsonInitializationStateStore(paths);
 
             Assert.Equal(DatabaseProvider.Postgres, reloaded.DatabaseProvider);
             Assert.Equal("Host=db;Database=agw", reloaded.DatabaseConnectionString);
             Assert.Equal("new-hash", reloaded.GetAuthenticationSnapshot().PasswordHash);
-            Assert.True(reloaded.ValidateToken(token.Token));
+            var persistedJson = await File.ReadAllTextAsync(
+                paths.StateFile,
+                TestContext.Current.CancellationToken);
+            Assert.Contains("\"schemaVersion\": 1", persistedJson);
+            Assert.DoesNotContain("\"execution\"", persistedJson);
+            Assert.DoesNotContain("\"distributedLock\"", persistedJson);
         }
         finally
         {
@@ -156,7 +190,6 @@ public class JsonInitializationStateStoreTests
         {
             var services = new ServiceCollection();
             services.AddSingleton(paths);
-            services.AddSingleton(TimeProvider);
             services.AddSetup(new ConfigurationBuilder().Build());
             using var provider = services.BuildServiceProvider();
 
@@ -179,5 +212,13 @@ public class JsonInitializationStateStoreTests
         var paths = AgwDataPaths.Resolve(root, "/unused");
         paths.EnsureCreated();
         return paths;
+    }
+
+    private static SetupConfiguration CreateStandaloneConfiguration()
+    {
+        return new SetupConfiguration(
+            DeploymentMode.Standalone,
+            DatabaseProvider.Sqlite,
+            "Data Source=agw.db");
     }
 }

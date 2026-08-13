@@ -67,17 +67,7 @@ public sealed class DependencyInjectionTests
 
     private sealed class StateStoreStub : IAuthenticationStateStore
     {
-        public AuthenticationSnapshot GetAuthenticationSnapshot() => new("hash", 2, []);
-
-        public Task<CreatedApiToken> CreateTokenAsync(
-            string name,
-            CancellationToken cancellationToken = default) => throw new NotImplementedException();
-
-        public Task<bool> RevokeTokenAsync(
-            Guid id,
-            CancellationToken cancellationToken = default) => throw new NotImplementedException();
-
-        public bool ValidateToken(string token) => false;
+        public AuthenticationSnapshot GetAuthenticationSnapshot() => new("hash", 2);
 
         public Task UpdatePasswordAsync(
             string passwordHash,

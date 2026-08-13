@@ -2,6 +2,7 @@ using Agw.Infrastructure.Data.Encryption;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Auth;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Jobs;
@@ -52,6 +53,7 @@ public class AgwDbContext : EFContext
 
     public DbSet<Provider> Providers => Set<Provider>();
     public DbSet<ProviderAuthConfig> ProviderAuthConfigs => Set<ProviderAuthConfig>();
+    public DbSet<ApiToken> ApiTokens => Set<ApiToken>();
 
     public DbSet<AgwAiModel> Models => Set<AgwAiModel>();
     public DbSet<ModelProviderRelation> ModelProviders => Set<ModelProviderRelation>();

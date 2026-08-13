@@ -34,13 +34,18 @@ public sealed class AgwAuthenticationMiddleware
     /// 验证 Bearer Token 或本机可信请求，并在允许时继续执行请求管道。
     /// </summary>
     /// <param name="context">当前 HTTP 上下文。</param>
-    /// <param name="stateStore">保存并验证身份认证状态的存储。</param>
-    public async Task InvokeAsync(HttpContext context, IAuthenticationStateStore stateStore)
+    /// <param name="stateStore">保存管理员密码和会话版本的状态存储。</param>
+    /// <param name="tokenStore">保存并验证 API Token 的数据库存储。</param>
+    public async Task InvokeAsync(
+        HttpContext context,
+        IAuthenticationStateStore stateStore,
+        IApiTokenStore tokenStore)
     {
         if (context.User.Identity?.IsAuthenticated != true)
         {
             var bearerToken = ResolveBearerToken(context);
-            if (bearerToken != null && stateStore.ValidateToken(bearerToken))
+            if (bearerToken != null
+                && await tokenStore.ValidateTokenAsync(bearerToken, context.RequestAborted))
             {
                 context.User = CreatePrincipal(
                     Constants.AdminUserId,

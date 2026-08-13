@@ -1,0 +1,23 @@
+@{
+    ViewData["Title"] = "Restart Agw";
+}
+
+<div class="completion">
+    <div class="completion-signal" aria-hidden="true"><span></span></div>
+    <p class="eyebrow">Configuration saved</p>
+    <h1>Your cluster foundation is ready.</h1>
+    <p class="lede">Agw initialized PostgreSQL and stored the distributed execution configuration. One restart is required before this Server can coordinate durable work.</p>
+
+    <div class="completion-card" role="status">
+        <strong>Restart this Server now.</strong>
+        <p>The execution provider is selected while the process starts, so the running process cannot switch safely in place.</p>
+    </div>
+
+    <ol class="restart-steps">
+        <li><span><b>Stop and restart</b> the current Agw Server process or container.</span></li>
+        <li><span>Wait for the readiness check to report healthy, then open the Agw URL again.</span></li>
+        <li><span>Add other replicas only after this first Server is running against the shared PostgreSQL database.</span></li>
+    </ol>
+
+    <div class="configuration-stamp"><span>EXECUTION</span><strong>DISTRIBUTED</strong><span>·</span><span>LOCK</span><strong>POSTGRES</strong></div>
+</div>

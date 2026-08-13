@@ -87,7 +87,7 @@ public sealed class AuthenticationMiddlewareTests
         context.Request.Headers.Authorization = "Bearer agw_desktop";
         var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask, false);
 
-        await middleware.InvokeAsync(context, new StateStoreStub("agw_desktop"));
+        await InvokeAsync(middleware, context, new StateStoreStub("agw_desktop"));
 
         Assert.True(context.User.Identity?.IsAuthenticated);
         Assert.Equal(AgwAuthDefaults.BearerScheme, context.User.Identity?.AuthenticationType);
@@ -103,7 +103,7 @@ public sealed class AuthenticationMiddlewareTests
         context.Request.Headers.Authorization = "Bearer agw_invalid";
         var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask, false);
 
-        await middleware.InvokeAsync(context, new StateStoreStub("agw_valid"));
+        await InvokeAsync(middleware, context, new StateStoreStub("agw_valid"));
 
         Assert.False(context.User.Identity?.IsAuthenticated);
     }
@@ -117,7 +117,7 @@ public sealed class AuthenticationMiddlewareTests
         context.Request.Headers.Authorization = "Bearer agw_invalid";
         var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask, false);
 
-        await middleware.InvokeAsync(context, new StateStoreStub("agw_valid"));
+        await InvokeAsync(middleware, context, new StateStoreStub("agw_valid"));
 
         Assert.Equal(AgwAuthDefaults.LocalTrustedScheme, context.User.Identity?.AuthenticationType);
     }
@@ -130,7 +130,7 @@ public sealed class AuthenticationMiddlewareTests
         context.Request.Host = new HostString("localhost", 5015);
         var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask, false);
 
-        await middleware.InvokeAsync(context, new StateStoreStub());
+        await InvokeAsync(middleware, context, new StateStoreStub());
 
         Assert.Equal(AgwAuthDefaults.LocalTrustedScheme, context.User.Identity?.AuthenticationType);
     }
@@ -153,7 +153,7 @@ public sealed class AuthenticationMiddlewareTests
             return Task.CompletedTask;
         }, false);
 
-        await middleware.InvokeAsync(context, new StateStoreStub());
+        await InvokeAsync(middleware, context, new StateStoreStub());
 
         Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
         Assert.False(nextCalled);
@@ -175,7 +175,7 @@ public sealed class AuthenticationMiddlewareTests
             return Task.CompletedTask;
         }, false);
 
-        await middleware.InvokeAsync(context, new StateStoreStub("agw_desktop"));
+        await InvokeAsync(middleware, context, new StateStoreStub("agw_desktop"));
 
         Assert.Equal(StatusCodes.Status200OK, context.Response.StatusCode);
         Assert.True(nextCalled);
@@ -199,7 +199,7 @@ public sealed class AuthenticationMiddlewareTests
             return Task.CompletedTask;
         }, true);
 
-        await middleware.InvokeAsync(context, new StateStoreStub("agw_desktop"));
+        await InvokeAsync(middleware, context, new StateStoreStub("agw_desktop"));
 
         Assert.Equal(AgwAuthDefaults.BearerScheme, context.User.Identity?.AuthenticationType);
         Assert.True(nextCalled);
@@ -223,7 +223,7 @@ public sealed class AuthenticationMiddlewareTests
             return Task.CompletedTask;
         }, false);
 
-        await middleware.InvokeAsync(context, new StateStoreStub("agw_desktop"));
+        await InvokeAsync(middleware, context, new StateStoreStub("agw_desktop"));
 
         Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
         Assert.False(nextCalled);
@@ -240,7 +240,7 @@ public sealed class AuthenticationMiddlewareTests
         context.Request.QueryString = new QueryString("?access_token=agw_desktop");
         var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask, false);
 
-        await middleware.InvokeAsync(context, new StateStoreStub("agw_desktop"));
+        await InvokeAsync(middleware, context, new StateStoreStub("agw_desktop"));
 
         Assert.False(context.User.Identity?.IsAuthenticated);
     }
@@ -257,7 +257,7 @@ public sealed class AuthenticationMiddlewareTests
         context.Request.QueryString = new QueryString("?access_token=agw_desktop");
         var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask, false);
 
-        await middleware.InvokeAsync(context, new StateStoreStub("agw_desktop"));
+        await InvokeAsync(middleware, context, new StateStoreStub("agw_desktop"));
 
         Assert.False(context.User.Identity?.IsAuthenticated);
     }
@@ -269,7 +269,12 @@ public sealed class AuthenticationMiddlewareTests
         public Task<WebSocket> AcceptAsync(WebSocketAcceptContext context) => throw new NotImplementedException();
     }
 
-    private sealed class StateStoreStub : IAuthenticationStateStore
+    private static Task InvokeAsync(
+        AgwAuthenticationMiddleware middleware,
+        HttpContext context,
+        StateStoreStub store) => middleware.InvokeAsync(context, store, store);
+
+    private sealed class StateStoreStub : IAuthenticationStateStore, IApiTokenStore
     {
         private readonly string? _validToken;
 
@@ -278,7 +283,11 @@ public sealed class AuthenticationMiddlewareTests
             _validToken = validToken;
         }
 
-        public AuthenticationSnapshot GetAuthenticationSnapshot() => new("hash", 1, []);
+        public AuthenticationSnapshot GetAuthenticationSnapshot() => new("hash", 1);
+
+        public Task<IReadOnlyList<ApiTokenSummary>> ListTokensAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ApiTokenSummary>>([]);
 
         public Task<CreatedApiToken> CreateTokenAsync(
             string name,
@@ -288,7 +297,10 @@ public sealed class AuthenticationMiddlewareTests
             Guid id,
             CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-        public bool ValidateToken(string token) => string.Equals(token, _validToken, StringComparison.Ordinal);
+        public Task<bool> ValidateTokenAsync(
+            string token,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(string.Equals(token, _validToken, StringComparison.Ordinal));
 
         public Task UpdatePasswordAsync(
             string passwordHash,

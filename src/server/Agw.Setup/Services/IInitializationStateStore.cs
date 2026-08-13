@@ -6,5 +6,5 @@ public interface IInitializationStateStore
 {
     bool IsInitialized { get; }
 
-    Task PersistAsync(SetupRequest request, string passwordHash, CancellationToken cancellationToken = default);
+    Task PersistAsync(SetupConfiguration configuration, string passwordHash, CancellationToken cancellationToken = default);
 }

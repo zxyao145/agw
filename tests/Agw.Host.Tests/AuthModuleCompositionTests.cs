@@ -107,7 +107,11 @@ public sealed class AuthModuleCompositionTests
         builder.Services.AddAuth();
         builder.Services.AddApiResult();
         builder.Services.AddSingleton(TimeProvider.System);
-        builder.Services.AddSingleton<IAuthenticationStateStore, AuthenticationStateStoreStub>();
+        builder.Services.AddSingleton<AuthenticationStateStoreStub>();
+        builder.Services.AddSingleton<IAuthenticationStateStore>(provider =>
+            provider.GetRequiredService<AuthenticationStateStoreStub>());
+        builder.Services.AddSingleton<IApiTokenStore>(provider =>
+            provider.GetRequiredService<AuthenticationStateStoreStub>());
         builder.Services.AddSingleton<IServerInitializationState, InitializationStateStub>();
 
         var app = builder.Build();
@@ -134,9 +138,13 @@ public sealed class AuthModuleCompositionTests
         return app;
     }
 
-    private sealed class AuthenticationStateStoreStub : IAuthenticationStateStore
+    private sealed class AuthenticationStateStoreStub : IAuthenticationStateStore, IApiTokenStore
     {
-        public AuthenticationSnapshot GetAuthenticationSnapshot() => new("hash", 1, []);
+        public AuthenticationSnapshot GetAuthenticationSnapshot() => new("hash", 1);
+
+        public Task<IReadOnlyList<ApiTokenSummary>> ListTokensAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ApiTokenSummary>>([]);
 
         public Task<CreatedApiToken> CreateTokenAsync(
             string name,
@@ -146,7 +154,10 @@ public sealed class AuthModuleCompositionTests
             Guid id,
             CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
-        public bool ValidateToken(string token) => string.Equals(token, "agw_valid", StringComparison.Ordinal);
+        public Task<bool> ValidateTokenAsync(
+            string token,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(string.Equals(token, "agw_valid", StringComparison.Ordinal));
 
         public Task UpdatePasswordAsync(
             string passwordHash,

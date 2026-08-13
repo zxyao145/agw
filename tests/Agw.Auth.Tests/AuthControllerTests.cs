@@ -149,6 +149,7 @@ public sealed class AuthControllerTests
 
         return new AuthController(
             stateStore,
+            stateStore,
             passwordHasher ?? new PasswordHasher<object>(),
             null!,
             attemptLimiter ?? new AuthenticationAttemptLimiter(),
@@ -170,7 +171,7 @@ public sealed class AuthControllerTests
         public override DateTimeOffset GetUtcNow() => _utcNow;
     }
 
-    private sealed class StateStoreStub : IAuthenticationStateStore
+    private sealed class StateStoreStub : IAuthenticationStateStore, IApiTokenStore
     {
         public string? PasswordHash { get; set; } = "hash";
         public int SessionVersion { get; set; } = 1;
@@ -178,7 +179,11 @@ public sealed class AuthControllerTests
         public string? CreatedTokenName { get; private set; }
 
         public AuthenticationSnapshot GetAuthenticationSnapshot() =>
-            new(PasswordHash, SessionVersion, []);
+            new(PasswordHash, SessionVersion);
+
+        public Task<IReadOnlyList<ApiTokenSummary>> ListTokensAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ApiTokenSummary>>([]);
 
         public Task<CreatedApiToken> CreateTokenAsync(
             string name,
@@ -197,7 +202,9 @@ public sealed class AuthControllerTests
             Guid id,
             CancellationToken cancellationToken = default) => Task.FromResult(true);
 
-        public bool ValidateToken(string token) => false;
+        public Task<bool> ValidateTokenAsync(
+            string token,
+            CancellationToken cancellationToken = default) => Task.FromResult(false);
 
         public Task UpdatePasswordAsync(
             string passwordHash,

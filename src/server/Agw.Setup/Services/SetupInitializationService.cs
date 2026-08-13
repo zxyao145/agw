@@ -1,4 +1,3 @@
-using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Infrastructure.Data.Interceptors;
@@ -52,20 +51,14 @@ public class SetupInitializationService : ISetupInitializationService
     public async Task InitializeAsync(SetupRequest request, CancellationToken cancellationToken = default)
     {
         var dbOptions = new DbContextOptionsBuilder<AgwDbContext>();
-        var resolvedRequest = new SetupRequest
-        {
-            Provider = request.Provider,
-            ConnectionString = DatabaseConnectionStringResolver.Resolve(
-                request.Provider,
-                request.ConnectionString,
-                _paths),
-            AdminPassword = request.AdminPassword,
-            SetupCode = request.SetupCode
-        };
+        var configuration = new SetupConfiguration(
+            request.DeploymentMode,
+            request.Provider,
+            SetupConnectionStringFactory.Create(request, _paths));
         AgwDbContextOptionsConfigurator.Configure(
             dbOptions,
-            resolvedRequest.Provider,
-            resolvedRequest.ConnectionString);
+            configuration.Provider,
+            configuration.ConnectionString);
         dbOptions.AddInterceptors(
             _entityCreatorInterceptor,
             _entityModifierInterceptor,
@@ -82,6 +75,6 @@ public class SetupInitializationService : ISetupInitializationService
         await seeder.SeedAsync();
 
         var passwordHash = _passwordHasher.HashPassword(new object(), request.AdminPassword);
-        await _stateStore.PersistAsync(resolvedRequest, passwordHash, cancellationToken);
+        await _stateStore.PersistAsync(configuration, passwordHash, cancellationToken);
     }
 }

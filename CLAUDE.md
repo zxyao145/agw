@@ -26,7 +26,7 @@ Agw.Files/           # File and workspace APIs, path security, request validatio
 Agw.Integrations/    # Plugin catalog, installations, connections, credentials, OAuth, MCP, and connection-bound tools
 Agw.Jobs/            # Scheduled jobs, project leases, execution logs, and hosted scheduling
 Agw.Providers/       # LLM models, providers, model-provider links, and auth configuration
-Agw.Setup/           # First-run setup, initialization state, and the combined server-state persistence adapter
+Agw.Setup/           # First-run setup, initialization state, server-state persistence, and legacy Token import
 Agw.Skills/          # Skill definitions, local/remote content, execution adapters, and agent-skill relations
 Agw.Projects/         # Projects, project tasks, task records, contexts, and task APIs
 Agw.Tools/           # Tool discovery, metadata, and AI tool factory and registry
@@ -149,7 +149,7 @@ After the first clone, configure hooks with `git config core.hooksPath .githooks
 
 ## Local Setup and Configuration
 
-On the first backend run, open `http://localhost:30816/setup` to choose the database provider, connection string, and administrator password. Setup seeds the database and writes `server-state.json` below the Agw data directory.
+On the first backend run, open `http://localhost:30816/setup` to choose Standalone or Cluster deployment, enter structured SQLite or PostgreSQL settings, and create the administrator password. Standalone supports both databases; Cluster requires PostgreSQL and takes effect after a Server restart. Setup seeds the database and writes `server-state.json` below the Agw data directory.
 
 Remote web access uses the administrator session cookie. Desktop, mobile, and automation clients use named `Authorization: Bearer agw_...` API tokens. The legacy `X-API-Key` setting is not supported.
 
@@ -159,10 +159,11 @@ Configuration guidance:
 
 - `Database:Provider` supports `sqlite` and `postgres`.
 - `Database:ConnectionString` defaults to `Data Source=agw.db`.
+- An optional `Setup` section can perform unattended first-run initialization when `server-state.json` is absent. It uses the same structured fields as the Setup form; inject `Setup:AdminPassword` and `Setup:PostgresPassword` through environment variables or Secrets. Existing state always wins and Setup configuration must not overwrite credentials or runtime setup choices.
 - `DistributedLock:Provider` supports `inmemory` and `postgres`; null or missing follows `Database:Provider`.
 - When `DistributedLock:ConnectionString` is empty, a PostgreSQL lock reuses `Database:ConnectionString`.
 - `OpenTelemetry:OtlpEndpoint` defaults to `http://localhost:4317`.
-- First-run and authentication state, including API Tokens, live in `server-state.json` through the `Agw.Setup` persistence adapter; do not reintroduce static `SystemInitialization` configuration.
+- First-run configuration plus administrator password/session state live in `server-state.json` through the `Agw.Setup` persistence adapter. API Token hashes and audit metadata live in the `api_token` database table; do not reintroduce static `SystemInitialization` configuration.
 - Keep secrets out of `appsettings*.json` and frontend environment files; prefer environment-variable overrides.
 - All backend projects target `.NET 10.0` and use nullable reference types, implicit usings, central package management, and code-style enforcement during builds.
 

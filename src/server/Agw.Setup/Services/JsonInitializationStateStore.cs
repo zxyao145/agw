@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -7,7 +5,6 @@ using Agw.Auth.Application;
 using Agw.Auth.Contracts;
 using Agw.Setup.Contracts;
 using Agw.Shared.Configuration;
-using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 
 namespace Agw.Setup.Services;
@@ -18,15 +15,13 @@ public sealed class JsonInitializationStateStore :
     IServerInitializationState
 {
     private readonly AgwDataPaths _paths;
-    private readonly TimeProvider _timeProvider;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly JsonSerializerOptions _serializerOptions = CreateSerializerOptions();
     private volatile ServerState _state;
 
-    public JsonInitializationStateStore(AgwDataPaths paths, TimeProvider timeProvider)
+    public JsonInitializationStateStore(AgwDataPaths paths)
     {
         _paths = paths;
-        _timeProvider = timeProvider;
         _state = Load(paths.StateFile);
     }
 
@@ -35,31 +30,46 @@ public sealed class JsonInitializationStateStore :
         var state = _state;
         return new AuthenticationSnapshot(
             state.PasswordHash,
-            state.SessionVersion,
-            state.Tokens.Select(ToSummary).ToArray());
+            state.SessionVersion);
     }
 
     public bool IsInitialized => _state.IsInitialized;
+    public bool HasLegacyApiTokenSection => _state.Tokens != null;
     public DatabaseProvider DatabaseProvider => _state.Database.Provider;
     public string DatabaseConnectionString => _state.Database.ConnectionString;
 
-    public async Task PersistAsync(SetupRequest request, string passwordHash, CancellationToken cancellationToken = default)
+    public async Task PersistAsync(
+        SetupConfiguration configuration,
+        string passwordHash,
+        CancellationToken cancellationToken = default)
     {
         await _writeLock.WaitAsync(cancellationToken);
         try
         {
             var nextState = new ServerState
             {
-                SchemaVersion = 1,
+                SchemaVersion = 2,
                 IsInitialized = true,
                 Database = new ServerDatabaseState
                 {
-                    Provider = request.Provider,
-                    ConnectionString = request.ConnectionString
+                    Provider = configuration.Provider,
+                    ConnectionString = configuration.ConnectionString
                 },
+                Execution = new ServerExecutionState
+                {
+                    Provider = configuration.DeploymentMode == DeploymentMode.Cluster
+                        ? "distributed"
+                        : "inProcess"
+                },
+                DistributedLock = configuration.DeploymentMode == DeploymentMode.Cluster
+                    ? new ServerDistributedLockState
+                    {
+                        Provider = "postgres",
+                        ConnectionString = string.Empty
+                    }
+                    : null,
                 PasswordHash = passwordHash,
-                SessionVersion = 1,
-                Tokens = []
+                SessionVersion = 1
             };
             await WriteAsync(nextState, cancellationToken);
             _state = nextState;
@@ -70,64 +80,36 @@ public sealed class JsonInitializationStateStore :
         }
     }
 
-    public async Task<CreatedApiToken> CreateTokenAsync(string name, CancellationToken cancellationToken = default)
+    public IReadOnlyList<LegacyApiTokenState> GetLegacyApiTokens()
     {
-        var normalizedName = name.Trim();
-        await _writeLock.WaitAsync(cancellationToken);
-        try
-        {
-            var currentState = _state;
-            if (currentState.Tokens.Any(x => string.Equals(x.Name, normalizedName, StringComparison.OrdinalIgnoreCase)))
-            {
-                throw new AgwException(ErrorCodes.ApiTokenNameAlreadyExists);
-            }
-
-            var token = $"agw_{Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)).TrimEnd('=').Replace('+', '-').Replace('/', '_')}";
-            var record = new ApiTokenRecord
-            {
-                Id = Guid.CreateVersion7(),
-                Name = normalizedName,
-                Prefix = token[..Math.Min(token.Length, 12)],
-                SecretHash = Hash(token),
-                CreatedAt = _timeProvider.GetUtcNow()
-            };
-            var nextState = Copy(currentState);
-            nextState.Tokens.Add(record);
-            await WriteAsync(nextState, cancellationToken);
-            _state = nextState;
-            return new CreatedApiToken(record.Id, record.Name, record.Prefix, record.CreatedAt, token);
-        }
-        finally
-        {
-            _writeLock.Release();
-        }
+        return _state.Tokens?
+            .Select(token => new LegacyApiTokenState(
+                token.Id,
+                token.Name,
+                token.Prefix,
+                token.SecretHash,
+                token.CreatedAt))
+            .ToArray()
+            ?? [];
     }
 
-    public async Task<bool> RevokeTokenAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task ClearLegacyApiTokensAsync(
+        CancellationToken cancellationToken = default)
     {
         await _writeLock.WaitAsync(cancellationToken);
         try
         {
+            if (_state.Tokens == null) return;
+
             var nextState = Copy(_state);
-            var removed = nextState.Tokens.RemoveAll(x => x.Id == id) > 0;
-            if (removed)
-            {
-                await WriteAsync(nextState, cancellationToken);
-                _state = nextState;
-            }
-            return removed;
+            nextState.Tokens = null;
+            await WriteAsync(nextState, cancellationToken);
+            _state = nextState;
         }
         finally
         {
             _writeLock.Release();
         }
-    }
-
-    public bool ValidateToken(string token)
-    {
-        if (string.IsNullOrWhiteSpace(token) || !token.StartsWith("agw_", StringComparison.Ordinal)) return false;
-        var candidate = Convert.FromHexString(Hash(token));
-        return _state.Tokens.Any(x => CryptographicOperations.FixedTimeEquals(candidate, Convert.FromHexString(x.SecretHash)));
     }
 
     public async Task UpdatePasswordAsync(string passwordHash, CancellationToken cancellationToken = default)
@@ -204,10 +186,6 @@ public sealed class JsonInitializationStateStore :
         return options;
     }
 
-    private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
-
-    private static ApiTokenSummary ToSummary(ApiTokenRecord token) => new(token.Id, token.Name, token.Prefix, token.CreatedAt);
-
     private static ServerState Copy(ServerState state) => new()
     {
         SchemaVersion = state.SchemaVersion,
@@ -217,16 +195,27 @@ public sealed class JsonInitializationStateStore :
             Provider = state.Database.Provider,
             ConnectionString = state.Database.ConnectionString
         },
+        Execution = state.Execution == null
+            ? null
+            : new ServerExecutionState { Provider = state.Execution.Provider },
+        DistributedLock = state.DistributedLock == null
+            ? null
+            : new ServerDistributedLockState
+            {
+                Provider = state.DistributedLock.Provider,
+                ConnectionString = state.DistributedLock.ConnectionString
+            },
         PasswordHash = state.PasswordHash,
         SessionVersion = state.SessionVersion,
-        Tokens = state.Tokens.Select(token => new ApiTokenRecord
+        Tokens = state.Tokens?.Select(token => new ApiTokenRecord
         {
             Id = token.Id,
             Name = token.Name,
             Prefix = token.Prefix,
             SecretHash = token.SecretHash,
             CreatedAt = token.CreatedAt
-        }).ToList()
+        })
+            .ToList()
     };
 
     private sealed class ServerState
@@ -234,14 +223,30 @@ public sealed class JsonInitializationStateStore :
         public int SchemaVersion { get; set; } = 1;
         public bool IsInitialized { get; set; }
         public ServerDatabaseState Database { get; set; } = new();
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public ServerExecutionState? Execution { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public ServerDistributedLockState? DistributedLock { get; set; }
         public string? PasswordHash { get; set; }
         public int SessionVersion { get; set; }
-        public List<ApiTokenRecord> Tokens { get; set; } = [];
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<ApiTokenRecord>? Tokens { get; set; }
     }
 
     private sealed class ServerDatabaseState
     {
         public DatabaseProvider Provider { get; set; } = DatabaseProvider.Sqlite;
+        public string ConnectionString { get; set; } = string.Empty;
+    }
+
+    private sealed class ServerExecutionState
+    {
+        public string Provider { get; set; } = string.Empty;
+    }
+
+    private sealed class ServerDistributedLockState
+    {
+        public string Provider { get; set; } = string.Empty;
         public string ConnectionString { get; set; } = string.Empty;
     }
 
@@ -254,3 +259,10 @@ public sealed class JsonInitializationStateStore :
         public DateTimeOffset CreatedAt { get; set; }
     }
 }
+
+public sealed record LegacyApiTokenState(
+    Guid Id,
+    string Name,
+    string Prefix,
+    string SecretHash,
+    DateTimeOffset CreatedAt);

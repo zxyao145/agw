@@ -25,12 +25,14 @@ public sealed class InitialMigrationTests
         AgwDbContextOptionsConfigurator.Configure(options, provider, connectionString);
         using var dbContext = new AgwDbContext(options.Options);
 
-        var initialMigration = Assert.Single(dbContext.Database.GetMigrations());
-        Assert.EndsWith("_Init", initialMigration, StringComparison.Ordinal);
+        var migrations = dbContext.Database.GetMigrations().ToArray();
+        Assert.Equal(2, migrations.Length);
+        Assert.EndsWith("_Init", migrations[0], StringComparison.Ordinal);
+        Assert.EndsWith("_AddApiTokenTable", migrations[1], StringComparison.Ordinal);
 
         var script = dbContext.GetService<IMigrator>().GenerateScript(
             Migration.InitialDatabase,
-            initialMigration,
+            migrations[^1],
             MigrationsSqlGenerationOptions.NoTransactions);
 
         Assert.Contains("integration_connection", script, StringComparison.OrdinalIgnoreCase);
@@ -41,6 +43,11 @@ public sealed class InitialMigrationTests
         Assert.Contains("project_conversation_chat_history", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("durable_execution", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("execution_stream_entry", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("api_token", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("normalized_name", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("secret_hash", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("create_by", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("create_time", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("tools", script, StringComparison.OrdinalIgnoreCase);
         if (usePostgres)
         {
@@ -79,9 +86,12 @@ public sealed class InitialMigrationTests
 
         await dbContext.Database.MigrateAsync(cancellationToken);
 
-        var appliedMigration = Assert.Single(
-            await dbContext.Database.GetAppliedMigrationsAsync(cancellationToken));
-        Assert.EndsWith("_Init", appliedMigration, StringComparison.Ordinal);
+        var appliedMigrations = (await dbContext.Database
+                .GetAppliedMigrationsAsync(cancellationToken))
+            .ToArray();
+        Assert.Equal(2, appliedMigrations.Length);
+        Assert.EndsWith("_Init", appliedMigrations[0], StringComparison.Ordinal);
+        Assert.EndsWith("_AddApiTokenTable", appliedMigrations[1], StringComparison.Ordinal);
         Assert.True(await TableExistsAsync(connection, "integration_connection", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "plugin_installation", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "project_memory", cancellationToken));
@@ -92,6 +102,10 @@ public sealed class InitialMigrationTests
             cancellationToken));
         Assert.True(await TableExistsAsync(connection, "durable_execution", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "execution_stream_entry", cancellationToken));
+        Assert.True(await TableExistsAsync(connection, "api_token", cancellationToken));
+        Assert.True(await ColumnExistsAsync(connection, "api_token", "create_by", cancellationToken));
+        Assert.True(await ColumnExistsAsync(connection, "api_token", "create_time", cancellationToken));
+        Assert.True(await ColumnExistsAsync(connection, "api_token", "secret_hash", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "agent", "tools", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "project", "tools", cancellationToken));
         Assert.False(await ColumnExistsAsync(

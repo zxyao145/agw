@@ -98,7 +98,7 @@ dotnet restore Agw.slnx
 dotnet run --project src/server/Agw.Host
 ```
 
-The development backend listens on `http://localhost:30816` by default. On the first run, open `http://localhost:30816/setup` to choose the database provider, connection string, and administrator password. All runtime data is stored in an `agw` directory under the current user's home directory. Setup through a domain name also requires the one-time setup code printed in the server startup logs.
+The development backend listens on `http://localhost:30816` by default. On the first run, open `http://localhost:30816/setup` to choose Standalone or Cluster deployment, enter structured SQLite or PostgreSQL settings, and create the administrator password. Unattended deployments may provide the same fields under the `Setup` configuration section when no `server-state.json` exists; inject passwords through environment variables or Secrets. Cluster deployment requires PostgreSQL and a Server restart after setup. All runtime data is stored in an `agw` directory under the current user's home directory. Setup through a domain name also requires the one-time setup code printed in the server startup logs.
 
 Start the frontend in another terminal:
 

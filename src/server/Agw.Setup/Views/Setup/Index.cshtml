@@ -1,50 +1,405 @@
 @model SetupRequest
 @{
     ViewData["Title"] = "Set up Agw";
+
+    var databaseFields = new[]
+    {
+        "Provider",
+        "SqlitePath",
+        "PostgresHost",
+        "PostgresPort",
+        "PostgresDatabase",
+        "PostgresUsername",
+        "PostgresPassword"
+    };
+    var administratorFields = new[] { "AdminPassword", "SetupCode" };
+    var hasDatabaseError = databaseFields.Any(field =>
+        ViewData.ModelState.TryGetValue(field, out var entry) && entry.Errors.Count > 0);
+    var hasAdministratorError = administratorFields.Any(field =>
+        ViewData.ModelState.TryGetValue(field, out var entry) && entry.Errors.Count > 0);
+    var hasModelError = ViewData.ModelState.TryGetValue(string.Empty, out var modelEntry) &&
+        modelEntry.Errors.Count > 0;
+    var initialStep = hasAdministratorError ? 2 : hasDatabaseError || hasModelError ? 1 : 0;
 }
 
-<p class="eyebrow">Server foundation</p>
-<h1>Set up your Agw Server</h1>
-<p class="lede">Choose the database and administrator credential for this Server. Desktop will reconnect automatically when setup completes.</p>
+<div class="page-intro">
+    <p class="eyebrow">Initial deployment</p>
+    <h1>Build your Server foundation.</h1>
+    <p class="lede">Three focused steps configure how Agw runs, where it stores data, and who can administer it.</p>
+</div>
 
-<div class="setup-note"><span>●</span><span><b>Stored locally.</b> Configuration, keys, logs, and the default SQLite database live under <code>~/agw</code>.</span></div>
+<div asp-validation-summary="ModelOnly" class="validation-banner" role="alert"></div>
 
-<div asp-validation-summary="ModelOnly" class="error"></div>
-
-<form method="post">
+<form method="post" id="setup-form" class="setup-wizard" data-initial-step="@initialStep">
     @Html.AntiForgeryToken()
 
-    <div class="field">
-        <label asp-for="Provider">Database provider</label>
-        <select asp-for="Provider">
-            <option value="sqlite">SQLite</option>
-            <option value="postgres">PostgreSQL</option>
-        </select>
-        <div class="hint">SQLite is recommended for a local Desktop installation. Use PostgreSQL for a shared Server.</div>
-    </div>
+    <nav class="steps-nav" aria-label="Setup progress">
+        <ol class="steps-list">
+            <li class="step-item" data-step-item data-status="@(initialStep == 0 ? "process" : "finish")">
+                <button type="button" id="step-trigger-0" class="step-trigger" data-step-target="0">
+                    <span class="step-icon" aria-hidden="true">
+                        <span class="step-number">1</span>
+                        <span class="step-check">✓</span>
+                    </span>
+                    <span class="step-copy">
+                        <strong>Deployment</strong>
+                        <small>Choose topology</small>
+                    </span>
+                    <span class="sr-only" data-step-status></span>
+                </button>
+            </li>
+            <li class="step-item" data-step-item data-status="@(initialStep > 1 ? "finish" : initialStep == 1 ? "process" : "wait")">
+                <button type="button" id="step-trigger-1" class="step-trigger" data-step-target="1">
+                    <span class="step-icon" aria-hidden="true">
+                        <span class="step-number">2</span>
+                        <span class="step-check">✓</span>
+                    </span>
+                    <span class="step-copy">
+                        <strong>Database</strong>
+                        <small>Configure storage</small>
+                    </span>
+                    <span class="sr-only" data-step-status></span>
+                </button>
+            </li>
+            <li class="step-item" data-step-item data-status="@(initialStep == 2 ? "process" : "wait")">
+                <button type="button" id="step-trigger-2" class="step-trigger" data-step-target="2">
+                    <span class="step-icon" aria-hidden="true">
+                        <span class="step-number">3</span>
+                        <span class="step-check">✓</span>
+                    </span>
+                    <span class="step-copy">
+                        <strong>Administrator</strong>
+                        <small>Secure access</small>
+                    </span>
+                    <span class="sr-only" data-step-status></span>
+                </button>
+            </li>
+        </ol>
+    </nav>
 
-    <div class="field">
-        <label asp-for="ConnectionString">Connection string</label>
-        <input asp-for="ConnectionString" />
-        <div class="hint">SQLite example: Data Source=agw.db. PostgreSQL requires a complete connection string.</div>
-        <span asp-validation-for="ConnectionString" class="error"></span>
-    </div>
+    <div class="step-announcement sr-only" aria-live="polite" data-step-announcement></div>
 
-    <div class="field">
-        <label asp-for="AdminPassword">Administrator password</label>
-        <input asp-for="AdminPassword" type="password" autocomplete="new-password" />
-        <div class="hint">Use at least 8 characters. This password authenticates browser administration sessions.</div>
-        <span asp-validation-for="AdminPassword" class="error"></span>
-    </div>
-
-    @if (ViewData["RequireSetupCode"] as bool? == true)
-    {
-        <div class="field">
-            <label asp-for="SetupCode"></label>
-            <input asp-for="SetupCode" autocomplete="one-time-code" />
-            <div class="hint">Enter the one-time Setup Code printed in the Server startup log.</div>
+    <section class="wizard-panel @(initialStep == 0 ? "is-active" : null)" data-step-panel="0" role="tabpanel" aria-labelledby="step-trigger-0" tabindex="-1">
+        <div class="wizard-heading">
+            <div>
+                <p class="section-kicker">Step 01 · Topology</p>
+                <h2>Deployment mode</h2>
+            </div>
+            <p>Pick the execution model that matches this installation.</p>
         </div>
-    }
 
-    <button type="submit" class="button">Initialize Server</button>
+        <fieldset class="choice-grid">
+            <legend class="sr-only">Deployment mode</legend>
+            <label class="choice-card">
+                <input asp-for="DeploymentMode" type="radio" value="Standalone" />
+                <span class="choice-card__panel">
+                    <span class="choice-card__top">
+                        <span class="topology-icon topology-icon--single" aria-hidden="true"><i></i></span>
+                        <span class="choice-card__check" aria-hidden="true">✓</span>
+                    </span>
+                    <strong>Standalone</strong>
+                    <small>One Server process with a fast, connection-bound execution runtime.</small>
+                    <span class="choice-card__meta">SQLite or PostgreSQL</span>
+                </span>
+            </label>
+
+            <label class="choice-card">
+                <input asp-for="DeploymentMode" type="radio" value="Cluster" />
+                <span class="choice-card__panel">
+                    <span class="choice-card__top">
+                        <span class="topology-icon topology-icon--cluster" aria-hidden="true"><i></i><i></i><i></i></span>
+                        <span class="choice-card__check" aria-hidden="true">✓</span>
+                    </span>
+                    <strong>Cluster</strong>
+                    <small>Durable execution and recovery across multiple Server replicas.</small>
+                    <span class="choice-card__meta">PostgreSQL required</span>
+                </span>
+            </label>
+        </fieldset>
+        <span asp-validation-for="DeploymentMode" class="field-error"></span>
+    </section>
+
+    <section class="wizard-panel @(initialStep == 1 ? "is-active" : null)" data-step-panel="1" role="tabpanel" aria-labelledby="step-trigger-1" tabindex="-1">
+        <div class="wizard-heading">
+            <div>
+                <p class="section-kicker">Step 02 · Persistence</p>
+                <h2>Database</h2>
+            </div>
+            <p>Choose a provider and enter its structured settings. Agw builds the connection safely.</p>
+        </div>
+
+        <fieldset class="choice-grid choice-grid--compact">
+            <legend class="sr-only">Database provider</legend>
+            <label class="choice-card choice-card--compact">
+                <input asp-for="Provider" type="radio" value="Sqlite" />
+                <span class="choice-card__panel">
+                    <span class="database-glyph" aria-hidden="true">SQ</span>
+                    <span>
+                        <strong>SQLite</strong>
+                        <small>Portable, local file</small>
+                    </span>
+                    <span class="choice-card__check" aria-hidden="true">✓</span>
+                </span>
+            </label>
+
+            <label class="choice-card choice-card--compact">
+                <input asp-for="Provider" type="radio" value="Postgres" />
+                <span class="choice-card__panel">
+                    <span class="database-glyph" aria-hidden="true">PG</span>
+                    <span>
+                        <strong>PostgreSQL</strong>
+                        <small>Shared, production-ready</small>
+                    </span>
+                    <span class="choice-card__check" aria-hidden="true">✓</span>
+                </span>
+            </label>
+        </fieldset>
+        <span asp-validation-for="Provider" class="field-error"></span>
+
+        <div class="database-panel" data-database-fields="Sqlite">
+            <div class="field">
+                <label asp-for="SqlitePath">Database file</label>
+                <div class="input-shell input-shell--path">
+                    <span aria-hidden="true">PATH</span>
+                    <input asp-for="SqlitePath" data-required autocomplete="off" spellcheck="false" />
+                </div>
+                <p class="hint">This is a path on the Server. The parent directory must be writable by the Agw process.</p>
+                <span asp-validation-for="SqlitePath" class="field-error"></span>
+            </div>
+        </div>
+
+        <div class="database-panel" data-database-fields="Postgres">
+            <div class="form-grid">
+                <div class="field field--host">
+                    <label asp-for="PostgresHost">Host or IP address</label>
+                    <input asp-for="PostgresHost" data-required autocomplete="off" spellcheck="false" placeholder="db.internal" />
+                    <span asp-validation-for="PostgresHost" class="field-error"></span>
+                </div>
+                <div class="field field--port">
+                    <label asp-for="PostgresPort">Port</label>
+                    <input asp-for="PostgresPort" data-required type="number" min="1" max="65535" inputmode="numeric" />
+                    <span asp-validation-for="PostgresPort" class="field-error"></span>
+                </div>
+                <div class="field">
+                    <label asp-for="PostgresDatabase">Database</label>
+                    <input asp-for="PostgresDatabase" data-required autocomplete="off" spellcheck="false" />
+                    <span asp-validation-for="PostgresDatabase" class="field-error"></span>
+                </div>
+                <div class="field">
+                    <label asp-for="PostgresUsername">Username</label>
+                    <input asp-for="PostgresUsername" data-required autocomplete="username" spellcheck="false" />
+                    <span asp-validation-for="PostgresUsername" class="field-error"></span>
+                </div>
+                <div class="field field--wide">
+                    <label asp-for="PostgresPassword">Database password</label>
+                    <input asp-for="PostgresPassword" data-required type="password" autocomplete="current-password" />
+                    <p class="hint">Used only for the PostgreSQL connection. It is separate from the Agw administrator password.</p>
+                    <span asp-validation-for="PostgresPassword" class="field-error"></span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="wizard-panel @(initialStep == 2 ? "is-active" : null)" data-step-panel="2" role="tabpanel" aria-labelledby="step-trigger-2" tabindex="-1">
+        <div class="wizard-heading">
+            <div>
+                <p class="section-kicker">Step 03 · Access</p>
+                <h2>Administrator</h2>
+            </div>
+            <p>Protect browser administration with a credential kept separate from the database.</p>
+        </div>
+
+        <div class="administrator-fields">
+            <div class="field">
+                <label asp-for="AdminPassword">Administrator password</label>
+                <input asp-for="AdminPassword" type="password" autocomplete="new-password" minlength="8" maxlength="256" required />
+                <p class="hint">Use 8–256 characters. This password never becomes part of the database connection.</p>
+                <span asp-validation-for="AdminPassword" class="field-error"></span>
+            </div>
+
+            @if (ViewData["RequireSetupCode"] as bool? == true)
+            {
+                <div class="field field--setup-code">
+                    <label asp-for="SetupCode"></label>
+                    <input asp-for="SetupCode" autocomplete="one-time-code" spellcheck="false" required />
+                    <p class="hint">Enter the one-time code printed in the Server startup log.</p>
+                    <span asp-validation-for="SetupCode" class="field-error"></span>
+                </div>
+            }
+        </div>
+    </section>
+
+    <div class="form-action">
+        <div class="selection-summary" aria-live="polite">
+            <span data-step-progress>Step 1 of 3</span>
+            <strong><span data-summary-mode>Standalone</span><i>/</i><span data-summary-database>SQLite</span></strong>
+        </div>
+        <div class="wizard-actions">
+            <button type="button" class="button button--secondary" data-step-back hidden>
+                <span aria-hidden="true">←</span>
+                <span>Back</span>
+            </button>
+            <button type="button" class="button" data-step-next>
+                <span data-next-label>Continue to database</span>
+                <span aria-hidden="true">→</span>
+            </button>
+            <button type="submit" class="button" data-step-submit hidden>
+                <span>Initialize Server</span>
+                <span aria-hidden="true">→</span>
+            </button>
+        </div>
+    </div>
 </form>
+
+<script>
+    (() => {
+        const form = document.getElementById("setup-form");
+        const stepItems = [...form.querySelectorAll("[data-step-item]")];
+        const stepButtons = [...form.querySelectorAll("[data-step-target]")];
+        const stepPanels = [...form.querySelectorAll("[data-step-panel]")];
+        const modeInputs = [...form.querySelectorAll('input[name="DeploymentMode"]')];
+        const providerInputs = [...form.querySelectorAll('input[name="Provider"]')];
+        const sqliteInput = providerInputs.find((input) => input.value === "Sqlite");
+        const postgresInput = providerInputs.find((input) => input.value === "Postgres");
+        const databasePanels = [...form.querySelectorAll("[data-database-fields]")];
+        const summaryMode = form.querySelector("[data-summary-mode]");
+        const summaryDatabase = form.querySelector("[data-summary-database]");
+        const stepProgress = form.querySelector("[data-step-progress]");
+        const announcement = form.querySelector("[data-step-announcement]");
+        const backButton = form.querySelector("[data-step-back]");
+        const nextButton = form.querySelector("[data-step-next]");
+        const nextLabel = form.querySelector("[data-next-label]");
+        const submitButton = form.querySelector("[data-step-submit]");
+        const stepNames = ["Deployment", "Database", "Administrator"];
+        const nextLabels = ["Continue to database", "Continue to administrator"];
+        let currentStep = Number.parseInt(form.dataset.initialStep ?? "0", 10);
+        let highestReachedStep = currentStep;
+
+        const selectedValue = (inputs) => inputs.find((input) => input.checked)?.value;
+
+        const syncDatabase = () => {
+            const isCluster = selectedValue(modeInputs) === "Cluster";
+            if (isCluster) {
+                sqliteInput.disabled = true;
+                postgresInput.checked = true;
+            } else {
+                sqliteInput.disabled = false;
+            }
+
+            const provider = selectedValue(providerInputs) ?? "Sqlite";
+            databasePanels.forEach((panel) => {
+                const active = panel.dataset.databaseFields === provider;
+                panel.hidden = !active;
+                panel.querySelectorAll("input").forEach((input) => {
+                    input.disabled = !active;
+                    if (input.hasAttribute("data-required")) input.required = active;
+                });
+            });
+
+            summaryMode.textContent = isCluster ? "Cluster" : "Standalone";
+            summaryDatabase.textContent = provider === "Postgres" ? "PostgreSQL" : "SQLite";
+        };
+
+        const renderStep = ({ announce = false, focus = false } = {}) => {
+            stepItems.forEach((item, index) => {
+                item.dataset.status = index < currentStep ? "finish" : index === currentStep ? "process" : "wait";
+                const button = stepButtons[index];
+                const status = button.querySelector("[data-step-status]");
+                const isCurrent = index === currentStep;
+                button.disabled = index > highestReachedStep;
+                button.setAttribute("aria-disabled", String(index > highestReachedStep));
+                if (isCurrent) button.setAttribute("aria-current", "step");
+                else button.removeAttribute("aria-current");
+                status.textContent = index < currentStep ? "Completed" : isCurrent ? "Current step" : "Not started";
+            });
+
+            stepPanels.forEach((panel, index) => {
+                const isCurrent = index === currentStep;
+                panel.hidden = !isCurrent;
+                panel.classList.toggle("is-active", isCurrent);
+                panel.setAttribute("aria-hidden", String(!isCurrent));
+            });
+
+            backButton.hidden = currentStep === 0;
+            nextButton.hidden = currentStep === stepPanels.length - 1;
+            submitButton.hidden = currentStep !== stepPanels.length - 1;
+            if (currentStep < nextLabels.length) nextLabel.textContent = nextLabels[currentStep];
+            stepProgress.textContent = `Step ${currentStep + 1} of ${stepPanels.length}`;
+
+            if (announce) announcement.textContent = `${stepNames[currentStep]}, step ${currentStep + 1} of ${stepPanels.length}`;
+            if (focus) {
+                stepPanels[currentStep].focus({ preventScroll: true });
+                const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+                stepPanels[currentStep].scrollIntoView({ behavior, block: "start" });
+            }
+        };
+
+        const validateStep = () => {
+            syncDatabase();
+            const invalidControl = [...stepPanels[currentStep].querySelectorAll("input, select, textarea")]
+                .find((control) => !control.disabled && !control.checkValidity());
+            if (!invalidControl) return true;
+
+            invalidControl.focus();
+            invalidControl.reportValidity();
+            return false;
+        };
+
+        const goToStep = (step, options = {}) => {
+            if (step < 0 || step >= stepPanels.length || step > highestReachedStep) return;
+            currentStep = step;
+            renderStep(options);
+        };
+
+        nextButton.addEventListener("click", () => {
+            if (!validateStep()) return;
+            highestReachedStep = Math.max(highestReachedStep, currentStep + 1);
+            goToStep(currentStep + 1, { announce: true, focus: true });
+        });
+
+        backButton.addEventListener("click", () => goToStep(currentStep - 1, { announce: true, focus: true }));
+        stepButtons.forEach((button) => {
+            button.addEventListener("click", () => goToStep(Number.parseInt(button.dataset.stepTarget, 10), { announce: true, focus: true }));
+        });
+
+        form.querySelector(".steps-list").addEventListener("keydown", (event) => {
+            if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+            event.preventDefault();
+            const availableButtons = stepButtons.filter((button) => !button.disabled);
+            const focusedIndex = availableButtons.indexOf(document.activeElement);
+            const lastIndex = availableButtons.length - 1;
+            let targetIndex = focusedIndex;
+            if (event.key === "Home") targetIndex = 0;
+            else if (event.key === "End") targetIndex = lastIndex;
+            else if (["ArrowRight", "ArrowDown"].includes(event.key)) targetIndex = Math.min(focusedIndex + 1, lastIndex);
+            else targetIndex = Math.max(focusedIndex - 1, 0);
+            availableButtons[targetIndex]?.focus();
+        });
+
+        [...modeInputs, ...providerInputs].forEach((input) => input.addEventListener("change", syncDatabase));
+        form.addEventListener("submit", (event) => {
+            syncDatabase();
+            if (!form.checkValidity()) {
+                event.preventDefault();
+                const invalidControl = form.querySelector("input:invalid, select:invalid, textarea:invalid");
+                const invalidPanel = invalidControl?.closest("[data-step-panel]");
+                if (invalidPanel) {
+                    highestReachedStep = Math.max(highestReachedStep, Number.parseInt(invalidPanel.dataset.stepPanel, 10));
+                    goToStep(Number.parseInt(invalidPanel.dataset.stepPanel, 10), { announce: true });
+                    requestAnimationFrame(() => {
+                        invalidControl.focus();
+                        invalidControl.reportValidity();
+                    });
+                }
+                return;
+            }
+
+            submitButton.disabled = true;
+            submitButton.firstElementChild.textContent = "Initializing…";
+            form.setAttribute("aria-busy", "true");
+        });
+
+        syncDatabase();
+        renderStep();
+    })();
+</script>

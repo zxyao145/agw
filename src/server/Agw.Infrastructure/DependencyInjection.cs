@@ -1,3 +1,5 @@
+using Agw.Auth.Application;
+using Agw.Infrastructure.Auth;
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Coordination;
 using Agw.Infrastructure.Data;
@@ -92,6 +94,7 @@ public static class DependencyInjection
 
         // Register database seeder
         services.AddScoped<DbSeeder>();
+        services.AddScoped<IApiTokenStore, EfApiTokenStore>();
 
         services.AddScoped<DbContext>(serviceProvider =>
             serviceProvider.GetRequiredService<AgwDbContext>());

@@ -111,6 +111,13 @@ try
         ContentRootPath = contentRootPath,
     });
 
+    var configuredSetup = File.Exists(dataPaths.StateFile)
+        ? ConfiguredSetupBootstrap.None
+        : ConfiguredSetupBootstrap.FromConfiguration(builder.Configuration, dataPaths);
+    if (configuredSetup.IsConfigured)
+    {
+        builder.Configuration.AddInMemoryCollection(configuredSetup.RuntimeConfiguration);
+    }
     builder.Configuration.AddJsonFile(dataPaths.StateFile, optional: true, reloadOnChange: true);
     builder.Services.AddSingleton(dataPaths);
     builder.Services.AddSingleton(TimeProvider.System);
@@ -125,6 +132,10 @@ try
     // Configure OpenTelemetry
     var serviceName = builder.Configuration.GetValue<string>("OpenTelemetry:ServiceName") ?? "Agw";
     var serviceVersion = builder.Configuration.GetValue<string>("OpenTelemetry:ServiceVersion") ?? "1.0.0";
+    var configuredOtlpEndpoint = builder.Configuration.GetValue<string>("OpenTelemetry:OtlpEndpoint");
+    var otlpEndpoint = new Uri(string.IsNullOrWhiteSpace(configuredOtlpEndpoint)
+        ? "http://localhost:4317"
+        : configuredOtlpEndpoint);
 
     builder.Services.AddOpenTelemetry()
         .ConfigureResource(resource => resource
@@ -143,7 +154,7 @@ try
             .AddSource("Microsoft.Agents.AI.Workflows")
             .AddOtlpExporter(options =>
             {
-                options.Endpoint = new Uri(builder.Configuration.GetValue<string>("OpenTelemetry:OtlpEndpoint") ?? "http://localhost:4317");
+                options.Endpoint = otlpEndpoint;
             }))
         .WithMetrics(metrics => metrics
             .AddAspNetCoreInstrumentation()
@@ -151,7 +162,7 @@ try
             .AddMeter("Agw.*")
             .AddOtlpExporter(options =>
             {
-                options.Endpoint = new Uri(builder.Configuration.GetValue<string>("OpenTelemetry:OtlpEndpoint") ?? "http://localhost:4317");
+                options.Endpoint = otlpEndpoint;
             }));
 
     builder.Logging.AddOpenTelemetry(logging =>
@@ -160,7 +171,7 @@ try
         logging.IncludeScopes = true;
         logging.AddOtlpExporter(options =>
         {
-            options.Endpoint = new Uri(builder.Configuration.GetValue<string>("OpenTelemetry:OtlpEndpoint") ?? "http://localhost:4317");
+            options.Endpoint = otlpEndpoint;
         });
     });
 
@@ -289,7 +300,7 @@ try
         .AddSkills(builder.Configuration)
         .AddProjects(builder.Configuration)
         .AddAuth()
-        .AddSetup(builder.Configuration)
+        .AddSetup(builder.Configuration, configuredSetup)
         .AddIntegrations(builder.Configuration)
         ;
 
@@ -311,14 +322,25 @@ try
         DatabaseConnectionStringResolver.ToSafeLogValue(databaseConnectionString));
     var iocUtil = app.Services.GetRequiredService<IocUtil>();
 
-    // Seed database on startup after initialization has been completed.
+    // Apply configured first-run setup, or seed an already initialized database on startup.
     using (var scope = app.Services.CreateScope())
     {
+        var configuredSetupInitializer = scope.ServiceProvider
+            .GetRequiredService<ConfiguredSetupInitializer>();
+        var initializedFromConfiguration = await configuredSetupInitializer
+            .InitializeIfConfiguredAsync();
         var initializationState = scope.ServiceProvider.GetRequiredService<IServerInitializationState>();
         if (initializationState.IsInitialized)
         {
-            var seeder = scope.ServiceProvider.GetRequiredService<DbSeeder>();
-            await seeder.SeedAsync();
+            if (!initializedFromConfiguration)
+            {
+                var seeder = scope.ServiceProvider.GetRequiredService<DbSeeder>();
+                await seeder.SeedAsync();
+            }
+
+            var legacyApiTokenMigrator = scope.ServiceProvider
+                .GetRequiredService<LegacyApiTokenMigrator>();
+            await legacyApiTokenMigrator.MigrateAsync();
         }
     }
 
