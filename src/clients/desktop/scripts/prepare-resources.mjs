@@ -55,7 +55,7 @@ await rm(rendererDirectory, { recursive: true, force: true });
 await cp(rendererOutput, rendererDirectory, { recursive: true });
 await writeFile(
   resolve(resourcesDirectory, "package-flavor.json"),
-  `${JSON.stringify({ packageFlavor: flavor }, null, 2)}\n`,
+  `${JSON.stringify({ packageFlavor: flavor, appVersion: releaseVersion }, null, 2)}\n`,
   "utf8",
 );
 

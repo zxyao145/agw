@@ -4,6 +4,7 @@ import type {
   AgwDesktopBridge,
   DesktopRuntimeState,
   DesktopSettings,
+  DesktopUpdateCheckResult,
   UninstallRequest,
   UninstallResult,
 } from "../shared/contracts";
@@ -11,6 +12,8 @@ import type {
 const bridge: AgwDesktopBridge = {
   getRuntimeState: () =>
     ipcRenderer.invoke("agw:get-runtime-state") as Promise<DesktopRuntimeState>,
+  checkForUpdates: () =>
+    ipcRenderer.invoke("agw:check-for-updates") as Promise<DesktopUpdateCheckResult>,
   saveSettings: (settings: DesktopSettings) =>
     ipcRenderer.invoke("agw:save-settings", settings) as Promise<DesktopRuntimeState>,
   saveToken: (profileId: string, token: string) =>

@@ -14,6 +14,8 @@ export type LocalServerRuntime = {
 export type DesktopRuntimeState = {
   isDesktop: true;
   platform: DesktopPlatform;
+  architecture: string;
+  appVersion: string;
   packageFlavor: PackageFlavor;
   settings: DesktopSettings;
   activeToken: string | null;

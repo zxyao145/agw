@@ -1,5 +1,6 @@
 import type { DesktopRuntimeState } from "./runtime";
 import type { DesktopSettings } from "./settings";
+import type { DesktopUpdateCheckResult } from "./update";
 
 export type UninstallRequest = {
   deleteServerData: boolean;
@@ -12,6 +13,7 @@ export type UninstallResult = {
 
 export type AgwDesktopBridge = {
   getRuntimeState(): Promise<DesktopRuntimeState>;
+  checkForUpdates(): Promise<DesktopUpdateCheckResult>;
   saveSettings(settings: DesktopSettings): Promise<DesktopRuntimeState>;
   saveToken(profileId: string, token: string): Promise<void>;
   deleteToken(profileId: string): Promise<void>;

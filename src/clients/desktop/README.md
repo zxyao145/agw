@@ -57,15 +57,17 @@ pnpm release:desktop -- --flavor client --arch x64 --version 0.1.0
 
 Direct `pnpm make:desktop` remains available for development packaging and defaults to the version in `desktop/package.json`.
 
-Releases contain eight unsigned installers:
+Releases contain nine unsigned artifacts:
 
-- Windows x64: Full and Client Squirrel Setup EXEs
+- Windows x64: Full and Client Squirrel Setup EXEs, plus a Client portable ZIP
 - macOS x64 and arm64: Full and Client DMGs
 - Ubuntu x64: Full and Client DEBs
 
-Installer names use `Agw-{version}-{full|client}-{platform}-{arch}` with `-Setup.exe`, `.dmg`, or `.deb` as appropriate.
+Artifact names use `Agw-Desktop-{version}-{full|client}-{platform}-{arch}` with `-Setup.exe`, `-Portable.zip`, `.dmg`, or `.deb` as appropriate.
 
-`.github/workflows/release.yml` builds the complete matrix on every push to `main`, stable `vX.Y.Z` tag, and manual run. Main and default manual runs keep the installers as temporary Actions artifacts. A stable tag publishes them on the matching GitHub Release; a manual run publishes only when `publish` is enabled and `release_tag` contains a stable `vX.Y.Z` value. V1 intentionally has no automatic updater, code signing, or notarization.
+`.github/workflows/build-desktop.yml` builds the complete matrix on pushes to `main` and retains temporary Actions artifacts. `.github/workflows/release.yml` reuses that matrix for `vX.Y.Z` and supported prerelease tags, or for a manually supplied release tag, then publishes the artifacts on the matching GitHub Release.
+
+Opening About checks GitHub's latest stable Release and offers the artifact matching the current Full/Client flavor, platform, architecture, and Windows installation shape. Downloads open in the default browser and remain user-installed; Desktop does not check in the background, download automatically, or install updates. Code signing and notarization are not currently configured.
 
 ## Close and uninstall behavior
 
