@@ -242,7 +242,7 @@ public class AgentflowDomainServiceTests
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_NonFanOutInputEdge_ReturnsNullCollections()
+    public void ValidateAndNormalizeGraph_NonFanOutInputEdge_ReturnsGraph()
     {
         var nodes = new[]
         {
@@ -266,8 +266,52 @@ public class AgentflowDomainServiceTests
             Guid.CreateVersion7(),
             []);
 
-        Assert.Null(result.Nodes);
-        Assert.Null(result.Edges);
+        Assert.NotNull(result.Nodes);
+        Assert.NotNull(result.Edges);
+    }
+
+    [Fact]
+    public void AgentflowEdgeKind_NumericValues_RemainBackwardCompatible()
+    {
+        Assert.Equal(0, (int)AgentflowEdgeKind.Direct);
+        Assert.Equal(1, (int)AgentflowEdgeKind.FanOut);
+        Assert.Equal(2, (int)AgentflowEdgeKind.FanInBarrier);
+        Assert.Equal(3, (int)AgentflowEdgeKind.SwitchCase);
+        Assert.Equal(4, (int)AgentflowEdgeKind.SwitchDefault);
+    }
+
+    [Fact]
+    public void ValidateAndNormalizeGraph_ConditionalFanOutEdges_ReturnsGraph()
+    {
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode { NodeId = "always", Kind = AgentflowNodeKind.PromptAdapter },
+            new AgentflowNode { NodeId = "conditional", Kind = AgentflowNodeKind.PromptAdapter },
+        };
+        var edges = new[]
+        {
+            new AgentflowEdge
+            {
+                EdgeId = "always",
+                SourceNodeId = "input",
+                TargetNodeId = "always",
+                Kind = AgentflowEdgeKind.FanOut,
+            },
+            new AgentflowEdge
+            {
+                EdgeId = "conditional",
+                SourceNodeId = "input",
+                TargetNodeId = "conditional",
+                Kind = AgentflowEdgeKind.FanOut,
+                ConditionJson = """{"contains":"approved"}""",
+            },
+        };
+
+        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+
+        Assert.NotNull(result.Nodes);
+        Assert.NotNull(result.Edges);
     }
 
     [Fact]
@@ -361,6 +405,183 @@ public class AgentflowDomainServiceTests
     }
 
     [Fact]
+    public void ValidateAndNormalizeGraph_MixedSourceRoutingStrategies_ReturnsNullCollections()
+    {
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode { NodeId = "node-a", Kind = AgentflowNodeKind.PromptAdapter },
+            new AgentflowNode { NodeId = "node-b", Kind = AgentflowNodeKind.PromptAdapter },
+        };
+        var edges = new[]
+        {
+            new AgentflowEdge
+            {
+                EdgeId = "direct",
+                SourceNodeId = "input",
+                TargetNodeId = "node-a",
+                Kind = AgentflowEdgeKind.Direct,
+            },
+            new AgentflowEdge
+            {
+                EdgeId = "fan-out",
+                SourceNodeId = "input",
+                TargetNodeId = "node-b",
+                Kind = AgentflowEdgeKind.FanOut,
+            },
+        };
+
+        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+
+        Assert.Null(result.Nodes);
+        Assert.Null(result.Edges);
+    }
+
+    [Fact]
+    public void ValidateAndNormalizeGraph_OrderedSwitchWithDefault_ReturnsGraph()
+    {
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode { NodeId = "first", Kind = AgentflowNodeKind.PromptAdapter },
+            new AgentflowNode { NodeId = "second", Kind = AgentflowNodeKind.PromptAdapter },
+            new AgentflowNode { NodeId = "fallback", Kind = AgentflowNodeKind.PromptAdapter },
+        };
+        var edges = new[]
+        {
+            SwitchCase("case-1", "input", "first", 0, "approved"),
+            SwitchCase("case-2", "input", "second", 1, "review"),
+            new AgentflowEdge
+            {
+                EdgeId = "default",
+                SourceNodeId = "input",
+                TargetNodeId = "fallback",
+                Kind = AgentflowEdgeKind.SwitchDefault,
+            },
+        };
+
+        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+
+        Assert.NotNull(result.Nodes);
+        Assert.NotNull(result.Edges);
+    }
+
+    [Fact]
+    public void ValidateAndNormalizeGraph_SwitchWithoutDefault_ReturnsGraph()
+    {
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode { NodeId = "approved", Kind = AgentflowNodeKind.PromptAdapter },
+        };
+        var edges = new[]
+        {
+            SwitchCase("approved", "input", "approved", 0, "approved"),
+        };
+
+        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+
+        Assert.NotNull(result.Nodes);
+        Assert.NotNull(result.Edges);
+    }
+
+    [Fact]
+    public void ValidateAndNormalizeGraph_DuplicateSwitchOrder_ReturnsNullCollections()
+    {
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode { NodeId = "first", Kind = AgentflowNodeKind.PromptAdapter },
+            new AgentflowNode { NodeId = "second", Kind = AgentflowNodeKind.PromptAdapter },
+        };
+        var edges = new[]
+        {
+            SwitchCase("case-1", "input", "first", 0, "approved"),
+            SwitchCase("case-2", "input", "second", 0, "review"),
+        };
+
+        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+
+        Assert.Null(result.Nodes);
+        Assert.Null(result.Edges);
+    }
+
+    [Fact]
+    public void ValidateAndNormalizeGraph_MultipleSwitchDefaults_ReturnsNullCollections()
+    {
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode { NodeId = "first", Kind = AgentflowNodeKind.PromptAdapter },
+            new AgentflowNode { NodeId = "fallback-a", Kind = AgentflowNodeKind.PromptAdapter },
+            new AgentflowNode { NodeId = "fallback-b", Kind = AgentflowNodeKind.PromptAdapter },
+        };
+        var edges = new[]
+        {
+            SwitchCase("case-1", "input", "first", 0, "approved"),
+            new AgentflowEdge
+            {
+                EdgeId = "default-a",
+                SourceNodeId = "input",
+                TargetNodeId = "fallback-a",
+                Kind = AgentflowEdgeKind.SwitchDefault,
+            },
+            new AgentflowEdge
+            {
+                EdgeId = "default-b",
+                SourceNodeId = "input",
+                TargetNodeId = "fallback-b",
+                Kind = AgentflowEdgeKind.SwitchDefault,
+            },
+        };
+
+        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+
+        Assert.Null(result.Nodes);
+        Assert.Null(result.Edges);
+    }
+
+    [Fact]
+    public void ValidateAndNormalizeGraph_InputFanOutAndBarrierEdges_ReturnsGraph()
+    {
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode { NodeId = "node-a", Kind = AgentflowNodeKind.PromptAdapter },
+            new AgentflowNode { NodeId = "node-b", Kind = AgentflowNodeKind.PromptAdapter },
+        };
+        var edges = new[]
+        {
+            new AgentflowEdge
+            {
+                EdgeId = "input-a",
+                SourceNodeId = "input",
+                TargetNodeId = "node-a",
+                Kind = AgentflowEdgeKind.FanOut,
+            },
+            new AgentflowEdge
+            {
+                EdgeId = "input-b",
+                SourceNodeId = "input",
+                TargetNodeId = "node-b",
+                Kind = AgentflowEdgeKind.FanInBarrier,
+            },
+            new AgentflowEdge
+            {
+                EdgeId = "a-b",
+                SourceNodeId = "node-a",
+                TargetNodeId = "node-b",
+                Kind = AgentflowEdgeKind.FanInBarrier,
+            },
+        };
+
+        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+
+        Assert.NotNull(result.Nodes);
+        Assert.NotNull(result.Edges);
+    }
+
+    [Fact]
     public void ValidateAndNormalizeGraph_ValidDag_ReturnsNormalizedNodesAndEdges()
     {
         var agentflowId = Guid.CreateVersion7();
@@ -404,7 +625,7 @@ public class AgentflowDomainServiceTests
                 EdgeId = "edge-a",
                 SourceNodeId = "node-a",
                 TargetNodeId = "node-b",
-                Kind = AgentflowEdgeKind.FanIn,
+                Kind = AgentflowEdgeKind.FanInBarrier,
                 Label = "review output",
                 ConditionJson = """{"contains":"approved"}""",
                 ConfigJson = """{"map":"summary"}""",
@@ -427,7 +648,7 @@ public class AgentflowDomainServiceTests
         Assert.Equal("""{"x":10,"y":20}""", normalizedNodes![1].PositionJson);
         Assert.Equal("Read upstream output carefully.", normalizedNodes![1].Instructions);
         Assert.Equal("""{"model":"default"}""", normalizedNodes![1].ConfigJson);
-        Assert.Equal(AgentflowEdgeKind.FanIn, normalizedEdges!.Last().Kind);
+        Assert.Equal(AgentflowEdgeKind.FanInBarrier, normalizedEdges!.Last().Kind);
         Assert.Equal("review output", normalizedEdges!.Last().Label);
         Assert.Equal("""{"contains":"approved"}""", normalizedEdges!.Last().ConditionJson);
         Assert.Equal("""{"map":"summary"}""", normalizedEdges!.Last().ConfigJson);
@@ -548,6 +769,24 @@ public class AgentflowDomainServiceTests
             ConfigJson = index == 1 ? """{"enableSummary":true}""" : null,
         }));
         return nodes;
+    }
+
+    private static AgentflowEdge SwitchCase(
+        string edgeId,
+        string sourceNodeId,
+        string targetNodeId,
+        int order,
+        string contains)
+    {
+        return new AgentflowEdge
+        {
+            EdgeId = edgeId,
+            SourceNodeId = sourceNodeId,
+            TargetNodeId = targetNodeId,
+            Kind = AgentflowEdgeKind.SwitchCase,
+            ConditionJson = $$"""{"contains":"{{contains}}"}""",
+            ConfigJson = $$"""{"switchCaseOrder":{{order}}}""",
+        };
     }
 
     private static IReadOnlyList<AgentflowEdge> CreateSummaryOutputEdges(int outputCount) =>

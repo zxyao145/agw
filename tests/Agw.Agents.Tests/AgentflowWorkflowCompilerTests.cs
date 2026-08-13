@@ -220,7 +220,7 @@ public class AgentflowWorkflowCompilerTests
     }
 
     [Fact]
-    public void Compile_FanOutAndFanInEdges_ReturnsWorkflow()
+    public void Compile_FanOutAndFanInBarrierEdges_ReturnsWorkflow()
     {
         var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "parallel-flow" };
         var nodes = new[]
@@ -235,8 +235,8 @@ public class AgentflowWorkflowCompilerTests
         {
             Edge("fan-out-left", "start", "left", AgentflowEdgeKind.FanOut),
             Edge("fan-out-right", "start", "right", AgentflowEdgeKind.FanOut),
-            Edge("fan-in-left", "left", "join", AgentflowEdgeKind.FanIn),
-            Edge("fan-in-right", "right", "join", AgentflowEdgeKind.FanIn),
+            Edge("fan-in-left", "left", "join", AgentflowEdgeKind.FanInBarrier),
+            Edge("fan-in-right", "right", "join", AgentflowEdgeKind.FanInBarrier),
             Edge("to-output", "join", "output"),
         };
 
@@ -246,6 +246,199 @@ public class AgentflowWorkflowCompilerTests
         var mermaid = WorkflowVisualizer.ToMermaidString(workflow!);
         Assert.Contains("start", mermaid);
         Assert.Contains("join", mermaid);
+    }
+
+    [Fact]
+    public async Task Compile_OrderedSwitch_ExecutesFirstMatchingCaseAndDefault()
+    {
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "switch-flow" };
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode { NodeId = "first", Kind = AgentflowNodeKind.PromptAdapter },
+            new AgentflowNode { NodeId = "second", Kind = AgentflowNodeKind.PromptAdapter },
+            new AgentflowNode { NodeId = "fallback", Kind = AgentflowNodeKind.PromptAdapter },
+        };
+        var edges = new[]
+        {
+            Edge(
+                "listed-first",
+                "input",
+                "second",
+                AgentflowEdgeKind.SwitchCase,
+                """{"contains":"approved"}""",
+                """{"switchCaseOrder":1}"""),
+            Edge(
+                "ordered-first",
+                "input",
+                "first",
+                AgentflowEdgeKind.SwitchCase,
+                """{"contains":"approved"}""",
+                """{"switchCaseOrder":0}"""),
+            Edge("default", "input", "fallback", AgentflowEdgeKind.SwitchDefault),
+        };
+        var workflow = _compiler.Compile(agentflow, nodes, edges, new Dictionary<string, AIAgent>());
+
+        Assert.NotNull(workflow);
+
+        var matchingEvents = await ExecuteAsync(workflow!, "approved");
+        Assert.Contains(matchingEvents, evt => HasChatInput(evt, "first"));
+        Assert.Single(matchingEvents, evt => HasTurnTokenInput(evt, "first"));
+        Assert.DoesNotContain(matchingEvents, evt => HasChatInput(evt, "second"));
+        Assert.DoesNotContain(matchingEvents, evt => HasTurnTokenInput(evt, "second"));
+        Assert.DoesNotContain(matchingEvents, evt => HasChatInput(evt, "fallback"));
+
+        var defaultEvents = await ExecuteAsync(workflow!, "rejected");
+        Assert.Contains(defaultEvents, evt => HasChatInput(evt, "fallback"));
+        Assert.Single(defaultEvents, evt => HasTurnTokenInput(evt, "fallback"));
+        Assert.DoesNotContain(defaultEvents, evt => HasChatInput(evt, "first"));
+        Assert.DoesNotContain(defaultEvents, evt => HasChatInput(evt, "second"));
+    }
+
+    [Fact]
+    public async Task Compile_DirectPredicates_RouteIndependently()
+    {
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "direct-flow" };
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode { NodeId = "always", Kind = AgentflowNodeKind.PromptAdapter },
+            new AgentflowNode { NodeId = "approved", Kind = AgentflowNodeKind.PromptAdapter },
+        };
+        var edges = new[]
+        {
+            Edge("always", "input", "always"),
+            Edge(
+                "approved",
+                "input",
+                "approved",
+                AgentflowEdgeKind.Direct,
+                """{"contains":"approved"}"""),
+        };
+        var workflow = _compiler.Compile(agentflow, nodes, edges, new Dictionary<string, AIAgent>());
+
+        Assert.NotNull(workflow);
+
+        var matchingEvents = await ExecuteAsync(workflow!, "approved");
+        Assert.Contains(matchingEvents, evt => HasChatInput(evt, "always"));
+        Assert.Contains(matchingEvents, evt => HasChatInput(evt, "approved"));
+        Assert.Single(matchingEvents, evt => HasTurnTokenInput(evt, "approved"));
+
+        var unmatchedEvents = await ExecuteAsync(workflow!, "rejected");
+        Assert.Contains(unmatchedEvents, evt => HasChatInput(evt, "always"));
+        Assert.DoesNotContain(unmatchedEvents, evt => HasChatInput(evt, "approved"));
+        Assert.DoesNotContain(unmatchedEvents, evt => HasTurnTokenInput(evt, "approved"));
+    }
+
+    [Fact]
+    public async Task Compile_SwitchWithoutDefault_UnmatchedInputStopsRouting()
+    {
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "switch-no-default" };
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode { NodeId = "approved", Kind = AgentflowNodeKind.PromptAdapter },
+        };
+        var edges = new[]
+        {
+            Edge(
+                "approved",
+                "input",
+                "approved",
+                AgentflowEdgeKind.SwitchCase,
+                """{"contains":"approved"}""",
+                """{"switchCaseOrder":0}"""),
+        };
+        var workflow = _compiler.Compile(agentflow, nodes, edges, new Dictionary<string, AIAgent>());
+
+        Assert.NotNull(workflow);
+
+        var events = await ExecuteAsync(workflow!, "rejected");
+        Assert.DoesNotContain(events, evt => HasChatInput(evt, "approved"));
+        Assert.DoesNotContain(events, evt => HasTurnTokenInput(evt, "approved"));
+    }
+
+    [Theory]
+    [InlineData("none", 0)]
+    [InlineData("alpha", 1)]
+    [InlineData("alpha beta", 2)]
+    public async Task Compile_ConditionalFanOut_SelectsEveryMatchingTarget(
+        string input,
+        int expectedConditionalTargets)
+    {
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "selection-flow" };
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode { NodeId = "always", Kind = AgentflowNodeKind.PromptAdapter },
+            new AgentflowNode { NodeId = "alpha", Kind = AgentflowNodeKind.PromptAdapter },
+            new AgentflowNode { NodeId = "beta", Kind = AgentflowNodeKind.PromptAdapter },
+        };
+        var edges = new[]
+        {
+            Edge("always", "input", "always", AgentflowEdgeKind.FanOut),
+            Edge(
+                "alpha",
+                "input",
+                "alpha",
+                AgentflowEdgeKind.FanOut,
+                """{"contains":"alpha"}"""),
+            Edge(
+                "beta",
+                "input",
+                "beta",
+                AgentflowEdgeKind.FanOut,
+                """{"contains":"beta"}"""),
+        };
+        var workflow = _compiler.Compile(agentflow, nodes, edges, new Dictionary<string, AIAgent>());
+
+        Assert.NotNull(workflow);
+
+        var events = await ExecuteAsync(workflow!, input);
+        Assert.Contains(events, evt => HasChatInput(evt, "always"));
+        Assert.Single(events, evt => HasTurnTokenInput(evt, "always"));
+        var conditionalTargets = events.Count(evt =>
+            HasChatInput(evt, "alpha") || HasChatInput(evt, "beta"));
+        Assert.Equal(expectedConditionalTargets, conditionalTargets);
+        var conditionalTargetTurns = events.Count(evt =>
+            HasTurnTokenInput(evt, "alpha") || HasTurnTokenInput(evt, "beta"));
+        Assert.Equal(expectedConditionalTargets, conditionalTargetTurns);
+    }
+
+    [Fact]
+    public async Task Compile_InputAndUpstreamBarrier_WaitsThenExecutesTargetOnce()
+    {
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "barrier-flow" };
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode { NodeId = "a", Kind = AgentflowNodeKind.PromptAdapter },
+            new AgentflowNode { NodeId = "b", Kind = AgentflowNodeKind.PromptAdapter },
+            new AgentflowNode { NodeId = "c", Kind = AgentflowNodeKind.PromptAdapter },
+        };
+        var edges = new[]
+        {
+            Edge("input-a", "input", "a", AgentflowEdgeKind.FanOut),
+            Edge("input-b", "input", "b", AgentflowEdgeKind.FanInBarrier),
+            Edge("a-b", "a", "b", AgentflowEdgeKind.FanInBarrier),
+            Edge("b-c", "b", "c"),
+        };
+        var workflow = _compiler.Compile(agentflow, nodes, edges, new Dictionary<string, AIAgent>());
+
+        Assert.NotNull(workflow);
+
+        var events = await ExecuteAsync(workflow!, "start");
+        Assert.Equal(2, events.Count(evt => HasChatInput(evt, "b")));
+        Assert.Single(events, evt => HasTurnTokenInput(evt, "b"));
+        var cInput = Assert.Single(events
+            .OfType<ExecutorInvokedEvent>()
+            .Where(evt => evt.ExecutorId == "c")
+            .Select(evt => evt.Data)
+            .OfType<List<ChatMessage>>());
+        Assert.NotEmpty(cInput);
+        var aIndex = events.ToList().FindIndex(evt => HasChatInput(evt, "a"));
+        var cIndex = events.ToList().FindIndex(evt => HasChatInput(evt, "c"));
+        Assert.True(aIndex >= 0 && aIndex < cIndex);
     }
 
     [Theory]
@@ -1047,7 +1240,9 @@ public class AgentflowWorkflowCompilerTests
         string id,
         string source,
         string target,
-        AgentflowEdgeKind kind = AgentflowEdgeKind.Direct)
+        AgentflowEdgeKind kind = AgentflowEdgeKind.Direct,
+        string? conditionJson = null,
+        string? configJson = null)
     {
         return new AgentflowEdge
         {
@@ -1055,7 +1250,45 @@ public class AgentflowWorkflowCompilerTests
             SourceNodeId = source,
             TargetNodeId = target,
             Kind = kind,
+            ConditionJson = conditionJson,
+            ConfigJson = configJson,
         };
+    }
+
+    private static async Task<IReadOnlyList<WorkflowEvent>> ExecuteAsync(
+        Workflow workflow,
+        string input)
+    {
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow,
+            new List<ChatMessage> { new(ChatRole.User, input) },
+            cancellationToken: TestContext.Current.CancellationToken);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+        var events = new List<WorkflowEvent>();
+        await foreach (var evt in run.WatchStreamAsync(TestContext.Current.CancellationToken))
+        {
+            events.Add(evt);
+        }
+
+        return events;
+    }
+
+    private static bool HasChatInput(WorkflowEvent evt, string executorId)
+    {
+        return evt is ExecutorInvokedEvent
+        {
+            ExecutorId: var invokedExecutorId,
+            Data: List<ChatMessage>,
+        } && invokedExecutorId == executorId;
+    }
+
+    private static bool HasTurnTokenInput(WorkflowEvent evt, string executorId)
+    {
+        return evt is ExecutorInvokedEvent
+        {
+            ExecutorId: var invokedExecutorId,
+            Data: TurnToken,
+        } && invokedExecutorId == executorId;
     }
 
     private static AIAgent CreateAgent(string id, string name, IChatClient? chatClient = null)

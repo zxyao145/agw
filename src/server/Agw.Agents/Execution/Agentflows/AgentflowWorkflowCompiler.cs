@@ -155,6 +155,7 @@ public sealed class AgentflowWorkflowCompiler
     private const string GeneratedStartNodeId = "__agw_start";
     private const string GeneratedOutputNodeId = "__agw_output";
     private const string HumanGateOutputSuffix = "__agw_human_gate_output";
+    private const string RoutingBridgeSuffix = "__agw_routing_bridge";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -399,7 +400,9 @@ public sealed class AgentflowWorkflowCompiler
             }
             else
             {
-                builder.AddEdge(source, target, condition, label, idempotent: true);
+                var bridge = BindChatRoutingBridge($"{edge.EdgeId}.{RoutingBridgeSuffix}");
+                builder.AddEdge(source, bridge, condition, label, idempotent: true);
+                builder.AddEdge(bridge, target, label, idempotent: true);
             }
         }
 
@@ -407,18 +410,35 @@ public sealed class AgentflowWorkflowCompiler
                      .GroupBy(edge => edge.SourceNodeId))
         {
             var source = GetSourceBinding(group.Key, bindings, humanGateOutputBindings);
-            var targets = group.Select(edge => bindings[edge.TargetNodeId]).Distinct().ToList();
-            if (targets.Count == 1)
+            var fanOutEdges = group
+                .OrderBy(edge => edge.EdgeId, StringComparer.Ordinal)
+                .ToList();
+            var bridges = fanOutEdges.ToDictionary(
+                edge => edge.EdgeId,
+                edge => BindChatRoutingBridge($"{edge.EdgeId}.{RoutingBridgeSuffix}"),
+                StringComparer.Ordinal);
+            var targets = fanOutEdges.Select(edge => bridges[edge.EdgeId]).ToList();
+            var conditions = fanOutEdges.Select(edge => BuildCondition(edge.ConditionJson)).ToList();
+            var label = fanOutEdges[0].Label ?? fanOutEdges[0].EdgeId;
+            builder.AddFanOutEdge<List<ChatMessage>>(
+                source,
+                targets,
+                (messages, targetCount) => messages == null
+                    ? []
+                    : Enumerable.Range(0, Math.Min(targetCount, conditions.Count))
+                        .Where(index => conditions[index]?.Invoke(messages) ?? true),
+                label);
+            foreach (var edge in fanOutEdges)
             {
-                builder.AddEdge(source, targets[0], group.First().Label ?? group.First().EdgeId, idempotent: true);
-            }
-            else if (targets.Count > 1)
-            {
-                builder.AddFanOutEdge(source, targets, group.First().Label ?? group.First().EdgeId);
+                builder.AddEdge(
+                    bridges[edge.EdgeId],
+                    bindings[edge.TargetNodeId],
+                    edge.Label ?? edge.EdgeId,
+                    idempotent: true);
             }
         }
 
-        foreach (var group in edges.Where(edge => edge.Kind == AgentflowEdgeKind.FanIn)
+        foreach (var group in edges.Where(edge => edge.Kind == AgentflowEdgeKind.FanInBarrier)
                      .GroupBy(edge => edge.TargetNodeId))
         {
             var sources = group
@@ -427,9 +447,70 @@ public sealed class AgentflowWorkflowCompiler
                 .ToList();
             if (sources.Count > 0)
             {
-                builder.AddFanInBarrierEdge(sources, bindings[group.Key], group.First().Label ?? group.First().EdgeId);
+                var label = group.First().Label ?? group.First().EdgeId;
+                builder.AddFanInBarrierEdge(sources, bindings[group.Key], label);
             }
         }
+
+        foreach (var group in edges
+                     .Where(edge => edge.Kind is AgentflowEdgeKind.SwitchCase or AgentflowEdgeKind.SwitchDefault)
+                     .GroupBy(edge => edge.SourceNodeId))
+        {
+            var source = GetSourceBinding(group.Key, bindings, humanGateOutputBindings);
+            var cases = group
+                .Where(edge => edge.Kind == AgentflowEdgeKind.SwitchCase)
+                .OrderBy(edge => GetSwitchCaseOrder(edge))
+                .ThenBy(edge => edge.EdgeId, StringComparer.Ordinal)
+                .ToList();
+            var defaultEdge = group.SingleOrDefault(edge => edge.Kind == AgentflowEdgeKind.SwitchDefault);
+            var switchEdges = cases.ToList();
+            if (defaultEdge != null)
+            {
+                switchEdges.Add(defaultEdge);
+            }
+            var bridges = switchEdges.ToDictionary(
+                edge => edge.EdgeId,
+                edge => BindChatRoutingBridge($"{edge.EdgeId}.{RoutingBridgeSuffix}"),
+                StringComparer.Ordinal);
+
+            builder.AddSwitch(source, switchBuilder =>
+            {
+                foreach (var edge in cases)
+                {
+                    var condition = BuildCondition(edge.ConditionJson);
+                    if (condition != null)
+                    {
+                        switchBuilder.AddCase(condition, bridges[edge.EdgeId]);
+                    }
+                }
+
+                if (defaultEdge != null)
+                {
+                    switchBuilder.WithDefault(bridges[defaultEdge.EdgeId]);
+                }
+            });
+
+            foreach (var edge in switchEdges)
+            {
+                builder.AddEdge(
+                    bridges[edge.EdgeId],
+                    bindings[edge.TargetNodeId],
+                    edge.Label ?? edge.EdgeId,
+                    idempotent: true);
+            }
+        }
+    }
+
+    private static ExecutorBinding BindChatRoutingBridge(string id)
+    {
+        return new ChatRoutingBridgeExecutor(id);
+    }
+
+    private static int GetSwitchCaseOrder(AgentflowEdge edge)
+    {
+        return AgentflowDomainService.TryReadSwitchCaseOrder(edge.ConfigJson, out var order)
+            ? order
+            : int.MaxValue;
     }
 
     private static void AddWorkflowOutputs(
@@ -634,6 +715,28 @@ public sealed class AgentflowWorkflowCompiler
             CancellationToken cancellationToken = default)
         {
             return context.SendMessageAsync(_transform(messages), cancellationToken);
+        }
+    }
+
+    [SendsMessage(typeof(List<ChatMessage>))]
+    [SendsMessage(typeof(TurnToken))]
+    private sealed class ChatRoutingBridgeExecutor : Executor<List<ChatMessage>>
+    {
+        public ChatRoutingBridgeExecutor(string id)
+            : base(id, ChatExecutorOptions, declareCrossRunShareable: true)
+        {
+        }
+
+        public override async ValueTask HandleAsync(
+            List<ChatMessage> messages,
+            IWorkflowContext context,
+            CancellationToken cancellationToken)
+        {
+            await context.SendMessageAsync(messages, cancellationToken).ConfigureAwait(false);
+            await context.SendMessageAsync(
+                    new TurnToken(emitEvents: true),
+                    cancellationToken)
+                .ConfigureAwait(false);
         }
     }
 

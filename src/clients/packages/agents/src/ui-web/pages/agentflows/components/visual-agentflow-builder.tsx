@@ -47,7 +47,9 @@ import {
   ModelProviderDto,
 } from "../../../../types/agentflow";
 import {
+  ArrowDown,
   ArrowLeft,
+  ArrowUp,
   ChevronRight,
   Crown,
   ExternalLink,
@@ -75,6 +77,20 @@ import {
   type BlockMembership,
 } from "./block-membership";
 import {
+  createDefaultEdgeData,
+  getDefaultEdgeKindForSource,
+  getEdgeRoutingLabel,
+  getNextSwitchCaseOrder,
+  getSwitchCasePosition,
+  isPredicateEdgeKind,
+  moveSwitchCaseEdge,
+  normalizeSwitchCaseOrders,
+  removeAgentflowEdge,
+  setSwitchCaseOrder,
+  validateAgentflowEdgeRouting,
+  type AgentflowEdgeData,
+} from "./agentflow-edge-routing";
+import {
   createInputNode,
   ensureInputGraph,
   INPUT_NODE_ID,
@@ -96,12 +112,7 @@ type DagNodeData = {
   };
 };
 
-type DagEdgeData = {
-  kind: AgentflowEdgeKind;
-  label: string;
-  conditionJson: string;
-  configJson: string;
-};
+type DagEdgeData = AgentflowEdgeData;
 
 type VisualAgentflowBuilderProps = {
   agents: AgentDto[];
@@ -203,16 +214,22 @@ const NODE_META: Record<
 const EDGE_LABELS: Record<AgentflowEdgeKind, string> = {
   [AgentflowEdgeKind.Direct]: "Direct",
   [AgentflowEdgeKind.FanOut]: "Fan Out",
-  [AgentflowEdgeKind.FanIn]: "Fan In",
+  [AgentflowEdgeKind.FanInBarrier]: "Fan-in Barrier",
+  [AgentflowEdgeKind.SwitchCase]: "If / Else If",
+  [AgentflowEdgeKind.SwitchDefault]: "Else",
 };
 
 const EDGE_HELP_TEXT: Record<AgentflowEdgeKind, string> = {
   [AgentflowEdgeKind.Direct]:
     "MAF AddEdge: one source to one target, optionally guarded by a predicate.",
   [AgentflowEdgeKind.FanOut]:
-    "MAF AddFanOutEdge: one source broadcasts the same input to multiple targets.",
-  [AgentflowEdgeKind.FanIn]:
-    "MAF AddFanInBarrierEdge: multiple sources join before the target runs.",
+    "MAF AddFanOutEdge: every target with a matching predicate runs; an empty predicate always matches.",
+  [AgentflowEdgeKind.FanInBarrier]:
+    "MAF AddFanInBarrierEdge: the target waits until every barrier source has produced a message.",
+  [AgentflowEdgeKind.SwitchCase]:
+    "MAF AddSwitch: cases run in order and only the first matching target receives the message.",
+  [AgentflowEdgeKind.SwitchDefault]:
+    "MAF Switch default: this target runs only when no If or Else If predicate matches.",
 };
 
 const CONDITION_KEYS = new Set([
@@ -627,25 +644,54 @@ export function VisualAgentflowBuilder({
   const updateEdgeData = React.useCallback(
     (edgeId: string, update: Partial<DagEdgeData>) => {
       setEdges((current) =>
-        current.map((edge) => {
-          if (edge.id !== edgeId) return edge;
+        normalizeSwitchCaseOrders(
+          current.map((edge) => {
+            if (edge.id !== edgeId) return edge;
 
-          const guardedUpdate =
-            edge.source === INPUT_NODE_ID
-              ? {
-                  ...update,
-                  kind: AgentflowEdgeKind.FanOut,
-                  conditionJson: "",
-                }
-              : update;
-          const nextData = { ...createDefaultEdgeData(), ...edge.data, ...guardedUpdate };
-          return applyEdgeVisuals({
-            ...edge,
-            data: nextData,
-            label: nextData.label || undefined,
-          });
-        }),
+            const previousData = { ...createDefaultEdgeData(), ...edge.data };
+            const nextKind = update.kind ?? previousData.kind;
+            const nextData = { ...previousData, ...update };
+            if (nextKind === AgentflowEdgeKind.SwitchCase) {
+              nextData.configJson = setSwitchCaseOrder(
+                nextData.configJson,
+                previousData.kind === AgentflowEdgeKind.SwitchCase
+                  ? (getSwitchCasePosition(current, edgeId)?.index ??
+                      getNextSwitchCaseOrder(current, edge.source))
+                  : getNextSwitchCaseOrder(current, edge.source),
+              );
+            } else {
+              nextData.configJson = setSwitchCaseOrder(nextData.configJson, null);
+            }
+            if (
+              nextKind === AgentflowEdgeKind.SwitchDefault ||
+              nextKind === AgentflowEdgeKind.FanInBarrier
+            ) {
+              nextData.conditionJson = "";
+            }
+
+            return applyEdgeVisuals({
+              ...edge,
+              data: nextData,
+              label: nextData.label || undefined,
+            });
+          }),
+        ),
       );
+    },
+    [setEdges],
+  );
+
+  const deleteFlowEdge = React.useCallback(
+    (edgeId: string) => {
+      setEdges((current) => removeAgentflowEdge(current, edgeId).map(applyEdgeVisuals));
+      setSelectedEdgeId((current) => (current === edgeId ? null : current));
+    },
+    [setEdges],
+  );
+
+  const moveSwitchCase = React.useCallback(
+    (edgeId: string, direction: -1 | 1) => {
+      setEdges((current) => moveSwitchCaseEdge(current, edgeId, direction).map(applyEdgeVisuals));
     },
     [setEdges],
   );
@@ -711,7 +757,9 @@ export function VisualAgentflowBuilder({
     const loadedEdges = editingAgentflow.edges.map((edge) => createFlowEdge(edge));
     const normalizedGraph = ensureInputGraph(loadedNodes, loadedEdges);
     setNodes(normalizedGraph.nodes);
-    setEdges(normalizedGraph.edges.map((edge) => applyEdgeVisuals(edge)));
+    setEdges(
+      normalizeSwitchCaseOrders(normalizedGraph.edges).map((edge) => applyEdgeVisuals(edge)),
+    );
     setCanvasScope({ kind: "root" });
     setPendingFocusNodeId(null);
     setSelectedNodeId(INPUT_NODE_ID);
@@ -727,9 +775,18 @@ export function VisualAgentflowBuilder({
         return;
       }
 
-      const edgeData = createDefaultEdgeData(
+      const edgeKind = getDefaultEdgeKindForSource(
+        edges,
+        params.source,
         params.source === INPUT_NODE_ID ? AgentflowEdgeKind.FanOut : AgentflowEdgeKind.Direct,
       );
+      const edgeData = createDefaultEdgeData(edgeKind);
+      if (edgeKind === AgentflowEdgeKind.SwitchCase) {
+        edgeData.configJson = setSwitchCaseOrder(
+          edgeData.configJson,
+          getNextSwitchCaseOrder(edges, params.source),
+        );
+      }
 
       const edge: Edge<DagEdgeData> = {
         id: `edge-${params.source}-${params.target}-${Date.now()}`,
@@ -742,7 +799,7 @@ export function VisualAgentflowBuilder({
 
       setEdges((current) => addEdge(applyEdgeVisuals(edge), current));
     },
-    [canvasScope, setEdges],
+    [canvasScope, edges, setEdges],
   );
 
   const onSelectionChange = React.useCallback(
@@ -888,7 +945,16 @@ export function VisualAgentflowBuilder({
     return getBlockParticipantEdges(edges, activeBlockNode.id);
   }, [activeBlockNode, edges]);
   const canvasNodes = canvasScope.kind === "block" ? blockCanvasNodes : rootVisibleNodes;
-  const canvasEdges = canvasScope.kind === "block" ? blockCanvasEdges : rootVisibleEdges;
+  const canvasEdges = React.useMemo(
+    () =>
+      canvasScope.kind === "block"
+        ? blockCanvasEdges
+        : rootVisibleEdges.map((edge) => ({
+            ...edge,
+            label: edge.data?.label || getEdgeRoutingLabel(edge, edges) || edge.label || undefined,
+          })),
+    [blockCanvasEdges, canvasScope, edges, rootVisibleEdges],
+  );
   const canvasKey = canvasScope.kind === "block" ? `block-${canvasScope.blockId}` : "root";
 
   React.useEffect(() => {
@@ -1197,7 +1263,13 @@ export function VisualAgentflowBuilder({
               onSelectBlockParticipant={selectBlockParticipant}
             />
           ) : selectedEdge ? (
-            <EdgeInspector edge={selectedEdge} onChange={updateEdgeData} />
+            <EdgeInspector
+              edge={selectedEdge}
+              edges={edges}
+              onChange={updateEdgeData}
+              onDelete={deleteFlowEdge}
+              onMoveSwitchCase={moveSwitchCase}
+            />
           ) : (
             <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
               Select a node or edge on the canvas.
@@ -2149,36 +2221,65 @@ function ConfigNumberField({
 
 function EdgeInspector({
   edge,
+  edges,
   onChange,
+  onDelete,
+  onMoveSwitchCase,
 }: {
   edge: Edge<DagEdgeData>;
+  edges: Edge<DagEdgeData>[];
   onChange: (edgeId: string, update: Partial<DagEdgeData>) => void;
+  onDelete: (edgeId: string) => void;
+  onMoveSwitchCase: (edgeId: string, direction: -1 | 1) => void;
 }) {
   const data = { ...createDefaultEdgeData(), ...edge.data };
-  const isInputSource = edge.source === INPUT_NODE_ID;
+  const switchPosition = getSwitchCasePosition(edges, edge.id);
+  const routingLabel = getEdgeRoutingLabel(edge, edges);
+  const hasOtherDefault = edges.some(
+    (candidate) =>
+      candidate.id !== edge.id &&
+      candidate.source === edge.source &&
+      candidate.data?.kind === AgentflowEdgeKind.SwitchDefault,
+  );
 
   return (
     <div className="space-y-3">
-      <div className="rounded-md border bg-background p-3">
-        <p className="text-sm font-medium">{EDGE_LABELS[data.kind]}</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {edge.source} {"->"} {edge.target}
-        </p>
+      <div className="rounded-md border bg-background p-3 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-medium">{EDGE_LABELS[data.kind]}</p>
+              {routingLabel ? (
+                <Badge variant="outline" className="font-mono text-[10px] tracking-wider">
+                  {routingLabel}
+                </Badge>
+              ) : null}
+            </div>
+            <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
+              {edge.source} {"->"} {edge.target}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            title="Delete edge"
+            aria-label="Delete edge"
+            className="shrink-0 text-destructive hover:border-destructive/50 hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => onDelete(edge.id)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
         <p className="mt-2 text-xs text-muted-foreground">{EDGE_HELP_TEXT[data.kind]}</p>
       </div>
       <div className="space-y-2">
         <Label>Edge Type</Label>
         <Select
           value={String(data.kind)}
-          disabled={isInputSource}
           onValueChange={(value) => {
-            if (isInputSource) return;
-
             const kind = Number(value) as AgentflowEdgeKind;
-            onChange(edge.id, {
-              kind,
-              conditionJson: kind === AgentflowEdgeKind.Direct ? data.conditionJson : "",
-            });
+            onChange(edge.id, { kind });
           }}
         >
           <SelectTrigger>
@@ -2186,13 +2287,55 @@ function EdgeInspector({
           </SelectTrigger>
           <SelectContent>
             {Object.entries(EDGE_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
+              <SelectItem
+                key={value}
+                value={value}
+                disabled={Number(value) === AgentflowEdgeKind.SwitchDefault && hasOtherDefault}
+              >
                 {label}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
+      {data.kind === AgentflowEdgeKind.SwitchCase && switchPosition ? (
+        <div className="rounded-md border border-violet-200 bg-violet-50/70 p-3 dark:border-violet-900 dark:bg-violet-950/30">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium text-violet-950 dark:text-violet-100">
+                Branch {switchPosition.index + 1} of {switchPosition.count}
+              </p>
+              <p className="mt-1 text-[11px] text-violet-700 dark:text-violet-300">
+                Cases are evaluated from top to bottom.
+              </p>
+            </div>
+            <div className="flex gap-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                title="Move branch up"
+                aria-label="Move branch up"
+                disabled={switchPosition.index === 0}
+                onClick={() => onMoveSwitchCase(edge.id, -1)}
+              >
+                <ArrowUp className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                title="Move branch down"
+                aria-label="Move branch down"
+                disabled={switchPosition.index === switchPosition.count - 1}
+                onClick={() => onMoveSwitchCase(edge.id, 1)}
+              >
+                <ArrowDown className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="space-y-2">
         <Label>Label</Label>
         <Input
@@ -2200,7 +2343,7 @@ function EdgeInspector({
           onChange={(event) => onChange(edge.id, { label: event.target.value })}
         />
       </div>
-      {data.kind === AgentflowEdgeKind.Direct ? (
+      {isPredicateEdgeKind(data.kind) ? (
         <div className="space-y-2">
           <Label>Predicate JSON</Label>
           <Textarea
@@ -2210,33 +2353,38 @@ function EdgeInspector({
             className="min-h-28 font-mono text-xs"
           />
           <p className="text-xs text-muted-foreground">
-            Optional keys: always, contains, notContains, equals, author, role, minMessages.
+            {data.kind === AgentflowEdgeKind.SwitchCase
+              ? "Required. The first matching branch wins."
+              : data.kind === AgentflowEdgeKind.FanOut
+                ? "Optional. Every matching target runs; blank means always selected."
+                : "Optional. Direct predicates are evaluated independently."}
+            {" Keys: always, contains, notContains, equals, author, role, minMessages."}
           </p>
         </div>
       ) : (
         <div className="rounded-md border bg-background p-3 text-xs text-muted-foreground">
-          Fan edges are structural MAF edges and do not use predicate JSON.
+          {data.kind === AgentflowEdgeKind.SwitchDefault
+            ? "Else does not use a predicate and always remains after all If branches."
+            : "Barrier edges are structural and do not use predicate JSON."}
         </div>
       )}
-      <div className="space-y-2">
-        <Label>Advanced Config JSON</Label>
-        <Textarea
-          value={data.configJson}
-          onChange={(event) => onChange(edge.id, { configJson: event.target.value })}
-          className="min-h-20 font-mono text-xs"
-        />
-      </div>
+      {data.kind === AgentflowEdgeKind.SwitchCase ? (
+        <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+          Branch order is maintained by the controls above. Other existing advanced config values
+          are preserved when the branch moves.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <Label>Advanced Config JSON</Label>
+          <Textarea
+            value={data.configJson}
+            onChange={(event) => onChange(edge.id, { configJson: event.target.value })}
+            className="min-h-20 font-mono text-xs"
+          />
+        </div>
+      )}
     </div>
   );
-}
-
-function createDefaultEdgeData(kind: AgentflowEdgeKind = AgentflowEdgeKind.Direct): DagEdgeData {
-  return {
-    kind,
-    label: "",
-    conditionJson: "",
-    configJson: "",
-  };
 }
 
 function createFlowEdge(edge: AgentflowEdgeDto): Edge<DagEdgeData> {
@@ -2277,8 +2425,16 @@ function getEdgeVisual(kind: AgentflowEdgeKind): {
     return { color: "#2563eb", width: 2, animated: true };
   }
 
-  if (kind === AgentflowEdgeKind.FanIn) {
+  if (kind === AgentflowEdgeKind.FanInBarrier) {
     return { color: "#d97706", width: 2, animated: false };
+  }
+
+  if (kind === AgentflowEdgeKind.SwitchCase) {
+    return { color: "#7c3aed", width: 2, animated: false };
+  }
+
+  if (kind === AgentflowEdgeKind.SwitchDefault) {
+    return { color: "#db2777", width: 2, animated: false };
   }
 
   return { color: "#475569", width: 1.75, animated: false };
@@ -2399,6 +2555,11 @@ function validateDag(nodes: Node<DagNodeData>[], edges: Edge<DagEdgeData>[]) {
     if (data.configJson.trim() && !isJsonObject(data.configJson)) {
       return { ok: false, message: `${data.label || edge.id} has invalid edge config JSON` };
     }
+  }
+
+  const routingError = validateAgentflowEdgeRouting(edges);
+  if (routingError) {
+    return { ok: false, message: routingError };
   }
 
   const adjacency = new Map(nodes.map((node) => [node.id, [] as string[]]));

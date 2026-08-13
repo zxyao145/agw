@@ -127,6 +127,11 @@ public class AgentflowDomainService
             }
         }
 
+        if (!HasValidRoutingStrategies(edges))
+        {
+            return (null, null);
+        }
+
         if (!IsValidInputRootedGraph(nodes, edges))
         {
             return (null, null);
@@ -236,11 +241,6 @@ public class AgentflowDomainService
         }
 
         if (edges.Any(edge => edge.TargetNodeId == InputNodeId))
-        {
-            return false;
-        }
-
-        if (edges.Any(edge => edge.SourceNodeId == InputNodeId && edge.Kind != AgentflowEdgeKind.FanOut))
         {
             return false;
         }
@@ -411,6 +411,88 @@ public class AgentflowDomainService
         {
             return false;
         }
+    }
+
+    internal static bool TryReadSwitchCaseOrder(string? configJson, out int order)
+    {
+        order = 0;
+        if (string.IsNullOrWhiteSpace(configJson))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(configJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object ||
+                !document.RootElement.TryGetProperty("switchCaseOrder", out var property) ||
+                property.ValueKind != JsonValueKind.Number ||
+                !property.TryGetInt32(out order) ||
+                order < 0)
+            {
+                order = 0;
+                return false;
+            }
+
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool HasValidRoutingStrategies(IReadOnlyList<AgentflowEdge> edges)
+    {
+        foreach (var sourceGroup in edges.GroupBy(edge => edge.SourceNodeId, StringComparer.Ordinal))
+        {
+            var sourceEdges = sourceGroup
+                .Where(edge => edge.Kind != AgentflowEdgeKind.FanInBarrier)
+                .ToList();
+            var strategyCount = sourceEdges
+                .Select(edge => edge.Kind switch
+                {
+                    AgentflowEdgeKind.Direct => "direct",
+                    AgentflowEdgeKind.FanOut => "fan-out",
+                    AgentflowEdgeKind.SwitchCase or AgentflowEdgeKind.SwitchDefault => "switch",
+                    _ => "unsupported",
+                })
+                .Distinct(StringComparer.Ordinal)
+                .Count();
+            if (strategyCount > 1 || sourceEdges.Any(edge => edge.Kind is < AgentflowEdgeKind.Direct or > AgentflowEdgeKind.SwitchDefault))
+            {
+                return false;
+            }
+
+            var switchEdges = sourceEdges
+                .Where(edge => edge.Kind is AgentflowEdgeKind.SwitchCase or AgentflowEdgeKind.SwitchDefault)
+                .ToList();
+            if (switchEdges.Count == 0)
+            {
+                continue;
+            }
+
+            var cases = switchEdges.Where(edge => edge.Kind == AgentflowEdgeKind.SwitchCase).ToList();
+            var defaults = switchEdges.Where(edge => edge.Kind == AgentflowEdgeKind.SwitchDefault).ToList();
+            if (cases.Count == 0 || defaults.Count > 1 ||
+                defaults.Any(edge => !string.IsNullOrWhiteSpace(edge.ConditionJson)))
+            {
+                return false;
+            }
+
+            var orders = new HashSet<int>();
+            foreach (var edge in cases)
+            {
+                if (string.IsNullOrWhiteSpace(edge.ConditionJson) ||
+                    !TryReadSwitchCaseOrder(edge.ConfigJson, out var order) ||
+                    !orders.Add(order))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     internal static bool TryReadOutputSummaryEnabled(string? configJson, out bool enabled)

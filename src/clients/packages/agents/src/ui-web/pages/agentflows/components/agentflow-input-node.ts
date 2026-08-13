@@ -96,15 +96,6 @@ export function validateInputGraph<
     return { ok: false, message: "Input cannot have incoming edges" };
   }
 
-  if (
-    edges.some(
-      (edge) =>
-        edge.source === INPUT_NODE_ID && (edge.data?.kind ?? EdgeKind.FanOut) !== EdgeKind.FanOut,
-    )
-  ) {
-    return { ok: false, message: "Input can only use Fan Out edges" };
-  }
-
   const visibleNodeIds = getRuntimeVisibleNodeIds(nodes, edges);
   const reachableNodeIds = getReachableNodeIds(INPUT_NODE_ID, edges, visibleNodeIds);
   const unreachableNode = nodes.find(

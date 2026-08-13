@@ -54,3 +54,19 @@ test("Agentflow uses the shared fullscreen Dialog contract", async () => {
   assert.match(source, /<DialogHeader className="shrink-0 border-b px-6 py-2">/);
   assert.doesNotMatch(source, /fixed inset-0 w-screen h-screen/);
 });
+
+test("Agentflow edge inspector exposes deletion and ordered branch controls", async () => {
+  const source = await readFile(BUILDER_URL, "utf8");
+
+  assert.match(source, /aria-label="Delete edge"/);
+  assert.match(source, /onDelete\(edge\.id\)/);
+  assert.match(
+    source,
+    /setSelectedEdgeId\(\(current\) => \(current === edgeId \? null : current\)\)/,
+  );
+  assert.match(source, /onMoveSwitchCase\(edge\.id, -1\)/);
+  assert.match(source, /onMoveSwitchCase\(edge\.id, 1\)/);
+  assert.match(source, /If \/ Else If/);
+  assert.match(source, /Fan-in Barrier/);
+  assert.match(source, /Number\(value\) === AgentflowEdgeKind\.SwitchDefault && hasOtherDefault/);
+});
