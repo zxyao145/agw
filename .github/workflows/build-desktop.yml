@@ -1,6 +1,15 @@
 name: Desktop Build
 
 on:
+  pull_request:
+    paths:
+      - "src/clients/desktop/**"
+      - "src/clients/packages/**"
+      - "src/clients/package.json"
+      - "src/clients/pnpm-workspace.yaml"
+      - "src/clients/pnpm-lock.yaml"
+      - "src/clients/turbo.json"
+      - ".github/workflows/build-desktop.yml"
   push:
     branches: [main]
   workflow_dispatch:
@@ -42,6 +51,7 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
   desktop-test:
+    name: test
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -62,7 +72,7 @@ jobs:
 
   desktop-build:
     needs: [metadata, desktop-test]
-    name: Desktop ${{ matrix.platform }} ${{ matrix.arch }} ${{ matrix.flavor }}
+    name: build Desktop ${{ matrix.platform }} ${{ matrix.arch }} ${{ matrix.flavor }}
     strategy:
       fail-fast: false
       matrix:

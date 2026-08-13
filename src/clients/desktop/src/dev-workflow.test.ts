@@ -35,3 +35,9 @@ test("macOS development app registers the Desktop OAuth protocol", async () => {
   assert.match(source, /\$\{appName\} Development\.app/u);
   assert.doesNotMatch(source, /mkdtemp|tmpdir/u);
 });
+
+test("Desktop resources record the injected release version", async () => {
+  const source = await readFile(resolve(process.cwd(), "scripts/prepare-resources.mjs"), "utf8");
+
+  assert.match(source, /packageFlavor: flavor, appVersion: releaseVersion/u);
+});

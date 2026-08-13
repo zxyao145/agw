@@ -9,7 +9,7 @@ on:
       - "src/clients/pnpm-workspace.yaml"
       - "src/clients/pnpm-lock.yaml"
       - "src/clients/turbo.json"
-      - ".github/workflows/web.yml"
+      - ".github/workflows/build-web.yml"
   push:
     branches: ["main"]
     paths:
@@ -23,6 +23,7 @@ on:
 
 jobs:
   test:
+    name: test
     runs-on: ubuntu-latest
     defaults:
       run:

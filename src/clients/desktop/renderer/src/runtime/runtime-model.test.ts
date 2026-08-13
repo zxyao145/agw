@@ -71,6 +71,8 @@ test("getEffectiveActiveServerProfile follows the bundled Server runtime port", 
   const profile = getEffectiveActiveServerProfile({
     isDesktop: true,
     platform: "darwin",
+    architecture: "arm64",
+    appVersion: "0.2.1",
     packageFlavor: "full",
     activeToken: null,
     settings,

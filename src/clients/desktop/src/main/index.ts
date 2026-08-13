@@ -24,17 +24,18 @@ import started from "electron-squirrel-startup";
 import type {
   DesktopRuntimeState,
   DesktopSettings,
-  PackageFlavor,
   UninstallRequest,
   UninstallResult,
 } from "../shared/contracts";
 import { DaemonManager } from "./daemon/daemon-manager";
 import { DESKTOP_OAUTH_PROTOCOL, findOAuthDeepLink, parseOAuthDeepLink } from "./oauth-deep-link";
+import { parseDesktopPackageMetadata, type DesktopPackageMetadata } from "./package-metadata";
 import { resolveRendererFile } from "./renderer-path";
 import { createLocalDesktopToken } from "./runtime/local-token";
 import { readLocalServerRuntime } from "./runtime/local-server-runtime";
 import { resolveServerExecutablePath } from "./runtime/server-executable-path";
 import { DesktopSettingsStore, type SecretCodec } from "./settings/settings-store";
+import { checkForDesktopUpdate } from "./update/github-release-updater";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -57,6 +58,7 @@ let activeTaskCount = 0;
 let currentSettings: DesktopSettings;
 let settingsStore: DesktopSettingsStore;
 let daemonManager: DaemonManager;
+let packageMetadata: DesktopPackageMetadata;
 let pendingOAuthRoute: string | null = null;
 let rendererReady = false;
 
@@ -65,15 +67,23 @@ function reportMainProcessError(title: string, error: unknown): void {
   dialog.showErrorBox(title, error instanceof Error ? error.message : String(error));
 }
 
-function readPackageFlavor(): PackageFlavor {
-  if (!app.isPackaged) return process.env.AGW_PACKAGE_FLAVOR === "client" ? "client" : "full";
+function readPackageMetadata(): DesktopPackageMetadata {
+  if (!app.isPackaged) {
+    return parseDesktopPackageMetadata({
+      packageFlavor: process.env.AGW_PACKAGE_FLAVOR === "client" ? "client" : "full",
+      appVersion: process.env.AGW_RELEASE_VERSION || app.getVersion(),
+    });
+  }
   try {
-    const value = JSON.parse(
-      readFileSync(join(process.resourcesPath, "package-flavor.json"), "utf8"),
-    ) as { packageFlavor?: string };
-    return value.packageFlavor === "client" ? "client" : "full";
-  } catch {
-    return "full";
+    return parseDesktopPackageMetadata(
+      JSON.parse(readFileSync(join(process.resourcesPath, "package-flavor.json"), "utf8")),
+    );
+  } catch (error) {
+    console.warn("Unable to read Desktop package metadata; using application defaults.", error);
+    return {
+      packageFlavor: "full",
+      appVersion: app.getVersion(),
+    };
   }
 }
 
@@ -140,6 +150,8 @@ async function runtimeState(): Promise<DesktopRuntimeState> {
   return {
     isDesktop: true,
     platform: process.platform,
+    architecture: process.arch,
+    appVersion: packageMetadata.appVersion,
     packageFlavor: currentSettings.packageFlavor,
     settings: currentSettings,
     activeToken,
@@ -344,7 +356,7 @@ async function prepareUninstall(request: UninstallRequest): Promise<UninstallRes
     };
   }
 
-  const updateExecutable = join(dirname(dirname(process.execPath)), "Update.exe");
+  const updateExecutable = windowsUpdateExecutablePath();
   if (existsSync(updateExecutable)) {
     const { spawn } = await import("node:child_process");
     spawn(updateExecutable, ["--uninstall", "-s"], { detached: true, stdio: "ignore" }).unref();
@@ -358,10 +370,30 @@ async function prepareUninstall(request: UninstallRequest): Promise<UninstallRes
   };
 }
 
+function windowsUpdateExecutablePath(): string {
+  return join(dirname(dirname(process.execPath)), "Update.exe");
+}
+
+function windowsDistribution(): "squirrel" | "portable" {
+  return process.platform === "win32" && !existsSync(windowsUpdateExecutablePath())
+    ? "portable"
+    : "squirrel";
+}
+
 function registerIpc(): void {
   ipcMain.handle("agw:get-runtime-state", async (event) => {
     assertTrustedSender(senderUrl(event));
     return runtimeState();
+  });
+  ipcMain.handle("agw:check-for-updates", async (event) => {
+    assertTrustedSender(senderUrl(event));
+    return checkForDesktopUpdate((input, init) => net.fetch(input, init), {
+      currentVersion: packageMetadata.appVersion,
+      packageFlavor: packageMetadata.packageFlavor,
+      platform: process.platform,
+      architecture: process.arch,
+      windowsDistribution: windowsDistribution(),
+    });
   });
   ipcMain.handle("agw:save-settings", async (event, settings: DesktopSettings) => {
     assertTrustedSender(senderUrl(event));
@@ -395,7 +427,7 @@ function registerIpc(): void {
     assertTrustedSender(senderUrl(event));
     const url = new URL(value);
     if (url.protocol !== "https:" && url.protocol !== "http:") {
-      throw new Error("Agw Desktop can only open HTTP(S) authorization URLs.");
+      throw new Error("Agw Desktop can only open HTTP(S) external URLs.");
     }
     await shell.openExternal(url.toString());
   });
@@ -469,7 +501,8 @@ void app
     app.dock?.setIcon(appIconPath());
     registerOAuthProtocolClient();
 
-    const flavor = readPackageFlavor();
+    packageMetadata = readPackageMetadata();
+    const flavor = packageMetadata.packageFlavor;
     settingsStore = new DesktopSettingsStore(app.getPath("userData"), flavor, createSecretCodec());
     currentSettings = await settingsStore.load();
     daemonManager = new DaemonManager(process.platform, serverExecutablePath());

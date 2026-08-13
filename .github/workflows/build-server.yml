@@ -1,6 +1,9 @@
 name: Server Build
 
 on:
+  pull_request:
+    paths:
+      - "src/server/**"
   push:
     branches: [ "main" ]
 
@@ -9,6 +12,7 @@ on:
 jobs:
 
   build:
+    name: build 
     runs-on: ubuntu-latest
     environment: prod
     

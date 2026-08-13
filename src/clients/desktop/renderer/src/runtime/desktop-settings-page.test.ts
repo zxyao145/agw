@@ -10,7 +10,12 @@ test("Desktop settings renders a dedicated About section", async () => {
   assert.match(source, /function DesktopAboutSection\(\)/);
   assert.match(source, /<section id="about"/);
   assert.match(source, /<h1[^>]*>About Agw Desktop<\/h1>/);
-  assert.match(source, /Loading package details…/);
+  assert.match(source, /runtimeState\.appVersion/);
+  assert.match(source, /runtimeState\.architecture/);
+  assert.match(source, /bridge\.checkForUpdates\(\)/);
+  assert.match(source, /void checkForUpdates\(\)/);
+  assert.match(source, /Download update/);
+  assert.match(source, /Latest stable/);
   assert.match(
     source,
     /<ServerProfilesPanel \/>[\s\S]*<DesktopSettingsPanel \/>[\s\S]*<DesktopAboutSection \/>/,
