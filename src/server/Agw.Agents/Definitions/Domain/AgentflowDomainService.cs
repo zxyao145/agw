@@ -50,7 +50,8 @@ public class AgentflowDomainService
         Guid agentflowId,
         IReadOnlyCollection<Guid> existingAgentIds,
         Guid? summaryModelProviderId = null,
-        IReadOnlyCollection<Guid>? existingModelProviderIds = null)
+        IReadOnlyCollection<Guid>? existingModelProviderIds = null,
+        IReadOnlyDictionary<Guid, string>? existingAgentNames = null)
     {
         if (nodes == null || edges == null)
         {
@@ -149,7 +150,7 @@ public class AgentflowDomainService
                 NodeId = x.NodeId,
                 Kind = x.Kind,
                 RelateId = x.RelateId,
-                Name = x.Name,
+                Name = ResolveNodeName(x, existingAgentNames),
                 PositionJson = x.PositionJson,
                 Instructions = x.Instructions,
                 ConfigJson = x.ConfigJson,
@@ -171,6 +172,23 @@ public class AgentflowDomainService
             .ToList();
 
         return (normalizedNodes, normalizedEdges);
+    }
+
+    private static string? ResolveNodeName(
+        AgentflowNode node,
+        IReadOnlyDictionary<Guid, string>? existingAgentNames)
+    {
+        if (!string.IsNullOrWhiteSpace(node.Name) ||
+            node.Kind != AgentflowNodeKind.Agent ||
+            !node.RelateId.HasValue ||
+            existingAgentNames == null)
+        {
+            return node.Name;
+        }
+
+        return existingAgentNames.TryGetValue(node.RelateId.Value, out var agentName)
+            ? agentName
+            : node.Name;
     }
 
     public IReadOnlyList<AgentflowNode> OrderNodesByEdges(

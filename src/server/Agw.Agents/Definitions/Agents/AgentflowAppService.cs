@@ -70,15 +70,16 @@ public class AgentflowAppService
             return null;
         }
 
-        var existingAgentIds = await ListExistingAgentIdsAsync(nodes);
+        var existingAgents = await ListExistingAgentsAsync(nodes);
         var existingModelProviderIds = await ListExistingModelProviderIdsAsync(agentflow.SummaryModelProviderId);
         var (normalizedNodes, normalizedEdges) = _agentflowDomainService.ValidateAndNormalizeGraph(
             nodes,
             edges,
             agentflow.Id,
-            existingAgentIds,
+            existingAgents.Keys.ToList(),
             agentflow.SummaryModelProviderId,
-            existingModelProviderIds);
+            existingModelProviderIds,
+            existingAgents);
         if (normalizedNodes == null || normalizedEdges == null)
         {
             return null;
@@ -123,15 +124,16 @@ public class AgentflowAppService
 
         if (nodes != null && edges != null)
         {
-            var existingAgentIds = await ListExistingAgentIdsAsync(nodes);
+            var existingAgents = await ListExistingAgentsAsync(nodes);
             var existingModelProviderIds = await ListExistingModelProviderIdsAsync(existing.SummaryModelProviderId);
             var (normalizedNodes, normalizedEdges) = _agentflowDomainService.ValidateAndNormalizeGraph(
                 nodes,
                 edges,
                 existing.Id,
-                existingAgentIds,
+                existingAgents.Keys.ToList(),
                 existing.SummaryModelProviderId,
-                existingModelProviderIds);
+                existingModelProviderIds,
+                existingAgents);
             if (normalizedNodes == null || normalizedEdges == null)
             {
                 return null;
@@ -199,7 +201,8 @@ public class AgentflowAppService
         return true;
     }
 
-    private async Task<IReadOnlyCollection<Guid>> ListExistingAgentIdsAsync(IReadOnlyList<AgentflowNode> nodes)
+    private async Task<IReadOnlyDictionary<Guid, string>> ListExistingAgentsAsync(
+        IReadOnlyList<AgentflowNode> nodes)
     {
         var agentIds = nodes
             .Where(x => x.Kind == AgentflowNodeKind.Agent)
@@ -210,11 +213,11 @@ public class AgentflowAppService
             .ToList();
         if (agentIds.Count == 0)
         {
-            return Array.Empty<Guid>();
+            return new Dictionary<Guid, string>();
         }
 
         var existingAgents = await _agentRepository.ListAsync(x => agentIds.Contains(x.Id));
-        return existingAgents.Select(x => x.Id).ToList();
+        return existingAgents.ToDictionary(x => x.Id, x => x.Name);
     }
 
     private async Task<IReadOnlyCollection<Guid>> ListExistingModelProviderIdsAsync(Guid? modelProviderId)

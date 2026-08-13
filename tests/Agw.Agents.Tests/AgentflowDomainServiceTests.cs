@@ -636,7 +636,11 @@ public class AgentflowDomainServiceTests
             nodes,
             edges,
             agentflowId,
-            [agentId]);
+            [agentId],
+            existingAgentNames: new Dictionary<Guid, string>
+            {
+                [agentId] = "default-agent-name",
+            });
 
         Assert.NotNull(normalizedNodes);
         Assert.NotNull(normalizedEdges);
@@ -652,6 +656,47 @@ public class AgentflowDomainServiceTests
         Assert.Equal("review output", normalizedEdges!.Last().Label);
         Assert.Equal("""{"contains":"approved"}""", normalizedEdges!.Last().ConditionJson);
         Assert.Equal("""{"map":"summary"}""", normalizedEdges!.Last().ConfigJson);
+    }
+
+    [Fact]
+    public void ValidateAndNormalizeGraph_AgentNodeWithoutName_DefaultsToAgentName()
+    {
+        var agentflowId = Guid.CreateVersion7();
+        var agentId = Guid.CreateVersion7();
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode
+            {
+                NodeId = "agent",
+                Kind = AgentflowNodeKind.Agent,
+                RelateId = agentId,
+                Name = " ",
+            },
+        };
+        var edges = new[]
+        {
+            new AgentflowEdge
+            {
+                EdgeId = "input-agent",
+                SourceNodeId = "input",
+                TargetNodeId = "agent",
+            },
+        };
+
+        var (normalizedNodes, normalizedEdges) = _service.ValidateAndNormalizeGraph(
+            nodes,
+            edges,
+            agentflowId,
+            [agentId],
+            existingAgentNames: new Dictionary<Guid, string>
+            {
+                [agentId] = "default-agent-name",
+            });
+
+        Assert.NotNull(normalizedNodes);
+        Assert.NotNull(normalizedEdges);
+        Assert.Equal("default-agent-name", normalizedNodes![1].Name);
     }
 
     [Fact]

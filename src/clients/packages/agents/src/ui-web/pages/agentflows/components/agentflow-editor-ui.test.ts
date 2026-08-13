@@ -70,3 +70,17 @@ test("Agentflow edge inspector exposes deletion and ordered branch controls", as
   assert.match(source, /Fan-in Barrier/);
   assert.match(source, /Number\(value\) === AgentflowEdgeKind\.SwitchDefault && hasOtherDefault/);
 });
+
+test("Agentflow agent nodes default to the agent name and keep it editable", async () => {
+  const source = await readFile(BUILDER_URL, "utf8");
+
+  assert.match(
+    source,
+    /if \(agent\) onAddNode\(AgentflowNodeKind\.Agent, agent\.name, agent\.id\)/,
+  );
+  assert.match(
+    source,
+    /<Label>Name<\/Label>[\s\S]*?value=\{node\.data\.title\}[\s\S]*?onChange=\{\(event\) => onChange\(node\.id, \{ title: event\.target\.value \}\)\}/,
+  );
+  assert.match(source, /name: node\.data\.title \|\| null/);
+});
