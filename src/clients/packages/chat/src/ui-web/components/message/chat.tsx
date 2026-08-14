@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { apiGet } from "@agw/api";
 import {
   getAgentMode,
+  hasPersistedDurableExecution,
   getMessageStreamingScopeId,
   getPendingHumanGate,
   getTurnFinishedStatus,
@@ -30,11 +31,13 @@ import {
 import { getClaudeInitCommands, prepareClaudeHistory } from "../../../lib/chat/ai-message-handlers";
 import { updateAutoScrollState, type AutoScrollState } from "../../../lib/chat/auto-scroll";
 import {
+  createStreamingMessageBatcher,
   createUserTextMessage,
-  mergeStreamingMessage,
+  mergeStreamingMessages,
   scopeMessagesByUserTurn,
   scopeStreamingMessage,
   toExecutionUserInput,
+  type StreamingMessageBatcher,
 } from "../../../services/execution-stream";
 import {
   addTokenUsage,
@@ -73,6 +76,8 @@ export interface ChatProps {
   onExecutionError?: (error: unknown) => void;
   /** 将 SignalR 重连状态同步给更高层的工作区遮罩。 */
   onReconnectStateChange?: (state: ExecutionReconnectState | null) => void;
+  /** 历史水合完成后，允许仅对已有 durable attachment 自动重订阅。 */
+  restoreDurableExecution?: boolean;
   active?: boolean;
 }
 
@@ -110,6 +115,7 @@ export function Chat({
   onConversationChange,
   onExecutionError,
   onReconnectStateChange,
+  restoreDurableExecution = false,
 }: ChatProps) {
   const executionServerId = useExecutionPlatform().serverId;
   const initialHistory = React.useMemo(
@@ -123,6 +129,9 @@ export function Chat({
   const [claudeCommands, setClaudeCommands] = React.useState<string[]>(initialHistory.commands);
   const [conversationUsage, setConversationUsage] = React.useState<TokenUsage>(sessionSeed.usage);
   const [contextId, setContextId] = React.useState<string | null>(sessionSeed.contextId);
+  const [hydratedSessionRevision, setHydratedSessionRevision] = React.useState(
+    sessionSeed.revision,
+  );
   const [permissionMode, setPermissionMode] = React.useState<PermissionMode>("fullAccess");
   const [agentMode, setAgentMode] = React.useState<AgentMode>(() =>
     getLatestAgentMode(sessionSeed.messages),
@@ -136,7 +145,9 @@ export function Chat({
   const userInputRef = React.useRef<UserInputRef | null>(null);
   const executionClientRef = React.useRef<ManagedExecutionHandle | null>(null);
   const configuredSessionRef = React.useRef<string | null>(null);
+  const durableRestoreAttemptRef = React.useRef<string | null>(null);
   const executionGenerationRef = React.useRef(0);
+  const streamingMessageBatcherRef = React.useRef<StreamingMessageBatcher | null>(null);
   const pendingTeardownCountRef = React.useRef(0);
   const activeStreamingScopeRef = React.useRef<string | null>(null);
   const confirmedAgentModeRef = React.useRef<AgentMode>(agentMode);
@@ -147,6 +158,18 @@ export function Chat({
   });
   const targetKey = target ? `${target.type}:${target.id}` : "";
   const previousTargetKeyRef = React.useRef(targetKey);
+
+  if (streamingMessageBatcherRef.current === null) {
+    streamingMessageBatcherRef.current = createStreamingMessageBatcher(
+      (incomingMessages, generation) => {
+        if (generation !== executionGenerationRef.current) {
+          return;
+        }
+
+        setMessages((current) => mergeStreamingMessages(current, incomingMessages));
+      },
+    );
+  }
 
   React.useEffect(() => {
     onReconnectStateChange?.(reconnectState);
@@ -193,6 +216,7 @@ export function Chat({
   );
 
   const interruptAndDispose = React.useCallback(async (reason: string) => {
+    streamingMessageBatcherRef.current?.flush(executionGenerationRef.current);
     executionGenerationRef.current += 1;
     activeStreamingScopeRef.current = null;
     const client = executionClientRef.current;
@@ -216,7 +240,12 @@ export function Chat({
     }
   }, []);
 
-  const detachExecution = React.useCallback(() => {
+  const detachExecution = React.useCallback((flushBufferedMessages = true) => {
+    if (flushBufferedMessages) {
+      streamingMessageBatcherRef.current?.flush(executionGenerationRef.current);
+    } else {
+      streamingMessageBatcherRef.current?.discard();
+    }
     executionGenerationRef.current += 1;
     activeStreamingScopeRef.current = null;
     executionClientRef.current?.detach();
@@ -259,11 +288,12 @@ export function Chat({
     confirmedAgentModeRef.current = nextAgentMode;
     setAgentMode(nextAgentMode);
     userInputRef.current?.setInput("");
+    setHydratedSessionRevision(sessionSeed.revision);
   }, [detachExecution, sessionSeed.revision]);
 
   React.useEffect(() => {
     return () => {
-      detachExecution();
+      detachExecution(false);
     };
   }, [detachExecution]);
 
@@ -291,6 +321,7 @@ export function Chat({
       }
 
       if (message.additionalProperties?.type === "mode-change-failed") {
+        streamingMessageBatcherRef.current?.flush(generation);
         setAgentMode(confirmedAgentModeRef.current);
         const detail = message.contents.find(
           (content) => typeof content.content === "string",
@@ -301,6 +332,7 @@ export function Chat({
 
       const nextAgentMode = getAgentMode(message);
       if (nextAgentMode) {
+        streamingMessageBatcherRef.current?.flush(generation);
         confirmedAgentModeRef.current = nextAgentMode;
         setAgentMode(nextAgentMode);
         if (isModeControlMessage(message)) return;
@@ -308,6 +340,7 @@ export function Chat({
 
       const initCommands = getClaudeInitCommands(message);
       if (initCommands !== null) {
+        streamingMessageBatcherRef.current?.flush(generation);
         setClaudeCommands(initCommands);
         return;
       }
@@ -319,6 +352,7 @@ export function Chat({
 
       const humanGate = getPendingHumanGate(message);
       if (humanGate) {
+        streamingMessageBatcherRef.current?.flush(generation);
         setPendingHumanGate(
           humanGate.requestType === "human-interaction"
             ? {
@@ -332,6 +366,7 @@ export function Chat({
       }
 
       if (message.additionalProperties?.type === "turn-start") {
+        streamingMessageBatcherRef.current?.flush(generation);
         activeStreamingScopeRef.current ??=
           getMessageStreamingScopeId(message) ?? message.messageId;
         setIsExecuting(true);
@@ -340,6 +375,7 @@ export function Chat({
 
       const terminalStatus = getTurnFinishedStatus(message);
       if (terminalStatus) {
+        streamingMessageBatcherRef.current?.flush(generation);
         activeStreamingScopeRef.current = null;
         setIsExecuting(false);
         setPendingHumanGate(null);
@@ -355,7 +391,7 @@ export function Chat({
           message,
           activeStreamingScopeRef.current ?? message.messageId,
         );
-        setMessages((current) => mergeStreamingMessage(current, scopedMessage));
+        streamingMessageBatcherRef.current?.enqueue(scopedMessage, generation);
       }
     },
     [notifyExecutionError, onConversationChange],
@@ -413,6 +449,7 @@ export function Chat({
           executionClientRef.current === client
         ) {
           setReconnectState(null);
+          setIsExecuting(["running", "waiting-approval", "detached"].includes(client.getStatus()));
         }
       },
     });
@@ -481,6 +518,9 @@ export function Chat({
                 executionClientRef.current === attachedClient
               ) {
                 setReconnectState(null);
+                setIsExecuting(
+                  ["running", "waiting-approval", "detached"].includes(attachedClient.getStatus()),
+                );
               }
             },
           },
@@ -524,6 +564,55 @@ export function Chat({
       projectId,
     ],
   );
+
+  React.useEffect(() => {
+    if (
+      !restoreDurableExecution ||
+      !projectId ||
+      !contextId ||
+      hydratedSessionRevision !== sessionSeed.revision ||
+      executionClientRef.current ||
+      !hasPersistedDurableExecution({ projectId, contextId })
+    ) {
+      return;
+    }
+
+    const restoreKey = JSON.stringify([
+      executionServerId,
+      projectId,
+      contextId,
+      sessionSeed.revision,
+    ]);
+    if (durableRestoreAttemptRef.current === restoreKey) {
+      return;
+    }
+    durableRestoreAttemptRef.current = restoreKey;
+
+    const generation = executionGenerationRef.current;
+    void ensureConfiguredClient(contextId, generation)
+      .then((client) => {
+        if (
+          !client ||
+          generation !== executionGenerationRef.current ||
+          executionClientRef.current !== client
+        ) {
+          return;
+        }
+
+        setIsExecuting(["running", "waiting-approval", "detached"].includes(client.getStatus()));
+      })
+      .catch(() => {
+        // configure 已通过现有 reconnect 状态展示临时恢复失败和手动 Retry。
+      });
+  }, [
+    contextId,
+    ensureConfiguredClient,
+    executionServerId,
+    hydratedSessionRevision,
+    projectId,
+    restoreDurableExecution,
+    sessionSeed.revision,
+  ]);
 
   const ensureContextId = React.useCallback(
     (announce: boolean) => {
@@ -577,6 +666,7 @@ export function Chat({
 
       activeStreamingScopeRef.current = userMessage.messageId;
       const scopedUserMessage = scopeStreamingMessage(userMessage, userMessage.messageId);
+      streamingMessageBatcherRef.current?.flush(executionGenerationRef.current);
       setMessages((current) => [...current, scopedUserMessage]);
       setPendingHumanGate(null);
       setIsExecuting(true);
@@ -700,6 +790,7 @@ export function Chat({
     }
 
     const generation = executionGenerationRef.current;
+    streamingMessageBatcherRef.current?.flush(generation);
     void client.interrupt("Stop requested by user.").catch((error) => {
       if (generation === executionGenerationRef.current && executionClientRef.current === client) {
         notifyExecutionError(error);

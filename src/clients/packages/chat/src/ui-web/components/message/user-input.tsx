@@ -343,7 +343,6 @@ function UserInputContainer({
   );
 
   const handleSend = () => {
-    console.log("handleSend onExecute input", input);
     onExecute?.(input);
     suggestionRequestRef.current += 1;
     setInput("");

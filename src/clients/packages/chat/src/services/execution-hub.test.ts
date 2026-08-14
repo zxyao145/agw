@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { HubConnectionBuilder, HubConnectionState } from "@microsoft/signalr";
 
 test("buildSettingCommand keeps target data out of settings", async () => {
   const { buildSettingCommand } = await import("./execution-hub" + ".ts");
@@ -104,6 +105,176 @@ test("buildSubscribeExecutionCommand resumes a Redis stream cursor", async () =>
     executionId: "execution-1",
     cursor: "3-9",
   });
+});
+
+test("durable attachment detection connects only for a valid persisted execution", async () => {
+  const { getDurableExecutionStorageKey, hasPersistedDurableExecution } = await import(
+    "./execution-hub" + ".ts"
+  );
+  const values = new Map<string, string>();
+  const originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
+    },
+  });
+
+  try {
+    const runtime = { baseUrl: "https://agw.example.test", token: null };
+    const setting = { projectId: "project-1", contextId: "context-1" };
+    assert.equal(hasPersistedDurableExecution(setting, runtime), false);
+
+    const key = getDurableExecutionStorageKey(runtime, setting);
+    values.set(key, JSON.stringify({ executionId: "", cursor: "1-0" }));
+    assert.equal(hasPersistedDurableExecution(setting, runtime), false);
+
+    values.set(key, JSON.stringify({ executionId: "execution-1", cursor: "3-9" }));
+    assert.equal(hasPersistedDurableExecution(setting, runtime), true);
+  } finally {
+    if (originalDescriptor) {
+      Object.defineProperty(globalThis, "localStorage", originalDescriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, "localStorage");
+    }
+  }
+});
+
+test("durable configure resumes its cursor, clears 404, and preserves temporary failures", async () => {
+  const { ExecutionHubClient, getDurableExecutionStorageKey, hasPersistedDurableExecution } =
+    await import("./execution-hub" + ".ts");
+  const values = new Map<string, string>();
+  const originalStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const originalBuild = HubConnectionBuilder.prototype.build;
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
+    },
+  });
+
+  const runtime = { baseUrl: "https://agw.example.test", token: null };
+  const setting = { projectId: "project-1", contextId: "context-1" };
+  const storageKey = getDurableExecutionStorageKey(runtime, setting);
+
+  const createConnection = (
+    subscribe: (
+      command: { executionId: string; cursor?: string },
+      emitMessage: (message: unknown) => void,
+    ) => Promise<void>,
+  ) => {
+    const commands: Array<{ type: string; executionId?: string; cursor?: string }> = [];
+    let receiveMessage: ((message: unknown) => void) | undefined;
+    const connection = {
+      state: HubConnectionState.Disconnected,
+      on: (eventName: string, handler: (message: unknown) => void) => {
+        if (eventName === "ReceiveMessage") receiveMessage = handler;
+      },
+      onreconnecting: () => undefined,
+      onclose: () => undefined,
+      onreconnected: () => undefined,
+      start: async () => {
+        connection.state = HubConnectionState.Connected;
+      },
+      stop: async () => {
+        connection.state = HubConnectionState.Disconnected;
+      },
+      invoke: async (methodName: string, command?: { type: string }) => {
+        if (methodName === "GetExecutionProvider") return "distributed";
+        if (command) commands.push(command);
+        if (command?.type === "SubscribeExecutionCommand") {
+          await subscribe(command, (message) => receiveMessage?.(message));
+        }
+      },
+    };
+    return { connection, commands };
+  };
+
+  try {
+    values.set(storageKey, JSON.stringify({ executionId: "execution-1", cursor: "3-9" }));
+    const resumed = createConnection(async () => undefined);
+    HubConnectionBuilder.prototype.build = () => resumed.connection as never;
+    const resumedClient = new ExecutionHubClient({ onMessage: () => undefined }, runtime);
+
+    assert.deepEqual(await resumedClient.configure(setting), {
+      restoredDurableExecution: true,
+    });
+    assert.deepEqual(resumed.commands.at(-1), {
+      type: "SubscribeExecutionCommand",
+      executionId: "execution-1",
+      cursor: "3-9",
+    });
+    await resumedClient.dispose();
+
+    values.set(storageKey, JSON.stringify({ executionId: "execution-terminal", cursor: "3-10" }));
+    const terminal = createConnection(async (_command, emitMessage) => {
+      emitMessage({
+        messageId: "terminal-1",
+        role: "system",
+        author: "$agw",
+        contents: [],
+        additionalProperties: {
+          type: "turn-finished",
+          status: "completed",
+          executionId: "execution-terminal",
+          streamCursor: "3-11",
+        },
+      });
+    });
+    HubConnectionBuilder.prototype.build = () => terminal.connection as never;
+    const terminalClient = new ExecutionHubClient({ onMessage: () => undefined }, runtime);
+
+    assert.deepEqual(await terminalClient.configure(setting), {
+      restoredDurableExecution: false,
+    });
+    assert.equal(hasPersistedDurableExecution(setting, runtime), false);
+    await terminalClient.dispose();
+
+    values.set(storageKey, JSON.stringify({ executionId: "execution-2", cursor: "4-0" }));
+    const missing = createConnection(async () => {
+      throw new Error("404_0011: execution not found");
+    });
+    HubConnectionBuilder.prototype.build = () => missing.connection as never;
+    const missingClient = new ExecutionHubClient({ onMessage: () => undefined }, runtime);
+
+    assert.deepEqual(await missingClient.configure(setting), {
+      restoredDurableExecution: false,
+    });
+    assert.equal(hasPersistedDurableExecution(setting, runtime), false);
+    await missingClient.dispose();
+
+    values.set(storageKey, JSON.stringify({ executionId: "execution-3", cursor: "5-1" }));
+    const temporary = createConnection(async () => {
+      throw new Error("temporary transport failure");
+    });
+    HubConnectionBuilder.prototype.build = () => temporary.connection as never;
+    let reconnectState: { status: string } | undefined;
+    const temporaryClient = new ExecutionHubClient(
+      {
+        onMessage: () => undefined,
+        onReconnectFailed: (state) => {
+          reconnectState = state;
+        },
+      },
+      runtime,
+    );
+
+    await assert.rejects(temporaryClient.configure(setting), /temporary transport failure/);
+    assert.equal(reconnectState?.status, "failed");
+    assert.equal(hasPersistedDurableExecution(setting, runtime), true);
+    await temporaryClient.dispose();
+  } finally {
+    HubConnectionBuilder.prototype.build = originalBuild;
+    if (originalStorageDescriptor) {
+      Object.defineProperty(globalThis, "localStorage", originalStorageDescriptor);
+    } else {
+      Reflect.deleteProperty(globalThis, "localStorage");
+    }
+  }
 });
 
 test("getTurnFinishedStatus reads terminal AgwMessage", async () => {

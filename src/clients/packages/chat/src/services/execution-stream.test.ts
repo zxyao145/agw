@@ -152,6 +152,176 @@ test("text deltas merge only when scope, id, role, and author all match", async 
   assert.equal(differentAuthor.length, 3);
 });
 
+test("a streaming batch builds one result while preserving untouched message references", async () => {
+  const { mergeStreamingMessages } = await loadExecutionStream();
+  const untouched = textMessage({
+    messageId: "untouched",
+    role: "assistant",
+    author: "agent",
+    content: "stable",
+    streamingScopeId: "user-1",
+  });
+  const active = textMessage({
+    messageId: "active",
+    role: "assistant",
+    author: "agent",
+    content: "a",
+    streamingScopeId: "user-1",
+  });
+  const original = [untouched, active];
+  const merged = mergeStreamingMessages(original, [
+    textMessage({
+      messageId: "active",
+      role: "assistant",
+      author: "agent",
+      content: "b",
+      streamingScopeId: "user-1",
+    }),
+    textMessage({
+      messageId: "active",
+      role: "assistant",
+      author: "agent",
+      content: "c",
+      streamingScopeId: "user-1",
+    }),
+  ]);
+
+  assert.equal(merged[0], untouched);
+  assert.notEqual(merged[1], active);
+  assert.equal(merged[1].contents[0].content, "abc");
+  assert.equal(active.contents[0].content, "a");
+});
+
+test("a streaming batch keeps duplicate ids isolated by scope", async () => {
+  const { mergeStreamingMessages } = await loadExecutionStream();
+  const merged = mergeStreamingMessages(
+    [],
+    [
+      textMessage({
+        messageId: "item_0",
+        role: "assistant",
+        author: "agent",
+        content: "one",
+        streamingScopeId: "user-1",
+      }),
+      textMessage({
+        messageId: "item_0",
+        role: "assistant",
+        author: "agent",
+        content: "two",
+        streamingScopeId: "user-2",
+      }),
+    ],
+  );
+
+  assert.deepEqual(
+    merged.map((message: { contents: Array<{ content?: string }> }) => message.contents[0].content),
+    ["one", "two"],
+  );
+});
+
+test("streaming contents preserve text and tool ordering", async () => {
+  const { mergeStreamingMessages } = await loadExecutionStream();
+  const merged = mergeStreamingMessages(
+    [
+      textMessage({
+        messageId: "item_0",
+        role: "assistant",
+        author: "agent",
+        content: "before",
+        streamingScopeId: "user-1",
+      }),
+    ],
+    [
+      {
+        messageId: "item_0",
+        role: "assistant",
+        author: "agent",
+        streamingScopeId: "user-1",
+        contents: [{ type: "FunctionCallContent", callId: "call-1", name: "tool" }],
+      },
+      textMessage({
+        messageId: "item_0",
+        role: "assistant",
+        author: "agent",
+        content: "after",
+        streamingScopeId: "user-1",
+      }),
+    ],
+  );
+
+  assert.deepEqual(
+    merged[0].contents.map((content: { type: string; content?: string }) => [
+      content.type,
+      content.content,
+    ]),
+    [
+      ["TextContent", "before"],
+      ["FunctionCallContent", undefined],
+      ["TextContent", "after"],
+    ],
+  );
+});
+
+test("the 50ms batcher commits a burst once and drops an old generation", async () => {
+  const { createStreamingMessageBatcher, STREAMING_MESSAGE_BATCH_INTERVAL_MS } =
+    await loadExecutionStream();
+  const scheduled: Array<() => void> = [];
+  const flushed: Array<{ messages: unknown[]; generation: number }> = [];
+  const batcher = createStreamingMessageBatcher(
+    (messages: unknown[], generation: number) => flushed.push({ messages, generation }),
+    (callback: () => void, delay: number) => {
+      assert.equal(delay, 50);
+      scheduled.push(callback);
+      return scheduled.length;
+    },
+    () => undefined,
+  );
+
+  assert.equal(STREAMING_MESSAGE_BATCH_INTERVAL_MS, 50);
+  for (let index = 0; index < 100; index += 1) {
+    batcher.enqueue(
+      textMessage({
+        messageId: "active",
+        role: "assistant",
+        author: "agent",
+        content: String(index),
+        streamingScopeId: "user-1",
+      }),
+      1,
+    );
+  }
+  assert.equal(scheduled.length, 1);
+  scheduled[0]();
+  assert.equal(flushed.length, 1);
+  assert.equal(flushed[0].messages.length, 100);
+
+  batcher.enqueue(
+    textMessage({
+      messageId: "stale",
+      role: "assistant",
+      author: "agent",
+      content: "stale",
+      streamingScopeId: "user-1",
+    }),
+    1,
+  );
+  batcher.enqueue(
+    textMessage({
+      messageId: "current",
+      role: "assistant",
+      author: "agent",
+      content: "current",
+      streamingScopeId: "user-2",
+    }),
+    2,
+  );
+  batcher.flush(2);
+
+  assert.equal(flushed.length, 2);
+  assert.equal((flushed[1].messages[0] as { messageId: string }).messageId, "current");
+});
+
 test("streamed proposed plan tags merge into one restorable Plan Card payload", async () => {
   const { mergeStreamingMessage } = await loadExecutionStream();
   const first = textMessage({

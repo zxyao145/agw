@@ -8,6 +8,7 @@ import {
   type PermissionMode,
   type ExecutionRequest,
   type ExecutionSetting,
+  type ExecutionConfigurationResult,
 } from "./execution-hub";
 import type { AiMessage } from "@agw/api";
 import {
@@ -27,6 +28,7 @@ type ExecutionClient = Pick<
   | "interruptAndWait"
   | "submitHumanResponse"
   | "retryConnection"
+  | "hasActiveExecution"
   | "dispose"
 >;
 
@@ -41,7 +43,7 @@ type Entry = {
 };
 
 export type ManagedExecutionHandle = {
-  configure(setting: ExecutionSetting): Promise<void>;
+  configure(setting: ExecutionSetting): Promise<ExecutionConfigurationResult>;
   execute(request: ExecutionRequest): Promise<void>;
   setMode(agentId: string, mode: AgentMode): Promise<void>;
   setPermissionMode(permissionMode: PermissionMode): Promise<void>;
@@ -104,7 +106,20 @@ export class ExecutionSessionManager {
 
     const attachedEntry = entry;
     return {
-      configure: (setting) => attachedEntry.client.configure(setting),
+      configure: async (setting) => {
+        try {
+          const result = await attachedEntry.client.configure(setting);
+          if (result.restoredDurableExecution) {
+            this.activity.turnStarted(key);
+          }
+          return result;
+        } catch (error) {
+          if (attachedEntry.client.hasActiveExecution()) {
+            this.activity.turnStarted(key);
+          }
+          throw error;
+        }
+      },
       execute: async (request) => {
         if (this.activity.isActive(key)) {
           throw new Error("This conversation already has a running task.");
@@ -202,6 +217,11 @@ export class ExecutionSessionManager {
   /** 清理重试状态，并通知 Chat 可以恢复操作。 */
   private handleReconnected(entry: Entry): void {
     entry.reconnectState = null;
+    if (entry.client.hasActiveExecution()) {
+      this.activity.turnStarted(entry.key);
+    } else if (this.activity.isActive(entry.key)) {
+      this.activity.turnFinished(entry.key, "completed");
+    }
     entry.handler?.onReconnected?.();
   }
 }

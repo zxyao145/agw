@@ -39,6 +39,27 @@ function hasSameStreamingIdentity(message: AiMessage, incoming: AiMessage): bool
   );
 }
 
+function getStreamingIdentity(message: AiMessage): string {
+  return JSON.stringify([
+    message.streamingScopeId ?? null,
+    message.messageId,
+    message.role,
+    message.author ?? null,
+  ]);
+}
+
+function appendStreamingContents(existing: AiMessage, incoming: AiMessage): void {
+  for (const incomingContent of incoming.contents) {
+    const previousContent = existing.contents.at(-1);
+    if (previousContent && isTextContent(previousContent) && isTextContent(incomingContent)) {
+      previousContent.content += incomingContent.content;
+      continue;
+    }
+
+    existing.contents.push(cloneMessageContent(incomingContent));
+  }
+}
+
 export function scopeStreamingMessage(message: AiMessage, streamingScopeId: string): AiMessage {
   return {
     ...cloneMessage(message),
@@ -80,40 +101,114 @@ export function getMessageTextContent(message: AiMessage): string {
 }
 
 export function mergeStreamingMessage(messages: AiMessage[], incoming: AiMessage): AiMessage[] {
-  const existingIndex = messages.findIndex((message) =>
-    hasSameStreamingIdentity(message, incoming),
-  );
-  if (existingIndex < 0) {
-    return [...messages, cloneMessage(incoming)];
+  return mergeStreamingMessages(messages, [incoming]);
+}
+
+export function mergeStreamingMessages(
+  messages: AiMessage[],
+  incomingMessages: AiMessage[],
+): AiMessage[] {
+  if (incomingMessages.length === 0) {
+    return messages;
   }
 
   const updated = [...messages];
-  const existing = cloneMessage(updated[existingIndex]);
-  const existingText = existing.contents.find(isTextContent);
-  const incomingText = incoming.contents.find(isTextContent);
+  const indexByIdentity = new Map(
+    messages.map((message, index) => [getStreamingIdentity(message), index]),
+  );
+  const mutableIndexes = new Set<number>();
 
-  if (incomingText) {
-    if (existingText) {
-      existingText.content = (existingText.content || "") + (incomingText.content || "");
-    } else {
-      existing.contents.push(cloneMessageContent(incomingText));
+  for (const incoming of incomingMessages) {
+    const identity = getStreamingIdentity(incoming);
+    const existingIndex = indexByIdentity.get(identity);
+    if (existingIndex === undefined) {
+      const appendedIndex = updated.length;
+      updated.push(cloneMessage(incoming));
+      indexByIdentity.set(identity, appendedIndex);
+      mutableIndexes.add(appendedIndex);
+      continue;
     }
+
+    if (!hasSameStreamingIdentity(updated[existingIndex], incoming)) {
+      continue;
+    }
+
+    if (!mutableIndexes.has(existingIndex)) {
+      updated[existingIndex] = cloneMessage(updated[existingIndex]);
+      mutableIndexes.add(existingIndex);
+    }
+    appendStreamingContents(updated[existingIndex], incoming);
   }
 
-  const incomingNonTextContents = incoming.contents
-    .filter((content) => !isTextContent(content))
-    .map(cloneMessageContent);
-  if (incomingNonTextContents.length > 0) {
-    existing.contents = [...existing.contents, ...incomingNonTextContents];
-  }
-
-  updated[existingIndex] = existing;
   return updated;
 }
 
 export function mergeStreamingMessagesById(messages: AiMessage[]): AiMessage[] {
-  return messages.reduce<AiMessage[]>(
-    (accumulator, message) => mergeStreamingMessage(accumulator, message),
-    [],
-  );
+  return mergeStreamingMessages([], messages);
+}
+
+export const STREAMING_MESSAGE_BATCH_INTERVAL_MS = 50;
+
+type StreamingMessageBatchTimer = ReturnType<typeof setTimeout>;
+type StreamingMessageBatchSchedule = (
+  callback: () => void,
+  delay: number,
+) => StreamingMessageBatchTimer;
+
+export interface StreamingMessageBatcher {
+  enqueue(message: AiMessage, generation: number): void;
+  flush(generation: number): void;
+  discard(): void;
+}
+
+export function createStreamingMessageBatcher(
+  onFlush: (messages: AiMessage[], generation: number) => void,
+  schedule: StreamingMessageBatchSchedule = setTimeout,
+  cancel: (timer: StreamingMessageBatchTimer) => void = clearTimeout,
+): StreamingMessageBatcher {
+  let timer: StreamingMessageBatchTimer | undefined;
+  let generation: number | undefined;
+  let bufferedMessages: AiMessage[] = [];
+
+  const cancelTimer = () => {
+    if (timer !== undefined) {
+      cancel(timer);
+      timer = undefined;
+    }
+  };
+
+  const discard = () => {
+    cancelTimer();
+    generation = undefined;
+    bufferedMessages = [];
+  };
+
+  const flush = (currentGeneration: number) => {
+    cancelTimer();
+    if (generation !== currentGeneration || bufferedMessages.length === 0) {
+      discard();
+      return;
+    }
+
+    const messages = bufferedMessages;
+    bufferedMessages = [];
+    generation = undefined;
+    onFlush(messages, currentGeneration);
+  };
+
+  return {
+    enqueue(message, currentGeneration) {
+      if (generation !== undefined && generation !== currentGeneration) {
+        discard();
+      }
+
+      generation = currentGeneration;
+      bufferedMessages.push(message);
+      if (timer === undefined) {
+        timer = schedule(() => flush(currentGeneration), STREAMING_MESSAGE_BATCH_INTERVAL_MS);
+      }
+    },
+    flush,
+    discard,
+  };
 }

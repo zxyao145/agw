@@ -10,17 +10,18 @@ type MdCardProps = {
   enableMath?: boolean;
 };
 
-const MdCard = ({ mdText, enableMath = true }: MdCardProps) => {
-  // console.log("MdCard mdText", typeof content, Array.isArray(content), content);
-  // console.trace("MdCard stack");
-
+const MdCard = React.memo(function MdCard({ mdText, enableMath = true }: MdCardProps) {
+  const normalizedText = React.useMemo(
+    () => (enableMath ? normalizeMathDelimiters(mdText) : mdText),
+    [enableMath, mdText],
+  );
   return (
     <ReactMarkdown
       remarkPlugins={enableMath ? [remarkGfm, remarkMath] : [remarkGfm]}
       rehypePlugins={enableMath ? [rehypeKatex] : []}
       // ReactMarkdown  code-inspector-plugin 有冲突
       // 大概率是 code-inspector-plugin 在 dev 下改写了 JSX。
-      children={enableMath ? normalizeMathDelimiters(mdText) : mdText}
+      children={normalizedText}
       components={{
         pre: ({ children }) => (
           <pre className="msg-content-md-code overflow-x-auto agw-scrollbar">{children}</pre>
@@ -43,6 +44,6 @@ const MdCard = ({ mdText, enableMath = true }: MdCardProps) => {
       }}
     />
   );
-};
+});
 
 export default MdCard;

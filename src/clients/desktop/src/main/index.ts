@@ -1,6 +1,6 @@
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, release } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -31,6 +31,11 @@ import { DaemonManager } from "./daemon/daemon-manager";
 import { DESKTOP_OAUTH_PROTOCOL, findOAuthDeepLink, parseOAuthDeepLink } from "./oauth-deep-link";
 import { parseDesktopPackageMetadata, type DesktopPackageMetadata } from "./package-metadata";
 import { resolveRendererFile } from "./renderer-path";
+import {
+  appendRendererEvent,
+  createRendererEventRecord,
+  RendererRecoveryGuard,
+} from "./renderer-recovery";
 import { createLocalDesktopToken } from "./runtime/local-token";
 import { readLocalServerRuntime } from "./runtime/local-server-runtime";
 import { resolveServerExecutablePath } from "./runtime/server-executable-path";
@@ -61,6 +66,11 @@ let daemonManager: DaemonManager;
 let packageMetadata: DesktopPackageMetadata;
 let pendingOAuthRoute: string | null = null;
 let rendererReady = false;
+let lastTrustedRendererUrl: string | null = null;
+let rendererReloadRequired = false;
+let rendererRecoveryInProgress = false;
+let rendererRecoveryAttempt: Promise<boolean> | null = null;
+const rendererRecoveryGuard = new RendererRecoveryGuard();
 
 function reportMainProcessError(title: string, error: unknown): void {
   console.error(title, error);
@@ -181,12 +191,99 @@ async function prepareRendererSession(): Promise<void> {
 async function loadRenderer(pathname = "/desktop/chat/"): Promise<void> {
   if (!mainWindow) return;
   const developmentUrl = process.env.AGW_RENDERER_URL;
-  await mainWindow.loadURL(
-    developmentUrl ? new URL(pathname, developmentUrl).toString() : `agw://app${pathname}`,
+  const target = developmentUrl
+    ? new URL(pathname, developmentUrl).toString()
+    : `agw://app${pathname}`;
+  await loadTrustedRendererUrl(target);
+}
+
+async function loadTrustedRendererUrl(target: string): Promise<void> {
+  if (!mainWindow) return;
+  if (!isTrustedRenderer(target)) {
+    throw new Error("Refusing to load an untrusted renderer URL.");
+  }
+  rendererRecoveryGuard.markLoadStarted();
+  lastTrustedRendererUrl = target;
+  await mainWindow.loadURL(target);
+}
+
+function writeRendererEvent(
+  event: "render-process-gone" | "did-fail-load" | "unresponsive" | "responsive",
+  reason: string,
+  url: string,
+  exitCode?: number,
+): void {
+  const record = createRendererEventRecord(
+    { event, reason, pathname: url, ...(exitCode === undefined ? {} : { exitCode }) },
+    {
+      appVersion: packageMetadata?.appVersion ?? app.getVersion(),
+      electronVersion: process.versions.electron,
+      os: `${process.platform} ${release()}`,
+    },
+  );
+  void appendRendererEvent(join(app.getPath("logs"), "renderer-events.jsonl"), record).catch(
+    (error) => console.warn("Unable to write renderer diagnostic event.", error),
   );
 }
 
+async function reloadRendererWindow(): Promise<void> {
+  const target =
+    lastTrustedRendererUrl ??
+    (process.env.AGW_RENDERER_URL
+      ? new URL("/desktop/chat/", process.env.AGW_RENDERER_URL).toString()
+      : "agw://app/desktop/chat/");
+  await loadTrustedRendererUrl(target);
+}
+
+async function showManualRendererRecovery(window: BrowserWindow): Promise<boolean> {
+  if (window.isDestroyed()) return false;
+  const answer = await dialog.showMessageBox(window, {
+    type: "error",
+    buttons: ["Reload Chat", "Close Window"],
+    defaultId: 0,
+    cancelId: 1,
+    title: "Chat renderer stopped",
+    message: "The Chat renderer stopped again before recovery completed.",
+    detail:
+      "Reload Chat retries without starting a new execution. Close Window hides Agw and reloads Chat the next time it is opened.",
+  });
+
+  if (answer.response === 0) {
+    await reloadRendererWindow();
+    return true;
+  }
+
+  rendererReloadRequired = true;
+  window.hide();
+  return false;
+}
+
+function recoverRenderer(window: BrowserWindow): Promise<boolean> {
+  if (rendererRecoveryInProgress) return rendererRecoveryAttempt ?? Promise.resolve(false);
+  if (isQuitting || window.isDestroyed()) return Promise.resolve(false);
+  rendererRecoveryInProgress = true;
+  const action = rendererRecoveryGuard.recordFailure();
+  const recovery = (async () => {
+    try {
+      if (action === "auto-reload") {
+        try {
+          await reloadRendererWindow();
+          return true;
+        } catch {
+          // A failed automatic navigation immediately hands control to manual recovery.
+        }
+      }
+      return await showManualRendererRecovery(window);
+    } finally {
+      rendererRecoveryInProgress = false;
+    }
+  })();
+  rendererRecoveryAttempt = recovery;
+  return recovery;
+}
+
 function createMainWindow(): BrowserWindow {
+  let destructionPlanned = false;
   const window = new BrowserWindow({
     width: 1440,
     height: 920,
@@ -214,12 +311,70 @@ function createMainWindow(): BrowserWindow {
   window.webContents.on("will-navigate", (event, target) => {
     if (!isTrustedRenderer(target)) event.preventDefault();
   });
+  window.webContents.on("did-navigate", (_event, target) => {
+    if (isTrustedRenderer(target)) lastTrustedRendererUrl = target;
+  });
+  window.webContents.on("did-finish-load", () => {
+    const target = window.webContents.getURL();
+    if (isTrustedRenderer(target)) lastTrustedRendererUrl = target;
+    rendererRecoveryGuard.markLoadSucceeded();
+  });
+  window.webContents.on("render-process-gone", (_event, details) => {
+    const target = window.webContents.getURL() || lastTrustedRendererUrl || "agw://app/";
+    writeRendererEvent("render-process-gone", details.reason, target, details.exitCode);
+    if (
+      details.reason === "clean-exit" ||
+      destructionPlanned ||
+      isQuitting ||
+      window.isDestroyed()
+    ) {
+      return;
+    }
+    void recoverRenderer(window).catch((error) =>
+      reportMainProcessError("Unable to recover Chat renderer", error),
+    );
+  });
+  window.webContents.on(
+    "did-fail-load",
+    (_event, errorCode, errorDescription, validatedUrl, isMainFrame) => {
+      if (
+        !isMainFrame ||
+        destructionPlanned ||
+        errorCode === -3 ||
+        errorDescription === "ERR_ABORTED"
+      ) {
+        return;
+      }
+      const target = validatedUrl || window.webContents.getURL() || lastTrustedRendererUrl || "";
+      writeRendererEvent("did-fail-load", errorDescription, target, errorCode);
+      void recoverRenderer(window).catch((error) =>
+        reportMainProcessError("Unable to recover Chat renderer", error),
+      );
+    },
+  );
+  window.on("unresponsive", () => {
+    writeRendererEvent(
+      "unresponsive",
+      "unresponsive",
+      window.webContents.getURL() || lastTrustedRendererUrl || "",
+    );
+  });
+  window.on("responsive", () => {
+    writeRendererEvent(
+      "responsive",
+      "responsive",
+      window.webContents.getURL() || lastTrustedRendererUrl || "",
+    );
+  });
   window.once("ready-to-show", () => window.show());
   window.on("close", (event) => {
     if (!isQuitting && currentSettings.closeBehavior === "minimize-to-tray") {
       event.preventDefault();
       window.hide();
+      return;
     }
+    destructionPlanned = true;
+    rendererRecoveryGuard.markLoadStarted();
   });
   window.on("closed", () => {
     mainWindow = null;
@@ -261,7 +416,17 @@ function createTray(): void {
 
 async function showWindow(pathname?: string): Promise<void> {
   if (!mainWindow) mainWindow = createMainWindow();
-  if (pathname) await loadRenderer(pathname);
+  if (rendererReloadRequired) {
+    rendererReloadRequired = false;
+    try {
+      await reloadRendererWindow();
+    } catch (error) {
+      rendererReloadRequired = true;
+      throw error;
+    }
+  } else if (pathname) {
+    await loadRenderer(pathname);
+  }
   mainWindow.show();
   mainWindow.focus();
 }
@@ -476,6 +641,7 @@ function registerIpc(): void {
 
 app.on("before-quit", () => {
   isQuitting = true;
+  rendererRecoveryGuard.dispose();
 });
 
 app.on("activate", () => showWindowSafely());
@@ -526,7 +692,12 @@ void app
 
     const initialRoute = pendingOAuthRoute ?? "/desktop/chat/";
     pendingOAuthRoute = null;
-    await loadRenderer(initialRoute);
+    try {
+      await loadRenderer(initialRoute);
+    } catch (error) {
+      const recovery = rendererRecoveryAttempt;
+      if (!recovery || !(await recovery)) throw error;
+    }
     rendererReady = true;
     if (pendingOAuthRoute) {
       const nextRoute = pendingOAuthRoute;

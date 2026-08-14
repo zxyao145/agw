@@ -1089,6 +1089,12 @@ export function ChatWorkspace({
                     target={selectedTarget}
                     projectId={selectedProjectId}
                     sessionSeed={chatSessionSeed}
+                    restoreDurableExecution={
+                      Number(chatSessionSeed.revision) > 0 &&
+                      queryProjectId === selectedProjectId &&
+                      queryContextId === contextId &&
+                      chatSessionSeed.contextId === contextId
+                    }
                     environmentVariables={environmentVariables}
                     onContextIdChange={handleChatContextIdChange}
                     onConversationChange={refreshConversationList}
