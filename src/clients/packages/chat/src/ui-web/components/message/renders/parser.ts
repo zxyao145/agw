@@ -40,7 +40,6 @@ function parseNestedJson(input: string | Record<string, unknown>, keys: string[]
       return input as string;
     }
   } else if (isRecord(input)) {
-    console.log("isRecord", input);
     jsonObj = input;
   } else {
     return input as string;

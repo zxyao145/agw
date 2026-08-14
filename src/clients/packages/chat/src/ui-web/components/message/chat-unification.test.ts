@@ -106,7 +106,7 @@ test("shared Chat keeps unmatched human interactions in the fallback approval ov
   assert.match(source, /request=\{floatingHumanGate\}/);
 });
 
-test("shared Chat scopes history and merges only the incoming streaming message", async () => {
+test("shared Chat scopes history and batches incoming streaming messages", async () => {
   const source = await readFile(CHAT_URL, "utf8");
 
   assert.match(source, /scopeMessagesByUserTurn\(preparedHistory\.messages\)/);
@@ -122,9 +122,32 @@ test("shared Chat scopes history and merges only the incoming streaming message"
   );
   assert.match(
     source,
-    /setMessages\(\(current\) => mergeStreamingMessage\(current, scopedMessage\)\)/,
+    /createStreamingMessageBatcher\([\s\S]*?mergeStreamingMessages\(current, incomingMessages\)/,
   );
+  assert.match(
+    source,
+    /streamingMessageBatcherRef\.current\?\.enqueue\(scopedMessage, generation\)/,
+  );
+  assert.match(source, /streamingMessageBatcherRef\.current\?\.flush\(generation\)/);
   assert.doesNotMatch(source, /mergeStreamingMessagesById/);
+});
+
+test("shared Chat restores only a hydrated durable attachment", async () => {
+  const source = await readFile(CHAT_URL, "utf8");
+  const pageSource = await readFile(CHAT_WORKSPACE_URL, "utf8");
+
+  assert.match(source, /restoreDurableExecution\?: boolean/);
+  assert.match(source, /hydratedSessionRevision !== sessionSeed\.revision/);
+  assert.match(source, /!hasPersistedDurableExecution\(\{ projectId, contextId \}\)/);
+  assert.match(source, /ensureConfiguredClient\(contextId, generation\)/);
+  assert.match(
+    source,
+    /onReconnected:[\s\S]*?setIsExecuting\([\s\S]*?attachedClient\.getStatus\(\)/,
+  );
+  assert.match(
+    pageSource,
+    /restoreDurableExecution=\{[\s\S]*?Number\(chatSessionSeed\.revision\) > 0[\s\S]*?queryProjectId === selectedProjectId[\s\S]*?queryContextId === contextId[\s\S]*?chatSessionSeed\.contextId === contextId/,
+  );
 });
 
 test("shared Chat follows streaming output only while the viewport is at the bottom", async () => {

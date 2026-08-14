@@ -28,3 +28,18 @@ test("Desktop clears stale development redirects before loading Chat", async () 
   );
   assert.match(readyHandler, /\.catch\(\(error\) => reportMainProcessError\(/);
 });
+
+test("Desktop diagnoses renderer exits and recovers without a reload loop", async () => {
+  const source = await readFile(MAIN_URL, "utf8");
+
+  assert.match(source, /webContents\.on\("render-process-gone"/);
+  assert.match(source, /"did-fail-load"/);
+  assert.match(source, /window\.on\("unresponsive"/);
+  assert.match(source, /window\.on\("responsive"/);
+  assert.match(source, /renderer-events\.jsonl/);
+  assert.match(source, /buttons: \["Reload Chat", "Close Window"\]/);
+  assert.match(source, /rendererReloadRequired = true;[\s\S]*?window\.hide\(\)/);
+  assert.match(source, /details\.reason === "clean-exit"/);
+  assert.match(source, /destructionPlanned/);
+  assert.match(source, /errorCode === -3|ERR_ABORTED/);
+});

@@ -7,7 +7,7 @@ const CONVERSATION_URL = new URL("./conversation.tsx", import.meta.url);
 
 async function loadMessageProcessor() {
   const source = await readFile(CONVERSATION_URL, "utf8");
-  const start = source.indexOf("const defaultProcessMessages");
+  const start = source.indexOf("type FragmentType");
   const end = source.indexOf("\nexport function Conversation");
   const processorSource = source
     .slice(start, end)
@@ -62,6 +62,43 @@ test("conversation renders agent name and author metadata above agent messages",
   assert.match(source, /\{messageMeta\.name\}/);
   assert.match(source, /\{messageMeta\.author\}/);
   assert.match(source, /AiMessageComponent message=\{item\.message\}/);
+});
+
+test("conversation caches preprocessing, uses stable keys, and omits message debug logs", async () => {
+  const source = await readFile(CONVERSATION_URL, "utf8");
+
+  assert.match(source, /new WeakMap<AiMessage, MessageFragment\[\]>/);
+  assert.match(source, /React\.useMemo\([\s\S]*?processMessages/);
+  assert.match(source, /function addStableKeys/);
+  assert.doesNotMatch(source, /key=\{index\}|console\.(?:debug|log)/);
+});
+
+test("conversation reuses preprocessing for unchanged messages only", async () => {
+  const { defaultProcessMessages } = await loadMessageProcessor();
+  const stableMessage = {
+    messageId: "stable-message",
+    author: "agent",
+    role: "assistant",
+    streamingScopeId: "user-1",
+    contents: [{ type: "TextContent", content: "stable" }],
+  };
+  const activeMessage = {
+    messageId: "active-message",
+    author: "agent",
+    role: "assistant",
+    streamingScopeId: "user-1",
+    contents: [{ type: "TextContent", content: "first" }],
+  };
+  const nextActiveMessage = {
+    ...activeMessage,
+    contents: [{ type: "TextContent", content: "second" }],
+  };
+
+  const first = defaultProcessMessages([stableMessage, activeMessage]);
+  const second = defaultProcessMessages([stableMessage, nextActiveMessage]);
+
+  assert.equal(first[0].message, second[0].message);
+  assert.notEqual(first[1].message, second[1].message);
 });
 
 test("conversation renders user author metadata above and aligned with user messages", async () => {
