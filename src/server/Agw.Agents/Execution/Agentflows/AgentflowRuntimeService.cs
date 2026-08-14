@@ -263,7 +263,9 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
 
                             var toolDecision = await humanGateApprovalHandler
                                 .WaitForApprovalAsync(toolApprovalGate, cancellationToken);
-                            var response = ToolApprovalSupport.CreateResponse(toolApprovalRequest, toolDecision);
+                            var response = ToolApprovalSupport.CreateWorkflowResponse(
+                                toolApprovalRequest,
+                                toolDecision);
                             await run.SendResponseAsync(externalRequest.CreateResponse(response));
                             break;
                         }
@@ -1001,7 +1003,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                 response.ResponseData);
             await run.SendResponseAsync(
                     externalRequest.CreateResponse(
-                        ToolApprovalSupport.CreateResponse(toolApprovalRequest, decision)))
+                        ToolApprovalSupport.CreateWorkflowResponse(toolApprovalRequest, decision)))
                 .ConfigureAwait(false);
             return;
         }

@@ -268,6 +268,9 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         {
             await SendSystemMessageAsync(
                 reason ?? "No active request is currently running.");
+            await _messageSink.WriteAsync(
+                TurnMessageFactory.CreateFinished("interrupted"),
+                CancellationToken.None);
             return;
         }
 

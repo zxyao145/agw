@@ -80,8 +80,12 @@ public class AgentflowRuntimeServiceTests
         Assert.Contains("unattended Agentflow execution", exception.Message);
     }
 
-    [Fact]
-    public async Task ExecuteStreamingAsync_ToolApprovalRequest_ResumesThroughWorkflowResponse()
+    [Theory]
+    [InlineData("once")]
+    [InlineData("always-tool")]
+    [InlineData("always-arguments")]
+    public async Task ExecuteStreamingAsync_ToolApprovalRequest_ResumesThroughWorkflowResponse(
+        string approvalScope)
     {
         var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "approval-flow" };
         var agentId = Guid.CreateVersion7();
@@ -130,7 +134,7 @@ public class AgentflowRuntimeServiceTests
             Guid.CreateVersion7(),
             "interactive-context",
             Guid.CreateVersion7(),
-            new DelayedApprovalHandler()))
+            new DelayedApprovalHandler(approvalScope)))
         {
             messages.Add(message);
         }
@@ -140,7 +144,7 @@ public class AgentflowRuntimeServiceTests
             string.Equals(type?.ToString(), "tool-approval-request", StringComparison.Ordinal));
         Assert.Contains(
             messages.SelectMany(message => message.Contents).OfType<AgwTextContent>(),
-            content => content.Content == "approved");
+            content => content.Content == approvalScope);
     }
 
     [Fact]
@@ -684,12 +688,23 @@ public class AgentflowRuntimeServiceTests
 
     private sealed class DelayedApprovalHandler : IHumanGateApprovalHandler
     {
+        private readonly string _approvalScope;
+
+        public DelayedApprovalHandler(string approvalScope = "once")
+        {
+            _approvalScope = approvalScope;
+        }
+
         public async ValueTask<HumanGateApprovalDecision> WaitForApprovalAsync(
             HumanGateApprovalRequest request,
             CancellationToken cancellationToken)
         {
             await Task.Delay(20, cancellationToken);
-            return new HumanGateApprovalDecision(request.RequestId, true, "approved");
+            return new HumanGateApprovalDecision(
+                request.RequestId,
+                true,
+                "approved",
+                _approvalScope);
         }
     }
 
@@ -987,9 +1002,23 @@ public class AgentflowRuntimeServiceTests
             CancellationToken cancellationToken = default)
         {
             await Task.Yield();
-            if (messages.SelectMany(message => message.Contents).OfType<ToolApprovalResponseContent>().Any())
+            var response = messages
+                .SelectMany(message => message.Contents)
+                .FirstOrDefault(content =>
+                    content is ToolApprovalResponseContent or AlwaysApproveToolApprovalResponseContent);
+            if (response != null)
             {
-                yield return new AgentResponseUpdate(ChatRole.Assistant, "approved");
+                var approvalScope = response switch
+                {
+                    AlwaysApproveToolApprovalResponseContent { AlwaysApproveTool: true } =>
+                        "always-tool",
+                    AlwaysApproveToolApprovalResponseContent
+                    {
+                        AlwaysApproveToolWithArguments: true
+                    } => "always-arguments",
+                    _ => "once"
+                };
+                yield return new AgentResponseUpdate(ChatRole.Assistant, approvalScope);
                 yield break;
             }
 

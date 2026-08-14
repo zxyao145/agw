@@ -1,13 +1,18 @@
+using System.IO.Enumeration;
 using System.Text.RegularExpressions;
 
 using Agw.Files.Abstracts;
 using Agw.Files.Abstracts.Dtos;
 using Agw.Files.Exceptions;
 
+using Microsoft.Extensions.FileSystemGlobbing;
+
 namespace Agw.Files.Application.Storage.Local;
 
 public sealed class LocalFileSystem : IAgwFileSystem
 {
+    private static readonly TimeSpan SearchRegexTimeout = TimeSpan.FromSeconds(1);
+
     private static readonly StringComparison PathComparison =
         OperatingSystem.IsWindows()
             ? StringComparison.OrdinalIgnoreCase
@@ -169,8 +174,18 @@ public sealed class LocalFileSystem : IAgwFileSystem
             yield break;
         }
 
-        var option = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
-        var entries = Directory.GetFileSystemEntries(fullPath, searchPattern, option);
+        var entries = Directory.EnumerateFileSystemEntries(
+            fullPath,
+            searchPattern,
+            new EnumerationOptions
+            {
+                AttributesToSkip = recursive
+                    ? FileAttributes.ReparsePoint
+                    : (FileAttributes)0,
+                IgnoreInaccessible = true,
+                RecurseSubdirectories = recursive,
+                ReturnSpecialDirectories = false
+            });
 
         foreach (var entry in entries)
         {
@@ -224,17 +239,45 @@ public sealed class LocalFileSystem : IAgwFileSystem
         Regex regex;
         try
         {
-            regex = new Regex(options.Pattern, regexOptions);
+            regex = new Regex(options.Pattern, regexOptions, SearchRegexTimeout);
         }
         catch (ArgumentException)
         {
             yield break;
         }
 
-        var allFiles = Directory.GetFiles(fullPath, "*", SearchOption.AllDirectories);
-        var hitCount = 0;
+        if (options.MaxHits is <= 0 ||
+            options.MaxFiles is <= 0 ||
+            options.MaxFileSizeBytes is <= 0 ||
+            options.MaxTotalBytes is <= 0)
+        {
+            yield break;
+        }
 
-        foreach (var file in allFiles)
+        Matcher? matcher = null;
+        if (!string.IsNullOrWhiteSpace(options.FilenameGlob))
+        {
+            matcher = new Matcher(StringComparison.OrdinalIgnoreCase);
+            matcher.AddInclude(options.FilenameGlob);
+        }
+
+        HashSet<string>? excludedDirectoryNames = null;
+        if (options.ExcludedDirectoryNames is { Count: > 0 })
+        {
+            excludedDirectoryNames = new HashSet<string>(
+                options.ExcludedDirectoryNames,
+                StringComparer.OrdinalIgnoreCase);
+        }
+
+        var hitCount = 0;
+        var fileCount = 0;
+        long totalBytes = 0;
+
+        foreach (var file in EnumerateSearchFiles(
+                     fullPath,
+                     options.Recursive,
+                     excludedDirectoryNames,
+                     ct))
         {
             ct.ThrowIfCancellationRequested();
 
@@ -243,9 +286,9 @@ public sealed class LocalFileSystem : IAgwFileSystem
                 yield break;
             }
 
-            if (file.Contains("\\.git\\") || file.Contains("/.git/"))
+            if (options.MaxFiles.HasValue && fileCount >= options.MaxFiles.Value)
             {
-                continue;
+                yield break;
             }
 
             if (options.IncludeExtensions is { Count: > 0 })
@@ -257,60 +300,147 @@ public sealed class LocalFileSystem : IAgwFileSystem
                 }
             }
 
-            if (!string.IsNullOrEmpty(options.FilenameGlob))
-            {
-                var filename = Path.GetFileName(file);
-                if (!MatchesSimpleGlob(filename, options.FilenameGlob))
-                {
-                    continue;
-                }
-            }
-
-            string[] lines;
-            try
-            {
-                lines = await File.ReadAllLinesAsync(file, ct);
-            }
-            catch
+            var searchRelativePath = Path.GetRelativePath(fullPath, file)
+                .Replace(Path.DirectorySeparatorChar, '/');
+            if (matcher?.Match(searchRelativePath).HasMatches == false)
             {
                 continue;
             }
 
-            var relativePath = ToRelativePath(file);
-
-            for (int i = 0; i < lines.Length; i++)
+            long fileSize;
+            try
             {
-                ct.ThrowIfCancellationRequested();
+                fileSize = new FileInfo(file).Length;
+            }
+            catch (IOException)
+            {
+                continue;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                continue;
+            }
 
-                if (regex.IsMatch(lines[i]))
+            if (options.MaxFileSizeBytes.HasValue &&
+                fileSize > options.MaxFileSizeBytes.Value)
+            {
+                continue;
+            }
+
+            if (options.MaxTotalBytes.HasValue &&
+                (fileSize > options.MaxTotalBytes.Value - totalBytes))
+            {
+                yield break;
+            }
+
+            fileCount++;
+            totalBytes += fileSize;
+
+            var relativePath = ToRelativePath(file);
+            StreamReader reader;
+            try
+            {
+                reader = new StreamReader(
+                    file,
+                    detectEncodingFromByteOrderMarks: true);
+            }
+            catch (IOException)
+            {
+                continue;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                continue;
+            }
+
+            using (reader)
+            {
+                var lineNumber = 0;
+                while (true)
                 {
+                    ct.ThrowIfCancellationRequested();
+
+                    string? line;
+                    try
+                    {
+                        line = await reader.ReadLineAsync(ct).ConfigureAwait(false);
+                    }
+                    catch (IOException)
+                    {
+                        break;
+                    }
+
+                    if (line == null || line.Contains('\0'))
+                    {
+                        break;
+                    }
+
+                    lineNumber++;
+                    bool isMatch;
+                    var regexTimedOut = false;
+                    try
+                    {
+                        isMatch = regex.IsMatch(line);
+                    }
+                    catch (RegexMatchTimeoutException)
+                    {
+                        isMatch = false;
+                        regexTimedOut = true;
+                    }
+
+                    if (regexTimedOut)
+                    {
+                        yield break;
+                    }
+
+                    if (!isMatch)
+                    {
+                        continue;
+                    }
+
                     if (options.MaxHits.HasValue && hitCount >= options.MaxHits.Value)
                     {
                         yield break;
                     }
 
                     hitCount++;
-                    yield return new SearchHit(relativePath, i + 1, lines[i]);
+                    yield return new SearchHit(relativePath, lineNumber, line);
                 }
             }
         }
     }
 
-    private static bool MatchesSimpleGlob(string filename, string pattern)
+    private static IEnumerable<string> EnumerateSearchFiles(
+        string rootPath,
+        bool recursive,
+        HashSet<string>? excludedDirectoryNames,
+        CancellationToken cancellationToken)
     {
-        var regexPattern = "^" + pattern
-            .Replace(".", "\\.")
-            .Replace("*", ".*")
-            .Replace("?", ".")
-            + "$";
+        var files = new FileSystemEnumerable<string>(
+            rootPath,
+            static (ref FileSystemEntry entry) => entry.ToFullPath(),
+            new EnumerationOptions
+            {
+                AttributesToSkip = FileAttributes.ReparsePoint,
+                IgnoreInaccessible = true,
+                RecurseSubdirectories = recursive,
+                ReturnSpecialDirectories = false
+            })
+        {
+            ShouldIncludePredicate = static (ref FileSystemEntry entry) => !entry.IsDirectory
+        };
 
-        try
+        if (excludedDirectoryNames != null)
         {
-            return Regex.IsMatch(filename, regexPattern, RegexOptions.IgnoreCase);
+            files.ShouldRecursePredicate =
+                (ref FileSystemEntry entry) =>
+                    !excludedDirectoryNames.Contains(entry.FileName.ToString());
         }
-        catch
+
+        foreach (var file in files)
         {
-            return true;
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return file;
         }
     }
 }

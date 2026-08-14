@@ -14,6 +14,9 @@ namespace Agw.Agents.Execution.Turns;
 /// </summary>
 internal static class ToolApprovalSupport
 {
+    private const string WorkflowApprovalScopeProperty =
+        "Agw.ToolApproval.WorkflowApprovalScope";
+
     /// <summary>
     /// 从 MAF Tool approval 创建统一 HumanGate 请求。
     /// </summary>
@@ -55,6 +58,56 @@ internal static class ToolApprovalSupport
             "always-arguments" => request.CreateAlwaysApproveToolWithArgumentsResponse(),
             _ => request.CreateResponse(approved: true)
         };
+    }
+
+    /// <summary>
+    /// 创建符合 Agentflow 输入端口类型约束的 approval 响应，并保留持久授权范围。
+    /// </summary>
+    public static ToolApprovalResponseContent CreateWorkflowResponse(
+        ToolApprovalRequestContent request,
+        HumanGateApprovalDecision decision)
+    {
+        var response = CreateResponse(request, decision);
+        if (response is ToolApprovalResponseContent singleApproval)
+        {
+            return singleApproval;
+        }
+
+        var alwaysApproval = (AlwaysApproveToolApprovalResponseContent)response;
+        alwaysApproval.InnerResponse.AdditionalProperties ??= [];
+        alwaysApproval.InnerResponse.AdditionalProperties[WorkflowApprovalScopeProperty] =
+            alwaysApproval.AlwaysApproveTool ? "always-tool" : "always-arguments";
+        return alwaysApproval.InnerResponse;
+    }
+
+    /// <summary>
+    /// 在节点 Agent 边界恢复 Agentflow 端口传输时展开的持久授权响应。
+    /// </summary>
+    public static List<ChatMessage> RestoreWorkflowResponses(
+        IReadOnlyList<ChatMessage> messages)
+    {
+        return messages
+            .Select(message =>
+            {
+                var restoredAny = false;
+                var contents = message.Contents
+                    .Select(content =>
+                    {
+                        var restored = RestoreWorkflowResponse(content);
+                        restoredAny |= !ReferenceEquals(restored, content);
+                        return restored;
+                    })
+                    .ToList();
+                if (!restoredAny)
+                {
+                    return message;
+                }
+
+                var restoredMessage = message.Clone();
+                restoredMessage.Contents = contents;
+                return restoredMessage;
+            })
+            .ToList();
     }
 
     /// <summary>
@@ -147,4 +200,24 @@ internal static class ToolApprovalSupport
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    private static AIContent RestoreWorkflowResponse(AIContent content)
+    {
+        if (content is not ToolApprovalResponseContent response ||
+            response.AdditionalProperties?.TryGetValue(
+                WorkflowApprovalScopeProperty,
+                out var scopeValue) != true)
+        {
+            return content;
+        }
+
+        var request = new ToolApprovalRequestContent(response.RequestId, response.ToolCall);
+        return scopeValue?.ToString() switch
+        {
+            "always-tool" => request.CreateAlwaysApproveToolResponse(response.Reason),
+            "always-arguments" =>
+                request.CreateAlwaysApproveToolWithArgumentsResponse(response.Reason),
+            _ => content
+        };
+    }
 }

@@ -7,4 +7,9 @@ public sealed record SearchOptions(
     bool Multiline = false,
     IReadOnlyList<string>? IncludeExtensions = null,
     string? FilenameGlob = null,
-    int? MaxHits = null);
+    int? MaxHits = null,
+    bool Recursive = true,
+    IReadOnlyCollection<string>? ExcludedDirectoryNames = null,
+    int? MaxFiles = null,
+    long? MaxFileSizeBytes = null,
+    long? MaxTotalBytes = null);
