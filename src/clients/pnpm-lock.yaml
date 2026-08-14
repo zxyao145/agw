@@ -109,8 +109,8 @@ importers:
         specifier: 2.0.3
         version: 2.0.3(supports-color@10.2.2)
       electron:
-        specifier: 43.1.1
-        version: 43.1.1(supports-color@10.2.2)
+        specifier: 43.4.0
+        version: 43.4.0(supports-color@10.2.2)
       electron-winstaller:
         specifier: 5.4.4
         version: 5.4.4
@@ -4162,8 +4162,8 @@ packages:
     resolution: {integrity: sha512-j9ETcBGJaXxAY/b6UBpR7LZfjdU4BAO+yvr4ifqHEdyuc3UNCy91PDGkWKY5UQ4coHNYfnwFggrqD6QPeFGAlg==}
     engines: {node: '>=8.0.0'}
 
-  electron@43.1.1:
-    resolution: {integrity: sha512-I5c5vfuVvaXpWx3IZdwvXgxQW44+e7OP1wXGVQkogLeSFSkUZ6sLCcWV05AdEcs65AO5tAIJJwbp7ixw+LdarA==}
+  electron@43.4.0:
+    resolution: {integrity: sha512-3qxGF0CeQbiox5oWV1JlbWGQ1VerbmDhTFqW4sJ8h7uqTHniFYPObXJcDna0DMh32et0fFyKzz0YY8lJv3t5jg==}
     engines: {node: '>= 22.12.0'}
     hasBin: true
 
@@ -9991,7 +9991,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron@43.1.1(supports-color@10.2.2):
+  electron@43.4.0(supports-color@10.2.2):
     dependencies:
       '@electron-internal/extract-zip': 1.0.4
       '@electron/get': 5.0.0(supports-color@10.2.2)

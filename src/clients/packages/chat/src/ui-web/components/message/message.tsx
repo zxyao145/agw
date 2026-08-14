@@ -102,17 +102,17 @@ const createMessageNode = (type: string, content: string, message: AiMessage): M
   return proposedPlan ? { type, content, proposedPlan } : { type, content };
 };
 
-export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
+function AiMessageView({ message }: { message: AiMessage }) {
+  // group contents by type
+  // To solve the problem of multiple returns of the same type in streaming mode
+  // A more appropriate approach is to group by messageId. Why wasn't that done? already forgotten
+  const groupContents = React.useMemo(() => groupContentsByType(message), [message]);
+
   if (isToolStateMessage(message)) {
     return <ToolState message={message} />;
   }
 
   const isResult = isResultMessage(message);
-
-  // group contents by type
-  // To solve the problem of multiple returns of the same type in streaming mode
-  // A more appropriate approach is to group by messageId. Why wasn't that done? already forgotten
-  const groupContents = React.useMemo(() => groupContentsByType(message), [message]);
   const isProposedPlan = groupContents.some((node) => node.proposedPlan != null);
 
   // const isUser = message.role === "user" && message.author === "user" && !message.additionalProperties;
@@ -145,18 +145,6 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
   //   title = `${message.role} (${message.author ?? "-"})`;
   // }
 
-  console.debug(
-    "AiMessageComponent isUser",
-    isUser,
-    "isToolResult",
-    isToolResult,
-    "IsSideRight",
-    IsSideRight,
-    "isResult",
-    isResult,
-    "message",
-    JSON.stringify(message),
-  );
   return (
     <div
       className={cn(
@@ -196,4 +184,6 @@ export const AiMessageComponent = ({ message }: { message: AiMessage }) => {
       </div>
     </div>
   );
-};
+}
+
+export const AiMessageComponent = React.memo(AiMessageView);

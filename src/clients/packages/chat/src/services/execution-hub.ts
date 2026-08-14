@@ -63,6 +63,10 @@ export type ExecutionSetting = {
   permissionMode?: PermissionMode;
 };
 
+export type ExecutionConfigurationResult = {
+  restoredDurableExecution: boolean;
+};
+
 export type ExecutionTarget = {
   agentId: string;
   agentType: number;
@@ -270,7 +274,7 @@ type PersistedDurableExecution = {
 type ExecutionProviderCapability = "in-process" | "distributed" | null;
 
 /** 为一个服务端上的项目会话生成互不冲突的 durable attachment 存储键。 */
-function getDurableExecutionStorageKey(
+export function getDurableExecutionStorageKey(
   runtime: ExecutionRuntimeConfig,
   setting: ExecutionSetting,
 ): string {
@@ -288,7 +292,7 @@ function readPersistedDurableExecution(key: string): PersistedDurableExecution |
     const value = globalThis.localStorage?.getItem(key);
     if (!value) return null;
     const parsed = JSON.parse(value) as Partial<PersistedDurableExecution>;
-    return typeof parsed.executionId === "string"
+    return typeof parsed.executionId === "string" && parsed.executionId.trim().length > 0
       ? {
           executionId: parsed.executionId,
           cursor: typeof parsed.cursor === "string" ? parsed.cursor : null,
@@ -297,6 +301,14 @@ function readPersistedDurableExecution(key: string): PersistedDurableExecution |
   } catch {
     return null;
   }
+}
+
+/** 页面恢复时只在本地确有未结束 durable execution 时建立执行连接。 */
+export function hasPersistedDurableExecution(
+  setting: ExecutionSetting,
+  runtime: ExecutionRuntimeConfig = executionRuntime,
+): boolean {
+  return readPersistedDurableExecution(getDurableExecutionStorageKey(runtime, setting)) !== null;
 }
 
 /** 尽力写入或清除 durable attachment；存储不可用不应阻断聊天。 */
@@ -435,7 +447,7 @@ export class ExecutionHubClient {
     this.handlers = handlers;
   }
 
-  public async configure(setting: ExecutionSetting): Promise<void> {
+  public async configure(setting: ExecutionSetting): Promise<ExecutionConfigurationResult> {
     this.setting = setting;
     this.durableStorageKey = getDurableExecutionStorageKey(this.runtime, setting);
     const persisted = readPersistedDurableExecution(this.durableStorageKey);
@@ -445,16 +457,32 @@ export class ExecutionHubClient {
       this.durableConfirmed = true;
       this.hasActiveTurn = true;
     }
-    await this.ensureConnected();
-    await this.refreshExecutionProvider();
-    await this.dispatch(buildSettingCommand(setting));
-    if (persisted) {
-      if (this.executionProvider === "in-process") {
-        this.finishActiveTurn();
-      } else {
-        await this.restoreDurableSubscription(persisted.executionId, persisted.cursor);
+    try {
+      await this.ensureConnected();
+      await this.refreshExecutionProvider();
+      await this.dispatch(buildSettingCommand(setting));
+      if (persisted) {
+        if (this.executionProvider === "in-process") {
+          this.finishActiveTurn();
+        } else {
+          const restoredDurableExecution = await this.restoreDurableSubscription(
+            persisted.executionId,
+            persisted.cursor,
+          );
+          return { restoredDurableExecution };
+        }
       }
+    } catch (error) {
+      const normalized = error instanceof Error ? error : new Error(String(error));
+      if (persisted) this.failReconnect(normalized);
+      throw normalized;
     }
+
+    return { restoredDurableExecution: false };
+  }
+
+  public hasActiveExecution(): boolean {
+    return this.hasActiveTurn || (this.durableConfirmed && this.activeExecutionId !== null);
   }
 
   public async execute(request: ExecutionRequest): Promise<void> {
@@ -691,7 +719,7 @@ export class ExecutionHubClient {
         "DispatchCommand",
         buildSubscribeExecutionCommand(executionId, cursor),
       );
-      return true;
+      return this.hasActiveExecution();
     } catch (error) {
       const normalized = error instanceof Error ? error : new Error(String(error));
       if (normalized.message.includes("404_0011")) {

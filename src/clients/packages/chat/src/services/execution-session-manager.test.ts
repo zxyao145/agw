@@ -13,7 +13,8 @@ const sessionKey = {
 /** 创建满足会话管理器测试所需的最小执行客户端。 */
 function createExecutionClient() {
   return {
-    configure: async () => undefined,
+    configure: async () => ({ restoredDurableExecution: false }),
+    hasActiveExecution: () => false,
     execute: async () => undefined,
     setMode: async () => undefined,
     setPermissionMode: async () => undefined,
@@ -24,6 +25,49 @@ function createExecutionClient() {
     dispose: async () => undefined,
   };
 }
+
+test("manager marks a restored durable execution active", async () => {
+  const manager = new ExecutionSessionManager(() => ({
+    ...createExecutionClient(),
+    configure: async () => ({ restoredDurableExecution: true }),
+    hasActiveExecution: () => true,
+  }));
+  const handle = manager.attach(sessionKey, { onMessage: () => undefined });
+
+  const result = await handle.configure({ projectId: "project-1", contextId: "context-1" });
+
+  assert.deepEqual(result, { restoredDurableExecution: true });
+  assert.equal(handle.getStatus(), "running");
+});
+
+test("manager preserves active recovery state when durable subscribe temporarily fails", async () => {
+  const failedState: ExecutionReconnectState = {
+    status: "failed",
+    retryAttempt: 7,
+    retryDelayMs: 0,
+  };
+  let clientHandlers: ExecutionHubHandlers | undefined;
+  const manager = new ExecutionSessionManager((handlers) => {
+    clientHandlers = handlers;
+    return {
+      ...createExecutionClient(),
+      configure: async () => {
+        clientHandlers?.onReconnectFailed?.(failedState);
+        throw new Error("temporary subscribe failure");
+      },
+      hasActiveExecution: () => true,
+    };
+  });
+  const handle = manager.attach(sessionKey, { onMessage: () => undefined });
+
+  await assert.rejects(
+    handle.configure({ projectId: "project-1", contextId: "context-1" }),
+    /temporary subscribe failure/,
+  );
+
+  assert.equal(handle.getStatus(), "running");
+  assert.equal(handle.getReconnectState(), failedState);
+});
 
 test("manager preserves reconnect state while a conversation is detached", () => {
   let clientHandlers: ExecutionHubHandlers | undefined;
@@ -92,4 +136,26 @@ test("manager keeps reconnect state until the manual retry succeeds", async () =
 
   clientHandlers?.onReconnected?.();
   assert.equal(handle.getReconnectState(), null);
+});
+
+test("manager clears a stale active status when reconnect finds no execution", async () => {
+  let clientHandlers: ExecutionHubHandlers | undefined;
+  let activeExecution = true;
+  const manager = new ExecutionSessionManager((handlers) => {
+    clientHandlers = handlers;
+    return {
+      ...createExecutionClient(),
+      configure: async () => ({ restoredDurableExecution: true }),
+      hasActiveExecution: () => activeExecution,
+    };
+  });
+  const handle = manager.attach(sessionKey, { onMessage: () => undefined });
+
+  await handle.configure({ projectId: "project-1", contextId: "context-1" });
+  assert.equal(handle.getStatus(), "running");
+
+  activeExecution = false;
+  clientHandlers?.onReconnected?.();
+
+  assert.equal(handle.getStatus(), "idle");
 });

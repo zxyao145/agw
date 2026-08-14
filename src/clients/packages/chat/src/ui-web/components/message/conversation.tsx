@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { Badge } from "@agw/components";
 import { Accordion, AccordionContent, AccordionItem } from "@agw/components";
 import { AiMessageComponent, isResultMessage } from "./message";
@@ -76,32 +77,30 @@ function getFunctionToolName(message: AiMessage): string | null {
   return typeof toolName === "string" && toolName.trim() ? toolName.trim() : null;
 }
 
-const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
-  const items: ProcessedMessageItem[] = [];
-  type FragmentType = "normal" | "result" | "function-call" | "function-result";
-  type MessageFragment = {
-    type: FragmentType;
-    message: AiMessage;
-    groupKey: string | null;
-    toolName: string;
-  };
-  type ToolGroup = {
-    calls: MessageFragment[];
-    results: MessageFragment[];
-  };
+type FragmentType = "normal" | "result" | "function-call" | "function-result";
+type MessageFragment = {
+  type: FragmentType;
+  message: AiMessage;
+  groupKey: string | null;
+  toolName: string;
+};
+type ToolGroup = {
+  calls: MessageFragment[];
+  results: MessageFragment[];
+};
+
+const messageFragmentCache = new WeakMap<AiMessage, MessageFragment[]>();
+
+function createMessageFragments(message: AiMessage): MessageFragment[] {
+  const cached = messageFragmentCache.get(message);
+  if (cached) {
+    return cached;
+  }
 
   const fragments: MessageFragment[] = [];
-
-  for (const message of msgs) {
-    if (isResultMessage(message)) {
-      fragments.push({ type: "result", message, groupKey: null, toolName: "" });
-      continue;
-    }
-
-    if ((message.role === "user" && !message.author) || message.contents.length === 0) {
-      continue;
-    }
-
+  if (isResultMessage(message)) {
+    fragments.push({ type: "result", message, groupKey: null, toolName: "" });
+  } else if (!((message.role === "user" && !message.author) || message.contents.length === 0)) {
     let normalContents: AiMessage["contents"] = [];
     const flushNormalContents = () => {
       if (normalContents.length === 0) {
@@ -142,6 +141,14 @@ const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
 
     flushNormalContents();
   }
+
+  messageFragmentCache.set(message, fragments);
+  return fragments;
+}
+
+const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
+  const items: ProcessedMessageItem[] = [];
+  const fragments = msgs.flatMap(createMessageFragments);
 
   const toolGroups = new Map<string, ToolGroup>();
   for (const fragment of fragments) {
@@ -200,6 +207,35 @@ const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
   return items;
 };
 
+function getMessageKey(message: AiMessage): string {
+  return JSON.stringify([
+    message.streamingScopeId ?? null,
+    message.messageId,
+    message.role ?? null,
+    message.author ?? null,
+  ]);
+}
+
+function getItemBaseKey(item: ProcessedMessageItem): string {
+  if (item.type === "accordion") {
+    const callId = item.messages[0]?.contents[0]?.additionalProperties?.callId;
+    return `accordion:${getMessageKey(item.messages[0])}:${String(callId ?? item.toolName)}`;
+  }
+
+  const contentType = item.message.contents[0]?.type ?? "empty";
+  return `${item.type}:${getMessageKey(item.message)}:${contentType}`;
+}
+
+function addStableKeys(items: ProcessedMessageItem[]) {
+  const occurrences = new Map<string, number>();
+  return items.map((item) => {
+    const baseKey = getItemBaseKey(item);
+    const occurrence = occurrences.get(baseKey) ?? 0;
+    occurrences.set(baseKey, occurrence + 1);
+    return { item, key: `${baseKey}:${occurrence}` };
+  });
+}
+
 export function Conversation({
   messages,
   messagesStartRef,
@@ -210,6 +246,12 @@ export function Conversation({
   onHumanInteractionSubmit,
   onHumanInteractionCancel,
 }: ChatSessionProps) {
+  const processedMessages = React.useMemo(
+    () => processMessages(collapseConsecutiveSystemMessages(messages)),
+    [messages, processMessages],
+  );
+  const keyedMessages = React.useMemo(() => addStableKeys(processedMessages), [processedMessages]);
+
   if (!messages || messages.length == 0) {
     return (
       <Empty>
@@ -222,8 +264,6 @@ export function Conversation({
     );
   }
 
-  const visibleMessages = collapseConsecutiveSystemMessages(messages);
-  const processedMessages = processMessages(visibleMessages);
   let humanInteractionItemIndex = -1;
   if (pendingHumanInteraction && onHumanInteractionSubmit && onHumanInteractionCancel) {
     for (let index = 0; index < processedMessages.length; index += 1) {
@@ -251,7 +291,7 @@ export function Conversation({
           </div>
         )}
 
-        {processedMessages.map((item, index) => {
+        {keyedMessages.map(({ item, key }, index) => {
           if (
             index === humanInteractionItemIndex &&
             item.type === "normal" &&
@@ -263,7 +303,7 @@ export function Conversation({
             return (
               <div
                 className="mx-4 max-w-full"
-                key={index}
+                key={key}
                 data-msg-id={item.message.messageId}
                 data-function-call-id={pendingHumanInteraction.callId}
               >
@@ -291,14 +331,14 @@ export function Conversation({
                 : null;
             if (questionResult) {
               return (
-                <div className="mx-4 max-w-[90%]" key={index}>
+                <div className="mx-4 max-w-[90%]" key={key}>
                   <HumanInteractionQuestionResultView result={questionResult} />
                 </div>
               );
             }
 
             return (
-              <div className="mx-4 max-w-[80%]" key={index}>
+              <div className="mx-4 max-w-[80%]" key={key}>
                 <Accordion type="single" collapsible className="w-full">
                   <AccordionItem value="item-1">
                     <MessageTrigger className="py-0 cursor-pointer">
@@ -310,8 +350,8 @@ export function Conversation({
                     </MessageTrigger>
                     <AccordionContent>
                       <div className="space-y-4">
-                        {item.messages.map((msg, msgIndex) => (
-                          <AiMessageComponent key={msgIndex} message={msg} />
+                        {item.messages.map((msg) => (
+                          <AiMessageComponent key={getMessageKey(msg)} message={msg} />
                         ))}
                       </div>
                     </AccordionContent>
@@ -324,14 +364,13 @@ export function Conversation({
             const isUserMessage = item.message.role === "user";
             const messageMeta = getMessageMeta(item.message);
 
-            console.debug("isResult", isResult, "message", item.message);
             return (
               <div
                 className={cn(
                   "mx-4 max-w-full",
                   isResult ? "border-t border-dashed pt-4 mt-8" : "",
                 )}
-                key={index}
+                key={key}
                 data-msg-id={item.message.messageId}
               >
                 {messageMeta ? (
