@@ -2,6 +2,7 @@ using System.Runtime.ExceptionServices;
 
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents.Tools;
+using Agw.Agents.Execution.Turns;
 
 using Microsoft.Agents.AI;
 
@@ -68,7 +69,10 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         var scopedSession = await PrepareSessionAsync(session, cancellationToken).ConfigureAwait(false);
         var pendingFunctionCallIds = GetPendingFunctionCallIds(scopedSession);
         var input = AgentflowMessageTransforms.ApplyInstructions(
-            AgentflowMessageTransforms.CreatePortableAgentInput(messages.ToList(), pendingFunctionCallIds),
+            ToolApprovalSupport.RestoreWorkflowResponses(
+                AgentflowMessageTransforms.CreatePortableAgentInput(
+                    messages.ToList(),
+                    pendingFunctionCallIds)),
             _instructions);
         UpdatePendingFunctionCallIds(input.SelectMany(message => message.Contents), pendingFunctionCallIds);
         SavePendingFunctionCallIds(scopedSession, pendingFunctionCallIds);
@@ -134,7 +138,10 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         var scopedSession = await PrepareSessionAsync(session, cancellationToken).ConfigureAwait(false);
         var pendingFunctionCallIds = GetPendingFunctionCallIds(scopedSession);
         var input = AgentflowMessageTransforms.ApplyInstructions(
-            AgentflowMessageTransforms.CreatePortableAgentInput(messages.ToList(), pendingFunctionCallIds),
+            ToolApprovalSupport.RestoreWorkflowResponses(
+                AgentflowMessageTransforms.CreatePortableAgentInput(
+                    messages.ToList(),
+                    pendingFunctionCallIds)),
             _instructions);
         UpdatePendingFunctionCallIds(input.SelectMany(message => message.Contents), pendingFunctionCallIds);
         SavePendingFunctionCallIds(scopedSession, pendingFunctionCallIds);

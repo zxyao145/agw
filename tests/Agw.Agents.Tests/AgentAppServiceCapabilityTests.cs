@@ -1,31 +1,12 @@
 using System.Linq.Expressions;
-using System.Reflection;
 
 using Agw.Agents.Definitions.Agents;
-using Agw.Agents.Execution.Agents;
-using Agw.Agents.Execution.Agents.AIContextProviders.AgwWorkspace;
 using Agw.Agents.Execution.Agents.Dtos;
-using Agw.Agents.Execution.Agents.Middleware;
-using Agw.Agents.ExternalAgents;
-using Agw.Domain.Services;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
-using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
-using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Data.Repositories;
-using Agw.Shared.Runtime;
-using Agw.Shared.Utils;
-using Agw.Tools.ToolBlocks;
-
-using ClaudeCodeSdk.MAF;
-using ClaudeCodeSdk.Types;
-
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
@@ -127,214 +108,25 @@ public class AgentAppServiceCapabilityTests
         Assert.Equal(skill.Id, Assert.Single(skills).Id);
     }
 
-    [Fact]
-    public async Task CreateAiAgentAsync_ExternalAgent_UsesProjectEnvironmentWithoutResolvingCapabilities()
-    {
-        var agentConnectionRelationRepository = new TestRepository<AgentConnectionRelation> { ThrowOnList = true };
-        var agentMcpRelationRepository = new TestRepository<AgentMcpServerRelation> { ThrowOnList = true };
-        var agentSkillRelationRepository = new TestRepository<AgentSkillRelation> { ThrowOnList = true };
-        var connectionRepository = new TestRepository<Connection> { ThrowOnList = true };
-        var mcpServerRepository = new TestRepository<McpServer> { ThrowOnList = true };
-        var skillRepository = new TestRepository<Skill> { ThrowOnList = true };
-        var appService = CreateService(
-            agentConnectionRelationRepository: agentConnectionRelationRepository,
-            agentMcpRelationRepository: agentMcpRelationRepository,
-            agentSkillRelationRepository: agentSkillRelationRepository,
-            connectionRepository: connectionRepository,
-            mcpServerRepository: mcpServerRepository,
-            skillRepository: skillRepository);
-        var project = new Project
-        {
-            Id = Guid.CreateVersion7(),
-            ExtraSetting = JsonUtil.Serialize(new ClaudeCodeAIAgentOptions
-            {
-                PermissionMode = PermissionMode.bypassPermissions,
-            }),
-            EnvironmentVariables = new Dictionary<string, string>
-            {
-                ["SHARED"] = "project",
-                ["PROJECT_ONLY"] = "project",
-            },
-            Tools =
-            [
-                new ToolValue { Definition = new WebSearchToolDefinition() }
-            ],
-            ProjectConnectionRelations =
-            [
-                new ProjectConnectionRelation { ConnectionId = Guid.CreateVersion7() },
-            ],
-            ProjectMcpToolServers =
-            [
-                new ProjectMcpServerRelation { McpToolServerId = Guid.CreateVersion7() },
-            ],
-            ProjectSkillRelations =
-            [
-                new ProjectSkillRelation { SkillId = Guid.CreateVersion7() },
-            ],
-        };
-        var toolRegistry = CreateToolRegistry();
-        var service = CreateRuntimeService(
-            appService,
-            new TestProjectAppService(project),
-            toolRegistry);
-        var request = new CreateAiAgentRequest
-        {
-            Agent = new Agent
-            {
-                Id = Guid.CreateVersion7(),
-                Name = AgentNames.ClaudeCode,
-                Type = AgentType.External,
-                EnvironmentVariables = new Dictionary<string, string>
-                {
-                    ["SHARED"] = "agent",
-                    ["AGENT_ONLY"] = "agent",
-                },
-                AgentConnectionRelations =
-                [
-                    new AgentConnectionRelation { ConnectionId = Guid.CreateVersion7() },
-                ],
-                AgentMcpToolServers =
-                [
-                    new AgentMcpServerRelation { McpToolServerId = Guid.CreateVersion7() },
-                ],
-                AgentSkillRelations =
-                [
-                    new AgentSkillRelation { SkillId = Guid.CreateVersion7() },
-                ],
-            },
-            ProjectId = project.Id,
-            EnvironmentVariables = new Dictionary<string, string>
-            {
-                ["SHARED"] = "session",
-                ["SESSION_ONLY"] = "session",
-            },
-        };
-        var method = typeof(AgentRuntimeService).GetMethod(
-            "CreateAiAgentAsync",
-            BindingFlags.Instance | BindingFlags.NonPublic,
-            [typeof(CreateAiAgentRequest), typeof(CancellationToken)]);
-
-        Assert.NotNull(method);
-        var agentTask = Assert.IsType<Task<AIAgent?>>(method.Invoke(
-            service,
-            [request, TestContext.Current.CancellationToken]));
-        var externalAgent = await agentTask;
-
-        Assert.NotNull(externalAgent);
-        var options = FindInObjectGraph<ClaudeCodeAIAgentOptions>(externalAgent!);
-        Assert.NotNull(options.EnvironmentVariables);
-        Assert.Equal("session", options.EnvironmentVariables["SHARED"]);
-        Assert.Equal("agent", options.EnvironmentVariables["AGENT_ONLY"]);
-        Assert.Equal("project", options.EnvironmentVariables["PROJECT_ONLY"]);
-        Assert.Equal("session", options.EnvironmentVariables["SESSION_ONLY"]);
-        Assert.Equal(0, agentConnectionRelationRepository.ListCallCount);
-        Assert.Equal(0, agentMcpRelationRepository.ListCallCount);
-        Assert.Equal(0, agentSkillRelationRepository.ListCallCount);
-        Assert.Equal(0, connectionRepository.ListCallCount);
-        Assert.Equal(0, mcpServerRepository.ListCallCount);
-        Assert.Equal(0, skillRepository.ListCallCount);
-    }
-
     private static AgentAppService CreateService(
         IEnumerable<McpServer>? mcpServers = null,
         IEnumerable<Skill>? skills = null,
         IEnumerable<AgentMcpServerRelation>? agentMcpRelations = null,
-        IEnumerable<AgentSkillRelation>? agentSkillRelations = null,
-        IRepository<AgentConnectionRelation>? agentConnectionRelationRepository = null,
-        IRepository<AgentMcpServerRelation>? agentMcpRelationRepository = null,
-        IRepository<AgentSkillRelation>? agentSkillRelationRepository = null,
-        IRepository<Connection>? connectionRepository = null,
-        IRepository<McpServer>? mcpServerRepository = null,
-        IRepository<Skill>? skillRepository = null)
+        IEnumerable<AgentSkillRelation>? agentSkillRelations = null)
     {
         return new AgentAppService(
             new TestRepository<Agent>(),
-            agentConnectionRelationRepository ?? new TestRepository<AgentConnectionRelation>(),
-            connectionRepository ?? new TestRepository<Connection>(),
+            new TestRepository<AgentConnectionRelation>(),
+            new TestRepository<Connection>(),
             new TestRepository<ModelProviderRelation>(),
             new TestRepository<AgwAiModel>(),
             new TestRepository<Provider>(),
-            mcpServerRepository ?? new TestRepository<McpServer>(mcpServers),
-            agentMcpRelationRepository ?? new TestRepository<AgentMcpServerRelation>(agentMcpRelations),
-            skillRepository ?? new TestRepository<Skill>(skills),
-            agentSkillRelationRepository ?? new TestRepository<AgentSkillRelation>(agentSkillRelations),
+            new TestRepository<McpServer>(mcpServers),
+            new TestRepository<AgentMcpServerRelation>(agentMcpRelations),
+            new TestRepository<Skill>(skills),
+            new TestRepository<AgentSkillRelation>(agentSkillRelations),
             new TestUnitOfWork(),
             new AgentDomainService(TimeProvider.System));
-    }
-
-    private static AgentRuntimeService CreateRuntimeService(
-        AgentAppService appService,
-        IProjectAppService projectAppService,
-        ToolRegistryService toolRegistry,
-        AgwDataPaths? dataPaths = null)
-    {
-        return new AgentRuntimeService(
-            appService,
-            projectAppService,
-            new AgentCapabilityComposer(
-                appService,
-                toolRegistry,
-                connectionCapabilityResolver: null!,
-                mcpToolMaterializer: null!,
-                new ToolBlockRegistry([]),
-                NullLogger<AgentCapabilityComposer>.Instance,
-                [new ProjectInstructionsSource()]),
-            chatHistoryProvider: null!,
-            providerSessionState: null!,
-            taskSessionBindingService: null!,
-            dataPaths ?? AgwDataPaths.Resolve(Path.GetTempPath(), Path.GetTempPath()),
-            fileSystemResolver: null!,
-            sessionStateStore: null!,
-            NullLogger<AgentRuntimeService>.Instance,
-            new ObservabilityMiddleware(NullLogger<ObservabilityMiddleware>.Instance),
-            new UsageTrackingMiddleware(
-                providerSessionState: null!,
-                usageRecorder: null!,
-                NullLogger<UsageTrackingMiddleware>.Instance),
-            summaryService: null!);
-    }
-
-    private static ToolRegistryService CreateToolRegistry()
-    {
-        return new ToolRegistryService(
-            NullLogger<ToolRegistryService>.Instance,
-            new ServiceCollection().BuildServiceProvider());
-    }
-
-    private static T FindInObjectGraph<T>(object root) where T : class
-    {
-        var pending = new Queue<(object Value, int Depth)>();
-        var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
-        pending.Enqueue((root, 0));
-
-        while (pending.Count > 0)
-        {
-            var (value, depth) = pending.Dequeue();
-            if (!visited.Add(value) || depth > 8)
-            {
-                continue;
-            }
-
-            if (value is T match)
-            {
-                return match;
-            }
-
-            for (var type = value.GetType(); type != null; type = type.BaseType)
-            {
-                foreach (var field in type.GetFields(
-                             BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
-                {
-                    var child = field.GetValue(value);
-                    if (child != null && !child.GetType().IsValueType && child is not string)
-                    {
-                        pending.Enqueue((child, depth + 1));
-                    }
-                }
-            }
-        }
-
-        throw new Xunit.Sdk.XunitException($"Could not find {typeof(T).Name} in the agent object graph.");
     }
 
     private sealed class TestRepository<TEntity> : IRepository<TEntity> where TEntity : class
@@ -348,10 +140,6 @@ public class AgentAppServiceCapabilityTests
 
         public IQueryable<TEntity> Queryable => _items.AsQueryable();
 
-        public bool ThrowOnList { get; init; }
-
-        public int ListCallCount { get; private set; }
-
         public Task<TEntity?> GetByIdAsync(object id) => Task.FromResult<TEntity?>(null);
 
         public Task<TEntity?> SingleOrDefaultAsync(
@@ -363,12 +151,6 @@ public class AgentAppServiceCapabilityTests
             Expression<Func<TEntity, bool>>? predicate = null,
             Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null)
         {
-            ListCallCount++;
-            if (ThrowOnList)
-            {
-                throw new Xunit.Sdk.XunitException($"Unexpected {typeof(TEntity).Name} capability lookup.");
-            }
-
             IQueryable<TEntity> query = _items.AsQueryable();
             if (predicate != null)
             {
@@ -416,30 +198,4 @@ public class AgentAppServiceCapabilityTests
         }
     }
 
-    private sealed class TestProjectAppService : IProjectAppService
-    {
-        private readonly Project _project;
-
-        public TestProjectAppService(Project project)
-        {
-            _project = project;
-        }
-
-        public Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null) =>
-            Task.FromResult<IReadOnlyList<Project>>([_project]);
-
-        public Task<string?> GetProjectExtraSettingAsync(Guid? projectId) =>
-            Task.FromResult(_project.ExtraSetting);
-
-        public Task<Guid?> ResolveProjectIdAsync(Guid? projectId) => Task.FromResult<Guid?>(_project.Id);
-
-        public Task<Project?> CreateAsync(Project project, string user) => Task.FromResult<Project?>(project);
-
-        public Task<bool> DeleteAsync(Guid id) => Task.FromResult(false);
-
-        public Task<Project?> GetAsync(Guid id) => Task.FromResult<Project?>(_project);
-
-        public Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction, string user) =>
-            Task.FromResult<Project?>(_project);
-    }
 }

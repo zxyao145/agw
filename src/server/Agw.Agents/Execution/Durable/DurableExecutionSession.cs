@@ -131,6 +131,10 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
             await SendSystemMessageAsync(
                     reason ?? "No active request is currently running.")
                 .ConfigureAwait(false);
+            await _messageSink.WriteAsync(
+                    TurnMessageFactory.CreateFinished("interrupted"),
+                    CancellationToken.None)
+                .ConfigureAwait(false);
             return;
         }
 

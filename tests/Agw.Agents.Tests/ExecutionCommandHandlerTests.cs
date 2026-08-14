@@ -9,6 +9,7 @@ using Agw.Agents.Execution.Commands.Mode;
 using Agw.Agents.Execution.Commands.Permission;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
+using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Turns;
@@ -85,7 +86,7 @@ public class ExecutionCommandHandlerTests
     }
 
     [Fact]
-    public async Task InterruptCommand_WithoutActiveTurn_SendsExistingSystemMessage()
+    public async Task InterruptCommand_WithoutActiveTurn_SendsSystemMessageAndInterruptedFinish()
     {
         var sink = new CapturingSink();
         await using var context = CreateContext(new FakeRuntimeFactory(), CreateTask("unused"), sink: sink);
@@ -95,9 +96,43 @@ public class ExecutionCommandHandlerTests
             context,
             TestContext.Current.CancellationToken);
 
-        Assert.Equal(
+        Assert.Collection(
+            sink.Messages,
+            message => Assert.Equal(
+                "nothing running",
+                Assert.IsType<AgwTextContent>(Assert.Single(message.Contents)).Content),
+            message =>
+            {
+                Assert.Equal("turn-finished", message.AdditionalProperties!["type"]);
+                Assert.Equal("interrupted", message.AdditionalProperties["status"]);
+            });
+    }
+
+    [Fact]
+    public async Task DurableSession_InterruptWithoutActiveExecution_SendsInterruptedFinish()
+    {
+        var sink = new CapturingSink();
+        await using var session = new DurableExecutionSession(
+            "user",
+            sink,
+            CancellationToken.None,
+            coordinator: null!);
+
+        await session.InterruptAsync(
+            executionId: null,
             "nothing running",
-            Assert.IsType<AgwTextContent>(Assert.Single(sink.Messages).Contents[0]).Content);
+            TestContext.Current.CancellationToken);
+
+        Assert.Collection(
+            sink.Messages,
+            message => Assert.Equal(
+                "nothing running",
+                Assert.IsType<AgwTextContent>(Assert.Single(message.Contents)).Content),
+            message =>
+            {
+                Assert.Equal("turn-finished", message.AdditionalProperties!["type"]);
+                Assert.Equal("interrupted", message.AdditionalProperties["status"]);
+            });
     }
 
     [Fact]

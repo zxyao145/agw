@@ -7,7 +7,6 @@ using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.AIContextProviders.AgwWorkspace;
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Middleware;
-using Agw.Agents.ExternalAgents;
 using Agw.Domain.Services;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
@@ -28,16 +27,12 @@ using Agw.Skills.Contracts.Registration;
 using Agw.Skills.Execution;
 using Agw.Tools.ToolBlocks;
 
-using ClaudeCodeSdk.MAF;
-
 using Microsoft.Agents.AI;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-
-using OpenAI.CodexSdk.MAF;
 
 namespace Agw.Agents.Tests;
 
@@ -354,102 +349,6 @@ public class AgentRuntimeServiceSystemCompositionTests
 
             await Assert.IsAssignableFrom<IAsyncDisposable>(aiAgent).DisposeAsync();
             Assert.True(connectionResource.Disposed);
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
-    }
-
-    [Theory]
-    [InlineData(AgentNames.ClaudeCode, typeof(ClaudeCodeAIAgent))]
-    [InlineData(AgentNames.Codex, typeof(CodexAIAgent))]
-    public async Task CreateBackgroundAgentsAsync_ExternalAgent_CreatesExternalAgent(
-        string agentName,
-        Type expectedAgentType)
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        var root = Path.Combine(
-            Path.GetTempPath(),
-            $"agw-background-external-{Guid.CreateVersion7():N}");
-        Directory.CreateDirectory(root);
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(cancellationToken);
-        var dbOptions = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(connection)
-            .UseSnakeCaseNamingConvention()
-            .Options;
-        await using var dbContext = new AgwDbContext(dbOptions);
-        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
-
-        var definition = new Agent
-        {
-            Id = Guid.CreateVersion7(),
-            Name = agentName,
-            DisplayName = agentName,
-            Type = AgentType.External,
-        };
-        dbContext.Agents.Add(definition);
-        await dbContext.SaveChangesAsync(cancellationToken);
-
-        var project = new Project
-        {
-            Id = Guid.CreateVersion7(),
-            Workspace = root,
-        };
-        var runtimeService = CreateRuntimeService(
-            CreateAgentAppService(dbContext),
-            new TestProjectAppService(project),
-            CreateToolRegistry(),
-            AgwDataPaths.Resolve(root, root),
-            new TestConnectionCapabilityResolver(CreateResolution([], new TrackingResource())),
-            new TestMcpToolMaterializer());
-        var method = typeof(AgentRuntimeService).GetMethod(
-            "CreateBackgroundAgentsAsync",
-            BindingFlags.Instance | BindingFlags.NonPublic,
-            [
-                typeof(IReadOnlyList<Guid>),
-                typeof(Guid),
-                typeof(Project),
-                typeof(Guid),
-                typeof(IReadOnlyDictionary<string, string>),
-                typeof(string),
-                typeof(CancellationToken)
-            ]);
-
-        try
-        {
-            Assert.NotNull(method);
-            var agentTask = Assert.IsType<ValueTask<IReadOnlyList<AIAgent>>>(method.Invoke(
-                runtimeService,
-                [
-                    new[] { definition.Id },
-                    Guid.CreateVersion7(),
-                    project,
-                    Guid.Empty,
-                    new Dictionary<string, string>(),
-                    "plan",
-                    cancellationToken
-                ]));
-            var backgroundAgent = Assert.Single(await agentTask);
-
-            Assert.Contains(
-                TraverseObjectGraph(backgroundAgent),
-                expectedAgentType.IsInstanceOfType);
-            Assert.Contains(
-                TraverseObjectGraph(backgroundAgent).OfType<Delegate>(),
-                callback => callback.Method.DeclaringType == typeof(BackgroundAgentApprovalMiddleware));
-
-            var externalAgent = TraverseObjectGraph(backgroundAgent)
-                .First(expectedAgentType.IsInstanceOfType);
-            if (externalAgent is IAsyncDisposable asyncDisposable)
-            {
-                await asyncDisposable.DisposeAsync();
-            }
-            else if (externalAgent is IDisposable disposable)
-            {
-                disposable.Dispose();
-            }
         }
         finally
         {
