@@ -156,6 +156,8 @@ public sealed class AgentflowWorkflowCompiler
     private const string GeneratedOutputNodeId = "__agw_output";
     private const string HumanGateOutputSuffix = "__agw_human_gate_output";
     private const string RoutingBridgeSuffix = "__agw_routing_bridge";
+    private const string LoopBarrierSourceSuffix = "__agw_loop_barrier_source";
+    private const string LoopBarrierSuffix = "__agw_loop_barrier";
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -269,7 +271,16 @@ public sealed class AgentflowWorkflowCompiler
         }
 
         AddHumanGateOutputEdges(builder, bindings, humanGateOutputBindings);
-        AddRuntimeEdges(builder, runtimeEdges, bindings, humanGateOutputBindings);
+        var cyclicComponents = AgentflowDomainService.FindCyclicComponents(
+            orderedNodes.Select(node => node.NodeId).ToList(),
+            runtimeEdges);
+        AddRuntimeEdges(
+            builder,
+            runtimeEdges,
+            nodeMap,
+            bindings,
+            humanGateOutputBindings,
+            cyclicComponents);
         AddWorkflowOutputs(builder, orderedNodes, runtimeEdges, bindings, humanGateOutputBindings);
 
         return builder.Build(validateOrphans: false);
@@ -387,15 +398,19 @@ public sealed class AgentflowWorkflowCompiler
     private static void AddRuntimeEdges(
         WorkflowBuilder builder,
         IReadOnlyList<AgentflowEdge> edges,
+        IReadOnlyDictionary<string, AgentflowNode> nodeMap,
         IReadOnlyDictionary<string, ExecutorBinding> bindings,
-        IReadOnlyDictionary<string, ExecutorBinding> humanGateOutputBindings)
+        IReadOnlyDictionary<string, ExecutorBinding> humanGateOutputBindings,
+        IReadOnlyList<HashSet<string>> cyclicComponents)
     {
         foreach (var edge in edges.Where(edge => edge.Kind == AgentflowEdgeKind.Direct))
         {
             var source = GetSourceBinding(edge.SourceNodeId, bindings, humanGateOutputBindings);
             var target = bindings[edge.TargetNodeId];
             var label = edge.Label ?? edge.EdgeId;
-            var condition = BuildCondition(edge.ConditionJson);
+            var condition = BuildCondition(
+                edge.ConditionJson,
+                nodeMap[edge.SourceNodeId].Kind == AgentflowNodeKind.HumanGate);
             if (condition == null)
             {
                 builder.AddEdge(source, target, label, idempotent: true);
@@ -420,7 +435,11 @@ public sealed class AgentflowWorkflowCompiler
                 edge => BindChatRoutingBridge($"{edge.EdgeId}.{RoutingBridgeSuffix}"),
                 StringComparer.Ordinal);
             var targets = fanOutEdges.Select(edge => bridges[edge.EdgeId]).ToList();
-            var conditions = fanOutEdges.Select(edge => BuildCondition(edge.ConditionJson)).ToList();
+            var conditions = fanOutEdges
+                .Select(edge => BuildCondition(
+                    edge.ConditionJson,
+                    nodeMap[group.Key].Kind == AgentflowNodeKind.HumanGate))
+                .ToList();
             var label = fanOutEdges[0].Label ?? fanOutEdges[0].EdgeId;
             builder.AddFanOutEdge<List<ChatMessage>>(
                 source,
@@ -443,13 +462,45 @@ public sealed class AgentflowWorkflowCompiler
         foreach (var group in edges.Where(edge => edge.Kind == AgentflowEdgeKind.FanInBarrier)
                      .GroupBy(edge => edge.TargetNodeId))
         {
-            var sources = group
+            var barrierEdges = group
+                .OrderBy(edge => edge.EdgeId, StringComparer.Ordinal)
+                .GroupBy(edge => edge.SourceNodeId, StringComparer.Ordinal)
+                .Select(sourceGroup => sourceGroup.First())
+                .ToList();
+            var cyclicComponent = cyclicComponents.SingleOrDefault(component => component.Contains(group.Key));
+            var reusableInputEdges = cyclicComponent == null
+                ? []
+                : barrierEdges
+                    .Where(edge =>
+                        !cyclicComponent.Contains(edge.SourceNodeId) &&
+                        nodeMap[edge.SourceNodeId].Kind == AgentflowNodeKind.Input)
+                    .ToList();
+            var repeatedEdges = cyclicComponent == null
+                ? []
+                : barrierEdges
+                    .Where(edge => cyclicComponent.Contains(edge.SourceNodeId))
+                    .ToList();
+
+            if (reusableInputEdges.Count > 0 &&
+                repeatedEdges.Count > 0 &&
+                reusableInputEdges.Count + repeatedEdges.Count == barrierEdges.Count)
+            {
+                AddLoopBarrierEdges(
+                    builder,
+                    group.Key,
+                    reusableInputEdges,
+                    repeatedEdges,
+                    bindings,
+                    humanGateOutputBindings);
+                continue;
+            }
+
+            var sources = barrierEdges
                 .Select(edge => GetSourceBinding(edge.SourceNodeId, bindings, humanGateOutputBindings))
-                .Distinct()
                 .ToList();
             if (sources.Count > 0)
             {
-                var label = group.First().Label ?? group.First().EdgeId;
+                var label = barrierEdges[0].Label ?? barrierEdges[0].EdgeId;
                 builder.AddFanInBarrierEdge(sources, bindings[group.Key], label);
             }
         }
@@ -479,7 +530,9 @@ public sealed class AgentflowWorkflowCompiler
             {
                 foreach (var edge in cases)
                 {
-                    var condition = BuildCondition(edge.ConditionJson);
+                    var condition = BuildCondition(
+                        edge.ConditionJson,
+                        nodeMap[group.Key].Kind == AgentflowNodeKind.HumanGate);
                     if (condition != null)
                     {
                         switchBuilder.AddCase(condition, bridges[edge.EdgeId]);
@@ -503,9 +556,60 @@ public sealed class AgentflowWorkflowCompiler
         }
     }
 
+    private static void AddLoopBarrierEdges(
+        WorkflowBuilder builder,
+        string targetNodeId,
+        IReadOnlyList<AgentflowEdge> reusableInputEdges,
+        IReadOnlyList<AgentflowEdge> repeatedEdges,
+        IReadOnlyDictionary<string, ExecutorBinding> bindings,
+        IReadOnlyDictionary<string, ExecutorBinding> humanGateOutputBindings)
+    {
+        var repeatedSourceNodeIds = repeatedEdges
+            .Select(edge => edge.SourceNodeId)
+            .ToList();
+        ExecutorBinding barrier = new LoopBarrierExecutor(
+            $"{targetNodeId}.{LoopBarrierSuffix}",
+            repeatedSourceNodeIds);
+        var barrierEdges = reusableInputEdges
+            .Select(edge => (Edge: edge, ReuseAcrossIterations: true))
+            .Concat(repeatedEdges.Select(edge => (Edge: edge, ReuseAcrossIterations: false)));
+
+        foreach (var (edge, reuseAcrossIterations) in barrierEdges)
+        {
+            var source = GetSourceBinding(edge.SourceNodeId, bindings, humanGateOutputBindings);
+            var bridge = BindLoopBarrierSource(
+                $"{edge.EdgeId}.{LoopBarrierSourceSuffix}",
+                edge.SourceNodeId,
+                reuseAcrossIterations);
+            var label = edge.Label ?? edge.EdgeId;
+            builder.AddEdge(source, bridge, label, idempotent: true);
+            builder.AddEdge(bridge, barrier, label, idempotent: true);
+        }
+
+        var targetLabel = reusableInputEdges[0].Label ?? reusableInputEdges[0].EdgeId;
+        builder.AddEdge(barrier, bindings[targetNodeId], targetLabel, idempotent: true);
+    }
+
     private static ExecutorBinding BindChatRoutingBridge(string id)
     {
         return new ChatRoutingBridgeExecutor(id);
+    }
+
+    private static ExecutorBinding BindLoopBarrierSource(
+        string id,
+        string sourceNodeId,
+        bool reuseAcrossIterations)
+    {
+        Func<List<ChatMessage>, LoopBarrierInput> transform = messages => new LoopBarrierInput
+        {
+            SourceNodeId = sourceNodeId,
+            ReuseAcrossIterations = reuseAcrossIterations,
+            Messages = messages.ToList(),
+        };
+        return transform.BindAsExecutor<List<ChatMessage>, LoopBarrierInput>(
+            id,
+            ChatExecutorOptions,
+            threadsafe: true);
     }
 
     private static int GetSwitchCaseOrder(AgentflowEdge edge)
@@ -571,7 +675,9 @@ public sealed class AgentflowWorkflowCompiler
             : bindings[nodeId];
     }
 
-    private static Func<List<ChatMessage>?, bool>? BuildCondition(string? conditionJson)
+    private static Func<List<ChatMessage>?, bool>? BuildCondition(
+        string? conditionJson,
+        bool useLatestHumanReply = false)
     {
         if (string.IsNullOrWhiteSpace(conditionJson))
         {
@@ -591,12 +697,20 @@ public sealed class AgentflowWorkflowCompiler
                 return false;
             }
 
+            IReadOnlyList<ChatMessage> conditionMessages = messages;
+            if (useLatestHumanReply)
+            {
+                var latestHumanReply = messages.LastOrDefault(message =>
+                    string.Equals(message.AuthorName, "human", StringComparison.OrdinalIgnoreCase));
+                conditionMessages = latestHumanReply == null ? [] : [latestHumanReply];
+            }
+
             if (config.Always.HasValue)
             {
                 return config.Always.Value;
             }
 
-            var text = string.Join("\n", messages.Select(message => message.Text));
+            var text = string.Join("\n", conditionMessages.Select(message => message.Text));
             if (!string.IsNullOrEmpty(config.Contains) &&
                 !text.Contains(config.Contains, StringComparison.OrdinalIgnoreCase))
             {
@@ -616,20 +730,20 @@ public sealed class AgentflowWorkflowCompiler
             }
 
             if (!string.IsNullOrEmpty(config.Author) &&
-                messages.All(message =>
+                conditionMessages.All(message =>
                     !string.Equals(message.AuthorName, config.Author, StringComparison.OrdinalIgnoreCase)))
             {
                 return false;
             }
 
             if (!string.IsNullOrEmpty(config.Role) &&
-                messages.All(message =>
+                conditionMessages.All(message =>
                     !string.Equals(message.Role.Value, config.Role, StringComparison.OrdinalIgnoreCase)))
             {
                 return false;
             }
 
-            if (config.MinMessages.HasValue && messages.Count < config.MinMessages.Value)
+            if (config.MinMessages.HasValue && conditionMessages.Count < config.MinMessages.Value)
             {
                 return false;
             }
@@ -740,6 +854,85 @@ public sealed class AgentflowWorkflowCompiler
                     cancellationToken)
                 .ConfigureAwait(false);
         }
+    }
+
+    private sealed class LoopBarrierExecutor : StatefulExecutor<LoopBarrierState, LoopBarrierInput>
+    {
+        private readonly IReadOnlyList<string> _repeatedSourceNodeIds;
+
+        public LoopBarrierExecutor(string id, IReadOnlyList<string> repeatedSourceNodeIds)
+            : base(
+                id,
+                () => new LoopBarrierState(),
+                sentMessageTypes: [typeof(List<ChatMessage>), typeof(TurnToken)])
+        {
+            _repeatedSourceNodeIds = repeatedSourceNodeIds;
+        }
+
+        public override async ValueTask HandleAsync(
+            LoopBarrierInput input,
+            IWorkflowContext context,
+            CancellationToken cancellationToken)
+        {
+            var state = await ReadStateAsync(context, cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+            if (input.ReuseAcrossIterations)
+            {
+                state.ReusableMessages = input.Messages;
+            }
+            else
+            {
+                if (!state.PendingMessages.TryGetValue(input.SourceNodeId, out var pendingMessages))
+                {
+                    pendingMessages = [];
+                    state.PendingMessages[input.SourceNodeId] = pendingMessages;
+                }
+
+                pendingMessages.AddRange(input.Messages);
+            }
+
+            var isReady = state.ReusableMessages != null &&
+                _repeatedSourceNodeIds.All(state.PendingMessages.ContainsKey);
+            List<ChatMessage>? messages = null;
+            if (isReady)
+            {
+                messages = state.ReusableMessages!.ToList();
+                foreach (var sourceNodeId in _repeatedSourceNodeIds)
+                {
+                    messages.AddRange(state.PendingMessages[sourceNodeId]);
+                }
+
+                state.PendingMessages.Clear();
+            }
+
+            await QueueStateUpdateAsync(state, context, cancellationToken).ConfigureAwait(false);
+            if (messages == null)
+            {
+                return;
+            }
+
+            await context.SendMessageAsync(messages, cancellationToken).ConfigureAwait(false);
+            await context.SendMessageAsync(
+                    new TurnToken(emitEvents: true),
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private sealed class LoopBarrierInput
+    {
+        public string SourceNodeId { get; set; } = string.Empty;
+
+        public bool ReuseAcrossIterations { get; set; }
+
+        public List<ChatMessage> Messages { get; set; } = [];
+    }
+
+    private sealed class LoopBarrierState
+    {
+        public List<ChatMessage>? ReusableMessages { get; set; }
+
+        public Dictionary<string, List<ChatMessage>> PendingMessages { get; set; } = new(StringComparer.Ordinal);
     }
 
     private sealed class InputPassthroughAgent(string nodeId, string? name) : AIAgent

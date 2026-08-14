@@ -16,7 +16,7 @@ public enum AgentflowEdgeKind
 
     /// <summary>
     /// 多对一汇聚屏障。
-    /// 编译时按同一个 TargetNodeId 分组，把多个 source 合成一次 AddFanInBarrierEdge(sources, target, ...)。语义是所有上游至少产生一条消息后，目标节点执行一次。
+    /// 编译时按同一个 TargetNodeId 分组。普通图使用 AddFanInBarrierEdge；循环图可缓存一次性 Input，并在环内来源每轮到达后复用。
     /// </summary>
     FanInBarrier = 2,
 

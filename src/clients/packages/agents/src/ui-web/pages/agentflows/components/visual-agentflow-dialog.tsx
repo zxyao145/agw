@@ -73,7 +73,7 @@ export function VisualAgentflowDialog({
               <DialogDescription>
                 {editingAgentflow
                   ? `Editing agentflow: ${editingAgentflow.name}`
-                  : "Design a DAG by adding agents, workflow-as-agent nodes, orchestration blocks, human gates, checkpoints, and MAF-aligned edges."}
+                  : "Design a workflow graph with agents, workflow-as-agent nodes, orchestration blocks, human gates, checkpoints, branches, and controlled loops."}
               </DialogDescription>
             </div>
             <div className="flex items-center gap-2">

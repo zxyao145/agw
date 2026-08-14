@@ -1073,13 +1073,12 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         HumanGateApprovalDecision decision)
     {
         var responseMessages = messages.ToList();
-        if (!string.IsNullOrWhiteSpace(decision.ResponseText))
+        responseMessages.Add(new ChatMessage(
+            ChatRole.User,
+            string.IsNullOrWhiteSpace(decision.ResponseText) ? string.Empty : decision.ResponseText.Trim())
         {
-            responseMessages.Add(new ChatMessage(ChatRole.User, decision.ResponseText.Trim())
-            {
-                AuthorName = "human",
-            });
-        }
+            AuthorName = "human",
+        });
 
         return responseMessages;
     }

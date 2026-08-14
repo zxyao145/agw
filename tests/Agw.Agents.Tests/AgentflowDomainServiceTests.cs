@@ -171,17 +171,158 @@ public class AgentflowDomainServiceTests
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_CyclicGraph_ReturnsNullCollections()
+    public void ValidateAndNormalizeGraph_CycleWithoutConditionalExit_ReturnsNullCollections()
     {
         var nodes = new[]
         {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
             new AgentflowNode { NodeId = "node-a", Kind = AgentflowNodeKind.PromptAdapter },
             new AgentflowNode { NodeId = "node-b", Kind = AgentflowNodeKind.PromptAdapter },
         };
         var edges = new[]
         {
-            new AgentflowEdge { EdgeId = "edge-1", SourceNodeId = "node-a", TargetNodeId = "node-b" },
-            new AgentflowEdge { EdgeId = "edge-2", SourceNodeId = "node-b", TargetNodeId = "node-a" },
+            new AgentflowEdge { EdgeId = "edge-1", SourceNodeId = "input", TargetNodeId = "node-a" },
+            new AgentflowEdge { EdgeId = "edge-2", SourceNodeId = "node-a", TargetNodeId = "node-b" },
+            new AgentflowEdge { EdgeId = "edge-3", SourceNodeId = "node-b", TargetNodeId = "node-a" },
+        };
+
+        var result = _service.ValidateAndNormalizeGraph(
+            nodes,
+            edges,
+            Guid.CreateVersion7(),
+            []);
+
+        Assert.Null(result.Nodes);
+        Assert.Null(result.Edges);
+    }
+
+    [Fact]
+    public void ValidateAndNormalizeGraph_CycleWithSwitchExitAndReusableInputBarrier_ReturnsGraph()
+    {
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode { NodeId = "upper", Kind = AgentflowNodeKind.PromptAdapter },
+            new AgentflowNode { NodeId = "lower", Kind = AgentflowNodeKind.PromptAdapter },
+            new AgentflowNode { NodeId = "human", Kind = AgentflowNodeKind.HumanGate },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var edges = new[]
+        {
+            new AgentflowEdge
+            {
+                EdgeId = "input-upper",
+                SourceNodeId = "input",
+                TargetNodeId = "upper",
+                Kind = AgentflowEdgeKind.FanOut,
+            },
+            new AgentflowEdge
+            {
+                EdgeId = "input-lower",
+                SourceNodeId = "input",
+                TargetNodeId = "lower",
+                Kind = AgentflowEdgeKind.FanInBarrier,
+            },
+            new AgentflowEdge
+            {
+                EdgeId = "upper-lower",
+                SourceNodeId = "upper",
+                TargetNodeId = "lower",
+                Kind = AgentflowEdgeKind.FanInBarrier,
+            },
+            new AgentflowEdge
+            {
+                EdgeId = "lower-human",
+                SourceNodeId = "lower",
+                TargetNodeId = "human",
+            },
+            new AgentflowEdge
+            {
+                EdgeId = "retry",
+                SourceNodeId = "human",
+                TargetNodeId = "upper",
+                Kind = AgentflowEdgeKind.SwitchCase,
+                ConditionJson = """{"contains":"retry"}""",
+                ConfigJson = """{"switchCaseOrder":0}""",
+            },
+            new AgentflowEdge
+            {
+                EdgeId = "done",
+                SourceNodeId = "human",
+                TargetNodeId = "output",
+                Kind = AgentflowEdgeKind.SwitchDefault,
+            },
+        };
+
+        var result = _service.ValidateAndNormalizeGraph(
+            nodes,
+            edges,
+            Guid.CreateVersion7(),
+            []);
+
+        Assert.NotNull(result.Nodes);
+        Assert.NotNull(result.Edges);
+        Assert.Equal(nodes.Length, result.Nodes.Count);
+        Assert.Equal(edges.Length, result.Edges.Count);
+    }
+
+    [Fact]
+    public void ValidateAndNormalizeGraph_CyclicBarrierWithExternalNonInputSource_ReturnsNullCollections()
+    {
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode { NodeId = "seed", Kind = AgentflowNodeKind.PromptAdapter },
+            new AgentflowNode { NodeId = "loop-a", Kind = AgentflowNodeKind.PromptAdapter },
+            new AgentflowNode { NodeId = "loop-b", Kind = AgentflowNodeKind.PromptAdapter },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var edges = new[]
+        {
+            new AgentflowEdge
+            {
+                EdgeId = "input-seed",
+                SourceNodeId = "input",
+                TargetNodeId = "seed",
+                Kind = AgentflowEdgeKind.FanOut,
+            },
+            new AgentflowEdge
+            {
+                EdgeId = "input-loop",
+                SourceNodeId = "input",
+                TargetNodeId = "loop-a",
+                Kind = AgentflowEdgeKind.FanOut,
+            },
+            new AgentflowEdge
+            {
+                EdgeId = "seed-barrier",
+                SourceNodeId = "seed",
+                TargetNodeId = "loop-b",
+                Kind = AgentflowEdgeKind.FanInBarrier,
+            },
+            new AgentflowEdge
+            {
+                EdgeId = "loop-barrier",
+                SourceNodeId = "loop-a",
+                TargetNodeId = "loop-b",
+                Kind = AgentflowEdgeKind.FanInBarrier,
+            },
+            new AgentflowEdge
+            {
+                EdgeId = "retry",
+                SourceNodeId = "loop-b",
+                TargetNodeId = "loop-a",
+                Kind = AgentflowEdgeKind.SwitchCase,
+                ConditionJson = """{"contains":"retry"}""",
+                ConfigJson = """{"switchCaseOrder":0}""",
+            },
+            new AgentflowEdge
+            {
+                EdgeId = "done",
+                SourceNodeId = "loop-b",
+                TargetNodeId = "output",
+                Kind = AgentflowEdgeKind.SwitchDefault,
+            },
         };
 
         var result = _service.ValidateAndNormalizeGraph(

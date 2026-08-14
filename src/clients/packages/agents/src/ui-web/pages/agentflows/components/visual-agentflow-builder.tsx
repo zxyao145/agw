@@ -96,6 +96,7 @@ import {
   INPUT_NODE_ID,
   validateInputGraph,
 } from "./agentflow-input-node";
+import { validateAgentflowCycles } from "./agentflow-cycle-validation";
 
 type DagNodeData = {
   kind: AgentflowNodeKind;
@@ -231,7 +232,7 @@ const EDGE_HELP_TEXT: Record<AgentflowEdgeKind, string> = {
   [AgentflowEdgeKind.FanOut]:
     "MAF AddFanOutEdge: every target with a matching predicate runs; an empty predicate always matches.",
   [AgentflowEdgeKind.FanInBarrier]:
-    "MAF AddFanInBarrierEdge: the target waits until every barrier source has produced a message.",
+    "The target waits for every barrier source; in a controlled loop, the initial Input is reused on later iterations.",
   [AgentflowEdgeKind.SwitchCase]:
     "MAF AddSwitch: cases run in order and only the first matching target receives the message.",
   [AgentflowEdgeKind.SwitchDefault]:
@@ -1016,7 +1017,7 @@ export function VisualAgentflowBuilder({
   }, [canvasEdges, canvasNodes, setNodes]);
 
   const graphValidation = React.useMemo(() => {
-    const validation = validateDag(nodes, edges);
+    const validation = validateAgentflowGraph(nodes, edges);
     if (!validation.ok) return validation;
 
     const outputNodes = nodes.filter((node) => node.data.kind === AgentflowNodeKind.Output);
@@ -2487,7 +2488,7 @@ function resolveNodeTitle(node: AgentflowNodeDto, agents: AgentDto[], agentflows
   return NODE_META[node.kind]?.label || "Node";
 }
 
-function validateDag(nodes: Node<DagNodeData>[], edges: Edge<DagEdgeData>[]) {
+function validateAgentflowGraph(nodes: Node<DagNodeData>[], edges: Edge<DagEdgeData>[]) {
   if (nodes.length === 0) {
     return { ok: false, message: "Add at least one node" };
   }
@@ -2578,29 +2579,15 @@ function validateDag(nodes: Node<DagNodeData>[], edges: Edge<DagEdgeData>[]) {
     return { ok: false, message: routingError };
   }
 
-  const adjacency = new Map(nodes.map((node) => [node.id, [] as string[]]));
-  edges.forEach((edge) => adjacency.get(edge.source)?.push(edge.target));
-
-  const visiting = new Set<string>();
-  const visited = new Set<string>();
-
-  const hasCycle = (nodeId: string): boolean => {
-    if (visiting.has(nodeId)) return true;
-    if (visited.has(nodeId)) return false;
-    visiting.add(nodeId);
-    for (const next of adjacency.get(nodeId) || []) {
-      if (hasCycle(next)) return true;
-    }
-    visiting.delete(nodeId);
-    visited.add(nodeId);
-    return false;
-  };
-
-  if (nodes.some((node) => hasCycle(node.id))) {
-    return { ok: false, message: "DAG cannot contain cycles" };
+  const cycleError = validateAgentflowCycles(nodes, edges);
+  if (cycleError) {
+    return { ok: false, message: cycleError };
   }
 
-  return { ok: true, message: `Valid DAG · ${nodes.length} nodes · ${edges.length} edges` };
+  return {
+    ok: true,
+    message: `Valid workflow graph · ${nodes.length} nodes · ${edges.length} edges`,
+  };
 }
 
 function isJsonObject(value: string) {

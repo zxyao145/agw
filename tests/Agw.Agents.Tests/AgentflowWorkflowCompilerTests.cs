@@ -7,6 +7,7 @@ using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agentflows.Builders;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Summaries;
 using Agw.Shared;
 using Agw.Shared.Contracts.Projects;
@@ -439,6 +440,133 @@ public class AgentflowWorkflowCompilerTests
         var aIndex = events.ToList().FindIndex(evt => HasChatInput(evt, "a"));
         var cIndex = events.ToList().FindIndex(evt => HasChatInput(evt, "c"));
         Assert.True(aIndex >= 0 && aIndex < cIndex);
+    }
+
+    [Fact]
+    public async Task Compile_CyclicBarrier_ReusesInputAcrossHumanGateIterations()
+    {
+        var (agentflow, nodes, edges) = CreateCyclicBarrierFlow();
+        var workflow = _compiler.Compile(agentflow, nodes, edges, new Dictionary<string, AIAgent>());
+
+        Assert.NotNull(workflow);
+
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow!,
+            new List<ChatMessage> { new(ChatRole.User, "original input") },
+            cancellationToken: cancellationToken);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+
+        var events = new List<WorkflowEvent>();
+        var requestCount = 0;
+        await foreach (var evt in run.WatchStreamAsync(cancellationToken))
+        {
+            events.Add(evt);
+            if (evt is RequestInfoEvent request)
+            {
+                requestCount++;
+                Assert.True(requestCount <= 2, "The workflow did not exit after the latest human reply.");
+                if (requestCount == 2)
+                {
+                    Assert.True(request.Request.TryGetDataAs<List<ChatMessage>>(out var requestMessages));
+                    Assert.Contains(requestMessages, message =>
+                        message.AuthorName == "human" && message.Text == "retry");
+                }
+
+                await run.SendResponseAsync(CreateHumanGateResponse(
+                    request.Request,
+                    requestCount == 1 ? "retry" : "done"));
+            }
+        }
+
+        Assert.Equal(2, requestCount);
+        Assert.Equal(2, events.Count(evt => HasChatInput(evt, "lower")));
+        Assert.Equal(2, events.Count(evt => HasTurnTokenInput(evt, "lower")));
+        Assert.Single(events, evt => HasChatInput(evt, "output"));
+        Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
+    }
+
+    [Fact]
+    public async Task Compile_CyclicBarrier_RestoresReusableInputFromCheckpoint()
+    {
+        var (agentflow, nodes, edges) = CreateCyclicBarrierFlow();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var sessionId = $"durable-{Guid.CreateVersion7():N}";
+        var firstStore = new DurableAgentflowCheckpointStore();
+        var firstManager = CheckpointManager.CreateJson(firstStore);
+        var firstWorkflow = _compiler.Compile(
+            agentflow,
+            nodes,
+            edges,
+            new Dictionary<string, AIAgent>());
+
+        Assert.NotNull(firstWorkflow);
+
+        await using (var firstRun = await InProcessExecution.RunStreamingAsync(
+                         firstWorkflow!,
+                         new List<ChatMessage> { new(ChatRole.User, "original input") },
+                         firstManager,
+                         sessionId,
+                         cancellationToken))
+        {
+            await firstRun.TrySendMessageAsync(new TurnToken(emitEvents: true));
+            await foreach (var evt in firstRun.WatchStreamAsync(cancellationToken))
+            {
+                if (evt is SuperStepCompletedEvent
+                    {
+                        CompletionInfo.HasPendingRequests: true,
+                        CompletionInfo.Checkpoint: not null,
+                    })
+                {
+                    await firstRun.CancelRunAsync();
+                    break;
+                }
+            }
+        }
+
+        Assert.NotNull(firstStore.Latest);
+
+        var restoredStore = new DurableAgentflowCheckpointStore(firstStore.Latest);
+        var restoredManager = CheckpointManager.CreateJson(restoredStore);
+        var checkpoint = await restoredManager.GetLatestCheckpointAsync(sessionId, cancellationToken);
+        var restoredWorkflow = _compiler.Compile(
+            agentflow,
+            nodes,
+            edges,
+            new Dictionary<string, AIAgent>());
+
+        Assert.NotNull(checkpoint);
+        Assert.NotNull(restoredWorkflow);
+
+        await using var restoredRun = await InProcessExecution.ResumeStreamingAsync(
+            restoredWorkflow!,
+            checkpoint!,
+            restoredManager,
+            cancellationToken);
+        await restoredRun.TrySendMessageAsync(new TurnToken(emitEvents: true));
+
+        var events = new List<WorkflowEvent>();
+        var requestCount = 0;
+        await foreach (var evt in restoredRun.WatchStreamAsync(cancellationToken))
+        {
+            events.Add(evt);
+            if (evt is RequestInfoEvent request)
+            {
+                requestCount++;
+                Assert.True(requestCount <= 2, "The restored workflow did not exit after the latest human reply.");
+                await restoredRun.SendResponseAsync(CreateHumanGateResponse(
+                    request.Request,
+                    requestCount == 1 ? "retry" : "done"));
+            }
+        }
+
+        Assert.Equal(2, requestCount);
+        Assert.DoesNotContain(
+            events,
+            evt => HasChatInput(evt, "input-lower.__agw_loop_barrier_source"));
+        Assert.Single(events, evt => HasChatInput(evt, "lower"));
+        Assert.Single(events, evt => HasChatInput(evt, "output"));
+        Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
     }
 
     [Theory]
@@ -1284,6 +1412,47 @@ public class AgentflowWorkflowCompilerTests
         }
 
         Assert.Empty(summaryService.Calls);
+    }
+
+    private static (Agentflow Agentflow, AgentflowNode[] Nodes, AgentflowEdge[] Edges)
+        CreateCyclicBarrierFlow()
+    {
+        return (
+            new Agentflow { Id = Guid.CreateVersion7(), Name = "revision-flow" },
+            [
+                new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+                new AgentflowNode { NodeId = "upper", Kind = AgentflowNodeKind.PromptAdapter },
+                new AgentflowNode { NodeId = "lower", Kind = AgentflowNodeKind.PromptAdapter },
+                new AgentflowNode { NodeId = "human", Kind = AgentflowNodeKind.HumanGate },
+                new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+            ],
+            [
+                Edge("input-upper", "input", "upper", AgentflowEdgeKind.FanOut),
+                Edge("input-lower", "input", "lower", AgentflowEdgeKind.FanInBarrier),
+                Edge("upper-lower", "upper", "lower", AgentflowEdgeKind.FanInBarrier),
+                Edge("lower-human", "lower", "human"),
+                Edge(
+                    "retry",
+                    "human",
+                    "upper",
+                    AgentflowEdgeKind.SwitchCase,
+                    """{"contains":"retry"}""",
+                    """{"switchCaseOrder":0}"""),
+                Edge("done", "human", "output", AgentflowEdgeKind.SwitchDefault),
+            ]);
+    }
+
+    private static ExternalResponse CreateHumanGateResponse(
+        ExternalRequest request,
+        string responseText)
+    {
+        Assert.True(request.TryGetDataAs<List<ChatMessage>>(out var requestMessages));
+        var responseMessages = requestMessages.ToList();
+        responseMessages.Add(new ChatMessage(ChatRole.User, responseText)
+        {
+            AuthorName = "human",
+        });
+        return request.CreateResponse(responseMessages);
     }
 
     private static AgentflowEdge Edge(
