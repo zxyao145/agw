@@ -12,7 +12,7 @@ on:
 jobs:
 
   build:
-    name: build 
+    name: test
     runs-on: ubuntu-latest
     environment: prod
     
@@ -27,5 +27,5 @@ jobs:
 
     - name: build
       run: |
-        dotnet build ./Agw.slnx -c Release
+        dotnet test ./Agw.slnx -c Release
 
