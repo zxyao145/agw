@@ -43,3 +43,17 @@ test("Desktop diagnoses renderer exits and recovers without a reload loop", asyn
   assert.match(source, /destructionPlanned/);
   assert.match(source, /errorCode === -3|ERR_ABORTED/);
 });
+
+test("Desktop completes startup after a successful initial renderer recovery", async () => {
+  const source = await readFile(MAIN_URL, "utf8");
+  const readyHandler = source.slice(source.indexOf(".whenReady()"));
+
+  assert.match(
+    source,
+    /rendererRecoveryAttempt: Promise<boolean> \| null = null;[\s\S]*?rendererRecoveryAttempt = recovery;/,
+  );
+  assert.match(
+    readyHandler,
+    /catch \(error\) \{[\s\S]*?const recovery = rendererRecoveryAttempt;[\s\S]*?if \(!recovery \|\| !\(await recovery\)\) throw error;[\s\S]*?rendererReady = true;/,
+  );
+});

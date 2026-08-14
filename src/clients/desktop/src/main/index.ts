@@ -69,6 +69,7 @@ let rendererReady = false;
 let lastTrustedRendererUrl: string | null = null;
 let rendererReloadRequired = false;
 let rendererRecoveryInProgress = false;
+let rendererRecoveryAttempt: Promise<boolean> | null = null;
 const rendererRecoveryGuard = new RendererRecoveryGuard();
 
 function reportMainProcessError(title: string, error: unknown): void {
@@ -234,8 +235,8 @@ async function reloadRendererWindow(): Promise<void> {
   await loadTrustedRendererUrl(target);
 }
 
-async function showManualRendererRecovery(window: BrowserWindow): Promise<void> {
-  if (window.isDestroyed()) return;
+async function showManualRendererRecovery(window: BrowserWindow): Promise<boolean> {
+  if (window.isDestroyed()) return false;
   const answer = await dialog.showMessageBox(window, {
     type: "error",
     buttons: ["Reload Chat", "Close Window"],
@@ -249,30 +250,36 @@ async function showManualRendererRecovery(window: BrowserWindow): Promise<void> 
 
   if (answer.response === 0) {
     await reloadRendererWindow();
-    return;
+    return true;
   }
 
   rendererReloadRequired = true;
   window.hide();
+  return false;
 }
 
-async function recoverRenderer(window: BrowserWindow): Promise<void> {
-  if (isQuitting || window.isDestroyed() || rendererRecoveryInProgress) return;
+function recoverRenderer(window: BrowserWindow): Promise<boolean> {
+  if (rendererRecoveryInProgress) return rendererRecoveryAttempt ?? Promise.resolve(false);
+  if (isQuitting || window.isDestroyed()) return Promise.resolve(false);
   rendererRecoveryInProgress = true;
   const action = rendererRecoveryGuard.recordFailure();
-  try {
-    if (action === "auto-reload") {
-      try {
-        await reloadRendererWindow();
-        return;
-      } catch {
-        // A failed automatic navigation immediately hands control to manual recovery.
+  const recovery = (async () => {
+    try {
+      if (action === "auto-reload") {
+        try {
+          await reloadRendererWindow();
+          return true;
+        } catch {
+          // A failed automatic navigation immediately hands control to manual recovery.
+        }
       }
+      return await showManualRendererRecovery(window);
+    } finally {
+      rendererRecoveryInProgress = false;
     }
-    await showManualRendererRecovery(window);
-  } finally {
-    rendererRecoveryInProgress = false;
-  }
+  })();
+  rendererRecoveryAttempt = recovery;
+  return recovery;
 }
 
 function createMainWindow(): BrowserWindow {
@@ -685,7 +692,12 @@ void app
 
     const initialRoute = pendingOAuthRoute ?? "/desktop/chat/";
     pendingOAuthRoute = null;
-    await loadRenderer(initialRoute);
+    try {
+      await loadRenderer(initialRoute);
+    } catch (error) {
+      const recovery = rendererRecoveryAttempt;
+      if (!recovery || !(await recovery)) throw error;
+    }
     rendererReady = true;
     if (pendingOAuthRoute) {
       const nextRoute = pendingOAuthRoute;
