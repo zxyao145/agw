@@ -82,13 +82,15 @@ public sealed class AgwAgentArchitectureTests
         Assert.Null(typeof(Agw.Shared.Data.Entities.Projects.Project).GetProperty("ToolBlocks"));
 
         var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
-        var migrationFiles = Directory
-            .EnumerateFiles(
-                Path.Combine(repositoryRoot, "src", "server", "Agw.Infrastructure", "Migrations"),
-                "*.cs",
-                SearchOption.TopDirectoryOnly)
+        var migrationDirectories = new[]
+        {
+            Path.Combine(repositoryRoot, "src", "server", "Agw.Migrations.Sqlite", "Migrations"),
+            Path.Combine(repositoryRoot, "src", "server", "Agw.Migrations.Postgres", "Migrations")
+        };
+        var migrationFiles = migrationDirectories
+            .SelectMany(path => Directory.EnumerateFiles(path, "*.cs", SearchOption.TopDirectoryOnly))
             .Where(path =>
-                Path.GetFileName(path).StartsWith("20260729", StringComparison.Ordinal) ||
+                Path.GetFileName(path).Contains("_Init", StringComparison.Ordinal) ||
                 path.EndsWith("AgwDbContextModelSnapshot.cs", StringComparison.Ordinal));
         var violations = migrationFiles
             .Where(path => File.ReadAllText(path).Contains("tool_blocks", StringComparison.Ordinal))
