@@ -24,6 +24,9 @@ Current Tool Blocks:
   `<Project.Workspace>/.agw/memory`. The same project shares memory across
   agents and conversations; filesystem-backed memory is shared when Projects
   point to the same Workspace.
+- `user-memory`: database-only Markdown memory bound to the authenticated user.
+  It follows that user across Agents, Projects, and conversations without being
+  visible to other users.
 - `file-access`: Harness file-access tools scoped to `Project.Workspace`.
 - `background-agents`: one-level background delegation tools.
 
@@ -56,6 +59,13 @@ Agent and Project definitions use one strongly typed `tools` field:
       "options": {
         "storage": "database"
       }
+    }
+  },
+  {
+    "kind": "toolBlock",
+    "definition": {
+      "name": "user-memory",
+      "options": {}
     }
   }
 ]
@@ -171,7 +181,22 @@ State belongs to the runtime behavior that needs it, not to the catalog:
 - Project Memory database storage is isolated by Project ID.
 - Project Memory filesystem storage is rooted below
   `<Project.Workspace>/.agw/memory`; Projects using the same Workspace share it.
+- User Memory is always stored in the database and isolated by the authenticated
+  user ID. Only its Markdown content is encrypted; names and descriptions stay
+  searchable.
+- The User Memory context provider contributes at most 50 names and complete
+  Markdown bodies. Descriptions are display metadata for management UI and
+  `user_memory_list`; they are not injected into model context.
 - Background relations and results are persisted by their owning runtime.
+
+### Memory scope and privacy
+
+Use User Memory for personal preferences and context that should follow one user
+across projects. Use Project Memory for knowledge owned by a project and shared
+by every Agent or user working in that project. User Memory never uses the
+filesystem, while Project Memory may use either database or workspace storage.
+User Memory automatically injects up to 50 complete bodies. Additional entries
+remain available through `user_memory_list` and `user_memory_read`.
 
 Tool Approval is an Agent pipeline concern. A Tool or ToolBlock contributes
 auto-approval rules where appropriate, while `AsAgwAgent` applies the approval

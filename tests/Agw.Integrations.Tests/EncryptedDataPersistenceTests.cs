@@ -8,6 +8,7 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;
+using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
 
 using Microsoft.AspNetCore.DataProtection;
@@ -279,7 +280,8 @@ public class EncryptedDataPersistenceTests
                 $"{typeof(DurableExecutionEventRecord).FullName}.{nameof(DurableExecutionEventRecord.PayloadJson)}",
                 $"{typeof(ConnectionCredential).FullName}.{nameof(ConnectionCredential.Value)}",
                 $"{typeof(PluginInstallationCredential).FullName}.{nameof(PluginInstallationCredential.Value)}",
-                $"{typeof(ProviderAuthConfig).FullName}.{nameof(ProviderAuthConfig.ApiKey)}"
+                $"{typeof(ProviderAuthConfig).FullName}.{nameof(ProviderAuthConfig.ApiKey)}",
+                $"{typeof(UserMemory).FullName}.{nameof(UserMemory.Content)}"
             }.OrderBy(name => name),
             encryptedProperties);
     }

@@ -52,6 +52,11 @@ internal sealed record DurableExecutionManifest
     public required Guid ExecutionId { get; init; }
 
     /// <summary>
+    /// 获取发起执行的稳定用户标识。旧清单缺少该字段时回退内置管理员。
+    /// </summary>
+    public string UserId { get; init; } = Constants.AdminUserId;
+
+    /// <summary>
     /// 获取需要执行的 Agent 标识。
     /// </summary>
     public required Guid AgentId { get; init; }
@@ -75,6 +80,9 @@ internal sealed record DurableExecutionManifest
     /// 获取重建运行时所需的执行设置。
     /// </summary>
     public required DurableExecutionSettings Settings { get; init; }
+
+    public string ResolveUserId() =>
+        string.IsNullOrWhiteSpace(UserId) ? Constants.AdminUserId : UserId;
 }
 
 /// <summary>

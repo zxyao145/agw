@@ -49,6 +49,7 @@ public static class ToolBlockDefinitionNames
     public const string Todo = "todo";
     public const string Mode = "mode";
     public const string ProjectMemory = "project-memory";
+    public const string UserMemory = "user-memory";
     public const string FileAccess = "file-access";
     public const string BackgroundAgents = "background-agents";
 
@@ -57,6 +58,7 @@ public static class ToolBlockDefinitionNames
         Todo,
         Mode,
         ProjectMemory,
+        UserMemory,
         FileAccess,
         BackgroundAgents
     ];
@@ -163,6 +165,7 @@ public sealed record WebSearchToolDefinition : ToolDefinition<EmptyToolOptions>
 [JsonDerivedType(typeof(TodoToolBlockDefinition), ToolBlockDefinitionNames.Todo)]
 [JsonDerivedType(typeof(ModeToolBlockDefinition), ToolBlockDefinitionNames.Mode)]
 [JsonDerivedType(typeof(ProjectMemoryToolBlockDefinition), ToolBlockDefinitionNames.ProjectMemory)]
+[JsonDerivedType(typeof(UserMemoryToolBlockDefinition), ToolBlockDefinitionNames.UserMemory)]
 [JsonDerivedType(typeof(FileAccessToolBlockDefinition), ToolBlockDefinitionNames.FileAccess)]
 [JsonDerivedType(typeof(BackgroundAgentsToolBlockDefinition), ToolBlockDefinitionNames.BackgroundAgents)]
 public abstract record ToolBlockDefinition
@@ -194,6 +197,11 @@ public sealed record ModeToolBlockDefinition : ToolBlockDefinition<EmptyToolOpti
 public sealed record ProjectMemoryToolBlockDefinition : ToolBlockDefinition<ProjectMemoryToolBlockOptions>
 {
     public override string GetDefinitionName() => ToolBlockDefinitionNames.ProjectMemory;
+}
+
+public sealed record UserMemoryToolBlockDefinition : ToolBlockDefinition<EmptyToolOptions>
+{
+    public override string GetDefinitionName() => ToolBlockDefinitionNames.UserMemory;
 }
 
 public sealed record ProjectMemoryToolBlockOptions

@@ -19,6 +19,8 @@ Tool 对模型暴露一个可调用操作，可以单独添加或删除。ToolBl
 - `project-memory`：Agw Project Memory 工具，存储可选数据库或
   `<Project.Workspace>/.agw/memory`。同一项目的 Agent 与会话共享记忆；
   Filesystem 模式下，指向同一 Workspace 的多个项目也共享记忆。
+- `user-memory`：只存数据库、绑定当前认证用户的 Markdown 记忆。它可跨
+  Agent、Project 和会话使用，但其他用户不可见。
 - `file-access`：限定在 `Project.Workspace` 下的 Harness 文件工具。
 - `background-agents`：只允许一层的后台 Agent 委派工具。
 
@@ -49,6 +51,13 @@ Agent 和 Project 统一使用一个强类型 `tools` 字段：
       "options": {
         "storage": "database"
       }
+    }
+  },
+  {
+    "kind": "toolBlock",
+    "definition": {
+      "name": "user-memory",
+      "options": {}
     }
   }
 ]
@@ -149,7 +158,19 @@ Catalog 构建和运行时组合都会校验名称：
 - Project Memory 数据库存储按 Project ID 隔离。
 - Project Memory 文件系统存储位于 `<Project.Workspace>/.agw/memory`；指向同一
   Workspace 的多个 Project 共享该目录。
+- User Memory 始终存储在数据库中，并按认证用户 ID 隔离。只有 Markdown
+  正文加密，名称和描述保持可检索。
+- User Memory Context Provider 最多注入 50 条名称及完整 Markdown 正文；描述仅用于
+  管理界面和 `user_memory_list` 展示，不注入模型上下文。
 - Background relation 与结果由对应 runtime 持久化。
+
+### Memory 作用域与隐私边界
+
+个人偏好和需要跨项目跟随同一用户的上下文应使用 User Memory；属于某一项目、
+需要由参与该项目的 Agent 或用户共享的知识应使用 Project Memory。User Memory
+不会使用文件系统，Project Memory 则可以选择数据库或 Workspace 存储。两种
+User Memory 会自动注入最多 50 条完整正文；超出范围的条目可通过
+`user_memory_list` 和 `user_memory_read` 获取。
 
 Tool Approval 属于 Agent pipeline。Tool 或 ToolBlock 只贡献必要的自动审批规则，`AsAgwAgent` 统一应用审批中间件；文件写入和 Shell 执行仍要求审批。
 

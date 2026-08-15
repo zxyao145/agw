@@ -7,6 +7,7 @@ import {
   Workflow,
   Bot,
   Blocks,
+  BookOpenText,
   // Terminal,
   Boxes,
   Cable,
@@ -94,18 +95,6 @@ const navItems: SidebarMenuGroupProps[] = [
         isActive: true,
         icon: <Workflow />,
       },
-      {
-        url: "/mcp-tool-servers",
-        title: "MCP Tool Servers",
-        isActive: true,
-        icon: <Network />,
-      },
-      {
-        url: "/skills",
-        title: "Skills",
-        isActive: true,
-        icon: <Blocks />,
-      },
     ],
   },
 
@@ -130,11 +119,29 @@ const navItems: SidebarMenuGroupProps[] = [
   },
 
   {
-    groupLable: "Integrations",
+    groupLable: "Capabilities",
     menus: [
       {
+        url: "/user-memory",
+        title: "User Memory",
+        isActive: true,
+        icon: <BookOpenText />,
+      },
+      {
+        url: "/skills",
+        title: "Skills",
+        isActive: true,
+        icon: <Blocks />,
+      },
+      {
+        url: "/mcp-tool-servers",
+        title: "MCP Tool Servers",
+        isActive: true,
+        icon: <Network />,
+      },
+      {
         url: "/integrations",
-        title: "Integrations (beta)",
+        title: "Integrations",
         isActive: true,
         icon: <Cable />,
       },

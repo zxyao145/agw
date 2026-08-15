@@ -58,3 +58,12 @@ test("Desktop shell switches Server profiles from the title bar", async () => {
   assert.match(source, /aria-selected=\{active\}/);
   assert.match(source, /activeServerId: nextServerId/);
 });
+
+test("Desktop exposes User Memory in Capabilities", async () => {
+  const source = await readFile(APP_SHELL_URL, "utf8");
+
+  assert.match(
+    source,
+    /label: "Capabilities"[\s\S]*href: "\/user-memory\/"[\s\S]*label: "User Memory"/,
+  );
+});

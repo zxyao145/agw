@@ -1,4 +1,7 @@
+using System.Security.Claims;
+
 using Agw.Agents.Execution.Agentflows;
+using Agw.Auth.Application;
 using Agw.Shared.Data;
 
 using Microsoft.Extensions.Logging;
@@ -49,27 +52,41 @@ internal sealed class DurableExecutionSegmentExecutor
         var manifest = (await _store.GetAsync(input.ExecutionId, cancellationToken)
                 .ConfigureAwait(false))
             .Manifest;
-        return manifest.AgentType switch
+        var previousUser = UserInfoUtil.Current;
+        UserInfoUtil.Current = CreateUserPrincipal(manifest.ResolveUserId());
+        try
         {
-            AgentRuntimeType.Agent => await _agentRunner.RunAsync(
-                    manifest,
-                    input,
-                    sink,
-                    cancellationToken)
-                .ConfigureAwait(false),
-            AgentRuntimeType.Agentflow => await _agentflowRuntimeService.ExecuteDurableSegmentAsync(
-                    manifest,
-                    input,
-                    sink,
-                    cancellationToken)
-                .ConfigureAwait(false),
-            _ => new DurableExecutionSegmentResult
+            return manifest.AgentType switch
             {
-                ExecutionId = input.ExecutionId,
-                SegmentIndex = input.SegmentIndex,
-                Status = DurableExecutionSegmentStatus.Failed,
-                ErrorMessage = $"Agent runtime type '{manifest.AgentType}' is not supported."
-            }
-        };
+                AgentRuntimeType.Agent => await _agentRunner.RunAsync(
+                        manifest,
+                        input,
+                        sink,
+                        cancellationToken)
+                    .ConfigureAwait(false),
+                AgentRuntimeType.Agentflow => await _agentflowRuntimeService.ExecuteDurableSegmentAsync(
+                        manifest,
+                        input,
+                        sink,
+                        cancellationToken)
+                    .ConfigureAwait(false),
+                _ => new DurableExecutionSegmentResult
+                {
+                    ExecutionId = input.ExecutionId,
+                    SegmentIndex = input.SegmentIndex,
+                    Status = DurableExecutionSegmentStatus.Failed,
+                    ErrorMessage = $"Agent runtime type '{manifest.AgentType}' is not supported."
+                }
+            };
+        }
+        finally
+        {
+            UserInfoUtil.Current = previousUser;
+        }
     }
+
+    private static ClaimsPrincipal CreateUserPrincipal(string userId) =>
+        new(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, userId)],
+            "DurableExecution"));
 }

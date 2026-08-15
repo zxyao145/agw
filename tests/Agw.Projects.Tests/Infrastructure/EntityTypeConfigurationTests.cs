@@ -11,6 +11,7 @@ using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
+using Agw.Shared.Data.Entities.Tools;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -80,7 +81,8 @@ public class EntityTypeConfigurationTests
             typeof(AgentSessionStateEntry),
             typeof(AgentSkillRelation),
             typeof(McpServer),
-            typeof(AgentMcpServerRelation));
+            typeof(AgentMcpServerRelation),
+            typeof(UserMemory));
     }
 
     [Fact]
@@ -186,7 +188,7 @@ public class EntityTypeConfigurationTests
             .OrderBy(type => type.FullName)
             .ToArray();
 
-        Assert.Equal(34, entityTypes.Length);
+        Assert.Equal(35, entityTypes.Length);
         AssertConfigured(entityTypes);
     }
 
