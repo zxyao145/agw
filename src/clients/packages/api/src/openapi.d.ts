@@ -3807,6 +3807,178 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/user-memories/paged": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          pageIndex?: number;
+          pageSize?: number;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfPagedResultOfUserMemorySummaryResponse"];
+            "application/json": components["schemas"]["ApiResultOfPagedResultOfUserMemorySummaryResponse"];
+            "text/json": components["schemas"]["ApiResultOfPagedResultOfUserMemorySummaryResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/user-memories/detail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          id?: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfUserMemoryDetailResponse"];
+            "application/json": components["schemas"]["ApiResultOfUserMemoryDetailResponse"];
+            "text/json": components["schemas"]["ApiResultOfUserMemoryDetailResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/user-memories": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["UserMemoryUpdateRequest"];
+          "text/json": components["schemas"]["UserMemoryUpdateRequest"];
+          "application/*+json": components["schemas"]["UserMemoryUpdateRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfUserMemoryDetailResponse"];
+            "application/json": components["schemas"]["ApiResultOfUserMemoryDetailResponse"];
+            "text/json": components["schemas"]["ApiResultOfUserMemoryDetailResponse"];
+          };
+        };
+      };
+    };
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["UserMemoryCreateRequest"];
+          "text/json": components["schemas"]["UserMemoryCreateRequest"];
+          "application/*+json": components["schemas"]["UserMemoryCreateRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfUserMemoryDetailResponse"];
+            "application/json": components["schemas"]["ApiResultOfUserMemoryDetailResponse"];
+            "text/json": components["schemas"]["ApiResultOfUserMemoryDetailResponse"];
+          };
+        };
+      };
+    };
+    delete: {
+      parameters: {
+        query?: {
+          id?: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5315,6 +5487,7 @@ export interface components {
       | components["schemas"]["ToolBlockDefinitionTodoToolBlockDefinition"]
       | components["schemas"]["ToolBlockDefinitionModeToolBlockDefinition"]
       | components["schemas"]["ToolBlockDefinitionProjectMemoryToolBlockDefinition"]
+      | components["schemas"]["ToolBlockDefinitionUserMemoryToolBlockDefinition"]
       | components["schemas"]["ToolBlockDefinitionFileAccessToolBlockDefinition"]
       | components["schemas"]["ToolBlockDefinitionBackgroundAgentsToolBlockDefinition"];
     ToolBlockDefinitionBackgroundAgentsToolBlockDefinition: {
@@ -5482,6 +5655,67 @@ export interface components {
       additionalCounts?: null | {
         [key: string]: number | string;
       };
+    };
+    ApiResultOfPagedResultOfUserMemorySummaryResponse: {
+      data?: null | components["schemas"]["PagedResultOfUserMemorySummaryResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
+    ApiResultOfUserMemoryDetailResponse: {
+      data?: null | components["schemas"]["UserMemoryDetailResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
+    PagedResultOfUserMemorySummaryResponse: {
+      items: components["schemas"]["UserMemorySummaryResponse"][];
+      /** Format: int64 */
+      total: number | string;
+      /** Format: int32 */
+      pageIndex: number;
+      /** Format: int32 */
+      pageSize: number;
+    };
+    ToolBlockDefinitionUserMemoryToolBlockDefinition: {
+      /** @enum {string} */
+      name: "user-memory";
+      options: components["schemas"]["EmptyToolOptions"];
+    };
+    UserMemoryCreateRequest: {
+      name: string;
+      description: null | string;
+      content: string;
+    };
+    UserMemoryDetailResponse: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      description: null | string;
+      content: string;
+      /** Format: date-time */
+      createTime: string;
+      /** Format: date-time */
+      updateTime: null | string;
+    };
+    UserMemorySummaryResponse: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      description: null | string;
+      /** Format: date-time */
+      createTime: string;
+      /** Format: date-time */
+      updateTime: null | string;
+    };
+    UserMemoryUpdateRequest: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      description: null | string;
+      content: string;
     };
   };
   responses: never;

@@ -78,6 +78,9 @@ importers:
       '@agw/skills':
         specifier: workspace:*
         version: link:../packages/skills
+      '@agw/tools':
+        specifier: workspace:*
+        version: link:../packages/tools
       '@electron-forge/cli':
         specifier: 7.11.2
         version: 7.11.2(encoding@0.1.13)(supports-color@10.2.2)
@@ -654,12 +657,24 @@ importers:
 
   packages/tools:
     dependencies:
+      '@agw/api':
+        specifier: workspace:*
+        version: link:../api
       '@agw/components':
         specifier: workspace:*
         version: link:../components
       lucide-react:
         specifier: 0.577.0
         version: 0.577.0(react@19.2.4)
+      react-markdown:
+        specifier: 10.1.0
+        version: 10.1.0(@types/react@19.2.14)(react@19.2.4)
+      remark-gfm:
+        specifier: 4.0.1
+        version: 4.0.1
+      sonner:
+        specifier: 2.0.7
+        version: 2.0.7(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
     devDependencies:
       '@types/node':
         specifier: 25.5.0
@@ -715,6 +730,9 @@ importers:
       '@agw/skills':
         specifier: workspace:*
         version: link:../packages/skills
+      '@agw/tools':
+        specifier: workspace:*
+        version: link:../packages/tools
       '@chenglou/pretext':
         specifier: ^0.0.5
         version: 0.0.5

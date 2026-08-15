@@ -7,6 +7,7 @@ import { useQuery } from "@agw/components/query";
 import {
   ArrowLeft,
   Blocks,
+  BookOpenText,
   Bot,
   Boxes,
   Cable,
@@ -82,6 +83,7 @@ const SETTINGS_GROUPS = [
   {
     label: "Capabilities",
     items: [
+      { href: "/user-memory/", label: "User Memory", icon: BookOpenText },
       // { href: "/skills/", label: "Skills", icon: GitBranch },
       { href: "/skills/", label: "Skills", icon: Blocks },
       { href: "/mcp-tool-servers/", label: "MCP servers", icon: Network },

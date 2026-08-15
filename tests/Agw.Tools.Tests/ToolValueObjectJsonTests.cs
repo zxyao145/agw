@@ -57,6 +57,16 @@ public sealed class ToolValueObjectJsonTests
     }
 
     [Fact]
+    public void Deserialize_UserMemory_CreatesParameterlessDefinition()
+    {
+        var values = ToolValueObjectJson.Deserialize(
+            """[{"kind":"toolBlock","definition":{"name":"user-memory","options":{}}}]""");
+
+        var value = Assert.IsType<ToolBlockValue>(Assert.Single(values));
+        Assert.IsType<UserMemoryToolBlockDefinition>(value.Definition);
+    }
+
+    [Fact]
     public void Deserialize_LegacyToolNames_MapsToStrongDefinitions()
     {
         var values = ToolValueObjectJson.Deserialize("""["WEB_SEARCH","web_fetch"]""");

@@ -9,6 +9,7 @@ using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
+using Agw.Shared.Data.Entities.Tools;
 
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
@@ -87,6 +88,7 @@ public class AgwDbContext : EFContext
 
     public DbSet<Project> Projects => Set<Project>();
     public DbSet<ProjectMemoryEntry> ProjectMemories => Set<ProjectMemoryEntry>();
+    public DbSet<UserMemory> UserMemories => Set<UserMemory>();
     public DbSet<ProjectSkillRelation> ProjectSkillRelations => Set<ProjectSkillRelation>();
     public DbSet<ProjectMcpServerRelation> ProjectMcpToolServers => Set<ProjectMcpServerRelation>();
     public DbSet<ProjectConnectionRelation> ProjectConnectionRelations => Set<ProjectConnectionRelation>();

@@ -10,6 +10,7 @@
     </ItemGroup>
     <ItemGroup>
         <FrameworkReference Include="Microsoft.AspNetCore.App" />
+        <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
         <ProjectReference Include="..\Agw.Files\Agw.Files.csproj" />
         <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
     </ItemGroup>

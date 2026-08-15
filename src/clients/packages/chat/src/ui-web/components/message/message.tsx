@@ -5,6 +5,7 @@ import { MessageNode } from "./types";
 import { renderContent } from "./renders";
 import { ToolState, isToolStateMessage, MessageCitations } from "./tool-state";
 import { parseMessageProposedPlan } from "./proposed-plan";
+import { formatToolJson } from "./tool-json";
 
 export const isResultMessage = (message: AiMessage): boolean =>
   message.additionalProperties?.type === "result";
@@ -52,13 +53,7 @@ const buildContentNode = (content: AiMessageContent, message: AiMessage): string
     type === MessageContentType.FunctionCallContent ||
     type === MessageContentType.FunctionResultContent
   ) {
-    if (processed.startsWith("{") && processed.endsWith("}")) {
-      try {
-        processed = "\n```json\n" + JSON.stringify(JSON.parse(processed), null, 2) + "\n```";
-      } catch {
-        // Keep original if invalid JSON
-      }
-    }
+    processed = formatToolJson(processed);
   }
 
   return processed;

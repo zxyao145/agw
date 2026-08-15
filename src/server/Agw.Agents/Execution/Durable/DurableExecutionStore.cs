@@ -118,6 +118,28 @@ internal sealed class DurableExecutionStore
         AgwUserInput input,
         TaskProjection task,
         ExecutionSettings settings,
+        CancellationToken cancellationToken) =>
+        await RegisterAsync(
+            executionId,
+            userName,
+            Constants.AdminUserId,
+            agentId,
+            agentType,
+            input,
+            task,
+            settings,
+            cancellationToken)
+            .ConfigureAwait(false);
+
+    internal async Task<DurableExecutionSnapshot> RegisterAsync(
+        Guid executionId,
+        string userName,
+        string userId,
+        Guid agentId,
+        Agw.Shared.Data.AgentRuntimeType agentType,
+        AgwUserInput input,
+        TaskProjection task,
+        ExecutionSettings settings,
         CancellationToken cancellationToken)
     {
         if (executionId == Guid.Empty)
@@ -125,6 +147,7 @@ internal sealed class DurableExecutionStore
             throw new AgwException(ErrorCodes.InvalidParam, "executionId is required.");
         }
         ArgumentException.ThrowIfNullOrWhiteSpace(userName);
+        userId = string.IsNullOrWhiteSpace(userId) ? Constants.AdminUserId : userId.Trim();
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(task);
         ArgumentNullException.ThrowIfNull(settings);
@@ -132,6 +155,7 @@ internal sealed class DurableExecutionStore
         var manifest = new DurableExecutionManifest
         {
             ExecutionId = executionId,
+            UserId = userId,
             AgentId = agentId,
             AgentType = agentType,
             Input = input,

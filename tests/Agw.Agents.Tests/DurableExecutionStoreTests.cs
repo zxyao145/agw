@@ -1,13 +1,18 @@
+using System.Security.Claims;
 using System.Text.Json;
 
+using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Turns;
+using Agw.Auth.Application;
 using Agw.Infrastructure.Data;
+using Agw.Shared;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Projects;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
@@ -60,6 +65,73 @@ public sealed class DurableExecutionStoreTests
             1,
             await database.Context.DurableExecutions.CountAsync(
                 TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task RegisterAsync_UserIdPersistsAndLegacyManifestFallsBackToAdmin()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var store = database.CreateStore();
+        var task = CreateTask();
+        var snapshot = await store.RegisterAsync(
+            Guid.CreateVersion7(),
+            "user-name",
+            "stable-user-id",
+            Guid.CreateVersion7(),
+            AgentRuntimeType.Agent,
+            CreateInput("hello"),
+            task,
+            CreateSettings(task.ProjectId, task.ContextId),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal("stable-user-id", snapshot.Manifest.ResolveUserId());
+        Assert.Equal(Constants.AdminUserId, CreateManifest().ResolveUserId());
+    }
+
+    [Fact]
+    public async Task Coordinator_StartAsync_CapturesAmbientUserIdOnceInManifest()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var store = database.CreateStore();
+        var services = new ServiceCollection();
+        services.AddSingleton(store);
+        await using var serviceProvider = services.BuildServiceProvider();
+        var coordinator = new DurableExecutionCoordinator(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            new InMemoryApplicationLock(),
+            new RecordingExecutionEventStream(),
+            TimeProvider.System,
+            Options.Create(new ExecutionRuntimeOptions()),
+            NullLogger<DurableExecutionCoordinator>.Instance);
+        var executionId = Guid.CreateVersion7();
+        var task = CreateTask();
+        var previous = UserInfoUtil.Current;
+        UserInfoUtil.Current = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(ClaimTypes.NameIdentifier, "ambient-user-id")],
+            "test"));
+
+        try
+        {
+            await coordinator.StartAsync(
+                executionId,
+                "display-name",
+                new ExecCommand(AgentRuntimeType.Agent, CreateInput("hello"))
+                {
+                    AgentId = Guid.CreateVersion7()
+                },
+                task,
+                CreateSettings(task.ProjectId, task.ContextId),
+                TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            UserInfoUtil.Current = previous;
+        }
+
+        var snapshot = await store.GetAsync(
+            executionId,
+            TestContext.Current.CancellationToken);
+        Assert.Equal("ambient-user-id", snapshot.Manifest.ResolveUserId());
     }
 
     [Fact]

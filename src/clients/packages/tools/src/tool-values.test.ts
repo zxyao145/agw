@@ -37,4 +37,11 @@ test("createToolBlockValue creates strong default options", () => {
       },
     },
   });
+  assert.deepEqual(createToolBlockValue("user-memory"), {
+    kind: "toolBlock",
+    definition: {
+      name: "user-memory",
+      options: {},
+    },
+  });
 });

@@ -13,6 +13,7 @@ export type ToolBlockName =
   | "todo"
   | "mode"
   | "project-memory"
+  | "user-memory"
   | "file-access"
   | "background-agents";
 

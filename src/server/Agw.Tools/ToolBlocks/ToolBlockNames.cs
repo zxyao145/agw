@@ -13,6 +13,7 @@ public static class ToolBlockNames
     public const string Todo = ToolBlockDefinitionNames.Todo;
     public const string Mode = ToolBlockDefinitionNames.Mode;
     public const string ProjectMemory = ToolBlockDefinitionNames.ProjectMemory;
+    public const string UserMemory = ToolBlockDefinitionNames.UserMemory;
     public const string FileAccess = ToolBlockDefinitionNames.FileAccess;
     public const string BackgroundAgents = ToolBlockDefinitionNames.BackgroundAgents;
 }
