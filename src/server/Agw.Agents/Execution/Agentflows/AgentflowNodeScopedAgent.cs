@@ -5,6 +5,7 @@ using Agw.Agents.Execution.Agents.Tools;
 using Agw.Agents.Execution.Turns;
 
 using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
@@ -12,12 +13,14 @@ namespace Agw.Agents.Execution.Agentflows;
 
 internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
 {
+    private const string NodeNamePropertyName = "nodeName";
     private const string PendingFunctionCallIdsStateKey =
         "Agw.Agentflows.AgentflowNodeScopedAgent.PendingFunctionCallIds";
 
     private readonly string _nodeId;
     private readonly string _historyNodeId;
     private readonly string? _name;
+    private readonly string? _messageNodeName;
     private readonly string? _instructions;
     private readonly AgentflowAgentSessionScope? _sessionScope;
     private readonly AgentflowExecutionTraceContext? _executionTraceContext;
@@ -43,6 +46,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         _nodeId = nodeId;
         _historyNodeId = historyNodeId ?? nodeId;
         _name = name;
+        _messageNodeName = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
         _instructions = instructions;
         _sessionScope = sessionScope;
         _executionTraceContext = executionTraceContext;
@@ -87,6 +91,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
             var response = await InnerAgent
                 .RunAsync(input, scopedSession, options, cancellationToken)
                 .ConfigureAwait(false);
+            AddNodeName(response.Messages);
             turnPersistence.RecordRange(response.Messages);
             UpdatePendingFunctionCallIds(
                 response.Messages.SelectMany(message => message.Contents),
@@ -97,6 +102,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                 .ConfigureAwait(false);
             foreach (var snapshot in snapshots)
             {
+                AddNodeName(snapshot);
                 response.Messages.Add(snapshot);
             }
             activity?.Complete();
@@ -167,6 +173,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                     }
 
                     update = enumerator.Current;
+                    AddNodeName(update);
                     var responseMessage = ToolStateSnapshots.ToMessage(update);
                     turnPersistence.Record(responseMessage);
 
@@ -194,7 +201,9 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                 .ConfigureAwait(false);
             foreach (var stateSnapshot in stateSnapshots)
             {
-                yield return ToolStateSnapshots.ToUpdate(stateSnapshot);
+                var stateSnapshotUpdate = ToolStateSnapshots.ToUpdate(stateSnapshot);
+                AddNodeName(stateSnapshotUpdate);
+                yield return stateSnapshotUpdate;
             }
 
             activity?.Complete();
@@ -288,6 +297,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                     _agentId.Value,
                     _agentflowId,
                     _historyNodeId,
+                    _messageNodeName,
                     session,
                     cancellationToken)
                 .ConfigureAwait(false);
@@ -295,7 +305,11 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
 
         AgentSession scopedSession =
             session ?? await InnerAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
-        _sessionScope?.Initialize(scopedSession, _agentflowId, _historyNodeId);
+        _sessionScope?.Initialize(
+            scopedSession,
+            _agentflowId,
+            _historyNodeId,
+            _messageNodeName);
         return scopedSession;
     }
 
@@ -316,8 +330,47 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         IReadOnlyList<ChatMessage> messages,
         CancellationToken cancellationToken)
     {
+        AddNodeName(messages);
         return _sessionScope?.PersistToolBlockMessagesAsync(messages, cancellationToken) ??
             Task.CompletedTask;
+    }
+
+    private void AddNodeName(IEnumerable<ChatMessage> messages)
+    {
+        foreach (var message in messages)
+        {
+            AddNodeName(message);
+        }
+    }
+
+    private void AddNodeName(ChatMessage message)
+    {
+        if (_messageNodeName == null || message.AdditionalProperties?.ContainsKey(NodeNamePropertyName) == true)
+        {
+            return;
+        }
+
+        message.AdditionalProperties = CreateNodeProperties(message.AdditionalProperties);
+    }
+
+    private void AddNodeName(AgentResponseUpdate update)
+    {
+        if (_messageNodeName == null || update.AdditionalProperties?.ContainsKey(NodeNamePropertyName) == true)
+        {
+            return;
+        }
+
+        update.AdditionalProperties = CreateNodeProperties(update.AdditionalProperties);
+    }
+
+    private AdditionalPropertiesDictionary CreateNodeProperties(
+        AdditionalPropertiesDictionary? properties)
+    {
+        var result = properties == null
+            ? new AdditionalPropertiesDictionary()
+            : new AdditionalPropertiesDictionary(properties);
+        result[NodeNamePropertyName] = _messageNodeName;
+        return result;
     }
 
     private static HashSet<string> GetPendingFunctionCallIds(AgentSession session)

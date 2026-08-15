@@ -5,6 +5,29 @@ import ts from "typescript";
 
 const CONVERSATION_URL = new URL("./conversation.tsx", import.meta.url);
 
+async function loadMessageMeta() {
+  const source = await readFile(CONVERSATION_URL, "utf8");
+  const start = source.indexOf("type MessageMeta");
+  const end = source.indexOf("\nfunction getFunctionToolName");
+  const messageMetaSource = source
+    .slice(start, end)
+    .replace("function getMessageMeta", "export function getMessageMeta");
+  const javascript = ts.transpileModule(
+    `
+const isResultMessage = (message) => message.additionalProperties?.type === "result";
+${messageMetaSource}
+`,
+    {
+      compilerOptions: {
+        module: ts.ModuleKind.ES2022,
+        target: ts.ScriptTarget.ES2022,
+      },
+    },
+  ).outputText;
+
+  return import(`data:text/javascript;base64,${Buffer.from(javascript).toString("base64")}`);
+}
+
 async function loadMessageProcessor() {
   const source = await readFile(CONVERSATION_URL, "utf8");
   const start = source.indexOf("type FragmentType");
@@ -62,6 +85,44 @@ test("conversation renders agent name and author metadata above agent messages",
   assert.match(source, /\{messageMeta\.name\}/);
   assert.match(source, /\{messageMeta\.author\}/);
   assert.match(source, /AiMessageComponent message=\{item\.message\}/);
+});
+
+test("conversation restores the agentflow node and agent names from persisted metadata", async () => {
+  const { getMessageMeta } = await loadMessageMeta();
+
+  assert.deepEqual(
+    getMessageMeta({
+      messageId: "message-1",
+      role: "assistant",
+      contents: [],
+      additionalProperties: {
+        nodeName: "Review Node",
+        agentName: "general-agent",
+        name: "Fallback Name",
+      },
+    }),
+    { name: "Review Node", author: "general-agent" },
+  );
+  assert.deepEqual(
+    getMessageMeta({
+      messageId: "message-2",
+      author: "general-agent",
+      role: "assistant",
+      contents: [],
+    }),
+    { name: null, author: "general-agent" },
+  );
+  assert.deepEqual(
+    getMessageMeta({
+      messageId: "message-3",
+      role: "assistant",
+      contents: [],
+      additionalProperties: {
+        agentName: "general-agent",
+      },
+    }),
+    { name: null, author: "general-agent" },
+  );
 });
 
 test("conversation caches preprocessing, uses stable keys, and omits message debug logs", async () => {

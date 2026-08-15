@@ -37,7 +37,9 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
     };
 
     private const string DefaultUser = Constants.AdminUserName;
+    private const string AgentNamePropertyName = "agentName";
     private const string HistoryScopeMetadataKey = "historyScope";
+    private const string NodeNamePropertyName = "nodeName";
 
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IApplicationLock _applicationLock;
@@ -106,11 +108,22 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         Guid projectId,
         string historyScope)
     {
+        InitializeSessionState(session, contextId, projectId, historyScope, nodeName: null);
+    }
+
+    public void InitializeSessionState(
+        AgentSession session,
+        string contextId,
+        Guid projectId,
+        string historyScope,
+        string? nodeName)
+    {
         ArgumentNullException.ThrowIfNull(session);
         var state = new State(
             ContextIdUtil.NormalizeContextId(contextId),
             projectId,
-            historyScope.Trim());
+            historyScope.Trim(),
+            nodeName);
         _state.SaveState(session, state);
     }
 
@@ -225,16 +238,19 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         var preludeMessages = context.Session == null
             ? Array.Empty<ChatMessage>()
             : ConversationHistoryPrelude.Take(context.Session);
+        var state = _state.GetOrInitializeState(context.Session);
         var newMessages = context.RequestMessages
             .Concat(preludeMessages)
-            .Concat(context.ResponseMessages ?? [])
+            .Concat(AddResponseMetadata(
+                context.ResponseMessages ?? [],
+                state.NodeName,
+                context.Agent.Name))
             .ToList();
         if (newMessages.Count == 0)
         {
             return;
         }
 
-        var state = _state.GetOrInitializeState(context.Session);
         await AppendAsync(
             state.ProjectId,
             state.ContextId,
@@ -584,6 +600,56 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             .Trim();
     }
 
+    private static IEnumerable<ChatMessage> AddResponseMetadata(
+        IEnumerable<ChatMessage> messages,
+        string? nodeName,
+        string? agentName)
+    {
+        var normalizedNodeName = string.IsNullOrWhiteSpace(nodeName) ? null : nodeName.Trim();
+        var normalizedAgentName = string.IsNullOrWhiteSpace(agentName) ? null : agentName.Trim();
+        if (normalizedNodeName == null && normalizedAgentName == null)
+        {
+            return messages;
+        }
+
+        return messages.Select(message => AddResponseMetadata(
+            message,
+            normalizedNodeName,
+            normalizedAgentName));
+    }
+
+    private static ChatMessage AddResponseMetadata(
+        ChatMessage message,
+        string? nodeName,
+        string? agentName)
+    {
+        var shouldAddNodeName = nodeName != null
+            && message.AdditionalProperties?.ContainsKey(NodeNamePropertyName) != true;
+        var shouldAddAgentName = agentName != null
+            && string.IsNullOrWhiteSpace(message.AuthorName)
+            && message.AdditionalProperties?.ContainsKey(AgentNamePropertyName) != true;
+        if (!shouldAddNodeName && !shouldAddAgentName)
+        {
+            return message;
+        }
+
+        var result = message.Clone();
+        result.AdditionalProperties = message.AdditionalProperties == null
+            ? new AdditionalPropertiesDictionary()
+            : new AdditionalPropertiesDictionary(message.AdditionalProperties);
+        if (shouldAddNodeName)
+        {
+            result.AdditionalProperties[NodeNamePropertyName] = nodeName;
+        }
+
+        if (shouldAddAgentName)
+        {
+            result.AdditionalProperties[AgentNamePropertyName] = agentName;
+        }
+
+        return result;
+    }
+
     public sealed record State
     {
         public string ContextId { get; init; }
@@ -592,11 +658,18 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
         public string? HistoryScope { get; init; }
 
-        public State(string contextId, Guid projectId, string? historyScope = null)
+        public string? NodeName { get; init; }
+
+        public State(
+            string contextId,
+            Guid projectId,
+            string? historyScope = null,
+            string? nodeName = null)
         {
             ContextId = contextId;
             ProjectId = projectId;
             HistoryScope = historyScope;
+            NodeName = string.IsNullOrWhiteSpace(nodeName) ? null : nodeName.Trim();
         }
     }
 }

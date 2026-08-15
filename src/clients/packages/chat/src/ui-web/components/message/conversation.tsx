@@ -31,7 +31,8 @@ type MessageMeta = {
   author: string | null;
 };
 
-const AGENT_NAME_KEYS = ["name", "agentName", "displayName", "agentDisplayName"];
+const AGENT_NAME_KEYS = ["nodeName", "name", "agentName", "displayName", "agentDisplayName"];
+const AGENT_AUTHOR_KEYS = ["agentName"];
 
 function readStringProperty(message: AiMessage, keys: string[]): string | null {
   const messageRecord = message as unknown as Record<string, unknown>;
@@ -51,7 +52,7 @@ function getMessageMeta(message: AiMessage): MessageMeta | null {
     return null;
   }
 
-  const agentAuthor = message.author?.trim() || null;
+  const agentAuthor = message.author?.trim() || readStringProperty(message, AGENT_AUTHOR_KEYS);
   if (message.role === "user") {
     return agentAuthor ? { name: null, author: agentAuthor } : null;
   }

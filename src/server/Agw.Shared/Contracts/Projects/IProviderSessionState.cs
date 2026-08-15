@@ -12,6 +12,16 @@ public interface IProviderSessionState
         Guid projectId,
         string historyScope);
 
+    void InitializeSessionState(
+        AgentSession session,
+        string contextId,
+        Guid projectId,
+        string historyScope,
+        string? nodeName)
+    {
+        InitializeSessionState(session, contextId, projectId, historyScope);
+    }
+
     bool TryGetProjectContext(AgentSession session, out Guid projectId, out string contextId)
     {
         projectId = Guid.Empty;

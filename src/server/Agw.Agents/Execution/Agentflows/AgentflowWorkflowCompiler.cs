@@ -54,7 +54,11 @@ internal sealed class AgentflowAgentSessionScope
 
     private IConversationHistoryWriter? ConversationHistoryWriter { get; }
 
-    public void Initialize(AgentSession session, Guid? agentflowId, string nodeId)
+    public void Initialize(
+        AgentSession session,
+        Guid? agentflowId,
+        string nodeId,
+        string? nodeName)
     {
         if (agentflowId.HasValue)
         {
@@ -62,7 +66,8 @@ internal sealed class AgentflowAgentSessionScope
                 session,
                 ContextId,
                 ProjectId,
-                $"agentflow:{agentflowId.Value:N}:node:{nodeId}");
+                $"agentflow:{agentflowId.Value:N}:node:{nodeId}",
+                nodeName);
         }
         else
         {
@@ -78,6 +83,7 @@ internal sealed class AgentflowAgentSessionScope
         Guid agentId,
         Guid? agentflowId,
         string nodeId,
+        string? nodeName,
         AgentSession? fallbackSession,
         CancellationToken cancellationToken)
     {
@@ -96,7 +102,7 @@ internal sealed class AgentflowAgentSessionScope
                 .ConfigureAwait(false);
         }
 
-        Initialize(session, agentflowId, nodeId);
+        Initialize(session, agentflowId, nodeId, nodeName);
         PermissionState.Register(session);
         return session;
     }
