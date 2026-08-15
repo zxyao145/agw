@@ -86,6 +86,16 @@ test("shared Chat owns canonical message filtering, grouping, usage, and managed
   assert.match(managerSource, /private readonly entries = new Map/);
 });
 
+test("shared Chat reattaches managed execution after history hydration", async () => {
+  const source = await readFile(CHAT_URL, "utf8");
+  const attachmentStart = source.indexOf("if (!executionSessionManager.has(key))");
+  const attachmentEnd = source.indexOf("const ensureConfiguredClient", attachmentStart);
+
+  assert.notEqual(attachmentStart, -1);
+  assert.notEqual(attachmentEnd, -1);
+  assert.match(source.slice(attachmentStart, attachmentEnd), /sessionSeed\.revision/);
+});
+
 test("shared Chat defaults agent mode to Execute without a persisted mode snapshot", async () => {
   const source = await readFile(CHAT_URL, "utf8");
 
@@ -95,7 +105,7 @@ test("shared Chat defaults agent mode to Execute without a persisted mode snapsh
   assert.match(source, /setAgentMode\(DEFAULT_AGENT_MODE\)/);
 });
 
-test("shared Chat keeps unmatched human interactions in the fallback approval overlay", async () => {
+test("shared Chat keeps unmatched human interactions in the scrollable conversation footer", async () => {
   const source = await readFile(CHAT_URL, "utf8");
 
   assert.match(
@@ -103,7 +113,14 @@ test("shared Chat keeps unmatched human interactions in the fallback approval ov
     /hasMatchingHumanInteractionCall\(visibleMessages, pendingHumanInteraction\)/,
   );
   assert.match(source, /pendingHumanInteraction=\{pendingHumanInteraction\}/);
-  assert.match(source, /request=\{floatingHumanGate\}/);
+  assert.match(
+    source,
+    /<Conversation[\s\S]*?footer=\{[\s\S]*?request=\{floatingHumanGate\}[\s\S]*?\/>/,
+  );
+  assert.doesNotMatch(
+    source,
+    /bottom-\[calc\(100%\+0\.5rem\)\][\s\S]*?request=\{floatingHumanGate\}/,
+  );
 });
 
 test("shared Chat scopes history and batches incoming streaming messages", async () => {

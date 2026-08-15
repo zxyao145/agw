@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import type { AiMessage } from "@agw/api";
 import type { ExecutionHubHandlers, ExecutionReconnectState } from "./execution-hub";
 import { ExecutionSessionManager } from "./execution-session-manager";
 
@@ -23,6 +24,46 @@ function createExecutionClient() {
     submitHumanResponse: async () => undefined,
     retryConnection: async () => undefined,
     dispose: async () => undefined,
+  };
+}
+
+function createQuestionInteraction(requestId = "interaction-1"): AiMessage {
+  return {
+    messageId: `message-${requestId}`,
+    role: "system",
+    author: "$agw",
+    contents: [{ type: "TextContent", content: "Choose before continuing." }],
+    additionalProperties: {
+      type: "human-interaction-request",
+      requestId,
+      interactionKind: "questions",
+      toolName: "ask_user_question",
+      callId: "call-1",
+      prompt: "Choose before continuing.",
+      payload: {
+        questions: [
+          {
+            question: "What should happen next?",
+            header: "Next step",
+            multiSelect: false,
+            options: [
+              { label: "Continue", description: "Keep running the workflow." },
+              { label: "Stop", description: "Stop the workflow." },
+            ],
+          },
+        ],
+      },
+    },
+  };
+}
+
+function createTurnFinishedMessage(): AiMessage {
+  return {
+    messageId: "turn-finished-1",
+    role: "system",
+    author: "$agw",
+    contents: [],
+    additionalProperties: { type: "turn-finished", status: "completed" },
   };
 }
 
@@ -158,4 +199,95 @@ test("manager clears a stale active status when reconnect finds no execution", a
   clientHandlers?.onReconnected?.();
 
   assert.equal(handle.getStatus(), "idle");
+});
+
+test("manager replays an unresolved question interaction when chat reattaches", async () => {
+  let clientHandlers: ExecutionHubHandlers | undefined;
+  const manager = new ExecutionSessionManager((handlers) => {
+    clientHandlers = handlers;
+    return createExecutionClient();
+  });
+  const interaction = createQuestionInteraction();
+  const initiallyReceived: AiMessage[] = [];
+  const firstHandle = manager.attach(sessionKey, {
+    onMessage: (message) => initiallyReceived.push(message),
+  });
+
+  clientHandlers?.onMessage(interaction);
+  assert.deepEqual(initiallyReceived, [interaction]);
+
+  firstHandle.detach();
+  const replayed: AiMessage[] = [];
+  manager.attach(sessionKey, { onMessage: (message) => replayed.push(message) });
+  await Promise.resolve();
+
+  assert.deepEqual(replayed, [interaction]);
+});
+
+test("manager clears the replayed question interaction after a response is submitted", async () => {
+  let clientHandlers: ExecutionHubHandlers | undefined;
+  const manager = new ExecutionSessionManager((handlers) => {
+    clientHandlers = handlers;
+    return createExecutionClient();
+  });
+  const interaction = createQuestionInteraction();
+  const firstHandle = manager.attach(sessionKey, { onMessage: () => undefined });
+
+  clientHandlers?.onMessage(interaction);
+  await firstHandle.submitHumanResponse({ requestId: "interaction-1", approved: true });
+  firstHandle.detach();
+
+  const replayed: AiMessage[] = [];
+  manager.attach(sessionKey, { onMessage: (message) => replayed.push(message) });
+  await Promise.resolve();
+
+  assert.deepEqual(replayed, []);
+});
+
+test("manager keeps the question interaction when response submission fails", async () => {
+  let clientHandlers: ExecutionHubHandlers | undefined;
+  const manager = new ExecutionSessionManager((handlers) => {
+    clientHandlers = handlers;
+    return {
+      ...createExecutionClient(),
+      submitHumanResponse: async () => {
+        throw new Error("response failed");
+      },
+    };
+  });
+  const interaction = createQuestionInteraction();
+  const firstHandle = manager.attach(sessionKey, { onMessage: () => undefined });
+
+  clientHandlers?.onMessage(interaction);
+  await assert.rejects(
+    firstHandle.submitHumanResponse({ requestId: "interaction-1", approved: true }),
+    /response failed/,
+  );
+  firstHandle.detach();
+
+  const replayed: AiMessage[] = [];
+  manager.attach(sessionKey, { onMessage: (message) => replayed.push(message) });
+  await Promise.resolve();
+
+  assert.deepEqual(replayed, [interaction]);
+});
+
+test("manager drops a buffered question interaction when the turn finishes", async () => {
+  let clientHandlers: ExecutionHubHandlers | undefined;
+  const manager = new ExecutionSessionManager((handlers) => {
+    clientHandlers = handlers;
+    return createExecutionClient();
+  });
+  const firstHandle = manager.attach(sessionKey, { onMessage: () => undefined });
+  firstHandle.detach();
+
+  clientHandlers?.onMessage(createQuestionInteraction());
+  const turnFinished = createTurnFinishedMessage();
+  clientHandlers?.onMessage(turnFinished);
+
+  const replayed: AiMessage[] = [];
+  manager.attach(sessionKey, { onMessage: (message) => replayed.push(message) });
+  await Promise.resolve();
+
+  assert.deepEqual(replayed, [turnFinished]);
 });

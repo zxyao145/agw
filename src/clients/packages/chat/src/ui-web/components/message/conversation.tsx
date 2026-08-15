@@ -24,6 +24,7 @@ export interface ChatSessionProps {
   pendingHumanInteraction?: (PendingHumanGate & { requestType: "human-interaction" }) | null;
   onHumanInteractionSubmit?: (responseData: unknown) => void;
   onHumanInteractionCancel?: () => void;
+  footer?: React.ReactNode;
 }
 
 type MessageMeta = {
@@ -246,6 +247,7 @@ export function Conversation({
   pendingHumanInteraction = null,
   onHumanInteractionSubmit,
   onHumanInteractionCancel,
+  footer,
 }: ChatSessionProps) {
   const processedMessages = React.useMemo(
     () => processMessages(collapseConsecutiveSystemMessages(messages)),
@@ -253,7 +255,7 @@ export function Conversation({
   );
   const keyedMessages = React.useMemo(() => addStableKeys(processedMessages), [processedMessages]);
 
-  if (!messages || messages.length == 0) {
+  if ((!messages || messages.length == 0) && !footer) {
     return (
       <Empty>
         <EmptyHeader>
@@ -402,6 +404,7 @@ export function Conversation({
           }
         })}
 
+        {footer}
         <div ref={messagesEndRef} />
       </div>
     </div>

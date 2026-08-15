@@ -58,12 +58,55 @@ public class AgentflowWorkflowCompilerTests
     }
 
     [Fact]
-    public void ApplyInstructions_WithInstructions_UsesDefaultInputAuthor()
+    public void ApplyInstructions_WithInstructions_MarksReorderableContext()
     {
         var result = AgentflowMessageTransforms.ApplyInstructions([], "Follow the workflow instructions.");
 
         var instruction = Assert.Single(result);
+        Assert.Equal(ChatRole.System, instruction.Role);
         Assert.Equal(Constants.DefaultInputAuthor, instruction.AuthorName);
+        Assert.Equal(
+            AgentRequestMessageSourceType.AIContextProvider,
+            instruction.GetAgentRequestMessageSourceType());
+    }
+
+    [Fact]
+    public void CreateFeedbackLoopAgentInput_KeepsOnlyLatestUpstreamResultAndHumanReply()
+    {
+        var staleReview = new ChatMessage(ChatRole.Assistant, "stale review")
+        {
+            AuthorName = "general-agent",
+        };
+        var latestReview = new ChatMessage(ChatRole.Assistant, "latest review")
+        {
+            AuthorName = "general-agent",
+            AdditionalProperties = new AdditionalPropertiesDictionary
+            {
+                ["nodeName"] = "Code Review",
+            },
+        };
+        var humanReply = new ChatMessage(ChatRole.User, "yes")
+        {
+            AuthorName = "human",
+        };
+
+        var result = AgentflowMessageTransforms.CreateFeedbackLoopAgentInput(
+            [staleReview, latestReview, humanReply]);
+
+        Assert.Equal(3, result.Count);
+        Assert.Equal(ChatRole.System, result[0].Role);
+        Assert.Equal(AgentflowMessageTransforms.FeedbackLoopInstruction, result[0].Text);
+        Assert.Equal(
+            AgentRequestMessageSourceType.AIContextProvider,
+            result[0].GetAgentRequestMessageSourceType());
+        Assert.Equal(ChatRole.User, result[1].Role);
+        Assert.Equal("latest review", result[1].Text);
+        Assert.Equal("Code Review", result[1].AdditionalProperties!["nodeName"]);
+        Assert.Equal(ChatRole.User, result[2].Role);
+        Assert.Equal("human", result[2].AuthorName);
+        Assert.Equal("yes", result[2].Text);
+        Assert.DoesNotContain(result, message => message.Text == "stale review");
+        Assert.Equal(ChatRole.Assistant, latestReview.Role);
     }
 
     [Fact]
@@ -1215,6 +1258,153 @@ public class AgentflowWorkflowCompilerTests
     }
 
     [Fact]
+    public async Task Compile_HumanGateFeedbackLoop_CompactsReviewBeforeReturningToAgent()
+    {
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "review-loop" };
+        var codingClient = new RecordingChatClient("implementation complete");
+        var reviewClient = new RecordingChatClient("review feedback: rename the variable");
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input, Name = "Input" },
+            new AgentflowNode
+            {
+                NodeId = "coding",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Coding",
+                Instructions = "Implement requested changes.",
+            },
+            new AgentflowNode
+            {
+                NodeId = "review",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Code Review",
+                Instructions = "Review the implementation.",
+            },
+            new AgentflowNode { NodeId = "human", Kind = AgentflowNodeKind.HumanGate },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var workflow = _compiler.Compile(
+            agentflow,
+            nodes,
+            [
+                Edge("input-coding", "input", "coding"),
+                Edge("coding-review", "coding", "review"),
+                Edge("review-human", "review", "human"),
+                Edge(
+                    "retry",
+                    "human",
+                    "coding",
+                    AgentflowEdgeKind.SwitchCase,
+                    """{"contains":"yes"}""",
+                    """{"switchCaseOrder":0}"""),
+                Edge("done", "human", "output", AgentflowEdgeKind.SwitchDefault),
+            ],
+            new Dictionary<string, AIAgent>
+            {
+                ["coding"] = CreateAgent("coding", "Coding", codingClient),
+                ["review"] = CreateAgent("review", "Code Review", reviewClient),
+            });
+
+        Assert.NotNull(workflow);
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow!,
+            new List<ChatMessage> { new(ChatRole.User, "initial request") },
+            cancellationToken: cancellationToken);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+
+        var events = new List<WorkflowEvent>();
+        var requestCount = 0;
+        await foreach (var evt in run.WatchStreamAsync(cancellationToken))
+        {
+            events.Add(evt);
+            if (evt is RequestInfoEvent request)
+            {
+                requestCount++;
+                await run.SendResponseAsync(CreateHumanGateResponse(
+                    request.Request,
+                    requestCount == 1 ? "yes" : "done"));
+            }
+        }
+
+        Assert.Equal(2, requestCount);
+        Assert.Equal(2, codingClient.TotalCalls);
+        Assert.Equal(2, reviewClient.TotalCalls);
+        var secondCodingCall = codingClient.Calls[1];
+        Assert.Contains(secondCodingCall, message =>
+            message.Role == ChatRole.System &&
+            message.Text == AgentflowMessageTransforms.FeedbackLoopInstruction);
+        Assert.Contains(secondCodingCall, message =>
+            message.Role == ChatRole.User &&
+            message.Text == "review feedback: rename the variable");
+        Assert.Contains(secondCodingCall, message =>
+            message.Role == ChatRole.User &&
+            message.AuthorName == "human" &&
+            message.Text == "yes");
+        Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
+    }
+
+    [Fact]
+    public async Task Compile_ToolApproval_DoesNotAdvanceDownstreamBeforeAgentCompletes()
+    {
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "tool-approval-flow" };
+        var worker = new ApprovalRequestAgent();
+        var reviewerClient = new CapturingChatClient("reviewed");
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "worker", Kind = AgentflowNodeKind.Agent, Name = "Worker" },
+            new AgentflowNode { NodeId = "reviewer", Kind = AgentflowNodeKind.Agent, Name = "Reviewer" },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var workflow = _compiler.Compile(
+            agentflow,
+            nodes,
+            [
+                Edge("worker-to-reviewer", "worker", "reviewer"),
+                Edge("reviewer-to-output", "reviewer", "output"),
+            ],
+            new Dictionary<string, AIAgent>
+            {
+                ["worker"] = worker,
+                ["reviewer"] = CreateAgent("reviewer", "Reviewer", reviewerClient),
+            });
+
+        Assert.NotNull(workflow);
+
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow!,
+            new List<ChatMessage> { new(ChatRole.User, "change the code") },
+            cancellationToken: cancellationToken);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+
+        var events = new List<WorkflowEvent>();
+        var responded = false;
+        await foreach (var evt in run.WatchStreamAsync(cancellationToken))
+        {
+            events.Add(evt);
+            if (evt is RequestInfoEvent request &&
+                request.Request.TryGetDataAs<ToolApprovalRequestContent>(out var approvalRequest))
+            {
+                Assert.Equal(0, reviewerClient.TotalCalls);
+                responded = true;
+                await run.SendResponseAsync(request.Request.CreateResponse(
+                    approvalRequest.CreateResponse(approved: true)));
+            }
+        }
+
+        Assert.True(responded);
+        Assert.Equal(2, worker.TotalCalls);
+        Assert.Equal(1, reviewerClient.TotalCalls);
+        var reviewerInput = Assert.Single(reviewerClient.Messages);
+        Assert.Equal("worker completed", reviewerInput.Text);
+        Assert.DoesNotContain(
+            reviewerInput.Contents,
+            content => content is ToolApprovalRequestContent or ToolApprovalResponseContent);
+        Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
+    }
+
+    [Fact]
     public async Task CreateParticipant_UsesPersistedNodeIdForHistoryScope()
     {
         var providerSessionState = new CapturingProviderSessionState();
@@ -1625,6 +1815,49 @@ public class AgentflowWorkflowCompilerTests
         }
     }
 
+    private sealed class RecordingChatClient(string responseText) : IChatClient
+    {
+        private int _totalCalls;
+
+        public int TotalCalls => _totalCalls;
+
+        public List<List<ChatMessage>> Calls { get; } = [];
+
+        public void Dispose()
+        {
+        }
+
+        public object? GetService(Type serviceType, object? serviceKey = null)
+        {
+            return serviceType.IsInstanceOfType(this) ? this : null;
+        }
+
+        public Task<ChatResponse> GetResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            Record(messages);
+            return Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, responseText)]));
+        }
+
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            Record(messages);
+            await Task.Yield();
+            yield return new ChatResponseUpdate(ChatRole.Assistant, responseText);
+        }
+
+        private void Record(IEnumerable<ChatMessage> messages)
+        {
+            Interlocked.Increment(ref _totalCalls);
+            Calls.Add(messages.Select(message => message.Clone()).ToList());
+        }
+    }
+
     private sealed class ToolTranscriptChatClient : IChatClient
     {
         public void Dispose()
@@ -1742,6 +1975,74 @@ public class AgentflowWorkflowCompilerTests
         }
 
         private sealed class ExternalFunctionCallSession : AgentSession;
+    }
+
+    private sealed class ApprovalRequestAgent : AIAgent
+    {
+        private int _totalCalls;
+
+        public int TotalCalls => _totalCalls;
+
+        protected override string? IdCore => "approval-request-agent";
+
+        public override string? Name => "Worker";
+
+        protected override ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken) =>
+            ValueTask.FromResult<AgentSession>(new ApprovalRequestSession());
+
+        protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
+            AgentSession session,
+            JsonSerializerOptions? jsonSerializerOptions,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
+
+        protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
+            JsonElement sessionState,
+            JsonSerializerOptions? jsonSerializerOptions,
+            CancellationToken cancellationToken) =>
+            ValueTask.FromResult<AgentSession>(new ApprovalRequestSession());
+
+        protected override Task<AgentResponse> RunCoreAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session,
+            AgentRunOptions? options,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session,
+            AgentRunOptions? options,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            Interlocked.Increment(ref _totalCalls);
+            var approvalResponse = messages
+                .SelectMany(message => message.Contents)
+                .OfType<ToolApprovalResponseContent>()
+                .FirstOrDefault();
+            if (approvalResponse != null)
+            {
+                yield return new AgentResponseUpdate(ChatRole.Assistant, "worker completed");
+                yield break;
+            }
+
+            yield return new AgentResponseUpdate
+            {
+                Role = ChatRole.Assistant,
+                Contents =
+                [
+                    new ToolApprovalRequestContent(
+                        "approval-1",
+                        new FunctionCallContent(
+                            "call-1",
+                            "write_file",
+                            new Dictionary<string, object?>())),
+                ],
+            };
+        }
+
+        private sealed class ApprovalRequestSession : AgentSession;
     }
 
     private sealed class CapturingProviderSessionState : IProviderSessionState

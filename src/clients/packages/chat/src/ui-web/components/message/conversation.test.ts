@@ -180,6 +180,13 @@ test("conversation can delegate scrolling while keeping messages centered", asyn
   assert.match(source, /<div className="mx-auto w-full max-w-225 space-y-4 pb-36">/);
 });
 
+test("conversation renders footer content before its bottom scroll anchor", async () => {
+  const source = await readFile(CONVERSATION_URL, "utf8");
+
+  assert.match(source, /\{footer\}[\s\S]*?<div ref=\{messagesEndRef\}/);
+  assert.match(source, /messages\.length == 0\) && !footer/);
+});
+
 test("conversation embeds a pending human interaction in its matching function call", async () => {
   const source = await readFile(CONVERSATION_URL, "utf8");
 

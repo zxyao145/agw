@@ -1,3 +1,4 @@
+using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
@@ -6,6 +7,11 @@ namespace Agw.Agents.Execution.Agentflows;
 
 internal static class AgentflowMessageTransforms
 {
+    internal const string FeedbackLoopInstruction =
+        "Continue only your assigned node responsibility. Treat the latest upstream result as " +
+        "feedback to implement, not as a role to repeat. Apply actionable feedback directly and " +
+        "do not redo the upstream review or analysis.";
+
     /// <summary>
     /// 将工作流上游 Agent 的输出转换为下游 Agent 可安全消费的输入。
     /// </summary>
@@ -76,14 +82,59 @@ internal static class AgentflowMessageTransforms
             return messages.ToList();
         }
 
-        var result = new List<ChatMessage>
+        var instructionMessage = new ChatMessage(ChatRole.System, instructions)
         {
-            new(ChatRole.System, instructions)
-            {
-                AuthorName = Constants.DefaultInputAuthor,
-            },
-        };
+            AuthorName = Constants.DefaultInputAuthor,
+        }.WithAgentRequestMessageSource(
+            // 审批恢复时该消息可能位于历史 FunctionCall 与当前 FunctionResult 之间，需允许中间件重排。
+            AgentRequestMessageSourceType.AIContextProvider,
+            nameof(AgentflowMessageTransforms));
+        var result = new List<ChatMessage> { instructionMessage };
         result.AddRange(messages);
+        return result;
+    }
+
+    /// <summary>
+    /// 将 HumanGate 回环压缩为最新上游结果和最新人工回复，避免把完整评审记录重新注入执行节点。
+    /// </summary>
+    internal static List<ChatMessage> CreateFeedbackLoopAgentInput(
+        IReadOnlyList<ChatMessage> messages)
+    {
+        var latestHumanReply = messages.LastOrDefault(IsHumanReply);
+        if (latestHumanReply == null)
+        {
+            return messages.ToList();
+        }
+
+        var latestUpstreamResult = messages.LastOrDefault(message =>
+            message.Role == ChatRole.Assistant &&
+            !IsHumanReply(message) &&
+            HasPortableText(message));
+        latestUpstreamResult ??= messages.LastOrDefault(message =>
+            message.Role != ChatRole.System &&
+            !IsHumanReply(message) &&
+            HasPortableText(message));
+
+        var instructionMessage = new ChatMessage(ChatRole.System, FeedbackLoopInstruction)
+        {
+            AuthorName = Constants.DefaultInputAuthor,
+        }.WithAgentRequestMessageSource(
+            AgentRequestMessageSourceType.AIContextProvider,
+            nameof(AgentflowMessageTransforms));
+        var result = new List<ChatMessage> { instructionMessage };
+
+        var upstreamMessage = CreatePortableFeedbackMessage(latestUpstreamResult);
+        if (upstreamMessage != null)
+        {
+            result.Add(upstreamMessage);
+        }
+
+        var humanMessage = CreatePortableFeedbackMessage(latestHumanReply);
+        if (humanMessage != null)
+        {
+            result.Add(humanMessage);
+        }
+
         return result;
     }
 
@@ -114,5 +165,37 @@ internal static class AgentflowMessageTransforms
                 return reassignedMessage;
             })
             .ToList();
+    }
+
+    private static bool IsHumanReply(ChatMessage message)
+    {
+        return string.Equals(message.AuthorName, "human", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasPortableText(ChatMessage message)
+    {
+        return !string.IsNullOrWhiteSpace(message.Text) &&
+            message.Contents.Any(content => content is TextContent or DataContent or UriContent);
+    }
+
+    private static ChatMessage? CreatePortableFeedbackMessage(ChatMessage? message)
+    {
+        if (message == null)
+        {
+            return null;
+        }
+
+        var contents = message.Contents
+            .Where(content => content is TextContent or DataContent or UriContent)
+            .ToList();
+        if (contents.Count == 0)
+        {
+            return null;
+        }
+
+        var result = message.Clone();
+        result.Role = ChatRole.User;
+        result.Contents = contents;
+        return result;
     }
 }

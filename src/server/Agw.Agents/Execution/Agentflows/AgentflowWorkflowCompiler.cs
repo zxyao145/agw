@@ -414,17 +414,31 @@ public sealed class AgentflowWorkflowCompiler
             var source = GetSourceBinding(edge.SourceNodeId, bindings, humanGateOutputBindings);
             var target = bindings[edge.TargetNodeId];
             var label = edge.Label ?? edge.EdgeId;
+            var compactHumanFeedback = IsCyclicHumanGateAgentEdge(
+                edge,
+                nodeMap,
+                cyclicComponents);
             var condition = BuildCondition(
                 edge.ConditionJson,
                 nodeMap[edge.SourceNodeId].Kind == AgentflowNodeKind.HumanGate);
-            if (condition == null)
+            if (condition == null && !compactHumanFeedback)
             {
                 builder.AddEdge(source, target, label, idempotent: true);
             }
             else
             {
-                var bridge = BindChatRoutingBridge($"{edge.EdgeId}.{RoutingBridgeSuffix}");
-                builder.AddEdge(source, bridge, condition, label, idempotent: true);
+                var bridge = BindChatRoutingBridge(
+                    $"{edge.EdgeId}.{RoutingBridgeSuffix}",
+                    compactHumanFeedback);
+                if (condition == null)
+                {
+                    builder.AddEdge(source, bridge, label, idempotent: true);
+                }
+                else
+                {
+                    builder.AddEdge(source, bridge, condition, label, idempotent: true);
+                }
+
                 builder.AddEdge(bridge, target, label, idempotent: true);
             }
         }
@@ -438,7 +452,9 @@ public sealed class AgentflowWorkflowCompiler
                 .ToList();
             var bridges = fanOutEdges.ToDictionary(
                 edge => edge.EdgeId,
-                edge => BindChatRoutingBridge($"{edge.EdgeId}.{RoutingBridgeSuffix}"),
+                edge => BindChatRoutingBridge(
+                    $"{edge.EdgeId}.{RoutingBridgeSuffix}",
+                    IsCyclicHumanGateAgentEdge(edge, nodeMap, cyclicComponents)),
                 StringComparer.Ordinal);
             var targets = fanOutEdges.Select(edge => bridges[edge.EdgeId]).ToList();
             var conditions = fanOutEdges
@@ -529,7 +545,9 @@ public sealed class AgentflowWorkflowCompiler
             }
             var bridges = switchEdges.ToDictionary(
                 edge => edge.EdgeId,
-                edge => BindChatRoutingBridge($"{edge.EdgeId}.{RoutingBridgeSuffix}"),
+                edge => BindChatRoutingBridge(
+                    $"{edge.EdgeId}.{RoutingBridgeSuffix}",
+                    IsCyclicHumanGateAgentEdge(edge, nodeMap, cyclicComponents)),
                 StringComparer.Ordinal);
 
             builder.AddSwitch(source, switchBuilder =>
@@ -596,9 +614,31 @@ public sealed class AgentflowWorkflowCompiler
         builder.AddEdge(barrier, bindings[targetNodeId], targetLabel, idempotent: true);
     }
 
-    private static ExecutorBinding BindChatRoutingBridge(string id)
+    private static ExecutorBinding BindChatRoutingBridge(
+        string id,
+        bool compactHumanFeedback = false)
     {
-        return new ChatRoutingBridgeExecutor(id);
+        return new ChatRoutingBridgeExecutor(
+            id,
+            compactHumanFeedback
+                ? AgentflowMessageTransforms.CreateFeedbackLoopAgentInput
+                : null);
+    }
+
+    private static bool IsCyclicHumanGateAgentEdge(
+        AgentflowEdge edge,
+        IReadOnlyDictionary<string, AgentflowNode> nodeMap,
+        IReadOnlyList<HashSet<string>> cyclicComponents)
+    {
+        if (nodeMap[edge.SourceNodeId].Kind != AgentflowNodeKind.HumanGate ||
+            nodeMap[edge.TargetNodeId].Kind != AgentflowNodeKind.Agent)
+        {
+            return false;
+        }
+
+        return cyclicComponents.Any(component =>
+            component.Contains(edge.SourceNodeId) &&
+            component.Contains(edge.TargetNodeId));
     }
 
     private static ExecutorBinding BindLoopBarrierSource(
@@ -844,9 +884,14 @@ public sealed class AgentflowWorkflowCompiler
     [SendsMessage(typeof(TurnToken))]
     private sealed class ChatRoutingBridgeExecutor : Executor<List<ChatMessage>>
     {
-        public ChatRoutingBridgeExecutor(string id)
+        private readonly Func<List<ChatMessage>, List<ChatMessage>>? _transform;
+
+        public ChatRoutingBridgeExecutor(
+            string id,
+            Func<List<ChatMessage>, List<ChatMessage>>? transform)
             : base(id, ChatExecutorOptions, declareCrossRunShareable: true)
         {
+            _transform = transform;
         }
 
         public override async ValueTask HandleAsync(
@@ -854,7 +899,8 @@ public sealed class AgentflowWorkflowCompiler
             IWorkflowContext context,
             CancellationToken cancellationToken)
         {
-            await context.SendMessageAsync(messages, cancellationToken).ConfigureAwait(false);
+            var output = _transform?.Invoke(messages) ?? messages;
+            await context.SendMessageAsync(output, cancellationToken).ConfigureAwait(false);
             await context.SendMessageAsync(
                     new TurnToken(emitEvents: true),
                     cancellationToken)

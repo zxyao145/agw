@@ -39,6 +39,7 @@ type Entry = {
   client: ExecutionClient;
   handler: ExecutionHubHandlers | null;
   pendingMessages: AiMessage[];
+  pendingHumanGate: { requestId: string; message: AiMessage } | null;
   reconnectState: ExecutionReconnectState | null;
 };
 
@@ -89,6 +90,7 @@ export class ExecutionSessionManager {
         client,
         handler,
         pendingMessages: [],
+        pendingHumanGate: null,
         reconnectState: null,
       };
       entry = nextEntry;
@@ -98,6 +100,15 @@ export class ExecutionSessionManager {
     }
     this.activity.attach(key);
     const pendingMessages = entry.pendingMessages.splice(0);
+    const pendingHumanGate = entry.pendingHumanGate;
+    if (
+      pendingHumanGate &&
+      !pendingMessages.some(
+        (message) => getPendingHumanGate(message)?.requestId === pendingHumanGate.requestId,
+      )
+    ) {
+      pendingMessages.push(pendingHumanGate.message);
+    }
     if (pendingMessages.length > 0) {
       queueMicrotask(() => {
         for (const message of pendingMessages) handler.onMessage(message);
@@ -136,7 +147,10 @@ export class ExecutionSessionManager {
       setPermissionMode: (permissionMode) => attachedEntry.client.setPermissionMode(permissionMode),
       interrupt: (reason) => attachedEntry.client.interrupt(reason),
       interruptAndWait: (reason) => attachedEntry.client.interruptAndWait(reason),
-      submitHumanResponse: (args) => attachedEntry.client.submitHumanResponse(args),
+      submitHumanResponse: async (args) => {
+        await attachedEntry.client.submitHumanResponse(args);
+        this.clearPendingHumanGate(attachedEntry, args.requestId);
+      },
       getStatus: () => this.activity.getStatus(key),
       getReconnectState: () => attachedEntry.reconnectState,
       detach: () => {
@@ -178,13 +192,18 @@ export class ExecutionSessionManager {
   public getSnapshot = this.activity.getSnapshot;
 
   private handleMessage(entry: Entry, message: AiMessage): void {
+    const humanGate = getPendingHumanGate(message);
     if (message.additionalProperties?.type === "turn-start") {
+      this.clearPendingHumanGate(entry);
       this.activity.turnStarted(entry.key);
-    } else if (getPendingHumanGate(message)) {
+    } else if (humanGate) {
+      this.clearPendingHumanGate(entry);
+      entry.pendingHumanGate = { requestId: humanGate.requestId, message };
       this.activity.waitingForApproval(entry.key);
     } else {
       const terminalStatus = getTurnFinishedStatus(message);
       if (terminalStatus) {
+        this.clearPendingHumanGate(entry);
         this.activity.turnFinished(entry.key, terminalStatus);
       }
     }
@@ -194,6 +213,18 @@ export class ExecutionSessionManager {
       entry.pendingMessages.push(message);
       if (entry.pendingMessages.length > 200) entry.pendingMessages.shift();
     }
+  }
+
+  private clearPendingHumanGate(entry: Entry, requestId?: string): void {
+    if (!requestId || entry.pendingHumanGate?.requestId === requestId) {
+      entry.pendingHumanGate = null;
+    }
+    entry.pendingMessages = entry.pendingMessages.filter((message) => {
+      const pendingHumanGate = getPendingHumanGate(message);
+      return (
+        !pendingHumanGate || (requestId !== undefined && pendingHumanGate.requestId !== requestId)
+      );
+    });
   }
 
   private handleClose(entry: Entry, error?: Error): void {
