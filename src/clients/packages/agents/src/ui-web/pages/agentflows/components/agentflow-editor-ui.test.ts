@@ -60,10 +60,7 @@ test("Agentflow edge inspector exposes deletion and ordered branch controls", as
 
   assert.match(source, /aria-label="Delete edge"/);
   assert.match(source, /onDelete\(edge\.id\)/);
-  assert.match(
-    source,
-    /setSelectedEdgeId\(\(current\) => \(current === edgeId \? null : current\)\)/,
-  );
+  assert.match(source, /removeAgentflowEdge\(document\.edges, edgeId\)/);
   assert.match(source, /onMoveSwitchCase\(edge\.id, -1\)/);
   assert.match(source, /onMoveSwitchCase\(edge\.id, 1\)/);
   assert.match(source, /If \/ Else If/);
@@ -80,7 +77,7 @@ test("Agentflow agent nodes default to the agent name and keep it editable", asy
   );
   assert.match(
     source,
-    /<Label>Name<\/Label>[\s\S]*?value=\{node\.data\.title\}[\s\S]*?onChange=\{\(event\) => onChange\(node\.id, \{ title: event\.target\.value \}\)\}/,
+    /<Label>Name<\/Label>[\s\S]*?value=\{node\.data\.title\}[\s\S]*?\{ title: event\.target\.value \},[\s\S]*?\{ group: `node:\$\{node\.id\}:title` \}/,
   );
   assert.match(source, /name: node\.data\.title \|\| null/);
 });
@@ -105,4 +102,49 @@ test("Agentflow Clear Messages is a configuration-free primitive node", async ()
     /const usesAdvancedConfig = node\.data\.kind !== AgentflowNodeKind\.ClearMessages/,
   );
   assert.match(source, /\{usesAdvancedConfig \? \([\s\S]*?<Label>Advanced Config JSON<\/Label>/);
+});
+
+test("Agentflow editor creates one Zustand store per dialog session", async () => {
+  const source = await readFile(DIALOG_URL, "utf8");
+
+  assert.match(source, /if \(!props\.open\) return null/);
+  assert.match(
+    source,
+    /<AgentflowEditorProvider[\s\S]*?initialDocument=\{createAgentflowEditorDocument/,
+  );
+  assert.match(source, /<VisualAgentflowDialogSession \{\.\.\.props\} \/>/);
+});
+
+test("Agentflow editor exposes undo, redo, dirty status, and guarded close actions", async () => {
+  const source = await readFile(DIALOG_URL, "utf8");
+
+  assert.match(source, /aria-label="Undo"/);
+  assert.match(source, /aria-label="Redo"/);
+  assert.match(source, /Unsaved changes/);
+  assert.match(source, /Discard unsaved changes\?/);
+  assert.match(source, /Keep editing/);
+  assert.match(source, /if \(isDirty\) \{[\s\S]*?setDiscardConfirmationOpen\(true\)/);
+});
+
+test("Agentflow editor keyboard history preserves native input undo", async () => {
+  const source = await readFile(DIALOG_URL, "utf8");
+
+  assert.match(source, /event\.metaKey \|\| event\.ctrlKey/);
+  assert.match(source, /event\.ctrlKey && !event\.metaKey && key === "y"/);
+  assert.match(source, /isEditableKeyboardTarget\(event\.target\)/);
+  assert.match(source, /input, textarea, select, \[contenteditable\]/);
+});
+
+test("Agentflow editor groups text and drag history while saving only marks successful writes clean", async () => {
+  const source = await readFile(BUILDER_URL, "utf8");
+
+  assert.match(source, /onBlurCapture=\{commitHistoryGroup\}/);
+  assert.match(source, /onNodeDragStart=\{commitHistoryGroup\}/);
+  assert.match(source, /onNodeDragStop=\{commitHistoryGroup\}/);
+  assert.match(source, /\{ group: "node-position" \}/);
+  assert.match(
+    source,
+    /await api(?:Put|Post)[\s\S]*?markSaved\(\);[\s\S]*?onAgentflowCreated\?\.\(\)/,
+  );
+  assert.match(source, /catch \(error\) \{[\s\S]*?Failed to save agentflow/);
 });

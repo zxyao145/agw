@@ -18,9 +18,9 @@ import ReactFlow, {
   OnSelectionChangeParams,
   Position,
   ReactFlowInstance,
+  applyEdgeChanges,
+  applyNodeChanges,
   addEdge,
-  useEdgesState,
-  useNodesState,
   useReactFlow,
 } from "reactflow";
 import "reactflow/dist/style.css";
@@ -88,7 +88,6 @@ import {
   removeAgentflowEdge,
   setSwitchCaseOrder,
   validateAgentflowEdgeRouting,
-  type AgentflowEdgeData,
 } from "./agentflow-edge-routing";
 import {
   createInputNode,
@@ -97,23 +96,18 @@ import {
   validateInputGraph,
 } from "./agentflow-input-node";
 import { validateAgentflowCycles } from "./agentflow-cycle-validation";
+import {
+  type AgentflowEditorCanvasScope,
+  type AgentflowEditorDocument,
+  type AgentflowEditorEdgeData,
+  type AgentflowEditorHistoryMode,
+  type AgentflowEditorNodeData,
+  useAgentflowEditorStore,
+} from "./agentflow-editor-store";
 
-type DagNodeData = {
-  kind: AgentflowNodeKind;
-  title: string;
-  relateId: string | null;
-  instructions: string;
-  configJson: string;
-  presentation?: {
-    disableHandles?: boolean;
-    member?: BlockMemberView;
-    members?: BlockMemberView[];
-    onDelete?: (nodeId: string) => void;
-    onOpenBlock?: (blockId: string) => void;
-  };
-};
+type DagNodeData = AgentflowEditorNodeData;
 
-type DagEdgeData = AgentflowEdgeData;
+type DagEdgeData = AgentflowEditorEdgeData;
 
 type VisualAgentflowBuilderProps = {
   agents: AgentDto[];
@@ -131,14 +125,19 @@ export type AgentflowBuilderActionState = {
   submit: () => void;
 };
 
-type CanvasScope =
-  | {
-      kind: "root";
-    }
-  | {
-      kind: "block";
-      blockId: string;
-    };
+type CanvasScope = AgentflowEditorCanvasScope;
+
+type NodeDataChangeHandler = (
+  nodeId: string,
+  update: Partial<DagNodeData>,
+  historyMode?: AgentflowEditorHistoryMode,
+) => void;
+
+type EdgeDataChangeHandler = (
+  edgeId: string,
+  update: Partial<DagEdgeData>,
+  historyMode?: AgentflowEditorHistoryMode,
+) => void;
 
 const NODE_META: Record<
   AgentflowNodeKind,
@@ -488,20 +487,31 @@ export function VisualAgentflowBuilder({
   onAgentflowCreated,
   onActionStateChange,
 }: VisualAgentflowBuilderProps) {
-  const [nodes, setNodes, onNodesChange] = useNodesState<DagNodeData>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<DagEdgeData>([]);
-  const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
-  const [selectedEdgeId, setSelectedEdgeId] = React.useState<string | null>(null);
-  const [canvasScope, setCanvasScope] = React.useState<CanvasScope>({ kind: "root" });
+  const nodes = useAgentflowEditorStore((state) => state.document.nodes);
+  const edges = useAgentflowEditorStore((state) => state.document.edges);
+  const agentflowName = useAgentflowEditorStore((state) => state.document.name);
+  const agentflowDescription = useAgentflowEditorStore((state) => state.document.description);
+  const summaryModelProviderId = useAgentflowEditorStore(
+    (state) => state.document.summaryModelProviderId,
+  );
+  const selectedNodeId = useAgentflowEditorStore((state) => state.selectedNodeId);
+  const selectedEdgeId = useAgentflowEditorStore((state) => state.selectedEdgeId);
+  const canvasScope = useAgentflowEditorStore((state) => state.canvasScope);
+  const pendingFocusNodeId = useAgentflowEditorStore((state) => state.pendingFocusNodeId);
+  const isSaving = useAgentflowEditorStore((state) => state.isSaving);
+  const updateDocument = useAgentflowEditorStore((state) => state.updateDocument);
+  const commitHistoryGroup = useAgentflowEditorStore((state) => state.commitHistoryGroup);
+  const markSaved = useAgentflowEditorStore((state) => state.markSaved);
+  const setSaving = useAgentflowEditorStore((state) => state.setSaving);
+  const selectNode = useAgentflowEditorStore((state) => state.selectNode);
+  const selectEdge = useAgentflowEditorStore((state) => state.selectEdge);
+  const clearSelection = useAgentflowEditorStore((state) => state.clearSelection);
+  const setCanvasScope = useAgentflowEditorStore((state) => state.setCanvasScope);
+  const setPendingFocusNodeId = useAgentflowEditorStore((state) => state.setPendingFocusNodeId);
   const [reactFlowCanvas, setReactFlowCanvas] = React.useState<{
     key: string;
     instance: ReactFlowInstance<DagNodeData, DagEdgeData>;
   } | null>(null);
-  const [pendingFocusNodeId, setPendingFocusNodeId] = React.useState<string | null>(null);
-  const [agentflowName, setAgentflowName] = React.useState("");
-  const [agentflowDescription, setAgentflowDescription] = React.useState("");
-  const [summaryModelProviderId, setSummaryModelProviderId] = React.useState("");
-  const [isSaving, setIsSaving] = React.useState(false);
 
   const availableAgentflows = React.useMemo(() => {
     if (!editingAgentflow) return agentflows;
@@ -532,8 +542,9 @@ export function VisualAgentflowBuilder({
         return;
       }
 
-      setNodes((current) =>
-        current
+      updateDocument((document) => ({
+        ...document,
+        nodes: document.nodes
           .filter((node) => node.id !== nodeId)
           .map((node) =>
             isBlockNodeKind(node.data.kind)
@@ -546,29 +557,46 @@ export function VisualAgentflowBuilder({
                 }
               : node,
           ),
-      );
-      setEdges((current) =>
-        current.filter((edge) => edge.source !== nodeId && edge.target !== nodeId),
-      );
-      setSelectedNodeId((current) => (current === nodeId ? null : current));
-      setSelectedEdgeId(null);
+        edges: document.edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId),
+      }));
     },
-    [setEdges, setNodes],
+    [updateDocument],
   );
 
   const handleNodesChange = React.useCallback(
     (changes: NodeChange[]) => {
-      onNodesChange(changes.filter((change) => change.type !== "remove"));
+      const applicableChanges = changes.filter(
+        (change) => change.type !== "remove" && change.type !== "select",
+      );
+      if (applicableChanges.length === 0) return;
+
+      const historyMode: AgentflowEditorHistoryMode = applicableChanges.some(
+        (change) => change.type === "position",
+      )
+        ? { group: "node-position" }
+        : "ephemeral";
+      updateDocument(
+        (document) => ({
+          ...document,
+          nodes: applyNodeChanges(applicableChanges, document.nodes),
+        }),
+        historyMode,
+      );
     },
-    [onNodesChange],
+    [updateDocument],
   );
 
   const handleEdgesChange = React.useCallback(
     (changes: EdgeChange[]) => {
       if (canvasScope.kind === "block") return;
-      onEdgesChange(changes);
+      const applicableChanges = changes.filter((change) => change.type !== "select");
+      if (applicableChanges.length === 0) return;
+      updateDocument((document) => ({
+        ...document,
+        edges: applyEdgeChanges(applicableChanges, document.edges),
+      }));
     },
-    [canvasScope, onEdgesChange],
+    [canvasScope, updateDocument],
   );
 
   const blockMembership = React.useMemo(() => createBlockMembership(nodes, edges), [edges, nodes]);
@@ -577,25 +605,28 @@ export function VisualAgentflowBuilder({
     const node = nodes.find((item) => item.id === canvasScope.blockId) ?? null;
     return node && isBlockNodeKind(node.data.kind) ? node : null;
   }, [canvasScope, nodes]);
-  const openBlockScope = React.useCallback((blockId: string) => {
-    setPendingFocusNodeId(null);
-    setCanvasScope({ kind: "block", blockId });
-    setSelectedNodeId(blockId);
-    setSelectedEdgeId(null);
-  }, []);
+  const openBlockScope = React.useCallback(
+    (blockId: string) => {
+      setPendingFocusNodeId(null);
+      setCanvasScope({ kind: "block", blockId });
+      selectNode(blockId);
+    },
+    [selectNode, setCanvasScope, setPendingFocusNodeId],
+  );
   const exitBlockScope = React.useCallback(() => {
     setPendingFocusNodeId(null);
     if (canvasScope.kind === "block") {
-      setSelectedNodeId(canvasScope.blockId);
-      setSelectedEdgeId(null);
+      selectNode(canvasScope.blockId);
     }
     setCanvasScope({ kind: "root" });
-  }, [canvasScope]);
-  const selectBlockParticipant = React.useCallback((blockId: string, participantNodeId: string) => {
-    setCanvasScope({ kind: "block", blockId });
-    setSelectedNodeId(participantNodeId);
-    setSelectedEdgeId(null);
-  }, []);
+  }, [canvasScope, selectNode, setCanvasScope, setPendingFocusNodeId]);
+  const selectBlockParticipant = React.useCallback(
+    (blockId: string, participantNodeId: string) => {
+      setCanvasScope({ kind: "block", blockId });
+      selectNode(participantNodeId);
+    },
+    [selectNode, setCanvasScope],
+  );
   const rootVisibleNodes = React.useMemo(() => {
     return getVisibleNodes(nodes, blockMembership).map((node) => {
       return {
@@ -624,83 +655,94 @@ export function VisualAgentflowBuilder({
     if (canvasScope.kind !== "root") return;
     if (!selectedNodeId || !blockMembership.hiddenParticipantIds.has(selectedNodeId)) return;
 
-    setSelectedNodeId(blockMembership.participantOwnersByNodeId.get(selectedNodeId)?.[0] ?? null);
-    setSelectedEdgeId(null);
-  }, [blockMembership, canvasScope, selectedNodeId]);
+    selectNode(blockMembership.participantOwnersByNodeId.get(selectedNodeId)?.[0] ?? null);
+  }, [blockMembership, canvasScope, selectNode, selectedNodeId]);
 
   React.useEffect(() => {
     if (canvasScope.kind === "root") return;
     if (activeBlockNode) return;
 
     setCanvasScope({ kind: "root" });
-    setSelectedNodeId(null);
-    setSelectedEdgeId(null);
-  }, [activeBlockNode, canvasScope]);
+    clearSelection();
+  }, [activeBlockNode, canvasScope, clearSelection, setCanvasScope]);
 
-  const updateNodeData = React.useCallback(
-    (nodeId: string, update: Partial<DagNodeData>) => {
-      setNodes((current) =>
-        current.map((node) =>
-          node.id === nodeId ? { ...node, data: { ...node.data, ...update } } : node,
-        ),
+  const updateNodeData = React.useCallback<NodeDataChangeHandler>(
+    (nodeId, update, historyMode = "atomic") => {
+      updateDocument(
+        (document) => ({
+          ...document,
+          nodes: document.nodes.map((node) =>
+            node.id === nodeId ? { ...node, data: { ...node.data, ...update } } : node,
+          ),
+        }),
+        historyMode,
       );
     },
-    [setNodes],
+    [updateDocument],
   );
 
-  const updateEdgeData = React.useCallback(
-    (edgeId: string, update: Partial<DagEdgeData>) => {
-      setEdges((current) =>
-        normalizeSwitchCaseOrders(
-          current.map((edge) => {
-            if (edge.id !== edgeId) return edge;
+  const updateEdgeData = React.useCallback<EdgeDataChangeHandler>(
+    (edgeId, update, historyMode = "atomic") => {
+      updateDocument(
+        (document) => ({
+          ...document,
+          edges: normalizeSwitchCaseOrders(
+            document.edges.map((edge) => {
+              if (edge.id !== edgeId) return edge;
 
-            const previousData = { ...createDefaultEdgeData(), ...edge.data };
-            const nextKind = update.kind ?? previousData.kind;
-            const nextData = { ...previousData, ...update };
-            if (nextKind === AgentflowEdgeKind.SwitchCase) {
-              nextData.configJson = setSwitchCaseOrder(
-                nextData.configJson,
-                previousData.kind === AgentflowEdgeKind.SwitchCase
-                  ? (getSwitchCasePosition(current, edgeId)?.index ??
-                      getNextSwitchCaseOrder(current, edge.source))
-                  : getNextSwitchCaseOrder(current, edge.source),
-              );
-            } else {
-              nextData.configJson = setSwitchCaseOrder(nextData.configJson, null);
-            }
-            if (
-              nextKind === AgentflowEdgeKind.SwitchDefault ||
-              nextKind === AgentflowEdgeKind.FanInBarrier
-            ) {
-              nextData.conditionJson = "";
-            }
+              const previousData = { ...createDefaultEdgeData(), ...edge.data };
+              const nextKind = update.kind ?? previousData.kind;
+              const nextData = { ...previousData, ...update };
+              if (nextKind === AgentflowEdgeKind.SwitchCase) {
+                nextData.configJson = setSwitchCaseOrder(
+                  nextData.configJson,
+                  previousData.kind === AgentflowEdgeKind.SwitchCase
+                    ? (getSwitchCasePosition(document.edges, edgeId)?.index ??
+                        getNextSwitchCaseOrder(document.edges, edge.source))
+                    : getNextSwitchCaseOrder(document.edges, edge.source),
+                );
+              } else {
+                nextData.configJson = setSwitchCaseOrder(nextData.configJson, null);
+              }
+              if (
+                nextKind === AgentflowEdgeKind.SwitchDefault ||
+                nextKind === AgentflowEdgeKind.FanInBarrier
+              ) {
+                nextData.conditionJson = "";
+              }
 
-            return applyEdgeVisuals({
-              ...edge,
-              data: nextData,
-              label: nextData.label || undefined,
-            });
-          }),
-        ),
+              return applyEdgeVisuals({
+                ...edge,
+                data: nextData,
+                label: nextData.label || undefined,
+              });
+            }),
+          ),
+        }),
+        historyMode,
       );
     },
-    [setEdges],
+    [updateDocument],
   );
 
   const deleteFlowEdge = React.useCallback(
     (edgeId: string) => {
-      setEdges((current) => removeAgentflowEdge(current, edgeId).map(applyEdgeVisuals));
-      setSelectedEdgeId((current) => (current === edgeId ? null : current));
+      updateDocument((document) => ({
+        ...document,
+        edges: removeAgentflowEdge(document.edges, edgeId).map(applyEdgeVisuals),
+      }));
     },
-    [setEdges],
+    [updateDocument],
   );
 
   const moveSwitchCase = React.useCallback(
     (edgeId: string, direction: -1 | 1) => {
-      setEdges((current) => moveSwitchCaseEdge(current, edgeId, direction).map(applyEdgeVisuals));
+      updateDocument((document) => ({
+        ...document,
+        edges: moveSwitchCaseEdge(document.edges, edgeId, direction).map(applyEdgeVisuals),
+      }));
     },
-    [setEdges],
+    [updateDocument],
   );
 
   const addDagNode = React.useCallback(
@@ -720,58 +762,14 @@ export function VisualAgentflowBuilder({
         },
       };
 
-      setNodes((current) => [...current, node]);
-      setSelectedNodeId(nodeId);
-      setSelectedEdgeId(null);
+      updateDocument((document) => ({
+        ...document,
+        nodes: [...document.nodes, node],
+      }));
+      selectNode(nodeId);
     },
-    [nodes.length, setNodes],
+    [nodes.length, selectNode, updateDocument],
   );
-
-  React.useEffect(() => {
-    if (!editingAgentflow) {
-      setAgentflowName("");
-      setAgentflowDescription("");
-      setSummaryModelProviderId("");
-      setNodes([createInputNode<DagNodeData>()]);
-      setEdges([]);
-      setCanvasScope({ kind: "root" });
-      setPendingFocusNodeId(null);
-      setSelectedNodeId(INPUT_NODE_ID);
-      setSelectedEdgeId(null);
-      return;
-    }
-
-    setAgentflowName(editingAgentflow.name);
-    setAgentflowDescription(editingAgentflow.description || "");
-    setSummaryModelProviderId(editingAgentflow.summaryModelProviderId ?? "");
-
-    const loadedNodes = editingAgentflow.nodes.map((node, index) => {
-      const position = parsePosition(node.positionJson, index);
-      return {
-        id: node.nodeId,
-        type: "dagNode",
-        position,
-        data: {
-          kind: node.kind,
-          title: node.name || resolveNodeTitle(node, agents, agentflows),
-          relateId: node.relateId,
-          instructions: node.instructions || "",
-          configJson: node.configJson || "",
-        },
-      } satisfies Node<DagNodeData>;
-    });
-
-    const loadedEdges = editingAgentflow.edges.map((edge) => createFlowEdge(edge));
-    const normalizedGraph = ensureInputGraph(loadedNodes, loadedEdges);
-    setNodes(normalizedGraph.nodes);
-    setEdges(
-      normalizeSwitchCaseOrders(normalizedGraph.edges).map((edge) => applyEdgeVisuals(edge)),
-    );
-    setCanvasScope({ kind: "root" });
-    setPendingFocusNodeId(null);
-    setSelectedNodeId(INPUT_NODE_ID);
-    setSelectedEdgeId(null);
-  }, [agents, agentflows, editingAgentflow, setEdges, setNodes]);
 
   const onConnect = React.useCallback(
     (params: Connection) => {
@@ -804,9 +802,12 @@ export function VisualAgentflowBuilder({
         data: edgeData,
       };
 
-      setEdges((current) => addEdge(applyEdgeVisuals(edge), current));
+      updateDocument((document) => ({
+        ...document,
+        edges: addEdge(applyEdgeVisuals(edge), document.edges),
+      }));
     },
-    [canvasScope, edges, setEdges],
+    [canvasScope, edges, updateDocument],
   );
 
   const onSelectionChange = React.useCallback(
@@ -815,35 +816,33 @@ export function VisualAgentflowBuilder({
       const selectedEdge = selection.edges[0];
 
       if (selectedNode) {
-        setSelectedNodeId(selectedNode.id);
-        setSelectedEdgeId(null);
+        selectNode(selectedNode.id);
         return;
       }
 
       if (selectedEdge && canvasScope.kind === "root") {
-        setSelectedEdgeId(selectedEdge.id);
-        setSelectedNodeId(null);
+        selectEdge(selectedEdge.id);
         return;
       }
 
       // ReactFlow can emit a transient empty selection while controlled node selection is syncing.
       // Pane clicks own the intentional clear/select-parent behavior below.
     },
-    [canvasScope],
+    [canvasScope, selectEdge, selectNode],
   );
 
   const addBlockParticipant = React.useCallback(
     (blockId: string, kind: AgentflowNodeKind, title: string, relateId: string) => {
       const nodeId = `${kind}-participant-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-      setNodes((current) => {
-        const blockNode = current.find((node) => node.id === blockId);
-        if (!blockNode) return current;
+      updateDocument((document) => {
+        const blockNode = document.nodes.find((node) => node.id === blockId);
+        if (!blockNode) return document;
 
         const participantNode: Node<DagNodeData> = {
           id: nodeId,
           type: "dagNode",
-          position: getNextBlockParticipantPosition(current, blockId),
+          position: getNextBlockParticipantPosition(document.nodes, blockId),
           data: {
             kind,
             title,
@@ -853,33 +852,36 @@ export function VisualAgentflowBuilder({
           },
         };
 
-        return [
-          ...current.map((node) =>
-            node.id === blockId
-              ? {
-                  ...node,
-                  data: {
-                    ...node.data,
-                    configJson: addBlockParticipantId(node.data.configJson, nodeId),
-                  },
-                }
-              : node,
-          ),
-          participantNode,
-        ];
+        return {
+          ...document,
+          nodes: [
+            ...document.nodes.map((node) =>
+              node.id === blockId
+                ? {
+                    ...node,
+                    data: {
+                      ...node.data,
+                      configJson: addBlockParticipantId(node.data.configJson, nodeId),
+                    },
+                  }
+                : node,
+            ),
+            participantNode,
+          ],
+        };
       });
       setCanvasScope({ kind: "block", blockId });
       setPendingFocusNodeId(nodeId);
-      setSelectedNodeId(nodeId);
-      setSelectedEdgeId(null);
+      selectNode(nodeId);
     },
-    [setNodes],
+    [selectNode, setCanvasScope, setPendingFocusNodeId, updateDocument],
   );
 
   const removeBlockParticipant = React.useCallback(
     (blockId: string, participantNodeId: string) => {
-      setNodes((current) =>
-        current.map((node) =>
+      updateDocument((document) => ({
+        ...document,
+        nodes: document.nodes.map((node) =>
           node.id === blockId
             ? {
                 ...node,
@@ -890,18 +892,18 @@ export function VisualAgentflowBuilder({
               }
             : node,
         ),
-      );
-      setSelectedNodeId(blockId);
-      setSelectedEdgeId(null);
+      }));
+      selectNode(blockId);
     },
-    [setNodes],
+    [selectNode, updateDocument],
   );
 
   const deleteBlockParticipant = React.useCallback(
     (blockId: string, participantNodeId: string) => {
       if (!canDeleteBlockMember(blockMembership, participantNodeId)) {
-        setNodes((current) =>
-          current.map((node) =>
+        updateDocument((document) => ({
+          ...document,
+          nodes: document.nodes.map((node) =>
             node.id === blockId
               ? {
                   ...node,
@@ -912,19 +914,17 @@ export function VisualAgentflowBuilder({
                 }
               : node,
           ),
-        );
+        }));
         setCanvasScope({ kind: "root" });
-        setSelectedNodeId(participantNodeId);
-        setSelectedEdgeId(null);
+        selectNode(participantNodeId);
         toast.info("Member removed from this block and kept in the workflow.");
         return;
       }
 
       deleteFlowNode(participantNodeId);
-      setSelectedNodeId(blockId);
-      setSelectedEdgeId(null);
+      selectNode(blockId);
     },
-    [blockMembership, deleteFlowNode, setNodes],
+    [blockMembership, deleteFlowNode, selectNode, setCanvasScope, updateDocument],
   );
 
   const blockCanvasNodes = React.useMemo(() => {
@@ -958,9 +958,10 @@ export function VisualAgentflowBuilder({
         ? blockCanvasEdges
         : rootVisibleEdges.map((edge) => ({
             ...edge,
+            selected: edge.id === selectedEdgeId,
             label: edge.data?.label || getEdgeRoutingLabel(edge, edges) || edge.label || undefined,
           })),
-    [blockCanvasEdges, canvasScope, edges, rootVisibleEdges],
+    [blockCanvasEdges, canvasScope, edges, rootVisibleEdges, selectedEdgeId],
   );
   const canvasKey = canvasScope.kind === "block" ? `block-${canvasScope.blockId}` : "root";
 
@@ -1008,13 +1009,14 @@ export function VisualAgentflowBuilder({
     if (canvasNodes.length === 0) return;
     const result = await createGraphLayout(canvasNodes, canvasEdges);
     const positionByNodeId = new Map(result.nodes.map((node) => [node.id, node.position]));
-    setNodes((current) =>
-      current.map((node) => {
+    updateDocument((document) => ({
+      ...document,
+      nodes: document.nodes.map((node) => {
         const position = positionByNodeId.get(node.id);
         return position ? { ...node, position } : node;
       }),
-    );
-  }, [canvasEdges, canvasNodes, setNodes]);
+    }));
+  }, [canvasEdges, canvasNodes, updateDocument]);
 
   const graphValidation = React.useMemo(() => {
     const validation = validateAgentflowGraph(nodes, edges);
@@ -1038,7 +1040,29 @@ export function VisualAgentflowBuilder({
     return validation;
   }, [edges, nodes, summaryModelProviderId]);
 
+  const setAgentflowName = React.useCallback(
+    (name: string) => {
+      updateDocument((document) => ({ ...document, name }), { group: "agentflow-name" });
+    },
+    [updateDocument],
+  );
+  const setAgentflowDescription = React.useCallback(
+    (description: string) => {
+      updateDocument((document) => ({ ...document, description }), {
+        group: "agentflow-description",
+      });
+    },
+    [updateDocument],
+  );
+  const setSummaryModelProviderId = React.useCallback(
+    (summaryModelProviderId: string) => {
+      updateDocument((document) => ({ ...document, summaryModelProviderId }));
+    },
+    [updateDocument],
+  );
+
   const handleBuild = React.useCallback(async () => {
+    commitHistoryGroup();
     if (!agentflowName.trim()) {
       toast.error("Please enter an agentflow name");
       return;
@@ -1081,7 +1105,7 @@ export function VisualAgentflowBuilder({
       }),
     };
 
-    setIsSaving(true);
+    setSaving(true);
     try {
       if (editingAgentflow) {
         await apiPut("/api/agentflows/{id}", {
@@ -1094,31 +1118,24 @@ export function VisualAgentflowBuilder({
         toast.success(`Agentflow "${agentflowName}" created`);
       }
 
-      setAgentflowName("");
-      setAgentflowDescription("");
-      setSummaryModelProviderId("");
-      setNodes([createInputNode<DagNodeData>()]);
-      setEdges([]);
-      setCanvasScope({ kind: "root" });
-      setPendingFocusNodeId(null);
-      setSelectedNodeId(INPUT_NODE_ID);
-      setSelectedEdgeId(null);
+      markSaved();
       onAgentflowCreated?.();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to save agentflow");
     } finally {
-      setIsSaving(false);
+      setSaving(false);
     }
   }, [
     agentflowDescription,
     agentflowName,
+    commitHistoryGroup,
     editingAgentflow,
     edges,
     graphValidation,
+    markSaved,
     nodes,
     onAgentflowCreated,
-    setEdges,
-    setNodes,
+    setSaving,
     summaryModelProviderId,
   ]);
 
@@ -1143,7 +1160,10 @@ export function VisualAgentflowBuilder({
   }, [actionState, onActionStateChange]);
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[320px_minmax(0,1fr)_340px]">
+    <div
+      className="grid h-full min-h-0 grid-cols-[320px_minmax(0,1fr)_340px]"
+      onBlurCapture={commitHistoryGroup}
+    >
       <aside className="min-h-0 overflow-auto agw-scrollbar border-r bg-muted/20 p-3">
         <div className="space-y-3">
           <div className="space-y-2">
@@ -1210,9 +1230,10 @@ export function VisualAgentflowBuilder({
           onConnect={onConnect}
           onInit={(instance) => setReactFlowCanvas({ key: canvasKey, instance })}
           onSelectionChange={onSelectionChange}
+          onNodeDragStart={commitHistoryGroup}
+          onNodeDragStop={commitHistoryGroup}
           onNodeClick={(_, node) => {
-            setSelectedNodeId(node.id);
-            setSelectedEdgeId(null);
+            selectNode(node.id);
           }}
           onNodeDoubleClick={(_, node) => {
             if (isBlockNodeKind(node.data.kind)) {
@@ -1221,18 +1242,15 @@ export function VisualAgentflowBuilder({
           }}
           onEdgeClick={(_, edge) => {
             if (canvasScope.kind === "block") return;
-            setSelectedEdgeId(edge.id);
-            setSelectedNodeId(null);
+            selectEdge(edge.id);
           }}
           onPaneClick={() => {
             if (canvasScope.kind === "block") {
-              setSelectedNodeId(canvasScope.blockId);
-              setSelectedEdgeId(null);
+              selectNode(canvasScope.blockId);
               return;
             }
 
-            setSelectedNodeId(null);
-            setSelectedEdgeId(null);
+            clearSelection();
           }}
           nodesConnectable={canvasScope.kind === "root"}
           deleteKeyCode={null}
@@ -1607,7 +1625,7 @@ function NodeInspector({
   blockMembership: BlockMembership;
   canvasScope: CanvasScope;
   activeBlockNode: Node<DagNodeData> | null;
-  onChange: (nodeId: string, update: Partial<DagNodeData>) => void;
+  onChange: NodeDataChangeHandler;
   onSummaryModelProviderIdChange: (value: string) => void;
   onAddBlockParticipant: (
     blockId: string,
@@ -1662,7 +1680,9 @@ function NodeInspector({
         <Label>Name</Label>
         <Input
           value={node.data.title}
-          onChange={(event) => onChange(node.id, { title: event.target.value })}
+          onChange={(event) =>
+            onChange(node.id, { title: event.target.value }, { group: `node:${node.id}:title` })
+          }
         />
       </div>
 
@@ -1671,7 +1691,13 @@ function NodeInspector({
           <Label>System Prompt / Instructions</Label>
           <Textarea
             value={node.data.instructions}
-            onChange={(event) => onChange(node.id, { instructions: event.target.value })}
+            onChange={(event) =>
+              onChange(
+                node.id,
+                { instructions: event.target.value },
+                { group: `node:${node.id}:instructions` },
+              )
+            }
             placeholder="Describe how this node should use upstream output."
             className="min-h-28"
           />
@@ -1729,7 +1755,13 @@ function NodeInspector({
           <Label>Advanced Config JSON</Label>
           <Textarea
             value={node.data.configJson}
-            onChange={(event) => onChange(node.id, { configJson: event.target.value })}
+            onChange={(event) =>
+              onChange(
+                node.id,
+                { configJson: event.target.value },
+                { group: `node:${node.id}:config` },
+              )
+            }
             placeholder='{ "key": "value" }'
             className="min-h-24 font-mono text-xs"
           />
@@ -1749,7 +1781,7 @@ function OutputSummaryConfigInspector({
   node: Node<DagNodeData>;
   modelProviders: ModelProviderDto[];
   summaryModelProviderId: string;
-  onChange: (nodeId: string, update: Partial<DagNodeData>) => void;
+  onChange: NodeDataChangeHandler;
   onSummaryModelProviderIdChange: (value: string) => void;
 }) {
   const config = readConfigJson(node.data.configJson) ?? {};
@@ -1827,7 +1859,7 @@ function BlockConfigInspector({
   agentflowSelectOptions: SearchableSelectOption[];
   blockMembership: BlockMembership;
   canvasScope: CanvasScope;
-  onChange: (nodeId: string, update: Partial<DagNodeData>) => void;
+  onChange: NodeDataChangeHandler;
   onAddParticipant: (
     blockId: string,
     kind: AgentflowNodeKind,
@@ -1853,8 +1885,11 @@ function BlockConfigInspector({
     ? managerNodeId
     : "";
 
-  const setConfig = (update: Record<string, unknown>) => {
-    onChange(node.id, { configJson: updateConfigJson(node.data.configJson, update) });
+  const setConfig = (
+    update: Record<string, unknown>,
+    historyMode: AgentflowEditorHistoryMode = "atomic",
+  ) => {
+    onChange(node.id, { configJson: updateConfigJson(node.data.configJson, update) }, historyMode);
   };
 
   return (
@@ -1911,7 +1946,9 @@ function BlockConfigInspector({
         <ConfigNumberField
           label="Max Rounds"
           value={readNumber(config.maxRounds)}
-          onChange={(value) => setConfig({ maxRounds: value })}
+          onChange={(value) =>
+            setConfig({ maxRounds: value }, { group: `node:${node.id}:max-rounds` })
+          }
         />
       ) : null}
 
@@ -1940,12 +1977,16 @@ function BlockConfigInspector({
             <ConfigNumberField
               label="Max Stalls"
               value={readNumber(config.maxStalls)}
-              onChange={(value) => setConfig({ maxStalls: value })}
+              onChange={(value) =>
+                setConfig({ maxStalls: value }, { group: `node:${node.id}:max-stalls` })
+              }
             />
             <ConfigNumberField
               label="Max Resets"
               value={readNumber(config.maxResets)}
-              onChange={(value) => setConfig({ maxResets: value })}
+              onChange={(value) =>
+                setConfig({ maxResets: value }, { group: `node:${node.id}:max-resets` })
+              }
             />
           </div>
           <div className="flex items-center justify-between rounded-md border px-3 py-2">
@@ -1964,7 +2005,12 @@ function BlockConfigInspector({
             <Label>Handoff Instructions</Label>
             <Textarea
               value={readString(config.handoffInstructions)}
-              onChange={(event) => setConfig({ handoffInstructions: event.target.value })}
+              onChange={(event) =>
+                setConfig(
+                  { handoffInstructions: event.target.value },
+                  { group: `node:${node.id}:handoff-instructions` },
+                )
+              }
               placeholder="Describe when one participant should hand off to another."
               className="min-h-24"
             />
@@ -1988,13 +2034,23 @@ function BlockConfigInspector({
               <ConfigNumberField
                 label="Autonomous Turn Limit"
                 value={readNumber(config.autonomousTurnLimit)}
-                onChange={(value) => setConfig({ autonomousTurnLimit: value })}
+                onChange={(value) =>
+                  setConfig(
+                    { autonomousTurnLimit: value },
+                    { group: `node:${node.id}:autonomous-turn-limit` },
+                  )
+                }
               />
               <div className="space-y-2">
                 <Label>Continuation Prompt</Label>
                 <Textarea
                   value={readString(config.continuationPrompt)}
-                  onChange={(event) => setConfig({ continuationPrompt: event.target.value })}
+                  onChange={(event) =>
+                    setConfig(
+                      { continuationPrompt: event.target.value },
+                      { group: `node:${node.id}:continuation-prompt` },
+                    )
+                  }
                   className="min-h-20"
                 />
               </div>
@@ -2062,7 +2118,7 @@ function BlockParticipantContextInspector({
   blockNode: Node<DagNodeData>;
   memberNode: Node<DagNodeData>;
   blockMembership: BlockMembership;
-  onChange: (nodeId: string, update: Partial<DagNodeData>) => void;
+  onChange: NodeDataChangeHandler;
   onRemoveParticipant: (blockId: string, participantNodeId: string) => void;
 }) {
   const config = readConfigJson(blockNode.data.configJson) ?? {};
@@ -2153,11 +2209,14 @@ function HumanGateConfigInspector({
   onChange,
 }: {
   node: Node<DagNodeData>;
-  onChange: (nodeId: string, update: Partial<DagNodeData>) => void;
+  onChange: NodeDataChangeHandler;
 }) {
   const config = readConfigJson(node.data.configJson) ?? {};
-  const setConfig = (update: Record<string, unknown>) => {
-    onChange(node.id, { configJson: updateConfigJson(node.data.configJson, update) });
+  const setConfig = (
+    update: Record<string, unknown>,
+    historyMode: AgentflowEditorHistoryMode = "atomic",
+  ) => {
+    onChange(node.id, { configJson: updateConfigJson(node.data.configJson, update) }, historyMode);
   };
 
   return (
@@ -2181,7 +2240,12 @@ function HumanGateConfigInspector({
         <Label>Human Prompt</Label>
         <Textarea
           value={readString(config.humanPrompt)}
-          onChange={(event) => setConfig({ humanPrompt: event.target.value })}
+          onChange={(event) =>
+            setConfig(
+              { humanPrompt: event.target.value },
+              { group: `node:${node.id}:human-prompt` },
+            )
+          }
           placeholder="What should the reviewer decide or provide?"
           className="min-h-24"
         />
@@ -2195,11 +2259,14 @@ function CheckpointConfigInspector({
   onChange,
 }: {
   node: Node<DagNodeData>;
-  onChange: (nodeId: string, update: Partial<DagNodeData>) => void;
+  onChange: NodeDataChangeHandler;
 }) {
   const config = readConfigJson(node.data.configJson) ?? {};
-  const setConfig = (update: Record<string, unknown>) => {
-    onChange(node.id, { configJson: updateConfigJson(node.data.configJson, update) });
+  const setConfig = (
+    update: Record<string, unknown>,
+    historyMode: AgentflowEditorHistoryMode = "atomic",
+  ) => {
+    onChange(node.id, { configJson: updateConfigJson(node.data.configJson, update) }, historyMode);
   };
 
   return (
@@ -2207,7 +2274,12 @@ function CheckpointConfigInspector({
       <Label>Checkpoint Name</Label>
       <Input
         value={readString(config.checkpointName)}
-        onChange={(event) => setConfig({ checkpointName: event.target.value })}
+        onChange={(event) =>
+          setConfig(
+            { checkpointName: event.target.value },
+            { group: `node:${node.id}:checkpoint-name` },
+          )
+        }
         placeholder={node.data.title}
       />
     </div>
@@ -2245,7 +2317,7 @@ function EdgeInspector({
 }: {
   edge: Edge<DagEdgeData>;
   edges: Edge<DagEdgeData>[];
-  onChange: (edgeId: string, update: Partial<DagEdgeData>) => void;
+  onChange: EdgeDataChangeHandler;
   onDelete: (edgeId: string) => void;
   onMoveSwitchCase: (edgeId: string, direction: -1 | 1) => void;
 }) {
@@ -2357,7 +2429,9 @@ function EdgeInspector({
         <Label>Label</Label>
         <Input
           value={data.label}
-          onChange={(event) => onChange(edge.id, { label: event.target.value })}
+          onChange={(event) =>
+            onChange(edge.id, { label: event.target.value }, { group: `edge:${edge.id}:label` })
+          }
         />
       </div>
       {isPredicateEdgeKind(data.kind) ? (
@@ -2365,7 +2439,13 @@ function EdgeInspector({
           <Label>Predicate JSON</Label>
           <Textarea
             value={data.conditionJson}
-            onChange={(event) => onChange(edge.id, { conditionJson: event.target.value })}
+            onChange={(event) =>
+              onChange(
+                edge.id,
+                { conditionJson: event.target.value },
+                { group: `edge:${edge.id}:condition` },
+              )
+            }
             placeholder='{ "contains": "approved", "minMessages": 1 }'
             className="min-h-28 font-mono text-xs"
           />
@@ -2395,13 +2475,62 @@ function EdgeInspector({
           <Label>Advanced Config JSON</Label>
           <Textarea
             value={data.configJson}
-            onChange={(event) => onChange(edge.id, { configJson: event.target.value })}
+            onChange={(event) =>
+              onChange(
+                edge.id,
+                { configJson: event.target.value },
+                { group: `edge:${edge.id}:config` },
+              )
+            }
             className="min-h-20 font-mono text-xs"
           />
         </div>
       )}
     </div>
   );
+}
+
+export function createAgentflowEditorDocument({
+  editingAgentflow,
+  agents,
+  agentflows,
+}: {
+  editingAgentflow?: AgentflowDetailDto | null;
+  agents: AgentDto[];
+  agentflows: AgentflowDto[];
+}): AgentflowEditorDocument {
+  if (!editingAgentflow) {
+    return {
+      name: "",
+      description: "",
+      summaryModelProviderId: "",
+      nodes: [createInputNode<DagNodeData>()],
+      edges: [],
+    };
+  }
+
+  const loadedNodes = editingAgentflow.nodes.map((node, index) => ({
+    id: node.nodeId,
+    type: "dagNode",
+    position: parsePosition(node.positionJson, index),
+    data: {
+      kind: node.kind,
+      title: node.name || resolveNodeTitle(node, agents, agentflows),
+      relateId: node.relateId,
+      instructions: node.instructions || "",
+      configJson: node.configJson || "",
+    },
+  })) satisfies Node<DagNodeData>[];
+  const loadedEdges = editingAgentflow.edges.map((edge) => createFlowEdge(edge));
+  const normalizedGraph = ensureInputGraph(loadedNodes, loadedEdges);
+
+  return {
+    name: editingAgentflow.name,
+    description: editingAgentflow.description || "",
+    summaryModelProviderId: editingAgentflow.summaryModelProviderId ?? "",
+    nodes: normalizedGraph.nodes,
+    edges: normalizeSwitchCaseOrders(normalizedGraph.edges).map(applyEdgeVisuals),
+  };
 }
 
 function createFlowEdge(edge: AgentflowEdgeDto): Edge<DagEdgeData> {
