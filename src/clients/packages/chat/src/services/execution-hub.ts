@@ -79,6 +79,26 @@ export type ExecutionRequest = ExecutionTarget & {
   input: ExecutionUserInput;
 };
 
+export type AgentflowCheckpointMarkerInfo = {
+  nodeId: string;
+  name: string;
+  messageId: string;
+};
+
+export type AgentflowCheckpointAvailability = {
+  occurrenceId: string;
+  agentflowId: string;
+  boundarySequence: number;
+  available: boolean;
+  markers: AgentflowCheckpointMarkerInfo[];
+};
+
+export type AgentflowCheckpointMessage = {
+  occurrenceId: string;
+  nodeId: string;
+  name: string;
+};
+
 export type PendingHumanGate = {
   requestType: "human-gate" | "tool-approval" | "human-interaction";
   requestId: string;
@@ -184,6 +204,17 @@ export function buildSubscribeExecutionCommand(executionId: string, cursor?: str
   };
 }
 
+export function buildResumeCheckpointCommand(args: {
+  checkpointOccurrenceId: string;
+  resumeExecutionId: string;
+  agentflowId: string;
+}) {
+  return {
+    type: "ResumeCheckpointCommand" as const,
+    ...args,
+  };
+}
+
 export function getTurnFinishedStatus(message: AiMessage): TurnFinishedStatus | null {
   if (message.additionalProperties?.type !== "turn-finished") return null;
   const status = message.additionalProperties.status;
@@ -257,6 +288,24 @@ export function getPendingHumanGate(message: AiMessage): PendingHumanGate | null
     inputPreview: readString(properties.inputPreview),
     toolName: readString(properties.toolName),
     arguments: readString(properties.arguments),
+  };
+}
+
+export function getAgentflowCheckpointMessage(
+  message: AiMessage,
+): AgentflowCheckpointMessage | null {
+  const properties = message.additionalProperties;
+  if (properties?.type !== "agentflow-checkpoint") return null;
+  const occurrenceId = readString(properties.checkpointOccurrenceId);
+  const nodeId = readString(properties.checkpointNodeId);
+  if (!occurrenceId || !nodeId) return null;
+  return {
+    occurrenceId,
+    nodeId,
+    name:
+      readString(properties.checkpointName) ??
+      readString(message.contents[0]?.content) ??
+      "Checkpoint",
   };
 }
 
@@ -507,6 +556,64 @@ export class ExecutionHubClient {
           if (await this.restoreDurableSubscription(executionId, null)) return;
         } catch {
           // 短暂探测失败不能证明服务端未接受启动，因此保留 executionId 供后续恢复。
+        }
+      }
+      throw error;
+    }
+  }
+
+  public async listAgentflowCheckpoints(
+    agentflowId: string,
+  ): Promise<AgentflowCheckpointAvailability[]> {
+    try {
+      await this.ensureConnected();
+      return await this.connection.invoke<AgentflowCheckpointAvailability[]>(
+        "GetAgentflowCheckpoints",
+        agentflowId,
+      );
+    } catch (error) {
+      const normalized = error instanceof Error ? error : new Error(String(error));
+      this.handlers.onError?.(normalized);
+      throw normalized;
+    }
+  }
+
+  public async resumeCheckpoint(args: {
+    checkpointOccurrenceId: string;
+    agentflowId: string;
+    resumeExecutionId?: string;
+  }): Promise<string> {
+    const resumeExecutionId = args.resumeExecutionId ?? globalThis.crypto.randomUUID();
+    this.activeExecutionId = resumeExecutionId;
+    this.streamCursor = null;
+    this.durableConfirmed = this.executionProvider === "distributed";
+    this.hasActiveTurn = true;
+    if (this.durableConfirmed) {
+      writePersistedDurableExecution(this.durableStorageKey, {
+        executionId: resumeExecutionId,
+        cursor: null,
+      });
+    }
+
+    try {
+      await this.dispatch(
+        buildResumeCheckpointCommand({
+          checkpointOccurrenceId: args.checkpointOccurrenceId,
+          resumeExecutionId,
+          agentflowId: args.agentflowId,
+        }),
+      );
+      return resumeExecutionId;
+    } catch (error) {
+      if (!this.durableConfirmed) {
+        this.finishActiveTurn();
+      } else if (this.connection.state === HubConnectionState.Connected) {
+        try {
+          if (await this.restoreDurableSubscription(resumeExecutionId, null)) {
+            return resumeExecutionId;
+          }
+        } catch {
+          // 与 execute 相同：无法确认服务端是否接受时保留 durable attachment。
         }
       }
       throw error;

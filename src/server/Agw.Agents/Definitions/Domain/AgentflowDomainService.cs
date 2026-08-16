@@ -50,7 +50,8 @@ public class AgentflowDomainService
         Guid agentflowId,
         IReadOnlyCollection<Guid> existingAgentIds,
         Guid? summaryModelProviderId = null,
-        IReadOnlyCollection<Guid>? existingModelProviderIds = null)
+        IReadOnlyCollection<Guid>? existingModelProviderIds = null,
+        IReadOnlyDictionary<Guid, string>? existingAgentNames = null)
     {
         if (nodes == null || edges == null)
         {
@@ -127,12 +128,17 @@ public class AgentflowDomainService
             }
         }
 
+        if (!HasValidRoutingStrategies(edges))
+        {
+            return (null, null);
+        }
+
         if (!IsValidInputRootedGraph(nodes, edges))
         {
             return (null, null);
         }
 
-        if (HasCycle(nodeIds, edges))
+        if (!HasValidCycleSemantics(nodes, edges))
         {
             return (null, null);
         }
@@ -144,7 +150,7 @@ public class AgentflowDomainService
                 NodeId = x.NodeId,
                 Kind = x.Kind,
                 RelateId = x.RelateId,
-                Name = x.Name,
+                Name = ResolveNodeName(x, existingAgentNames),
                 PositionJson = x.PositionJson,
                 Instructions = x.Instructions,
                 ConfigJson = x.ConfigJson,
@@ -166,6 +172,23 @@ public class AgentflowDomainService
             .ToList();
 
         return (normalizedNodes, normalizedEdges);
+    }
+
+    private static string? ResolveNodeName(
+        AgentflowNode node,
+        IReadOnlyDictionary<Guid, string>? existingAgentNames)
+    {
+        if (!string.IsNullOrWhiteSpace(node.Name) ||
+            node.Kind != AgentflowNodeKind.Agent ||
+            !node.RelateId.HasValue ||
+            existingAgentNames == null)
+        {
+            return node.Name;
+        }
+
+        return existingAgentNames.TryGetValue(node.RelateId.Value, out var agentName)
+            ? agentName
+            : node.Name;
     }
 
     public IReadOnlyList<AgentflowNode> OrderNodesByEdges(
@@ -236,11 +259,6 @@ public class AgentflowDomainService
         }
 
         if (edges.Any(edge => edge.TargetNodeId == InputNodeId))
-        {
-            return false;
-        }
-
-        if (edges.Any(edge => edge.SourceNodeId == InputNodeId && edge.Kind != AgentflowEdgeKind.FanOut))
         {
             return false;
         }
@@ -413,6 +431,88 @@ public class AgentflowDomainService
         }
     }
 
+    internal static bool TryReadSwitchCaseOrder(string? configJson, out int order)
+    {
+        order = 0;
+        if (string.IsNullOrWhiteSpace(configJson))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(configJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object ||
+                !document.RootElement.TryGetProperty("switchCaseOrder", out var property) ||
+                property.ValueKind != JsonValueKind.Number ||
+                !property.TryGetInt32(out order) ||
+                order < 0)
+            {
+                order = 0;
+                return false;
+            }
+
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool HasValidRoutingStrategies(IReadOnlyList<AgentflowEdge> edges)
+    {
+        foreach (var sourceGroup in edges.GroupBy(edge => edge.SourceNodeId, StringComparer.Ordinal))
+        {
+            var sourceEdges = sourceGroup
+                .Where(edge => edge.Kind != AgentflowEdgeKind.FanInBarrier)
+                .ToList();
+            var strategyCount = sourceEdges
+                .Select(edge => edge.Kind switch
+                {
+                    AgentflowEdgeKind.Direct => "direct",
+                    AgentflowEdgeKind.FanOut => "fan-out",
+                    AgentflowEdgeKind.SwitchCase or AgentflowEdgeKind.SwitchDefault => "switch",
+                    _ => "unsupported",
+                })
+                .Distinct(StringComparer.Ordinal)
+                .Count();
+            if (strategyCount > 1 || sourceEdges.Any(edge => edge.Kind is < AgentflowEdgeKind.Direct or > AgentflowEdgeKind.SwitchDefault))
+            {
+                return false;
+            }
+
+            var switchEdges = sourceEdges
+                .Where(edge => edge.Kind is AgentflowEdgeKind.SwitchCase or AgentflowEdgeKind.SwitchDefault)
+                .ToList();
+            if (switchEdges.Count == 0)
+            {
+                continue;
+            }
+
+            var cases = switchEdges.Where(edge => edge.Kind == AgentflowEdgeKind.SwitchCase).ToList();
+            var defaults = switchEdges.Where(edge => edge.Kind == AgentflowEdgeKind.SwitchDefault).ToList();
+            if (cases.Count == 0 || defaults.Count > 1 ||
+                defaults.Any(edge => !string.IsNullOrWhiteSpace(edge.ConditionJson)))
+            {
+                return false;
+            }
+
+            var orders = new HashSet<int>();
+            foreach (var edge in cases)
+            {
+                if (string.IsNullOrWhiteSpace(edge.ConditionJson) ||
+                    !TryReadSwitchCaseOrder(edge.ConfigJson, out var order) ||
+                    !orders.Add(order))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     internal static bool TryReadOutputSummaryEnabled(string? configJson, out bool enabled)
     {
         enabled = false;
@@ -460,43 +560,117 @@ public class AgentflowDomainService
         };
     }
 
-    private static bool HasCycle(IReadOnlyList<string> nodeIds, IReadOnlyList<AgentflowEdge> edges)
+    private static bool HasValidCycleSemantics(
+        IReadOnlyList<AgentflowNode> nodes,
+        IReadOnlyList<AgentflowEdge> edges)
     {
-        var visiting = new HashSet<string>(StringComparer.Ordinal);
-        var visited = new HashSet<string>(StringComparer.Ordinal);
-        var adjacency = nodeIds.ToDictionary(x => x, _ => new List<string>(), StringComparer.Ordinal);
+        var cyclicComponents = FindCyclicComponents(
+            nodes.Select(node => node.NodeId).ToList(),
+            edges);
+        if (cyclicComponents.Count == 0)
+        {
+            return true;
+        }
+
+        var nodeById = nodes.ToDictionary(node => node.NodeId, StringComparer.Ordinal);
+        foreach (var component in cyclicComponents)
+        {
+            var hasConditionalExit = edges.Any(edge =>
+                component.Contains(edge.SourceNodeId) &&
+                !component.Contains(edge.TargetNodeId) &&
+                edge.Kind is AgentflowEdgeKind.SwitchCase or AgentflowEdgeKind.SwitchDefault);
+            if (!hasConditionalExit)
+            {
+                return false;
+            }
+
+            var outsideBarrierSources = edges
+                .Where(edge =>
+                    edge.Kind == AgentflowEdgeKind.FanInBarrier &&
+                    component.Contains(edge.TargetNodeId) &&
+                    !component.Contains(edge.SourceNodeId))
+                .Select(edge => nodeById[edge.SourceNodeId]);
+            if (outsideBarrierSources.Any(node =>
+                    node.NodeId != InputNodeId || node.Kind != AgentflowNodeKind.Input))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    internal static IReadOnlyList<HashSet<string>> FindCyclicComponents(
+        IReadOnlyCollection<string> nodeIds,
+        IReadOnlyList<AgentflowEdge> edges)
+    {
+        var adjacency = nodeIds.ToDictionary(
+            nodeId => nodeId,
+            _ => new List<string>(),
+            StringComparer.Ordinal);
 
         foreach (var edge in edges)
         {
             adjacency[edge.SourceNodeId].Add(edge.TargetNodeId);
         }
 
-        bool Visit(string nodeId)
+        var nextIndex = 0;
+        var indexes = new Dictionary<string, int>(StringComparer.Ordinal);
+        var lowLinks = new Dictionary<string, int>(StringComparer.Ordinal);
+        var stack = new Stack<string>();
+        var onStack = new HashSet<string>(StringComparer.Ordinal);
+        var cyclicComponents = new List<HashSet<string>>();
+
+        void Visit(string nodeId)
         {
-            if (visiting.Contains(nodeId))
-            {
-                return true;
-            }
+            indexes[nodeId] = nextIndex;
+            lowLinks[nodeId] = nextIndex;
+            nextIndex++;
+            stack.Push(nodeId);
+            onStack.Add(nodeId);
 
-            if (visited.Contains(nodeId))
-            {
-                return false;
-            }
-
-            visiting.Add(nodeId);
             foreach (var next in adjacency[nodeId])
             {
-                if (Visit(next))
+                if (!indexes.ContainsKey(next))
                 {
-                    return true;
+                    Visit(next);
+                    lowLinks[nodeId] = Math.Min(lowLinks[nodeId], lowLinks[next]);
+                }
+                else if (onStack.Contains(next))
+                {
+                    lowLinks[nodeId] = Math.Min(lowLinks[nodeId], indexes[next]);
                 }
             }
 
-            visiting.Remove(nodeId);
-            visited.Add(nodeId);
-            return false;
+            if (lowLinks[nodeId] != indexes[nodeId])
+            {
+                return;
+            }
+
+            var component = new HashSet<string>(StringComparer.Ordinal);
+            string current;
+            do
+            {
+                current = stack.Pop();
+                onStack.Remove(current);
+                component.Add(current);
+            }
+            while (current != nodeId);
+
+            if (component.Count > 1 || adjacency[nodeId].Contains(nodeId, StringComparer.Ordinal))
+            {
+                cyclicComponents.Add(component);
+            }
         }
 
-        return nodeIds.Any(Visit);
+        foreach (var nodeId in nodeIds)
+        {
+            if (!indexes.ContainsKey(nodeId))
+            {
+                Visit(nodeId);
+            }
+        }
+
+        return cyclicComponents;
     }
 }

@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 
+using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Tools;
@@ -279,7 +280,7 @@ public sealed class AgwAgentExtensionsTests
     }
 
     [Fact]
-    public async Task AsAgwAgent_ApprovalContinuation_KeepsFunctionResultNextToFunctionCall()
+    public async Task AsAgwAgent_ApprovalContinuation_WhenToolFails_KeepsFunctionResultNextToFunctionCall()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -328,7 +329,7 @@ public sealed class AgwAgentExtensionsTests
             TimeProvider.System,
             new JsonSerializerOptions(JsonSerializerDefaults.Web));
         var function = AIFunctionFactory.Create(
-            (Func<string>)(() => "written"),
+            (Func<string>)(() => throw new ArgumentException("old_string not found")),
             new AIFunctionFactoryOptions { Name = "web_search" });
         var client = new FunctionCallingStubChatClient();
         var agent = client.AsAgwAgent(
@@ -339,7 +340,11 @@ public sealed class AgwAgentExtensionsTests
             NullLoggerFactory.Instance,
             serviceProvider);
         var session = await agent.CreateSessionAsync(cancellationToken);
-        historyProvider.InitializeSessionState(session, "context-1", projectId);
+        historyProvider.InitializeSessionState(
+            session,
+            "context-1",
+            projectId,
+            "agentflow:flow-1:node:node-1");
         var firstUpdates = new List<AgentResponseUpdate>();
 
         await foreach (var update in agent.RunStreamingAsync(
@@ -352,8 +357,22 @@ public sealed class AgwAgentExtensionsTests
 
         var approvalRequest = Assert.Single(
             firstUpdates.SelectMany(update => update.Contents).OfType<ToolApprovalRequestContent>());
+        var serializedSession = await agent.SerializeSessionAsync(
+            session,
+            cancellationToken: cancellationToken);
+        session = await agent.DeserializeSessionAsync(
+            serializedSession,
+            cancellationToken: cancellationToken);
+        historyProvider.InitializeSessionState(
+            session,
+            "context-1",
+            projectId,
+            "agentflow:flow-1:node:node-1");
+        var continuation = AgentflowMessageTransforms.ApplyInstructions(
+            [new ChatMessage(ChatRole.User, [approvalRequest.CreateAlwaysApproveToolResponse()])],
+            "Follow the node instructions.");
         await foreach (var _ in agent.RunStreamingAsync(
-                           [new ChatMessage(ChatRole.User, [approvalRequest.CreateResponse(approved: true)])],
+                           continuation,
                            session,
                            cancellationToken: cancellationToken))
         {

@@ -26,9 +26,18 @@ test("Desktop shell keeps every Chat action on the dedicated route", async () =>
   const source = await readFile(APP_SHELL_URL, "utf8");
 
   assert.match(source, /buildChatHref\("\/desktop\/chat"/);
-  assert.match(source, /href="\/desktop\/chat\/"/);
+  assert.match(source, /href=\{chatReturnHref\}/);
   assert.doesNotMatch(source, /href="\/chat\/"/);
   assert.doesNotMatch(source, /router\.(?:push|replace)\(`\/chat/);
+});
+
+test("Desktop shell carries the current Chat route through Settings navigation", async () => {
+  const source = await readFile(APP_SHELL_URL, "utf8");
+
+  assert.match(source, /contextId: searchParams\.get\("contextId"\)/);
+  assert.match(source, /buildSettingsHref\("\/dashboard\/", chatReturnHref\)/);
+  assert.match(source, /getDesktopChatReturnHref\(searchParams\.get\("returnTo"\)\)/);
+  assert.match(source, /buildSettingsHref\(item\.href, chatReturnHref\)/);
 });
 
 test("Desktop shell presents active executions as background conversations", async () => {

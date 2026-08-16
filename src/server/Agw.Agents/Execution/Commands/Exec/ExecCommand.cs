@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 
+using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data;
@@ -31,4 +32,7 @@ public class ExecCommand : AgentRunCommand
     public bool Stream { get; set; } = true;
 
     public AgwUserInput Input { get; set; }
+
+    [JsonIgnore]
+    internal AgentflowCheckpointSnapshot? ResumeCheckpoint { get; set; }
 }

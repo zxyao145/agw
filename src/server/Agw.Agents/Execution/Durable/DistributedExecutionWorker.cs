@@ -17,6 +17,7 @@ namespace Agw.Agents.Execution.Durable;
 /// </summary>
 internal sealed class DistributedExecutionWorker : BackgroundService
 {
+    private static readonly TimeSpan InterruptPollingInterval = TimeSpan.FromMilliseconds(250);
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IApplicationLock _applicationLock;
     private readonly IExecutionEventStream _eventStream;
@@ -200,17 +201,30 @@ internal sealed class DistributedExecutionWorker : BackgroundService
                 return;
             }
 
+            using var segmentCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken);
+            using var monitorCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken);
+            var interruptMonitor = MonitorInterruptAsync(
+                executionId,
+                segmentCancellation,
+                monitorCancellation.Token);
             DurableExecutionSegmentResult result;
             try
             {
                 result = await executor.RunAsync(
                         snapshot.CreateSegmentInput(),
-                        cancellationToken)
+                        segmentCancellation.Token)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 // 关闭中的 Server 不写失败终态；锁释放后由其他 Server 根据 Running 快照重放该分段。
+                return;
+            }
+            catch (OperationCanceledException) when (segmentCancellation.IsCancellationRequested)
+            {
+                // 中断状态已经先写入 PostgreSQL；协作式取消只负责尽快停止旧分支并释放锁。
                 return;
             }
             catch (Exception exception)
@@ -228,6 +242,24 @@ internal sealed class DistributedExecutionWorker : BackgroundService
                     ErrorMessage = exception.Message
                 };
             }
+            finally
+            {
+                await monitorCancellation.CancelAsync().ConfigureAwait(false);
+                try
+                {
+                    await interruptMonitor.ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                }
+                catch (Exception exception)
+                {
+                    _logger.LogWarning(
+                        exception,
+                        "Failed to monitor interrupt state for distributed execution {ExecutionId}.",
+                        executionId);
+                }
+            }
 
             var persisted = await store.SaveSegmentResultAsync(result, cancellationToken)
                 .ConfigureAwait(false);
@@ -240,6 +272,29 @@ internal sealed class DistributedExecutionWorker : BackgroundService
                         cancellationToken)
                     .ConfigureAwait(false);
             }
+        }
+    }
+
+    private async Task MonitorInterruptAsync(
+        Guid executionId,
+        CancellationTokenSource segmentCancellation,
+        CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            await Task.Delay(InterruptPollingInterval, _timeProvider, cancellationToken)
+                .ConfigureAwait(false);
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
+            var snapshot = await store.GetAsync(executionId, cancellationToken)
+                .ConfigureAwait(false);
+            if (snapshot.Status != DurableExecutionStatus.Interrupted)
+            {
+                continue;
+            }
+
+            await segmentCancellation.CancelAsync().ConfigureAwait(false);
+            return;
         }
     }
 

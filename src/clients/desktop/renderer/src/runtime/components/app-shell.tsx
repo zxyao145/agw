@@ -50,6 +50,7 @@ import { buildChatHref } from "@agw/chat";
 import { DEFAULT_PROJECT_ID, normalizeProjectTabs } from "@agw/projects";
 import { cn } from "@agw/components";
 import { useDesktopRuntime } from "../runtime-provider";
+import { buildSettingsHref, getDesktopChatReturnHref } from "./app-shell-routing";
 import { DesktopProjectPicker, type DesktopProjectOption } from "./project-picker";
 
 type ProjectSummary = DesktopProjectOption;
@@ -138,6 +139,11 @@ function ChatShell({ children }: { children: React.ReactNode }) {
   const activity = useExecutionActivity();
   const [serverPickerOpen, setServerPickerOpen] = React.useState(false);
   const activeProjectId = searchParams.get("projectId") ?? DEFAULT_PROJECT_ID;
+  const chatReturnHref = buildChatHref("/desktop/chat", {
+    projectId: activeProjectId,
+    contextId: searchParams.get("contextId"),
+  });
+  const settingsHref = buildSettingsHref("/dashboard/", chatReturnHref);
   const serverId = desktop.activeProfile?.id ?? "browser";
   const runtimeSettings = desktop.runtimeState?.settings;
   const serverProfiles = runtimeSettings?.profiles ?? [];
@@ -381,7 +387,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
           <ThemeButton />
         </span>
         <Link
-          href="/dashboard/"
+          href={settingsHref}
           className="agw-titlebar-button agw-titlebar-control"
           aria-label="Settings"
         >
@@ -395,8 +401,10 @@ function ChatShell({ children }: { children: React.ReactNode }) {
 
 function SettingsShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const desktop = useDesktopRuntime();
   const platform = desktop.runtimeState?.platform ?? "browser";
+  const chatReturnHref = getDesktopChatReturnHref(searchParams.get("returnTo"));
   const [hash, setHash] = React.useState("");
   React.useEffect(() => {
     const updateHash = () => setHash(window.location.hash);
@@ -407,7 +415,7 @@ function SettingsShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="agw-app-shell">
       <header className={cn("agw-titlebar agw-settings-titlebar", `platform-${platform}`)}>
-        <Link href="/desktop/chat/" className="agw-back-button agw-titlebar-control ml-4">
+        <Link href={chatReturnHref} className="agw-back-button agw-titlebar-control ml-4">
           <ArrowLeft />
           <span>Back to chat</span>
         </Link>
@@ -435,7 +443,11 @@ function SettingsShell({ children }: { children: React.ReactNode }) {
                     : pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
                 const Icon = item.icon;
                 return (
-                  <Link key={item.href} href={item.href} className={cn(active && "is-active")}>
+                  <Link
+                    key={item.href}
+                    href={buildSettingsHref(item.href, chatReturnHref)}
+                    className={cn(active && "is-active")}
+                  >
                     <Icon />
                     <span>{item.label}</span>
                   </Link>

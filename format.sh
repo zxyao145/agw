@@ -9,7 +9,7 @@ files=$({
 
 if [ -n "$files" ]; then
     printf 'C# files:\n%s\n' "$files"
-    dotnet format --verify-no-changes --include $files
+    dotnet format --include $files
 fi
 
 printf '\n\n----------------------\n\n'

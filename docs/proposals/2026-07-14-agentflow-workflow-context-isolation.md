@@ -15,11 +15,11 @@ Messages with role 'tool' must be a response to a preceding message with 'tool_c
 
 本方案将上下文拆成三个层次：
 
-1. **Workflow 业务上下文**：整个 Workflow 继续共享一个 `ProjectContext`。
+1. **Workflow 业务上下文**：整个 Workflow 继续共享一个 `ProjectConversation`（由 `projectId + contextId` 标识）。
 2. **节点模型历史**：每个 Agentflow 节点中的 Agent 实例使用独立的 `historyScope`。
 3. **节点间交接消息**：只传递文本、数据和 URI 等可移植内容，不传递其他节点的工具协议状态。
 
-同时，方案保留同一节点内的外部工具调用续接能力，并在读取旧历史时过滤孤立的 `FunctionResultContent`。整个改造复用 `TaskRecord.Metadata`，不新增表或字段，不需要 EF Core migration。
+同时，方案保留同一节点内的外部工具调用续接能力，并在读取旧历史时过滤孤立的 `FunctionResultContent`。整个改造复用 `ProjectConversationChatHistory.Metadata`，不新增表或字段，不需要 EF Core migration。
 
 ## 1. 背景与问题
 
@@ -31,7 +31,7 @@ Agentflow 执行时，`AgentflowRuntimeService` 会解析或创建一组：
 projectId + contextId + taskId
 ```
 
-其中 `projectId/contextId` 被写入 Agent 的 `AgentSession`，`EfCoreChatHistoryProvider` 再根据这两个值查找 `ProjectContext` 和对应的全部 `TaskRecord`。这套设计用于单 Agent 对话是成立的，因为同一个 context 下通常只有一条模型历史。
+其中 `projectId/contextId` 被写入 Agent 的 `AgentSession`，`EfCoreChatHistoryProvider` 再根据这两个值查找 `ProjectConversation` 和对应的全部 `ProjectConversationChatHistory`。这套设计用于单 Agent 对话是成立的，因为同一个 context 下通常只有一条模型历史。
 
 问题出现在多 Agent Workflow：所有节点都被初始化为同一个 `projectId/contextId`，历史提供器也没有节点维度，因此 Node A、Node B 和 Block 内部参与者加载的是同一批模型消息。
 
@@ -40,7 +40,7 @@ flowchart LR
     U["用户输入"] --> W["Workflow"]
     W --> A["Node A / Agent A"]
     W --> B["Node B / Agent B"]
-    A --> H["同一个 ProjectContext 历史"]
+    A --> H["同一个 ProjectConversation 历史"]
     B --> H
     H --> A
     H --> B
@@ -82,21 +82,21 @@ tool: FunctionResultContent(callId = call-1)  // 前面没有对应的 FunctionC
 
 ### 2.1 目标
 
-- 同一次 Agentflow 执行及其后续轮次继续共享一个 `ProjectContext`。
+- 同一次 Agentflow 执行及其后续轮次继续共享一个 `ProjectConversation`。
 - 每个持久化 Agentflow 节点拥有独立、稳定的模型历史。
 - Node A 的工具协议不能进入 Node B 的模型上下文。
 - Node A 的文本、数据和 URI 输出可以作为普通输入交给 Node B。
 - 外部工具结果返回原节点时，仍以合法的 `tool` 消息继续同一次工具调用。
 - 旧数据中的孤立工具结果不能再破坏后续模型请求。
 - 普通单 Agent 对话保持原来的无作用域历史行为。
-- 不增加数据库迁移，不破坏已有 `TaskRecord.Metadata` 内容。
+- 不增加数据库迁移，不破坏已有 `ProjectConversationChatHistory.Metadata` 内容。
 
 ### 2.2 非目标
 
-- 不把每个节点拆成独立 `ProjectContext`。
+- 不把每个节点拆成独立 `ProjectConversation`。
 - 不尝试让不同 Agent 共享对方的完整推理过程或工具调用栈。
 - 不改变 Workflow 图的边、Fan-out、Fan-in、Human Gate 或 Output 语义。
-- 不迁移或重写历史 `TaskRecord`。
+- 不迁移或重写历史 `ProjectConversationChatHistory`。
 - 不把 `historyScope` 暴露为用户配置项。
 
 ## 3. 核心判断：共享 Workflow Context，隔离 Agent Context
@@ -105,13 +105,13 @@ tool: FunctionResultContent(callId = call-1)  // 前面没有对应的 FunctionC
 
 | 层次                  | 作用                                    | 共享范围            | 当前载体                               |
 | --------------------- | --------------------------------------- | ------------------- | -------------------------------------- |
-| Workflow 业务上下文   | 任务归属、完整对话、审计、UI 历史、追踪 | 整个 Workflow       | `ProjectContext(projectId, contextId)` |
+| Workflow 业务上下文   | 任务归属、完整对话、审计、UI 历史、追踪 | 整个 Workflow       | `ProjectConversation(projectId, contextId)` |
 | Agent 节点模型历史    | 给某个节点下一轮推理使用的消息          | 单个 Agentflow 节点 | `historyScope` + `AgentSession`        |
 | Workflow 运行时上下文 | MAF 执行器之间的调度和消息传递          | 单次运行            | `IWorkflowContext` / Workflow runtime  |
 
 本方案的原则可以压缩成一句话：
 
-> `ProjectContext` 负责“这是谁的任务”，`historyScope` 负责“这个节点见过什么”，Workflow 边负责“节点之间这次要传什么”。
+> `ProjectConversation` 负责“这是谁的任务”，`historyScope` 负责“这个节点见过什么”，Workflow 边负责“节点之间这次要传什么”。
 
 准确地说，隔离粒度是**持久化节点中的 Agent 实例**，而不是 Agent 定义本身。同一个 Agent 定义如果被放进两个不同节点，会得到两份历史。这样可以避免复用定义时出现隐式共享状态，也更符合 Workflow 图的执行语义。
 
@@ -136,9 +136,9 @@ flowchart TB
 
     SA --> P["EfCoreChatHistoryProvider"]
     SB --> P
-    P --> PC["共享 ProjectContext"]
-    P --> TRA["TaskRecord<br/>Metadata.historyScope = node-a"]
-    P --> TRB["TaskRecord<br/>Metadata.historyScope = node-b"]
+    P --> PC["共享 ProjectConversation"]
+    P --> TRA["ProjectConversationChatHistory<br/>Metadata.historyScope = node-a"]
+    P --> TRB["ProjectConversationChatHistory<br/>Metadata.historyScope = node-b"]
 ```
 
 这个结构保留了一份完整的 Workflow 业务记录，但模型读取历史时只取自己的分区。节点之间的数据传递不依赖“偷看共享历史”，而是明确经过 Workflow 边和可移植消息转换。
@@ -187,7 +187,7 @@ Block 参与者显式传入 `historyNodeId: participantNode.NodeId`。嵌套 Wor
 
 ### 5.3 Session State 扩展
 
-`IProviderSessionState` 保留原来的无作用域初始化方法，并增加强制实现的重载：
+`IProviderSessionState` 保留原来的无作用域初始化方法，并要求 Provider 实现带 `historyScope` 的重载：
 
 ```csharp
 void InitializeSessionState(
@@ -197,24 +197,25 @@ void InitializeSessionState(
     string historyScope);
 ```
 
-没有采用带默认实现的接口方法。原因是静默退回无作用域历史会让某个 Provider 看似支持 Agentflow，实际仍加载整个 context，问题很难从编译期发现。
+`nodeName` 后来作为兼容重载加入：默认实现会回落到上述 scoped 方法，`EfCoreChatHistoryProvider` 则同时保存节点名称。只有显示标签可以回落；`historyScope` 本身不能静默退回无作用域历史，否则某个 Provider 会重新加载整个 context。`NodeName` 只影响响应消息归属，不改变历史分区；完整规则见 [Agentflow 指南](../6.Agentflow.md)。
 
-`EfCoreChatHistoryProvider.State` 对应增加可空的 `HistoryScope`：
+`EfCoreChatHistoryProvider.State` 对应保存可空的 `HistoryScope` 和 `NodeName`：
 
 ```text
 State
 ├── ProjectId
 ├── ContextId
-└── HistoryScope?
+├── HistoryScope?
+└── NodeName?
 ```
 
 普通 Agent 仍使用 `HistoryScope = null`。Agentflow 节点在运行前由 `AgentflowAgentSessionScope.Initialize` 写入非空作用域。
 
 ## 6. 持久化模型
 
-### 6.1 复用 TaskRecord.Metadata
+### 6.1 复用 ProjectConversationChatHistory.Metadata
 
-历史作用域写入现有 `TaskRecord.Metadata`：
+历史作用域写入现有 `ProjectConversationChatHistory.Metadata`：
 
 ```json
 {
@@ -232,7 +233,7 @@ State
 }
 ```
 
-这样做的直接收益是无需修改 `TaskRecord` 表结构。SQLite 会按已有转换存储 JSON 文本，PostgreSQL 使用现有 `jsonb` 映射。
+这样做的直接收益是无需修改 `ProjectConversationChatHistory` 表结构。SQLite 会按已有转换存储 JSON 文本，PostgreSQL 使用现有 `jsonb` 映射。
 
 ### 6.2 写入规则
 
@@ -245,7 +246,7 @@ State
 | Workflow-as-Agent 外层节点 | 写入外层 Agentflow node scope        |
 | 嵌套 Workflow 内部节点     | 写入嵌套 Agentflow 自己的 node scope |
 
-所有记录仍指向同一个 `ProjectContextId`，并继续使用全局 `ConversationSequence` 排序。因此 UI、任务查询和审计可以看到完整的跨节点时间线。
+所有记录仍通过 `ConversationId` 指向同一个 `ProjectConversation`，并继续使用全局 `ConversationSequence` 排序。因此 UI、任务查询和审计可以看到完整的跨节点时间线。
 
 ### 6.3 读取规则
 
@@ -282,7 +283,7 @@ sequenceDiagram
     participant Node as NodeScopedAgent
     participant Session as AgentSession
     participant History as EfCoreChatHistoryProvider
-    participant DB as ProjectContext / TaskRecord
+    participant DB as ProjectConversation / ChatHistory
 
     Client->>Runtime: Execute(agentflowId, projectId, contextId)
     Runtime->>Compiler: Compile(flow, shared session scope)
@@ -291,12 +292,12 @@ sequenceDiagram
     Node->>Session: Create or reuse session
     Node->>Session: Initialize(projectId, contextId, historyScope)
     Node->>History: Run inner agent with scoped session
-    History->>DB: Load shared ProjectContext
-    History->>DB: Load TaskRecords
+    History->>DB: Load shared ProjectConversation
+    History->>DB: Load ProjectConversationChatHistory
     History->>History: Keep exact matching historyScope
     History-->>Node: Private node history
     Node->>History: Store request + response
-    History->>DB: Append TaskRecords with historyScope metadata
+    History->>DB: Append chat histories with historyScope metadata
 ```
 
 ### 7.2 历史写入链路
@@ -304,9 +305,9 @@ sequenceDiagram
 `StoreChatHistoryAsync` 会把当前请求消息和响应消息合并，然后：
 
 1. 从 Session State 读取 `ProjectId`、`ContextId` 和 `HistoryScope`。
-2. 查找或创建共享 `ProjectContext`。
-3. 计算该 `ProjectContext` 下的下一个全局 `ConversationSequence`。
-4. 为每条消息创建 `TaskRecord`。
+2. 查找或创建共享 `ProjectConversation`。
+3. 计算该 `ProjectConversation` 下的下一个全局 `ConversationSequence`。
+4. 为每条消息创建 `ProjectConversationChatHistory`。
 5. 保留原 metadata，并追加 `historyScope`。
 6. 一次性保存。
 
@@ -317,8 +318,8 @@ sequenceDiagram
 `ProvideChatHistoryAsync` 的处理顺序如下：
 
 1. 从 `AgentSession` 读取 Provider State。
-2. 根据 `projectId/contextId` 定位共享 `ProjectContext`。
-3. 读取具有 `ConversationPayload` 的 `TaskRecord`。
+2. 根据 `projectId/contextId` 定位共享 `ProjectConversation`。
+3. 读取具有 `ConversationPayload` 的 `ProjectConversationChatHistory`。
 4. 只保留作用域与当前 Session 完全相同的记录。
 5. 按 `ConversationSequence`、`CreateTime`、`Id` 排序并反序列化。
 6. 排除只用于 Workflow 最终展示的 `type=result` 消息。
@@ -407,7 +408,7 @@ sequenceDiagram
 
 部署前的 Agentflow 记录没有 `historyScope`。新节点使用非空 scope，因此不会加载这些无作用域记录。实际效果是：
 
-- 旧记录仍在同一个 `ProjectContext` 下，Web 历史、任务查询和审计数据不丢失。
+- 旧记录仍在同一个 `ProjectConversation` 下，Web 历史、任务查询和审计数据不丢失。
 - 新 Agentflow 节点从一份干净的模型历史开始。
 - 不需要猜测旧记录属于哪个节点，也不需要做高风险的数据回填。
 
@@ -448,9 +449,9 @@ sequenceDiagram
 
 本次改造覆盖以下行为：
 
-1. **共享 ProjectContext、隔离历史**：Node A、Node B 和普通无作用域会话写入同一 `ProjectContext`，但各自只能读到自己的消息。
+1. **共享 ProjectConversation、隔离历史**：Node A、Node B 和普通无作用域会话写入同一 `ProjectConversation`，但各自只能读到自己的消息。
 
-2. **作用域正确持久化**：`TaskRecord.Metadata.historyScope` 按节点写入，不覆盖已有 target metadata。
+2. **作用域正确持久化**：`ProjectConversationChatHistory.Metadata.historyScope` 按节点写入，不覆盖已有 target metadata。
 
 3. **跨节点只转发可移植内容**：Node A 同时产生 FunctionCall、FunctionResult 和最终文本时，Node B 只收到被重标记为 user 的最终可移植内容。
 
@@ -467,12 +468,12 @@ sequenceDiagram
 - [`AgentflowWorkflowCompilerTests.cs`](../../tests/Agw.Agents.Tests/AgentflowWorkflowCompilerTests.cs)
 - [`EfCoreChatHistoryProviderTests.cs`](../../tests/Agw.Projects.Tests/EfCoreChatHistoryProviderTests.cs)
 
-实施完成时的验证结果：
+当前实现可通过以下命令重复验证：
 
-```text
-Agw.Agents.Tests:   223 passed
-Agw.Projects.Tests: 138 passed
-Agw.slnx:           499 passed, 0 failed
+```bash
+dotnet test tests/Agw.Agents.Tests/Agw.Agents.Tests.csproj
+dotnet test tests/Agw.Projects.Tests/Agw.Projects.Tests.csproj
+dotnet test Agw.slnx
 ```
 
 ### 12.2 验收标准
@@ -488,7 +489,7 @@ Agw.slnx:           499 passed, 0 failed
 
 ### 13.1 当前取舍
 
-**复用 Metadata，而不是新增列。** 这让改造可以无迁移上线，也避免扩大数据模型。但 `EfCoreChatHistoryProvider` 当前先按 `ProjectContextId` 读取记录，再在内存中按 scope 过滤。context 历史很长时，这不是最优查询路径。
+**复用 Metadata，而不是新增列。** 这让改造可以无迁移上线，也避免扩大数据模型。但 `EfCoreChatHistoryProvider` 当前先按 `ConversationId` 读取记录，再在内存中按 scope 过滤。context 历史很长时，这不是最优查询路径。
 
 **节点 ID 变化会形成新历史。** `historyScope` 以持久化 Node ID 为身份。如果编辑器删除节点再新建，即使绑定同一个 Agent 定义，也会被视为新的 Agent 实例。这是预期语义，但需要在未来的节点复制、导入和重建功能中保持清晰。
 
@@ -496,10 +497,10 @@ Agw.slnx:           499 passed, 0 failed
 
 ### 13.2 可选后续优化
 
-如果单个 ProjectContext 的 `TaskRecord` 数量明显增大，可以考虑：
+如果单个 `ProjectConversation` 的 `ProjectConversationChatHistory` 数量明显增大，可以考虑：
 
 1. 将 `historyScope` 提升为独立可索引列。
-2. 为 `(ProjectContextId, HistoryScope, ConversationSequence)` 建联合索引。
+2. 为 `(ConversationId, HistoryScope, ConversationSequence)` 建联合索引。
 3. 提供后台诊断工具，统计无作用域 Agentflow 记录和孤立工具结果，但不自动迁移。
 4. 在 trace 中增加 history scope 标签，方便排查节点历史装载问题；对外展示时仍隐藏内部 scope 字符串。
 5. 为新的跨节点结构化数据设计独立 DTO，而不是借用模型工具协议。
@@ -508,7 +509,7 @@ Agw.slnx:           499 passed, 0 failed
 
 ## 14. 备选方案与否决原因
 
-### 方案 A：每个节点创建独立 ProjectContext
+### 方案 A：每个节点创建独立 ProjectConversation
 
 隔离最彻底，但会把一次 Workflow 拆成多个 conversation。Web 历史、任务状态、Job 日志和审计查询都需要重新聚合，业务语义也变差，因此不采用。
 
@@ -528,6 +529,6 @@ Agw.slnx:           499 passed, 0 failed
 
 Agentflow 的多个节点共享同一个 Project/Context 是合理的，但共享的应该是 Workflow 的业务事实，而不是每个模型调用的私有协议状态。
 
-本方案通过 `ProjectContext` 共享、`historyScope` 隔离和可移植消息交接三条边界，把“完整任务记录”和“节点可用模型历史”分开。再配合同节点 pending tool call 跟踪与旧历史防御，既修复了 OpenAI tool message 400，也保留了外部工具、Block 和嵌套 Workflow 的正常执行能力。
+本方案通过 `ProjectConversation` 共享、`historyScope` 隔离和可移植消息交接三条边界，把“完整任务记录”和“节点可用模型历史”分开。再配合同节点 pending tool call 跟踪与旧历史防御，既修复了 OpenAI tool message 400，也保留了外部工具、Block 和嵌套 Workflow 的正常执行能力。
 
 简单来说：Workflow 仍是一段完整的对话，但其中每个 Agent 只记得自己应该记得的部分。

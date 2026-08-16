@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 
+using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Turns;
@@ -30,6 +31,7 @@ internal sealed class DurableExecutionCoordinator
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<DurableExecutionCoordinator> _logger;
     private readonly TimeSpan _streamPollingInterval;
+    private readonly AgentflowCheckpointStore? _checkpointStore;
 
     /// <summary>
     /// 初始化 distributed execution 的持久状态、排他锁和消息回放边界。
@@ -40,13 +42,15 @@ internal sealed class DurableExecutionCoordinator
         IExecutionEventStream eventStream,
         TimeProvider timeProvider,
         IOptions<ExecutionRuntimeOptions> options,
-        ILogger<DurableExecutionCoordinator> logger)
+        ILogger<DurableExecutionCoordinator> logger,
+        AgentflowCheckpointStore? checkpointStore = null)
     {
         _scopeFactory = scopeFactory;
         _applicationLock = applicationLock;
         _eventStream = eventStream;
         _timeProvider = timeProvider;
         _logger = logger;
+        _checkpointStore = checkpointStore;
         _streamPollingInterval = TimeSpan.FromMilliseconds(
             options.Value.Distributed.EventStream.ReadPollingMilliseconds);
     }
@@ -164,6 +168,42 @@ internal sealed class DurableExecutionCoordinator
         await using var scope = _scopeFactory.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
         return await store.RequestInterruptAsync(executionId, userName, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 等待来源 execution 完全释放分布式锁后，原子截断历史并登记新的恢复分支。
+    /// </summary>
+    public async Task ResumeCheckpointAsync(
+        Guid occurrenceId,
+        Guid resumeExecutionId,
+        Guid projectId,
+        string contextId,
+        Guid agentflowId,
+        string userName,
+        CancellationToken cancellationToken)
+    {
+        var checkpointStore = _checkpointStore
+            ?? throw new AgwException(
+                ErrorCodes.DurableExecutionUnavailable,
+                "Agentflow checkpoint services are not configured.");
+        var sourceExecutionId = await checkpointStore
+            .GetSourceExecutionIdAsync(occurrenceId, userName, cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
+
+        await using var executionLock = await _applicationLock.AcquireAsync(
+                DurableExecutionLock.GetResourceName(sourceExecutionId),
+                cancellationToken)
+            .ConfigureAwait(false);
+        await checkpointStore.PrepareDistributedResumeAsync(
+                occurrenceId,
+                resumeExecutionId,
+                projectId,
+                contextId,
+                agentflowId,
+                userName,
+                cancellationToken)
             .ConfigureAwait(false);
     }
 

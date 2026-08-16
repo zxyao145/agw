@@ -1,3 +1,5 @@
+using Agw.Agents.Execution.Agentflows;
+using Agw.Agents.Execution.Commands.Checkpoint;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.Commands.Setting;
@@ -10,6 +12,7 @@ using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Utils;
 
 using Microsoft.Extensions.AI;
 
@@ -28,11 +31,13 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     private readonly ITaskAppService _taskAppService;
     private readonly IProjectAppService _projectAppService;
     private readonly DurableExecutionSession? _durableSession;
+    private readonly AgentflowCheckpointStore? _checkpointStore;
     private RuntimeBase? _runtime;
     private TaskProjection? _resolvedTask;
     private string? _workspace;
     private ExecutionTarget? _target;
     private PendingModeChange? _pendingModeChange;
+    private Guid? _lastResumeExecutionId;
     private volatile bool _waitingForHuman;
 
     internal ExecutionConnectionContext(
@@ -42,7 +47,8 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         IRuntimeFactory runtimeFactory,
         ITaskAppService taskAppService,
         IProjectAppService projectAppService,
-        DurableExecutionSession? durableSession = null)
+        DurableExecutionSession? durableSession = null,
+        AgentflowCheckpointStore? checkpointStore = null)
     {
         _userName = userName;
         _messageSink = messageSink;
@@ -51,6 +57,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         _taskAppService = taskAppService;
         _projectAppService = projectAppService;
         _durableSession = durableSession;
+        _checkpointStore = checkpointStore;
     }
 
     public ExecutionSettings? Settings { get; private set; }
@@ -107,6 +114,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         _resolvedTask = null;
         _workspace = null;
         _target = null;
+        _lastResumeExecutionId = null;
     }
 
     public async Task StartTurnAsync(ExecCommand command, CancellationToken cancellationToken)
@@ -137,6 +145,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         {
             throw new AgwException(ErrorCodes.InvalidParam, "ExecCommand.agentId is required.");
         }
+        command.ExecutionId ??= Guid.CreateVersion7();
 
         Settings ??= ExecutionSettings.CreateDefault();
         await ResolveExecutionContextAsync(command, cancellationToken);
@@ -294,6 +303,126 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             await SendSystemMessageAsync(
                 "No matching HumanGate request is waiting for this response.");
         }
+    }
+
+    public async Task<IReadOnlyList<AgentflowCheckpointAvailability>> GetAgentflowCheckpointsAsync(
+        Guid agentflowId,
+        CancellationToken cancellationToken)
+    {
+        if (agentflowId == Guid.Empty)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "agentflowId is required.");
+        }
+
+        var checkpointStore = _checkpointStore
+            ?? throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "Agentflow checkpoint services are not configured.");
+        var settings = Settings
+            ?? throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "Execution settings must be configured before querying checkpoints.");
+        IReadOnlySet<Guid>? inProcessOccurrences = null;
+        if (_durableSession == null
+            && _runtime is AgentflowRuntime runtime
+            && _target is { AgentType: AgentRuntimeType.Agentflow, AgentId: var targetId }
+            && targetId == agentflowId)
+        {
+            inProcessOccurrences = runtime.CheckpointOccurrenceIds;
+        }
+
+        return await checkpointStore.ListAsync(
+                ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId),
+                ContextIdUtil.ResolveContextId(settings.ContextId),
+                agentflowId,
+                _userName,
+                inProcessOccurrences,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task ResumeCheckpointAsync(
+        ResumeCheckpointCommand command,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        if (command.CheckpointOccurrenceId == Guid.Empty
+            || command.ResumeExecutionId == Guid.Empty
+            || command.AgentflowId == Guid.Empty)
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "checkpointOccurrenceId, resumeExecutionId and agentflowId are required.");
+        }
+        if (_lastResumeExecutionId == command.ResumeExecutionId)
+        {
+            return;
+        }
+        if (HasActiveTurn)
+        {
+            throw new AgwException(
+                ErrorCodes.DurableExecutionConflict,
+                "Stop the active Agentflow execution before resuming a checkpoint.");
+        }
+
+        var checkpointStore = _checkpointStore
+            ?? throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "Agentflow checkpoint services are not configured.");
+        var settings = Settings
+            ?? throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "Execution settings must be configured before resuming a checkpoint.");
+        var projectId = ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId);
+        var contextId = ContextIdUtil.ResolveContextId(settings.ContextId);
+
+        if (_durableSession != null)
+        {
+            await _durableSession.ResumeCheckpointAsync(
+                    command.CheckpointOccurrenceId,
+                    command.ResumeExecutionId,
+                    projectId,
+                    contextId,
+                    command.AgentflowId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            _target = new ExecutionTarget(command.AgentflowId, AgentRuntimeType.Agentflow);
+            _lastResumeExecutionId = command.ResumeExecutionId;
+            return;
+        }
+
+        if (_runtime is not AgentflowRuntime runtime
+            || _target is not { AgentType: AgentRuntimeType.Agentflow, AgentId: var targetId }
+            || targetId != command.AgentflowId
+            || !runtime.TryGetCheckpoint(command.CheckpointOccurrenceId, out _))
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "The selected in-process checkpoint is no longer available.");
+        }
+
+        var snapshot = await checkpointStore.PrepareInProcessResumeAsync(
+                command.CheckpointOccurrenceId,
+                projectId,
+                contextId,
+                command.AgentflowId,
+                _userName,
+                cancellationToken)
+            .ConfigureAwait(false);
+        runtime.RemoveCheckpointsAfter(snapshot.BoundarySequence);
+        await StartTurnAsync(
+                new ExecCommand(
+                    AgentRuntimeType.Agentflow,
+                    new AgwUserInput { Contents = [] })
+                {
+                    AgentId = command.AgentflowId,
+                    ExecutionId = command.ResumeExecutionId,
+                    Stream = true,
+                    ResumeCheckpoint = snapshot
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        _lastResumeExecutionId = command.ResumeExecutionId;
     }
 
     public async ValueTask DisposeAsync()

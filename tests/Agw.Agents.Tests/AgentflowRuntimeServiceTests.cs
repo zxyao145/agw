@@ -17,6 +17,7 @@ using Agw.Shared.Exceptions;
 
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
@@ -210,6 +211,148 @@ public class AgentflowRuntimeServiceTests
 
         Assert.Null(mermaid);
         Assert.True(firstAgent.Disposed);
+    }
+
+    [Fact]
+    public async Task ExecuteStreamingAsync_CheckpointMarker_EmitsNamedMafCheckpoint()
+    {
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "checkpoint-flow" };
+        var agentId = Guid.CreateVersion7();
+        var nodes = new[]
+        {
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "agent",
+                Kind = AgentflowNodeKind.Agent,
+                RelateId = agentId,
+            },
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "checkpoint",
+                Kind = AgentflowNodeKind.CheckpointMarker,
+                Name = "Fallback Name",
+                ConfigJson = """{"checkpointName":"Review Ready"}""",
+            },
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "output",
+                Kind = AgentflowNodeKind.Output,
+            },
+        };
+        var edges = new[]
+        {
+            new AgentflowEdge
+            {
+                AgentflowId = agentflow.Id,
+                EdgeId = "agent-checkpoint",
+                SourceNodeId = "agent",
+                TargetNodeId = "checkpoint",
+            },
+            new AgentflowEdge
+            {
+                AgentflowId = agentflow.Id,
+                EdgeId = "checkpoint-output",
+                SourceNodeId = "checkpoint",
+                TargetNodeId = "output",
+            },
+        };
+        var logger = new CapturingLogger<AgentflowRuntimeService>();
+        var service = new AgentflowRuntimeService(
+            logger,
+            new TestRepository<Agentflow>([agentflow], item => item.Id),
+            new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
+            new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
+            new AgentflowDomainService(TimeProvider.System),
+            new StubAgentRuntimeService(agentId),
+            new StubProviderSessionState(),
+            new RecordingSummaryService());
+
+        await foreach (var _ in service.ExecuteStreamingAsync(
+                           agentflow.Id,
+                           "run",
+                           TestContext.Current.CancellationToken,
+                           taskId: Guid.CreateVersion7()))
+        {
+        }
+
+        var checkpoint = Assert.Single(logger.Entries, entry =>
+            Equals(entry.GetProperty("CheckpointName"), "Review Ready"));
+        Assert.Equal("checkpoint", checkpoint.GetProperty("CheckpointNodeId"));
+        Assert.False(string.IsNullOrWhiteSpace(checkpoint.GetProperty("CheckpointId")?.ToString()));
+    }
+
+    [Fact]
+    public async Task ExecuteStreamingAsync_CheckpointAfterToolApproval_EmitsOnce()
+    {
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "checkpoint-approval-flow" };
+        var agentId = Guid.CreateVersion7();
+        var worker = new ApprovalRequestAgent();
+        var nodes = new[]
+        {
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "agent",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Worker",
+                RelateId = agentId,
+            },
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "checkpoint",
+                Kind = AgentflowNodeKind.CheckpointMarker,
+                ConfigJson = """{"checkpointName":"Ready"}""",
+            },
+            new AgentflowNode
+            {
+                AgentflowId = agentflow.Id,
+                NodeId = "output",
+                Kind = AgentflowNodeKind.Output,
+            },
+        };
+        var edges = new[]
+        {
+            new AgentflowEdge
+            {
+                AgentflowId = agentflow.Id,
+                EdgeId = "agent-checkpoint",
+                SourceNodeId = "agent",
+                TargetNodeId = "checkpoint",
+            },
+            new AgentflowEdge
+            {
+                AgentflowId = agentflow.Id,
+                EdgeId = "checkpoint-output",
+                SourceNodeId = "checkpoint",
+                TargetNodeId = "output",
+            },
+        };
+        var logger = new CapturingLogger<AgentflowRuntimeService>();
+        var service = new AgentflowRuntimeService(
+            logger,
+            new TestRepository<Agentflow>([agentflow], item => item.Id),
+            new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
+            new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
+            new AgentflowDomainService(TimeProvider.System),
+            new StubAgentRuntimeService(_ => worker),
+            new StubProviderSessionState(),
+            new RecordingSummaryService());
+
+        await foreach (var _ in service.ExecuteStreamingAsync(
+                           agentflow.Id,
+                           "run",
+                           TestContext.Current.CancellationToken,
+                           taskId: Guid.CreateVersion7(),
+                           humanGateApprovalHandler: new DelayedApprovalHandler("once")))
+        {
+        }
+
+        Assert.Single(logger.Entries, entry =>
+            Equals(entry.GetProperty("CheckpointName"), "Ready"));
     }
 
     [Fact]
@@ -1116,4 +1259,31 @@ public class AgentflowRuntimeServiceTests
         Guid ProjectId,
         string ContextId,
         string? CustomInstructions);
+
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        public List<LogEntry> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            var properties = state as IEnumerable<KeyValuePair<string, object?>> ?? [];
+            Entries.Add(new LogEntry(properties.ToList()));
+        }
+    }
+
+    private sealed record LogEntry(IReadOnlyList<KeyValuePair<string, object?>> Properties)
+    {
+        public object? GetProperty(string name) => Properties
+            .FirstOrDefault(property => string.Equals(property.Key, name, StringComparison.Ordinal))
+            .Value;
+    }
 }

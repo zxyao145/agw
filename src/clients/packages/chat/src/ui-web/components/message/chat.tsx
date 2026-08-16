@@ -7,12 +7,14 @@ import { toast } from "sonner";
 import { apiGet } from "@agw/api";
 import {
   getAgentMode,
+  getAgentflowCheckpointMessage,
   hasPersistedDurableExecution,
   getMessageStreamingScopeId,
   getPendingHumanGate,
   getTurnFinishedStatus,
   isModeControlMessage,
   type AgentMode,
+  type AgentflowCheckpointAvailability,
   type ExecutionReconnectState,
   type PendingHumanGate,
   type PermissionMode,
@@ -100,6 +102,34 @@ function getLatestAgentMode(messages: AiMessage[]): AgentMode {
   return DEFAULT_AGENT_MODE;
 }
 
+function calculateConversationUsage(messages: AiMessage[]): TokenUsage {
+  return messages.reduce((usage, message) => {
+    const messageUsage = getMessageTokenUsage(message);
+    return messageUsage ? addTokenUsage(usage, messageUsage) : usage;
+  }, EMPTY_TOKEN_USAGE);
+}
+
+function truncateAtCheckpoint(
+  messages: AiMessage[],
+  occurrenceId: string,
+  resumedStreamingScopeId: string,
+): AiMessage[] {
+  let boundaryIndex = -1;
+  for (let index = 0; index < messages.length; index += 1) {
+    if (getAgentflowCheckpointMessage(messages[index])?.occurrenceId === occurrenceId) {
+      boundaryIndex = index;
+    }
+  }
+  if (boundaryIndex < 0) return messages;
+
+  return [
+    ...messages.slice(0, boundaryIndex + 1),
+    ...messages
+      .slice(boundaryIndex + 1)
+      .filter((message) => message.streamingScopeId === resumedStreamingScopeId),
+  ];
+}
+
 /**
  * Shared chat container that owns session state, execution, message rendering, and input.
  * 共享聊天容器，拥有会话状态、执行、消息渲染和输入。
@@ -126,6 +156,7 @@ export function Chat({
   const [isTransitioning, setIsTransitioning] = React.useState(false);
   const [reconnectState, setReconnectState] = React.useState<ExecutionReconnectState | null>(null);
   const [messages, setMessages] = React.useState<AiMessage[]>(initialHistory.messages);
+  const messagesRef = React.useRef<AiMessage[]>(initialHistory.messages);
   const [claudeCommands, setClaudeCommands] = React.useState<string[]>(initialHistory.commands);
   const [conversationUsage, setConversationUsage] = React.useState<TokenUsage>(sessionSeed.usage);
   const [contextId, setContextId] = React.useState<string | null>(sessionSeed.contextId);
@@ -137,6 +168,9 @@ export function Chat({
     getLatestAgentMode(sessionSeed.messages),
   );
   const [pendingHumanGate, setPendingHumanGate] = React.useState<PendingHumanGate | null>(null);
+  const [checkpointAvailability, setCheckpointAvailability] = React.useState<
+    AgentflowCheckpointAvailability[]
+  >([]);
   const contextIdRef = React.useRef<string | null>(sessionSeed.contextId);
   const announcedContextIdRef = React.useRef<string | null>(sessionSeed.contextId);
   const messagesEndRef = React.useRef<HTMLDivElement>(null!);
@@ -166,7 +200,11 @@ export function Chat({
           return;
         }
 
-        setMessages((current) => mergeStreamingMessages(current, incomingMessages));
+        setMessages((current) => {
+          const nextMessages = mergeStreamingMessages(current, incomingMessages);
+          messagesRef.current = nextMessages;
+          return nextMessages;
+        });
       },
     );
   }
@@ -202,6 +240,28 @@ export function Chat({
     [agentSuggestionsQuery.data, claudeCommands],
   );
   const visibleMessages = React.useMemo(() => stripUsageContents(messages), [messages]);
+  const latestAvailableCheckpoint = React.useMemo(
+    () =>
+      checkpointAvailability
+        .filter((checkpoint) => checkpoint.available)
+        .reduce<AgentflowCheckpointAvailability | null>(
+          (latest, checkpoint) =>
+            !latest || checkpoint.boundarySequence > latest.boundarySequence ? checkpoint : latest,
+          null,
+        ),
+    [checkpointAvailability],
+  );
+  const checkpointResumeDisabled = isExecuting || isTransitioning || reconnectState !== null;
+  const pendingHumanInteraction =
+    pendingHumanGate?.requestType === "human-interaction"
+      ? { ...pendingHumanGate, requestType: "human-interaction" as const }
+      : null;
+  const floatingHumanGate =
+    pendingHumanGate &&
+    (!pendingHumanInteraction ||
+      !hasMatchingHumanInteractionCall(visibleMessages, pendingHumanInteraction))
+      ? pendingHumanGate
+      : null;
 
   const notifyExecutionError = React.useCallback(
     (error: unknown) => {
@@ -264,6 +324,7 @@ export function Chat({
     previousTargetKeyRef.current = targetKey;
     detachExecution();
     setPendingHumanGate(null);
+    setCheckpointAvailability([]);
     setClaudeCommands([]);
     confirmedAgentModeRef.current = DEFAULT_AGENT_MODE;
     setAgentMode(DEFAULT_AGENT_MODE);
@@ -273,11 +334,13 @@ export function Chat({
     const preparedHistory = prepareChatHistory(sessionSeed.messages);
     detachExecution();
     setPendingHumanGate(null);
+    setCheckpointAvailability([]);
     autoScrollStateRef.current = {
       shouldAutoScroll: true,
       scrollHeight: 0,
       scrollTop: 0,
     };
+    messagesRef.current = preparedHistory.messages;
     setMessages(preparedHistory.messages);
     setClaudeCommands(preparedHistory.commands);
     setConversationUsage(sessionSeed.usage);
@@ -312,7 +375,22 @@ export function Chat({
       scrollHeight: scrollContainer.scrollHeight,
       scrollTop: scrollContainer.scrollTop,
     };
-  }, [messages]);
+  }, [floatingHumanGate?.requestId, messages]);
+
+  const refreshAgentflowCheckpoints = React.useCallback(
+    async (client: ManagedExecutionHandle, generation: number) => {
+      if (!target || target.type !== "agentflow") {
+        setCheckpointAvailability([]);
+        return;
+      }
+
+      const checkpoints = await client.listAgentflowCheckpoints(target.id);
+      if (generation === executionGenerationRef.current && executionClientRef.current === client) {
+        setCheckpointAvailability(checkpoints);
+      }
+    },
+    [target],
+  );
 
   const applyExecutionMessage = React.useCallback(
     (message: AiMessage, generation: number) => {
@@ -350,6 +428,20 @@ export function Chat({
         setConversationUsage((current) => addTokenUsage(current, messageUsage));
       }
 
+      if (getAgentflowCheckpointMessage(message)) {
+        streamingMessageBatcherRef.current?.flush(generation);
+        const scopedMessage = scopeStreamingMessage(
+          message,
+          activeStreamingScopeRef.current ?? message.messageId,
+        );
+        streamingMessageBatcherRef.current?.enqueue(scopedMessage, generation);
+        const client = executionClientRef.current;
+        if (client) {
+          void refreshAgentflowCheckpoints(client, generation).catch(() => undefined);
+        }
+        return;
+      }
+
       const humanGate = getPendingHumanGate(message);
       if (humanGate) {
         streamingMessageBatcherRef.current?.flush(generation);
@@ -380,6 +472,10 @@ export function Chat({
         setIsExecuting(false);
         setPendingHumanGate(null);
         void onConversationChange?.();
+        const client = executionClientRef.current;
+        if (client) {
+          void refreshAgentflowCheckpoints(client, generation).catch(() => undefined);
+        }
         if (terminalStatus === "failed") {
           notifyExecutionError(new Error("Execution failed"));
         }
@@ -394,7 +490,7 @@ export function Chat({
         streamingMessageBatcherRef.current?.enqueue(scopedMessage, generation);
       }
     },
-    [notifyExecutionError, onConversationChange],
+    [notifyExecutionError, onConversationChange, refreshAgentflowCheckpoints],
   );
 
   React.useEffect(() => {
@@ -450,6 +546,7 @@ export function Chat({
         ) {
           setReconnectState(null);
           setIsExecuting(["running", "waiting-approval", "detached"].includes(client.getStatus()));
+          void refreshAgentflowCheckpoints(client, generation).catch(() => undefined);
         }
       },
     });
@@ -461,7 +558,15 @@ export function Chat({
       if (executionClientRef.current === client) executionClientRef.current = null;
       client.detach();
     };
-  }, [applyExecutionMessage, contextId, executionServerId, notifyExecutionError, projectId]);
+  }, [
+    applyExecutionMessage,
+    contextId,
+    executionServerId,
+    notifyExecutionError,
+    projectId,
+    refreshAgentflowCheckpoints,
+    sessionSeed.revision,
+  ]);
 
   const ensureConfiguredClient = React.useCallback(
     async (
@@ -521,6 +626,7 @@ export function Chat({
                 setIsExecuting(
                   ["running", "waiting-approval", "detached"].includes(attachedClient.getStatus()),
                 );
+                void refreshAgentflowCheckpoints(attachedClient, generation).catch(() => undefined);
               }
             },
           },
@@ -562,8 +668,40 @@ export function Chat({
       notifyExecutionError,
       permissionMode,
       projectId,
+      refreshAgentflowCheckpoints,
     ],
   );
+
+  React.useEffect(() => {
+    if (
+      !projectId ||
+      !contextId ||
+      target?.type !== "agentflow" ||
+      hydratedSessionRevision !== sessionSeed.revision
+    ) {
+      setCheckpointAvailability([]);
+      return;
+    }
+
+    const generation = executionGenerationRef.current;
+    void ensureConfiguredClient(contextId, generation)
+      .then((client) =>
+        client ? refreshAgentflowCheckpoints(client, generation) : Promise.resolve(),
+      )
+      .catch(() => {
+        if (generation === executionGenerationRef.current) {
+          setCheckpointAvailability([]);
+        }
+      });
+  }, [
+    contextId,
+    ensureConfiguredClient,
+    hydratedSessionRevision,
+    projectId,
+    refreshAgentflowCheckpoints,
+    sessionSeed.revision,
+    target?.type,
+  ]);
 
   React.useEffect(() => {
     if (
@@ -667,7 +805,11 @@ export function Chat({
       activeStreamingScopeRef.current = userMessage.messageId;
       const scopedUserMessage = scopeStreamingMessage(userMessage, userMessage.messageId);
       streamingMessageBatcherRef.current?.flush(executionGenerationRef.current);
-      setMessages((current) => [...current, scopedUserMessage]);
+      setMessages((current) => {
+        const nextMessages = [...current, scopedUserMessage];
+        messagesRef.current = nextMessages;
+        return nextMessages;
+      });
       setPendingHumanGate(null);
       setIsExecuting(true);
       const generation = executionGenerationRef.current;
@@ -798,6 +940,92 @@ export function Chat({
     });
   }, [notifyExecutionError]);
 
+  const handleResumeCheckpoint = React.useCallback(
+    (occurrenceId?: string) => {
+      if (!projectId || !contextId || target?.type !== "agentflow") {
+        return;
+      }
+      if (checkpointResumeDisabled) {
+        return;
+      }
+
+      const selectedCheckpoint = occurrenceId
+        ? checkpointAvailability.find(
+            (checkpoint) => checkpoint.occurrenceId === occurrenceId && checkpoint.available,
+          )
+        : latestAvailableCheckpoint;
+      if (!selectedCheckpoint) {
+        toast.error("No resumable checkpoint is available");
+        return;
+      }
+
+      const generation = executionGenerationRef.current;
+      const resumeExecutionId = globalThis.crypto.randomUUID();
+      streamingMessageBatcherRef.current?.flush(generation);
+      activeStreamingScopeRef.current = resumeExecutionId;
+      setPendingHumanGate(null);
+      setIsTransitioning(true);
+
+      void ensureConfiguredClient(contextId, generation)
+        .then(async (client) => {
+          if (!client) {
+            throw new Error("Execution session is no longer available");
+          }
+          await client.resumeCheckpoint({
+            checkpointOccurrenceId: selectedCheckpoint.occurrenceId,
+            agentflowId: target.id,
+            resumeExecutionId,
+          });
+          if (
+            generation !== executionGenerationRef.current ||
+            executionClientRef.current !== client
+          ) {
+            return;
+          }
+
+          const retainedMessages = truncateAtCheckpoint(
+            messagesRef.current,
+            selectedCheckpoint.occurrenceId,
+            resumeExecutionId,
+          );
+          messagesRef.current = retainedMessages;
+          setMessages(retainedMessages);
+          setConversationUsage(calculateConversationUsage(retainedMessages));
+          setCheckpointAvailability((current) =>
+            current.filter(
+              (checkpoint) => checkpoint.boundarySequence <= selectedCheckpoint.boundarySequence,
+            ),
+          );
+          setIsExecuting(true);
+          void onConversationChange?.();
+          void refreshAgentflowCheckpoints(client, generation).catch(() => undefined);
+        })
+        .catch((error) => {
+          if (generation !== executionGenerationRef.current) return;
+          activeStreamingScopeRef.current = null;
+          setIsExecuting(false);
+          notifyExecutionError(error);
+        })
+        .finally(() => {
+          if (generation === executionGenerationRef.current) {
+            setIsTransitioning(false);
+          }
+        });
+    },
+    [
+      checkpointAvailability,
+      checkpointResumeDisabled,
+      contextId,
+      ensureConfiguredClient,
+      latestAvailableCheckpoint,
+      notifyExecutionError,
+      onConversationChange,
+      projectId,
+      refreshAgentflowCheckpoints,
+      target,
+    ],
+  );
+
   const submitHumanGateResponse = React.useCallback(
     (
       approved: boolean,
@@ -847,6 +1075,8 @@ export function Chat({
     const contextToClear = contextId;
     void interruptAndDispose("Conversation cleared.");
     setPendingHumanGate(null);
+    setCheckpointAvailability([]);
+    messagesRef.current = [];
     setMessages([]);
     setClaudeCommands([]);
     setConversationUsage(EMPTY_TOKEN_USAGE);
@@ -890,17 +1120,6 @@ export function Chat({
     );
   }, []);
 
-  const pendingHumanInteraction =
-    pendingHumanGate?.requestType === "human-interaction"
-      ? { ...pendingHumanGate, requestType: "human-interaction" as const }
-      : null;
-  const floatingHumanGate =
-    pendingHumanGate &&
-    (!pendingHumanInteraction ||
-      !hasMatchingHumanInteractionCall(visibleMessages, pendingHumanInteraction))
-      ? pendingHumanGate
-      : null;
-
   return (
     <div className={cn("@container relative h-full min-h-0 w-full overflow-hidden", className)}>
       <div
@@ -923,6 +1142,24 @@ export function Chat({
                 submitHumanGateResponse(true, undefined, "once", responseData)
               }
               onHumanInteractionCancel={() => submitHumanGateResponse(false)}
+              checkpointAvailability={checkpointAvailability}
+              showCheckpointResume={target?.type === "agentflow"}
+              checkpointResumeDisabled={checkpointResumeDisabled}
+              onCheckpointResume={handleResumeCheckpoint}
+              footer={
+                floatingHumanGate ? (
+                  <div className="mx-4">
+                    <HumanGateApproval
+                      request={floatingHumanGate}
+                      permissionMode={permissionMode}
+                      onApprove={(approvalScope, responseText, responseData) =>
+                        submitHumanGateResponse(true, responseText, approvalScope, responseData)
+                      }
+                      onReject={(responseText) => submitHumanGateResponse(false, responseText)}
+                    />
+                  </div>
+                ) : null
+              }
             />
           </div>
 
@@ -936,19 +1173,6 @@ export function Chat({
         className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center"
       >
         <div className="relative min-h-30 min-w-0 max-w-5xl flex-1 bg-linear-to-t from-background from-50% via-background/80 via-70% to-transparent px-6">
-          {/* 用户确认 */}
-          {floatingHumanGate ? (
-            <div className="pointer-events-auto absolute bottom-[calc(100%+0.5rem)] left-2 right-2">
-              <HumanGateApproval
-                request={floatingHumanGate}
-                permissionMode={permissionMode}
-                onApprove={(approvalScope, responseText, responseData) =>
-                  submitHumanGateResponse(true, responseText, approvalScope, responseData)
-                }
-                onReject={(responseText) => submitHumanGateResponse(false, responseText)}
-              />
-            </div>
-          ) : null}
           {/* 输入框 */}
           <ChatInput
             isExecuting={isExecuting}
@@ -960,6 +1184,9 @@ export function Chat({
             onInterrupt={handleInterrupt}
             onClearSession={handleClear}
             onScrollToTop={handleScrollToTop}
+            showResume={target?.type === "agentflow"}
+            canResume={!checkpointResumeDisabled && latestAvailableCheckpoint !== null}
+            onResume={() => handleResumeCheckpoint()}
             projectId={projectId}
             commandSource={commandSource}
             permissionMode={permissionMode}

@@ -140,6 +140,19 @@ function AiMessageView({ message }: { message: AiMessage }) {
   //   title = `${message.role} (${message.author ?? "-"})`;
   // }
 
+  // console.debug(
+  //   "AiMessageComponent isUser",
+  //   isUser,
+  //   "isToolResult",
+  //   isToolResult,
+  //   "IsSideRight",
+  //   IsSideRight,
+  //   "isResult",
+  //   isResult,
+  //   "message",
+  //   JSON.stringify(message),
+  // );
+
   return (
     <div
       className={cn(

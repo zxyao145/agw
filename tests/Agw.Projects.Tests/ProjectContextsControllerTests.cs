@@ -7,6 +7,7 @@ using Agw.Projects.Controllers;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
+using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
 
 using Microsoft.AspNetCore.Mvc;
@@ -330,6 +331,7 @@ public class ProjectContextsControllerTests
         return new ProjectContextAppService(
             new EfRepository<ProjectConversation>(dbContext),
             new EfRepository<ProjectConversationChatHistory>(dbContext),
+            new EfRepository<AgentflowCheckpointRecord>(dbContext),
             new EfRepository<AgentflowTrace>(dbContext),
             new EfRepository<AgentUsage>(dbContext),
             dbContext,

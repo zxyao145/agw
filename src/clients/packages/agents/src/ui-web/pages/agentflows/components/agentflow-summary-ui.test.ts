@@ -33,7 +33,7 @@ test("Agentflow summary model provider is loaded, edited, saved, and preserved",
   assert.match(dialogSource, /modelProviders=\{modelProviders\}/);
   assert.match(
     builderSource,
-    /setSummaryModelProviderId\(editingAgentflow\.summaryModelProviderId \?\? ""\)/,
+    /summaryModelProviderId: editingAgentflow\.summaryModelProviderId \?\? ""/,
   );
   assert.match(builderSource, /summaryModelProviderId: summaryModelProviderId \|\| null/);
   assert.match(typesSource, /summaryModelProviderId: string \| null/);

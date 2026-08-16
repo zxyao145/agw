@@ -80,7 +80,8 @@ public static class TurnPipeline
 
     private static bool IsControlMessage(string? messageType) =>
         messageType?.StartsWith("human-gate-", StringComparison.Ordinal) == true ||
-        messageType?.StartsWith("tool-approval-", StringComparison.Ordinal) == true;
+        messageType?.StartsWith("tool-approval-", StringComparison.Ordinal) == true ||
+        string.Equals(messageType, "agentflow-checkpoint", StringComparison.Ordinal);
 
     private static bool IsFatalError(AgwMessage message) =>
         message.Contents

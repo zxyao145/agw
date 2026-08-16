@@ -68,6 +68,9 @@ public class AgwDbContext : EFContext
     /// </summary>
     public DbSet<DurableExecutionRecord> DurableExecutions => Set<DurableExecutionRecord>();
 
+    public DbSet<AgentflowCheckpointRecord> AgentflowCheckpoints =>
+        Set<AgentflowCheckpointRecord>();
+
     /// <summary>
     /// 获取 PostgreSQL event stream 实现的 append-only execution 消息集合。
     /// </summary>

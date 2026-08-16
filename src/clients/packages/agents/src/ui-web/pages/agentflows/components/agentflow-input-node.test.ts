@@ -120,7 +120,7 @@ test("validateInputGraph rejects incoming edges to input", async () => {
   assert.match(result.message, /Input cannot have incoming edges/);
 });
 
-test("validateInputGraph rejects non-FanOut edges from input", async () => {
+test("validateInputGraph allows non-FanOut routing from input", async () => {
   const { validateInputGraph, INPUT_NODE_ID } = await loadInputNodeRules();
   const nodes = [
     node(INPUT_NODE_ID, AgentflowNodeKind.Input),
@@ -131,8 +131,7 @@ test("validateInputGraph rejects non-FanOut edges from input", async () => {
     edge("bad", INPUT_NODE_ID, "agent", AgentflowEdgeKind.Direct),
   ]);
 
-  assert.equal(result.ok, false);
-  assert.match(result.message, /Input can only use Fan Out edges/);
+  assert.equal(result.ok, true);
 });
 
 test("validateInputGraph rejects visible nodes unreachable from input", async () => {

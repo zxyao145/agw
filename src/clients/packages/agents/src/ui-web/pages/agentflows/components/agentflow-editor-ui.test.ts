@@ -54,3 +54,97 @@ test("Agentflow uses the shared fullscreen Dialog contract", async () => {
   assert.match(source, /<DialogHeader className="shrink-0 border-b px-6 py-2">/);
   assert.doesNotMatch(source, /fixed inset-0 w-screen h-screen/);
 });
+
+test("Agentflow edge inspector exposes deletion and ordered branch controls", async () => {
+  const source = await readFile(BUILDER_URL, "utf8");
+
+  assert.match(source, /aria-label="Delete edge"/);
+  assert.match(source, /onDelete\(edge\.id\)/);
+  assert.match(source, /removeAgentflowEdge\(document\.edges, edgeId\)/);
+  assert.match(source, /onMoveSwitchCase\(edge\.id, -1\)/);
+  assert.match(source, /onMoveSwitchCase\(edge\.id, 1\)/);
+  assert.match(source, /If \/ Else If/);
+  assert.match(source, /Fan-in Barrier/);
+  assert.match(source, /Number\(value\) === AgentflowEdgeKind\.SwitchDefault && hasOtherDefault/);
+});
+
+test("Agentflow agent nodes default to the agent name and keep it editable", async () => {
+  const source = await readFile(BUILDER_URL, "utf8");
+
+  assert.match(
+    source,
+    /if \(agent\) onAddNode\(AgentflowNodeKind\.Agent, agent\.name, agent\.id\)/,
+  );
+  assert.match(
+    source,
+    /<Label>Name<\/Label>[\s\S]*?value=\{node\.data\.title\}[\s\S]*?\{ title: event\.target\.value \},[\s\S]*?\{ group: `node:\$\{node\.id\}:title` \}/,
+  );
+  assert.match(source, /name: node\.data\.title \|\| null/);
+});
+
+test("Agentflow Clear Messages and Checkpoint hide advanced JSON", async () => {
+  const source = await readFile(BUILDER_URL, "utf8");
+
+  assert.match(
+    source,
+    /\[AgentflowNodeKind\.ClearMessages\]: \{[\s\S]*?label: "Clear Messages",[\s\S]*?symbol: "Ø",[\s\S]*?body: "Discard upstream messages and continue with empty input",[\s\S]*?\}/,
+  );
+  assert.match(
+    source,
+    /label="Clear Messages"[\s\S]*?onClick=\{\(\) => onAddNode\(AgentflowNodeKind\.ClearMessages, "Clear Messages"\)\}/,
+  );
+  assert.match(
+    source,
+    /const usesInstructions =[\s\S]*?node\.data\.kind !== AgentflowNodeKind\.ClearMessages/,
+  );
+  assert.match(
+    source,
+    /const usesAdvancedConfig =\s*node\.data\.kind !== AgentflowNodeKind\.ClearMessages &&\s*node\.data\.kind !== AgentflowNodeKind\.CheckpointMarker/,
+  );
+  assert.match(source, /\{usesAdvancedConfig \? \([\s\S]*?<Label>Advanced Config JSON<\/Label>/);
+});
+
+test("Agentflow editor creates one Zustand store per dialog session", async () => {
+  const source = await readFile(DIALOG_URL, "utf8");
+
+  assert.match(source, /if \(!props\.open\) return null/);
+  assert.match(
+    source,
+    /<AgentflowEditorProvider[\s\S]*?initialDocument=\{createAgentflowEditorDocument/,
+  );
+  assert.match(source, /<VisualAgentflowDialogSession \{\.\.\.props\} \/>/);
+});
+
+test("Agentflow editor exposes undo, redo, dirty status, and guarded close actions", async () => {
+  const source = await readFile(DIALOG_URL, "utf8");
+
+  assert.match(source, /aria-label="Undo"/);
+  assert.match(source, /aria-label="Redo"/);
+  assert.match(source, /Unsaved changes/);
+  assert.match(source, /Discard unsaved changes\?/);
+  assert.match(source, /Keep editing/);
+  assert.match(source, /if \(isDirty\) \{[\s\S]*?setDiscardConfirmationOpen\(true\)/);
+});
+
+test("Agentflow editor keyboard history preserves native input undo", async () => {
+  const source = await readFile(DIALOG_URL, "utf8");
+
+  assert.match(source, /event\.metaKey \|\| event\.ctrlKey/);
+  assert.match(source, /event\.ctrlKey && !event\.metaKey && key === "y"/);
+  assert.match(source, /isEditableKeyboardTarget\(event\.target\)/);
+  assert.match(source, /input, textarea, select, \[contenteditable\]/);
+});
+
+test("Agentflow editor groups text and drag history while saving only marks successful writes clean", async () => {
+  const source = await readFile(BUILDER_URL, "utf8");
+
+  assert.match(source, /onBlurCapture=\{commitHistoryGroup\}/);
+  assert.match(source, /onNodeDragStart=\{commitHistoryGroup\}/);
+  assert.match(source, /onNodeDragStop=\{commitHistoryGroup\}/);
+  assert.match(source, /\{ group: "node-position" \}/);
+  assert.match(
+    source,
+    /await api(?:Put|Post)[\s\S]*?markSaved\(\);[\s\S]*?onAgentflowCreated\?\.\(\)/,
+  );
+  assert.match(source, /catch \(error\) \{[\s\S]*?Failed to save agentflow/);
+});

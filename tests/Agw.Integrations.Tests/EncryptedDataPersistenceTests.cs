@@ -271,6 +271,7 @@ public class EncryptedDataPersistenceTests
         Assert.Equal(
             new[]
             {
+                $"{typeof(AgentflowCheckpointRecord).FullName}.{nameof(AgentflowCheckpointRecord.CheckpointJson)}",
                 $"{typeof(McpServer).FullName}.{nameof(McpServer.Headers)}",
                 $"{typeof(DurableExecutionRecord).FullName}.{nameof(DurableExecutionRecord.CheckpointJson)}",
                 $"{typeof(DurableExecutionRecord).FullName}.{nameof(DurableExecutionRecord.ErrorMessage)}",

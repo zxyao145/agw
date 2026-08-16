@@ -15,6 +15,8 @@ The Electron entry points are `src/main/index.ts` and `src/preload/index.ts`; th
 
 Every `server + project + conversation` has an independent SignalR connection. Switching Project tabs detaches the visible subscriber without stopping the task. Project status priority is: waiting for approval, failed, running, completed, idle.
 
+Opening Settings from Chat carries the active Project and optional conversation in a validated `returnTo` query value. Settings navigation preserves that value, so **Back to chat** returns to the same selection; an invalid external or non-Chat target falls back to `/desktop/chat/`.
+
 ## Develop
 
 Install all client workspace dependencies once from the pnpm Workspace root:

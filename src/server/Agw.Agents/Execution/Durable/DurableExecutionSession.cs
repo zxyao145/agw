@@ -219,6 +219,30 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
     }
 
     /// <summary>
+    /// 原子创建 checkpoint 恢复分支，并将当前 connection 附着到新 execution。
+    /// </summary>
+    public async Task ResumeCheckpointAsync(
+        Guid occurrenceId,
+        Guid resumeExecutionId,
+        Guid projectId,
+        string contextId,
+        Guid agentflowId,
+        CancellationToken cancellationToken)
+    {
+        await _coordinator.ResumeCheckpointAsync(
+                occurrenceId,
+                resumeExecutionId,
+                projectId,
+                contextId,
+                agentflowId,
+                _userName,
+                cancellationToken)
+            .ConfigureAwait(false);
+        await AttachAsync(resumeExecutionId, cursor: null, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// 连接断开时只取消消息订阅；执行仍由 distributed worker 持续托管。
     /// </summary>
     public void PrepareForDetach() => _subscriptionCts?.Cancel();

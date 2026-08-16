@@ -56,6 +56,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
     private readonly IConversationHistoryWriter? _conversationHistoryWriter;
     private readonly AgentSessionStateStore? _sessionStateStore;
     private readonly HumanInteractionContextAccessor? _humanInteractionContextAccessor;
+    private readonly AgentflowCheckpointStore? _checkpointStore;
+    private readonly IRuntimeTurnContextAccessor? _turnContextAccessor;
     private readonly AgentflowWorkflowCompiler _workflowCompiler = new();
 
     public AgentflowRuntimeService(
@@ -69,7 +71,9 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         IAgentTurnSummaryService summaryService,
         AgentSessionStateStore? sessionStateStore = null,
         IConversationHistoryWriter? conversationHistoryWriter = null,
-        HumanInteractionContextAccessor? humanInteractionContextAccessor = null)
+        HumanInteractionContextAccessor? humanInteractionContextAccessor = null,
+        AgentflowCheckpointStore? checkpointStore = null,
+        IRuntimeTurnContextAccessor? turnContextAccessor = null)
     {
         _logger = logger;
         _agentflowRepository = agentflowRepository;
@@ -82,6 +86,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         _sessionStateStore = sessionStateStore;
         _conversationHistoryWriter = conversationHistoryWriter;
         _humanInteractionContextAccessor = humanInteractionContextAccessor;
+        _checkpointStore = checkpointStore;
+        _turnContextAccessor = turnContextAccessor;
     }
 
     public async Task<string?> GetMermaidAsync(Guid agentflowId, CancellationToken cancellationToken = default)
@@ -130,7 +136,10 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             humanGateApprovalHandler,
             environmentVariables,
             conversationId,
-            new PermissionModeState(permissionMode));
+            new PermissionModeState(permissionMode),
+            sourceExecutionId: null,
+            checkpointState: null,
+            resumeCheckpoint: null);
 
     internal IAsyncEnumerable<AgwMessage> ExecuteStreamingWithPermissionStateAsync(
         Guid agentflowId,
@@ -142,7 +151,10 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         IHumanGateApprovalHandler? humanGateApprovalHandler,
         IReadOnlyDictionary<string, string>? environmentVariables,
         Guid? conversationId,
-        PermissionModeState permissionState) =>
+        PermissionModeState permissionState,
+        Guid? sourceExecutionId,
+        AgentflowCheckpointRuntimeState checkpointState,
+        AgentflowCheckpointSnapshot? resumeCheckpoint) =>
         ExecuteStreamingCoreAsync(
             agentflowId,
             input,
@@ -153,7 +165,10 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             humanGateApprovalHandler,
             environmentVariables,
             conversationId,
-            permissionState);
+            permissionState,
+            sourceExecutionId,
+            checkpointState,
+            resumeCheckpoint);
 
     private async IAsyncEnumerable<AgwMessage> ExecuteStreamingCoreAsync(
         Guid agentflowId,
@@ -165,7 +180,10 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         IHumanGateApprovalHandler? humanGateApprovalHandler,
         IReadOnlyDictionary<string, string>? environmentVariables,
         Guid? conversationId,
-        PermissionModeState permissionState)
+        PermissionModeState permissionState,
+        Guid? sourceExecutionId,
+        AgentflowCheckpointRuntimeState? checkpointState,
+        AgentflowCheckpointSnapshot? resumeCheckpoint)
     {
         var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
         if (agentflow == null)
@@ -201,6 +219,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
 
         await using var workflowResources = workflowLease;
         var workflow = workflowLease.Workflow;
+        var checkpointNodeNames = await GetCheckpointNodeNamesAsync(agentflow.Id);
 
         var humanGateNodes = (await _agentflowNodeRepository.ListAsync(
                 x => x.AgentflowId == agentflow.Id && x.Kind == AgentflowNodeKind.HumanGate))
@@ -210,13 +229,29 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         _logger.LogInformation("Constructed workflow: {Workflow}", mermaidString);
 
         var messages = CreateWorkflowInputMessages(input);
-
-        await using var run = await InProcessExecution.RunStreamingAsync(
-            workflow,
-            messages,
-            cancellationToken: cancellationToken);
+        var checkpointedRun = await StartCheckpointedRunAsync(
+                workflow,
+                messages,
+                agentflow.Id,
+                resolvedTaskId,
+                resumeCheckpoint?.Checkpoint,
+                cancellationToken)
+            .ConfigureAwait(false);
+        await using var run = checkpointedRun.Run;
+        var definitionFingerprint = checkpointState != null
+            && _checkpointStore != null
+            && sessionScope.ConversationId != Guid.Empty
+                ? await _checkpointStore
+                    .GetDefinitionFingerprintAsync(agentflow.Id, cancellationToken)
+                    .ConfigureAwait(false)
+                : null;
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
         var executorsWithUpdates = new HashSet<string>(StringComparer.Ordinal);
+        var pendingCheckpointRequests = new Dictionary<string, PendingCheckpointRequest>(
+            StringComparer.Ordinal);
+        var resumedCheckpointNodeIds = resumeCheckpoint?.Markers
+            .Select(item => item.NodeId)
+            .ToHashSet(StringComparer.Ordinal) ?? [];
 
         await foreach (var evt in run.WatchStreamAsync(cancellationToken).ConfigureAwait(false))
         {
@@ -238,6 +273,26 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                             "External request {RequestId} from port {PortId}",
                             externalRequest.RequestId,
                             externalRequest.PortInfo.PortId);
+
+                        if (TryCreateCheckpointRequest(
+                                externalRequest,
+                                checkpointNodeNames,
+                                out var checkpointRequest))
+                        {
+                            if (resumedCheckpointNodeIds.Remove(checkpointRequest.NodeId))
+                            {
+                                await ContinueCheckpointRequestsAsync(
+                                        run,
+                                        [checkpointRequest],
+                                        cancellationToken)
+                                    .ConfigureAwait(false);
+                            }
+                            else
+                            {
+                                pendingCheckpointRequests[externalRequest.RequestId] = checkpointRequest;
+                            }
+                            break;
+                        }
 
                         if (externalRequest.TryGetDataAs(
                                 out Microsoft.Extensions.AI.ToolApprovalRequestContent? toolApprovalRequest))
@@ -385,6 +440,40 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
 
                     break;
 
+                case SuperStepCompletedEvent completed:
+                    var checkpointMarkers = CreateCheckpointMarkers(pendingCheckpointRequests.Values);
+                    var recorded = await RecordCheckpointAsync(
+                            sourceExecutionId,
+                            resolvedProjectId,
+                            sessionScope.ConversationId,
+                            resolvedContextId,
+                            resolvedTaskId,
+                            agentflow.Id,
+                            _turnContextAccessor?.Current?.UserName ?? Constants.AdminUserName,
+                            isDurable: false,
+                            definitionFingerprint,
+                            checkpointedRun.Store,
+                            completed.CompletionInfo?.Checkpoint,
+                            checkpointMarkers,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    if (recorded != null)
+                    {
+                        checkpointState?.Register(recorded.Snapshot);
+                        foreach (var checkpointMessage in recorded.Messages)
+                        {
+                            yield return checkpointMessage;
+                        }
+                    }
+                    LogCheckpoint(completed, checkpointMarkers);
+                    await ContinueCheckpointRequestsAsync(
+                            run,
+                            pendingCheckpointRequests.Values,
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                    pendingCheckpointRequests.Clear();
+                    break;
+
                 case WorkflowErrorEvent error:
                     _logger.LogError(error.Exception, "Workflow error");
                     yield return CreateWorkflowErrorMessage(error.Exception);
@@ -449,9 +538,15 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         var humanGateNodes = (await _agentflowNodeRepository.ListAsync(
                 item => item.AgentflowId == agentflow.Id && item.Kind == AgentflowNodeKind.HumanGate))
             .ToDictionary(node => node.NodeId, StringComparer.Ordinal);
-        var sessionId = $"durable-{manifest.ExecutionId:N}";
+        var checkpointNodeNames = await GetCheckpointNodeNamesAsync(agentflow.Id);
+        var sessionId = input.Checkpoint?.SessionId ?? $"durable-{manifest.ExecutionId:N}";
         var checkpointStore = new DurableAgentflowCheckpointStore(input.Checkpoint);
         var checkpointManager = CheckpointManager.CreateJson(checkpointStore);
+        var definitionFingerprint = _checkpointStore == null
+            ? null
+            : await _checkpointStore
+                .GetDefinitionFingerprintAsync(agentflow.Id, cancellationToken)
+                .ConfigureAwait(false);
         StreamingRun run;
         if (input.SegmentIndex == 0)
         {
@@ -488,6 +583,12 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             var consumed = new HashSet<string>(StringComparer.Ordinal);
             var pending = new Dictionary<string, DurableHumanInteractionSnapshot>(StringComparer.Ordinal);
             var executorsWithUpdates = new HashSet<string>(StringComparer.Ordinal);
+            var pendingCheckpointRequests = new Dictionary<string, PendingCheckpointRequest>(
+                StringComparer.Ordinal);
+            var resumedCheckpointNodeIds = input.SegmentIndex == 1
+                && manifest.ResumeCheckpointOccurrenceId.HasValue
+                    ? manifest.ResumeCheckpointNodeIds.ToHashSet(StringComparer.Ordinal)
+                    : [];
             await foreach (var evt in run.WatchStreamAsync(cancellationToken).ConfigureAwait(false))
             {
                 switch (evt)
@@ -495,6 +596,25 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                     case RequestInfoEvent requestInfo:
                         {
                             var externalRequest = requestInfo.Request;
+                            if (TryCreateCheckpointRequest(
+                                    externalRequest,
+                                    checkpointNodeNames,
+                                    out var checkpointRequest))
+                            {
+                                if (resumedCheckpointNodeIds.Remove(checkpointRequest.NodeId))
+                                {
+                                    await ContinueCheckpointRequestsAsync(
+                                            run,
+                                            [checkpointRequest],
+                                            cancellationToken).ConfigureAwait(false);
+                                }
+                                else
+                                {
+                                    pendingCheckpointRequests[externalRequest.RequestId] = checkpointRequest;
+                                }
+                                break;
+                            }
+
                             var approvalRequest = CreateDurableApprovalRequest(
                                 externalRequest,
                                 humanGateNodes);
@@ -566,11 +686,48 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                     case SuperStepCompletedEvent completed
                         when completed.CompletionInfo is { HasPendingRequests: true } completion
                              && pending.Count > 0:
+                        var waitingCheckpointMarkers = CreateCheckpointMarkers(
+                            pendingCheckpointRequests.Values);
+                        var waitingCheckpoint = await RecordCheckpointAsync(
+                                input.ExecutionId,
+                                resolvedProjectId,
+                                sessionScope.ConversationId,
+                                resolvedContextId,
+                                manifest.Task.TaskId,
+                                agentflow.Id,
+                                manifest.UserName,
+                                isDurable: true,
+                                definitionFingerprint,
+                                checkpointStore,
+                                completion.Checkpoint,
+                                waitingCheckpointMarkers,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                        if (waitingCheckpoint != null)
+                        {
+                            foreach (var checkpointMessage in waitingCheckpoint.Messages)
+                            {
+                                await sink.WriteAsync(checkpointMessage, cancellationToken)
+                                .ConfigureAwait(false);
+                            }
+                        }
+                        LogCheckpoint(completed, waitingCheckpointMarkers);
                         if (completion.Checkpoint == null)
                         {
                             return CreateDurableFailure(
                                 input,
                                 "Agentflow reached a human interaction without a checkpoint.");
+                        }
+
+                        if (pendingCheckpointRequests.Count > 0)
+                        {
+                            await ContinueCheckpointRequestsAsync(
+                                    run,
+                                    pendingCheckpointRequests.Values,
+                                    cancellationToken)
+                                .ConfigureAwait(false);
+                            pendingCheckpointRequests.Clear();
+                            break;
                         }
 
                         await run.CancelRunAsync().ConfigureAwait(false);
@@ -590,6 +747,41 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                             PendingInteractions = pending.Values.ToArray(),
                             Checkpoint = durableCheckpoint
                         };
+
+                    case SuperStepCompletedEvent completed:
+                        var checkpointMarkers = CreateCheckpointMarkers(
+                            pendingCheckpointRequests.Values);
+                        var recordedCheckpoint = await RecordCheckpointAsync(
+                                input.ExecutionId,
+                                resolvedProjectId,
+                                sessionScope.ConversationId,
+                                resolvedContextId,
+                                manifest.Task.TaskId,
+                                agentflow.Id,
+                                manifest.UserName,
+                                isDurable: true,
+                                definitionFingerprint,
+                                checkpointStore,
+                                completed.CompletionInfo?.Checkpoint,
+                                checkpointMarkers,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                        if (recordedCheckpoint != null)
+                        {
+                            foreach (var checkpointMessage in recordedCheckpoint.Messages)
+                            {
+                                await sink.WriteAsync(checkpointMessage, cancellationToken)
+                                .ConfigureAwait(false);
+                            }
+                        }
+                        LogCheckpoint(completed, checkpointMarkers);
+                        await ContinueCheckpointRequestsAsync(
+                                run,
+                                pendingCheckpointRequests.Values,
+                                cancellationToken)
+                            .ConfigureAwait(false);
+                        pendingCheckpointRequests.Clear();
+                        break;
                 }
             }
 
@@ -769,18 +961,35 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
 
         await using var workflowResources = workflowLease;
         var workflow = workflowLease.Workflow;
+        var checkpointNodeNames = await GetCheckpointNodeNamesAsync(agentflow.Id);
 
-        await using var run = await InProcessExecution.RunStreamingAsync(
-            workflow,
-            messages,
-            cancellationToken: cancellationToken);
+        var checkpointedRun = await StartCheckpointedRunAsync(
+                workflow,
+                messages,
+                agentflow.Id,
+                taskId.Value,
+                resumeCheckpoint: null,
+                cancellationToken)
+            .ConfigureAwait(false);
+        await using var run = checkpointedRun.Run;
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         var outputs = new List<AgwMessage>();
+        var pendingCheckpointRequests = new Dictionary<string, PendingCheckpointRequest>(
+            StringComparer.Ordinal);
         await foreach (var evt in run.WatchStreamAsync(cancellationToken).ConfigureAwait(false))
         {
             if (evt is RequestInfoEvent requestInfo)
             {
+                if (TryCreateCheckpointRequest(
+                        requestInfo.Request,
+                        checkpointNodeNames,
+                        out var checkpointRequest))
+                {
+                    pendingCheckpointRequests[requestInfo.Request.RequestId] = checkpointRequest;
+                    continue;
+                }
+
                 await run.CancelRunAsync();
                 if (!requestInfo.Request.TryGetDataAs(
                         out Microsoft.Extensions.AI.ToolApprovalRequestContent? toolApprovalRequest))
@@ -801,6 +1010,18 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             else if (evt is WorkflowOutputEvent outputEvt)
             {
                 outputs.AddRange(CreateWorkflowOutputMessages(outputEvt.Data));
+            }
+            else if (evt is SuperStepCompletedEvent completed)
+            {
+                var checkpointMarkers = CreateCheckpointMarkers(
+                    pendingCheckpointRequests.Values);
+                LogCheckpoint(completed, checkpointMarkers);
+                await ContinueCheckpointRequestsAsync(
+                        run,
+                        pendingCheckpointRequests.Values,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                pendingCheckpointRequests.Clear();
             }
         }
 
@@ -962,6 +1183,196 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         }
     }
 
+    private static string CreateCheckpointSessionId(Guid agentflowId, Guid taskId) =>
+        $"agentflow-{agentflowId:N}-task-{taskId:N}";
+
+    private static async ValueTask<CheckpointedStreamingRun> StartCheckpointedRunAsync(
+        Workflow workflow,
+        List<ChatMessage> messages,
+        Guid agentflowId,
+        Guid taskId,
+        DurableAgentflowCheckpoint? resumeCheckpoint,
+        CancellationToken cancellationToken)
+    {
+        var store = new DurableAgentflowCheckpointStore(resumeCheckpoint);
+        var checkpointManager = CheckpointManager.CreateJson(store);
+        if (resumeCheckpoint == null)
+        {
+            var run = await InProcessExecution.RunStreamingAsync(
+                    workflow,
+                    messages,
+                    checkpointManager,
+                    CreateCheckpointSessionId(agentflowId, taskId),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            return new CheckpointedStreamingRun(run, store);
+        }
+
+        var checkpoint = await checkpointManager
+            .GetLatestCheckpointAsync(resumeCheckpoint.SessionId, cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw new AgwException(
+                ErrorCodes.AgentExecutionFailed,
+                "Agentflow checkpoint could not be restored.");
+        var resumedRun = await InProcessExecution.ResumeStreamingAsync(
+                workflow,
+                checkpoint,
+                checkpointManager,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return new CheckpointedStreamingRun(resumedRun, store);
+    }
+
+    private async Task<RecordedAgentflowCheckpoint?> RecordCheckpointAsync(
+        Guid? sourceExecutionId,
+        Guid projectId,
+        Guid conversationId,
+        string contextId,
+        Guid taskId,
+        Guid agentflowId,
+        string userName,
+        bool isDurable,
+        string? definitionFingerprint,
+        DurableAgentflowCheckpointStore runCheckpointStore,
+        CheckpointInfo? frameworkCheckpoint,
+        IReadOnlyDictionary<string, string> checkpointMarkers,
+        CancellationToken cancellationToken)
+    {
+        if (_checkpointStore == null
+            || conversationId == Guid.Empty
+            || checkpointMarkers.Count == 0
+            || frameworkCheckpoint == null
+            || string.IsNullOrWhiteSpace(definitionFingerprint))
+        {
+            return null;
+        }
+
+        var checkpoint = runCheckpointStore.Latest;
+        if (checkpoint == null
+            || !string.Equals(
+                checkpoint.SessionId,
+                frameworkCheckpoint.SessionId,
+                StringComparison.Ordinal)
+            || !string.Equals(
+                checkpoint.CheckpointId,
+                frameworkCheckpoint.CheckpointId,
+                StringComparison.Ordinal))
+        {
+            _logger.LogWarning(
+                "Agentflow checkpoint markers were emitted without a persisted framework checkpoint.");
+            return null;
+        }
+
+        return await _checkpointStore.RecordAsync(
+                sourceExecutionId,
+                projectId,
+                conversationId,
+                contextId,
+                taskId,
+                agentflowId,
+                userName,
+                isDurable,
+                definitionFingerprint,
+                checkpoint,
+                checkpointMarkers,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private sealed record CheckpointedStreamingRun(
+        StreamingRun Run,
+        DurableAgentflowCheckpointStore Store);
+
+    private async Task<IReadOnlyDictionary<string, CheckpointRequestNode>> GetCheckpointNodeNamesAsync(
+        Guid agentflowId)
+    {
+        var nodes = await _agentflowNodeRepository.ListAsync(
+            item => item.AgentflowId == agentflowId
+                && item.Kind == AgentflowNodeKind.CheckpointMarker);
+        return nodes.ToDictionary(
+            item => AgentflowWorkflowCompiler.GetCheckpointRequestPortId(item.NodeId),
+            item => new CheckpointRequestNode(
+                item.NodeId,
+                AgentflowWorkflowCompiler.ResolveCheckpointName(item)),
+            StringComparer.Ordinal);
+    }
+
+    private static bool TryCreateCheckpointRequest(
+        ExternalRequest request,
+        IReadOnlyDictionary<string, CheckpointRequestNode> checkpointNodes,
+        out PendingCheckpointRequest checkpointRequest)
+    {
+        if (!checkpointNodes.TryGetValue(request.PortInfo.PortId, out var checkpointNode))
+        {
+            checkpointRequest = null!;
+            return false;
+        }
+
+        var messages = request.TryGetDataAs<List<ChatMessage>>(out var requestedMessages)
+            && requestedMessages != null
+                ? requestedMessages
+                : [];
+        checkpointRequest = new PendingCheckpointRequest(
+            request,
+            checkpointNode.NodeId,
+            checkpointNode.Name,
+            messages);
+        return true;
+    }
+
+    private static IReadOnlyDictionary<string, string> CreateCheckpointMarkers(
+        IEnumerable<PendingCheckpointRequest> requests) =>
+        requests
+            .GroupBy(item => item.NodeId, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => group.First().CheckpointName,
+                StringComparer.Ordinal);
+
+    private static async Task ContinueCheckpointRequestsAsync(
+        StreamingRun run,
+        IEnumerable<PendingCheckpointRequest> requests,
+        CancellationToken cancellationToken)
+    {
+        foreach (var request in requests)
+        {
+            await run.SendResponseAsync(
+                    request.Request.CreateResponse(request.Messages))
+                .ConfigureAwait(false);
+        }
+    }
+
+    private sealed record PendingCheckpointRequest(
+        ExternalRequest Request,
+        string NodeId,
+        string CheckpointName,
+        List<ChatMessage> Messages);
+
+    private sealed record CheckpointRequestNode(string NodeId, string Name);
+
+    private void LogCheckpoint(
+        SuperStepCompletedEvent completed,
+        IReadOnlyDictionary<string, string> checkpointMarkers)
+    {
+        var completion = completed.CompletionInfo;
+        var checkpoint = completion?.Checkpoint;
+        if (completion == null || checkpoint == null)
+        {
+            return;
+        }
+
+        foreach (var (nodeId, checkpointName) in checkpointMarkers)
+        {
+            _logger.LogInformation(
+                "Agentflow named checkpoint {CheckpointName} ({CheckpointNodeId}) created as {CheckpointId} for session {CheckpointSessionId} at superstep {SuperStep}",
+                checkpointName,
+                nodeId,
+                checkpoint.CheckpointId,
+                checkpoint.SessionId,
+                completed.StepNumber);
+        }
+    }
+
     /// <summary>
     /// 将 Agentflow external request 映射为可持久化的 Tool approval 或 HumanGate 请求。
     /// </summary>
@@ -1073,13 +1484,12 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         HumanGateApprovalDecision decision)
     {
         var responseMessages = messages.ToList();
-        if (!string.IsNullOrWhiteSpace(decision.ResponseText))
+        responseMessages.Add(new ChatMessage(
+            ChatRole.User,
+            string.IsNullOrWhiteSpace(decision.ResponseText) ? string.Empty : decision.ResponseText.Trim())
         {
-            responseMessages.Add(new ChatMessage(ChatRole.User, decision.ResponseText.Trim())
-            {
-                AuthorName = "human",
-            });
-        }
+            AuthorName = "human",
+        });
 
         return responseMessages;
     }

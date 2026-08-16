@@ -68,6 +68,7 @@ const NODE_KIND_LABELS = [
   "Magentic Block",
   "Output",
   "Input",
+  "Clear Messages",
 ] as const;
 
 export function getNodeKindLabel(kind: number): string {

@@ -156,6 +156,7 @@ internal sealed class DurableExecutionStore
         {
             ExecutionId = executionId,
             UserId = userId,
+            UserName = userName,
             AgentId = agentId,
             AgentType = agentType,
             Input = input,

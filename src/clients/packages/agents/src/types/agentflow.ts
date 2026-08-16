@@ -56,6 +56,7 @@ export const AgentflowNodeKind = {
   MagenticBlock: 8,
   Output: 9,
   Input: 10,
+  ClearMessages: 11,
 } as const;
 
 export type AgentflowNodeKind = (typeof AgentflowNodeKind)[keyof typeof AgentflowNodeKind];
@@ -63,7 +64,9 @@ export type AgentflowNodeKind = (typeof AgentflowNodeKind)[keyof typeof Agentflo
 export const AgentflowEdgeKind = {
   Direct: 0,
   FanOut: 1,
-  FanIn: 2,
+  FanInBarrier: 2,
+  SwitchCase: 3,
+  SwitchDefault: 4,
 } as const;
 
 export type AgentflowEdgeKind = (typeof AgentflowEdgeKind)[keyof typeof AgentflowEdgeKind];

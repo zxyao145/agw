@@ -5,21 +5,30 @@ public enum AgentflowEdgeKind
     /// <summary>
     /// 普通一对一边。
     /// 运行时调用 AddEdge(source, target, ...)，可以带 ConditionJson 条件，条件满足才走这条边。
-    /// 见 AgentflowWorkflowCompiler.cs:387
     /// </summary>
     Direct = 0,
 
     /// <summary>
-    /// 一对多广播边。
-    /// 编译时按同一个 SourceNodeId 分组，把同一个 source 的多个目标合成一次 AddFanOutEdge(source, targets, ...)。语义是一个节点输出同时分发给多个下游。
-    /// 见 AgentflowWorkflowCompiler.cs:403
+    /// 一对多选择边。
+    /// 编译时按同一个 SourceNodeId 分组，通过 AddFanOutEdge selector 选择所有条件命中的目标；无条件目标始终命中。
     /// </summary>
     FanOut = 1,
 
     /// <summary>
     /// 多对一汇聚屏障。
-    /// 编译时按同一个 TargetNodeId 分组，把多个 source 合成一次 AddFanInBarrierEdge(sources, target, ...)。语义是多个上游都完成后，目标节点才执行。
-    /// 见 AgentflowWorkflowCompiler.cs:413
+    /// 编译时按同一个 TargetNodeId 分组。普通图使用 AddFanInBarrierEdge；循环图可缓存一次性 Input，并在环内来源每轮到达后复用。
     /// </summary>
-    FanIn = 2,
+    FanInBarrier = 2,
+
+    /// <summary>
+    /// 有序互斥条件分支。
+    /// 编译时按同一个 SourceNodeId 分组，并按 ConfigJson.switchCaseOrder 依次添加到 AddSwitch。
+    /// </summary>
+    SwitchCase = 3,
+
+    /// <summary>
+    /// 有序互斥条件分支的默认出口。
+    /// 同一个 SourceNodeId 最多存在一条，并编译为 SwitchBuilder.WithDefault。
+    /// </summary>
+    SwitchDefault = 4,
 }

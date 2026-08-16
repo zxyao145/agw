@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 
 using Agw.Agents.Execution.Commands.Abstracts;
+using Agw.Agents.Execution.Commands.Checkpoint;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.Commands.Interrupt;
@@ -32,6 +33,8 @@ public static class ExecutionCommandRegistrationExtensions
                 nameof(SetPermissionModeCommand))
             .AddExecutionCommand<SubscribeExecutionCommand, SubscribeExecutionCommandHandler>(
                 nameof(SubscribeExecutionCommand))
+            .AddExecutionCommand<ResumeCheckpointCommand, ResumeCheckpointCommandHandler>(
+                nameof(ResumeCheckpointCommand))
             .AddExecutionCommand<HumanResponseCommand, HumanResponseCommandHandler>(nameof(HumanResponseCommand));
 
     public static IServiceCollection AddExecutionCommand<TCommand, THandler>(

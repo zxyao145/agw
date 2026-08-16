@@ -4,6 +4,7 @@ import test from "node:test";
 
 const CHAT_URL = new URL("./chat.tsx", import.meta.url);
 const CHAT_INPUT_URL = new URL("./chat-input.tsx", import.meta.url);
+const CHECKPOINT_CARD_URL = new URL("./agentflow-checkpoint-card.tsx", import.meta.url);
 const PACKAGES_URL = new URL("../../../../../", import.meta.url);
 const SEARCH_FILE_URL = new URL("../../../lib/chat/search-file.ts", import.meta.url);
 const EXECUTION_HUB_URL = new URL("../../../services/execution-hub.ts", import.meta.url);
@@ -86,6 +87,16 @@ test("shared Chat owns canonical message filtering, grouping, usage, and managed
   assert.match(managerSource, /private readonly entries = new Map/);
 });
 
+test("shared Chat reattaches managed execution after history hydration", async () => {
+  const source = await readFile(CHAT_URL, "utf8");
+  const attachmentStart = source.indexOf("if (!executionSessionManager.has(key))");
+  const attachmentEnd = source.indexOf("const ensureConfiguredClient", attachmentStart);
+
+  assert.notEqual(attachmentStart, -1);
+  assert.notEqual(attachmentEnd, -1);
+  assert.match(source.slice(attachmentStart, attachmentEnd), /sessionSeed\.revision/);
+});
+
 test("shared Chat defaults agent mode to Execute without a persisted mode snapshot", async () => {
   const source = await readFile(CHAT_URL, "utf8");
 
@@ -95,7 +106,7 @@ test("shared Chat defaults agent mode to Execute without a persisted mode snapsh
   assert.match(source, /setAgentMode\(DEFAULT_AGENT_MODE\)/);
 });
 
-test("shared Chat keeps unmatched human interactions in the fallback approval overlay", async () => {
+test("shared Chat keeps unmatched human interactions in the scrollable conversation footer", async () => {
   const source = await readFile(CHAT_URL, "utf8");
 
   assert.match(
@@ -103,7 +114,14 @@ test("shared Chat keeps unmatched human interactions in the fallback approval ov
     /hasMatchingHumanInteractionCall\(visibleMessages, pendingHumanInteraction\)/,
   );
   assert.match(source, /pendingHumanInteraction=\{pendingHumanInteraction\}/);
-  assert.match(source, /request=\{floatingHumanGate\}/);
+  assert.match(
+    source,
+    /<Conversation[\s\S]*?footer=\{[\s\S]*?request=\{floatingHumanGate\}[\s\S]*?\/>/,
+  );
+  assert.doesNotMatch(
+    source,
+    /bottom-\[calc\(100%\+0\.5rem\)\][\s\S]*?request=\{floatingHumanGate\}/,
+  );
 });
 
 test("shared Chat scopes history and batches incoming streaming messages", async () => {
@@ -130,6 +148,33 @@ test("shared Chat scopes history and batches incoming streaming messages", async
   );
   assert.match(source, /streamingMessageBatcherRef\.current\?\.flush\(generation\)/);
   assert.doesNotMatch(source, /mergeStreamingMessagesById/);
+});
+
+test("Agentflow checkpoint resume uses an exact occurrence and truncates only after success", async () => {
+  const [source, inputSource, cardSource] = await Promise.all([
+    readFile(CHAT_URL, "utf8"),
+    readFile(CHAT_INPUT_URL, "utf8"),
+    readFile(CHECKPOINT_CARD_URL, "utf8"),
+  ]);
+
+  assert.match(source, /target\?\.type === "agentflow"/);
+  assert.match(source, /checkpoint\.boundarySequence > latest\.boundarySequence/);
+  assert.match(
+    source,
+    /checkpointResumeDisabled =\s*isExecuting \|\| isTransitioning \|\| reconnectState !== null/,
+  );
+  assert.match(source, /checkpoint\.occurrenceId === occurrenceId && checkpoint\.available/);
+  assert.match(source, /message\.streamingScopeId === resumedStreamingScopeId/);
+  assert.ok(
+    source.indexOf("await client.resumeCheckpoint") < source.lastIndexOf("truncateAtCheckpoint("),
+  );
+  assert.match(source, /setConversationUsage\(calculateConversationUsage\(retainedMessages\)\)/);
+
+  const resumeIndex = inputSource.indexOf("Resume");
+  const quickTextIndex = inputSource.indexOf("<QuickTextDialog");
+  assert.ok(resumeIndex >= 0 && resumeIndex < quickTextIndex);
+  assert.match(cardSource, /The workflow continued automatically\./);
+  assert.match(cardSource, /disabled=\{disabled \|\| !available\}/);
 });
 
 test("shared Chat restores only a hydrated durable attachment", async () => {

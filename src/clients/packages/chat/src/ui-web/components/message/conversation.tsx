@@ -9,11 +9,16 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "
 import { collapseConsecutiveSystemMessages } from "../../../lib/chat/ai-message-handlers";
 import { cn } from "@agw/components";
 import { MessageTrigger } from "../message-trigger";
-import type { PendingHumanGate } from "../../../services/execution-hub";
+import {
+  getAgentflowCheckpointMessage,
+  type AgentflowCheckpointAvailability,
+  type PendingHumanGate,
+} from "../../../services/execution-hub";
 import { matchesHumanInteractionCall } from "../../../services/human-interaction-call";
 import { getHumanInteractionQuestionResult } from "../../../services/human-interaction";
 import { HumanInteractionPanel } from "./human-interaction-panel";
 import { HumanInteractionQuestionResultView } from "./human-interaction-question-result";
+import { AgentflowCheckpointCard } from "./agentflow-checkpoint-card";
 
 export interface ChatSessionProps {
   messages: AiMessage[];
@@ -24,6 +29,11 @@ export interface ChatSessionProps {
   pendingHumanInteraction?: (PendingHumanGate & { requestType: "human-interaction" }) | null;
   onHumanInteractionSubmit?: (responseData: unknown) => void;
   onHumanInteractionCancel?: () => void;
+  checkpointAvailability?: AgentflowCheckpointAvailability[];
+  showCheckpointResume?: boolean;
+  checkpointResumeDisabled?: boolean;
+  onCheckpointResume?: (occurrenceId: string) => void;
+  footer?: React.ReactNode;
 }
 
 type MessageMeta = {
@@ -31,7 +41,8 @@ type MessageMeta = {
   author: string | null;
 };
 
-const AGENT_NAME_KEYS = ["name", "agentName", "displayName", "agentDisplayName"];
+const AGENT_NAME_KEYS = ["nodeName", "name", "agentName", "displayName", "agentDisplayName"];
+const AGENT_AUTHOR_KEYS = ["agentName"];
 
 function readStringProperty(message: AiMessage, keys: string[]): string | null {
   const messageRecord = message as unknown as Record<string, unknown>;
@@ -51,7 +62,7 @@ function getMessageMeta(message: AiMessage): MessageMeta | null {
     return null;
   }
 
-  const agentAuthor = message.author?.trim() || null;
+  const agentAuthor = message.author?.trim() || readStringProperty(message, AGENT_AUTHOR_KEYS);
   if (message.role === "user") {
     return agentAuthor ? { name: null, author: agentAuthor } : null;
   }
@@ -245,14 +256,23 @@ export function Conversation({
   pendingHumanInteraction = null,
   onHumanInteractionSubmit,
   onHumanInteractionCancel,
+  checkpointAvailability = [],
+  showCheckpointResume = false,
+  checkpointResumeDisabled = false,
+  onCheckpointResume,
+  footer,
 }: ChatSessionProps) {
   const processedMessages = React.useMemo(
     () => processMessages(collapseConsecutiveSystemMessages(messages)),
     [messages, processMessages],
   );
   const keyedMessages = React.useMemo(() => addStableKeys(processedMessages), [processedMessages]);
+  const checkpointsByOccurrence = React.useMemo(
+    () => new Map(checkpointAvailability.map((item) => [item.occurrenceId, item])),
+    [checkpointAvailability],
+  );
 
-  if (!messages || messages.length == 0) {
+  if ((!messages || messages.length == 0) && !footer) {
     return (
       <Empty>
         <EmptyHeader>
@@ -292,6 +312,22 @@ export function Conversation({
         )}
 
         {keyedMessages.map(({ item, key }, index) => {
+          const checkpoint =
+            item.type === "normal" ? getAgentflowCheckpointMessage(item.message) : null;
+          if (checkpoint) {
+            const availability = checkpointsByOccurrence.get(checkpoint.occurrenceId);
+            return (
+              <AgentflowCheckpointCard
+                key={key}
+                name={checkpoint.name}
+                showResume={showCheckpointResume}
+                available={availability?.available === true}
+                disabled={checkpointResumeDisabled || !onCheckpointResume}
+                onResume={() => onCheckpointResume?.(checkpoint.occurrenceId)}
+              />
+            );
+          }
+
           if (
             index === humanInteractionItemIndex &&
             item.type === "normal" &&
@@ -401,6 +437,7 @@ export function Conversation({
           }
         })}
 
+        {footer}
         <div ref={messagesEndRef} />
       </div>
     </div>

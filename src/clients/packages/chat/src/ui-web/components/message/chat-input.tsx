@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ArrowUp, Eraser, Square } from "lucide-react";
+import { ArrowUp, Eraser, RotateCcw, Square } from "lucide-react";
 
 import { QuickTextDialog } from "@agw/projects";
 import { Button } from "@agw/components";
@@ -21,6 +21,9 @@ interface ChatInputProps {
   onInterrupt: () => void;
   onClearSession: () => void;
   onScrollToTop: () => void;
+  showResume: boolean;
+  canResume: boolean;
+  onResume: () => void;
   projectId: string | null;
   commandSource: CommandSource;
   permissionMode: PermissionMode;
@@ -39,6 +42,9 @@ export function ChatInput({
   onInterrupt,
   onClearSession,
   onScrollToTop,
+  showResume,
+  canResume,
+  onResume,
   projectId,
   commandSource,
   permissionMode,
@@ -94,6 +100,22 @@ export function ChatInput({
         />
       </UserInput.BottomLeft>
       <UserInput.TopRight>
+        {showResume ? (
+          <>
+            <Button
+              type="button"
+              onClick={onResume}
+              disabled={!canResume}
+              variant="ghost"
+              size="sm"
+              title={canResume ? "Resume from the latest checkpoint" : "No checkpoint available"}
+            >
+              <RotateCcw width={16} />
+              Resume
+            </Button>
+            <Separator orientation="vertical" />
+          </>
+        ) : null}
         <QuickTextDialog onCommandSelect={handleQuickCommand} />
         <Separator orientation="vertical" />
         <Button
