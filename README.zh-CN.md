@@ -34,7 +34,7 @@ Agw 是一个面向个人用户和小型研发团队的、自托管的后台工�
 ```
 
 > [!NOTE]
-> 当前编排能力还偏基础，比较适合顺序、并行、交接和人工审批流程；不太适合高度动态、自主规划很深的 Agent 群体。
+> Agentflow 支持顺序执行、扇出/汇聚、有序条件分支、交接、人工审批和受控循环；仍不太适合高度动态、自主规划很深的 Agent 群体。
 
 ### 人-Agent 协作平台
 
@@ -409,6 +409,7 @@ flowchart TB
 - [Architecture](docs/2.Architecture.md): 系统概述、后端/前端架构以及核心领域概念。
 - [Module Organization](docs/3.Module%20Organization.md): 模块内部采用的分层原则。
 - [Chat Suggestions 设计](docs/5.Chat%20Suggestions.md)：Agent 感知的 slash commands、Claude init commands、文件建议与失败降级。
+- [Agentflow 指南](docs/6.Agentflow.md)：图路由与循环规则、编辑器撤销和未保存状态、Chat 消息归属。
 - [Agent 执行流程](docs/ws-flow.md)：SignalR 命令、turn 消息、runtime 生命周期与断线行为。
 - [Execution 子系统](src/server/Agw.Agents/Execution/README.md)：目录职责、数据流与 command 扩展方式。
 - [Files 模块](src/server/Agw.Files/README.zh-CN.md)：Project Workspace 解析、路径边界、Git 行为与挂载要求。

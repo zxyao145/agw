@@ -4,9 +4,7 @@ This document gives coding agents the repository context and mandatory constrain
 
 ## Project Overview
 
-Agw is an AaaS (Agent as a Service) platform and agent gateway. It lets users create agents, integrate external agents such as Claude Code and Codex, run agent sessions, schedule jobs, orchestrate multi-agent workflows, and manage providers, tools, skills, projects, tasks, integrations, and chat execution.
-
-The repository is a modular monolith with an ASP.NET Core and EF Core backend plus Next.js and Expo clients. The backend targets `.NET 10.0`, is built around Microsoft.Agents.AI/MAF, MCP tool servers, A2A endpoints, and external-agent SDK integrations, and is composed from `src/server/Agw.Host/Program.cs`.
+Agw is a modular-monolith AaaS platform and agent gateway for system and external Agents, scheduled Jobs, multi-agent Agentflows, and project-scoped Chat execution. Its ASP.NET Core and EF Core backend targets `.NET 10.0` and integrates Microsoft.Agents.AI/MAF, MCP, A2A, and external-agent SDKs from `src/server/Agw.Host/Program.cs`; Next.js, Electron, and Expo provide the clients.
 
 ## Repository Map
 
@@ -32,7 +30,7 @@ Agw.Projects/         # Projects, project tasks, task records, contexts, and tas
 Agw.Tools/           # Tool discovery, metadata, and AI tool factory and registry
 ```
 
-`Agw.slnx` is the root solution and includes the backend projects and tests. `src/server/server.sln` includes backend projects only. The root solution includes test projects for A2A, Agents, Auth, Files, Host, Integrations, Jobs, Projects, Setup, Shared, Skills, and Tools.
+`Agw.slnx` is the root solution and includes all backend projects and tests; `src/server/server.sln` contains backend projects only.
 
 ### Module Layering
 
@@ -42,23 +40,23 @@ Backend modules use lightweight layering:
 Api → Application → Domain ← Infrastructure
 ```
 
-Api owns protocol adapters; Application owns use cases and business behavior; Domain contains data-only entities and value objects; Infrastructure implements persistence and external adapters. Dependencies point inward. A typical flow is `Controller → AppService / RuntimeService → DomainService → IRepository / IUnitOfWork → EF Core`.
+Api owns protocol adapters, Application owns use cases, Domain owns data-only entities and value objects, and Infrastructure implements persistence and external adapters. Dependencies point inward; a typical flow is `Controller → AppService / RuntimeService → DomainService → IRepository / IUnitOfWork → EF Core`.
 
 ### Client Workspace (`src/clients/`)
 
-`@agw/web`, `@agw/desktop`, and the `@agw/*` packages under `src/clients/packages/` share a pnpm Workspace and use Turborepo for task orchestration. Run pnpm commands from `src/clients/`; one `pnpm install` installs the whole workspace. The Expo mobile app remains a separate npm workspace.
+`@agw/web`, `@agw/desktop`, and packages under `src/clients/packages/` share a pnpm Workspace and Turborepo. Run pnpm commands from `src/clients/`; Expo mobile remains a separate npm workspace.
 
 ### Web Client (`src/clients/web/`)
 
 The web client uses Next.js 16 App Router, React 19, Tailwind CSS 4, Radix UI/Shadcn components, React Query, and generated `openapi-fetch` types.
 
-`src/clients/web/src/app/` contains only Next.js routes, layouts, global CSS, and application-shell composition. Business domains live in `src/clients/packages/` (`agents`, `auth`, `chat`, `integrations`, `jobs`, `observability`, `projects`, `providers`, `settings`, and `skills`); transport and shared UI live in `http-client`, `api`, and `components`. Web routes import public package entry points rather than owning domain implementations.
+`src/clients/web/src/app/` contains only routes, layouts, global CSS, and shell composition. Business domains, transport, and shared UI live in `src/clients/packages/`; Web routes import their public package entry points.
 
 `src/clients/web/next.config.ts` proxies `/api/*` and `/openapi/*` to the backend unless `NEXT_OUTPUT_MODE=export`.
 
 ### Desktop Client (`src/clients/desktop/`)
 
-The Electron entry points are `src/clients/desktop/src/main/index.ts` and `src/clients/desktop/src/preload/index.ts`. Desktop owns an independent Next.js React renderer under `src/clients/desktop/renderer/`; its Electron bridge adapter lives in `src/clients/desktop/renderer/src/runtime/`, while cross-process data shapes remain internal under `src/clients/desktop/src/shared/contracts/`. Web and Desktop do not import, locate, build, or consume artifacts from each other. Both applications reuse business and infrastructure modules only through root `src/clients/packages/`. Chat owns its execution status model.
+Electron entry points are under `src/clients/desktop/src/{main,preload}/`. Desktop owns `renderer/`, keeps its bridge adapter in `renderer/src/runtime/` and cross-process contracts in `src/shared/contracts/`, and shares business modules with Web only through root `src/clients/packages/`. Web and Desktop never import or build each other. Chat owns execution status.
 
 ### Mobile Client (`src/clients/mobile/`)
 
@@ -67,6 +65,7 @@ The Expo app root is `src/clients/mobile/shared`. Follow the nested `src/clients
 ## Deeper Documentation
 
 - [`docs/2.Architecture.md`](docs/2.Architecture.md): module responsibilities, runtime boundaries, client packages, and domain relationships.
+- [`docs/6.Agentflow.md`](docs/6.Agentflow.md): graph routing, cycle constraints, editor history, and Chat attribution.
 - [`src/server/Agw.Agents/Execution/README.md`](src/server/Agw.Agents/Execution/README.md): SignalR commands, runtimes, turn lifecycle, and extension points.
 - [`src/server/Agw.Files/README.zh-CN.md`](src/server/Agw.Files/README.zh-CN.md): workspace resolution, path security, file APIs, and Git behavior.
 - [`src/clients/desktop/README.md`](src/clients/desktop/README.md): Desktop runtime, packaging, server profiles, and security boundaries.

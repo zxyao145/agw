@@ -33,7 +33,7 @@ Publishing/Archiving Agent
 ```
 
 > [!NOTE]
-> The current orchestration capabilities are still fairly basic. They work best for sequential, parallel, handoff, and human-approval workflows, and are less suitable for highly dynamic groups of agents that require deep autonomous planning.
+> Agentflows support sequential execution, fan-out/fan-in, ordered conditional branches, handoff, human approval, and controlled loops. They remain less suitable for highly dynamic groups of agents that require deep autonomous planning.
 
 ### Human-Agent Collaboration Platform
 
@@ -406,6 +406,7 @@ Detailed project documentation is available under [`docs/`](docs/):
 - [Architecture](docs/2.Architecture.md): System overview, backend and frontend architecture, and core domain concepts.
 - [Module Organization](docs/3.Module%20Organization.md): Layering principles used within modules.
 - [Chat Suggestions Design](docs/5.Chat%20Suggestions.md): Agent-aware slash commands, Claude init commands, file suggestions, and failure fallback behavior.
+- [Agentflow Guide](docs/6.Agentflow.md): Graph routing and cycle rules, editor Undo and dirty state, and Chat message attribution.
 - [Agent Execution Flow](docs/ws-flow.md): SignalR commands, turn messages, runtime lifecycle, and disconnection behavior.
 - [Execution Subsystem](src/server/Agw.Agents/Execution/README.md): Directory responsibilities, data flow, and command extension methods.
 - [Files Module](src/server/Agw.Files/README.zh-CN.md): Project workspace resolution, path boundaries, Git behavior, and mount requirements.
