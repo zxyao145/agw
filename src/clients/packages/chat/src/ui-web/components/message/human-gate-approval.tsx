@@ -31,6 +31,8 @@ export function HumanGateApproval({
   const mode = request.mode.toLowerCase();
   const expectsInput = mode === "input";
   const isToolApproval = mode === "tool-approval";
+  const rejectLabel = expectsInput ? "Interrupt" : "Reject";
+  const approveLabel = expectsInput ? "Submit" : "Approve";
 
   React.useEffect(() => {
     setResponseText("");
@@ -51,7 +53,7 @@ export function HumanGateApproval({
   }
 
   return (
-    <div className="pointer-events-auto max-h-[45vh] overflow-auto agw-scrollbar rounded-md border bg-background/95 p-3 shadow-sm backdrop-blur">
+    <div className="pointer-events-auto rounded-md border bg-background/95 p-3 shadow-sm backdrop-blur">
       <div className="flex items-start gap-3">
         <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-muted">
           <ShieldCheck className="h-4 w-4 text-primary" />
@@ -67,14 +69,16 @@ export function HumanGateApproval({
               {request.mode}
             </Badge>
           </div>
-          <div className="text-sm text-foreground">{request.prompt}</div>
+          <div className="whitespace-pre-wrap break-words text-sm text-foreground">
+            {request.prompt}
+          </div>
           {request.inputPreview ? (
-            <div className="line-clamp-2 rounded-md bg-muted/60 px-2 py-1.5 text-xs text-muted-foreground">
+            <div className="whitespace-pre-wrap break-words rounded-md bg-muted/60 px-2 py-1.5 text-xs text-muted-foreground">
               {request.inputPreview}
             </div>
           ) : null}
           {isToolApproval && request.arguments ? (
-            <pre className="mt-2 max-h-28 overflow-auto rounded-md border bg-muted/40 p-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
+            <pre className="mt-2 whitespace-pre-wrap break-words rounded-md border bg-muted/40 p-2 font-mono text-[11px] leading-relaxed text-muted-foreground">
               {request.arguments}
             </pre>
           ) : null}
@@ -98,7 +102,7 @@ export function HumanGateApproval({
           onClick={() => onReject(responseText.trim() || undefined)}
         >
           <X className="h-4 w-4" />
-          Reject
+          {rejectLabel}
         </Button>
         {isToolApproval && permissionMode === "alwaysAsk" ? (
           <Button type="button" size="sm" onClick={() => onApprove("once")}>
@@ -136,7 +140,7 @@ export function HumanGateApproval({
             onClick={() => onApprove("once", responseText.trim() || undefined)}
           >
             <Check className="h-4 w-4" />
-            Approve
+            {approveLabel}
           </Button>
         )}
       </div>
