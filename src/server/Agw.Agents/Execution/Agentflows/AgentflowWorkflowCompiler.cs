@@ -161,6 +161,8 @@ public sealed class AgentflowWorkflowCompiler
     private const string GeneratedStartNodeId = "__agw_start";
     private const string GeneratedOutputNodeId = "__agw_output";
     private const string HumanGateOutputSuffix = "__agw_human_gate_output";
+    private const string CheckpointRequestSuffix = "__agw_checkpoint_request";
+    private const string CheckpointOutputSuffix = "__agw_checkpoint_output";
     private const string RoutingBridgeSuffix = "__agw_routing_bridge";
     private const string LoopBarrierSourceSuffix = "__agw_loop_barrier_source";
     private const string LoopBarrierSuffix = "__agw_loop_barrier";
@@ -218,7 +220,8 @@ public sealed class AgentflowWorkflowCompiler
             .SelectMany(edge => new[] { edge.SourceNodeId, edge.TargetNodeId })
             .ToHashSet(StringComparer.Ordinal);
         var bindings = new Dictionary<string, ExecutorBinding>(StringComparer.Ordinal);
-        var humanGateOutputBindings = new Dictionary<string, ExecutorBinding>(StringComparer.Ordinal);
+        var requestPortBindings = new Dictionary<string, ExecutorBinding>(StringComparer.Ordinal);
+        var requestPortOutputBindings = new Dictionary<string, ExecutorBinding>(StringComparer.Ordinal);
 
         foreach (var node in orderedNodes)
         {
@@ -240,8 +243,18 @@ public sealed class AgentflowWorkflowCompiler
                 bindings[node.NodeId] = binding;
                 if (node.Kind == AgentflowNodeKind.HumanGate)
                 {
-                    humanGateOutputBindings[node.NodeId] =
+                    requestPortBindings[node.NodeId] = binding;
+                    requestPortOutputBindings[node.NodeId] =
                         BindChatTransform($"{node.NodeId}.{HumanGateOutputSuffix}", messages => messages);
+                }
+                else if (node.Kind == AgentflowNodeKind.CheckpointMarker)
+                {
+                    requestPortBindings[node.NodeId] =
+                        RequestPort.Create<List<ChatMessage>, List<ChatMessage>>(
+                                GetCheckpointRequestPortId(node.NodeId))
+                            .BindAsExecutor();
+                    requestPortOutputBindings[node.NodeId] =
+                        BindChatRoutingBridge($"{node.NodeId}.{CheckpointOutputSuffix}");
                 }
             }
         }
@@ -276,7 +289,12 @@ public sealed class AgentflowWorkflowCompiler
             builder.AddFanOutEdge(start, roots, "start");
         }
 
-        AddHumanGateOutputEdges(builder, bindings, humanGateOutputBindings);
+        AddRequestPortOutputEdges(
+            builder,
+            nodeMap,
+            bindings,
+            requestPortBindings,
+            requestPortOutputBindings);
         var cyclicComponents = AgentflowDomainService.FindCyclicComponents(
             orderedNodes.Select(node => node.NodeId).ToList(),
             runtimeEdges);
@@ -285,9 +303,9 @@ public sealed class AgentflowWorkflowCompiler
             runtimeEdges,
             nodeMap,
             bindings,
-            humanGateOutputBindings,
+            requestPortOutputBindings,
             cyclicComponents);
-        AddWorkflowOutputs(builder, orderedNodes, runtimeEdges, bindings, humanGateOutputBindings);
+        AddWorkflowOutputs(builder, orderedNodes, runtimeEdges, bindings, requestPortOutputBindings);
 
         return builder.Build(validateOrphans: false);
     }
@@ -349,7 +367,7 @@ public sealed class AgentflowWorkflowCompiler
             AgentflowNodeKind.ClearMessages =>
                 BindChatProtocolTransform(node.NodeId, _ => []),
             AgentflowNodeKind.CheckpointMarker =>
-                BindChatTransform(node.NodeId, messages => messages),
+                BindCheckpointInput(node.NodeId),
             AgentflowNodeKind.Input =>
                 new InputPassthroughAgent(node.NodeId, node.Name).BindAsExecutor(AgentHostOptions),
             AgentflowNodeKind.HumanGate =>
@@ -406,12 +424,12 @@ public sealed class AgentflowWorkflowCompiler
         IReadOnlyList<AgentflowEdge> edges,
         IReadOnlyDictionary<string, AgentflowNode> nodeMap,
         IReadOnlyDictionary<string, ExecutorBinding> bindings,
-        IReadOnlyDictionary<string, ExecutorBinding> humanGateOutputBindings,
+        IReadOnlyDictionary<string, ExecutorBinding> requestPortOutputBindings,
         IReadOnlyList<HashSet<string>> cyclicComponents)
     {
         foreach (var edge in edges.Where(edge => edge.Kind == AgentflowEdgeKind.Direct))
         {
-            var source = GetSourceBinding(edge.SourceNodeId, bindings, humanGateOutputBindings);
+            var source = GetSourceBinding(edge.SourceNodeId, bindings, requestPortOutputBindings);
             var target = bindings[edge.TargetNodeId];
             var label = edge.Label ?? edge.EdgeId;
             var compactHumanFeedback = IsCyclicHumanGateAgentEdge(
@@ -446,7 +464,7 @@ public sealed class AgentflowWorkflowCompiler
         foreach (var group in edges.Where(edge => edge.Kind == AgentflowEdgeKind.FanOut)
                      .GroupBy(edge => edge.SourceNodeId))
         {
-            var source = GetSourceBinding(group.Key, bindings, humanGateOutputBindings);
+            var source = GetSourceBinding(group.Key, bindings, requestPortOutputBindings);
             var fanOutEdges = group
                 .OrderBy(edge => edge.EdgeId, StringComparer.Ordinal)
                 .ToList();
@@ -513,12 +531,12 @@ public sealed class AgentflowWorkflowCompiler
                     reusableInputEdges,
                     repeatedEdges,
                     bindings,
-                    humanGateOutputBindings);
+                    requestPortOutputBindings);
                 continue;
             }
 
             var sources = barrierEdges
-                .Select(edge => GetSourceBinding(edge.SourceNodeId, bindings, humanGateOutputBindings))
+                .Select(edge => GetSourceBinding(edge.SourceNodeId, bindings, requestPortOutputBindings))
                 .ToList();
             if (sources.Count > 0)
             {
@@ -531,7 +549,7 @@ public sealed class AgentflowWorkflowCompiler
                      .Where(edge => edge.Kind is AgentflowEdgeKind.SwitchCase or AgentflowEdgeKind.SwitchDefault)
                      .GroupBy(edge => edge.SourceNodeId))
         {
-            var source = GetSourceBinding(group.Key, bindings, humanGateOutputBindings);
+            var source = GetSourceBinding(group.Key, bindings, requestPortOutputBindings);
             var cases = group
                 .Where(edge => edge.Kind == AgentflowEdgeKind.SwitchCase)
                 .OrderBy(edge => GetSwitchCaseOrder(edge))
@@ -586,7 +604,7 @@ public sealed class AgentflowWorkflowCompiler
         IReadOnlyList<AgentflowEdge> reusableInputEdges,
         IReadOnlyList<AgentflowEdge> repeatedEdges,
         IReadOnlyDictionary<string, ExecutorBinding> bindings,
-        IReadOnlyDictionary<string, ExecutorBinding> humanGateOutputBindings)
+        IReadOnlyDictionary<string, ExecutorBinding> requestPortOutputBindings)
     {
         var repeatedSourceNodeIds = repeatedEdges
             .Select(edge => edge.SourceNodeId)
@@ -600,7 +618,7 @@ public sealed class AgentflowWorkflowCompiler
 
         foreach (var (edge, reuseAcrossIterations) in barrierEdges)
         {
-            var source = GetSourceBinding(edge.SourceNodeId, bindings, humanGateOutputBindings);
+            var source = GetSourceBinding(edge.SourceNodeId, bindings, requestPortOutputBindings);
             var bridge = BindLoopBarrierSource(
                 $"{edge.EdgeId}.{LoopBarrierSourceSuffix}",
                 edge.SourceNodeId,
@@ -624,6 +642,9 @@ public sealed class AgentflowWorkflowCompiler
                 ? AgentflowMessageTransforms.CreateFeedbackLoopAgentInput
                 : null);
     }
+
+    private static ExecutorBinding BindCheckpointInput(string id) =>
+        new CheckpointInputExecutor(id);
 
     private static bool IsCyclicHumanGateAgentEdge(
         AgentflowEdge edge,
@@ -670,7 +691,7 @@ public sealed class AgentflowWorkflowCompiler
         IReadOnlyList<AgentflowNode> orderedNodes,
         IReadOnlyList<AgentflowEdge> runtimeEdges,
         IReadOnlyDictionary<string, ExecutorBinding> bindings,
-        IReadOnlyDictionary<string, ExecutorBinding> humanGateOutputBindings)
+        IReadOnlyDictionary<string, ExecutorBinding> requestPortOutputBindings)
     {
         var explicitOutputs = orderedNodes
             .Where(node => node.Kind == AgentflowNodeKind.Output && bindings.ContainsKey(node.NodeId))
@@ -684,7 +705,7 @@ public sealed class AgentflowWorkflowCompiler
 
         var terminalNodes = bindings.Keys
             .Where(nodeId => runtimeEdges.All(edge => edge.SourceNodeId != nodeId))
-            .Select(nodeId => GetSourceBinding(nodeId, bindings, humanGateOutputBindings))
+            .Select(nodeId => GetSourceBinding(nodeId, bindings, requestPortOutputBindings))
             .ToList();
         if (terminalNodes.Count == 0)
         {
@@ -700,23 +721,41 @@ public sealed class AgentflowWorkflowCompiler
         builder.WithOutputFrom(output);
     }
 
-    private static void AddHumanGateOutputEdges(
+    private static void AddRequestPortOutputEdges(
         WorkflowBuilder builder,
+        IReadOnlyDictionary<string, AgentflowNode> nodeMap,
         IReadOnlyDictionary<string, ExecutorBinding> bindings,
-        IReadOnlyDictionary<string, ExecutorBinding> humanGateOutputBindings)
+        IReadOnlyDictionary<string, ExecutorBinding> requestPortBindings,
+        IReadOnlyDictionary<string, ExecutorBinding> requestPortOutputBindings)
     {
-        foreach (var (nodeId, outputBinding) in humanGateOutputBindings)
+        foreach (var (nodeId, outputBinding) in requestPortOutputBindings)
         {
-            builder.AddEdge(bindings[nodeId], outputBinding, "human-response", idempotent: true);
+            var requestPortBinding = requestPortBindings[nodeId];
+            if (nodeMap[nodeId].Kind == AgentflowNodeKind.CheckpointMarker)
+            {
+                builder.AddEdge(
+                    bindings[nodeId],
+                    requestPortBinding,
+                    "checkpoint-request",
+                    idempotent: true);
+            }
+
+            var label = nodeMap[nodeId].Kind == AgentflowNodeKind.HumanGate
+                ? "human-response"
+                : "checkpoint-response";
+            builder.AddEdge(requestPortBinding, outputBinding, label, idempotent: true);
         }
     }
+
+    internal static string GetCheckpointRequestPortId(string nodeId) =>
+        $"{nodeId}.{CheckpointRequestSuffix}";
 
     private static ExecutorBinding GetSourceBinding(
         string nodeId,
         IReadOnlyDictionary<string, ExecutorBinding> bindings,
-        IReadOnlyDictionary<string, ExecutorBinding> humanGateOutputBindings)
+        IReadOnlyDictionary<string, ExecutorBinding> requestPortOutputBindings)
     {
-        return humanGateOutputBindings.TryGetValue(nodeId, out var outputBinding)
+        return requestPortOutputBindings.TryGetValue(nodeId, out var outputBinding)
             ? outputBinding
             : bindings[nodeId];
     }
@@ -844,6 +883,29 @@ public sealed class AgentflowWorkflowCompiler
             AgentflowNodeKind.GroupChatBlock or AgentflowNodeKind.MagenticBlock;
     }
 
+    internal static string ResolveCheckpointName(AgentflowNode node)
+    {
+        if (!string.IsNullOrWhiteSpace(node.ConfigJson))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(node.ConfigJson);
+                if (document.RootElement.ValueKind == JsonValueKind.Object &&
+                    document.RootElement.TryGetProperty("checkpointName", out var property) &&
+                    property.ValueKind == JsonValueKind.String &&
+                    !string.IsNullOrWhiteSpace(property.GetString()))
+                {
+                    return property.GetString()!.Trim();
+                }
+            }
+            catch (JsonException)
+            {
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(node.Name) ? node.NodeId : node.Name.Trim();
+    }
+
     private sealed record AgentflowConditionConfig
     {
         public bool? Always { get; init; }
@@ -877,6 +939,58 @@ public sealed class AgentflowWorkflowCompiler
             CancellationToken cancellationToken = default)
         {
             return context.SendMessageAsync(_transform(messages), cancellationToken);
+        }
+    }
+
+    private sealed class CheckpointInputExecutor : ChatProtocolExecutor
+    {
+        public CheckpointInputExecutor(string id)
+            : base(
+                id,
+                new ChatProtocolExecutorOptions { AutoSendTurnToken = true },
+                declareCrossRunShareable: true)
+        {
+        }
+
+        protected override ValueTask TakeTurnAsync(
+            List<ChatMessage> messages,
+            IWorkflowContext context,
+            bool? emitEvents,
+            CancellationToken cancellationToken = default)
+        {
+            return EndsWithToolApprovalRequest(messages)
+                ? ValueTask.CompletedTask
+                : context.SendMessageAsync(messages, cancellationToken);
+        }
+
+        private static bool EndsWithToolApprovalRequest(IReadOnlyList<ChatMessage> messages)
+        {
+            for (var messageIndex = messages.Count - 1; messageIndex >= 0; messageIndex--)
+            {
+                var contents = messages[messageIndex].Contents;
+                for (var contentIndex = contents.Count - 1; contentIndex >= 0; contentIndex--)
+                {
+                    var content = contents[contentIndex];
+                    if (content is Microsoft.Extensions.AI.ToolApprovalRequestContent)
+                    {
+                        return true;
+                    }
+
+                    if (content is Microsoft.Extensions.AI.TextContent text
+                        && !string.IsNullOrWhiteSpace(text.Text))
+                    {
+                        return false;
+                    }
+
+                    if (content is Microsoft.Extensions.AI.FunctionResultContent
+                        or Microsoft.Extensions.AI.ToolApprovalResponseContent)
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return false;
         }
     }
 

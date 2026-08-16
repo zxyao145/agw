@@ -187,6 +187,15 @@ test("conversation renders footer content before its bottom scroll anchor", asyn
   assert.match(source, /messages\.length == 0\) && !footer/);
 });
 
+test("conversation renders checkpoint cards bound to their own occurrence", async () => {
+  const source = await readFile(CONVERSATION_URL, "utf8");
+
+  assert.match(source, /getAgentflowCheckpointMessage\(item\.message\)/);
+  assert.match(source, /checkpointsByOccurrence\.get\(checkpoint\.occurrenceId\)/);
+  assert.match(source, /onCheckpointResume\?\.\(checkpoint\.occurrenceId\)/);
+  assert.match(source, /showResume=\{showCheckpointResume\}/);
+});
+
 test("conversation embeds a pending human interaction in its matching function call", async () => {
   const source = await readFile(CONVERSATION_URL, "utf8");
 

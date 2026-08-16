@@ -62,6 +62,24 @@ public class TurnPipelineTests
     }
 
     [Fact]
+    public async Task RunAsync_NonStreaming_ForwardsCheckpointBeforeBufferedContent()
+    {
+        var sink = new CapturingSink();
+        var content = CreateMessage("content");
+        var checkpoint = CreateMessage("saved", "agentflow-checkpoint");
+
+        await TurnPipeline.RunAsync(
+            ToStream(content, checkpoint, TestContext.Current.CancellationToken),
+            false,
+            sink,
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            ["turn-start", "agentflow-checkpoint", null, "turn-finished"],
+            sink.Messages.Select(GetType));
+    }
+
+    [Fact]
     public async Task RunAsync_FatalErrorContent_EmitsFailedFinish()
     {
         var sink = new CapturingSink();

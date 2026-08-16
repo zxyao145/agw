@@ -44,6 +44,8 @@ public static class DependencyInjection
         services.AddScoped<AgentflowTraceAppService>();
         services.AddScoped<AgentflowRuntimeService>();
         services.AddScoped<IAgentflowRuntimeService, AgentflowRuntimeService>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<AgentflowCheckpointStore>();
         services.AddScoped<McpToolServerDomainService>();
         services.AddScoped<AgentDomainService>();
         services.AddScoped<AgentAppService>();
@@ -79,7 +81,6 @@ public static class DependencyInjection
             services.AddScoped<DurableExecutionStore>();
             services.AddScoped<DurableAgentSegmentRunner>();
             services.AddScoped<DurableExecutionSegmentExecutor>();
-            services.TryAddSingleton(TimeProvider.System);
             AddExecutionEventStream(services, executionOptions);
             services.AddSingleton<DurableExecutionCoordinator>();
             services.AddHostedService<DistributedExecutionWorker>();

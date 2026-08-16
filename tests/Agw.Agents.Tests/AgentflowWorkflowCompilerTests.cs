@@ -530,6 +530,258 @@ public class AgentflowWorkflowCompilerTests
     }
 
     [Fact]
+    public async Task Compile_CheckpointBeforeClearMessages_RehydratesDownstreamOnly()
+    {
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "checkpoint-clear-loop" };
+        var codingClient = new CapturingChatClient("implementation complete");
+        var reviewClient = new CapturingChatClient("review complete");
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode { NodeId = "coding", Kind = AgentflowNodeKind.Agent, Name = "Coding" },
+            new AgentflowNode { NodeId = "checkpoint", Kind = AgentflowNodeKind.CheckpointMarker },
+            new AgentflowNode { NodeId = "clear", Kind = AgentflowNodeKind.ClearMessages },
+            new AgentflowNode { NodeId = "review", Kind = AgentflowNodeKind.Agent, Name = "Code Review" },
+            new AgentflowNode { NodeId = "human", Kind = AgentflowNodeKind.HumanGate },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var edges = new[]
+        {
+            Edge("input-coding", "input", "coding", AgentflowEdgeKind.FanOut),
+            Edge("input-review", "input", "review", AgentflowEdgeKind.FanInBarrier),
+            Edge("coding-checkpoint", "coding", "checkpoint"),
+            Edge("checkpoint-clear", "checkpoint", "clear"),
+            Edge("clear-review", "clear", "review", AgentflowEdgeKind.FanInBarrier),
+            Edge("review-human", "review", "human"),
+            Edge(
+                "retry",
+                "human",
+                "coding",
+                AgentflowEdgeKind.SwitchCase,
+                """{"contains":"retry"}""",
+                """{"switchCaseOrder":0}"""),
+            Edge("done", "human", "output", AgentflowEdgeKind.SwitchDefault),
+        };
+        Workflow? CompileWorkflow() => _compiler.Compile(
+            agentflow,
+            nodes,
+            edges,
+            new Dictionary<string, AIAgent>
+            {
+                ["coding"] = CreateAgent("coding", "Coding", codingClient),
+                ["review"] = CreateAgent("review", "Code Review", reviewClient),
+            });
+
+        var workflow = CompileWorkflow();
+
+        Assert.NotNull(workflow);
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var checkpointManager = CheckpointManager.CreateInMemory();
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow!,
+            new List<ChatMessage> { new(ChatRole.User, "original request") },
+            checkpointManager,
+            $"checkpoint-test-{Guid.CreateVersion7():N}",
+            cancellationToken);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+
+        var events = new List<WorkflowEvent>();
+        var requestCount = 0;
+        var checkpointRequestCount = 0;
+        RequestInfoEvent? checkpointRequest = null;
+        CheckpointInfo? markerCheckpoint = null;
+        await foreach (var evt in run.WatchStreamAsync(cancellationToken))
+        {
+            events.Add(evt);
+            if (evt is RequestInfoEvent request
+                && request.Request.PortInfo.PortId ==
+                AgentflowWorkflowCompiler.GetCheckpointRequestPortId("checkpoint"))
+            {
+                checkpointRequestCount++;
+                checkpointRequest = request;
+            }
+
+            if (evt is SuperStepCompletedEvent
+                {
+                    CompletionInfo.Checkpoint: not null,
+                } completed && checkpointRequest != null)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken);
+                Assert.Equal(0, reviewClient.TotalCalls);
+                markerCheckpoint = completed.CompletionInfo.Checkpoint;
+                Assert.True(checkpointRequest.Request.TryGetDataAs<List<ChatMessage>>(
+                    out var checkpointMessages));
+                await run.SendResponseAsync(
+                    checkpointRequest.Request.CreateResponse(checkpointMessages!));
+                checkpointRequest = null;
+            }
+
+            if (evt is RequestInfoEvent humanRequest
+                && humanRequest.Request.PortInfo.PortId !=
+                AgentflowWorkflowCompiler.GetCheckpointRequestPortId("checkpoint"))
+            {
+                requestCount++;
+                await run.SendResponseAsync(CreateHumanGateResponse(humanRequest.Request, "done"));
+            }
+        }
+
+        Assert.True(run.IsCheckpointingEnabled);
+        Assert.NotNull(markerCheckpoint);
+        Assert.Contains(markerCheckpoint, run.Checkpoints);
+        Assert.Equal(1, codingClient.TotalCalls);
+        Assert.Equal(1, reviewClient.TotalCalls);
+        Assert.Equal(1, checkpointRequestCount);
+        var reviewInput = Assert.Single(reviewClient.Messages);
+        Assert.Equal("original request", reviewInput.Text);
+        Assert.Equal(1, requestCount);
+        Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
+
+        var resumedWorkflow = CompileWorkflow();
+
+        Assert.NotNull(resumedWorkflow);
+        await using var resumedRun = await InProcessExecution.ResumeStreamingAsync(
+            resumedWorkflow!,
+            markerCheckpoint,
+            checkpointManager,
+            cancellationToken);
+        await foreach (var evt in resumedRun.WatchStreamAsync(cancellationToken))
+        {
+            events.Add(evt);
+            if (evt is RequestInfoEvent request
+                && request.Request.PortInfo.PortId ==
+                AgentflowWorkflowCompiler.GetCheckpointRequestPortId("checkpoint"))
+            {
+                checkpointRequestCount++;
+                Assert.True(request.Request.TryGetDataAs<List<ChatMessage>>(
+                    out var checkpointMessages));
+                await resumedRun.SendResponseAsync(
+                    request.Request.CreateResponse(checkpointMessages!));
+            }
+            else if (evt is RequestInfoEvent humanRequest)
+            {
+                requestCount++;
+                await resumedRun.SendResponseAsync(
+                    CreateHumanGateResponse(humanRequest.Request, "done"));
+            }
+        }
+
+        Assert.Equal(1, codingClient.TotalCalls);
+        Assert.Equal(2, reviewClient.TotalCalls);
+        Assert.Equal(2, checkpointRequestCount);
+        Assert.Equal(2, reviewClient.Messages.Count(message => message.Text == "original request"));
+        Assert.Equal(2, requestCount);
+        Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
+    }
+
+    [Fact]
+    public async Task Compile_Checkpoint_AggregatesMultiMessageAgentTurnIntoSingleRequest()
+    {
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "checkpoint-multi-message" };
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode { NodeId = "coding", Kind = AgentflowNodeKind.Agent, Name = "Coding" },
+            new AgentflowNode { NodeId = "checkpoint", Kind = AgentflowNodeKind.CheckpointMarker },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var edges = new[]
+        {
+            Edge("input-coding", "input", "coding", AgentflowEdgeKind.FanOut),
+            Edge("coding-checkpoint", "coding", "checkpoint"),
+            Edge("checkpoint-output", "checkpoint", "output"),
+        };
+        var workflow = _compiler.Compile(
+            agentflow,
+            nodes,
+            edges,
+            new Dictionary<string, AIAgent>
+            {
+                ["coding"] = CreateAgent("coding", "Coding", new ToolTranscriptChatClient()),
+            });
+
+        Assert.NotNull(workflow);
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow!,
+            new List<ChatMessage> { new(ChatRole.User, "implement") },
+            cancellationToken: cancellationToken);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+
+        var checkpointRequestCount = 0;
+        await foreach (var evt in run.WatchStreamAsync(cancellationToken))
+        {
+            if (evt is not RequestInfoEvent request
+                || request.Request.PortInfo.PortId !=
+                AgentflowWorkflowCompiler.GetCheckpointRequestPortId("checkpoint"))
+            {
+                continue;
+            }
+
+            checkpointRequestCount++;
+            Assert.True(request.Request.TryGetDataAs<List<ChatMessage>>(out var messages));
+            await run.SendResponseAsync(request.Request.CreateResponse(messages!));
+        }
+
+        Assert.Equal(1, checkpointRequestCount);
+    }
+
+    [Fact]
+    public async Task Compile_Checkpoint_AfterToolApprovalCreatesSingleRequest()
+    {
+        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "checkpoint-tool-approval" };
+        var worker = new ApprovalRequestAgent();
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "worker", Kind = AgentflowNodeKind.Agent, Name = "Worker" },
+            new AgentflowNode { NodeId = "checkpoint", Kind = AgentflowNodeKind.CheckpointMarker },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var workflow = _compiler.Compile(
+            agentflow,
+            nodes,
+            [
+                Edge("worker-checkpoint", "worker", "checkpoint"),
+                Edge("checkpoint-output", "checkpoint", "output"),
+            ],
+            new Dictionary<string, AIAgent> { ["worker"] = worker });
+
+        Assert.NotNull(workflow);
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow!,
+            new List<ChatMessage> { new(ChatRole.User, "change the code") },
+            cancellationToken: cancellationToken);
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+
+        var checkpointRequestCount = 0;
+        await foreach (var evt in run.WatchStreamAsync(cancellationToken))
+        {
+            if (evt is not RequestInfoEvent request)
+            {
+                continue;
+            }
+
+            if (request.Request.TryGetDataAs<ToolApprovalRequestContent>(out var approvalRequest))
+            {
+                await run.SendResponseAsync(request.Request.CreateResponse(
+                    approvalRequest.CreateResponse(approved: true)));
+                continue;
+            }
+
+            if (request.Request.PortInfo.PortId ==
+                AgentflowWorkflowCompiler.GetCheckpointRequestPortId("checkpoint"))
+            {
+                checkpointRequestCount++;
+                Assert.True(request.Request.TryGetDataAs<List<ChatMessage>>(out var messages));
+                await run.SendResponseAsync(request.Request.CreateResponse(messages!));
+            }
+        }
+
+        Assert.Equal(2, worker.TotalCalls);
+        Assert.Equal(1, checkpointRequestCount);
+    }
+
+    [Fact]
     public async Task Compile_CyclicBarrier_RestoresReusableInputFromCheckpoint()
     {
         var (agentflow, nodes, edges) = CreateCyclicBarrierFlow();

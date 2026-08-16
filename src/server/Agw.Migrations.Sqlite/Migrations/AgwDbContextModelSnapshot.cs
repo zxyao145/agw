@@ -613,6 +613,97 @@ namespace Agw.Migrations.Sqlite.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Executions.AgentflowCheckpointRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AgentflowId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("agentflow_id");
+
+                    b.Property<long>("BoundarySequence")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("boundary_sequence");
+
+                    b.Property<string>("CheckpointJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("checkpoint_json");
+
+                    b.Property<string>("ContextId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("context_id");
+
+                    b.Property<string>("CreateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_by");
+
+                    b.Property<DateTimeOffset>("CreateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("create_time");
+
+                    b.Property<string>("DefinitionFingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("definition_fingerprint");
+
+                    b.Property<bool>("IsDurable")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("is_durable");
+
+                    b.Property<string>("MarkersJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("markers_json");
+
+                    b.Property<Guid>("ProjectConversationId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_conversation_id");
+
+                    b.Property<Guid>("ProjectId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_id");
+
+                    b.Property<Guid?>("SourceExecutionId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("source_execution_id");
+
+                    b.Property<Guid>("TaskId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("task_id");
+
+                    b.Property<string>("UpdateBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_by");
+
+                    b.Property<DateTimeOffset?>("UpdateTime")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("update_time");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("user_name");
+
+                    b.HasKey("Id")
+                        .HasName("pk_agentflow_checkpoint");
+
+                    b.HasIndex("SourceExecutionId")
+                        .HasDatabaseName("ix_agentflow_checkpoint_source_execution_id");
+
+                    b.HasIndex("ProjectConversationId", "AgentflowId", "BoundarySequence")
+                        .HasDatabaseName("ix_agentflow_checkpoint_project_conversation_id_agentflow_id_boundary_sequence");
+
+                    b.ToTable("agentflow_checkpoint", (string)null);
+                });
+
             modelBuilder.Entity("Agw.Shared.Data.Entities.Executions.DurableExecutionEventRecord", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2106,6 +2197,16 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasConstraintName("fk_agent_skill_relation_skill_skill_id");
 
                     b.Navigation("Agent");
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Executions.AgentflowCheckpointRecord", b =>
+                {
+                    b.HasOne("Agw.Shared.Data.Entities.Projects.ProjectConversation", null)
+                        .WithMany()
+                        .HasForeignKey("ProjectConversationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_agentflow_checkpoint_project_conversation_project_conversation_id");
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Integrations.ConnectionCredential", b =>

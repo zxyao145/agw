@@ -107,6 +107,45 @@ test("buildSubscribeExecutionCommand resumes a Redis stream cursor", async () =>
   });
 });
 
+test("checkpoint commands preserve the exact occurrence identity", async () => {
+  const { buildResumeCheckpointCommand, getAgentflowCheckpointMessage } = await import(
+    "./execution-hub" + ".ts"
+  );
+
+  assert.deepEqual(
+    buildResumeCheckpointCommand({
+      checkpointOccurrenceId: "occurrence-1",
+      resumeExecutionId: "execution-2",
+      agentflowId: "agentflow-1",
+    }),
+    {
+      type: "ResumeCheckpointCommand",
+      checkpointOccurrenceId: "occurrence-1",
+      resumeExecutionId: "execution-2",
+      agentflowId: "agentflow-1",
+    },
+  );
+  assert.deepEqual(
+    getAgentflowCheckpointMessage({
+      messageId: "checkpoint-message-1",
+      author: "Agw",
+      role: "assistant",
+      contents: [{ type: "TextContent", content: "Review saved" }],
+      additionalProperties: {
+        type: "agentflow-checkpoint",
+        checkpointOccurrenceId: "occurrence-1",
+        checkpointNodeId: "checkpoint-node",
+        checkpointName: "Review saved",
+      },
+    }),
+    {
+      occurrenceId: "occurrence-1",
+      nodeId: "checkpoint-node",
+      name: "Review saved",
+    },
+  );
+});
+
 test("durable attachment detection connects only for a valid persisted execution", async () => {
   const { getDurableExecutionStorageKey, hasPersistedDurableExecution } = await import(
     "./execution-hub" + ".ts"

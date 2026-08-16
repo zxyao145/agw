@@ -1,3 +1,4 @@
+using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Agents.Execution.Durable;
 using Agw.Files.Exceptions;
@@ -53,6 +54,14 @@ public sealed class ExecutionHub : Hub<IExecutionHubClient>
     public Task<string> GetExecutionProvider() =>
         Task.FromResult(_executionProvider.ToString());
 
+    public Task<IReadOnlyList<AgentflowCheckpointAvailability>> GetAgentflowCheckpoints(
+        Guid agentflowId) =>
+        InvokeResultAsync(() => _registry.GetAgentflowCheckpointsAsync(
+            Context.ConnectionId,
+            CurrentUser,
+            agentflowId,
+            Context.ConnectionAborted));
+
     private string CurrentUser => Context.User?.Identity?.Name ?? Constants.AdminUserName;
 
     private static async Task InvokeAsync(Func<Task> action)
@@ -60,6 +69,22 @@ public sealed class ExecutionHub : Hub<IExecutionHubClient>
         try
         {
             await action();
+        }
+        catch (AgwException exception)
+        {
+            throw CreateHubException(exception);
+        }
+        catch (AgwFilesException exception)
+        {
+            throw CreateHubException(exception);
+        }
+    }
+
+    private static async Task<T> InvokeResultAsync<T>(Func<Task<T>> action)
+    {
+        try
+        {
+            return await action();
         }
         catch (AgwException exception)
         {

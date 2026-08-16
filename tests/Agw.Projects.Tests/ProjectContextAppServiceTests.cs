@@ -7,6 +7,7 @@ using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
+using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
@@ -411,6 +412,21 @@ public class ProjectContextAppServiceTests
                 0,
                 "Clear me",
                 TaskExecutionStatus.Succeeded));
+            seedContext.AgentflowCheckpoints.Add(new AgentflowCheckpointRecord
+            {
+                Id = Guid.CreateVersion7(),
+                ProjectId = projectId,
+                ProjectConversationId = contextId,
+                ContextId = "context-1",
+                TaskId = Guid.CreateVersion7(),
+                AgentflowId = Guid.CreateVersion7(),
+                UserName = "tester",
+                BoundarySequence = 0,
+                DefinitionFingerprint = new string('a', 64),
+                MarkersJson = "[]",
+                CheckpointJson = "{}",
+                CreateTime = TimeProvider.System.GetUtcNow()
+            });
             seedContext.TaskSessionBindings.Add(new TaskSessionBinding
             {
                 Id = Guid.CreateVersion7(),
@@ -431,6 +447,7 @@ public class ProjectContextAppServiceTests
 
         Assert.Equal(ApplicationResultType.Success, result.Type);
         Assert.Empty(await dbContext.ProjectConversationChatHistories.ToListAsync(cancellationToken));
+        Assert.Empty(await dbContext.AgentflowCheckpoints.ToListAsync(cancellationToken));
         Assert.Empty(await dbContext.TaskSessionBindings.ToListAsync(cancellationToken));
         Assert.Single(await dbContext.ProjectConversations.ToListAsync(cancellationToken));
         Assert.Single(await dbContext.AgentUsages.ToListAsync(cancellationToken));
@@ -594,6 +611,7 @@ public class ProjectContextAppServiceTests
         return new ProjectContextAppService(
             new EfRepository<ProjectConversation>(dbContext),
             new EfRepository<ProjectConversationChatHistory>(dbContext),
+            new EfRepository<AgentflowCheckpointRecord>(dbContext),
             new EfRepository<AgentflowTrace>(dbContext),
             new EfRepository<AgentUsage>(dbContext),
             dbContext,

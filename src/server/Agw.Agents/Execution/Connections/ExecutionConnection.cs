@@ -1,3 +1,4 @@
+using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Commands.Abstracts;
 
@@ -45,6 +46,22 @@ internal sealed class ExecutionConnection : IAsyncDisposable
         {
             ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
             await _dispatcher.DispatchAsync(command, _context, cancellationToken);
+        }
+        finally
+        {
+            _commandGate.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<AgentflowCheckpointAvailability>> GetAgentflowCheckpointsAsync(
+        Guid agentflowId,
+        CancellationToken cancellationToken)
+    {
+        await _commandGate.WaitAsync(cancellationToken);
+        try
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+            return await _context.GetAgentflowCheckpointsAsync(agentflowId, cancellationToken);
         }
         finally
         {

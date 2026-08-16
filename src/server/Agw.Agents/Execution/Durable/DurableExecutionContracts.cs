@@ -57,6 +57,11 @@ internal sealed record DurableExecutionManifest
     public string UserId { get; init; } = Constants.AdminUserId;
 
     /// <summary>
+    /// 获取 execution owner 的稳定登录名，用于 checkpoint 授权。
+    /// </summary>
+    public string UserName { get; init; } = Constants.AdminUserName;
+
+    /// <summary>
     /// 获取需要执行的 Agent 标识。
     /// </summary>
     public required Guid AgentId { get; init; }
@@ -80,6 +85,16 @@ internal sealed record DurableExecutionManifest
     /// 获取重建运行时所需的执行设置。
     /// </summary>
     public required DurableExecutionSettings Settings { get; init; }
+
+    /// <summary>
+    /// 获取创建当前分支的历史 Agentflow checkpoint occurrence。
+    /// </summary>
+    public Guid? ResumeCheckpointOccurrenceId { get; init; }
+
+    /// <summary>
+    /// 获取恢复分支首次启动时需要自动应答的 Checkpoint RequestPort 节点。
+    /// </summary>
+    public IReadOnlyList<string> ResumeCheckpointNodeIds { get; init; } = [];
 
     public string ResolveUserId() =>
         string.IsNullOrWhiteSpace(UserId) ? Constants.AdminUserId : UserId;

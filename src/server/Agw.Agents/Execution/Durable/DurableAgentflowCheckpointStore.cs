@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 using Agw.Shared.Exceptions;
@@ -67,9 +69,17 @@ internal sealed class DurableAgentflowCheckpointStore : ICheckpointStore<JsonEle
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
 
-        var checkpointInfo = new CheckpointInfo(
+        var checkpointIdInput = string.Join(
+            "\u001f",
             sessionId,
-            Guid.CreateVersion7().ToString("N"));
+            _checkpoints.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            parent?.SessionId ?? string.Empty,
+            parent?.CheckpointId ?? string.Empty,
+            value.GetRawText());
+        var checkpointId = Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(checkpointIdInput)))
+            .ToLowerInvariant();
+        var checkpointInfo = new CheckpointInfo(sessionId, checkpointId);
         _checkpoints.Add(new DurableAgentflowCheckpoint
         {
             SessionId = checkpointInfo.SessionId,

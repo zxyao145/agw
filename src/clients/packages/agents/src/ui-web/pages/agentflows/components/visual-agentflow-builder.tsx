@@ -1638,7 +1638,9 @@ function NodeInspector({
   onSelectBlockParticipant: (blockId: string, participantNodeId: string) => void;
 }) {
   const meta = NODE_META[node.data.kind];
-  const usesAdvancedConfig = node.data.kind !== AgentflowNodeKind.ClearMessages;
+  const usesAdvancedConfig =
+    node.data.kind !== AgentflowNodeKind.ClearMessages &&
+    node.data.kind !== AgentflowNodeKind.CheckpointMarker;
   const configIsInvalid =
     usesAdvancedConfig &&
     node.data.configJson.trim().length > 0 &&

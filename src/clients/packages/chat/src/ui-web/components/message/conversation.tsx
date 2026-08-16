@@ -9,11 +9,16 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "
 import { collapseConsecutiveSystemMessages } from "../../../lib/chat/ai-message-handlers";
 import { cn } from "@agw/components";
 import { MessageTrigger } from "../message-trigger";
-import type { PendingHumanGate } from "../../../services/execution-hub";
+import {
+  getAgentflowCheckpointMessage,
+  type AgentflowCheckpointAvailability,
+  type PendingHumanGate,
+} from "../../../services/execution-hub";
 import { matchesHumanInteractionCall } from "../../../services/human-interaction-call";
 import { getHumanInteractionQuestionResult } from "../../../services/human-interaction";
 import { HumanInteractionPanel } from "./human-interaction-panel";
 import { HumanInteractionQuestionResultView } from "./human-interaction-question-result";
+import { AgentflowCheckpointCard } from "./agentflow-checkpoint-card";
 
 export interface ChatSessionProps {
   messages: AiMessage[];
@@ -24,6 +29,10 @@ export interface ChatSessionProps {
   pendingHumanInteraction?: (PendingHumanGate & { requestType: "human-interaction" }) | null;
   onHumanInteractionSubmit?: (responseData: unknown) => void;
   onHumanInteractionCancel?: () => void;
+  checkpointAvailability?: AgentflowCheckpointAvailability[];
+  showCheckpointResume?: boolean;
+  checkpointResumeDisabled?: boolean;
+  onCheckpointResume?: (occurrenceId: string) => void;
   footer?: React.ReactNode;
 }
 
@@ -247,6 +256,10 @@ export function Conversation({
   pendingHumanInteraction = null,
   onHumanInteractionSubmit,
   onHumanInteractionCancel,
+  checkpointAvailability = [],
+  showCheckpointResume = false,
+  checkpointResumeDisabled = false,
+  onCheckpointResume,
   footer,
 }: ChatSessionProps) {
   const processedMessages = React.useMemo(
@@ -254,6 +267,10 @@ export function Conversation({
     [messages, processMessages],
   );
   const keyedMessages = React.useMemo(() => addStableKeys(processedMessages), [processedMessages]);
+  const checkpointsByOccurrence = React.useMemo(
+    () => new Map(checkpointAvailability.map((item) => [item.occurrenceId, item])),
+    [checkpointAvailability],
+  );
 
   if ((!messages || messages.length == 0) && !footer) {
     return (
@@ -295,6 +312,22 @@ export function Conversation({
         )}
 
         {keyedMessages.map(({ item, key }, index) => {
+          const checkpoint =
+            item.type === "normal" ? getAgentflowCheckpointMessage(item.message) : null;
+          if (checkpoint) {
+            const availability = checkpointsByOccurrence.get(checkpoint.occurrenceId);
+            return (
+              <AgentflowCheckpointCard
+                key={key}
+                name={checkpoint.name}
+                showResume={showCheckpointResume}
+                available={availability?.available === true}
+                disabled={checkpointResumeDisabled || !onCheckpointResume}
+                onResume={() => onCheckpointResume?.(checkpoint.occurrenceId)}
+              />
+            );
+          }
+
           if (
             index === humanInteractionItemIndex &&
             item.type === "normal" &&

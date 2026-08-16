@@ -13,6 +13,7 @@ public sealed class AgentflowRuntime : RuntimeBase
     private readonly TaskProjection _task;
     private readonly SettingCommand _settings;
     private readonly AgentflowRuntimeService _runtimeService;
+    private readonly AgentflowCheckpointRuntimeState _checkpointState = new();
 
     internal AgentflowRuntime(
         Guid agentflowId,
@@ -51,10 +52,29 @@ public sealed class AgentflowRuntime : RuntimeBase
             humanGateApprovalHandler,
             _settings.EnvironmentVariables,
             _task.ProjectConversationId,
-            permissionState);
+            permissionState,
+            command.ExecutionId,
+            _checkpointState,
+            command.ResumeCheckpoint);
+
+    internal IReadOnlySet<Guid> CheckpointOccurrenceIds => _checkpointState.OccurrenceIds;
+
+    internal bool TryGetCheckpoint(
+        Guid occurrenceId,
+        out AgentflowCheckpointSnapshot? checkpoint) =>
+        _checkpointState.TryGet(occurrenceId, out checkpoint);
+
+    internal void RemoveCheckpointsAfter(long boundarySequence) =>
+        _checkpointState.RemoveAfter(boundarySequence);
 
     internal void SetPermissionMode(PermissionMode permissionMode)
     {
         _settings.PermissionMode = permissionMode;
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        await base.DisposeAsync();
+        _checkpointState.Clear();
     }
 }

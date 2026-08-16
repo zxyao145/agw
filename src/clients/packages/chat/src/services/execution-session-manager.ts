@@ -9,6 +9,7 @@ import {
   type ExecutionRequest,
   type ExecutionSetting,
   type ExecutionConfigurationResult,
+  type AgentflowCheckpointAvailability,
 } from "./execution-hub";
 import type { AiMessage } from "@agw/api";
 import {
@@ -22,6 +23,8 @@ type ExecutionClient = Pick<
   ExecutionHubClient,
   | "configure"
   | "execute"
+  | "listAgentflowCheckpoints"
+  | "resumeCheckpoint"
   | "setMode"
   | "setPermissionMode"
   | "interrupt"
@@ -46,6 +49,12 @@ type Entry = {
 export type ManagedExecutionHandle = {
   configure(setting: ExecutionSetting): Promise<ExecutionConfigurationResult>;
   execute(request: ExecutionRequest): Promise<void>;
+  listAgentflowCheckpoints(agentflowId: string): Promise<AgentflowCheckpointAvailability[]>;
+  resumeCheckpoint(args: {
+    checkpointOccurrenceId: string;
+    agentflowId: string;
+    resumeExecutionId?: string;
+  }): Promise<string>;
   setMode(agentId: string, mode: AgentMode): Promise<void>;
   setPermissionMode(permissionMode: PermissionMode): Promise<void>;
   interrupt(reason?: string): Promise<void>;
@@ -138,6 +147,20 @@ export class ExecutionSessionManager {
         this.activity.turnStarted(key);
         try {
           await attachedEntry.client.execute(request);
+        } catch (error) {
+          this.activity.turnFinished(key, "failed");
+          throw error;
+        }
+      },
+      listAgentflowCheckpoints: (agentflowId) =>
+        attachedEntry.client.listAgentflowCheckpoints(agentflowId),
+      resumeCheckpoint: async (args) => {
+        if (this.activity.isActive(key)) {
+          throw new Error("This conversation already has a running task.");
+        }
+        this.activity.turnStarted(key);
+        try {
+          return await attachedEntry.client.resumeCheckpoint(args);
         } catch (error) {
           this.activity.turnFinished(key, "failed");
           throw error;

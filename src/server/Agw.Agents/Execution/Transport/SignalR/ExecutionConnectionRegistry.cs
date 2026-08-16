@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 
+using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Agents.Execution.Connections;
@@ -71,6 +72,21 @@ public sealed class ExecutionConnectionRegistry : IAsyncDisposable
         }
 
         return connection.DispatchAsync(command, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<AgentflowCheckpointAvailability>> GetAgentflowCheckpointsAsync(
+        string connectionId,
+        string userName,
+        Guid agentflowId,
+        CancellationToken cancellationToken)
+    {
+        if (!_connections.TryGetValue(connectionId, out var connection)
+            || !string.Equals(connection.UserName, userName, StringComparison.Ordinal))
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "Execution connection is not available.");
+        }
+
+        return connection.GetAgentflowCheckpointsAsync(agentflowId, cancellationToken);
     }
 
     public Task DisconnectAsync(string connectionId)

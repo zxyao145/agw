@@ -123,7 +123,7 @@ public class EfCoreChatHistoryProviderTests
     }
 
     [Fact]
-    public async Task ProvideChatHistoryAsync_WhenContextContainsResult_ExcludesResultFromModelHistory()
+    public async Task ProvideChatHistoryAsync_WhenContextContainsControlSnapshots_ExcludesThemFromModelHistory()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -146,7 +146,8 @@ public class EfCoreChatHistoryProviderTests
             seedContext.ProjectConversations.Add(CreateContext(projectConversationId, projectId, "context-1"));
             seedContext.ProjectConversationChatHistories.AddRange(
                 CreateRecord(projectConversationId, Guid.CreateVersion7(), 0, "normal", jsonOptions),
-                CreateRecord(projectConversationId, Guid.CreateVersion7(), 1, CreateResultMessage("summary"), jsonOptions));
+                CreateRecord(projectConversationId, Guid.CreateVersion7(), 1, CreateResultMessage("summary"), jsonOptions),
+                CreateRecord(projectConversationId, Guid.CreateVersion7(), 2, CreateCheckpointMessage(), jsonOptions));
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -1388,6 +1389,18 @@ public class EfCoreChatHistoryProviderTests
             AdditionalProperties = new AdditionalPropertiesDictionary
             {
                 ["type"] = "result"
+            }
+        };
+
+    private static ChatMessage CreateCheckpointMessage() =>
+        new(ChatRole.Assistant, "Review saved")
+        {
+            MessageId = Guid.CreateVersion7().ToString(),
+            AuthorName = Constants.DefaultAgentAuthor,
+            AdditionalProperties = new AdditionalPropertiesDictionary
+            {
+                ["type"] = "agentflow-checkpoint",
+                ["checkpointOccurrenceId"] = Guid.CreateVersion7().ToString()
             }
         };
 

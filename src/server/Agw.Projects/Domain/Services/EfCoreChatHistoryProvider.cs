@@ -389,7 +389,11 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         string.Equals(type?.ToString(), "result", StringComparison.Ordinal);
 
     private static bool IsExcludedFromModelHistory(ChatMessage message) =>
-        IsResult(message) || IsToolMessage(message);
+        IsResult(message) || IsCheckpoint(message) || IsToolMessage(message);
+
+    private static bool IsCheckpoint(ChatMessage message) =>
+        message.AdditionalProperties?.TryGetValue("type", out var type) == true
+        && string.Equals(type?.ToString(), "agentflow-checkpoint", StringComparison.Ordinal);
 
     private static bool IsToolMessage(ChatMessage message) =>
         message.AdditionalProperties.IsToolMessage();

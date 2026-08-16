@@ -26,10 +26,11 @@ public sealed class InitialMigrationTests
         using var dbContext = new AgwDbContext(options.Options);
 
         var migrations = dbContext.Database.GetMigrations().ToArray();
-        Assert.Equal(3, migrations.Length);
+        Assert.Equal(4, migrations.Length);
         Assert.EndsWith("_Init", migrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", migrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", migrations[2], StringComparison.Ordinal);
+        Assert.EndsWith("_AddAgentflowCheckpoints", migrations[3], StringComparison.Ordinal);
 
         var script = dbContext.GetService<IMigrator>().GenerateScript(
             Migration.InitialDatabase,
@@ -44,6 +45,7 @@ public sealed class InitialMigrationTests
         Assert.Contains("project_conversation_chat_history", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("durable_execution", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("execution_stream_entry", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("agentflow_checkpoint", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("api_token", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("user_memory", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("normalized_name", script, StringComparison.OrdinalIgnoreCase);
@@ -91,10 +93,11 @@ public sealed class InitialMigrationTests
         var appliedMigrations = (await dbContext.Database
                 .GetAppliedMigrationsAsync(cancellationToken))
             .ToArray();
-        Assert.Equal(3, appliedMigrations.Length);
+        Assert.Equal(4, appliedMigrations.Length);
         Assert.EndsWith("_Init", appliedMigrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", appliedMigrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", appliedMigrations[2], StringComparison.Ordinal);
+        Assert.EndsWith("_AddAgentflowCheckpoints", appliedMigrations[3], StringComparison.Ordinal);
         Assert.True(await TableExistsAsync(connection, "integration_connection", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "plugin_installation", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "project_memory", cancellationToken));
@@ -105,6 +108,7 @@ public sealed class InitialMigrationTests
             cancellationToken));
         Assert.True(await TableExistsAsync(connection, "durable_execution", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "execution_stream_entry", cancellationToken));
+        Assert.True(await TableExistsAsync(connection, "agentflow_checkpoint", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "api_token", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "user_memory", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "api_token", "create_by", cancellationToken));

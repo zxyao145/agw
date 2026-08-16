@@ -175,6 +175,7 @@ public class EntityTypeConfigurationTests
     public void ExecutionEntities_DeclareMatchingConfigurations()
     {
         AssertConfigured(
+            typeof(AgentflowCheckpointRecord),
             typeof(DurableExecutionRecord),
             typeof(DurableExecutionEventRecord));
     }
@@ -188,7 +189,7 @@ public class EntityTypeConfigurationTests
             .OrderBy(type => type.FullName)
             .ToArray();
 
-        Assert.Equal(35, entityTypes.Length);
+        Assert.Equal(36, entityTypes.Length);
         AssertConfigured(entityTypes);
     }
 

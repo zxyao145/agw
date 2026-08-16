@@ -1,6 +1,7 @@
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
+using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Extensions;
@@ -14,6 +15,7 @@ public class ProjectContextAppService
 {
     private readonly IRepository<ProjectConversation> _contextRepository;
     private readonly IRepository<ProjectConversationChatHistory> _recordRepository;
+    private readonly IRepository<AgentflowCheckpointRecord> _checkpointRepository;
     private readonly IRepository<AgentflowTrace> _traceRepository;
     private readonly IRepository<AgentUsage> _usageRepository;
     private readonly IUnitOfWork _unitOfWork;
@@ -25,6 +27,7 @@ public class ProjectContextAppService
     public ProjectContextAppService(
         IRepository<ProjectConversation> contextRepository,
         IRepository<ProjectConversationChatHistory> recordRepository,
+        IRepository<AgentflowCheckpointRecord> checkpointRepository,
         IRepository<AgentflowTrace> traceRepository,
         IRepository<AgentUsage> usageRepository,
         IUnitOfWork unitOfWork,
@@ -35,6 +38,7 @@ public class ProjectContextAppService
     {
         _contextRepository = contextRepository;
         _recordRepository = recordRepository;
+        _checkpointRepository = checkpointRepository;
         _traceRepository = traceRepository;
         _usageRepository = usageRepository;
         _unitOfWork = unitOfWork;
@@ -105,6 +109,9 @@ public class ProjectContextAppService
         await _recordRepository.Queryable
             .Where(record => record.ConversationId == context.Id)
             .ExecuteDeleteAsync();
+        await _checkpointRepository.Queryable
+            .Where(checkpoint => checkpoint.ProjectConversationId == context.Id)
+            .ExecuteDeleteAsync();
         await _traceRepository.Queryable
             .Where(trace => trace.ProjectId == context.ProjectId && trace.ContextId == context.ContextId)
             .ExecuteDeleteAsync();
@@ -153,6 +160,9 @@ public class ProjectContextAppService
         await _traceRepository.Queryable
             .Where(trace => trace.ProjectId == project.Id)
             .ExecuteDeleteAsync();
+        await _checkpointRepository.Queryable
+            .Where(checkpoint => checkpoint.ProjectId == project.Id)
+            .ExecuteDeleteAsync();
 
         await _contextRepository.Queryable
             .Where(context => context.ProjectId == project.Id)
@@ -172,6 +182,9 @@ public class ProjectContextAppService
 
         await _recordRepository.Queryable
             .Where(record => record.ConversationId == context.Id)
+            .ExecuteDeleteAsync();
+        await _checkpointRepository.Queryable
+            .Where(checkpoint => checkpoint.ProjectConversationId == context.Id)
             .ExecuteDeleteAsync();
         await _traceRepository.Queryable
             .Where(trace => trace.ProjectId == context.ProjectId && trace.ContextId == context.ContextId)

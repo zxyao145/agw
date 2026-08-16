@@ -2,6 +2,7 @@ using System.Text.Json;
 
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Commands.Abstracts;
+using Agw.Agents.Execution.Commands.Checkpoint;
 using Agw.Agents.Execution.Commands.Mode;
 using Agw.Agents.Execution.Commands.Permission;
 using Agw.Agents.Execution.Commands.Setting;
@@ -99,6 +100,34 @@ public class ExecutionCommandRegistrationTests
 
         var setPermissionMode = Assert.IsType<SetPermissionModeCommand>(command);
         Assert.Equal(PermissionMode.AllowSameArguments, setPermissionMode.PermissionMode);
+    }
+
+    [Fact]
+    public void AddExecutionCommands_RegistersResumeCheckpointCommand()
+    {
+        var services = new ServiceCollection();
+        services.AddExecutionCommands();
+        using var provider = services.BuildServiceProvider();
+        var options = provider
+            .GetRequiredService<IOptions<JsonHubProtocolOptions>>()
+            .Value
+            .PayloadSerializerOptions;
+
+        var command = JsonSerializer.Deserialize<AgentRunCommand>(
+            """
+            {
+              "type": "ResumeCheckpointCommand",
+              "checkpointOccurrenceId": "0190c7e9-19f3-7fb5-8c16-21b70989f001",
+              "resumeExecutionId": "0190c7e9-19f3-7fb5-8c16-21b70989f002",
+              "agentflowId": "0190c7e9-19f3-7fb5-8c16-21b70989f003"
+            }
+            """,
+            options);
+
+        var resume = Assert.IsType<ResumeCheckpointCommand>(command);
+        Assert.Equal(
+            Guid.Parse("0190c7e9-19f3-7fb5-8c16-21b70989f001"),
+            resume.CheckpointOccurrenceId);
     }
 
     [Fact]

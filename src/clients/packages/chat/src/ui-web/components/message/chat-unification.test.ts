@@ -4,6 +4,7 @@ import test from "node:test";
 
 const CHAT_URL = new URL("./chat.tsx", import.meta.url);
 const CHAT_INPUT_URL = new URL("./chat-input.tsx", import.meta.url);
+const CHECKPOINT_CARD_URL = new URL("./agentflow-checkpoint-card.tsx", import.meta.url);
 const PACKAGES_URL = new URL("../../../../../", import.meta.url);
 const SEARCH_FILE_URL = new URL("../../../lib/chat/search-file.ts", import.meta.url);
 const EXECUTION_HUB_URL = new URL("../../../services/execution-hub.ts", import.meta.url);
@@ -147,6 +148,33 @@ test("shared Chat scopes history and batches incoming streaming messages", async
   );
   assert.match(source, /streamingMessageBatcherRef\.current\?\.flush\(generation\)/);
   assert.doesNotMatch(source, /mergeStreamingMessagesById/);
+});
+
+test("Agentflow checkpoint resume uses an exact occurrence and truncates only after success", async () => {
+  const [source, inputSource, cardSource] = await Promise.all([
+    readFile(CHAT_URL, "utf8"),
+    readFile(CHAT_INPUT_URL, "utf8"),
+    readFile(CHECKPOINT_CARD_URL, "utf8"),
+  ]);
+
+  assert.match(source, /target\?\.type === "agentflow"/);
+  assert.match(source, /checkpoint\.boundarySequence > latest\.boundarySequence/);
+  assert.match(
+    source,
+    /checkpointResumeDisabled =\s*isExecuting \|\| isTransitioning \|\| reconnectState !== null/,
+  );
+  assert.match(source, /checkpoint\.occurrenceId === occurrenceId && checkpoint\.available/);
+  assert.match(source, /message\.streamingScopeId === resumedStreamingScopeId/);
+  assert.ok(
+    source.indexOf("await client.resumeCheckpoint") < source.lastIndexOf("truncateAtCheckpoint("),
+  );
+  assert.match(source, /setConversationUsage\(calculateConversationUsage\(retainedMessages\)\)/);
+
+  const resumeIndex = inputSource.indexOf("Resume");
+  const quickTextIndex = inputSource.indexOf("<QuickTextDialog");
+  assert.ok(resumeIndex >= 0 && resumeIndex < quickTextIndex);
+  assert.match(cardSource, /The workflow continued automatically\./);
+  assert.match(cardSource, /disabled=\{disabled \|\| !available\}/);
 });
 
 test("shared Chat restores only a hydrated durable attachment", async () => {
