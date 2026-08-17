@@ -28,6 +28,7 @@ using Agw.Skills.Execution;
 using Agw.Tools.ToolBlocks;
 
 using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Compaction;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -73,7 +74,13 @@ public class AgentRuntimeServiceSystemCompositionTests
         var connectionId = Guid.CreateVersion7();
         var classSkillRegistration = new TestSkillRegistration();
 
-        dbContext.Models.Add(new AgwAiModel { Id = modelId, Name = "test-model" });
+        dbContext.Models.Add(new AgwAiModel
+        {
+            Id = modelId,
+            Name = "test-model",
+            MaxContextWindowTokens = 128_000,
+            MaxOutputTokens = 16_000
+        });
         dbContext.Providers.Add(new Provider
         {
             Id = providerId,
@@ -258,6 +265,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             var agentOptions = FindInObjectGraph<ChatClientAgentOptions>(aiAgent!);
             var chatOptions = Assert.IsType<ChatOptions>(agentOptions.ChatOptions);
             Assert.Equal("You are a helpful agent.", chatOptions.Instructions);
+            Assert.Equal(16_000, chatOptions.MaxOutputTokens);
             Assert.NotNull(chatOptions.Tools);
             Assert.Equal(
                 new[]
@@ -288,6 +296,13 @@ public class AgentRuntimeServiceSystemCompositionTests
             Assert.NotNull(agentOptions.AIContextProviders);
             var contextProviders = agentOptions.AIContextProviders.ToArray();
             Assert.Equal(2, contextProviders.Length);
+            Assert.DoesNotContain(contextProviders, provider => provider is CompactionProvider);
+            var compactionScope = Assert.IsType<LocalHistoryCompactionScopeChatClient>(
+                aiAgent!.GetService<LocalHistoryCompactionScopeChatClient>());
+            var compactionProvider = FindInObjectGraph<CompactionProvider>(compactionScope);
+            Assert.Equal(
+                $"agw.compaction.{agent.Id:N}",
+                Assert.Single(compactionProvider.StateKeys));
             var instructionsProvider = Assert.IsType<AgwWorkspaceProvider>(contextProviders[0]);
             var skillsProvider = Assert.IsType<AgentSkillsProvider>(contextProviders[1]);
             var instructionsContext = await instructionsProvider.InvokingAsync(

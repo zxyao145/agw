@@ -40,7 +40,7 @@ The resulting `server-state.json` lives below the Agw data directory, not the ap
 
 API Token hashes and metadata live in the database `api_token` table instead of `server-state.json`. On startup, legacy JSON Token records are imported with their original creation time, attributed to the built-in administrator because the old format had no creator, and removed from the state file only after a successful database write. See [`Agw.Auth`](../Agw.Auth/README.md) for the runtime seam.
 
-The `AddApiTokenTable` migration exists for both SQLite and PostgreSQL. Setup applies the selected provider's pending migrations before seeding and before any legacy Token import; it never marks initialization complete when migration or import fails.
+Matching schema migrations are maintained for SQLite and PostgreSQL. Setup applies the selected provider's pending migrations before seeding and before any legacy Token import; it never marks initialization complete when migration or import fails. An already initialized installation does not repeat first-run setup during normal startup, so later schema upgrades must follow the procedure in the [Deployment Guide](../../../docs/4.Deployment.md).
 
 ## Authentication handoff
 

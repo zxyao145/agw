@@ -257,7 +257,8 @@ public class DbSeeder
             {
                 Id = DeepSeekModelId,
                 Name = "deepseek-v4-pro",
-                MaxTokens = 256_000,
+                MaxContextWindowTokens = AgwAiModel.DefaultMaxContextWindowTokens,
+                MaxOutputTokens = AgwAiModel.DefaultMaxOutputTokens,
                 CreateBy = Constants.AdminUserName,
                 CreateTime = now,
                 UpdateBy = Constants.AdminUserName,

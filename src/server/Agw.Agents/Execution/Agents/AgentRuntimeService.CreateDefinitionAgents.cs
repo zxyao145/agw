@@ -12,6 +12,7 @@ using Anthropic;
 using Anthropic.Core;
 
 using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -127,7 +128,14 @@ public partial class AgentRuntimeService
                         SystemPrompt = agentDefinition.SystemPrompt,
                         ModelId = model.Name,
                         OpenTelemetrySourceName = provider.Name,
-                        ChatHistoryProvider = _chatHistoryProvider
+                        ChatHistoryProvider = _chatHistoryProvider,
+                        CompactionProvider = new CompactionProvider(
+                            new ContextWindowCompactionStrategy(
+                                model.MaxContextWindowTokens,
+                                model.MaxOutputTokens),
+                            stateKey: $"agw.compaction.{agentDefinition.Id:N}",
+                            loggerFactory: _loggerFactory),
+                        MaxOutputTokens = model.MaxOutputTokens
                     },
                     capabilities,
                     _loggerFactory,

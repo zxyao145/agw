@@ -2867,7 +2867,7 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/html": {}
+              "text/html": { }
             }
           }
         }
@@ -5927,6 +5927,71 @@
         },
         "description": "Updates an agent. External agents support partial updates for displayName, description,\nmodelProviderId, extra, and environmentVariables only. When supplied for an External agent,\ndisplayName and description cannot be null."
       },
+      "AgwAiModel": {
+        "required": [
+          "id",
+          "name",
+          "description",
+          "maxContextWindowTokens",
+          "maxOutputTokens",
+          "createTime",
+          "createBy",
+          "updateBy"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "maxContextWindowTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxOutputTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "providers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelProviderRelation"
+            }
+          },
+          "createTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "updateTime": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "updateBy": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "AgwContent": {
         "required": [
           "type",
@@ -6542,6 +6607,73 @@
           }
         }
       },
+      "ApiResultOfAgwAiModel": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgwAiModel"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfAgwAiModel[]": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AgwAiModel"
+            }
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ApiResultOfConnectionResponse": {
         "required": [
           "code",
@@ -6847,73 +6979,6 @@
           }
         }
       },
-      "ApiResultOfAgwAiModel": {
-        "required": [
-          "code",
-          "title",
-          "detail",
-          "contentType"
-        ],
-        "type": "object",
-        "properties": {
-          "data": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/AgwAiModel"
-              }
-            ]
-          },
-          "code": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "title": {
-            "type": "string"
-          },
-          "detail": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
-      "ApiResultOfAgwAiModel[]": {
-        "required": [
-          "code",
-          "title",
-          "detail",
-          "contentType"
-        ],
-        "type": "object",
-        "properties": {
-          "data": {
-            "type": [
-              "null",
-              "array"
-            ],
-            "items": {
-              "$ref": "#/components/schemas/AgwAiModel"
-            }
-          },
-          "code": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "title": {
-            "type": "string"
-          },
-          "detail": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
       "ApiResultOfMcpServer": {
         "required": [
           "code",
@@ -7160,7 +7225,7 @@
         ],
         "type": "object",
         "properties": {
-          "data": {},
+          "data": { },
           "code": {
             "type": "integer",
             "format": "int32"
@@ -7358,6 +7423,40 @@
               },
               {
                 "$ref": "#/components/schemas/PagedResultOfSkillResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfPagedResultOfUserMemorySummaryResponse": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PagedResultOfUserMemorySummaryResponse"
               }
             ]
           },
@@ -7827,6 +7926,40 @@
             "items": {
               "$ref": "#/components/schemas/ToolInfo"
             }
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfUserMemoryDetailResponse": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserMemoryDetailResponse"
+              }
+            ]
           },
           "code": {
             "type": "integer",
@@ -8773,66 +8906,6 @@
           }
         }
       },
-      "AgwAiModel": {
-        "required": [
-          "id",
-          "name",
-          "description",
-          "maxTokens",
-          "createTime",
-          "createBy",
-          "updateBy"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "name": {
-            "type": "string"
-          },
-          "description": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "maxTokens": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "providers": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ModelProviderRelation"
-            }
-          },
-          "createTime": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "createBy": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "updateTime": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "format": "date-time"
-          },
-          "updateBy": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
       "LoginRequest": {
         "required": [
           "password"
@@ -9207,7 +9280,8 @@
         "required": [
           "name",
           "description",
-          "maxTokens"
+          "maxContextWindowTokens",
+          "maxOutputTokens"
         ],
         "type": "object",
         "properties": {
@@ -9220,7 +9294,11 @@
               "string"
             ]
           },
-          "maxTokens": {
+          "maxContextWindowTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxOutputTokens": {
             "type": "integer",
             "format": "int32"
           }
@@ -9445,7 +9523,8 @@
         "required": [
           "name",
           "description",
-          "maxTokens"
+          "maxContextWindowTokens",
+          "maxOutputTokens"
         ],
         "type": "object",
         "properties": {
@@ -9458,7 +9537,11 @@
               "string"
             ]
           },
-          "maxTokens": {
+          "maxContextWindowTokens": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxOutputTokens": {
             "type": "integer",
             "format": "int32"
           }
@@ -9783,6 +9866,39 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SkillResponse"
+            }
+          },
+          "total": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "pageIndex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PagedResultOfUserMemorySummaryResponse": {
+        "required": [
+          "items",
+          "total",
+          "pageIndex",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserMemorySummaryResponse"
             }
           },
           "total": {
@@ -11102,6 +11218,23 @@
           }
         }
       },
+      "ToolBlockDefinitionUserMemoryToolBlockDefinition": {
+        "required": [
+          "options",
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "enum": [
+              "user-memory"
+            ],
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/components/schemas/EmptyToolOptions"
+          }
+        }
+      },
       "ToolCatalogItemKind": {
         "enum": [
           "tool",
@@ -11605,124 +11738,6 @@
           }
         }
       },
-      "ApiResultOfPagedResultOfUserMemorySummaryResponse": {
-        "required": [
-          "code",
-          "title",
-          "detail",
-          "contentType"
-        ],
-        "type": "object",
-        "properties": {
-          "data": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/PagedResultOfUserMemorySummaryResponse"
-              }
-            ]
-          },
-          "code": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "title": {
-            "type": "string"
-          },
-          "detail": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
-      "ApiResultOfUserMemoryDetailResponse": {
-        "required": [
-          "code",
-          "title",
-          "detail",
-          "contentType"
-        ],
-        "type": "object",
-        "properties": {
-          "data": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/UserMemoryDetailResponse"
-              }
-            ]
-          },
-          "code": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "title": {
-            "type": "string"
-          },
-          "detail": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
-      "PagedResultOfUserMemorySummaryResponse": {
-        "required": [
-          "items",
-          "total",
-          "pageIndex",
-          "pageSize"
-        ],
-        "type": "object",
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/UserMemorySummaryResponse"
-            }
-          },
-          "total": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int64"
-          },
-          "pageIndex": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "pageSize": {
-            "type": "integer",
-            "format": "int32"
-          }
-        }
-      },
-      "ToolBlockDefinitionUserMemoryToolBlockDefinition": {
-        "required": [
-          "options",
-          "name"
-        ],
-        "properties": {
-          "name": {
-            "enum": [
-              "user-memory"
-            ],
-            "type": "string"
-          },
-          "options": {
-            "$ref": "#/components/schemas/EmptyToolOptions"
-          }
-        }
-      },
       "UserMemoryCreateRequest": {
         "required": [
           "name",
@@ -11913,6 +11928,9 @@
     },
     {
       "name": "Tools"
+    },
+    {
+      "name": "UserMemories"
     }
   ]
 }

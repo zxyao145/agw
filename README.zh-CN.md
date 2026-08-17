@@ -120,7 +120,7 @@ Agw Desktop 在 `src/clients/desktop/` 下拥有独立的 Electron main/preload 
 典型本地使用流程：
 
 1. 如果后端跳转到 `/setup`，先完成首次初始化。
-2. 在 `Providers`、`Models`、`Model Providers` 中配置供应商、模型和模型供应商关联。
+2. 在 `Providers`、`Models`、`Model Providers` 中配置供应商、模型和模型供应商关联，并按供应商真实规格设置每个模型的上下文窗口与最大输出 token。Definition Agent 会据此预留回复空间并自动压缩模型请求；自动发现模型使用的 `256,000 / 64,000` 只是回退默认值，并不代表供应商的真实上限。
 3. 在 `Agents` 中创建 Agent，并按需关联 MCP Tool Servers、Tools、Skills 或集成应用。
 4. 通过 `Chat` 或 `Projects` 运行 Agent Session，并查看持久化的 Task 历史。
 5. 使用 `Agentflows` 进行多 Agent 编排，使用 `Jobs` 执行定时或周期任务。
@@ -411,7 +411,7 @@ flowchart TB
 - [Chat Suggestions 设计](docs/5.Chat%20Suggestions.md)：Agent 感知的 slash commands、Claude init commands、文件建议与失败降级。
 - [Agentflow 指南](docs/6.Agentflow.md)：图路由与循环规则、编辑器撤销和未保存状态、Chat 消息归属。
 - [Agent 执行流程](docs/ws-flow.md)：SignalR 命令、turn 消息、runtime 生命周期与断线行为。
-- [Execution 子系统](src/server/Agw.Agents/Execution/README.md)：目录职责、数据流与 command 扩展方式。
+- [Execution 子系统](src/server/Agw.Agents/Execution/README.md)：目录职责、数据流、Definition Agent 自动上下文压缩与 command 扩展方式。
 - [Files 模块](src/server/Agw.Files/README.zh-CN.md)：Project Workspace 解析、路径边界、Git 行为与挂载要求。
 
 ## 配置

@@ -27,11 +27,15 @@ public class ModelAppService : IModelAppService
 
     public async Task<AgwAiModel> CreateAsync(ModelCreateRequest request, string user)
     {
+        _modelDomainService.ValidateTokenLimits(
+            request.MaxContextWindowTokens,
+            request.MaxOutputTokens);
         var model = new AgwAiModel
         {
             Name = request.Name,
             Description = request.Description,
-            MaxTokens = request.MaxTokens
+            MaxContextWindowTokens = request.MaxContextWindowTokens,
+            MaxOutputTokens = request.MaxOutputTokens
         };
 
         _modelDomainService.PrepareForCreate(model, user);
@@ -48,11 +52,15 @@ public class ModelAppService : IModelAppService
             return null;
         }
 
+        _modelDomainService.ValidateTokenLimits(
+            request.MaxContextWindowTokens,
+            request.MaxOutputTokens);
         _modelDomainService.ApplyUpdate(existing, model =>
         {
             model.Name = request.Name;
             model.Description = request.Description;
-            model.MaxTokens = request.MaxTokens;
+            model.MaxContextWindowTokens = request.MaxContextWindowTokens;
+            model.MaxOutputTokens = request.MaxOutputTokens;
         }, user);
 
         _modelRepository.Update(existing);

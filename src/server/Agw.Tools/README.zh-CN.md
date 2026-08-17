@@ -124,6 +124,23 @@ AsAgwAgent
 
 聚合 Contribution 通过持有子 Contribution 形成资源所有权树。Agent capability lease 释放时，资源按后进先出顺序清理；物化中途失败时，已经创建的资源也会被释放。
 
+### Tool 调用与自动上下文压缩
+
+上下文压缩不属于 Tool 或 ToolBlock 本身，而是由 `Agw.Agents` 的 `AsAgwAgent` 管线为 Definition Agent 统一执行。每个模型通过 `AgwAiModel` 提供两项限制：
+
+- `MaxContextWindowTokens`：一次模型调用的总上下文窗口上限，包含输入上下文和预留输出；
+- `MaxOutputTokens`：单次模型回复的最大 token 数，同时写入 `ChatOptions.MaxOutputTokens`。
+
+压缩策略的有效输入预算为：
+
+```text
+InputBudget = MaxContextWindowTokens - MaxOutputTokens
+```
+
+MAF 核心包的 `ContextWindowCompactionStrategy` 按有效输入预算的默认阈值工作：达到 50% 时压缩较旧的 Tool call/result，达到 80% 时截断较旧消息。Tool call 与对应 result 作为原子消息组处理，不会只保留其中一部分。框架按 token 估算值判断阈值，该值不等同于字符数，也可能与模型提供方的最终计数略有差异。
+
+默认配置 `256_000 / 64_000` 对应 `192_000` 的有效输入预算，因此两个阈值分别约为 `96_000` 和 `153_600` 个输入 token。Compaction Provider 位于函数调用循环内部，并在逐次历史持久化层之后运行，所以一次 Tool 调用前后的每次模型请求都会重新检查预算。压缩只改变当前发给模型的请求；EF Core 仍保存完整原始历史，压缩状态随 `AgentSession.StateBag` 持久化。External Agent 与一次性 Summary client 不经过这条管线。
+
 Catalog 构建和运行时组合都会校验名称：
 
 - 独立 Tool 不能重名；

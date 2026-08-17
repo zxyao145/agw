@@ -4260,6 +4260,23 @@ export interface components {
       /** Format: uuid */
       summaryModelProviderId?: null | string;
     };
+    AgwAiModel: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      description: null | string;
+      /** Format: int32 */
+      maxContextWindowTokens: number;
+      /** Format: int32 */
+      maxOutputTokens: number;
+      providers?: components["schemas"]["ModelProviderRelation"][];
+      /** Format: date-time */
+      createTime: string;
+      createBy: null | string;
+      /** Format: date-time */
+      updateTime?: null | string;
+      updateBy: null | string;
+    };
     AgwContent:
       | components["schemas"]["AgwContentAgwTextContent"]
       | components["schemas"]["AgwContentAgwTextReasoningContent"]
@@ -4399,6 +4416,20 @@ export interface components {
       title: string;
       detail: null | string;
     };
+    ApiResultOfAgwAiModel: {
+      data?: null | components["schemas"]["AgwAiModel"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
+    "ApiResultOfAgwAiModel[]": {
+      data?: null | components["schemas"]["AgwAiModel"][];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
     ApiResultOfConnectionResponse: {
       data?: null | components["schemas"]["ConnectionResponse"];
       /** Format: int32 */
@@ -4459,20 +4490,6 @@ export interface components {
     };
     "ApiResultOfJobLogResponse[]": {
       data?: null | components["schemas"]["JobLogResponse"][];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ApiResultOfAgwAiModel: {
-      data?: null | components["schemas"]["AgwAiModel"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    "ApiResultOfAgwAiModel[]": {
-      data?: null | components["schemas"]["AgwAiModel"][];
       /** Format: int32 */
       code: number;
       title: string;
@@ -4576,6 +4593,13 @@ export interface components {
       title: string;
       detail: null | string;
     };
+    ApiResultOfPagedResultOfUserMemorySummaryResponse: {
+      data?: null | components["schemas"]["PagedResultOfUserMemorySummaryResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
     ApiResultOfPluginInstallationResponse: {
       data?: null | components["schemas"]["PluginInstallationResponse"];
       /** Format: int32 */
@@ -4669,6 +4693,13 @@ export interface components {
     };
     "ApiResultOfToolInfo[]": {
       data?: null | components["schemas"]["ToolInfo"][];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
+    ApiResultOfUserMemoryDetailResponse: {
+      data?: null | components["schemas"]["UserMemoryDetailResponse"];
       /** Format: int32 */
       code: number;
       title: string;
@@ -4925,21 +4956,6 @@ export interface components {
       isEnabled: boolean;
       status: components["schemas"]["JobStatus"];
     };
-    AgwAiModel: {
-      /** Format: uuid */
-      id: string;
-      name: string;
-      description: null | string;
-      /** Format: int32 */
-      maxTokens: number;
-      providers?: components["schemas"]["ModelProviderRelation"][];
-      /** Format: date-time */
-      createTime: string;
-      createBy: null | string;
-      /** Format: date-time */
-      updateTime?: null | string;
-      updateBy: null | string;
-    };
     LoginRequest: {
       password: string;
     };
@@ -5048,7 +5064,9 @@ export interface components {
       name: string;
       description: null | string;
       /** Format: int32 */
-      maxTokens: number;
+      maxContextWindowTokens: number;
+      /** Format: int32 */
+      maxOutputTokens: number;
     };
     ModelProviderCreateRequest: {
       /** Format: uuid */
@@ -5108,7 +5126,9 @@ export interface components {
       name: string;
       description: null | string;
       /** Format: int32 */
-      maxTokens: number;
+      maxContextWindowTokens: number;
+      /** Format: int32 */
+      maxOutputTokens: number;
     };
     OAuth2AuthorizationCodeResponse: {
       authorizationEndpoint: string;
@@ -5198,6 +5218,15 @@ export interface components {
     };
     PagedResultOfSkillResponse: {
       items: components["schemas"]["SkillResponse"][];
+      /** Format: int64 */
+      total: number | string;
+      /** Format: int32 */
+      pageIndex: number;
+      /** Format: int32 */
+      pageSize: number;
+    };
+    PagedResultOfUserMemorySummaryResponse: {
+      items: components["schemas"]["UserMemorySummaryResponse"][];
       /** Format: int64 */
       total: number | string;
       /** Format: int32 */
@@ -5515,6 +5544,11 @@ export interface components {
       name: "todo";
       options: components["schemas"]["EmptyToolOptions"];
     };
+    ToolBlockDefinitionUserMemoryToolBlockDefinition: {
+      /** @enum {string} */
+      name: "user-memory";
+      options: components["schemas"]["EmptyToolOptions"];
+    };
     /** @enum {unknown} */
     ToolCatalogItemKind: "tool" | "toolBlock";
     ToolDefinition:
@@ -5655,34 +5689,6 @@ export interface components {
       additionalCounts?: null | {
         [key: string]: number | string;
       };
-    };
-    ApiResultOfPagedResultOfUserMemorySummaryResponse: {
-      data?: null | components["schemas"]["PagedResultOfUserMemorySummaryResponse"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ApiResultOfUserMemoryDetailResponse: {
-      data?: null | components["schemas"]["UserMemoryDetailResponse"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    PagedResultOfUserMemorySummaryResponse: {
-      items: components["schemas"]["UserMemorySummaryResponse"][];
-      /** Format: int64 */
-      total: number | string;
-      /** Format: int32 */
-      pageIndex: number;
-      /** Format: int32 */
-      pageSize: number;
-    };
-    ToolBlockDefinitionUserMemoryToolBlockDefinition: {
-      /** @enum {string} */
-      name: "user-memory";
-      options: components["schemas"]["EmptyToolOptions"];
     };
     UserMemoryCreateRequest: {
       name: string;

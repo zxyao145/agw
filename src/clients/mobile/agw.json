@@ -6607,8 +6607,8 @@
           "id",
           "name",
           "description",
-          "type",
-          "maxTokens",
+          "maxContextWindowTokens",
+          "maxOutputTokens",
           "createTime",
           "createBy",
           "updateBy"
@@ -6628,10 +6628,11 @@
               "string"
             ]
           },
-          "type": {
-            "$ref": "#/components/schemas/ModelType"
+          "maxContextWindowTokens": {
+            "type": "integer",
+            "format": "int32"
           },
-          "maxTokens": {
+          "maxOutputTokens": {
             "type": "integer",
             "format": "int32"
           },
@@ -7005,8 +7006,8 @@
         "required": [
           "name",
           "description",
-          "type",
-          "maxTokens"
+          "maxContextWindowTokens",
+          "maxOutputTokens"
         ],
         "type": "object",
         "properties": {
@@ -7019,10 +7020,11 @@
               "string"
             ]
           },
-          "type": {
-            "$ref": "#/components/schemas/ModelType"
+          "maxContextWindowTokens": {
+            "type": "integer",
+            "format": "int32"
           },
-          "maxTokens": {
+          "maxOutputTokens": {
             "type": "integer",
             "format": "int32"
           }
@@ -7250,8 +7252,8 @@
         "required": [
           "name",
           "description",
-          "type",
-          "maxTokens"
+          "maxContextWindowTokens",
+          "maxOutputTokens"
         ],
         "type": "object",
         "properties": {
@@ -7264,10 +7266,11 @@
               "string"
             ]
           },
-          "type": {
-            "$ref": "#/components/schemas/ModelType"
+          "maxContextWindowTokens": {
+            "type": "integer",
+            "format": "int32"
           },
-          "maxTokens": {
+          "maxOutputTokens": {
             "type": "integer",
             "format": "int32"
           }

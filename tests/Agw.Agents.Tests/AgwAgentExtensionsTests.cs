@@ -13,10 +13,12 @@ using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Projects;
 
 using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Compaction;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
@@ -38,6 +40,199 @@ public sealed class AgwAgentExtensionsTests
         await agent.DisposeAsync();
 
         Assert.True(client.Disposed);
+    }
+
+    [Fact]
+    public async Task AsAgwAgent_CompactionProvider_RunsForEveryModelCallAndSetsOutputLimit()
+    {
+        var function = AIFunctionFactory.Create(
+            (Func<string>)(() => "search result"),
+            new AIFunctionFactoryOptions { Name = "web_search" });
+        var strategy = new CountingCompactionStrategy();
+        var client = new FunctionCallingStubChatClient();
+        var agent = client.AsAgwAgent(
+            CreateDefinition(
+                new InMemoryChatHistoryProvider(),
+                new CompactionProvider(strategy, stateKey: "test-compaction"),
+                maxOutputTokens: 64_000),
+            CreateCapabilities(tools: [function]),
+            NullLoggerFactory.Instance,
+            new ServiceCollection().BuildServiceProvider());
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+
+        await agent.RunAsync(
+            [
+                new ChatMessage(ChatRole.User, "previous question"),
+                new ChatMessage(ChatRole.Assistant, "previous answer"),
+                new ChatMessage(ChatRole.User, "search")
+            ],
+            session,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, strategy.InvocationCount);
+        Assert.Equal([64_000, 64_000], client.MaxOutputTokens);
+
+        var serializedSession = await agent.SerializeSessionAsync(
+            session,
+            cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Contains("test-compaction", serializedSession.GetRawText(), StringComparison.Ordinal);
+        session = await agent.DeserializeSessionAsync(
+            serializedSession,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        await agent.RunAsync(
+            [new ChatMessage(ChatRole.User, "follow up")],
+            session,
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(3, strategy.InvocationCount);
+        Assert.Equal([64_000, 64_000, 64_000], client.MaxOutputTokens);
+    }
+
+    [Fact]
+    public async Task ContextWindowCompactionStrategy_LongHistory_PreservesSystemAndRecentMessages()
+    {
+        const string toolCallId = "old-tool-call";
+        var messages = new List<ChatMessage>
+        {
+            new(ChatRole.System, "system instructions")
+        };
+        for (var turn = 0; turn < 40; turn++)
+        {
+            messages.Add(new ChatMessage(ChatRole.User, $"user-{turn}: {new string('u', 200)}"));
+            if (turn == 2)
+            {
+                messages.Add(new ChatMessage(
+                    ChatRole.Assistant,
+                    [new FunctionCallContent(toolCallId, "search", new Dictionary<string, object?>())]));
+                messages.Add(new ChatMessage(
+                    ChatRole.Tool,
+                    [new FunctionResultContent(toolCallId, new string('r', 1_000))]));
+            }
+
+            messages.Add(new ChatMessage(ChatRole.Assistant, $"assistant-{turn}: {new string('a', 200)}"));
+        }
+
+        var compacted = (await CompactionProvider.CompactAsync(
+                new ContextWindowCompactionStrategy(4_000, 1_000),
+                messages,
+                cancellationToken: TestContext.Current.CancellationToken))
+            .ToList();
+
+        Assert.True(compacted.Count < messages.Count);
+        Assert.Contains(compacted, message => message.Role == ChatRole.System);
+        Assert.Contains(compacted, message => message.Text.StartsWith("user-39:", StringComparison.Ordinal));
+        var compactedCallIds = compacted
+            .SelectMany(message => message.Contents)
+            .Select(content => content switch
+            {
+                FunctionCallContent call => call.CallId,
+                FunctionResultContent result => result.CallId,
+                _ => null
+            })
+            .Where(callId => callId == toolCallId)
+            .ToList();
+        Assert.True(compactedCallIds.Count is 0 or 2);
+    }
+
+    [Fact]
+    public async Task AsAgwAgent_Compaction_DoesNotPersistCompactedRequestMessages()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var projectId = Guid.CreateVersion7();
+        var projectConversationId = Guid.CreateVersion7();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(new Project
+            {
+                Id = projectId,
+                Name = "Project",
+                Type = ProjectType.UserDefined,
+                CreateBy = "tester",
+                CreateTime = TimeProvider.System.GetUtcNow()
+            });
+            seedContext.ProjectConversations.Add(new ProjectConversation
+            {
+                Id = projectConversationId,
+                ProjectId = projectId,
+                ContextId = "compaction-context",
+                Title = "Chat",
+                CreateBy = "tester",
+                CreateTime = TimeProvider.System.GetUtcNow(),
+                UpdateBy = "tester",
+                UpdateTime = TimeProvider.System.GetUtcNow()
+            });
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var historyProvider = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System,
+            jsonOptions);
+        var client = new RecordingResponseChatClient();
+        var agent = client.AsAgwAgent(
+            CreateDefinition(
+                historyProvider,
+                new CompactionProvider(
+                    new ContextWindowCompactionStrategy(4_000, 1_000),
+                    stateKey: "test-ef-compaction"),
+                maxOutputTokens: 1_000),
+            CreateCapabilities(),
+            NullLoggerFactory.Instance,
+            serviceProvider);
+        var session = await agent.CreateSessionAsync(cancellationToken);
+        historyProvider.InitializeSessionState(
+            session,
+            "compaction-context",
+            projectId);
+        var originalMessages = Enumerable.Range(0, 40)
+            .SelectMany(turn => new[]
+            {
+                new ChatMessage(ChatRole.User, $"user-{turn}: {new string('u', 200)}"),
+                new ChatMessage(ChatRole.Assistant, $"assistant-{turn}: {new string('a', 200)}")
+            })
+            .ToList();
+
+        await agent.RunAsync(
+            originalMessages,
+            session,
+            cancellationToken: cancellationToken);
+
+        var modelRequest = Assert.Single(client.Requests);
+        Assert.True(modelRequest.Count < originalMessages.Count);
+        Assert.Contains(modelRequest, message =>
+            message.Text.StartsWith("user-39:", StringComparison.Ordinal));
+
+        await using var verifyContext = new AgwDbContext(options);
+        var records = await verifyContext.ProjectConversationChatHistories
+            .Where(record => record.ConversationId == projectConversationId)
+            .OrderBy(record => record.ConversationSequence)
+            .ToListAsync(cancellationToken);
+        var storedMessages = records
+            .Select(record => JsonSerializer.Deserialize<ChatMessage>(
+                record.ConversationPayload!,
+                jsonOptions)!)
+            .ToList();
+        Assert.Contains(storedMessages, message =>
+            message.Text.StartsWith("user-0:", StringComparison.Ordinal));
+        Assert.Contains(storedMessages, message =>
+            message.Text.StartsWith("user-39:", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -646,14 +841,19 @@ public sealed class AgwAgentExtensionsTests
         properties?.TryGetValue("type", out var type) == true &&
         string.Equals(type?.ToString(), expectedType, StringComparison.Ordinal);
 
-    private static ResolvedAgentDefinition CreateDefinition(ChatHistoryProvider chatHistoryProvider) =>
+    private static ResolvedAgentDefinition CreateDefinition(
+        ChatHistoryProvider chatHistoryProvider,
+        AIContextProvider? compactionProvider = null,
+        int? maxOutputTokens = null) =>
         new()
         {
             Id = "test-agent",
             Name = "Test agent",
             ModelId = "test-model",
             OpenTelemetrySourceName = "test-source",
-            ChatHistoryProvider = chatHistoryProvider
+            ChatHistoryProvider = chatHistoryProvider,
+            CompactionProvider = compactionProvider,
+            MaxOutputTokens = maxOutputTokens
         };
 
     private static AgentCapabilityComposition CreateCapabilities(
@@ -715,6 +915,7 @@ public sealed class AgwAgentExtensionsTests
     private sealed class FunctionCallingStubChatClient : IChatClient
     {
         public List<List<ChatMessage>> Requests { get; } = [];
+        public List<int?> MaxOutputTokens { get; } = [];
 
         public void Dispose()
         {
@@ -730,6 +931,7 @@ public sealed class AgwAgentExtensionsTests
         {
             var request = messages.Select(message => message.Clone()).ToList();
             Requests.Add(request);
+            MaxOutputTokens.Add(options?.MaxOutputTokens);
             return Task.FromResult(
                 request.SelectMany(message => message.Contents)
                     .OfType<FunctionResultContent>()
@@ -746,6 +948,7 @@ public sealed class AgwAgentExtensionsTests
             await Task.Yield();
             var request = messages.Select(message => message.Clone()).ToList();
             Requests.Add(request);
+            MaxOutputTokens.Add(options?.MaxOutputTokens);
             if (request.SelectMany(message => message.Contents)
                 .OfType<FunctionResultContent>()
                 .Any())
@@ -769,6 +972,58 @@ public sealed class AgwAgentExtensionsTests
                         new Dictionary<string, object?>())
                 ]);
     }
+
+    private sealed class RecordingResponseChatClient : IChatClient
+    {
+        public List<List<ChatMessage>> Requests { get; } = [];
+
+        public void Dispose()
+        {
+        }
+
+        public object? GetService(Type serviceType, object? serviceKey = null) =>
+            serviceType.IsInstanceOfType(this) ? this : null;
+
+        public Task<ChatResponse> GetResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            CancellationToken cancellationToken = default)
+        {
+            Requests.Add(messages.Select(message => message.Clone()).ToList());
+            return Task.FromResult(
+                new ChatResponse(new ChatMessage(ChatRole.Assistant, "done")));
+        }
+
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
+            IEnumerable<ChatMessage> messages,
+            ChatOptions? options = null,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            Requests.Add(messages.Select(message => message.Clone()).ToList());
+            yield return new ChatResponseUpdate(ChatRole.Assistant, "done");
+        }
+    }
+
+    private sealed class CountingCompactionStrategy : CompactionStrategy
+    {
+        public CountingCompactionStrategy()
+            : base(CompactionTriggers.Always)
+        {
+        }
+
+        public int InvocationCount { get; private set; }
+
+        protected override ValueTask<bool> CompactCoreAsync(
+            CompactionMessageIndex index,
+            ILogger logger,
+            CancellationToken cancellationToken)
+        {
+            InvocationCount++;
+            return ValueTask.FromResult(false);
+        }
+    }
+
 
     private sealed class IllegalShellCallChatClient : IChatClient
     {

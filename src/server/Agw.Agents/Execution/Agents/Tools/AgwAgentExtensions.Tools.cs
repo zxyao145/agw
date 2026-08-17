@@ -32,11 +32,6 @@ public static class AgwAgentExtensions
         };
         var modeProvider = capabilities.ContextProviders.OfType<AgentModeProvider>().FirstOrDefault();
         var contextProviders = capabilities.ContextProviders.ToList();
-        if (definition.CompactionProvider != null)
-        {
-            contextProviders.Add(definition.CompactionProvider);
-        }
-
         if (modeProvider != null)
         {
             contextProviders.Add(new PlanModeToolGuardProvider(
@@ -58,10 +53,17 @@ public static class AgwAgentExtensions
         chatClientBuilder
             .UseMessageInjection()
             .Use(static innerClient => new FunctionResultOrderingChatClient(innerClient))
-            .UsePerServiceCallChatHistoryPersistence()
-            .UseOpenTelemetry(
-                sourceName: definition.OpenTelemetrySourceName,
-                configure: static options => options.EnableSensitiveData = true);
+            .UsePerServiceCallChatHistoryPersistence();
+        if (definition.CompactionProvider != null)
+        {
+            chatClientBuilder
+                .Use(static innerClient => new LocalHistoryCompactionScopeChatClient(innerClient))
+                .UseAIContextProviders(definition.CompactionProvider);
+        }
+
+        chatClientBuilder.UseOpenTelemetry(
+            sourceName: definition.OpenTelemetrySourceName,
+            configure: static options => options.EnableSensitiveData = true);
 
         var configuredChatClient = chatClientBuilder.Build(services);
         capabilities.AddResource(configuredChatClient);

@@ -26,11 +26,12 @@ public sealed class InitialMigrationTests
         using var dbContext = new AgwDbContext(options.Options);
 
         var migrations = dbContext.Database.GetMigrations().ToArray();
-        Assert.Equal(4, migrations.Length);
+        Assert.Equal(5, migrations.Length);
         Assert.EndsWith("_Init", migrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", migrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", migrations[2], StringComparison.Ordinal);
         Assert.EndsWith("_AddAgentflowCheckpoints", migrations[3], StringComparison.Ordinal);
+        Assert.EndsWith("_AddModelCompactionLimits", migrations[4], StringComparison.Ordinal);
 
         var script = dbContext.GetService<IMigrator>().GenerateScript(
             Migration.InitialDatabase,
@@ -53,6 +54,11 @@ public sealed class InitialMigrationTests
         Assert.Contains("create_by", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("create_time", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("tools", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("max_context_window_tokens", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("max_output_tokens", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ck_model_token_limits", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("DEFAULT 256000", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("DEFAULT 64000", script, StringComparison.OrdinalIgnoreCase);
         if (usePostgres)
         {
             Assert.Contains("metadata jsonb", script, StringComparison.OrdinalIgnoreCase);
@@ -93,11 +99,12 @@ public sealed class InitialMigrationTests
         var appliedMigrations = (await dbContext.Database
                 .GetAppliedMigrationsAsync(cancellationToken))
             .ToArray();
-        Assert.Equal(4, appliedMigrations.Length);
+        Assert.Equal(5, appliedMigrations.Length);
         Assert.EndsWith("_Init", appliedMigrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", appliedMigrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", appliedMigrations[2], StringComparison.Ordinal);
         Assert.EndsWith("_AddAgentflowCheckpoints", appliedMigrations[3], StringComparison.Ordinal);
+        Assert.EndsWith("_AddModelCompactionLimits", appliedMigrations[4], StringComparison.Ordinal);
         Assert.True(await TableExistsAsync(connection, "integration_connection", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "plugin_installation", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "project_memory", cancellationToken));
@@ -116,6 +123,35 @@ public sealed class InitialMigrationTests
         Assert.True(await ColumnExistsAsync(connection, "api_token", "secret_hash", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "agent", "tools", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "project", "tools", cancellationToken));
+        Assert.True(await ColumnExistsAsync(
+            connection,
+            "model",
+            "max_context_window_tokens",
+            cancellationToken));
+        Assert.True(await ColumnExistsAsync(
+            connection,
+            "model",
+            "max_output_tokens",
+            cancellationToken));
+        Assert.False(await ColumnExistsAsync(connection, "model", "max_tokens", cancellationToken));
+        Assert.Equal(
+            "256000",
+            await ColumnDefaultAsync(
+                connection,
+                "model",
+                "max_context_window_tokens",
+                cancellationToken));
+        Assert.Equal(
+            "64000",
+            await ColumnDefaultAsync(
+                connection,
+                "model",
+                "max_output_tokens",
+                cancellationToken));
+        Assert.Contains(
+            "ck_model_token_limits",
+            await TableSqlAsync(connection, "model", cancellationToken),
+            StringComparison.OrdinalIgnoreCase);
         Assert.False(await ColumnExistsAsync(
             connection,
             "agent",
@@ -124,6 +160,48 @@ public sealed class InitialMigrationTests
         Assert.False(await TableExistsAsync(connection, "agent_file_memory", cancellationToken));
         Assert.False(await TableExistsAsync(connection, "project_context", cancellationToken));
         Assert.False(await TableExistsAsync(connection, "project_task_record", cancellationToken));
+    }
+
+    [Fact]
+    public async Task MigrateAsync_Sqlite_ModelCompactionLimitsPreserveExistingMaxTokens()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(
+                connection,
+                migrations => migrations.MigrationsAssembly(
+                    AgwDbContextOptionsConfigurator.SqliteMigrationsAssembly))
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using var dbContext = new AgwDbContext(options);
+        var migrations = dbContext.Database.GetMigrations().ToArray();
+        var migrator = dbContext.GetService<IMigrator>();
+        await migrator.MigrateAsync(migrations[^2], cancellationToken);
+        var modelId = Guid.CreateVersion7();
+        await using (var insert = connection.CreateCommand())
+        {
+            insert.CommandText =
+                "INSERT INTO model (id, name, max_tokens, create_time) " +
+                "VALUES ($id, $name, $maxTokens, $createTime);";
+            insert.Parameters.AddWithValue("$id", modelId);
+            insert.Parameters.AddWithValue("$name", "existing-model");
+            insert.Parameters.AddWithValue("$maxTokens", 128_000);
+            insert.Parameters.AddWithValue("$createTime", TimeProvider.System.GetUtcNow());
+            await insert.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await migrator.MigrateAsync(migrations[^1], cancellationToken);
+
+        await using var select = connection.CreateCommand();
+        select.CommandText =
+            "SELECT max_context_window_tokens, max_output_tokens FROM model WHERE id = $id;";
+        select.Parameters.AddWithValue("$id", modelId);
+        await using var reader = await select.ExecuteReaderAsync(cancellationToken);
+        Assert.True(await reader.ReadAsync(cancellationToken));
+        Assert.Equal(128_000, reader.GetInt32(0));
+        Assert.Equal(64_000, reader.GetInt32(1));
     }
 
     private static async Task<bool> TableExistsAsync(
@@ -150,5 +228,31 @@ public sealed class InitialMigrationTests
         command.Parameters.AddWithValue("$tableName", tableName);
         command.Parameters.AddWithValue("$columnName", columnName);
         return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken)) == 1;
+    }
+
+    private static async Task<string?> ColumnDefaultAsync(
+        SqliteConnection connection,
+        string tableName,
+        string columnName,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT dflt_value FROM pragma_table_info($tableName) WHERE name = $columnName;";
+        command.Parameters.AddWithValue("$tableName", tableName);
+        command.Parameters.AddWithValue("$columnName", columnName);
+        return Convert.ToString(await command.ExecuteScalarAsync(cancellationToken));
+    }
+
+    private static async Task<string> TableSqlAsync(
+        SqliteConnection connection,
+        string tableName,
+        CancellationToken cancellationToken)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = $tableName;";
+        command.Parameters.AddWithValue("$tableName", tableName);
+        return Convert.ToString(await command.ExecuteScalarAsync(cancellationToken)) ?? string.Empty;
     }
 }
