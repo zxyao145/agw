@@ -315,6 +315,22 @@ sequenceDiagram
 
 Agent 执行结束时，`AgentRuntimeService` 会在 `finally` 中保存 SDK session state。外部 Codex Agent 还会通过 task-session binding 记录 provider session id，以支持后续恢复。
 
+### Definition Agent 自动 Compaction
+
+所有经 `CreateDefinitionAgentAsync` 创建的 Agent 都自动启用上下文压缩，包括前台 System Agent、Agentflow 节点 Agent 和后台 Definition Agent。External Agent 与 Result Summary 使用的一次性 `IChatClient` 不经过这条管线。
+
+每个模型必须配置 `MaxContextWindowTokens` 和 `MaxOutputTokens`，且两者均为正数、输出上限小于上下文窗口。有效输入预算为 `MaxContextWindowTokens - MaxOutputTokens`；`ChatOptions.MaxOutputTokens` 同时使用模型的输出上限。新建、自动发现和默认种子模型的回退值分别为 `256_000` 与 `64_000`，管理员应按模型提供方的真实规格修正。
+
+运行时使用 MAF 核心包的 `ContextWindowCompactionStrategy` 和默认两阶段阈值，不调用额外的总结模型：
+
+- 达到有效输入预算的 50% 时，优先把较旧的 Tool call/result 组折叠为精简内容；
+- 达到 80% 时，截断较旧的消息；
+- Tool call 与对应 result 始终作为原子消息组处理。
+
+`CompactionProvider` 位于函数调用循环内部，并在逐次历史持久化层之后执行，所以同一轮中的每次模型请求都会重新评估上下文。`LocalHistoryCompactionScopeChatClient` 仅在本地历史 sentinel 存在时为该 provider 暴露共享 `StateBag` 的本地 session 视图，避免后续 Tool iteration 被误判为远程服务托管历史。压缩结果只传给当前模型请求；`EfCoreChatHistoryProvider` 仍保存未压缩的原始消息，不会把合成或裁剪后的请求历史写回数据库。
+
+Provider 状态保存在现有 `AgentSession.StateBag`，并随 `AgentSessionStateStore` 序列化和恢复。state key 使用 `agw.compaction.{agentId}`，避免同一会话中的多个 Definition Agent 相互覆盖状态。
+
 ### Result Summary
 
 Definition 创建的 System Agent 可通过 `EnableSummary` 在一次主执行成功后追加本轮总结。总结复用该 Agent 的 `ModelProviderId`，以一次性 `IChatClient` 调用执行；输入只包含本轮用户文字和本轮 Assistant 的 `TextContent`，不加载历史、工具或技能。External Agent 不支持该开关。

@@ -1722,9 +1722,17 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("description");
 
-                    b.Property<int>("MaxTokens")
+                    b.Property<int>("MaxContextWindowTokens")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
-                        .HasColumnName("max_tokens");
+                        .HasDefaultValue(256000)
+                        .HasColumnName("max_context_window_tokens");
+
+                    b.Property<int>("MaxOutputTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(64000)
+                        .HasColumnName("max_output_tokens");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -1747,7 +1755,10 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_model_name");
 
-                    b.ToTable("model", (string)null);
+                    b.ToTable("model", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_model_token_limits", "max_context_window_tokens > 0 AND max_output_tokens > 0 AND max_output_tokens < max_context_window_tokens");
+                        });
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.ModelProviderRelation", b =>

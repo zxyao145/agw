@@ -1,12 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { useMutation, useQueryClient } from "@agw/components/query";
-import { toast } from "sonner";
-
-import { apiPost, getApiErrorMessage } from "@agw/api";
-import { Button } from "@agw/components";
+import { apiPut, getApiErrorMessage } from "@agw/api";
 import {
+  Button,
   Dialog,
   DialogClose,
   DialogContent,
@@ -14,64 +11,74 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  Input,
+  Label,
+  Textarea,
 } from "@agw/components";
-import { Input } from "@agw/components";
-import { Label } from "@agw/components";
-import { Textarea } from "@agw/components";
+import { useMutation, useQueryClient } from "@agw/components/query";
 import { applyDialogOpenChange } from "@agw/integrations";
+import { toast } from "sonner";
 
 import { ModelTokenLimitFields } from "./model-token-limit-fields";
-import {
-  DEFAULT_MAX_CONTEXT_WINDOW_TOKENS,
-  DEFAULT_MAX_OUTPUT_TOKENS,
-  getModelTokenLimitError,
-  type ModelCreateRequest,
-} from "./types";
+import { getModelTokenLimitError, type ModelDto, type ModelUpdateRequest } from "./types";
 
-interface CreateModelDialogProps {
+interface EditModelDialogProps {
+  model: ModelDto | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function CreateModelDialog({ open, onOpenChange }: CreateModelDialogProps) {
+export function EditModelDialog({ model, open, onOpenChange }: EditModelDialogProps) {
   const queryClient = useQueryClient();
-
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
-  const [maxContextWindowTokens, setMaxContextWindowTokens] = React.useState(
-    String(DEFAULT_MAX_CONTEXT_WINDOW_TOKENS),
-  );
-  const [maxOutputTokens, setMaxOutputTokens] = React.useState(String(DEFAULT_MAX_OUTPUT_TOKENS));
+  const [maxContextWindowTokens, setMaxContextWindowTokens] = React.useState("");
+  const [maxOutputTokens, setMaxOutputTokens] = React.useState("");
 
-  const createModelMutation = useMutation({
-    mutationFn: async (body: ModelCreateRequest) => {
-      return await apiPost("/api/models", { body });
+  React.useEffect(() => {
+    if (!open || !model) {
+      return;
+    }
+
+    setName(model.name);
+    setDescription(model.description ?? "");
+    setMaxContextWindowTokens(String(model.maxContextWindowTokens));
+    setMaxOutputTokens(String(model.maxOutputTokens));
+  }, [model, open]);
+
+  const updateModelMutation = useMutation({
+    mutationFn: async (body: ModelUpdateRequest) => {
+      if (!model) {
+        throw new Error("Model is required");
+      }
+
+      return await apiPut("/api/models/{id}", {
+        params: { path: { id: model.id } },
+        body,
+      });
     },
     onSuccess: async () => {
-      toast.success("Model created");
+      toast.success("Model updated");
       onOpenChange(false);
-      setName("");
-      setDescription("");
-      setMaxContextWindowTokens(String(DEFAULT_MAX_CONTEXT_WINDOW_TOKENS));
-      setMaxOutputTokens(String(DEFAULT_MAX_OUTPUT_TOKENS));
       await queryClient.invalidateQueries({ queryKey: ["models"] });
     },
     onError: (error) => {
-      toast.error(`Create failed: ${getApiErrorMessage(error)}`);
+      toast.error(`Update failed: ${getApiErrorMessage(error)}`);
     },
   });
 
   const contextWindow = Number(maxContextWindowTokens);
   const maximumOutput = Number(maxOutputTokens);
   const tokenLimitError = getModelTokenLimitError(contextWindow, maximumOutput);
-  const createDisabled = !name.trim() || tokenLimitError !== null || createModelMutation.isPending;
+  const updateDisabled =
+    model === null || !name.trim() || tokenLimitError !== null || updateModelMutation.isPending;
 
   return (
     <Dialog
       open={open}
       onOpenChange={(nextOpen) =>
         applyDialogOpenChange({
-          isPending: createModelMutation.isPending,
+          isPending: updateModelMutation.isPending,
           nextOpen,
           setOpen: onOpenChange,
         })
@@ -79,35 +86,34 @@ export function CreateModelDialog({ open, onOpenChange }: CreateModelDialogProps
     >
       <DialogContent size="lg">
         <DialogHeader>
-          <DialogTitle>Create model</DialogTitle>
+          <DialogTitle>Edit model</DialogTitle>
           <DialogDescription>
-            Configure the model identity and token limits used by automatic compaction.
+            Keep these limits aligned with the model provider's published specifications.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="name">Name</Label>
+            <Label htmlFor="edit-model-name">Name</Label>
             <Input
-              id="name"
+              id="edit-model-name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="gpt-4o-mini"
+              onChange={(event) => setName(event.target.value)}
             />
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="edit-model-description">Description</Label>
             <Textarea
-              id="description"
+              id="edit-model-description"
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(event) => setDescription(event.target.value)}
               rows={3}
             />
           </div>
 
           <ModelTokenLimitFields
-            idPrefix="create-model-"
+            idPrefix="edit-model-"
             maxContextWindowTokens={maxContextWindowTokens}
             maxOutputTokens={maxOutputTokens}
             onMaxContextWindowTokensChange={setMaxContextWindowTokens}
@@ -117,16 +123,15 @@ export function CreateModelDialog({ open, onOpenChange }: CreateModelDialogProps
 
         <DialogFooter>
           <DialogClose asChild>
-            <Button type="button" variant="outline">
+            <Button type="button" variant="outline" disabled={updateModelMutation.isPending}>
               Cancel
             </Button>
           </DialogClose>
-
           <Button
             type="button"
-            disabled={createDisabled}
+            disabled={updateDisabled}
             onClick={() =>
-              createModelMutation.mutate({
+              updateModelMutation.mutate({
                 name: name.trim(),
                 description: description.trim() || null,
                 maxContextWindowTokens: contextWindow,
@@ -134,7 +139,7 @@ export function CreateModelDialog({ open, onOpenChange }: CreateModelDialogProps
               })
             }
           >
-            {createModelMutation.isPending ? "Creating..." : "Create"}
+            {updateModelMutation.isPending ? "Updating..." : "Update"}
           </Button>
         </DialogFooter>
       </DialogContent>

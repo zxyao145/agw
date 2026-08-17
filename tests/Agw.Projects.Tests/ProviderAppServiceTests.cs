@@ -36,7 +36,8 @@ public class ProviderAppServiceTests
             {
                 Id = Guid.CreateVersion7(),
                 Name = "existing-model",
-                MaxTokens = 8192,
+                MaxContextWindowTokens = 8192,
+                MaxOutputTokens = 2048,
                 CreateBy = "seed",
                 CreateTime = TimeProvider.System.GetUtcNow()
             });
@@ -70,8 +71,12 @@ public class ProviderAppServiceTests
             .ToListAsync(cancellationToken);
 
         Assert.Equal(["existing-model", "new-model"], relatedModels.Select(model => model.Name));
-        Assert.Equal(8192, relatedModels.Single(model => model.Name == "existing-model").MaxTokens);
-        Assert.Equal(0, relatedModels.Single(model => model.Name == "new-model").MaxTokens);
+        var existingModel = relatedModels.Single(model => model.Name == "existing-model");
+        Assert.Equal(8192, existingModel.MaxContextWindowTokens);
+        Assert.Equal(2048, existingModel.MaxOutputTokens);
+        var newModel = relatedModels.Single(model => model.Name == "new-model");
+        Assert.Equal(AgwAiModel.DefaultMaxContextWindowTokens, newModel.MaxContextWindowTokens);
+        Assert.Equal(AgwAiModel.DefaultMaxOutputTokens, newModel.MaxOutputTokens);
         Assert.All(
             await verifyContext.ModelProviders.ToListAsync(cancellationToken),
             relation =>
@@ -451,7 +456,8 @@ public class ProviderAppServiceTests
     {
         Id = Guid.CreateVersion7(),
         Name = name,
-        MaxTokens = 256_000,
+        MaxContextWindowTokens = AgwAiModel.DefaultMaxContextWindowTokens,
+        MaxOutputTokens = AgwAiModel.DefaultMaxOutputTokens,
         CreateBy = "seed",
         CreateTime = TimeProvider.System.GetUtcNow()
     };

@@ -191,7 +191,8 @@ public class ProviderAppService : IProviderAppService
             {
                 Name = modelName,
                 Description = null,
-                MaxTokens = 0
+                MaxContextWindowTokens = AgwAiModel.DefaultMaxContextWindowTokens,
+                MaxOutputTokens = AgwAiModel.DefaultMaxOutputTokens
             };
             _modelDomainService.PrepareForCreate(model, user);
             await _modelRepository.AddAsync(model);
