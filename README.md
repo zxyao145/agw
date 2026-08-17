@@ -117,7 +117,7 @@ Agw Desktop owns a secure Electron main/preload implementation and an independen
 A typical local workflow is:
 
 1. If the backend redirects to `/setup`, complete the first-run setup.
-2. Configure providers, models, and model-provider links under `Providers`, `Models`, and `Model Providers`.
+2. Configure providers, models, and model-provider links under `Providers`, `Models`, and `Model Providers`. Set each model's context-window and maximum-output token limits to the provider's actual specifications: Definition Agents use those limits to reserve response capacity and compact model requests automatically. The `256,000 / 64,000` values assigned to newly discovered models are fallback defaults, not guaranteed provider limits.
 3. Create an agent under `Agents`, then attach MCP tool servers, tools, skills, or integrated apps as needed.
 4. Use `Chat` or `Projects` to run agent sessions and review the persisted task history.
 5. Use `Agentflows` for multi-agent orchestration and `Jobs` for scheduled or recurring tasks.
@@ -408,7 +408,7 @@ Detailed project documentation is available under [`docs/`](docs/):
 - [Chat Suggestions Design](docs/5.Chat%20Suggestions.md): Agent-aware slash commands, Claude init commands, file suggestions, and failure fallback behavior.
 - [Agentflow Guide](docs/6.Agentflow.md): Graph routing and cycle rules, editor Undo and dirty state, and Chat message attribution.
 - [Agent Execution Flow](docs/ws-flow.md): SignalR commands, turn messages, runtime lifecycle, and disconnection behavior.
-- [Execution Subsystem](src/server/Agw.Agents/Execution/README.md): Directory responsibilities, data flow, and command extension methods.
+- [Execution Subsystem](src/server/Agw.Agents/Execution/README.md): Directory responsibilities, data flow, Definition Agent compaction, and command extension methods.
 - [Files Module](src/server/Agw.Files/README.zh-CN.md): Project workspace resolution, path boundaries, Git behavior, and mount requirements.
 
 ## Configuration
