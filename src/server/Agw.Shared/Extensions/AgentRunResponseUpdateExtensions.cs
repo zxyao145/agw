@@ -35,7 +35,10 @@ public static class AgentRunResponseUpdateExtensions
     {
         if (update == null) return null;
 
-        var contents = ConvertContents(update.Contents, update.AdditionalProperties);
+        var contents = ConvertContents(
+            update.Contents,
+            update.AdditionalProperties,
+            preserveWhitespaceOnlyText: true);
 
         return new AgwMessage(
             update.MessageId ?? "",
@@ -48,10 +51,14 @@ public static class AgentRunResponseUpdateExtensions
 
     private static List<AgwContent> ConvertContents(
         IEnumerable<AIContent> contents,
-        AdditionalPropertiesDictionary? messageProperties)
+        AdditionalPropertiesDictionary? messageProperties,
+        bool preserveWhitespaceOnlyText = false)
     {
-        return contents
-            .WithoutBlankTextualContent(messageProperties)
+        var filteredContents = preserveWhitespaceOnlyText
+            ? contents.WithoutEmptyStreamingTextualContent(messageProperties)
+            : contents.WithoutBlankTextualContent(messageProperties);
+
+        return filteredContents
             .Select(ConvertContent)
             .OfType<AgwContent>()
             .ToList();

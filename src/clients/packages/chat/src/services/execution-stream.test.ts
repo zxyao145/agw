@@ -354,7 +354,48 @@ test("streamed proposed plan tags merge into one restorable Plan Card payload", 
 
   assert.equal(completed.length, 1);
   assert.deepEqual(parseProposedPlan(completed[0].contents[0].content as string), {
+    leadingMarkdown: "",
     markdown: "# Plan\n\n1. Inspect",
+    trailingMarkdown: "",
+    isClosed: true,
+  });
+});
+
+test("standalone whitespace deltas preserve fenced plan Markdown exactly", async () => {
+  const { mergeStreamingMessage } = await loadExecutionStream();
+  const chunks = [
+    "Intro",
+    "\n",
+    "<proposed_plan>",
+    "\n",
+    "```sh",
+    "\n",
+    "fi",
+    "\n",
+    "```",
+    "\n",
+    "</proposed_plan>",
+  ];
+  let messages: ReturnType<typeof textMessage>[] = [];
+
+  for (const content of chunks) {
+    messages = mergeStreamingMessage(
+      messages,
+      textMessage({
+        messageId: "plan-with-fence",
+        role: "assistant",
+        author: "agent",
+        content,
+        streamingScopeId: "user-1",
+      }),
+    );
+  }
+
+  const content = messages[0].contents[0].content as string;
+  assert.equal(content, chunks.join(""));
+  assert.deepEqual(parseProposedPlan(content), {
+    leadingMarkdown: "Intro",
+    markdown: "```sh\nfi\n```",
     trailingMarkdown: "",
     isClosed: true,
   });

@@ -20,47 +20,94 @@ export function parseMessageProposedPlan(
   return parseProposedPlan(content);
 }
 
-// 检查 assistant TextContent 中，是否有 proposed_plan 标签。
-// 会检查首个非空白内容是否为 <proposed_plan>
-export function parseProposedPlan(content: string): ProposedPlanPresentation | null {
-  const firstNonWhitespace = content.search(/\S/u);
-  if (
-    firstNonWhitespace < 0 ||
-    isIndentedCode(content, firstNonWhitespace) ||
-    !content.startsWith(PROPOSED_PLAN_OPEN_TAG, firstNonWhitespace)
-  ) {
-    return null;
-  }
+type MarkdownFence = {
+  marker: "`" | "~";
+  length: number;
+};
 
-  // proposed_plan 开始位置
-  const bodyStart = firstNonWhitespace + PROPOSED_PLAN_OPEN_TAG.length;
-  // 对应 的proposed_plan 结束位置
-  const closingTagStart = content.indexOf(PROPOSED_PLAN_CLOSE_TAG, bodyStart);
-  if (closingTagStart >= 0) {
+type RootLevelLine = {
+  lineStart: number;
+  nextLineStart: number;
+};
+
+// 检查 assistant TextContent 中是否有独占一行、位于 Markdown 代码块外的 proposed_plan 标签。
+export function parseProposedPlan(content: string): ProposedPlanPresentation | null {
+  const openingTag = findRootLevelLine(content, PROPOSED_PLAN_OPEN_TAG);
+  if (!openingTag) return null;
+
+  const bodyStart = openingTag.nextLineStart;
+  const closingTag = findRootLevelLine(content, PROPOSED_PLAN_CLOSE_TAG, bodyStart);
+  if (closingTag) {
     return {
-      markdown: content.slice(bodyStart, closingTagStart).trim(),
-      trailingMarkdown: content.slice(closingTagStart + PROPOSED_PLAN_CLOSE_TAG.length).trim(),
+      leadingMarkdown: content.slice(0, openingTag.lineStart).trim(),
+      markdown: content.slice(bodyStart, closingTag.lineStart).trim(),
+      trailingMarkdown: content.slice(closingTag.nextLineStart).trim(),
       isClosed: true,
     };
   }
 
   return {
+    leadingMarkdown: content.slice(0, openingTag.lineStart).trim(),
     markdown: stripPartialClosingTag(content.slice(bodyStart)).trim(),
     trailingMarkdown: "",
     isClosed: false,
   };
 }
 
-// 用于避免把 Markdown 缩进代码块中的 <proposed_plan> 误判为真正的 plan。
-// 函数会检查开始标签所在行前面的缩进：
-// 4 个或更多空格：视为代码
-// 包含 Tab：视为代码
-// 0～3 个空格：仍允许识别为计划标签
-function isIndentedCode(content: string, firstNonWhitespace: number): boolean {
-  const lineStart = content.lastIndexOf("\n", firstNonWhitespace - 1) + 1;
-  const indentation = content.slice(lineStart, firstNonWhitespace);
+function findRootLevelLine(
+  content: string,
+  expectedContent: string,
+  startAt = 0,
+): RootLevelLine | null {
+  let fence: MarkdownFence | null = null;
+  let lineStart = 0;
 
-  return indentation.includes("\t") || indentation.length >= 4;
+  while (lineStart <= content.length) {
+    const newlineIndex = content.indexOf("\n", lineStart);
+    const rawLineEnd = newlineIndex < 0 ? content.length : newlineIndex;
+    const rawLine = content.slice(lineStart, rawLineEnd);
+    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+    const nextLineStart = newlineIndex < 0 ? content.length : newlineIndex + 1;
+
+    if (fence) {
+      if (isClosingFence(line, fence)) fence = null;
+    } else {
+      const openingFence = parseOpeningFence(line);
+      if (openingFence) {
+        fence = openingFence;
+      } else if (lineStart >= startAt && isExpectedRootLevelLine(line, expectedContent)) {
+        return { lineStart, nextLineStart };
+      }
+    }
+
+    if (newlineIndex < 0) break;
+    lineStart = nextLineStart;
+  }
+
+  return null;
+}
+
+function isExpectedRootLevelLine(line: string, expectedContent: string): boolean {
+  const indentationLength = line.match(/^ {0,3}/u)?.[0].length ?? 0;
+  return line.slice(indentationLength).trimEnd() === expectedContent;
+}
+
+function parseOpeningFence(line: string): MarkdownFence | null {
+  const match = /^ {0,3}(`{3,}|~{3,})(.*)$/u.exec(line);
+  if (!match) return null;
+
+  const run = match[1];
+  const marker = run[0] as MarkdownFence["marker"];
+  if (marker === "`" && match[2].includes("`")) return null;
+
+  return { marker, length: run.length };
+}
+
+function isClosingFence(line: string, fence: MarkdownFence): boolean {
+  const match = /^ {0,3}(`+|~+)[\t ]*$/u.exec(line);
+  if (!match) return false;
+
+  return match[1][0] === fence.marker && match[1].length >= fence.length;
 }
 
 // stripPartialClosingTag 用于处理流式输出过程中尚未完整生成的结束标签，避免 Card 正文短暂显示协议字符。
@@ -71,9 +118,12 @@ function isIndentedCode(content: string, firstNonWhitespace: number): boolean {
 // 完整的 </proposed_plan> 还没出现，函数会识别末尾的 </proposed_ 是结束标签的前半部分，并暂时移除。
 // 后续 plan> 到达并合并后，解析器会识别完整结束标签，并将 isClosed 设置为 true。
 function stripPartialClosingTag(content: string): string {
+  const finalLineStart = content.lastIndexOf("\n") + 1;
   for (let length = PROPOSED_PLAN_CLOSE_TAG.length - 1; length > 0; length -= 1) {
-    if (content.endsWith(PROPOSED_PLAN_CLOSE_TAG.slice(0, length))) {
-      return content.slice(0, -length);
+    const partialTag = PROPOSED_PLAN_CLOSE_TAG.slice(0, length);
+    const partialLine = findRootLevelLine(content, partialTag, finalLineStart);
+    if (partialLine) {
+      return content.slice(0, partialLine.lineStart);
     }
   }
 

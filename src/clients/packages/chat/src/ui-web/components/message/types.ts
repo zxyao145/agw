@@ -1,4 +1,5 @@
 export type ProposedPlanPresentation = {
+  leadingMarkdown: string;
   markdown: string;
   trailingMarkdown: string;
   isClosed: boolean;

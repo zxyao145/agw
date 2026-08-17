@@ -25,12 +25,20 @@ export function isResultMessage(message: AiMessage): boolean {
 }
 
 export function collapseConsecutiveSystemMessages(messages: AiMessage[]): AiMessage[] {
-  return messages.filter(
+  const visibleMessages = messages.filter((message) => !isReadOnlyModeSnapshot(message));
+  return visibleMessages.filter(
     (message, index) =>
       message.role !== "system" ||
       ToolMessageTypes.has(String(message.additionalProperties?.type)) ||
-      messages[index + 1]?.role !== "system" ||
-      ToolMessageTypes.has(String(messages[index + 1]?.additionalProperties?.type)),
+      visibleMessages[index + 1]?.role !== "system" ||
+      ToolMessageTypes.has(String(visibleMessages[index + 1]?.additionalProperties?.type)),
+  );
+}
+
+function isReadOnlyModeSnapshot(message: AiMessage): boolean {
+  return (
+    message.additionalProperties?.type === "tool-mode-status" &&
+    message.additionalProperties?.toolName === "mode_get"
   );
 }
 
@@ -105,6 +113,7 @@ export function prepareClaudeHistory(messages: AiMessage[]): {
     const init = parseClaudeInitMessage(message);
     if (!init.isInit) {
       if (
+        !isReadOnlyModeSnapshot(message) &&
         !ControlMessageTypes.has(String(message.additionalProperties?.type)) &&
         message.additionalProperties?.presentation !== "control"
       ) {

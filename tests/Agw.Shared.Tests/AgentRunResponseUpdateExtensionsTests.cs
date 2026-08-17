@@ -33,13 +33,13 @@ public sealed class AgentRunResponseUpdateExtensionsTests
     }
 
     [Fact]
-    public void ToAiMessage_ResponseUpdateWithBlankTextualContent_RemovesBlankContent()
+    public void ToAiMessage_ResponseUpdateWithEmptyTextualContent_RemovesEmptyContent()
     {
         var update = new AgentResponseUpdate(
             ChatRole.Assistant,
             [
                 new TextContent(string.Empty),
-                new TextReasoningContent("\t"),
+                new TextReasoningContent(string.Empty),
                 new FunctionCallContent("call-1", "read_file", new Dictionary<string, object?>())
             ]);
 
@@ -47,6 +47,29 @@ public sealed class AgentRunResponseUpdateExtensionsTests
 
         var content = Assert.IsType<AgwFunctionCallContent>(Assert.Single(result!.Contents));
         Assert.Equal("call-1", content.AdditionalProperties!["callId"]);
+    }
+
+    [Fact]
+    public void ToAiMessage_ResponseUpdateWithWhitespaceOnlyTextualContent_PreservesContent()
+    {
+        var update = new AgentResponseUpdate(
+            ChatRole.Assistant,
+            [
+                new TextContent("\n"),
+                new TextContent("  "),
+                new TextContent("\t"),
+                new TextReasoningContent("\n\t")
+            ]);
+
+        var result = update.ToAiMessage();
+
+        Assert.NotNull(result);
+        Assert.Collection(
+            result.Contents,
+            content => Assert.Equal("\n", Assert.IsType<AgwTextContent>(content).Content),
+            content => Assert.Equal("  ", Assert.IsType<AgwTextContent>(content).Content),
+            content => Assert.Equal("\t", Assert.IsType<AgwTextContent>(content).Content),
+            content => Assert.Equal("\n\t", Assert.IsType<AgwTextReasoningContent>(content).Content));
     }
 
     [Fact]
