@@ -59,18 +59,25 @@ public sealed class AgwAgentExtensionsTests
             NullLoggerFactory.Instance,
             new ServiceCollection().BuildServiceProvider());
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var requestMessages = new List<ChatMessage>
+        {
+            new(ChatRole.User, "previous question"),
+            new(ChatRole.Assistant, "previous answer"),
+            new(ChatRole.User, "search")
+        };
 
         await agent.RunAsync(
-            [
-                new ChatMessage(ChatRole.User, "previous question"),
-                new ChatMessage(ChatRole.Assistant, "previous answer"),
-                new ChatMessage(ChatRole.User, "search")
-            ],
+            requestMessages,
             session,
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, strategy.InvocationCount);
         Assert.Equal([64_000, 64_000], client.MaxOutputTokens);
+        Assert.All(
+            requestMessages,
+            message => Assert.Equal(
+                AgentRequestMessageSourceType.External,
+                message.GetAgentRequestMessageSourceType()));
 
         var serializedSession = await agent.SerializeSessionAsync(
             session,
@@ -87,6 +94,43 @@ public sealed class AgwAgentExtensionsTests
 
         Assert.Equal(3, strategy.InvocationCount);
         Assert.Equal([64_000, 64_000, 64_000], client.MaxOutputTokens);
+    }
+
+    [Fact]
+    public async Task AsAgwAgent_StreamingCompaction_PreservesFunctionLoopContextWithoutDuplication()
+    {
+        var function = AIFunctionFactory.Create(
+            (Func<string>)(() => "search result"),
+            new AIFunctionFactoryOptions { Name = "web_search" });
+        var client = new FunctionCallingStubChatClient();
+        var agent = client.AsAgwAgent(
+            CreateDefinition(
+                new InMemoryChatHistoryProvider(),
+                new CompactionProvider(
+                    new CountingCompactionStrategy(),
+                    stateKey: "streaming-compaction")),
+            CreateCapabilities(tools: [function]),
+            NullLoggerFactory.Instance,
+            new ServiceCollection().BuildServiceProvider());
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var requestMessage = new ChatMessage(ChatRole.User, "search")
+            .WithAgentRequestMessageSource(
+                AgentRequestMessageSourceType.AIContextProvider,
+                "test-context-provider");
+
+        await foreach (var _ in agent.RunStreamingAsync(
+                           [requestMessage],
+                           session,
+                           cancellationToken: TestContext.Current.CancellationToken))
+        {
+        }
+
+        Assert.Equal(
+            AgentRequestMessageSourceType.AIContextProvider,
+            requestMessage.GetAgentRequestMessageSourceType());
+        Assert.Equal(2, client.Requests.Count);
+        Assert.Contains(client.Requests[0], message => message.Text == "search");
+        Assert.Single(client.Requests[1], message => message.Text == "search");
     }
 
     [Fact]
@@ -136,7 +180,7 @@ public sealed class AgwAgentExtensionsTests
     }
 
     [Fact]
-    public async Task AsAgwAgent_Compaction_DoesNotPersistCompactedRequestMessages()
+    public async Task AsAgwAgent_AutoApprovedFunctionLoop_PreservesHistoryAndDeduplicatesContext()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -185,15 +229,28 @@ public sealed class AgwAgentExtensionsTests
             NullLogger<EfCoreChatHistoryProvider>.Instance,
             TimeProvider.System,
             jsonOptions);
-        var client = new RecordingResponseChatClient();
+        var function = AIFunctionFactory.Create(
+            (Func<string>)(() => "search result"),
+            new AIFunctionFactoryOptions { Name = "web_search" });
+        var client = new FunctionCallingStubChatClient(
+            functionCallCount: 2,
+            functionRoundCount: 3);
         var agent = client.AsAgwAgent(
             CreateDefinition(
                 historyProvider,
                 new CompactionProvider(
-                    new ContextWindowCompactionStrategy(4_000, 1_000),
+                    new ContextWindowCompactionStrategy(64_000, 1_000),
                     stateKey: "test-ef-compaction"),
                 maxOutputTokens: 1_000),
-            CreateCapabilities(),
+            CreateCapabilities(
+                tools: [new ApprovalRequiredAIFunction(function)],
+                contextProviders:
+                [
+                    new StaticTextContextProvider("mode context"),
+                    new TodoProvider(),
+                    new StaticTextContextProvider("memory context")
+                ],
+                autoApprovalRules: [ToolApprovalAgent.AllToolsAutoApprovalRule]),
             NullLoggerFactory.Instance,
             serviceProvider);
         var session = await agent.CreateSessionAsync(cancellationToken);
@@ -208,14 +265,30 @@ public sealed class AgwAgentExtensionsTests
                 new ChatMessage(ChatRole.Assistant, $"assistant-{turn}: {new string('a', 200)}")
             })
             .ToList();
+        await foreach (var _ in agent.RunStreamingAsync(
+                           originalMessages,
+                           session,
+                           cancellationToken: cancellationToken))
+        {
+        }
 
-        await agent.RunAsync(
-            originalMessages,
-            session,
-            cancellationToken: cancellationToken);
-
-        var modelRequest = Assert.Single(client.Requests);
-        Assert.True(modelRequest.Count < originalMessages.Count);
+        Assert.Equal(4, client.Requests.Count);
+        Assert.Equal(
+            [0, 2, 4, 6],
+            client.Requests.Select(request => request
+                .SelectMany(message => message.Contents)
+                .OfType<FunctionResultContent>()
+                .Count()));
+        Assert.All(client.Requests, request =>
+        {
+            Assert.Single(request, message => message.Text == "mode context");
+            Assert.Single(request, message => message.Text == "memory context");
+            Assert.Single(request, message =>
+                message.Text.StartsWith("### Current todo list", StringComparison.Ordinal));
+        });
+        var modelRequest = client.Requests[0];
+        Assert.Contains(modelRequest, message =>
+            message.Text.StartsWith("user-0:", StringComparison.Ordinal));
         Assert.Contains(modelRequest, message =>
             message.Text.StartsWith("user-39:", StringComparison.Ordinal));
 
@@ -233,6 +306,61 @@ public sealed class AgwAgentExtensionsTests
             message.Text.StartsWith("user-0:", StringComparison.Ordinal));
         Assert.Contains(storedMessages, message =>
             message.Text.StartsWith("user-39:", StringComparison.Ordinal));
+        Assert.Single(storedMessages, message =>
+            message.Text.StartsWith("### Current todo list", StringComparison.Ordinal));
+        Assert.Single(storedMessages, message => message.Text == "mode context");
+        Assert.Single(storedMessages, message => message.Text == "memory context");
+        Assert.Equal(
+            6,
+            storedMessages.SelectMany(message => message.Contents)
+                .OfType<FunctionCallContent>()
+                .Count());
+        Assert.Equal(
+            6,
+            storedMessages.SelectMany(message => message.Contents)
+                .OfType<FunctionResultContent>()
+                .Count());
+    }
+
+    [Fact]
+    public async Task AsAgwAgent_StalledCompactionState_RebuildsFromCompleteHistory()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var historyProvider = new MutableChatHistoryProvider();
+        var client = new RecordingResponseChatClient();
+        var agent = client.AsAgwAgent(
+            CreateDefinition(
+                historyProvider,
+                new CompactionProvider(
+                    new CountingCompactionStrategy(),
+                    stateKey: "stalled-compaction")),
+            CreateCapabilities(
+                contextProviders: [new StaticTextContextProvider("memory context")]),
+            NullLoggerFactory.Instance,
+            new ServiceCollection().BuildServiceProvider());
+        var session = await agent.CreateSessionAsync(cancellationToken);
+
+        await agent.RunAsync(
+            [new ChatMessage(ChatRole.User, "original user request")],
+            session,
+            cancellationToken: cancellationToken);
+        Assert.True(session.StateBag.TryRemoveValue("stalled-compaction.agw-index-version"));
+
+        historyProvider.Messages =
+        [
+            new ChatMessage(ChatRole.User, "original user request"),
+            new ChatMessage(ChatRole.Assistant, "persisted assistant response")
+        ];
+        await agent.RunAsync(
+            [new ChatMessage(ChatRole.User, "new user request")],
+            session,
+            cancellationToken: cancellationToken);
+
+        Assert.Equal(2, client.Requests.Count);
+        Assert.Contains(client.Requests[1], message => message.Text == "persisted assistant response");
+        Assert.Contains(client.Requests[1], message => message.Text == "new user request");
+        Assert.Single(client.Requests[1], message => message.Text == "memory context");
+        Assert.True(session.StateBag.Serialize().TryGetProperty("stalled-compaction", out _));
     }
 
     [Fact]
@@ -860,6 +988,7 @@ public sealed class AgwAgentExtensionsTests
         IReadOnlyList<AITool>? tools = null,
         IReadOnlyList<AIContextProvider>? contextProviders = null,
         IReadOnlyList<LoopEvaluator>? loopEvaluators = null,
+        IReadOnlyList<Func<ToolAutoApprovalRuleContext, ValueTask<bool>>>? autoApprovalRules = null,
         IReadOnlySet<string>? planModeAllowedToolNames = null,
         IReadOnlyList<string>? toolWarnings = null,
         IReadOnlyDictionary<string, string>? toolInvocationWarnings = null) =>
@@ -869,7 +998,7 @@ public sealed class AgwAgentExtensionsTests
             warnings: [],
             contextProviders: contextProviders ?? [],
             loopEvaluators: loopEvaluators ?? [],
-            autoApprovalRules: [],
+            autoApprovalRules: autoApprovalRules ?? [],
             planModeAllowedToolNames: planModeAllowedToolNames ?? new HashSet<string>(),
             toolWarnings: toolWarnings ?? [],
             toolInvocationWarnings: toolInvocationWarnings ??
@@ -882,6 +1011,26 @@ public sealed class AgwAgentExtensionsTests
             LoopContext context,
             CancellationToken cancellationToken = default) =>
             ValueTask.FromResult(LoopEvaluation.Stop());
+    }
+
+    private sealed class StaticTextContextProvider : AIContextProvider
+    {
+        private readonly string _text;
+
+        public StaticTextContextProvider(string text)
+        {
+            _text = text;
+        }
+
+        public override IReadOnlyList<string> StateKeys => [];
+
+        protected override ValueTask<AIContext> ProvideAIContextAsync(
+            InvokingContext context,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult(new AIContext
+            {
+                Messages = [new ChatMessage(ChatRole.User, _text)]
+            });
     }
 
     private sealed class StubChatClient : IChatClient
@@ -914,6 +1063,17 @@ public sealed class AgwAgentExtensionsTests
 
     private sealed class FunctionCallingStubChatClient : IChatClient
     {
+        private readonly int _functionCallCount;
+        private readonly int _functionRoundCount;
+
+        public FunctionCallingStubChatClient(
+            int functionCallCount = 1,
+            int functionRoundCount = 1)
+        {
+            _functionCallCount = functionCallCount;
+            _functionRoundCount = functionRoundCount;
+        }
+
         public List<List<ChatMessage>> Requests { get; } = [];
         public List<int?> MaxOutputTokens { get; } = [];
 
@@ -932,12 +1092,10 @@ public sealed class AgwAgentExtensionsTests
             var request = messages.Select(message => message.Clone()).ToList();
             Requests.Add(request);
             MaxOutputTokens.Add(options?.MaxOutputTokens);
-            return Task.FromResult(
-                request.SelectMany(message => message.Contents)
-                    .OfType<FunctionResultContent>()
-                    .Any()
-                    ? new ChatResponse(new ChatMessage(ChatRole.Assistant, "done"))
-                    : new ChatResponse(CreateFunctionCallMessage()));
+            var completedRounds = GetCompletedRounds(request);
+            return Task.FromResult(completedRounds >= _functionRoundCount
+                ? new ChatResponse(new ChatMessage(ChatRole.Assistant, "done"))
+                : new ChatResponse(CreateFunctionCallMessage(completedRounds + 1)));
         }
 
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
@@ -949,9 +1107,8 @@ public sealed class AgwAgentExtensionsTests
             var request = messages.Select(message => message.Clone()).ToList();
             Requests.Add(request);
             MaxOutputTokens.Add(options?.MaxOutputTokens);
-            if (request.SelectMany(message => message.Contents)
-                .OfType<FunctionResultContent>()
-                .Any())
+            var completedRounds = GetCompletedRounds(request);
+            if (completedRounds >= _functionRoundCount)
             {
                 yield return new ChatResponseUpdate(ChatRole.Assistant, "done");
                 yield break;
@@ -959,18 +1116,24 @@ public sealed class AgwAgentExtensionsTests
 
             yield return new ChatResponseUpdate(
                 ChatRole.Assistant,
-                CreateFunctionCallMessage().Contents);
+                CreateFunctionCallMessage(completedRounds + 1).Contents);
         }
 
-        private static ChatMessage CreateFunctionCallMessage() =>
+        private int GetCompletedRounds(IReadOnlyList<ChatMessage> request) =>
+            request.SelectMany(message => message.Contents)
+                .OfType<FunctionResultContent>()
+                .Count() / _functionCallCount;
+
+        private ChatMessage CreateFunctionCallMessage(int round) =>
             new(
                 ChatRole.Assistant,
-                [
-                    new FunctionCallContent(
-                        "web-search-call",
+                Enumerable.Range(1, _functionCallCount)
+                    .Select(index => new FunctionCallContent(
+                        $"web-search-call-{round}-{index}",
                         "web_search",
-                        new Dictionary<string, object?>())
-                ]);
+                        new Dictionary<string, object?>()))
+                    .Cast<AIContent>()
+                    .ToList());
     }
 
     private sealed class RecordingResponseChatClient : IChatClient
@@ -1003,6 +1166,17 @@ public sealed class AgwAgentExtensionsTests
             Requests.Add(messages.Select(message => message.Clone()).ToList());
             yield return new ChatResponseUpdate(ChatRole.Assistant, "done");
         }
+    }
+
+    private sealed class MutableChatHistoryProvider : ChatHistoryProvider
+    {
+        public IReadOnlyList<ChatMessage> Messages { get; set; } = [];
+
+        protected override ValueTask<IEnumerable<ChatMessage>> ProvideChatHistoryAsync(
+            InvokingContext context,
+            CancellationToken cancellationToken = default) =>
+            ValueTask.FromResult<IEnumerable<ChatMessage>>(
+                Messages.Select(static message => message.Clone()));
     }
 
     private sealed class CountingCompactionStrategy : CompactionStrategy

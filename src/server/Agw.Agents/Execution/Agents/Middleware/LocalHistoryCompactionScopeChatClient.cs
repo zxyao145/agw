@@ -2,14 +2,29 @@ using System.Runtime.CompilerServices;
 
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 
 namespace Agw.Agents.Execution.Agents.Middleware;
 
 internal sealed class LocalHistoryCompactionScopeChatClient : DelegatingChatClient
 {
-    public LocalHistoryCompactionScopeChatClient(IChatClient innerClient)
+    private const string CompactionIndexVersion = "function-loop-context-v1";
+
+    private readonly string? _compactionStateKey;
+    private readonly string? _compactionVersionStateKey;
+    private readonly ILogger<LocalHistoryCompactionScopeChatClient> _logger;
+
+    public LocalHistoryCompactionScopeChatClient(
+        IChatClient innerClient,
+        string? compactionStateKey,
+        ILogger<LocalHistoryCompactionScopeChatClient> logger)
         : base(innerClient)
     {
+        _compactionStateKey = compactionStateKey;
+        _compactionVersionStateKey = string.IsNullOrWhiteSpace(compactionStateKey)
+            ? null
+            : $"{compactionStateKey}.agw-index-version";
+        _logger = logger;
     }
 
     public override async Task<ChatResponse> GetResponseAsync(
@@ -17,18 +32,20 @@ internal sealed class LocalHistoryCompactionScopeChatClient : DelegatingChatClie
         ChatOptions? options = null,
         CancellationToken cancellationToken = default)
     {
+        var isolatedMessages = ChatMessageSourceIsolation.CloneMessages(messages);
         var originalContext = AIAgent.CurrentRunContext;
+        EnsureCompatibleCompactionState(originalContext?.Session);
         var compactionContext = CreateCompactionContext(originalContext, options);
         if (compactionContext == null)
         {
-            return await base.GetResponseAsync(messages, options, cancellationToken)
+            return await base.GetResponseAsync(isolatedMessages, options, cancellationToken)
                 .ConfigureAwait(false);
         }
 
         RunContextAccessor.SetCurrent(compactionContext);
         try
         {
-            return await base.GetResponseAsync(messages, options, cancellationToken)
+            return await base.GetResponseAsync(isolatedMessages, options, cancellationToken)
                 .ConfigureAwait(false);
         }
         finally
@@ -42,12 +59,14 @@ internal sealed class LocalHistoryCompactionScopeChatClient : DelegatingChatClie
         ChatOptions? options = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        var isolatedMessages = ChatMessageSourceIsolation.CloneMessages(messages);
         var originalContext = AIAgent.CurrentRunContext;
+        EnsureCompatibleCompactionState(originalContext?.Session);
         var compactionContext = CreateCompactionContext(originalContext, options);
         if (compactionContext == null)
         {
             await foreach (var update in base.GetStreamingResponseAsync(
-                               messages,
+                               isolatedMessages,
                                options,
                                cancellationToken).ConfigureAwait(false))
             {
@@ -61,7 +80,7 @@ internal sealed class LocalHistoryCompactionScopeChatClient : DelegatingChatClie
         try
         {
             await foreach (var update in base.GetStreamingResponseAsync(
-                               messages,
+                               isolatedMessages,
                                options,
                                cancellationToken).ConfigureAwait(false))
             {
@@ -71,6 +90,33 @@ internal sealed class LocalHistoryCompactionScopeChatClient : DelegatingChatClie
         finally
         {
             RunContextAccessor.SetCurrent(originalContext);
+        }
+    }
+
+    private void EnsureCompatibleCompactionState(AgentSession? session)
+    {
+        if (session == null ||
+            string.IsNullOrWhiteSpace(_compactionStateKey) ||
+            string.IsNullOrWhiteSpace(_compactionVersionStateKey))
+        {
+            return;
+        }
+
+        if (session.StateBag.TryGetValue<string>(
+                _compactionVersionStateKey,
+                out var version) &&
+            string.Equals(version, CompactionIndexVersion, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var resetExistingState = session.StateBag.TryRemoveValue(_compactionStateKey);
+        session.StateBag.SetValue(_compactionVersionStateKey, CompactionIndexVersion);
+        if (resetExistingState)
+        {
+            _logger.LogWarning(
+                "Resetting legacy compaction state {CompactionStateKey} so it can be rebuilt from complete chat history.",
+                _compactionStateKey);
         }
     }
 
