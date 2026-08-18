@@ -4,6 +4,7 @@ using System.Text.Json;
 
 using Agw.Domain.Services;
 using Agw.Infrastructure.Data;
+using Agw.Projects.Domain.Services;
 using Agw.Shared;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Projects;
@@ -1270,6 +1271,60 @@ public class EfCoreChatHistoryProviderTests
         Assert.NotNull(record.Metadata);
         Assert.Equal("agent", record.Metadata!["targetType"].GetString());
         Assert.Equal("11111111-1111-1111-1111-111111111111", record.Metadata["targetId"].GetString());
+    }
+
+    [Fact]
+    public async Task StoreChatHistoryAsync_HandoffAndCurrentInput_PersistsOnlyCurrentInputAndCursor()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        var projectId = Guid.CreateVersion7();
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+            setupContext.Projects.Add(CreateProject(projectId));
+            await setupContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+        var provider = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System);
+        var session = new FakeAgentSession();
+        provider.InitializeSessionState(session, "context-1", projectId);
+        var handoff = new ChatMessage(ChatRole.Assistant, "previous plan");
+        ConversationHandoffMetadata.MarkHandoffMessage(handoff);
+        var current = new ChatMessage(ChatRole.User, "implement it")
+        {
+            AdditionalProperties = new AdditionalPropertiesDictionary
+            {
+                [ConversationHandoffMetadata.ThroughSequenceKey] = 17L
+            }
+        };
+
+        await InvokeStoreChatHistoryAsync(
+            provider,
+            new ChatHistoryProvider.InvokedContext(
+                new FakeAgent(),
+                session,
+                [handoff, current],
+                []),
+            cancellationToken);
+
+        await using var verifyContext = new AgwDbContext(options);
+        var record = await verifyContext.ProjectConversationChatHistories.SingleAsync(cancellationToken);
+        Assert.Equal("implement it", record.GetText());
+        Assert.Equal(
+            17,
+            record.Metadata![ConversationHandoffMetadata.ThroughSequenceKey].GetInt64());
     }
 
     [Fact]

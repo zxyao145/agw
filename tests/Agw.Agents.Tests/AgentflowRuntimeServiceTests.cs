@@ -829,6 +829,34 @@ public class AgentflowRuntimeServiceTests
         Assert.Equal(input, message.Text);
     }
 
+    [Fact]
+    public void CreateWorkflowInputMessages_Handoff_PrependsContextAndStampsTargetCursor()
+    {
+        var agentflowId = Guid.CreateVersion7();
+        var handoffMessage = new ChatMessage(ChatRole.Assistant, "approved plan");
+        ConversationHandoffMetadata.MarkHandoffMessage(handoffMessage);
+        var input = new AgwUserInput
+        {
+            MessageId = "current-input",
+            Contents = [new AgwTextContent { Content = "start implementation" }]
+        };
+
+        var messages = AgentflowRuntimeService.CreateWorkflowInputMessages(
+            input,
+            agentflowId,
+            new ConversationHandoff([handoffMessage], 29));
+
+        Assert.Equal(["approved plan", "start implementation"], messages.Select(message => message.Text));
+        var current = messages[1];
+        Assert.Equal("current-input", current.MessageId);
+        Assert.Equal(
+            29L,
+            current.AdditionalProperties![ConversationHandoffMetadata.ThroughSequenceKey]);
+        var text = Assert.IsType<TextContent>(Assert.Single(current.Contents));
+        Assert.Equal("agentflow", text.AdditionalProperties!["targetType"]);
+        Assert.Equal(agentflowId.ToString("D"), text.AdditionalProperties["targetId"]);
+    }
+
     private sealed class DelayedApprovalHandler : IHumanGateApprovalHandler
     {
         private readonly string _approvalScope;

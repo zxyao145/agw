@@ -1,7 +1,11 @@
 using Agw.Agents.Execution.Runtimes;
 using Agw.Shared.AgwMsgVm;
+using Agw.Shared.Contracts.Projects;
+using Agw.Shared.Data;
 
 using ClaudeCodeSdk.MAF;
+
+using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution;
 
@@ -35,6 +39,95 @@ internal static class AgwMessageUtil
     }
 
     #endregion
+
+    public static ChatMessage CreateUserChatMessage(AgwUserInput input)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(input.Contents);
+
+        return new ChatMessage(ChatRole.User, ConvertToAIContents(input.Contents))
+        {
+            MessageId = string.IsNullOrWhiteSpace(input.MessageId)
+                ? Guid.CreateVersion7().ToString()
+                : input.MessageId,
+            AuthorName = string.IsNullOrWhiteSpace(input.Author)
+                ? Constants.DefaultInputAuthor
+                : input.Author
+        };
+    }
+
+    public static List<ChatMessage> CreateExecutionInputMessages(
+        AgwUserInput input,
+        AgentRuntimeType targetType,
+        Guid targetId,
+        ConversationHandoff handoff)
+    {
+        ArgumentNullException.ThrowIfNull(handoff);
+
+        var currentMessage = CreateUserChatMessage(input);
+        ApplyTargetMetadata(currentMessage, targetType, targetId);
+        ConversationHandoffMetadata.SetThroughSequence(
+            currentMessage,
+            handoff.ThroughSequence);
+
+        var messages = new List<ChatMessage>(handoff.Messages.Count + 1);
+        messages.AddRange(handoff.Messages);
+        messages.Add(currentMessage);
+        return messages;
+    }
+
+    private static void ApplyTargetMetadata(
+        ChatMessage message,
+        AgentRuntimeType targetType,
+        Guid targetId)
+    {
+        var content = message.Contents.FirstOrDefault();
+        if (content == null)
+        {
+            return;
+        }
+
+        content.AdditionalProperties ??= [];
+        content.AdditionalProperties["targetType"] = targetType switch
+        {
+            AgentRuntimeType.Agent => "agent",
+            AgentRuntimeType.Agentflow => "agentflow",
+            _ => targetType.ToString().ToLowerInvariant()
+        };
+        content.AdditionalProperties["targetId"] = targetId.ToString("D");
+    }
+
+    private static List<AIContent> ConvertToAIContents(IEnumerable<AgwContent> contents)
+    {
+        var aiContents = new List<AIContent>();
+        foreach (var item in contents)
+        {
+            switch (item)
+            {
+                case AgwTextContent text:
+                    aiContents.Add(new TextContent(text.Content)
+                    {
+                        AdditionalProperties = CloneAdditionalProperties(text.AdditionalProperties)
+                    });
+                    break;
+
+                case AgwUriContent uri:
+                    aiContents.Add(new UriContent(uri.Uri, uri.MediaType)
+                    {
+                        AdditionalProperties = CloneAdditionalProperties(uri.AdditionalProperties)
+                    });
+                    break;
+            }
+        }
+
+        return aiContents;
+    }
+
+    private static AdditionalPropertiesDictionary? CloneAdditionalProperties(
+        AdditionalPropertiesDictionary? additionalProperties) =>
+        additionalProperties == null
+            ? null
+            : new AdditionalPropertiesDictionary(additionalProperties);
 
     #region agents
 
