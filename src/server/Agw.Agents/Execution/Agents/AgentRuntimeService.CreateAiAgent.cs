@@ -3,16 +3,13 @@ using Agw.Agents.Execution.Agents.Utils;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
-
 using Microsoft.Agents.AI;
 
 namespace Agw.Agents.Execution.Agents;
 
 public partial class AgentRuntimeService
 {
-    public async Task<AIAgent?> CreateAiAgentAsync(
-        Guid agentId,
-        CancellationToken cancellationToken = default)
+    public async Task<AIAgent?> CreateAiAgentAsync(Guid agentId, CancellationToken cancellationToken = default)
     {
         var agent = await _agentAppService.GetAgentAsync(agentId);
         if (agent == null)
@@ -20,24 +17,17 @@ public partial class AgentRuntimeService
             return null;
         }
 
-        return await CreateAiAgentAsync(new CreateAiAgentRequest
-        {
-            Agent = agent,
-        }, cancellationToken);
+        return await CreateAiAgentAsync(new CreateAiAgentRequest { Agent = agent }, cancellationToken);
     }
 
     public async Task<AIAgent?> CreateAiAgentAsync(
         Guid agentId,
         Guid? projectId,
         bool resume,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
-        return await CreateAiAgentAsync(
-            agentId,
-            projectId,
-            resume,
-            environmentVariables: null,
-            cancellationToken);
+        return await CreateAiAgentAsync(agentId, projectId, resume, environmentVariables: null, cancellationToken);
     }
 
     public async Task<AIAgent?> CreateAiAgentAsync(
@@ -45,7 +35,8 @@ public partial class AgentRuntimeService
         Guid? projectId,
         bool resume,
         IReadOnlyDictionary<string, string>? environmentVariables,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var agent = await _agentAppService.GetAgentAsync(agentId);
         if (agent == null)
@@ -53,20 +44,24 @@ public partial class AgentRuntimeService
             return null;
         }
 
-        return await CreateAiAgentAsync(new CreateAiAgentRequest
-        {
-            Agent = agent,
-            EnvironmentVariables = environmentVariables,
-            ProjectId = projectId,
-            Resume = resume,
-        }, cancellationToken);
+        return await CreateAiAgentAsync(
+            new CreateAiAgentRequest
+            {
+                Agent = agent,
+                EnvironmentVariables = environmentVariables,
+                ProjectId = projectId,
+                Resume = resume,
+            },
+            cancellationToken
+        );
     }
 
     public async Task<AIAgent?> CreateAgentflowNodeAgentAsync(
         Guid agentId,
         Guid? projectId,
         IReadOnlyDictionary<string, string>? environmentVariables,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var agent = await _agentAppService.GetAgentAsync(agentId);
         if (agent == null)
@@ -74,14 +69,17 @@ public partial class AgentRuntimeService
             return null;
         }
 
-        return await CreateAiAgentAsync(new CreateAiAgentRequest
-        {
-            Agent = agent,
-            EnvironmentVariables = environmentVariables,
-            ProjectId = projectId,
-            Resume = false,
-            DefaultMode = "execute"
-        }, cancellationToken);
+        return await CreateAiAgentAsync(
+            new CreateAiAgentRequest
+            {
+                Agent = agent,
+                EnvironmentVariables = environmentVariables,
+                ProjectId = projectId,
+                Resume = false,
+                DefaultMode = "execute",
+            },
+            cancellationToken
+        );
     }
 
     public async Task<AIAgent?> CreateAgentflowNodeAgentAsync(
@@ -89,7 +87,8 @@ public partial class AgentRuntimeService
         Guid? projectId,
         Guid conversationId,
         IReadOnlyDictionary<string, string>? environmentVariables,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         return await CreateAgentflowNodeAgentAsync(
             agentId,
@@ -97,7 +96,8 @@ public partial class AgentRuntimeService
             conversationId,
             environmentVariables,
             deferHumanInteractions: false,
-            cancellationToken);
+            cancellationToken
+        );
     }
 
     /// <summary>
@@ -109,7 +109,8 @@ public partial class AgentRuntimeService
         Guid conversationId,
         IReadOnlyDictionary<string, string>? environmentVariables,
         bool deferHumanInteractions,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var agent = await _agentAppService.GetAgentAsync(agentId);
         if (agent == null)
@@ -117,31 +118,35 @@ public partial class AgentRuntimeService
             return null;
         }
 
-        return await CreateAiAgentAsync(new CreateAiAgentRequest
-        {
-            Agent = agent,
-            EnvironmentVariables = environmentVariables,
-            ProjectId = projectId,
-            ConversationId = conversationId,
-            Resume = false,
-            DefaultMode = "execute",
-            DeferHumanInteractions = deferHumanInteractions
-        }, cancellationToken);
+        return await CreateAiAgentAsync(
+            new CreateAiAgentRequest
+            {
+                Agent = agent,
+                EnvironmentVariables = environmentVariables,
+                ProjectId = projectId,
+                ConversationId = conversationId,
+                Resume = false,
+                DefaultMode = "execute",
+                DeferHumanInteractions = deferHumanInteractions,
+            },
+            cancellationToken
+        );
     }
 
     private async Task<AIAgent?> CreateAiAgentAsync(
         CreateAiAgentRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Agent);
-        Project? project = await _projectAppService
-            .GetAsync(request.ProjectId ?? ProjectDefaults.DefaultBuiltInId);
+        Project? project = await _projectAppService.GetAsync(request.ProjectId ?? ProjectDefaults.DefaultBuiltInId);
         ArgumentNullException.ThrowIfNull(project);
         var environmentVariables = AgentRuntimeServiceUtil.MergeEnvironmentVariables(
             request.Agent.EnvironmentVariables,
             project.EnvironmentVariables,
-            request.EnvironmentVariables);
+            request.EnvironmentVariables
+        );
 
         if (request.Agent.Type == AgentType.External)
         {
@@ -156,7 +161,8 @@ public partial class AgentRuntimeService
                 environmentVariables,
                 request.DefaultMode,
                 cancellationToken,
-                deferHumanInteractions: request.DeferHumanInteractions)
+                deferHumanInteractions: request.DeferHumanInteractions
+            )
             .ConfigureAwait(false);
     }
 }

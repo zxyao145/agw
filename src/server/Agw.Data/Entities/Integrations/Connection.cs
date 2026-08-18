@@ -1,8 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
-
 using Agw.Shared.Data.Abstractions;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Shared.Data.Entities.Integrations;
@@ -27,6 +25,7 @@ public class Connection : BaseEntity, IAggregateRoot
     public DateTimeOffset? LastValidatedAtUtc { get; set; }
     public string? LastValidationErrorCode { get; set; }
     public string? ValidationMetadataJson { get; set; }
+
     [JsonIgnore]
     public ICollection<ConnectionCredential> Credentials { get; set; } = new List<ConnectionCredential>();
 }

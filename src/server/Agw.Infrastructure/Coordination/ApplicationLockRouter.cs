@@ -2,9 +2,7 @@ using Agw.Infrastructure.Configuration;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Runtime;
-
 using Medallion.Threading;
-
 using Microsoft.Extensions.Options;
 
 namespace Agw.Infrastructure.Coordination;
@@ -25,7 +23,8 @@ public sealed class ApplicationLockRouter : IApplicationLock
         IServerInitializationState serverInitializationState,
         IOptionsMonitor<DistributedLockSettings> settings,
         InMemoryApplicationLock inMemoryLock,
-        Func<DistributedLockProvider, string, IDistributedLockProvider> providerFactory)
+        Func<DistributedLockProvider, string, IDistributedLockProvider> providerFactory
+    )
     {
         _serverInitializationState = serverInitializationState;
         _settings = settings;
@@ -33,44 +32,37 @@ public sealed class ApplicationLockRouter : IApplicationLock
         _providerFactory = providerFactory;
     }
 
-    public async Task<IAsyncDisposable> AcquireAsync(
-        string resourceName,
-        CancellationToken cancellationToken)
+    public async Task<IAsyncDisposable> AcquireAsync(string resourceName, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(resourceName);
 
         var effectiveSettings = DistributedLockSettingsResolver.Resolve(
             _settings.CurrentValue,
             _serverInitializationState.DatabaseProvider,
-            _serverInitializationState.DatabaseConnectionString);
+            _serverInitializationState.DatabaseConnectionString
+        );
         if (effectiveSettings.Provider == DistributedLockProvider.InMemory)
         {
-            return await _inMemoryLock
-                .AcquireAsync(resourceName, cancellationToken)
-                .ConfigureAwait(false);
+            return await _inMemoryLock.AcquireAsync(resourceName, cancellationToken).ConfigureAwait(false);
         }
 
-        return await GetDistributedLockProvider(
-                effectiveSettings.Provider!.Value,
-                effectiveSettings.ConnectionString!)
-            .AcquireLockAsync(
-                $"agw:application:{resourceName}",
-                cancellationToken: cancellationToken)
+        return await GetDistributedLockProvider(effectiveSettings.Provider!.Value, effectiveSettings.ConnectionString!)
+            .AcquireLockAsync($"agw:application:{resourceName}", cancellationToken: cancellationToken)
             .ConfigureAwait(false);
     }
 
     private IDistributedLockProvider GetDistributedLockProvider(
         DistributedLockProvider provider,
-        string connectionString)
+        string connectionString
+    )
     {
         lock (_distributedLockSync)
         {
-            if (_distributedLockProvider == null ||
-                _distributedProvider != provider ||
-                !string.Equals(
-                    _distributedConnectionString,
-                    connectionString,
-                    StringComparison.Ordinal))
+            if (
+                _distributedLockProvider == null
+                || _distributedProvider != provider
+                || !string.Equals(_distributedConnectionString, connectionString, StringComparison.Ordinal)
+            )
             {
                 _distributedProvider = provider;
                 _distributedConnectionString = connectionString;

@@ -1,8 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
-
 using Agw.Shared.Data.Entities.Projects;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Shared.Data.Entities.Agents;

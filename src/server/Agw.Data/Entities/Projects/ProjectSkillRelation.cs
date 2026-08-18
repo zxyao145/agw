@@ -1,8 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
-
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Skills;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Shared.Data.Entities.Projects;

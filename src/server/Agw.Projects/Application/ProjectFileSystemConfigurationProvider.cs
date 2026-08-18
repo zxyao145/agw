@@ -12,16 +12,10 @@ public sealed class ProjectFileSystemConfigurationProvider : IProjectFileSystemC
         _projectAppService = projectAppService;
     }
 
-    public async Task<ProjectFileSystemConfiguration?> GetAsync(
-        Guid projectId,
-        CancellationToken cancellationToken)
+    public async Task<ProjectFileSystemConfiguration?> GetAsync(Guid projectId, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var project = await _projectAppService.GetAsync(projectId);
-        return project == null
-            ? null
-            : new ProjectFileSystemConfiguration(
-                project.Name,
-                project.Workspace);
+        return project == null ? null : new ProjectFileSystemConfiguration(project.Name, project.Workspace);
     }
 }

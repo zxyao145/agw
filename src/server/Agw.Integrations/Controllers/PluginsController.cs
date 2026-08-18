@@ -1,9 +1,7 @@
 using Agw.Integrations.Application.Management;
 using Agw.Integrations.Contracts.Management;
 using Agw.Shared.Results;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Integrations.Controllers;

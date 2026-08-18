@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text.Json;
-
 using Agw.Integrations.Application.Credentials;
 using Agw.Integrations.Application.Management;
 using Agw.Integrations.Application.Plugins;
@@ -11,10 +10,8 @@ using Agw.Integrations.Domain.Plugins;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
-
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
-
 using IntegrationConnection = Agw.Shared.Data.Entities.Integrations.Connection;
 
 namespace Agw.Integrations.Application.OAuth;
@@ -37,7 +34,7 @@ public sealed class OAuthAuthorizationAppService
         "client_id",
         "client_secret",
         "code_verifier",
-        "refresh_token"
+        "refresh_token",
     ];
     private static readonly string[] ReservedAuthorizeParameters =
     [
@@ -47,7 +44,7 @@ public sealed class OAuthAuthorizationAppService
         "state",
         "scope",
         "code_challenge",
-        "code_challenge_method"
+        "code_challenge_method",
     ];
 
     private readonly IRepository<IntegrationConnection> _connectionRepository;
@@ -71,7 +68,8 @@ public sealed class OAuthAuthorizationAppService
         IHttpClientFactory httpClientFactory,
         OAuthStateProtector stateProtector,
         TimeProvider timeProvider,
-        ILogger<OAuthAuthorizationAppService> logger)
+        ILogger<OAuthAuthorizationAppService> logger
+    )
     {
         _connectionRepository = connectionRepository;
         _installationRepository = installationRepository;
@@ -91,23 +89,18 @@ public sealed class OAuthAuthorizationAppService
         string returnPath,
         OAuthCompletionTarget completionTarget,
         string user,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         OAuthStateProtector.ValidateReturnPath(returnPath);
         ValidateCallbackUri(callbackUri);
         var context = await ResolveContextAsync(connectionId, cancellationToken);
         var verifier = context.Settings.UsePkce ? CreatePkceVerifier() : null;
-        var state = _stateProtector.Protect(
-            connectionId,
-            verifier,
-            returnPath,
-            callbackUri,
-            completionTarget);
+        var state = _stateProtector.Protect(connectionId, verifier, returnPath, callbackUri, completionTarget);
         var parameters = new Dictionary<string, string?>(
-            context.Settings.AdditionalAuthorizeParameters.ToDictionary(
-                item => item.Key,
-                item => (string?)item.Value),
-            StringComparer.Ordinal);
+            context.Settings.AdditionalAuthorizeParameters.ToDictionary(item => item.Key, item => (string?)item.Value),
+            StringComparer.Ordinal
+        );
         foreach (var reservedParameter in ReservedAuthorizeParameters)
         {
             parameters.Remove(reservedParameter);
@@ -125,7 +118,8 @@ public sealed class OAuthAuthorizationAppService
         if (verifier != null)
         {
             parameters["code_challenge"] = WebEncoders.Base64UrlEncode(
-                SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
+                SHA256.HashData(Encoding.ASCII.GetBytes(verifier))
+            );
             parameters["code_challenge_method"] = "S256";
         }
 
@@ -138,7 +132,7 @@ public sealed class OAuthAuthorizationAppService
 
         return new OAuthAuthorizeStartResponse
         {
-            AuthorizationUrl = QueryHelpers.AddQueryString(context.Settings.AuthorizationEndpoint, parameters)
+            AuthorizationUrl = QueryHelpers.AddQueryString(context.Settings.AuthorizationEndpoint, parameters),
         };
     }
 
@@ -147,14 +141,12 @@ public sealed class OAuthAuthorizationAppService
         string? authorizationCode,
         string? providerError,
         string user,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (!_stateProtector.TryUnprotect(protectedState, out var state) || state == null)
         {
-            return FailedRedirect(
-                "/integrations",
-                InvalidStateRedirectCode,
-                OAuthCompletionTarget.Web);
+            return FailedRedirect("/integrations", InvalidStateRedirectCode, OAuthCompletionTarget.Web);
         }
 
         OAuthConnectionContext context;
@@ -164,10 +156,7 @@ public sealed class OAuthAuthorizationAppService
         }
         catch (AgwException)
         {
-            return FailedRedirect(
-                state.ReturnPath,
-                InvalidStateRedirectCode,
-                state.CompletionTarget);
+            return FailedRedirect(state.ReturnPath, InvalidStateRedirectCode, state.CompletionTarget);
         }
 
         if (!string.IsNullOrWhiteSpace(providerError) || string.IsNullOrWhiteSpace(authorizationCode))
@@ -176,11 +165,9 @@ public sealed class OAuthAuthorizationAppService
                 context.Connection,
                 ConnectionStatus.PendingAuthorization,
                 AuthorizationDeniedCode,
-                user);
-            return FailedRedirect(
-                state.ReturnPath,
-                AuthorizationDeniedRedirectCode,
-                state.CompletionTarget);
+                user
+            );
+            return FailedRedirect(state.ReturnPath, AuthorizationDeniedRedirectCode, state.CompletionTarget);
         }
 
         try
@@ -203,25 +190,17 @@ public sealed class OAuthAuthorizationAppService
         }
         catch (Exception exception) when (IsProviderFailure(exception, cancellationToken))
         {
-            _logger.LogWarning(
-                "OAuth authorization failed for connection {ConnectionId}.",
-                context.Connection.Id);
-            await SetFailureAsync(
-                context.Connection,
-                ConnectionStatus.Invalid,
-                TokenExchangeFailedCode,
-                user);
-            return FailedRedirect(
-                state.ReturnPath,
-                TokenExchangeFailedRedirectCode,
-                state.CompletionTarget);
+            _logger.LogWarning("OAuth authorization failed for connection {ConnectionId}.", context.Connection.Id);
+            await SetFailureAsync(context.Connection, ConnectionStatus.Invalid, TokenExchangeFailedCode, user);
+            return FailedRedirect(state.ReturnPath, TokenExchangeFailedRedirectCode, state.CompletionTarget);
         }
     }
 
     internal async Task<OAuthRefreshResponse> RefreshAsync(
         Guid connectionId,
         string user,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var context = await ResolveContextAsync(connectionId, cancellationToken);
         if (!context.Settings.SupportsRefresh)
@@ -232,7 +211,8 @@ public sealed class OAuthAuthorizationAppService
         var refreshCredential = await _credentialReader.ReadConnectionAsync(
             connectionId,
             IntegrationCredentialSlots.OAuthRefreshToken,
-            cancellationToken);
+            cancellationToken
+        );
         if (refreshCredential == null)
         {
             throw new AgwException(ErrorCodes.IntegrationCredentialUnavailable);
@@ -252,11 +232,7 @@ public sealed class OAuthAuthorizationAppService
             }
             MarkReady(context.Connection, user);
             await _unitOfWork.SaveChangesAsync();
-            return new OAuthRefreshResponse
-            {
-                ConnectionId = connectionId,
-                ExpiresAtUtc = token.ExpiresAtUtc
-            };
+            return new OAuthRefreshResponse { ConnectionId = connectionId, ExpiresAtUtc = token.ExpiresAtUtc };
         }
         catch (Exception exception) when (IsProviderFailure(exception, cancellationToken))
         {
@@ -268,11 +244,13 @@ public sealed class OAuthAuthorizationAppService
 
     private async Task<OAuthConnectionContext> ResolveContextAsync(
         Guid connectionId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var connection = await _connectionRepository.Queryable
-            .Include(item => item.Credentials)
-            .FirstOrDefaultAsync(item => item.Id == connectionId, cancellationToken)
+        var connection =
+            await _connectionRepository
+                .Queryable.Include(item => item.Credentials)
+                .FirstOrDefaultAsync(item => item.Id == connectionId, cancellationToken)
             ?? throw new AgwException(ErrorCodes.ConnectionNotFound);
         if (!connection.Enabled)
         {
@@ -283,55 +261,56 @@ public sealed class OAuthAuthorizationAppService
             _pluginCatalog,
             connection.PluginId,
             connection.ConnectorId,
-            connection.AuthSchemeId);
-        if (definition.AuthScheme.Type != AuthSchemeType.OAuth2
-            || definition.AuthScheme.OAuth2AuthorizationCode == null)
+            connection.AuthSchemeId
+        );
+        if (
+            definition.AuthScheme.Type != AuthSchemeType.OAuth2
+            || definition.AuthScheme.OAuth2AuthorizationCode == null
+        )
         {
             throw new AgwException(ErrorCodes.IntegrationConfigurationInvalid);
         }
 
-        var installation = await _installationRepository.Queryable
-            .Include(item => item.Credentials)
-            .FirstOrDefaultAsync(
-                item => item.PluginId == connection.PluginId && item.Enabled,
-                cancellationToken)
+        var installation =
+            await _installationRepository
+                .Queryable.Include(item => item.Credentials)
+                .FirstOrDefaultAsync(item => item.PluginId == connection.PluginId && item.Enabled, cancellationToken)
             ?? throw new AgwException(ErrorCodes.IntegrationConfigurationInvalid);
         var settings = definition.AuthScheme.OAuth2AuthorizationCode;
         var clientId = await ReadInstallationFieldAsync(
             installation,
             definition,
             settings.ClientIdFieldId,
-            cancellationToken);
+            cancellationToken
+        );
         string? clientSecret = null;
-        if (settings.ClientAuthenticationMethod is OAuth2ClientAuthenticationMethod.Basic
-            or OAuth2ClientAuthenticationMethod.Body)
+        if (
+            settings.ClientAuthenticationMethod
+            is OAuth2ClientAuthenticationMethod.Basic
+                or OAuth2ClientAuthenticationMethod.Body
+        )
         {
             clientSecret = await ReadInstallationFieldAsync(
                 installation,
                 definition,
                 settings.ClientSecretFieldId!,
-                cancellationToken);
+                cancellationToken
+            );
         }
 
-        return new OAuthConnectionContext(
-            connection,
-            installation,
-            definition,
-            settings,
-            clientId,
-            clientSecret);
+        return new OAuthConnectionContext(connection, installation, definition, settings, clientId, clientSecret);
     }
 
     private async Task<string> ReadInstallationFieldAsync(
         PluginInstallation installation,
         ResolvedIntegrationDefinition definition,
         string fieldId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var field = definition.AuthScheme.InstallationFields.First(item => string.Equals(
-            item.Id,
-            fieldId,
-            StringComparison.OrdinalIgnoreCase));
+        var field = definition.AuthScheme.InstallationFields.First(item =>
+            string.Equals(item.Id, fieldId, StringComparison.OrdinalIgnoreCase)
+        );
         string? value;
         if (field.Type == FormFieldType.Secret)
         {
@@ -340,8 +319,10 @@ public sealed class OAuthAuthorizationAppService
                 IntegrationCredentialSlots.InstallationField(
                     definition.Connector.Id,
                     definition.AuthScheme.Id,
-                    fieldId),
-                cancellationToken);
+                    fieldId
+                ),
+                cancellationToken
+            );
             value = credential?.Value;
         }
         else
@@ -351,8 +332,10 @@ public sealed class OAuthAuthorizationAppService
                 IntegrationConfigurationCodec.InstallationKey(
                     definition.Connector.Id,
                     definition.AuthScheme.Id,
-                    fieldId),
-                out value);
+                    fieldId
+                ),
+                out value
+            );
         }
 
         return string.IsNullOrWhiteSpace(value)
@@ -360,13 +343,9 @@ public sealed class OAuthAuthorizationAppService
             : value;
     }
 
-    private Dictionary<string, string> BuildTokenForm(
-        OAuthConnectionContext context,
-        string? callbackUri)
+    private Dictionary<string, string> BuildTokenForm(OAuthConnectionContext context, string? callbackUri)
     {
-        var form = new Dictionary<string, string>(
-            context.Settings.AdditionalTokenParameters,
-            StringComparer.Ordinal);
+        var form = new Dictionary<string, string>(context.Settings.AdditionalTokenParameters, StringComparer.Ordinal);
         foreach (var reservedParameter in ReservedTokenParameters)
         {
             form.Remove(reservedParameter);
@@ -398,19 +377,19 @@ public sealed class OAuthAuthorizationAppService
     private async Task<OAuthTokenPayload> RequestTokenAsync(
         OAuthConnectionContext context,
         IReadOnlyDictionary<string, string> form,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, context.Settings.TokenEndpoint)
         {
-            Content = new FormUrlEncodedContent(form)
+            Content = new FormUrlEncodedContent(form),
         };
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         if (context.Settings.ClientAuthenticationMethod == OAuth2ClientAuthenticationMethod.Basic)
         {
             var encodedClientId = WebUtility.UrlEncode(context.ClientId);
             var encodedClientSecret = WebUtility.UrlEncode(context.ClientSecret);
-            var value = Convert.ToBase64String(Encoding.UTF8.GetBytes(
-                $"{encodedClientId}:{encodedClientSecret}"));
+            var value = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{encodedClientId}:{encodedClientSecret}"));
             request.Headers.Authorization = new AuthenticationHeaderValue("Basic", value);
         }
 
@@ -427,19 +406,15 @@ public sealed class OAuthAuthorizationAppService
         var refreshToken = ReadOptionalString(root, "refresh_token");
         var idToken = ReadOptionalString(root, "id_token");
         var expiresAtUtc = ReadExpiresAt(root, _timeProvider.GetUtcNow());
-        return new OAuthTokenPayload(
-            accessToken,
-            refreshToken,
-            idToken,
-            expiresAtUtc,
-            root.Clone());
+        return new OAuthTokenPayload(accessToken, refreshToken, idToken, expiresAtUtc, root.Clone());
     }
 
     private async Task<string?> ResolveSubjectAsync(
         OAuthConnectionContext context,
         OAuthTokenPayload token,
         bool required,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         JsonElement source;
         switch (context.Settings.SubjectResolution.Source)
@@ -455,7 +430,11 @@ public sealed class OAuthAuthorizationAppService
                 source = ParseJwtPayload(token.IdToken);
                 break;
             case OAuthSubjectSource.UserInfo:
-                source = await RequestUserInfoAsync(context.Settings.UserInfoEndpoint!, token.AccessToken, cancellationToken);
+                source = await RequestUserInfoAsync(
+                    context.Settings.UserInfoEndpoint!,
+                    token.AccessToken,
+                    cancellationToken
+                );
                 break;
             default:
                 throw OAuthProtocolFailure();
@@ -469,7 +448,8 @@ public sealed class OAuthAuthorizationAppService
     private async Task<JsonElement> RequestUserInfoAsync(
         string endpoint,
         string accessToken,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, endpoint);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -490,14 +470,16 @@ public sealed class OAuthAuthorizationAppService
         IntegrationConnection connection,
         OAuthTokenPayload token,
         bool preserveMissingRefreshToken,
-        string user)
+        string user
+    )
     {
         await UpsertCredentialAsync(
             connection,
             IntegrationCredentialSlots.OAuthAccessToken,
             token.AccessToken,
             token.ExpiresAtUtc,
-            user);
+            user
+        );
         if (!string.IsNullOrWhiteSpace(token.RefreshToken))
         {
             await UpsertCredentialAsync(
@@ -505,7 +487,8 @@ public sealed class OAuthAuthorizationAppService
                 IntegrationCredentialSlots.OAuthRefreshToken,
                 token.RefreshToken,
                 null,
-                user);
+                user
+            );
         }
         else if (!preserveMissingRefreshToken)
         {
@@ -514,12 +497,7 @@ public sealed class OAuthAuthorizationAppService
 
         if (!string.IsNullOrWhiteSpace(token.IdToken))
         {
-            await UpsertCredentialAsync(
-                connection,
-                IntegrationCredentialSlots.OAuthIdToken,
-                token.IdToken,
-                null,
-                user);
+            await UpsertCredentialAsync(connection, IntegrationCredentialSlots.OAuthIdToken, token.IdToken, null, user);
         }
         else if (!preserveMissingRefreshToken)
         {
@@ -532,12 +510,12 @@ public sealed class OAuthAuthorizationAppService
         string slot,
         string value,
         DateTimeOffset? expiresAtUtc,
-        string user)
+        string user
+    )
     {
-        var credential = connection.Credentials.FirstOrDefault(item => string.Equals(
-            item.Slot,
-            slot,
-            StringComparison.OrdinalIgnoreCase));
+        var credential = connection.Credentials.FirstOrDefault(item =>
+            string.Equals(item.Slot, slot, StringComparison.OrdinalIgnoreCase)
+        );
         if (credential == null)
         {
             credential = new ConnectionCredential
@@ -547,7 +525,7 @@ public sealed class OAuthAuthorizationAppService
                 Connection = connection,
                 Slot = slot,
                 CreateBy = user,
-                CreateTime = _timeProvider.GetUtcNow()
+                CreateTime = _timeProvider.GetUtcNow(),
             };
             connection.Credentials.Add(credential);
             await _connectionCredentialRepository.AddAsync(credential);
@@ -566,10 +544,9 @@ public sealed class OAuthAuthorizationAppService
 
     private void RemoveCredential(IntegrationConnection connection, string slot)
     {
-        var credential = connection.Credentials.FirstOrDefault(item => string.Equals(
-            item.Slot,
-            slot,
-            StringComparison.OrdinalIgnoreCase));
+        var credential = connection.Credentials.FirstOrDefault(item =>
+            string.Equals(item.Slot, slot, StringComparison.OrdinalIgnoreCase)
+        );
         if (credential == null)
         {
             return;
@@ -593,7 +570,8 @@ public sealed class OAuthAuthorizationAppService
         IntegrationConnection connection,
         ConnectionStatus status,
         string errorCode,
-        string user)
+        string user
+    )
     {
         connection.Status = status;
         connection.LastValidatedAtUtc = null;
@@ -610,49 +588,46 @@ public sealed class OAuthAuthorizationAppService
 
     private static void ValidateCallbackUri(string callbackUri)
     {
-        if (!Uri.TryCreate(callbackUri, UriKind.Absolute, out var uri)
+        if (
+            !Uri.TryCreate(callbackUri, UriKind.Absolute, out var uri)
             || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)
-            || string.IsNullOrWhiteSpace(uri.Host))
+            || string.IsNullOrWhiteSpace(uri.Host)
+        )
         {
             throw new AgwException(ErrorCodes.IntegrationConfigurationInvalid);
         }
     }
 
-    private static OAuthCallbackResult SucceededRedirect(
-        string returnPath,
-        OAuthCompletionTarget completionTarget)
+    private static OAuthCallbackResult SucceededRedirect(string returnPath, OAuthCompletionTarget completionTarget)
     {
         return new OAuthCallbackResult
         {
             Success = true,
             RedirectPath = QueryHelpers.AddQueryString(returnPath, "oauth", SuccessRedirectCode),
-            CompletionTarget = completionTarget
+            CompletionTarget = completionTarget,
         };
     }
 
     private static OAuthCallbackResult FailedRedirect(
         string returnPath,
         string code,
-        OAuthCompletionTarget completionTarget)
+        OAuthCompletionTarget completionTarget
+    )
     {
         return new OAuthCallbackResult
         {
             Success = false,
             RedirectPath = QueryHelpers.AddQueryString(
                 returnPath,
-                new Dictionary<string, string?>
-                {
-                    ["oauth"] = "error",
-                    ["code"] = code
-                }),
-            CompletionTarget = completionTarget
+                new Dictionary<string, string?> { ["oauth"] = "error", ["code"] = code }
+            ),
+            CompletionTarget = completionTarget,
         };
     }
 
     private static bool IsProviderFailure(Exception exception, CancellationToken cancellationToken)
     {
-        return exception is AgwException agwException
-                && agwException.Code == ErrorCodes.OAuthProviderRequestFailed.Code
+        return exception is AgwException agwException && agwException.Code == ErrorCodes.OAuthProviderRequestFailed.Code
             || exception is HttpRequestException or JsonException
             || exception is TaskCanceledException && !cancellationToken.IsCancellationRequested;
     }
@@ -666,8 +641,7 @@ public sealed class OAuthAuthorizationAppService
 
     private static string? ReadOptionalString(JsonElement element, string propertyName)
     {
-        if (!TryGetProperty(element, propertyName, out var property)
-            || property.ValueKind != JsonValueKind.String)
+        if (!TryGetProperty(element, propertyName, out var property) || property.ValueKind != JsonValueKind.String)
         {
             return null;
         }
@@ -690,8 +664,10 @@ public sealed class OAuthAuthorizationAppService
                 throw OAuthProtocolFailure();
             }
         }
-        else if (expiresElement.ValueKind == JsonValueKind.String
-            && long.TryParse(expiresElement.GetString(), out var parsed))
+        else if (
+            expiresElement.ValueKind == JsonValueKind.String
+            && long.TryParse(expiresElement.GetString(), out var parsed)
+        )
         {
             seconds = parsed;
         }
@@ -733,8 +709,7 @@ public sealed class OAuthAuthorizationAppService
         var current = root;
         foreach (var segment in path.Split('.', StringSplitOptions.RemoveEmptyEntries))
         {
-            if (current.ValueKind != JsonValueKind.Object
-                || !TryGetProperty(current, segment, out current))
+            if (current.ValueKind != JsonValueKind.Object || !TryGetProperty(current, segment, out current))
             {
                 value = null;
                 return false;
@@ -747,7 +722,7 @@ public sealed class OAuthAuthorizationAppService
             JsonValueKind.Number => current.GetRawText(),
             JsonValueKind.True => bool.TrueString,
             JsonValueKind.False => bool.FalseString,
-            _ => null
+            _ => null,
         };
         return !string.IsNullOrWhiteSpace(value);
     }
@@ -785,7 +760,8 @@ public sealed class OAuthAuthorizationAppService
             ResolvedIntegrationDefinition definition,
             OAuth2AuthorizationCodeSettings settings,
             string clientId,
-            string? clientSecret)
+            string? clientSecret
+        )
         {
             Connection = connection;
             Installation = installation;
@@ -810,7 +786,8 @@ public sealed class OAuthAuthorizationAppService
             string? refreshToken,
             string? idToken,
             DateTimeOffset? expiresAtUtc,
-            JsonElement response)
+            JsonElement response
+        )
         {
             AccessToken = accessToken;
             RefreshToken = refreshToken;

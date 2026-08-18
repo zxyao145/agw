@@ -1,6 +1,5 @@
 using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Jobs;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -44,7 +43,7 @@ public class JobRowVersionTests
                 CreateBy = "tester",
                 CreateTime = TimeProvider.System.GetUtcNow(),
                 UpdateBy = "tester",
-                UpdateTime = TimeProvider.System.GetUtcNow()
+                UpdateTime = TimeProvider.System.GetUtcNow(),
             };
 
             createContext.Jobs.Add(job);

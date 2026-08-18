@@ -1,10 +1,8 @@
 using System.Reflection;
-
 using Agw.Files.Abstracts;
 using Agw.Files.Application.Files;
 using Agw.Files.Application.Storage.Local;
 using Agw.Files.Application.Storage.Resolver;
-
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -51,7 +49,8 @@ public class DependencyInjectionTests
             var services = new ServiceCollection();
             services.AddLogging();
             services.AddSingleton<IProjectFileSystemConfigurationProvider>(
-                new TestProjectFileSystemConfigurationProvider(workspace));
+                new TestProjectFileSystemConfigurationProvider(workspace)
+            );
             services.AddFiles(new ConfigurationBuilder().Build());
 
             await using var serviceProvider = services.BuildServiceProvider();
@@ -63,7 +62,8 @@ public class DependencyInjectionTests
             Assert.Same(fileSystem, cachedFileSystem);
             Assert.Equal(
                 Path.GetFullPath(workspace).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
-                localFileSystem.NormalizedRoot);
+                localFileSystem.NormalizedRoot
+            );
         }
         finally
         {
@@ -80,14 +80,16 @@ public class DependencyInjectionTests
         var expectedWorkspace = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".agw",
-            projectName);
+            projectName
+        );
 
         try
         {
             var services = new ServiceCollection();
             services.AddLogging();
             services.AddSingleton<IProjectFileSystemConfigurationProvider>(
-                new TestProjectFileSystemConfigurationProvider(null, projectName));
+                new TestProjectFileSystemConfigurationProvider(null, projectName)
+            );
             services.AddFiles(new ConfigurationBuilder().Build());
 
             await using var serviceProvider = services.BuildServiceProvider();
@@ -98,9 +100,9 @@ public class DependencyInjectionTests
             var localFileSystem = Assert.IsType<LocalFileSystem>(fileSystem);
             Assert.True(Directory.Exists(expectedWorkspace));
             Assert.Equal(
-                Path.GetFullPath(expectedWorkspace).TrimEnd(Path.DirectorySeparatorChar)
-                + Path.DirectorySeparatorChar,
-                localFileSystem.NormalizedRoot);
+                Path.GetFullPath(expectedWorkspace).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
+                localFileSystem.NormalizedRoot
+            );
         }
         finally
         {
@@ -116,20 +118,17 @@ public class DependencyInjectionTests
         private readonly string? _workspace;
         private readonly string _projectName;
 
-        public TestProjectFileSystemConfigurationProvider(
-            string? workspace,
-            string projectName = "Test Project")
+        public TestProjectFileSystemConfigurationProvider(string? workspace, string projectName = "Test Project")
         {
             _workspace = workspace;
             _projectName = projectName;
         }
 
-        public Task<ProjectFileSystemConfiguration?> GetAsync(
-            Guid projectId,
-            CancellationToken cancellationToken)
+        public Task<ProjectFileSystemConfiguration?> GetAsync(Guid projectId, CancellationToken cancellationToken)
         {
             return Task.FromResult<ProjectFileSystemConfiguration?>(
-                new ProjectFileSystemConfiguration(_projectName, _workspace));
+                new ProjectFileSystemConfiguration(_projectName, _workspace)
+            );
         }
     }
 }

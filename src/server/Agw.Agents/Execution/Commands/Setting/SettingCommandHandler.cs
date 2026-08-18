@@ -8,6 +8,6 @@ public sealed class SettingCommandHandler : IExecutionCommandHandler<SettingComm
     public Task HandleAsync(
         SettingCommand command,
         ExecutionConnectionContext context,
-        CancellationToken cancellationToken) =>
-        context.ApplySettingsAsync(ExecutionSettings.FromCommand(command), cancellationToken);
+        CancellationToken cancellationToken
+    ) => context.ApplySettingsAsync(ExecutionSettings.FromCommand(command), cancellationToken);
 }

@@ -37,20 +37,21 @@ public class PluginCatalogValidatorTests
     {
         var connector = CreateConnector(authSchemes: [CreateApiKeyAuth("api-key"), CreateApiKeyAuth("API-Key")]);
 
-        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Fact]
     public void Validate_CapabilitySourceIdsDifferOnlyByCase_Throws()
     {
         var connector = CreateConnector(
-            capabilitySources:
-            [
-                CreateNativeSource("native"),
-                CreateNativeSource("Native"),
-            ]);
+            capabilitySources: [CreateNativeSource("native"), CreateNativeSource("Native")]
+        );
 
-        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Fact]
@@ -59,7 +60,9 @@ public class PluginCatalogValidatorTests
         var authScheme = CreateApiKeyAuth("api-key", [CreateField("token"), CreateField("Token")]);
         var connector = CreateConnector(authSchemes: [authScheme]);
 
-        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Fact]
@@ -73,7 +76,9 @@ public class PluginCatalogValidatorTests
         };
         var connector = CreateConnector(authSchemes: [authScheme]);
 
-        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Fact]
@@ -82,7 +87,9 @@ public class PluginCatalogValidatorTests
         var authScheme = CreateOAuthAuth(userInfoEndpoint: "");
         var connector = CreateConnector(authSchemes: [authScheme]);
 
-        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Theory]
@@ -97,13 +104,13 @@ public class PluginCatalogValidatorTests
     {
         var authScheme = CreateOAuthAuth(
             userInfoEndpoint: "https://example.test/userinfo",
-            additionalAuthorizeParameters: new Dictionary<string, string>
-            {
-                [parameterName] = "plugin-controlled",
-            });
+            additionalAuthorizeParameters: new Dictionary<string, string> { [parameterName] = "plugin-controlled" }
+        );
         var connector = CreateConnector(authSchemes: [authScheme]);
 
-        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Fact]
@@ -112,7 +119,9 @@ public class PluginCatalogValidatorTests
         var source = CreateMcpSource(new StdioMcpTransportDefinition { Command = "" });
         var connector = CreateConnector(capabilitySources: [source]);
 
-        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Fact]
@@ -121,7 +130,9 @@ public class PluginCatalogValidatorTests
         var source = CreateMcpSource(new HttpMcpTransportDefinition { Endpoint = "" });
         var connector = CreateConnector(capabilitySources: [source]);
 
-        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Fact]
@@ -130,7 +141,9 @@ public class PluginCatalogValidatorTests
         var source = CreateMcpSource(new SseMcpTransportDefinition { Endpoint = "" });
         var connector = CreateConnector(capabilitySources: [source]);
 
-        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Theory]
@@ -141,15 +154,15 @@ public class PluginCatalogValidatorTests
         McpTransportDefinition transport = useSse
             ? new SseMcpTransportDefinition { Endpoint = "http://example.test/mcp" }
             : new HttpMcpTransportDefinition { Endpoint = "http://example.test/mcp" };
-        var source = CreateMcpSource(
-            transport,
-            [CreateConnectionFieldBinding(CredentialBindingTarget.HttpHeader)]);
+        var source = CreateMcpSource(transport, [CreateConnectionFieldBinding(CredentialBindingTarget.HttpHeader)]);
         var connector = CreateConnector(
             authSchemes: [CreateApiKeyAuth("api-key", [CreateField("token")])],
-            capabilitySources: [source]);
+            capabilitySources: [source]
+        );
 
         Assert.Throws<InvalidOperationException>(() =>
-            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Fact]
@@ -168,12 +181,16 @@ public class PluginCatalogValidatorTests
                     Target = CredentialBindingTarget.HttpHeader,
                     TargetName = "Authorization",
                 },
-            ]);
+            ]
+        );
         var connector = CreateConnector(
             authSchemes: [CreateApiKeyAuth("api-key", [CreateField("token")])],
-            capabilitySources: [source]);
+            capabilitySources: [source]
+        );
 
-        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Fact]
@@ -192,16 +209,20 @@ public class PluginCatalogValidatorTests
                     Target = CredentialBindingTarget.HttpHeader,
                     TargetName = "Authorization",
                 },
-            ]);
+            ]
+        );
         var connector = CreateConnector(
             authSchemes:
             [
                 CreateApiKeyAuth("first", [CreateField("first-token")]),
                 CreateApiKeyAuth("second", [CreateField("second-token")]),
             ],
-            capabilitySources: [source]);
+            capabilitySources: [source]
+        );
 
-        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Fact]
@@ -209,12 +230,16 @@ public class PluginCatalogValidatorTests
     {
         var source = CreateMcpSource(
             new StdioMcpTransportDefinition { Command = "mcp-server" },
-            [CreateConnectionFieldBinding(CredentialBindingTarget.HttpHeader)]);
+            [CreateConnectionFieldBinding(CredentialBindingTarget.HttpHeader)]
+        );
         var connector = CreateConnector(
             authSchemes: [CreateApiKeyAuth("api-key", [CreateField("token")])],
-            capabilitySources: [source]);
+            capabilitySources: [source]
+        );
 
-        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Theory]
@@ -227,12 +252,16 @@ public class PluginCatalogValidatorTests
             : new HttpMcpTransportDefinition { Endpoint = "https://example.test/mcp" };
         var source = CreateMcpSource(
             transport,
-            [CreateConnectionFieldBinding(CredentialBindingTarget.EnvironmentVariable)]);
+            [CreateConnectionFieldBinding(CredentialBindingTarget.EnvironmentVariable)]
+        );
         var connector = CreateConnector(
             authSchemes: [CreateApiKeyAuth("api-key", [CreateField("token")])],
-            capabilitySources: [source]);
+            capabilitySources: [source]
+        );
 
-        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Fact]
@@ -243,20 +272,21 @@ public class PluginCatalogValidatorTests
             [
                 new CredentialBindingDefinition
                 {
-                    ValueSource = new OAuthAccessTokenCredentialValueSourceDefinition
-                    {
-                        AuthSchemeId = "api-key",
-                    },
+                    ValueSource = new OAuthAccessTokenCredentialValueSourceDefinition { AuthSchemeId = "api-key" },
                     Target = CredentialBindingTarget.HttpHeader,
                     TargetName = "Authorization",
                     ValuePrefix = "Bearer ",
                 },
-            ]);
+            ]
+        );
         var connector = CreateConnector(
             authSchemes: [CreateApiKeyAuth("api-key", [CreateField("token")])],
-            capabilitySources: [source]);
+            capabilitySources: [source]
+        );
 
-        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Fact]
@@ -272,12 +302,16 @@ public class PluginCatalogValidatorTests
         };
         var source = CreateMcpSource(
             new HttpMcpTransportDefinition { Endpoint = "https://example.test/mcp" },
-            [binding]);
+            [binding]
+        );
         var connector = CreateConnector(
             authSchemes: [CreateApiKeyAuth("api-key", [CreateField("token")])],
-            capabilitySources: [source]);
+            capabilitySources: [source]
+        );
 
-        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Fact]
@@ -292,12 +326,16 @@ public class PluginCatalogValidatorTests
         };
         var source = CreateMcpSource(
             new HttpMcpTransportDefinition { Endpoint = "https://example.test/mcp" },
-            [first, second]);
+            [first, second]
+        );
         var connector = CreateConnector(
             authSchemes: [CreateApiKeyAuth("api-key", [CreateField("token")])],
-            capabilitySources: [source]);
+            capabilitySources: [source]
+        );
 
-        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Theory]
@@ -308,17 +346,23 @@ public class PluginCatalogValidatorTests
         var binding = CreateConnectionFieldBinding(CredentialBindingTarget.HttpHeader);
         var source = CreateMcpSource(
             new HttpMcpTransportDefinition { Endpoint = "https://example.test/mcp" },
-            [new CredentialBindingDefinition
-            {
-                ValueSource = binding.ValueSource,
-                Target = binding.Target,
-                TargetName = targetName,
-            }]);
+            [
+                new CredentialBindingDefinition
+                {
+                    ValueSource = binding.ValueSource,
+                    Target = binding.Target,
+                    TargetName = targetName,
+                },
+            ]
+        );
         var connector = CreateConnector(
             authSchemes: [CreateApiKeyAuth("api-key", [CreateField("token")])],
-            capabilitySources: [source]);
+            capabilitySources: [source]
+        );
 
-        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Theory]
@@ -329,17 +373,23 @@ public class PluginCatalogValidatorTests
         var binding = CreateConnectionFieldBinding(CredentialBindingTarget.EnvironmentVariable);
         var source = CreateMcpSource(
             new StdioMcpTransportDefinition { Command = "mcp-server" },
-            [new CredentialBindingDefinition
-            {
-                ValueSource = binding.ValueSource,
-                Target = binding.Target,
-                TargetName = targetName,
-            }]);
+            [
+                new CredentialBindingDefinition
+                {
+                    ValueSource = binding.ValueSource,
+                    Target = binding.Target,
+                    TargetName = targetName,
+                },
+            ]
+        );
         var connector = CreateConnector(
             authSchemes: [CreateApiKeyAuth("api-key", [CreateField("token")])],
-            capabilitySources: [source]);
+            capabilitySources: [source]
+        );
 
-        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Fact]
@@ -351,10 +401,13 @@ public class PluginCatalogValidatorTests
             [
                 CreateField("client-id", FormFieldType.Text),
                 CreateField("client-secret", FormFieldType.Text),
-            ]);
+            ]
+        );
         var connector = CreateConnector(authSchemes: [authScheme]);
 
-        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Fact]
@@ -363,18 +416,19 @@ public class PluginCatalogValidatorTests
         var authScheme = CreateOAuthAuth(
             userInfoEndpoint: "https://example.test/user",
             installationFields: [CreateField("client-secret")],
-            clientIdFieldId: "missing-client-id");
+            clientIdFieldId: "missing-client-id"
+        );
         var connector = CreateConnector(authSchemes: [authScheme]);
 
-        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])])
+        );
     }
 
     [Fact]
     public void Validate_TokenResponseSubjectWithoutUserInfoEndpoint_DoesNotThrow()
     {
-        var authScheme = CreateOAuthAuth(
-            userInfoEndpoint: null,
-            subjectSource: OAuthSubjectSource.TokenResponse);
+        var authScheme = CreateOAuthAuth(userInfoEndpoint: null, subjectSource: OAuthSubjectSource.TokenResponse);
         var connector = CreateConnector(authSchemes: [authScheme]);
 
         PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]);
@@ -403,7 +457,8 @@ public class PluginCatalogValidatorTests
                     Target = CredentialBindingTarget.EnvironmentVariable,
                     TargetName = "API_TOKEN",
                 },
-            ]);
+            ]
+        );
         var connector = CreateConnector(authSchemes: [authScheme], capabilitySources: [source]);
 
         PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]);
@@ -418,15 +473,13 @@ public class PluginCatalogValidatorTests
             [
                 new CredentialBindingDefinition
                 {
-                    ValueSource = new OAuthAccessTokenCredentialValueSourceDefinition
-                    {
-                        AuthSchemeId = "oauth2",
-                    },
+                    ValueSource = new OAuthAccessTokenCredentialValueSourceDefinition { AuthSchemeId = "oauth2" },
                     Target = CredentialBindingTarget.HttpHeader,
                     TargetName = "Authorization",
                     ValuePrefix = "Bearer ",
                 },
-            ]);
+            ]
+        );
         var connector = CreateConnector(authSchemes: [authScheme], capabilitySources: [source]);
 
         PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]);
@@ -435,18 +488,30 @@ public class PluginCatalogValidatorTests
     [Fact]
     public void Validate_CoreDisplayValuesAreEmpty_Throws()
     {
-        Assert.Throws<InvalidOperationException>(
-            () => PluginCatalogValidator.Validate([CreatePlugin(version: "")]));
-        Assert.Throws<InvalidOperationException>(
-            () => PluginCatalogValidator.Validate([CreatePlugin(displayName: "")]));
-        Assert.Throws<InvalidOperationException>(
-            () => PluginCatalogValidator.Validate([CreatePlugin(connectors: [CreateConnector(displayName: "")])]));
-        Assert.Throws<InvalidOperationException>(
-            () => PluginCatalogValidator.Validate(
-                [CreatePlugin(connectors: [CreateConnector(authSchemes: [CreateApiKeyAuth("api-key", displayName: "")])])]));
-        Assert.Throws<InvalidOperationException>(
-            () => PluginCatalogValidator.Validate(
-                [CreatePlugin(connectors: [CreateConnector(authSchemes: [CreateApiKeyAuth("api-key", [CreateField("token", label: "")])])])]));
+        Assert.Throws<InvalidOperationException>(() => PluginCatalogValidator.Validate([CreatePlugin(version: "")]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(displayName: "")])
+        );
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [CreateConnector(displayName: "")])])
+        );
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([
+                CreatePlugin(
+                    connectors: [CreateConnector(authSchemes: [CreateApiKeyAuth("api-key", displayName: "")])]
+                ),
+            ])
+        );
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([
+                CreatePlugin(
+                    connectors:
+                    [
+                        CreateConnector(authSchemes: [CreateApiKeyAuth("api-key", [CreateField("token", label: "")])]),
+                    ]
+                ),
+            ])
+        );
     }
 
     [Fact]
@@ -458,20 +523,23 @@ public class PluginCatalogValidatorTests
             DisplayName = "Auth",
             Type = (AuthSchemeType)999,
         };
-        Assert.Throws<InvalidOperationException>(
-            () => PluginCatalogValidator.Validate([CreatePlugin(connectors: [CreateConnector(authSchemes: [invalidAuth])])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([CreatePlugin(connectors: [CreateConnector(authSchemes: [invalidAuth])])])
+        );
 
         var invalidField = CreateField("token", (FormFieldType)999);
-        Assert.Throws<InvalidOperationException>(
-            () => PluginCatalogValidator.Validate(
-                [CreatePlugin(connectors: [CreateConnector(authSchemes: [CreateApiKeyAuth("api-key", [invalidField])])])]));
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([
+                CreatePlugin(connectors: [CreateConnector(authSchemes: [CreateApiKeyAuth("api-key", [invalidField])])]),
+            ])
+        );
 
-        var invalidSubject = CreateOAuthAuth(
-            "https://example.test/user",
-            subjectSource: (OAuthSubjectSource)999);
-        Assert.Throws<InvalidOperationException>(
-            () => PluginCatalogValidator.Validate(
-                [CreatePlugin(connectors: [CreateConnector(authSchemes: [invalidSubject])])]));
+        var invalidSubject = CreateOAuthAuth("https://example.test/user", subjectSource: (OAuthSubjectSource)999);
+        Assert.Throws<InvalidOperationException>(() =>
+            PluginCatalogValidator.Validate([
+                CreatePlugin(connectors: [CreateConnector(authSchemes: [invalidSubject])]),
+            ])
+        );
     }
 
     [Theory]
@@ -504,8 +572,10 @@ public class PluginCatalogValidatorTests
                             Target = CredentialBindingTarget.HttpHeader,
                             TargetName = "Authorization",
                         },
-                    ]),
-            ]);
+                    ]
+                ),
+            ]
+        );
 
         PluginCatalogValidator.Validate([CreatePlugin(connectors: [connector])]);
     }
@@ -515,7 +585,8 @@ public class PluginCatalogValidatorTests
         IReadOnlyList<ConnectorDefinition>? connectors = null,
         IReadOnlyList<PluginSkillDefinition>? skills = null,
         string version = "1.0.0",
-        string displayName = "Plugin")
+        string displayName = "Plugin"
+    )
     {
         return new PluginDefinition
         {
@@ -531,7 +602,8 @@ public class PluginCatalogValidatorTests
         string id = "connector",
         IReadOnlyList<AuthSchemeDefinition>? authSchemes = null,
         IReadOnlyList<CapabilitySourceDefinition>? capabilitySources = null,
-        string displayName = "Connector")
+        string displayName = "Connector"
+    )
     {
         return new ConnectorDefinition
         {
@@ -545,7 +617,8 @@ public class PluginCatalogValidatorTests
     private static AuthSchemeDefinition CreateApiKeyAuth(
         string id,
         IReadOnlyList<FormFieldDefinition>? connectionFields = null,
-        string displayName = "API key")
+        string displayName = "API key"
+    )
     {
         return new AuthSchemeDefinition
         {
@@ -561,7 +634,8 @@ public class PluginCatalogValidatorTests
         IReadOnlyList<FormFieldDefinition>? installationFields = null,
         string clientIdFieldId = "client-id",
         OAuthSubjectSource subjectSource = OAuthSubjectSource.UserInfo,
-        IReadOnlyDictionary<string, string>? additionalAuthorizeParameters = null)
+        IReadOnlyDictionary<string, string>? additionalAuthorizeParameters = null
+    )
     {
         return new AuthSchemeDefinition
         {
@@ -575,24 +649,20 @@ public class PluginCatalogValidatorTests
                 UserInfoEndpoint = userInfoEndpoint,
                 ClientIdFieldId = clientIdFieldId,
                 ClientSecretFieldId = "client-secret",
-                SubjectResolution = new OAuthSubjectResolutionDefinition
-                {
-                    Source = subjectSource,
-                    Field = "id",
-                },
+                SubjectResolution = new OAuthSubjectResolutionDefinition { Source = subjectSource, Field = "id" },
                 ClientAuthenticationMethod = OAuth2ClientAuthenticationMethod.Body,
-                AdditionalAuthorizeParameters = additionalAuthorizeParameters
-                    ?? new Dictionary<string, string>(),
+                AdditionalAuthorizeParameters = additionalAuthorizeParameters ?? new Dictionary<string, string>(),
             },
-            InstallationFields = installationFields
-                ?? [CreateField("client-id", FormFieldType.Text), CreateField("client-secret")],
+            InstallationFields =
+                installationFields ?? [CreateField("client-id", FormFieldType.Text), CreateField("client-secret")],
         };
     }
 
     private static FormFieldDefinition CreateField(
         string id,
         FormFieldType type = FormFieldType.Secret,
-        string label = "Token")
+        string label = "Token"
+    )
     {
         return new FormFieldDefinition
         {
@@ -604,16 +674,13 @@ public class PluginCatalogValidatorTests
 
     private static NativeCapabilitySourceDefinition CreateNativeSource(string id)
     {
-        return new NativeCapabilitySourceDefinition
-        {
-            Id = id,
-            Provider = "provider",
-        };
+        return new NativeCapabilitySourceDefinition { Id = id, Provider = "provider" };
     }
 
     private static McpCapabilitySourceDefinition CreateMcpSource(
         McpTransportDefinition transport,
-        IReadOnlyList<CredentialBindingDefinition>? credentialBindings = null)
+        IReadOnlyList<CredentialBindingDefinition>? credentialBindings = null
+    )
     {
         return new McpCapabilitySourceDefinition
         {
@@ -625,10 +692,7 @@ public class PluginCatalogValidatorTests
 
     private static PluginSkillDefinition CreateSkill(string contentPath)
     {
-        return new PluginSkillDefinition
-        {
-            ContentPath = contentPath,
-        };
+        return new PluginSkillDefinition { ContentPath = contentPath };
     }
 
     private static CredentialBindingDefinition CreateConnectionFieldBinding(CredentialBindingTarget target)

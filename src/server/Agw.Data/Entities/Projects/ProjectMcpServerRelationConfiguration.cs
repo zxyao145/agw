@@ -9,12 +9,14 @@ public class ProjectMcpServerRelationConfiguration : IEntityTypeConfiguration<Pr
     {
         builder.HasKey(e => new { e.ProjectId, e.McpToolServerId });
 
-        builder.HasOne(e => e.Project)
+        builder
+            .HasOne(e => e.Project)
             .WithMany(project => project.ProjectMcpToolServers)
             .HasForeignKey(e => e.ProjectId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasOne(e => e.McpToolServer)
+        builder
+            .HasOne(e => e.McpToolServer)
             .WithMany()
             .HasForeignKey(e => e.McpToolServerId)
             .OnDelete(DeleteBehavior.Cascade);

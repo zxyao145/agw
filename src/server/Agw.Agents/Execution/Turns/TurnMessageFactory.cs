@@ -1,6 +1,5 @@
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Extensions;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution.Turns;
@@ -13,32 +12,21 @@ internal static class TurnMessageFactory
     /// <summary>
     /// 创建 Turn 已启动消息，并在 durable 模式下携带稳定的 executionId 与渲染作用域。
     /// </summary>
-    public static AgwMessage CreateStarted(
-        Guid? executionId = null,
-        string? streamingScopeId = null) =>
+    public static AgwMessage CreateStarted(Guid? executionId = null, string? streamingScopeId = null) =>
         CreateState("turn-start", status: null, executionId, streamingScopeId);
 
     /// <summary>
     /// 创建 Turn 已结束消息，并在 durable 模式下携带最终状态和 executionId。
     /// </summary>
-    public static AgwMessage CreateFinished(
-        string status = "completed",
-        Guid? executionId = null) =>
+    public static AgwMessage CreateFinished(string status = "completed", Guid? executionId = null) =>
         CreateState("turn-finished", status, executionId, streamingScopeId: null);
 
     /// <summary>
     /// 按统一协议构造 Turn 状态消息，避免启动与结束消息的字段发生漂移。
     /// </summary>
-    private static AgwMessage CreateState(
-        string type,
-        string? status,
-        Guid? executionId,
-        string? streamingScopeId)
+    private static AgwMessage CreateState(string type, string? status, Guid? executionId, string? streamingScopeId)
     {
-        var properties = new AdditionalPropertiesDictionary
-        {
-            ["type"] = type
-        };
+        var properties = new AdditionalPropertiesDictionary { ["type"] = type };
         if (status != null)
         {
             properties["status"] = status;
@@ -57,6 +45,7 @@ internal static class TurnMessageFactory
             Constants.DefaultAgentAuthor,
             AiRole.System,
             [new AgwTextContent { Content = "" }],
-            properties);
+            properties
+        );
     }
 }

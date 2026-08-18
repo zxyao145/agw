@@ -1,12 +1,10 @@
 using System.Text.Json;
-
 using Agw.Integrations.Application.Capabilities;
 using Agw.Integrations.Application.Management;
 using Agw.Integrations.Contracts.Management;
 using Agw.Integrations.Contracts.OAuth;
 using Agw.Integrations.Controllers;
 using Agw.Integrations.Infrastructure.Plugins;
-
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Integrations.Tests;
@@ -23,39 +21,42 @@ public class IntegrationManagementControllerTests
         AssertMethod<PluginInstallationsController>(
             nameof(PluginInstallationsController.UpsertAsync),
             typeof(HttpPutAttribute),
-            null);
+            null
+        );
 
         Assert.Equal("api/integrations/connections", RouteOf<ConnectionsController>());
         AssertMethod<ConnectionsController>(nameof(ConnectionsController.ListAsync), typeof(HttpGetAttribute), null);
         AssertMethod<ConnectionsController>(nameof(ConnectionsController.CreateAsync), typeof(HttpPostAttribute), null);
         AssertMethod<ConnectionsController>(nameof(ConnectionsController.UpdateAsync), typeof(HttpPutAttribute), null);
-        AssertMethod<ConnectionsController>(nameof(ConnectionsController.DeleteAsync), typeof(HttpDeleteAttribute), null);
+        AssertMethod<ConnectionsController>(
+            nameof(ConnectionsController.DeleteAsync),
+            typeof(HttpDeleteAttribute),
+            null
+        );
         AssertMethod<ConnectionsController>(
             nameof(ConnectionsController.ValidateAsync),
             typeof(HttpPostAttribute),
-            "validate");
+            "validate"
+        );
 
         Assert.Equal("api/integrations/oauth", RouteOf<OAuthController>());
         AssertMethod<OAuthController>(
             nameof(OAuthController.GetCallbackInfo),
             typeof(HttpGetAttribute),
-            "callback-info");
+            "callback-info"
+        );
         AssertMethod<OAuthController>(
             nameof(OAuthController.AuthorizeStartAsync),
             typeof(HttpPostAttribute),
-            "authorize-start");
-        AssertMethod<OAuthController>(
-            nameof(OAuthController.CallbackAsync),
-            typeof(HttpGetAttribute),
-            "callback");
+            "authorize-start"
+        );
+        AssertMethod<OAuthController>(nameof(OAuthController.CallbackAsync), typeof(HttpGetAttribute), "callback");
         AssertMethod<OAuthController>(
             nameof(OAuthController.DesktopComplete),
             typeof(HttpGetAttribute),
-            "desktop-complete");
-        AssertMethod<OAuthController>(
-            nameof(OAuthController.RefreshAsync),
-            typeof(HttpPostAttribute),
-            "refresh");
+            "desktop-complete"
+        );
+        AssertMethod<OAuthController>(nameof(OAuthController.RefreshAsync), typeof(HttpPostAttribute), "refresh");
 
         var deleteId = typeof(ConnectionsController)
             .GetMethod(nameof(ConnectionsController.DeleteAsync))!
@@ -70,7 +71,9 @@ public class IntegrationManagementControllerTests
         var controller = new PluginsController(
             new PluginCatalogAppService(
                 new BuiltInPluginCatalog(),
-                new PluginSkillMetadataReader(new AppContextPluginContentRootProvider())));
+                new PluginSkillMetadataReader(new AppContextPluginContentRootProvider())
+            )
+        );
 
         var result = await controller.List(TestContext.Current.CancellationToken);
 
@@ -91,16 +94,14 @@ public class IntegrationManagementControllerTests
 
     private static string RouteOf<TController>()
     {
-        return typeof(TController).GetCustomAttributes(typeof(RouteAttribute), inherit: true)
+        return typeof(TController)
+            .GetCustomAttributes(typeof(RouteAttribute), inherit: true)
             .Cast<RouteAttribute>()
             .Single()
             .Template;
     }
 
-    private static void AssertMethod<TController>(
-        string methodName,
-        Type attributeType,
-        string? expectedTemplate)
+    private static void AssertMethod<TController>(string methodName, Type attributeType, string? expectedTemplate)
     {
         var method = typeof(TController).GetMethod(methodName);
         Assert.NotNull(method);

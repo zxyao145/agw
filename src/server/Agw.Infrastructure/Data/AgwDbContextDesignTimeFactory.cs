@@ -3,7 +3,6 @@ using Agw.Infrastructure.Data.Encryption;
 using Agw.Shared.Configuration;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
-
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Configuration;
@@ -15,9 +14,8 @@ public class AgwDbContextDesignTimeFactory : IDesignTimeDbContextFactory<AgwDbCo
     public AgwDbContext CreateDbContext(string[] args)
     {
         var configuration = BuildConfiguration();
-        var settings = configuration
-            .GetSection(DatabaseSettings.SectionName)
-            .Get<DatabaseSettings>() ?? new DatabaseSettings();
+        var settings =
+            configuration.GetSection(DatabaseSettings.SectionName).Get<DatabaseSettings>() ?? new DatabaseSettings();
         var configuredProvider = configuration[$"{DatabaseSettings.SectionName}:Provider"];
         if (!string.IsNullOrWhiteSpace(configuredProvider))
         {
@@ -28,9 +26,7 @@ public class AgwDbContextDesignTimeFactory : IDesignTimeDbContextFactory<AgwDbCo
         var provider = string.IsNullOrWhiteSpace(providerArgument)
             ? settings.Provider
             : DatabaseProviderResolver.Parse(providerArgument);
-        var connectionString = provider == settings.Provider
-            ? settings.ConnectionString
-            : string.Empty;
+        var connectionString = provider == settings.Provider ? settings.ConnectionString : string.Empty;
         if (string.IsNullOrWhiteSpace(connectionString))
         {
             connectionString = GetDesignTimeConnectionString(provider);
@@ -42,7 +38,8 @@ public class AgwDbContextDesignTimeFactory : IDesignTimeDbContextFactory<AgwDbCo
         var dataPaths = AgwDataPaths.ResolveFromEnvironment();
         dataPaths.EnsureCreated();
         var dataProtectionProvider = AgwDataProtectionConfiguration.CreatePersistedProvider(
-            new DirectoryInfo(dataPaths.KeysDirectory));
+            new DirectoryInfo(dataPaths.KeysDirectory)
+        );
         var encryptedDataProtector = new DataProtectionEncryptedDataProtector(dataProtectionProvider);
 
         return new AgwDbContext(options.Options, encryptedDataProtector);
@@ -51,7 +48,8 @@ public class AgwDbContextDesignTimeFactory : IDesignTimeDbContextFactory<AgwDbCo
     private static IConfiguration BuildConfiguration()
     {
         var hostDirectory = FindHostDirectory();
-        var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
+        var environment =
+            Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
             ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
             ?? "Development";
 

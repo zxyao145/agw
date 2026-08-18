@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
 
@@ -32,9 +31,7 @@ public partial class SkillDomainService
         skill.Id = skill.Id == Guid.Empty ? Guid.CreateVersion7() : skill.Id;
         skill.CreateBy = user;
         skill.CreateTime = _timeProvider.GetUtcNow();
-        skill.ContentPath = skill.Kind == SkillKind.Local
-            ? BuildContentPath(skill.Name)
-            : string.Empty;
+        skill.ContentPath = skill.Kind == SkillKind.Local ? BuildContentPath(skill.Name) : string.Empty;
     }
 
     public void ApplyUpdate(Skill skill, string name, string description, string user)
@@ -44,19 +41,14 @@ public partial class SkillDomainService
         Validate(name, description);
         skill.Name = name.Trim();
         skill.Description = description.Trim();
-        skill.ContentPath = skill.Kind == SkillKind.Local
-            ? BuildContentPath(skill.Name)
-            : string.Empty;
+        skill.ContentPath = skill.Kind == SkillKind.Local ? BuildContentPath(skill.Name) : string.Empty;
         skill.UpdateBy = user;
         skill.UpdateTime = _timeProvider.GetUtcNow();
     }
 
     public IReadOnlyList<Guid> NormalizeAgentIds(IEnumerable<Guid>? agentIds)
     {
-        return (agentIds ?? [])
-            .Where(id => id != Guid.Empty)
-            .Distinct()
-            .ToList();
+        return (agentIds ?? []).Where(id => id != Guid.Empty).Distinct().ToList();
     }
 
     public string BuildContentPath(string skillName)
@@ -81,12 +73,18 @@ public partial class SkillDomainService
         var trimmed = name.Trim();
         if (trimmed.Length > MaxNameLength)
         {
-            throw new AgwException(ErrorCodes.SkillNameTooLong, $"Skill name must be {MaxNameLength} characters or fewer.");
+            throw new AgwException(
+                ErrorCodes.SkillNameTooLong,
+                $"Skill name must be {MaxNameLength} characters or fewer."
+            );
         }
 
         if (!SkillNameRegex().IsMatch(trimmed))
         {
-            throw new AgwException(ErrorCodes.SkillNameInvalidFormat, "Skill name must contain only lowercase letters, numbers, and single hyphens.");
+            throw new AgwException(
+                ErrorCodes.SkillNameInvalidFormat,
+                "Skill name must contain only lowercase letters, numbers, and single hyphens."
+            );
         }
     }
 
@@ -99,7 +97,10 @@ public partial class SkillDomainService
 
         if (description.Trim().Length > MaxDescriptionLength)
         {
-            throw new AgwException(ErrorCodes.SkillDescriptionTooLong, $"Skill description must be {MaxDescriptionLength} characters or fewer.");
+            throw new AgwException(
+                ErrorCodes.SkillDescriptionTooLong,
+                $"Skill description must be {MaxDescriptionLength} characters or fewer."
+            );
         }
     }
 }

@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
@@ -8,7 +7,6 @@ using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
 using Agw.Tools.HumanInteraction;
 using Agw.Tools.ToolBlocks.Blocks.Mode;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,9 +25,10 @@ public sealed class ModeToolBlockTests
         Assert.IsNotType<HumanInteractionRequiredAIFunction>(materialized.ModeGet);
         Assert.Equal(
             "plan",
-            ReadStringResult(await materialized.ModeGet.InvokeAsync(
-                new AIFunctionArguments(),
-                TestContext.Current.CancellationToken)));
+            ReadStringResult(
+                await materialized.ModeGet.InvokeAsync(new AIFunctionArguments(), TestContext.Current.CancellationToken)
+            )
+        );
     }
 
     [Fact]
@@ -38,9 +37,7 @@ public sealed class ModeToolBlockTests
         var materialized = await MaterializeAsync();
         await using var contribution = materialized.Contribution;
 
-        Assert.Equal(
-            ["mode_get", "mode_set"],
-            contribution.PlanModeAllowedToolNames.Order(StringComparer.Ordinal));
+        Assert.Equal(["mode_get", "mode_set"], contribution.PlanModeAllowedToolNames.Order(StringComparer.Ordinal));
         Assert.Contains("prepare a decision-complete plan", materialized.Context.Instructions);
         Assert.Contains("Do not execute shell commands", materialized.Context.Instructions);
         Assert.Contains("Todo tools may be used", materialized.Context.Instructions);
@@ -61,28 +58,27 @@ public sealed class ModeToolBlockTests
         await using var services = CreateServices(channel);
         var arguments = CreateArguments("execute", services);
 
-        var pendingResult = materialized.ModeSet
-            .InvokeAsync(arguments, TestContext.Current.CancellationToken)
-            .AsTask();
-        var request = await channel.RequestReceived.Task.WaitAsync(
-            TestContext.Current.CancellationToken);
+        var pendingResult = materialized.ModeSet.InvokeAsync(arguments, TestContext.Current.CancellationToken).AsTask();
+        var request = await channel.RequestReceived.Task.WaitAsync(TestContext.Current.CancellationToken);
 
         Assert.False(pendingResult.IsCompleted);
         Assert.Equal(ModeSetHumanInteractionProvider.InteractionKind, request.InteractionKind);
         Assert.Equal("mode_set", request.ToolName);
         Assert.Equal("execute", request.Payload.GetProperty("mode").GetString());
 
-        channel.Submit(new HumanInteractionResponse(
-            request.RequestId,
-            Cancelled: false,
-            JsonSerializer.SerializeToElement(new { confirmed = true })));
+        channel.Submit(
+            new HumanInteractionResponse(
+                request.RequestId,
+                Cancelled: false,
+                JsonSerializer.SerializeToElement(new { confirmed = true })
+            )
+        );
 
         Assert.Equal("Mode changed to \"execute\".", ReadStringResult(await pendingResult));
         Assert.Equal(
             "execute",
-            await materialized.ModeProvider.GetModeAsync(
-                materialized.Session,
-                TestContext.Current.CancellationToken));
+            await materialized.ModeProvider.GetModeAsync(materialized.Session, TestContext.Current.CancellationToken)
+        );
     }
 
     [Fact]
@@ -92,27 +88,21 @@ public sealed class ModeToolBlockTests
         await using var contribution = materialized.Contribution;
         var channel = new TestHumanInteractionChannel();
         await using var services = CreateServices(channel);
-        var pendingResult = materialized.ModeSet
-            .InvokeAsync(
-                CreateArguments("execute", services),
-                TestContext.Current.CancellationToken)
+        var pendingResult = materialized
+            .ModeSet.InvokeAsync(CreateArguments("execute", services), TestContext.Current.CancellationToken)
             .AsTask();
-        var request = await channel.RequestReceived.Task.WaitAsync(
-            TestContext.Current.CancellationToken);
+        var request = await channel.RequestReceived.Task.WaitAsync(TestContext.Current.CancellationToken);
 
-        channel.Submit(new HumanInteractionResponse(
-            request.RequestId,
-            Cancelled: true,
-            ResponseData: null));
+        channel.Submit(new HumanInteractionResponse(request.RequestId, Cancelled: true, ResponseData: null));
 
         Assert.Equal(
             "Mode change to \"execute\" was cancelled by the user.",
-            Assert.IsType<string>(await pendingResult));
+            Assert.IsType<string>(await pendingResult)
+        );
         Assert.Equal(
             "plan",
-            await materialized.ModeProvider.GetModeAsync(
-                materialized.Session,
-                TestContext.Current.CancellationToken));
+            await materialized.ModeProvider.GetModeAsync(materialized.Session, TestContext.Current.CancellationToken)
+        );
     }
 
     [Fact]
@@ -125,15 +115,16 @@ public sealed class ModeToolBlockTests
         var exception = await Assert.ThrowsAsync<AgwException>(async () =>
             await materialized.ModeSet.InvokeAsync(
                 CreateArguments("execute", services),
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(ErrorCodes.AgentExecutionFailed.Code, exception.Code);
         Assert.Contains("requires an active interactive channel", exception.Message);
         Assert.Equal(
             "plan",
-            await materialized.ModeProvider.GetModeAsync(
-                materialized.Session,
-                TestContext.Current.CancellationToken));
+            await materialized.ModeProvider.GetModeAsync(materialized.Session, TestContext.Current.CancellationToken)
+        );
     }
 
     private static async Task<MaterializedModeTools> MaterializeAsync()
@@ -143,15 +134,12 @@ public sealed class ModeToolBlockTests
             new ToolMaterializationContext
             {
                 Agent = new Agent { Id = Guid.CreateVersion7() },
-                Project = new Project
-                {
-                    Id = Guid.CreateVersion7(),
-                    Workspace = "/workspace"
-                },
+                Project = new Project { Id = Guid.CreateVersion7(), Workspace = "/workspace" },
                 Workspace = "/workspace",
-                DefaultMode = "plan"
+                DefaultMode = "plan",
             },
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         var modeProvider = Assert.IsType<AgentModeProvider>(contribution.ContextProviders[0]);
         var agent = new TestAgent();
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
@@ -160,11 +148,12 @@ public sealed class ModeToolBlockTests
         {
             aiContext = await provider.InvokingAsync(
                 new AIContextProvider.InvokingContext(agent, session, aiContext),
-                TestContext.Current.CancellationToken);
+                TestContext.Current.CancellationToken
+            );
         }
 
-        var functions = aiContext.Tools!
-            .OfType<AIFunction>()
+        var functions = aiContext
+            .Tools!.OfType<AIFunction>()
             .ToDictionary(static function => function.Name, StringComparer.OrdinalIgnoreCase);
         return new MaterializedModeTools(
             contribution,
@@ -172,7 +161,8 @@ public sealed class ModeToolBlockTests
             Assert.IsAssignableFrom<AIFunction>(functions["mode_set"]),
             Assert.IsAssignableFrom<AIFunction>(functions["mode_get"]),
             session,
-            aiContext);
+            aiContext
+        );
     }
 
     private static ServiceProvider CreateServices(IHumanInteractionChannel channel) =>
@@ -180,20 +170,15 @@ public sealed class ModeToolBlockTests
             .AddSingleton<IHumanInteractionContextAccessor>(new TestContextAccessor(channel))
             .BuildServiceProvider();
 
-    private static AIFunctionArguments CreateArguments(
-        string mode,
-        IServiceProvider services) =>
-        new(new Dictionary<string, object?> { ["mode"] = mode })
-        {
-            Services = services
-        };
+    private static AIFunctionArguments CreateArguments(string mode, IServiceProvider services) =>
+        new(new Dictionary<string, object?> { ["mode"] = mode }) { Services = services };
 
     private static string? ReadStringResult(object? result) =>
         result switch
         {
             string text => text,
             JsonElement { ValueKind: JsonValueKind.String } element => element.GetString(),
-            _ => null
+            _ => null,
         };
 
     private sealed record MaterializedModeTools(
@@ -202,7 +187,8 @@ public sealed class ModeToolBlockTests
         AIFunction ModeSet,
         AIFunction ModeGet,
         AgentSession Session,
-        AIContext Context);
+        AIContext Context
+    );
 
     private sealed class TestContextAccessor : IHumanInteractionContextAccessor
     {
@@ -217,14 +203,16 @@ public sealed class ModeToolBlockTests
     private sealed class TestHumanInteractionChannel : IHumanInteractionChannel
     {
         private readonly TaskCompletionSource<HumanInteractionResponse> _response = new(
-            TaskCreationOptions.RunContinuationsAsynchronously);
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
 
-        public TaskCompletionSource<HumanInteractionRequest> RequestReceived { get; } = new(
-            TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<HumanInteractionRequest> RequestReceived { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public async ValueTask<HumanInteractionResponse> RequestAsync(
             HumanInteractionRequest request,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             RequestReceived.TrySetResult(request);
             return await _response.Task.WaitAsync(cancellationToken);
@@ -239,33 +227,33 @@ public sealed class ModeToolBlockTests
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
-            CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            CancellationToken cancellationToken
+        ) => throw new NotSupportedException();
 
         protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
-            [EnumeratorCancellation] CancellationToken cancellationToken)
+            [EnumeratorCancellation] CancellationToken cancellationToken
+        )
         {
             yield break;
         }
 
-        protected override ValueTask<AgentSession> CreateSessionCoreAsync(
-            CancellationToken cancellationToken) =>
+        protected override ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken) =>
             ValueTask.FromResult<AgentSession>(new TestAgentSession());
 
         protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
             AgentSession session,
             JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
 
         protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
             JsonElement sessionState,
             JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult<AgentSession>(new TestAgentSession());
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult<AgentSession>(new TestAgentSession());
     }
 
     private sealed class TestAgentSession : AgentSession;

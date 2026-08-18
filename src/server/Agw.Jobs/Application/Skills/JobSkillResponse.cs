@@ -17,4 +17,5 @@ public sealed record JobSkillResponse(
     bool IsEnabled,
     int RetryCount,
     int MaxRetryCount,
-    string? LastError);
+    string? LastError
+);

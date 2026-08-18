@@ -1,11 +1,9 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
 using Agw.Tools.Impl.Web;
-
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -33,16 +31,17 @@ public class WebSearchToolTests
                       </a>
                       <div class="VwiC3b">Google snippet text.</div>
                     </body></html>
-                    """);
+                    """
+                );
             }
 
             return CreateResponse(HttpStatusCode.InternalServerError, "unexpected provider");
         });
 
-        var result = await tool.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
-        {
-            ["query"] = "dotnet"
-        }), TestContext.Current.CancellationToken);
+        var result = await tool.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "dotnet" }),
+            TestContext.Current.CancellationToken
+        );
         var resultJson = Assert.IsType<JsonElement>(result);
         var results = resultJson.GetProperty("results").EnumerateArray().ToList();
 
@@ -78,16 +77,17 @@ public class WebSearchToolTests
                         <div class="b_caption"><p>Bing snippet text.</p></div>
                       </li>
                     </body></html>
-                    """);
+                    """
+                );
             }
 
             return CreateResponse(HttpStatusCode.InternalServerError, "unexpected provider");
         });
 
-        var result = await tool.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
-        {
-            ["query"] = "dotnet"
-        }), TestContext.Current.CancellationToken);
+        var result = await tool.InvokeAsync(
+            new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "dotnet" }),
+            TestContext.Current.CancellationToken
+        );
         var resultJson = Assert.IsType<JsonElement>(result);
         var results = resultJson.GetProperty("results").EnumerateArray().ToList();
 
@@ -110,10 +110,11 @@ public class WebSearchToolTests
         });
 
         await Assert.ThrowsAsync<AgwException>(async () =>
-            await tool.InvokeAsync(new AIFunctionArguments(new Dictionary<string, object?>
-            {
-                ["query"] = "dotnet"
-            }), TestContext.Current.CancellationToken));
+            await tool.InvokeAsync(
+                new AIFunctionArguments(new Dictionary<string, object?> { ["query"] = "dotnet" }),
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(["www.google.com", "www.bing.com", "www.baidu.com"], requestedHosts);
     }
@@ -130,10 +131,7 @@ public class WebSearchToolTests
 
     private static HttpResponseMessage CreateResponse(HttpStatusCode statusCode, string content)
     {
-        return new HttpResponseMessage(statusCode)
-        {
-            Content = new StringContent(content, Encoding.UTF8, "text/html")
-        };
+        return new HttpResponseMessage(statusCode) { Content = new StringContent(content, Encoding.UTF8, "text/html") };
     }
 
     private sealed class StubHttpClientFactory : IHttpClientFactory
@@ -160,7 +158,10 @@ public class WebSearchToolTests
             _handler = handler;
         }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        )
         {
             return Task.FromResult(_handler(request));
         }

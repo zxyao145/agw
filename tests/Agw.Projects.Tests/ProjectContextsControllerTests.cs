@@ -1,5 +1,4 @@
 using System.Reflection;
-
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Projects.Application;
@@ -9,7 +8,6 @@ using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
-
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -97,14 +95,16 @@ public class ProjectContextsControllerTests
         var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
-            seedContext.Projects.Add(new Project
-            {
-                Id = projectId,
-                Name = "Project",
-                Type = ProjectType.UserDefined,
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
+            seedContext.Projects.Add(
+                new Project
+                {
+                    Id = projectId,
+                    Name = "Project",
+                    Type = ProjectType.UserDefined,
+                    CreateBy = "tester",
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                }
+            );
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -129,14 +129,16 @@ public class ProjectContextsControllerTests
         var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
-            seedContext.Projects.Add(new Project
-            {
-                Id = projectId,
-                Name = "Project",
-                Type = ProjectType.UserDefined,
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
+            seedContext.Projects.Add(
+                new Project
+                {
+                    Id = projectId,
+                    Name = "Project",
+                    Type = ProjectType.UserDefined,
+                    CreateBy = "tester",
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                }
+            );
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -161,14 +163,16 @@ public class ProjectContextsControllerTests
         var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
-            seedContext.Projects.Add(new Project
-            {
-                Id = projectId,
-                Name = "Project",
-                Type = ProjectType.UserDefined,
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
+            seedContext.Projects.Add(
+                new Project
+                {
+                    Id = projectId,
+                    Name = "Project",
+                    Type = ProjectType.UserDefined,
+                    CreateBy = "tester",
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                }
+            );
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -193,14 +197,16 @@ public class ProjectContextsControllerTests
         var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
-            seedContext.Projects.Add(new Project
-            {
-                Id = projectId,
-                Name = "Project",
-                Type = ProjectType.UserDefined,
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
+            seedContext.Projects.Add(
+                new Project
+                {
+                    Id = projectId,
+                    Name = "Project",
+                    Type = ProjectType.UserDefined,
+                    CreateBy = "tester",
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                }
+            );
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -210,7 +216,8 @@ public class ProjectContextsControllerTests
         var result = await controller.UpdateTitleAsync(
             projectId,
             "context-1",
-            new ProjectContextTitleUpdateRequest("   "));
+            new ProjectContextTitleUpdateRequest("   ")
+        );
 
         Assert.StartsWith("Bens.Results.ApiResult", result.GetType().FullName);
     }
@@ -228,14 +235,16 @@ public class ProjectContextsControllerTests
         var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
-            seedContext.Projects.Add(new Project
-            {
-                Id = projectId,
-                Name = "Project",
-                Type = ProjectType.UserDefined,
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
+            seedContext.Projects.Add(
+                new Project
+                {
+                    Id = projectId,
+                    Name = "Project",
+                    Type = ProjectType.UserDefined,
+                    CreateBy = "tester",
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                }
+            );
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -249,12 +258,7 @@ public class ProjectContextsControllerTests
 
     private static MethodInfo GetGetMethod()
     {
-        var method = typeof(ProjectContextsController).GetMethod(
-            "GetAsync",
-            [
-                typeof(Guid),
-                typeof(string)
-            ]);
+        var method = typeof(ProjectContextsController).GetMethod("GetAsync", [typeof(Guid), typeof(string)]);
 
         Assert.NotNull(method);
         return method;
@@ -262,12 +266,7 @@ public class ProjectContextsControllerTests
 
     private static MethodInfo GetClearRecordsMethod()
     {
-        var method = typeof(ProjectContextsController).GetMethod(
-            "ClearRecordsAsync",
-            [
-                typeof(Guid),
-                typeof(string)
-            ]);
+        var method = typeof(ProjectContextsController).GetMethod("ClearRecordsAsync", [typeof(Guid), typeof(string)]);
 
         Assert.NotNull(method);
         return method;
@@ -277,11 +276,8 @@ public class ProjectContextsControllerTests
     {
         var method = typeof(ProjectContextsController).GetMethod(
             "UpdateTitleAsync",
-            [
-                typeof(Guid),
-                typeof(string),
-                typeof(ProjectContextTitleUpdateRequest)
-            ]);
+            [typeof(Guid), typeof(string), typeof(ProjectContextTitleUpdateRequest)]
+        );
 
         Assert.NotNull(method);
         return method;
@@ -289,11 +285,7 @@ public class ProjectContextsControllerTests
 
     private static MethodInfo GetDeleteAllMethod()
     {
-        var method = typeof(ProjectContextsController).GetMethod(
-            "DeleteAllAsync",
-            [
-                typeof(Guid)
-            ]);
+        var method = typeof(ProjectContextsController).GetMethod("DeleteAllAsync", [typeof(Guid)]);
 
         Assert.NotNull(method);
         return method;
@@ -301,24 +293,19 @@ public class ProjectContextsControllerTests
 
     private static MethodInfo GetDeleteMethod()
     {
-        var method = typeof(ProjectContextsController).GetMethod(
-            "DeleteAsync",
-            [
-                typeof(Guid),
-                typeof(string)
-            ]);
+        var method = typeof(ProjectContextsController).GetMethod("DeleteAsync", [typeof(Guid), typeof(string)]);
 
         Assert.NotNull(method);
         return method;
     }
 
     private static DbContextOptions<AgwDbContext> CreateOptions(SqliteConnection connection) =>
-        new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(connection)
-            .UseSnakeCaseNamingConvention()
-            .Options;
+        new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).UseSnakeCaseNamingConvention().Options;
 
-    private static async Task EnsureCreatedAsync(DbContextOptions<AgwDbContext> options, CancellationToken cancellationToken)
+    private static async Task EnsureCreatedAsync(
+        DbContextOptions<AgwDbContext> options,
+        CancellationToken cancellationToken
+    )
     {
         await using var setupContext = new AgwDbContext(options);
         await setupContext.Database.EnsureCreatedAsync(cancellationToken);
@@ -341,7 +328,9 @@ public class ProjectContextsControllerTests
                 new EfRepository<TaskSessionBinding>(dbContext),
                 new EfRepository<ProjectConversation>(dbContext),
                 dbContext,
-                TimeProvider.System),
-            TimeProvider.System);
+                TimeProvider.System
+            ),
+            TimeProvider.System
+        );
     }
 }

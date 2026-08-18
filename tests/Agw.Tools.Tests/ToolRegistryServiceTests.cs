@@ -1,5 +1,4 @@
 using System.Text.Json;
-
 using Agw.Domain.Services;
 using Agw.Shared.Contracts.Tools;
 using Agw.Shared.Data.Entities.Agents;
@@ -10,7 +9,6 @@ using Agw.Tools.ContextualTools;
 using Agw.Tools.ContextualTools.Shell;
 using Agw.Tools.ContextualTools.WebSearch;
 using Agw.Tools.ToolBlocks.Blocks.Todo;
-
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -35,11 +33,9 @@ public class ToolRegistryServiceTests
     public async Task InvokeAsync_ForRegisteredParameterObjectTool_AcceptsFlattenedArguments()
     {
         var tool = CreateDiffFunction();
-        var arguments = new AIFunctionArguments(new Dictionary<string, object?>
-        {
-            ["before"] = "line 1",
-            ["after"] = "line 2"
-        });
+        var arguments = new AIFunctionArguments(
+            new Dictionary<string, object?> { ["before"] = "line 1", ["after"] = "line 2" }
+        );
 
         var result = await tool.InvokeAsync(arguments, TestContext.Current.CancellationToken);
         var resultJson = Assert.IsType<JsonElement>(result);
@@ -52,9 +48,7 @@ public class ToolRegistryServiceTests
     public async Task MaterializeAsync_IndependentTools_MarksOnlyTrustedPlanToolsAllowed()
     {
         await using var serviceProvider = new ServiceCollection().BuildServiceProvider();
-        var registry = new ToolRegistryService(
-            NullLogger<ToolRegistryService>.Instance,
-            serviceProvider);
+        var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, serviceProvider);
 
         await using var contribution = await registry.MaterializeAsync(
             [
@@ -64,14 +58,16 @@ public class ToolRegistryServiceTests
                 new GenerateGuidToolDefinition(),
                 new GitCloneToolDefinition(),
                 new PowerShellToolDefinition(),
-                new WebFetchToolDefinition()
+                new WebFetchToolDefinition(),
             ],
             CreateMaterializationContext(),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(
             ["ask_user_question", "diff", "generate_guid", "web_fetch"],
-            contribution.PlanModeAllowedToolNames.Order(StringComparer.Ordinal));
+            contribution.PlanModeAllowedToolNames.Order(StringComparer.Ordinal)
+        );
     }
 
     [Theory]
@@ -86,13 +82,14 @@ public class ToolRegistryServiceTests
             Project = context.Project,
             Workspace = context.Workspace,
             DefaultMode = context.DefaultMode,
-            SupportsHostedWebSearch = hosted
+            SupportsHostedWebSearch = hosted,
         };
 
         await using var contribution = await new WebSearchContextualTool().MaterializeAsync(
             new WebSearchToolDefinition(),
             context,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(["web_search"], contribution.PlanModeAllowedToolNames);
     }
@@ -117,7 +114,7 @@ public class ToolRegistryServiceTests
             "task_list",
             "task_update",
             "task_output",
-            "task_stop"
+            "task_stop",
         };
 
         Assert.All(removedToolNames, name => Assert.False(registry.ToolExists(name)));
@@ -135,14 +132,11 @@ public class ToolRegistryServiceTests
             NullLogger<ToolRegistryService>.Instance,
             serviceProvider,
             [new WebSearchContextualTool()],
-            toolBlockRegistry);
+            toolBlockRegistry
+        );
 
-        var webSearch = Assert.Single(
-            registry.GetAllTools(),
-            item => item.Name == "web_search");
-        var todo = Assert.Single(
-            registry.GetAllTools(),
-            item => item.Name == ToolBlockNames.Todo);
+        var webSearch = Assert.Single(registry.GetAllTools(), item => item.Name == "web_search");
+        var todo = Assert.Single(registry.GetAllTools(), item => item.Name == ToolBlockNames.Todo);
 
         Assert.Equal(ToolCatalogItemKind.Tool, webSearch.Kind);
         Assert.Equal(ToolCatalogItemKind.ToolBlock, todo.Kind);
@@ -158,13 +152,16 @@ public class ToolRegistryServiceTests
             NullLogger<ToolRegistryService>.Instance,
             serviceProvider,
             Array.Empty<IContextualTool>(),
-            new ToolBlockRegistry([new TodoToolBlock()]));
+            new ToolBlockRegistry([new TodoToolBlock()])
+        );
 
-        var exception = await Assert.ThrowsAsync<AgwException>(
-            async () => await registry.MaterializeAsync(
+        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+            await registry.MaterializeAsync(
                 [new TestToolDefinition("todos_add")],
                 CreateMaterializationContext(),
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Contains("belongs to Tool Block 'todo'", exception.Message);
     }
@@ -177,16 +174,17 @@ public class ToolRegistryServiceTests
         var contextualTools = new IContextualTool[]
         {
             new WebSearchContextualTool(),
-            new ShellContextualTool(new ConfigurationBuilder().Build())
+            new ShellContextualTool(new ConfigurationBuilder().Build()),
         };
-        var toolBlocks = ToolBlockDefinitionNames.All
-            .Select(static name => new DefinitionCoverageToolBlock(name))
+        var toolBlocks = ToolBlockDefinitionNames
+            .All.Select(static name => new DefinitionCoverageToolBlock(name))
             .ToArray();
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             serviceProvider,
             contextualTools,
-            new ToolBlockRegistry(toolBlocks));
+            new ToolBlockRegistry(toolBlocks)
+        );
 
         registry.ValidateDefinitionCoverage();
     }
@@ -202,17 +200,13 @@ public class ToolRegistryServiceTests
 
     private static ToolMaterializationContext CreateMaterializationContext()
     {
-        var project = new Project
-        {
-            Id = Guid.CreateVersion7(),
-            Workspace = "/workspace"
-        };
+        var project = new Project { Id = Guid.CreateVersion7(), Workspace = "/workspace" };
         return new ToolMaterializationContext
         {
             Agent = new Agent { Id = Guid.CreateVersion7() },
             Project = project,
             Workspace = project.Workspace,
-            DefaultMode = "plan"
+            DefaultMode = "plan",
         };
     }
 
@@ -232,12 +226,7 @@ public class ToolRegistryServiceTests
     {
         public DefinitionCoverageToolBlock(string name)
         {
-            Descriptor = new ToolBlockDescriptor(
-                name,
-                name,
-                name,
-                ToolBlockScope.Agent | ToolBlockScope.Project,
-                []);
+            Descriptor = new ToolBlockDescriptor(name, name, name, ToolBlockScope.Agent | ToolBlockScope.Project, []);
         }
 
         public ToolBlockDescriptor Descriptor { get; }
@@ -245,7 +234,7 @@ public class ToolRegistryServiceTests
         public ValueTask<ToolContribution> MaterializeAsync(
             ToolBlockDefinition definition,
             ToolMaterializationContext context,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult(new ToolContribution());
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult(new ToolContribution());
     }
 }

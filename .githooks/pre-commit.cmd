@@ -1,8 +1,8 @@
 
 @echo off
 
-echo Running dotnet format Agw.slnx check...
-dotnet format Agw.slnx --verify-no-changes 
+echo Running csharpier check...
+dotnet csharpier check . 
 if errorlevel 1 exit /b 1
 
 cd src/clients/web 2>nul

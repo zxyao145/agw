@@ -1,10 +1,8 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-
 using Agw.Agents.Execution.Agentflows;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Projects;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -22,7 +20,8 @@ public sealed class AgentflowNodeScopedAgentTests
             Guid.CreateVersion7(),
             "context-1",
             taskId: null,
-            conversationHistoryWriter: writer);
+            conversationHistoryWriter: writer
+        );
         var agent = new AgentflowNodeScopedAgent(
             new ToolMessageAgent(),
             "node-1",
@@ -30,11 +29,15 @@ public sealed class AgentflowNodeScopedAgentTests
             instructions: null,
             scope,
             agentflowId: Guid.CreateVersion7(),
-            agentId: Guid.CreateVersion7());
+            agentId: Guid.CreateVersion7()
+        );
 
-        await foreach (var _ in agent.RunStreamingAsync(
-                           [new ChatMessage(ChatRole.User, "run")],
-                           cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (
+            var _ in agent.RunStreamingAsync(
+                [new ChatMessage(ChatRole.User, "run")],
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        )
         {
             break;
         }
@@ -53,12 +56,16 @@ public sealed class AgentflowNodeScopedAgentTests
             "node-1",
             "  Review Node  ",
             instructions: null,
-            sessionScope: null);
+            sessionScope: null
+        );
 
         var updates = new List<AgentResponseUpdate>();
-        await foreach (var update in agent.RunStreamingAsync(
-                           [new ChatMessage(ChatRole.User, "run")],
-                           cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (
+            var update in agent.RunStreamingAsync(
+                [new ChatMessage(ChatRole.User, "run")],
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        )
         {
             updates.Add(update);
         }
@@ -66,9 +73,8 @@ public sealed class AgentflowNodeScopedAgentTests
         Assert.Equal(2, updates.Count);
         Assert.All(
             updates,
-            update => Assert.Equal(
-                "Review Node",
-                update.AdditionalProperties!["nodeName"]?.ToString()));
+            update => Assert.Equal("Review Node", update.AdditionalProperties!["nodeName"]?.ToString())
+        );
         Assert.Equal(ToolMessageTypes.Warning, updates[0].AdditionalProperties!["type"]?.ToString());
         Assert.Equal("general-agent", updates[1].AuthorName);
     }
@@ -81,18 +87,23 @@ public sealed class AgentflowNodeScopedAgentTests
             "participant-node",
             "Participant Node",
             instructions: null,
-            sessionScope: null);
+            sessionScope: null
+        );
         var outerAgent = new AgentflowNodeScopedAgent(
             innerAgent,
             "block-node",
             "Block Node",
             instructions: null,
-            sessionScope: null);
+            sessionScope: null
+        );
 
         var updates = new List<AgentResponseUpdate>();
-        await foreach (var update in outerAgent.RunStreamingAsync(
-                           [new ChatMessage(ChatRole.User, "run")],
-                           cancellationToken: TestContext.Current.CancellationToken))
+        await foreach (
+            var update in outerAgent.RunStreamingAsync(
+                [new ChatMessage(ChatRole.User, "run")],
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        )
         {
             updates.Add(update);
         }
@@ -100,9 +111,8 @@ public sealed class AgentflowNodeScopedAgentTests
         Assert.NotEmpty(updates);
         Assert.All(
             updates,
-            update => Assert.Equal(
-                "Participant Node",
-                update.AdditionalProperties!["nodeName"]?.ToString()));
+            update => Assert.Equal("Participant Node", update.AdditionalProperties!["nodeName"]?.ToString())
+        );
     }
 
     [Fact]
@@ -113,11 +123,13 @@ public sealed class AgentflowNodeScopedAgentTests
             "node-1",
             "Review Node",
             instructions: null,
-            sessionScope: null);
+            sessionScope: null
+        );
 
         var response = await agent.RunAsync(
             [new ChatMessage(ChatRole.User, "run")],
-            cancellationToken: TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
         var message = Assert.Single(response.Messages);
         Assert.Equal("general-agent", message.AuthorName);
@@ -133,11 +145,13 @@ public sealed class AgentflowNodeScopedAgentTests
             "node-1",
             "Outer Node",
             instructions: null,
-            sessionScope: null);
+            sessionScope: null
+        );
 
         var response = await agent.RunAsync(
             [new ChatMessage(ChatRole.User, "run")],
-            cancellationToken: TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
         var message = Assert.Single(response.Messages);
         Assert.Equal("Inner Node", message.AdditionalProperties!["nodeName"]?.ToString());
@@ -151,11 +165,13 @@ public sealed class AgentflowNodeScopedAgentTests
             "node-1",
             "   ",
             instructions: null,
-            sessionScope: null);
+            sessionScope: null
+        );
 
         var response = await agent.RunAsync(
             [new ChatMessage(ChatRole.User, "run")],
-            cancellationToken: TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
         var message = Assert.Single(response.Messages);
         Assert.False(message.AdditionalProperties!.ContainsKey("nodeName"));
@@ -169,7 +185,8 @@ public sealed class AgentflowNodeScopedAgentTests
             Guid projectId,
             string contextId,
             IReadOnlyList<ChatMessage> messages,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Calls.Add(messages.ToList());
             return Task.CompletedTask;
@@ -180,24 +197,22 @@ public sealed class AgentflowNodeScopedAgentTests
     {
         public string? NodeName { get; private set; }
 
-        public void InitializeSessionState(AgentSession session, string contextId, Guid projectId)
-        {
-        }
+        public void InitializeSessionState(AgentSession session, string contextId, Guid projectId) { }
 
         public void InitializeSessionState(
             AgentSession session,
             string contextId,
             Guid projectId,
-            string historyScope)
-        {
-        }
+            string historyScope
+        ) { }
 
         public void InitializeSessionState(
             AgentSession session,
             string contextId,
             Guid projectId,
             string historyScope,
-            string? nodeName)
+            string? nodeName
+        )
         {
             NodeName = nodeName;
         }
@@ -212,52 +227,51 @@ public sealed class AgentflowNodeScopedAgentTests
             _nodeName = nodeName;
         }
 
-        protected override ValueTask<AgentSession> CreateSessionCoreAsync(
-            CancellationToken cancellationToken) =>
+        protected override ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken) =>
             ValueTask.FromResult<AgentSession>(new ToolMessageSession());
 
         protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
             AgentSession session,
             JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }));
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }));
 
         protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
             JsonElement sessionState,
             JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult<AgentSession>(new ToolMessageSession());
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult<AgentSession>(new ToolMessageSession());
 
         protected override Task<AgentResponse> RunCoreAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
-            var properties = new AdditionalPropertiesDictionary
-            {
-                ["marker"] = "kept"
-            };
+            var properties = new AdditionalPropertiesDictionary { ["marker"] = "kept" };
             if (_nodeName != null)
             {
                 properties["nodeName"] = _nodeName;
             }
 
-            return Task.FromResult(new AgentResponse(
-                [
+            return Task.FromResult(
+                new AgentResponse([
                     new ChatMessage(ChatRole.Assistant, "done")
                     {
                         AuthorName = "general-agent",
-                        AdditionalProperties = properties
-                    }
-                ]));
+                        AdditionalProperties = properties,
+                    },
+                ])
+            );
         }
 
         protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
-            [EnumeratorCancellation] CancellationToken cancellationToken)
+            [EnumeratorCancellation] CancellationToken cancellationToken
+        )
         {
             yield return new AgentResponseUpdate(ChatRole.System, [new TextContent(string.Empty)])
             {
@@ -265,13 +279,10 @@ public sealed class AgentflowNodeScopedAgentTests
                 AdditionalProperties = new AdditionalPropertiesDictionary
                 {
                     ["type"] = ToolMessageTypes.Warning,
-                    ["persistSeparately"] = true
-                }
+                    ["persistSeparately"] = true,
+                },
             };
-            yield return new AgentResponseUpdate(ChatRole.Assistant, "not consumed")
-            {
-                AuthorName = "general-agent"
-            };
+            yield return new AgentResponseUpdate(ChatRole.Assistant, "not consumed") { AuthorName = "general-agent" };
             await Task.CompletedTask;
         }
 

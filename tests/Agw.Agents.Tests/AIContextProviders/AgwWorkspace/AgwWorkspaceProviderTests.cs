@@ -1,10 +1,8 @@
 using System.Runtime.CompilerServices;
-
 using Agw.Agents.Execution.Agents.AIContextProviders.AgwWorkspace;
 using Agw.Files.Utils;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
@@ -18,20 +16,14 @@ public class AgwWorkspaceProviderTests
     public async Task InvokingAsync_UsesAgentAndProjectFromProvider()
     {
         var agent = new Agent { Id = Guid.CreateVersion7() };
-        var project = new Project
-        {
-            Id = Guid.CreateVersion7(),
-            Workspace = "/workspace"
-        };
+        var project = new Project { Id = Guid.CreateVersion7(), Workspace = "/workspace" };
         var provider = new AgwWorkspaceProvider(
             agent,
             project,
-            [new StubInstructionsSource((context, _) =>
-                ValueTask.FromResult<string?>(context.Project.Workspace))]);
+            [new StubInstructionsSource((context, _) => ValueTask.FromResult<string?>(context.Project.Workspace))]
+        );
 
-        var result = await provider.InvokingAsync(
-            CreateInvokingContext(),
-            TestContext.Current.CancellationToken);
+        var result = await provider.InvokingAsync(CreateInvokingContext(), TestContext.Current.CancellationToken);
 
         Assert.Equal(project.Workspace, result.Instructions);
     }
@@ -42,11 +34,10 @@ public class AgwWorkspaceProviderTests
         var provider = CreateProvider(
             new StubInstructionsSource((_, _) => ValueTask.FromResult<string?>(" first ")),
             new StubInstructionsSource((_, _) => ValueTask.FromResult<string?>("   ")),
-            new StubInstructionsSource((_, _) => ValueTask.FromResult<string?>("\nsecond\n")));
+            new StubInstructionsSource((_, _) => ValueTask.FromResult<string?>("\nsecond\n"))
+        );
 
-        var result = await provider.InvokingAsync(
-            CreateInvokingContext(),
-            TestContext.Current.CancellationToken);
+        var result = await provider.InvokingAsync(CreateInvokingContext(), TestContext.Current.CancellationToken);
 
         Assert.Equal($"first{Environment.NewLine}second", result.Instructions);
     }
@@ -56,15 +47,11 @@ public class AgwWorkspaceProviderTests
     {
         var callCount = 0;
         var provider = CreateProvider(
-            new StubInstructionsSource((_, _) =>
-                ValueTask.FromResult<string?>($"value-{++callCount}")));
+            new StubInstructionsSource((_, _) => ValueTask.FromResult<string?>($"value-{++callCount}"))
+        );
 
-        var first = await provider.InvokingAsync(
-            CreateInvokingContext(),
-            TestContext.Current.CancellationToken);
-        var second = await provider.InvokingAsync(
-            CreateInvokingContext(),
-            TestContext.Current.CancellationToken);
+        var first = await provider.InvokingAsync(CreateInvokingContext(), TestContext.Current.CancellationToken);
+        var second = await provider.InvokingAsync(CreateInvokingContext(), TestContext.Current.CancellationToken);
 
         Assert.Equal("value-1", first.Instructions);
         Assert.Equal("value-2", second.Instructions);
@@ -75,12 +62,12 @@ public class AgwWorkspaceProviderTests
     public async Task InvokingAsync_SourceThrows_PropagatesException()
     {
         var provider = CreateProvider(
-            new StubInstructionsSource((_, _) => ValueTask.FromException<string?>(new TestException())));
+            new StubInstructionsSource((_, _) => ValueTask.FromException<string?>(new TestException()))
+        );
 
         await Assert.ThrowsAsync<TestException>(async () =>
-            await provider.InvokingAsync(
-                CreateInvokingContext(),
-                TestContext.Current.CancellationToken));
+            await provider.InvokingAsync(CreateInvokingContext(), TestContext.Current.CancellationToken)
+        );
     }
 
     [Fact]
@@ -88,13 +75,12 @@ public class AgwWorkspaceProviderTests
     {
         var sourceCancellationToken = new CancellationToken(canceled: true);
         var provider = CreateProvider(
-            new StubInstructionsSource((_, _) =>
-                ValueTask.FromCanceled<string?>(sourceCancellationToken)));
+            new StubInstructionsSource((_, _) => ValueTask.FromCanceled<string?>(sourceCancellationToken))
+        );
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-            await provider.InvokingAsync(
-                CreateInvokingContext(),
-                TestContext.Current.CancellationToken));
+            await provider.InvokingAsync(CreateInvokingContext(), TestContext.Current.CancellationToken)
+        );
     }
 
     [Fact]
@@ -105,14 +91,12 @@ public class AgwWorkspaceProviderTests
         var context = new AgwInstructionsSourceContext(
             new Agent(),
             new Project { Workspace = workspace },
-            CreateInvokingContext());
+            CreateInvokingContext()
+        );
 
-        var result = await source.GetInstructionsAsync(
-            context,
-            TestContext.Current.CancellationToken);
+        var result = await source.GetInstructionsAsync(context, TestContext.Current.CancellationToken);
 
-        var expected =
-            $"""
+        var expected = $"""
             # others
 
             - Your default workspace or working directory is '{PathUtil.ExpandTilde(workspace)}'.
@@ -132,42 +116,32 @@ public class AgwWorkspaceProviderTests
         Assert.IsType<ProjectInstructionsSource>(Assert.Single(sources));
     }
 
-    private static AgwWorkspaceProvider CreateProvider(
-        params IAgentInstructionsSource[] sources)
+    private static AgwWorkspaceProvider CreateProvider(params IAgentInstructionsSource[] sources)
     {
-        return new AgwWorkspaceProvider(
-            new Agent(),
-            new Project(),
-            sources);
+        return new AgwWorkspaceProvider(new Agent(), new Project(), sources);
     }
 
     private static AIContextProvider.InvokingContext CreateInvokingContext()
     {
-        var agent = new ChatClientAgent(
-            new StubChatClient(),
-            new ChatClientAgentOptions { Name = "test-agent" });
+        var agent = new ChatClientAgent(new StubChatClient(), new ChatClientAgentOptions { Name = "test-agent" });
         return new AIContextProvider.InvokingContext(agent, null, new AIContext());
     }
 
     private sealed class StubInstructionsSource : IAgentInstructionsSource
     {
-        private readonly Func<
-            AgwInstructionsSourceContext,
-            CancellationToken,
-            ValueTask<string?>> _callback;
+        private readonly Func<AgwInstructionsSourceContext, CancellationToken, ValueTask<string?>> _callback;
 
         public StubInstructionsSource(
-            Func<
-                AgwInstructionsSourceContext,
-                CancellationToken,
-                ValueTask<string?>> callback)
+            Func<AgwInstructionsSourceContext, CancellationToken, ValueTask<string?>> callback
+        )
         {
             _callback = callback;
         }
 
         public ValueTask<string?> GetInstructionsAsync(
             AgwInstructionsSourceContext context,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             return _callback(context, cancellationToken);
         }
@@ -175,9 +149,7 @@ public class AgwWorkspaceProviderTests
 
     private sealed class StubChatClient : IChatClient
     {
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
 
         public object? GetService(Type serviceType, object? serviceKey = null)
         {
@@ -187,23 +159,22 @@ public class AgwWorkspaceProviderTests
         public Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
-            return Task.FromResult(new ChatResponse(
-                [new ChatMessage(ChatRole.Assistant, "done")]));
+            return Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, "done")]));
         }
 
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+            [EnumeratorCancellation] CancellationToken cancellationToken = default
+        )
         {
             await Task.Yield();
             yield return new ChatResponseUpdate(ChatRole.Assistant, "done");
         }
     }
 
-    private sealed class TestException : Exception
-    {
-    }
+    private sealed class TestException : Exception { }
 }

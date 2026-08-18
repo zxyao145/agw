@@ -1,11 +1,9 @@
 using System.Linq.Expressions;
-
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Utils;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Projects.Application;
@@ -25,7 +23,8 @@ public class TaskExecutionAppService
         IUnitOfWork unitOfWork,
         ProjectConversationChatHistoryDomainService chatHistoryDomainService,
         ProjectResolver projectResolver,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider
+    )
     {
         _contextRepository = contextRepository;
         _recordRepository = recordRepository;
@@ -97,7 +96,8 @@ public class TaskExecutionAppService
     public Task<ApplicationResult<TaskExecutionSnapshot>> CreateAsync(
         Guid projectId,
         TaskCreateRequest request,
-        string user)
+        string user
+    )
     {
         return CreateAsync(projectId, request, user, TaskExecutionStatus.Pending);
     }
@@ -105,7 +105,8 @@ public class TaskExecutionAppService
     public Task<ApplicationResult<TaskExecutionSnapshot>> CreateRunningAsync(
         Guid projectId,
         TaskCreateRequest request,
-        string user)
+        string user
+    )
     {
         return CreateAsync(projectId, request, user, TaskExecutionStatus.Running);
     }
@@ -114,7 +115,8 @@ public class TaskExecutionAppService
         Guid projectId,
         Guid? taskId,
         TaskCreateRequest request,
-        string user)
+        string user
+    )
     {
         return CreateAsync(projectId, request, user, TaskExecutionStatus.Pending, taskId);
     }
@@ -127,19 +129,22 @@ public class TaskExecutionAppService
         TaskCreateRequest request,
         string user,
         TaskExecutionStatus initialStatus,
-        Guid? taskIdOverride = null)
+        Guid? taskIdOverride = null
+    )
     {
         var project = await _projectResolver.ResolveRequiredAsync(projectId);
         if (project == null)
         {
             return ApplicationResult<TaskExecutionSnapshot>.Invalid(
-                "Failed to create task (project/target invalid, target mismatch, or input missing).");
+                "Failed to create task (project/target invalid, target mismatch, or input missing)."
+            );
         }
 
         var now = _timeProvider.GetUtcNow();
-        var taskId = taskIdOverride.HasValue && taskIdOverride.Value != Guid.Empty
-            ? taskIdOverride.Value
-            : Guid.CreateVersion7();
+        var taskId =
+            taskIdOverride.HasValue && taskIdOverride.Value != Guid.Empty
+                ? taskIdOverride.Value
+                : Guid.CreateVersion7();
         var contextId = ContextIdUtil.ResolveContextId(request.ContextId);
         var title = string.IsNullOrWhiteSpace(request.Title)
             ? TaskTitleFactory.Create(request.Input)
@@ -154,7 +159,7 @@ public class TaskExecutionAppService
             JobId = request.JobId,
             Status = initialStatus,
             CreateTime = now,
-            UpdateTime = now
+            UpdateTime = now,
         };
 
         await _recordRepository.AddAsync(record);
@@ -164,11 +169,7 @@ public class TaskExecutionAppService
         return ApplicationResult<TaskExecutionSnapshot>.Success(TaskExecutionMapper.ToSnapshot(task, [record], null));
     }
 
-    public async Task<ApplicationResult> UpdateTitleAsync(
-        Guid projectId,
-        Guid taskId,
-        string title,
-        string user)
+    public async Task<ApplicationResult> UpdateTitleAsync(Guid projectId, Guid taskId, string title, string user)
     {
         var context = await GetContextByTaskAsync(projectId, taskId);
         if (context == null)
@@ -197,9 +198,7 @@ public class TaskExecutionAppService
             return ApplicationResult.Success();
         }
 
-        await _recordRepository.Queryable
-            .Where(x => x.TaskId == taskId)
-            .ExecuteDeleteAsync();
+        await _recordRepository.Queryable.Where(x => x.TaskId == taskId).ExecuteDeleteAsync();
 
         await _unitOfWork.SaveChangesAsync();
 
@@ -214,9 +213,7 @@ public class TaskExecutionAppService
             return ApplicationResult.NotFound();
         }
 
-        await _recordRepository.Queryable
-            .Where(x => x.TaskId == taskId)
-            .ExecuteDeleteAsync();
+        await _recordRepository.Queryable.Where(x => x.TaskId == taskId).ExecuteDeleteAsync();
 
         await _unitOfWork.SaveChangesAsync();
         return ApplicationResult.Success();
@@ -234,12 +231,16 @@ public class TaskExecutionAppService
     public Task<TaskProjection?> MarkFailedAsync(Guid id, string errorMessage, string user) =>
         MarkTaskAsync(id, TaskExecutionStatus.Failed, errorMessage, user);
 
-    private async Task<TaskProjection?> MarkTaskAsync(Guid id, TaskExecutionStatus status, string? errorMessage, string user)
+    private async Task<TaskProjection?> MarkTaskAsync(
+        Guid id,
+        TaskExecutionStatus status,
+        string? errorMessage,
+        string user
+    )
     {
         var records = _chatHistoryDomainService.Order(
-            await _recordRepository.Queryable
-                .Where(record => record.TaskId == id)
-                .ToListAsync());
+            await _recordRepository.Queryable.Where(record => record.TaskId == id).ToListAsync()
+        );
         if (records.Count == 0)
         {
             return null;
@@ -283,17 +284,18 @@ public class TaskExecutionAppService
         Guid? jobId,
         string title,
         string user,
-        DateTimeOffset now)
+        DateTimeOffset now
+    )
     {
-        var context = await _contextRepository.SingleOrDefaultAsync(
-            item => item.ProjectId == projectId && item.ContextId == contextId);
+        var context = await _contextRepository.SingleOrDefaultAsync(item =>
+            item.ProjectId == projectId && item.ContextId == contextId
+        );
         if (context == null && Guid.TryParse(contextId, out _))
         {
-            var legacyContexts = await _contextRepository.ListAsync(
-                item => item.ProjectId == projectId && item.ContextId.ToLower() == contextId);
-            context = legacyContexts
-                .OrderBy(item => item.CreateTime)
-                .FirstOrDefault();
+            var legacyContexts = await _contextRepository.ListAsync(item =>
+                item.ProjectId == projectId && item.ContextId.ToLower() == contextId
+            );
+            context = legacyContexts.OrderBy(item => item.CreateTime).FirstOrDefault();
             if (context != null)
             {
                 context.ContextId = contextId;
@@ -328,7 +330,7 @@ public class TaskExecutionAppService
             CreateBy = user,
             CreateTime = now,
             UpdateBy = user,
-            UpdateTime = now
+            UpdateTime = now,
         };
         await _contextRepository.AddAsync(context);
         return context;

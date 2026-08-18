@@ -13,6 +13,11 @@ public class AgentflowNodeConfiguration : IEntityTypeConfiguration<AgentflowNode
         builder.Property(e => e.PositionJson).HasMaxLength(1000);
         builder.Property(e => e.Instructions).HasMaxLength(8000);
         builder.Property(e => e.ConfigJson).HasMaxLength(16000);
-        builder.HasIndex(e => new { e.AgentflowId, e.Kind, e.RelateId });
+        builder.HasIndex(e => new
+        {
+            e.AgentflowId,
+            e.Kind,
+            e.RelateId,
+        });
     }
 }

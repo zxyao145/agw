@@ -1,14 +1,9 @@
 using System.ComponentModel.DataAnnotations;
-
 using Agw.Shared.Data.Abstractions;
 
 namespace Agw.Shared.Data;
 
-
-
-public interface IEntityAudit : IEntityCreator, IEntityModifier
-{
-}
+public interface IEntityAudit : IEntityCreator, IEntityModifier { }
 
 public abstract class BaseEntity : IEntityAudit
 {

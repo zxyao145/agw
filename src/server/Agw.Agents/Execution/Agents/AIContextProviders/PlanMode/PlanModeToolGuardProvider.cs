@@ -1,5 +1,4 @@
 using Agw.Shared.Exceptions;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -8,8 +7,7 @@ namespace Agw.Agents.Execution.Agents.AIContextProviders.PlanMode;
 
 internal sealed class PlanModeToolGuardProvider : AIContextProvider
 {
-    internal const string EnforcementInstructions =
-        """
+    internal const string EnforcementInstructions = """
         ## Plan Mode Tool Enforcement
         Plan mode is enforced by the server. Only the tools currently exposed to you may be used.
         Todo tools may be used to organize planning. Do not attempt shell commands; file or project-memory mutations; skill scripts; background-task mutations; or external Connection/MCP tools.
@@ -23,15 +21,14 @@ internal sealed class PlanModeToolGuardProvider : AIContextProvider
     public PlanModeToolGuardProvider(
         AgentModeProvider modeProvider,
         IReadOnlySet<string> allowedToolNames,
-        ILogger? logger = null)
+        ILogger? logger = null
+    )
     {
         ArgumentNullException.ThrowIfNull(modeProvider);
         ArgumentNullException.ThrowIfNull(allowedToolNames);
 
         _modeProvider = modeProvider;
-        _allowedToolNames = new HashSet<string>(
-            allowedToolNames,
-            StringComparer.OrdinalIgnoreCase);
+        _allowedToolNames = new HashSet<string>(allowedToolNames, StringComparer.OrdinalIgnoreCase);
         _logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
     }
 
@@ -39,32 +36,27 @@ internal sealed class PlanModeToolGuardProvider : AIContextProvider
 
     protected override async ValueTask<AIContext> InvokingCoreAsync(
         InvokingContext context,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
-        var executeMode = await IsExecuteModeAsync(
-                _modeProvider,
-                context.Session,
-                _logger,
-                cancellationToken)
+        var executeMode = await IsExecuteModeAsync(_modeProvider, context.Session, _logger, cancellationToken)
             .ConfigureAwait(false);
         var tools = context.AIContext.Tools;
-        var duplicateNames = tools == null
-            ? []
-            : tools
-                .Where(static tool => !string.IsNullOrWhiteSpace(tool.Name))
-                .GroupBy(static tool => tool.Name, StringComparer.OrdinalIgnoreCase)
-                .Where(static group => group.Skip(1).Any())
-                .Select(static group => group.Key)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var duplicateNames =
+            tools == null
+                ? []
+                : tools
+                    .Where(static tool => !string.IsNullOrWhiteSpace(tool.Name))
+                    .GroupBy(static tool => tool.Name, StringComparer.OrdinalIgnoreCase)
+                    .Where(static group => group.Skip(1).Any())
+                    .Select(static group => group.Key)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
         if (executeMode)
         {
             if (tools != null)
             {
                 context.AIContext.Tools = tools
-                    .Select(tool => WrapIfRestricted(
-                        tool,
-                        context.Session,
-                        duplicateNames.Contains(tool.Name)))
+                    .Select(tool => WrapIfRestricted(tool, context.Session, duplicateNames.Contains(tool.Name)))
                     .ToArray();
             }
 
@@ -75,11 +67,13 @@ internal sealed class PlanModeToolGuardProvider : AIContextProvider
         {
             context.AIContext.Tools = tools
                 .Where(tool =>
-                    !duplicateNames.Contains(tool.Name) &&
-                    (_allowedToolNames.Contains(tool.Name) || tool is AIFunction))
-                .Select(tool => _allowedToolNames.Contains(tool.Name)
-                    ? tool
-                    : WrapRestrictedFunction(tool, context.Session, hideFromModel: true))
+                    !duplicateNames.Contains(tool.Name) && (_allowedToolNames.Contains(tool.Name) || tool is AIFunction)
+                )
+                .Select(tool =>
+                    _allowedToolNames.Contains(tool.Name)
+                        ? tool
+                        : WrapRestrictedFunction(tool, context.Session, hideFromModel: true)
+                )
                 .ToArray();
         }
 
@@ -89,13 +83,9 @@ internal sealed class PlanModeToolGuardProvider : AIContextProvider
         return context.AIContext;
     }
 
-    private AITool WrapIfRestricted(
-        AITool tool,
-        AgentSession? session,
-        bool hasNameConflict)
+    private AITool WrapIfRestricted(AITool tool, AgentSession? session, bool hasNameConflict)
     {
-        if ((!hasNameConflict && _allowedToolNames.Contains(tool.Name)) ||
-            tool is not AIFunction)
+        if ((!hasNameConflict && _allowedToolNames.Contains(tool.Name)) || tool is not AIFunction)
         {
             return tool;
         }
@@ -103,31 +93,23 @@ internal sealed class PlanModeToolGuardProvider : AIContextProvider
         return WrapRestrictedFunction(tool, session, hideFromModel: false);
     }
 
-    private AITool WrapRestrictedFunction(
-        AITool tool,
-        AgentSession? session,
-        bool hideFromModel)
+    private AITool WrapRestrictedFunction(AITool tool, AgentSession? session, bool hideFromModel)
     {
         var function = (AIFunction)tool;
-        if (function is PlanModeRestrictedAIFunction existing &&
-            existing.HideFromModel == hideFromModel)
+        if (function is PlanModeRestrictedAIFunction existing && existing.HideFromModel == hideFromModel)
         {
             return function;
         }
 
-        return new PlanModeRestrictedAIFunction(
-            function,
-            _modeProvider,
-            session,
-            _logger,
-            hideFromModel);
+        return new PlanModeRestrictedAIFunction(function, _modeProvider, session, _logger, hideFromModel);
     }
 
     internal static async ValueTask<bool> IsExecuteModeAsync(
         AgentModeProvider modeProvider,
         AgentSession? session,
         ILogger logger,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (session == null)
         {
@@ -136,9 +118,7 @@ internal sealed class PlanModeToolGuardProvider : AIContextProvider
 
         try
         {
-            var mode = await modeProvider
-                .GetModeAsync(session, cancellationToken)
-                .ConfigureAwait(false);
+            var mode = await modeProvider.GetModeAsync(session, cancellationToken).ConfigureAwait(false);
             return string.Equals(mode, "execute", StringComparison.Ordinal);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -147,9 +127,7 @@ internal sealed class PlanModeToolGuardProvider : AIContextProvider
         }
         catch (Exception exception)
         {
-            logger.LogWarning(
-                exception,
-                "Unable to resolve Agent mode; applying Plan mode restrictions.");
+            logger.LogWarning(exception, "Unable to resolve Agent mode; applying Plan mode restrictions.");
             return false;
         }
     }
@@ -166,7 +144,8 @@ internal sealed class PlanModeRestrictedAIFunction : DelegatingAIFunction
         AgentModeProvider modeProvider,
         AgentSession? session,
         ILogger logger,
-        bool hideFromModel)
+        bool hideFromModel
+    )
         : base(innerFunction)
     {
         _modeProvider = modeProvider;
@@ -189,18 +168,18 @@ internal sealed class PlanModeRestrictedAIFunction : DelegatingAIFunction
 
     protected override async ValueTask<object?> InvokeCoreAsync(
         AIFunctionArguments arguments,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        if (!await PlanModeToolGuardProvider.IsExecuteModeAsync(
-                _modeProvider,
-                _session,
-                _logger,
-                cancellationToken)
-            .ConfigureAwait(false))
+        if (
+            !await PlanModeToolGuardProvider
+                .IsExecuteModeAsync(_modeProvider, _session, _logger, cancellationToken)
+                .ConfigureAwait(false)
+        )
         {
             var errorCode = ErrorCodes.PlanModeToolNotAllowed.Code;
-            return $"{errorCode / 10_000:D3}_{errorCode % 10_000:D4} " +
-                $"PlanModeToolNotAllowed: Tool '{Name}' is not available in Plan mode.";
+            return $"{errorCode / 10_000:D3}_{errorCode % 10_000:D4} "
+                + $"PlanModeToolNotAllowed: Tool '{Name}' is not available in Plan mode.";
         }
 
         return await base.InvokeCoreAsync(arguments, cancellationToken).ConfigureAwait(false);

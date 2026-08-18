@@ -1,9 +1,7 @@
 using System.Collections.Concurrent;
-
 using Agw.Jobs.Scheduling.Attempts;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Runtime;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -37,7 +35,8 @@ public sealed class JobHostedService : BackgroundService
         JobSchedulerWakeSignal schedulerWakeSignal,
         IProjectExecutionLock projectExecutionLock,
         IServerInitializationState serverInitializationState,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider
+    )
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
@@ -72,7 +71,8 @@ public sealed class JobHostedService : BackgroundService
                 var jobs = await jobStore.PrefetchAsync(
                     now,
                     now.Add(JobSchedulingDefaults.PrefetchWindow),
-                    cancellationToken);
+                    cancellationToken
+                );
                 foreach (var job in jobs)
                 {
                     UpsertScheduledJob(job);
@@ -89,7 +89,8 @@ public sealed class JobHostedService : BackgroundService
                 var delayTask = Task.Delay(
                     JobSchedulingDefaults.PrefetchInterval,
                     _timeProvider,
-                    waitCancellation.Token);
+                    waitCancellation.Token
+                );
                 var signalTask = _schedulerWakeSignal.WaitAsync(waitCancellation.Token);
                 var completedTask = await Task.WhenAny(delayTask, signalTask);
                 waitCancellation.Cancel();
@@ -132,9 +133,7 @@ public sealed class JobHostedService : BackgroundService
         }
     }
 
-    private void DispatchOrQueueByProject(
-        ScheduledJob scheduledJob,
-        CancellationToken cancellationToken)
+    private void DispatchOrQueueByProject(ScheduledJob scheduledJob, CancellationToken cancellationToken)
     {
         var shouldStartExecution = false;
 
@@ -164,9 +163,7 @@ public sealed class JobHostedService : BackgroundService
         StartProjectExecution(scheduledJob, cancellationToken);
     }
 
-    private void StartProjectExecution(
-        ScheduledJob scheduledJob,
-        CancellationToken cancellationToken)
+    private void StartProjectExecution(ScheduledJob scheduledJob, CancellationToken cancellationToken)
     {
         var executionTask = ExecuteProjectQueueAsync(scheduledJob, cancellationToken);
         _runningExecutions[scheduledJob.JobId] = executionTask;
@@ -180,15 +177,15 @@ public sealed class JobHostedService : BackgroundService
                     _logger.LogError(
                         task.Exception,
                         "Project queue for job {JobId} failed unexpectedly.",
-                        scheduledJob.JobId);
+                        scheduledJob.JobId
+                    );
                 }
             },
-            TaskScheduler.Default);
+            TaskScheduler.Default
+        );
     }
 
-    private async Task ExecuteProjectQueueAsync(
-        ScheduledJob scheduledJob,
-        CancellationToken cancellationToken)
+    private async Task ExecuteProjectQueueAsync(ScheduledJob scheduledJob, CancellationToken cancellationToken)
     {
         var current = scheduledJob;
         while (!cancellationToken.IsCancellationRequested)
@@ -203,8 +200,7 @@ public sealed class JobHostedService : BackgroundService
                     while (backlogQueue.Count > 0)
                     {
                         var candidate = backlogQueue.Dequeue();
-                        if (_jobMap.TryGetValue(candidate.JobId, out var latest)
-                            && latest.Version == candidate.Version)
+                        if (_jobMap.TryGetValue(candidate.JobId, out var latest) && latest.Version == candidate.Version)
                         {
                             next = candidate;
                             break;
@@ -228,13 +224,12 @@ public sealed class JobHostedService : BackgroundService
         }
     }
 
-    private async Task ExecuteOneAsync(
-        ScheduledJob scheduledJob,
-        CancellationToken cancellationToken)
+    private async Task ExecuteOneAsync(ScheduledJob scheduledJob, CancellationToken cancellationToken)
     {
         await using var projectLock = await _projectExecutionLock.AcquireAsync(
             scheduledJob.ProjectId,
-            cancellationToken);
+            cancellationToken
+        );
 
         using var scope = _scopeFactory.CreateScope();
         var attemptRunner = scope.ServiceProvider.GetRequiredService<JobAttemptRunner>();
@@ -251,20 +246,22 @@ public sealed class JobHostedService : BackgroundService
 
     private void UpsertScheduledJob(Job job)
     {
-        UpsertScheduledJob(new ScheduledJob
-        {
-            JobId = job.Id,
-            ProjectId = job.ProjectId,
-            AgentType = job.AgentType,
-            AgentId = job.AgentId,
-            Name = job.Name,
-            Prompt = job.Prompt,
-            TriggerType = job.TriggerType,
-            TriggerValue = job.TriggerValue,
-            NextRunTime = job.NextRunTime,
-            RetryCount = job.RetryCount,
-            MaxRetryCount = job.MaxRetryCount
-        });
+        UpsertScheduledJob(
+            new ScheduledJob
+            {
+                JobId = job.Id,
+                ProjectId = job.ProjectId,
+                AgentType = job.AgentType,
+                AgentId = job.AgentId,
+                Name = job.Name,
+                Prompt = job.Prompt,
+                TriggerType = job.TriggerType,
+                TriggerValue = job.TriggerValue,
+                NextRunTime = job.NextRunTime,
+                RetryCount = job.RetryCount,
+                MaxRetryCount = job.MaxRetryCount,
+            }
+        );
     }
 
     private void UpsertScheduledJob(ScheduledJob scheduledJob)
@@ -273,9 +270,7 @@ public sealed class JobHostedService : BackgroundService
 
         lock (_queueLock)
         {
-            var version = _jobMap.TryGetValue(scheduledJob.JobId, out var existing)
-                ? existing.Version + 1
-                : 1;
+            var version = _jobMap.TryGetValue(scheduledJob.JobId, out var existing) ? existing.Version + 1 : 1;
 
             upserted = scheduledJob with { Version = version };
             _jobMap[scheduledJob.JobId] = upserted;
@@ -291,8 +286,7 @@ public sealed class JobHostedService : BackgroundService
         {
             while (_queue.TryPeek(out var candidate, out _))
             {
-                if (_jobMap.TryGetValue(candidate.JobId, out var current)
-                    && current.Version == candidate.Version)
+                if (_jobMap.TryGetValue(candidate.JobId, out var current) && current.Version == candidate.Version)
                 {
                     scheduledJob = candidate;
                     return true;
@@ -312,8 +306,7 @@ public sealed class JobHostedService : BackgroundService
         {
             while (_queue.TryDequeue(out var candidate, out _))
             {
-                if (_jobMap.TryGetValue(candidate.JobId, out var current)
-                    && current.Version == candidate.Version)
+                if (_jobMap.TryGetValue(candidate.JobId, out var current) && current.Version == candidate.Version)
                 {
                     scheduledJob = candidate;
                     return true;

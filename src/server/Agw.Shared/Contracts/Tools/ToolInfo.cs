@@ -9,7 +9,7 @@ public enum ToolCatalogItemKind
     Tool,
 
     [JsonStringEnumMemberName("toolBlock")]
-    ToolBlock
+    ToolBlock,
 }
 
 [Flags]
@@ -17,7 +17,7 @@ public enum ToolScope
 {
     None = 0,
     Agent = 1,
-    Project = 2
+    Project = 2,
 }
 
 /// <summary>

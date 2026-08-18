@@ -3,9 +3,7 @@ using Agw.Agents.Definitions.Contracts;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Results;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Agents.Definitions.Controllers;
@@ -31,7 +29,8 @@ public class TracesController : ControllerBase
         [FromQuery] DateTimeOffset? toUtc,
         [FromQuery] int pageIndex = 1,
         [FromQuery] int pageSize = 20,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var query = new AgentflowTraceQuery
         {

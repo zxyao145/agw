@@ -2,17 +2,13 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
-
 using A2A;
-
 using Agw.A2A.Extensions;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Agw.A2A;
-
 
 /// <summary>
 /// copy from A2AServer
@@ -43,7 +39,8 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         AgwChannelEventNotifier notifier,
         ILogger<A2AServer> logger,
         IServiceScopeFactory serviceScopeFactory,
-        A2AServerOptions? options = null)
+        A2AServerOptions? options = null
+    )
     {
         _taskStore = taskStore;
         _notifier = notifier ?? throw new AgwException(ErrorCodes.InvalidParam, "notifier cannot be null.");
@@ -59,7 +56,10 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         // dictionary removal and CTS disposal, so no cleanup needed here.
         foreach (var cts in _backgroundCancellations.Values.ToArray())
         {
-            try { await cts.CancelAsync().ConfigureAwait(false); }
+            try
+            {
+                await cts.CancelAsync().ConfigureAwait(false);
+            }
             catch (ObjectDisposedException) { }
         }
 
@@ -73,7 +73,7 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         string agentName,
         SendMessageRequest request,
         CancellationToken cancellationToken = default
-        )
+    )
     {
         using var activity = AgwA2ADiagnostics.Source.StartActivity("A2AServer.SendMessage", ActivityKind.Internal);
         var stopwatch = Stopwatch.StartNew();
@@ -84,15 +84,15 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         {
             AgwA2ADiagnostics.RequestCount.Add(1);
 
-            context = await ResolveContextAsync(request, streamingResponse: false, cancellationToken).ConfigureAwait(false);
+            context = await ResolveContextAsync(request, streamingResponse: false, cancellationToken)
+                .ConfigureAwait(false);
             TagActivity(activity, context);
             GuardTerminalState(context);
 
             if (context.IsContinuation && _options.AutoAppendHistory)
             {
-                await ApplyEventAsync(
-                    new StreamResponse { Message = request.Message },
-                    context, cancellationToken).ConfigureAwait(false);
+                await ApplyEventAsync(new StreamResponse { Message = request.Message }, context, cancellationToken)
+                    .ConfigureAwait(false);
             }
 
             bool returnImmediately = request.Configuration?.ReturnImmediately == true;
@@ -154,23 +154,34 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
                 executionCancellationToken = cancellationToken;
             }
 
-            var agentTask = Task.Run(async () =>
-            {
-                try
+            var agentTask = Task.Run(
+                async () =>
                 {
-                    await (await GetAgentHandler(agentName)).ExecuteAsync(context, eventQueue, executionCancellationToken).ConfigureAwait(false);
-                }
-                finally
-                {
-                    eventQueue.Complete();
-                }
-            }, executionCancellationToken);
+                    try
+                    {
+                        await (await GetAgentHandler(agentName))
+                            .ExecuteAsync(context, eventQueue, executionCancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        eventQueue.Complete();
+                    }
+                },
+                executionCancellationToken
+            );
 
             if (returnImmediately)
             {
                 return await MaterializeReturnImmediatelyResponseAsync(
-                    eventQueue, agentTask, context,
-                    backgroundCts, executionCancellationToken, cancellationToken).ConfigureAwait(false);
+                        eventQueue,
+                        agentTask,
+                        context,
+                        backgroundCts,
+                        executionCancellationToken,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
             }
 
             var result = await MaterializeResponseAsync(eventQueue, context, cancellationToken).ConfigureAwait(false);
@@ -182,8 +193,11 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         {
             // Clean up orphaned background CTS if we registered one but never
             // reached the drain task that owns its removal and disposal.
-            if (backgroundCts is not null && context is not null &&
-                _backgroundCancellations.TryRemove(context.TaskId, out _))
+            if (
+                backgroundCts is not null
+                && context is not null
+                && _backgroundCancellations.TryRemove(context.TaskId, out _)
+            )
             {
                 backgroundCts.Dispose();
             }
@@ -201,10 +215,15 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
 
     /// <inheritdoc />
     public virtual async IAsyncEnumerable<StreamResponse> SendStreamingMessageAsync(
-         string agentName,
-        SendMessageRequest request, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        string agentName,
+        SendMessageRequest request,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default
+    )
     {
-        using var activity = AgwA2ADiagnostics.Source.StartActivity("A2AServer.SendStreamingMessage", ActivityKind.Internal);
+        using var activity = AgwA2ADiagnostics.Source.StartActivity(
+            "A2AServer.SendStreamingMessage",
+            ActivityKind.Internal
+        );
         AgwA2ADiagnostics.RequestCount.Add(1);
 
         RequestContext? context = null;
@@ -214,29 +233,34 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
 
         try
         {
-            context = await ResolveContextAsync(request, streamingResponse: true, cancellationToken).ConfigureAwait(false);
+            context = await ResolveContextAsync(request, streamingResponse: true, cancellationToken)
+                .ConfigureAwait(false);
             TagActivity(activity, context);
             GuardTerminalState(context);
 
             if (context.IsContinuation && _options.AutoAppendHistory)
             {
-                await ApplyEventAsync(
-                    new StreamResponse { Message = request.Message },
-                    context, cancellationToken).ConfigureAwait(false);
+                await ApplyEventAsync(new StreamResponse { Message = request.Message }, context, cancellationToken)
+                    .ConfigureAwait(false);
             }
 
             eventQueue = new AgentEventQueue();
-            agentTask = Task.Run(async () =>
-            {
-                try
+            agentTask = Task.Run(
+                async () =>
                 {
-                    await (await GetAgentHandler(agentName)).ExecuteAsync(context, eventQueue, cancellationToken).ConfigureAwait(false);
-                }
-                finally
-                {
-                    eventQueue.Complete();
-                }
-            }, cancellationToken);
+                    try
+                    {
+                        await (await GetAgentHandler(agentName))
+                            .ExecuteAsync(context, eventQueue, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    finally
+                    {
+                        eventQueue.Complete();
+                    }
+                },
+                cancellationToken
+            );
         }
         catch (Exception ex)
         {
@@ -277,16 +301,20 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
 
     /// <inheritdoc />
     public virtual async Task<AgentTask> GetTaskAsync(
-        GetTaskRequest request, CancellationToken cancellationToken = default)
+        GetTaskRequest request,
+        CancellationToken cancellationToken = default
+    )
     {
         if (request.HistoryLength is { } hl && hl < 0)
         {
             throw new AgwException(
                 ErrorCodes.InvalidHistoryLength,
-                $"Invalid historyLength: {hl}. Must be non-negative.");
+                $"Invalid historyLength: {hl}. Must be non-negative."
+            );
         }
 
-        var task = await _taskStore.GetTaskAsync(request.Id, cancellationToken).ConfigureAwait(false)
+        var task =
+            await _taskStore.GetTaskAsync(request.Id, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.A2ATaskNotFound, $"Task '{request.Id}' not found.");
 
         return task.WithHistoryTrimmedTo(request.HistoryLength);
@@ -295,7 +323,9 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
     /// <inheritdoc />
     public virtual async Task<ListTasksResponse> ListTasksAsync(
         string agentName,
-        ListTasksRequest request, CancellationToken cancellationToken = default)
+        ListTasksRequest request,
+        CancellationToken cancellationToken = default
+    )
     {
         // Verification is an effective agent
         await GetAgentHandler(agentName).ConfigureAwait(false);
@@ -305,12 +335,15 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
     /// <inheritdoc />
     public virtual async Task<AgentTask> CancelTaskAsync(
         string agentName,
-        CancelTaskRequest request, CancellationToken cancellationToken = default)
+        CancelTaskRequest request,
+        CancellationToken cancellationToken = default
+    )
     {
         using var activity = AgwA2ADiagnostics.Source.StartActivity("A2AServer.CancelTask", ActivityKind.Internal);
         activity?.SetTag("a2a.task.id", request.Id);
 
-        var task = await _taskStore.GetTaskAsync(request.Id, cancellationToken).ConfigureAwait(false)
+        var task =
+            await _taskStore.GetTaskAsync(request.Id, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.A2ATaskNotFound, $"Task '{request.Id}' not found.");
 
         if (task.Status.State.IsTerminal())
@@ -327,7 +360,14 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
 
         var context = new RequestContext
         {
-            Message = task.History?.LastOrDefault() ?? new Message { Role = Role.User, MessageId = string.Empty, Parts = [] },
+            Message =
+                task.History?.LastOrDefault()
+                ?? new Message
+                {
+                    Role = Role.User,
+                    MessageId = string.Empty,
+                    Parts = [],
+                },
             Task = task,
             TaskId = task.Id,
             ContextId = task.ContextId,
@@ -336,17 +376,22 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         };
 
         var eventQueue = new AgentEventQueue();
-        var agentTask = Task.Run(async () =>
-        {
-            try
+        var agentTask = Task.Run(
+            async () =>
             {
-                await (await GetAgentHandler(agentName)).CancelAsync(context, eventQueue, cancellationToken).ConfigureAwait(false);
-            }
-            finally
-            {
-                eventQueue.Complete();
-            }
-        }, cancellationToken);
+                try
+                {
+                    await (await GetAgentHandler(agentName))
+                        .CancelAsync(context, eventQueue, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                finally
+                {
+                    eventQueue.Complete();
+                }
+            },
+            cancellationToken
+        );
 
         await foreach (var response in eventQueue.WithCancellation(cancellationToken).ConfigureAwait(false))
         {
@@ -362,7 +407,8 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
     /// <inheritdoc />
     public virtual async IAsyncEnumerable<StreamResponse> SubscribeToTaskAsync(
         SubscribeToTaskRequest request,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default
+    )
     {
         using var activity = AgwA2ADiagnostics.Source.StartActivity("A2AServer.SubscribeToTask", ActivityKind.Internal);
         activity?.SetTag("a2a.task.id", request.Id);
@@ -375,14 +421,16 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         // guaranteeing no events are lost between snapshot and live stream.
         using (await _notifier.AcquireTaskLockAsync(request.Id, cancellationToken).ConfigureAwait(false))
         {
-            currentTask = await _taskStore.GetTaskAsync(request.Id, cancellationToken).ConfigureAwait(false)
+            currentTask =
+                await _taskStore.GetTaskAsync(request.Id, cancellationToken).ConfigureAwait(false)
                 ?? throw new AgwException(ErrorCodes.A2ATaskNotFound, $"Task '{request.Id}' not found.");
 
             if (currentTask.Status.State.IsTerminal())
             {
                 throw new AgwException(
                     ErrorCodes.A2ATerminalTaskCannotBeSubscribed,
-                    "Task is in a terminal state and cannot be subscribed to.");
+                    "Task is in a terminal state and cannot be subscribed to."
+                );
             }
 
             channel = _notifier.CreateChannel(request.Id);
@@ -394,8 +442,7 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         // Live events via channel (no catch-up needed — lock guarantees no gap)
         try
         {
-            await foreach (var streamEvent in channel.Reader.ReadAllAsync(cancellationToken)
-                .ConfigureAwait(false))
+            await foreach (var streamEvent in channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
                 yield return streamEvent;
             }
@@ -408,35 +455,45 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
 
     /// <inheritdoc />
     public virtual Task<TaskPushNotificationConfig> CreateTaskPushNotificationConfigAsync(
-        CreateTaskPushNotificationConfigRequest request, CancellationToken cancellationToken = default)
+        CreateTaskPushNotificationConfigRequest request,
+        CancellationToken cancellationToken = default
+    )
     {
         throw new AgwException(ErrorCodes.A2APushNotificationNotSupported, "Push notifications not supported.");
     }
 
     /// <inheritdoc />
     public virtual Task<TaskPushNotificationConfig> GetTaskPushNotificationConfigAsync(
-        GetTaskPushNotificationConfigRequest request, CancellationToken cancellationToken = default)
+        GetTaskPushNotificationConfigRequest request,
+        CancellationToken cancellationToken = default
+    )
     {
         throw new AgwException(ErrorCodes.A2APushNotificationNotSupported, "Push notifications not supported.");
     }
 
     /// <inheritdoc />
     public virtual Task<ListTaskPushNotificationConfigResponse> ListTaskPushNotificationConfigAsync(
-        ListTaskPushNotificationConfigRequest request, CancellationToken cancellationToken = default)
+        ListTaskPushNotificationConfigRequest request,
+        CancellationToken cancellationToken = default
+    )
     {
         throw new AgwException(ErrorCodes.A2APushNotificationNotSupported, "Push notifications not supported.");
     }
 
     /// <inheritdoc />
     public virtual Task DeleteTaskPushNotificationConfigAsync(
-        DeleteTaskPushNotificationConfigRequest request, CancellationToken cancellationToken = default)
+        DeleteTaskPushNotificationConfigRequest request,
+        CancellationToken cancellationToken = default
+    )
     {
         throw new AgwException(ErrorCodes.A2APushNotificationNotSupported, "Push notifications not supported.");
     }
 
     /// <inheritdoc />
     public virtual Task<AgentCard> GetExtendedAgentCardAsync(
-        GetExtendedAgentCardRequest request, CancellationToken cancellationToken = default)
+        GetExtendedAgentCardRequest request,
+        CancellationToken cancellationToken = default
+    )
     {
         throw new AgwException(ErrorCodes.A2AExtendedAgentCardNotConfigured, "Extended agent card not configured.");
     }
@@ -444,7 +501,10 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
     // ─── Private Helpers ───
 
     private async Task<RequestContext> ResolveContextAsync(
-        SendMessageRequest request, bool streamingResponse, CancellationToken cancellationToken)
+        SendMessageRequest request,
+        bool streamingResponse,
+        CancellationToken cancellationToken
+    )
     {
         AgentTask? existingTask = null;
         var taskId = request.Message.TaskId;
@@ -452,7 +512,8 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
 
         if (!string.IsNullOrEmpty(taskId))
         {
-            existingTask = await _taskStore.GetTaskAsync(taskId, cancellationToken).ConfigureAwait(false)
+            existingTask =
+                await _taskStore.GetTaskAsync(taskId, cancellationToken).ConfigureAwait(false)
                 ?? throw new AgwException(ErrorCodes.A2ATaskNotFound, $"Task '{taskId}' not found.");
             contextId ??= existingTask.ContextId;
         }
@@ -476,17 +537,20 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         {
             throw new AgwException(
                 ErrorCodes.A2ATerminalTaskCannotAcceptMessages,
-                "Task is in a terminal state and cannot accept messages.");
+                "Task is in a terminal state and cannot accept messages."
+            );
         }
     }
 
     private async Task ApplyEventAsync(
-        StreamResponse response, RequestContext context, CancellationToken cancellationToken)
+        StreamResponse response,
+        RequestContext context,
+        CancellationToken cancellationToken
+    )
     {
         using (await _notifier.AcquireTaskLockAsync(context.TaskId, cancellationToken).ConfigureAwait(false))
         {
-            var currentTask = await _taskStore.GetTaskAsync(context.TaskId, cancellationToken)
-                .ConfigureAwait(false);
+            var currentTask = await _taskStore.GetTaskAsync(context.TaskId, cancellationToken).ConfigureAwait(false);
 
             var updatedTask = global::A2A.TaskProjection.Apply(currentTask, response);
 
@@ -502,8 +566,7 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
                 AgwA2ADiagnostics.TaskCreatedCount.Add(1);
             }
 
-            await _taskStore.SaveTaskAsync(context.TaskId, updatedTask, cancellationToken)
-                .ConfigureAwait(false);
+            await _taskStore.SaveTaskAsync(context.TaskId, updatedTask, cancellationToken).ConfigureAwait(false);
 
             _notifier.Notify(context.TaskId, response);
         }
@@ -521,9 +584,13 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
     /// <param name="backgroundCancellationToken">Token for cancelling the background drain (from shared or new CTS).</param>
     /// <param name="cancellationToken">Token for cancelling the initial read.</param>
     private async Task<SendMessageResponse> MaterializeReturnImmediatelyResponseAsync(
-        AgentEventQueue eventQueue, Task agentTask, RequestContext context,
+        AgentEventQueue eventQueue,
+        Task agentTask,
+        RequestContext context,
         CancellationTokenSource? ownedBackgroundCts,
-        CancellationToken backgroundCancellationToken, CancellationToken cancellationToken)
+        CancellationToken backgroundCancellationToken,
+        CancellationToken cancellationToken
+    )
     {
         SendMessageResponse? result = null;
 
@@ -550,51 +617,63 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         if (result?.Task is not null)
         {
             // Drain remaining events in the background so they are applied to the task store.
-            var drainTask = Task.Run(async () =>
-            {
-                try
+            var drainTask = Task.Run(
+                async () =>
                 {
-                    await foreach (var response in eventQueue.WithCancellation(backgroundCancellationToken).ConfigureAwait(false))
+                    try
                     {
-                        await ApplyEventAsync(response, context, CancellationToken.None).ConfigureAwait(false);
-                    }
+                        await foreach (
+                            var response in eventQueue
+                                .WithCancellation(backgroundCancellationToken)
+                                .ConfigureAwait(false)
+                        )
+                        {
+                            await ApplyEventAsync(response, context, CancellationToken.None).ConfigureAwait(false);
+                        }
 
 #pragma warning disable VSTHRD003 // Intentional: agentTask runs the agent handler in the background
-                    await agentTask.ConfigureAwait(false);
+                        await agentTask.ConfigureAwait(false);
 #pragma warning restore VSTHRD003
-                }
-                catch (OperationCanceledException)
-                {
-                    // Expected when tasks/cancel triggers the backgroundCts
-                }
-                catch (Exception ex)
-                {
-                    _logger.BackgroundEventProcessingFailed(ex, context.TaskId);
-                }
-                finally
-                {
-                    _backgroundTasks.TryRemove(context.TaskId, out _);
-
-                    // Only clean up the CTS if this drain owns it (i.e., it was created
-                    // for this request, not reused from an earlier return-immediately call).
-                    if (ownedBackgroundCts is not null)
-                    {
-                        _backgroundCancellations.TryRemove(context.TaskId, out _);
-                        ownedBackgroundCts.Dispose();
                     }
-                }
-            }, CancellationToken.None);
+                    catch (OperationCanceledException)
+                    {
+                        // Expected when tasks/cancel triggers the backgroundCts
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.BackgroundEventProcessingFailed(ex, context.TaskId);
+                    }
+                    finally
+                    {
+                        _backgroundTasks.TryRemove(context.TaskId, out _);
+
+                        // Only clean up the CTS if this drain owns it (i.e., it was created
+                        // for this request, not reused from an earlier return-immediately call).
+                        if (ownedBackgroundCts is not null)
+                        {
+                            _backgroundCancellations.TryRemove(context.TaskId, out _);
+                            ownedBackgroundCts.Dispose();
+                        }
+                    }
+                },
+                CancellationToken.None
+            );
 
 #pragma warning disable CS4014, VSTHRD003 // Fire-and-forget by design; combined task is tracked for DisposeAsync
             _backgroundTasks.AddOrUpdate(
                 context.TaskId,
                 drainTask,
-                (_, existingDrain) => Task.WhenAll(existingDrain, drainTask));
+                (_, existingDrain) => Task.WhenAll(existingDrain, drainTask)
+            );
 #pragma warning restore CS4014, VSTHRD003
 
             // Re-fetch from store to return the current persisted state
-            result.Task = await _taskStore.GetTaskAsync(context.TaskId, CancellationToken.None).ConfigureAwait(false)
-                ?? throw new AgwException(ErrorCodes.A2ATaskNotFound, $"Task '{context.TaskId}' not found after processing.");
+            result.Task =
+                await _taskStore.GetTaskAsync(context.TaskId, CancellationToken.None).ConfigureAwait(false)
+                ?? throw new AgwException(
+                    ErrorCodes.A2ATaskNotFound,
+                    $"Task '{context.TaskId}' not found after processing."
+                );
 
             return result;
         }
@@ -604,13 +683,18 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         await agentTask.ConfigureAwait(false);
 #pragma warning restore VSTHRD003
 
-        return result ?? throw new AgwException(
-            ErrorCodes.A2AInvalidAgentResponse,
-            "Agent handler did not produce any response events.");
+        return result
+            ?? throw new AgwException(
+                ErrorCodes.A2AInvalidAgentResponse,
+                "Agent handler did not produce any response events."
+            );
     }
 
     private async Task<SendMessageResponse> MaterializeResponseAsync(
-        AgentEventQueue eventQueue, RequestContext context, CancellationToken cancellationToken)
+        AgentEventQueue eventQueue,
+        RequestContext context,
+        CancellationToken cancellationToken
+    )
     {
         SendMessageResponse? result = null;
 
@@ -636,22 +720,31 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         // all persisted events, not a stale snapshot.
         if (result?.Task is not null)
         {
-            result.Task = await _taskStore.GetTaskAsync(context.TaskId, cancellationToken).ConfigureAwait(false)
-                ?? throw new AgwException(ErrorCodes.A2ATaskNotFound, $"Task '{context.TaskId}' not found after processing.");
+            result.Task =
+                await _taskStore.GetTaskAsync(context.TaskId, cancellationToken).ConfigureAwait(false)
+                ?? throw new AgwException(
+                    ErrorCodes.A2ATaskNotFound,
+                    $"Task '{context.TaskId}' not found after processing."
+                );
         }
 
-        return result ?? throw new AgwException(
-            ErrorCodes.A2AInvalidAgentResponse,
-            "Agent handler did not produce any response events.");
+        return result
+            ?? throw new AgwException(
+                ErrorCodes.A2AInvalidAgentResponse,
+                "Agent handler did not produce any response events."
+            );
     }
 
     private async Task<IAgentHandler> GetAgentHandler(string agentName)
     {
         var sp = _serviceScopeFactory.CreateScope().ServiceProvider;
         var ahf = sp.GetRequiredService<AgentHandlerFactory>();
-        var ah = (await ahf.CreateAsync(agentName)) ?? throw new AgwException(
-            ErrorCodes.A2AInvalidAgentResponse,
-            $"No agent handler configured for agent '{agentName}'.");
+        var ah =
+            (await ahf.CreateAsync(agentName))
+            ?? throw new AgwException(
+                ErrorCodes.A2AInvalidAgentResponse,
+                $"No agent handler configured for agent '{agentName}'."
+            );
         return ah;
     }
 

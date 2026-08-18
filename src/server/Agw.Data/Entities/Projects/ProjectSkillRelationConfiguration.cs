@@ -9,15 +9,13 @@ public class ProjectSkillRelationConfiguration : IEntityTypeConfiguration<Projec
     {
         builder.HasKey(e => new { e.ProjectId, e.SkillId });
 
-        builder.HasOne(e => e.Project)
+        builder
+            .HasOne(e => e.Project)
             .WithMany(project => project.ProjectSkillRelations)
             .HasForeignKey(e => e.ProjectId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasOne(e => e.Skill)
-            .WithMany()
-            .HasForeignKey(e => e.SkillId)
-            .OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne(e => e.Skill).WithMany().HasForeignKey(e => e.SkillId).OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(e => e.SkillId);
     }

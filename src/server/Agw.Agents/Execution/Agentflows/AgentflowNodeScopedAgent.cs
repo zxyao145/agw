@@ -1,12 +1,9 @@
 using System.Runtime.ExceptionServices;
-
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents.Tools;
 using Agw.Agents.Execution.Turns;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace Agw.Agents.Execution.Agentflows;
@@ -41,7 +38,9 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         Guid? agentflowId = null,
         string? traceNodeId = null,
         Guid? agentId = null,
-        string? historyNodeId = null) : base(innerAgent)
+        string? historyNodeId = null
+    )
+        : base(innerAgent)
     {
         _nodeId = nodeId;
         _historyNodeId = historyNodeId ?? nodeId;
@@ -68,23 +67,21 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         IEnumerable<ChatMessage> messages,
         AgentSession? session = null,
         AgentRunOptions? options = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var scopedSession = await PrepareSessionAsync(session, cancellationToken).ConfigureAwait(false);
         var pendingFunctionCallIds = GetPendingFunctionCallIds(scopedSession);
         var input = AgentflowMessageTransforms.ApplyInstructions(
             ToolApprovalSupport.RestoreWorkflowResponses(
-                AgentflowMessageTransforms.CreatePortableAgentInput(
-                    messages.ToList(),
-                    pendingFunctionCallIds)),
-            _instructions);
+                AgentflowMessageTransforms.CreatePortableAgentInput(messages.ToList(), pendingFunctionCallIds)
+            ),
+            _instructions
+        );
         UpdatePendingFunctionCallIds(input.SelectMany(message => message.Contents), pendingFunctionCallIds);
         SavePendingFunctionCallIds(scopedSession, pendingFunctionCallIds);
         using var activity = StartExecutionActivity(input);
-        var turnPersistence = new ToolTurnPersistence(
-            InnerAgent,
-            scopedSession,
-            PersistToolBlockMessagesAsync);
+        var turnPersistence = new ToolTurnPersistence(InnerAgent, scopedSession, PersistToolBlockMessagesAsync);
         Exception? executionFailure = null;
         try
         {
@@ -95,11 +92,10 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
             turnPersistence.RecordRange(response.Messages);
             UpdatePendingFunctionCallIds(
                 response.Messages.SelectMany(message => message.Contents),
-                pendingFunctionCallIds);
+                pendingFunctionCallIds
+            );
             SavePendingFunctionCallIds(scopedSession, pendingFunctionCallIds);
-            var snapshots = await turnPersistence
-                .CompleteAsync(CancellationToken.None)
-                .ConfigureAwait(false);
+            var snapshots = await turnPersistence.CompleteAsync(CancellationToken.None).ConfigureAwait(false);
             foreach (var snapshot in snapshots)
             {
                 AddNodeName(snapshot);
@@ -122,12 +118,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         }
         finally
         {
-            await FinalizeTurnAsync(
-                    turnPersistence,
-                    scopedSession,
-                    activity,
-                    executionFailure)
-                .ConfigureAwait(false);
+            await FinalizeTurnAsync(turnPersistence, scopedSession, activity, executionFailure).ConfigureAwait(false);
         }
     }
 
@@ -138,24 +129,21 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         IEnumerable<ChatMessage> messages,
         AgentSession? session = null,
         AgentRunOptions? options = null,
-        [System.Runtime.CompilerServices.EnumeratorCancellation]
-        CancellationToken cancellationToken = default)
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
+    )
     {
         var scopedSession = await PrepareSessionAsync(session, cancellationToken).ConfigureAwait(false);
         var pendingFunctionCallIds = GetPendingFunctionCallIds(scopedSession);
         var input = AgentflowMessageTransforms.ApplyInstructions(
             ToolApprovalSupport.RestoreWorkflowResponses(
-                AgentflowMessageTransforms.CreatePortableAgentInput(
-                    messages.ToList(),
-                    pendingFunctionCallIds)),
-            _instructions);
+                AgentflowMessageTransforms.CreatePortableAgentInput(messages.ToList(), pendingFunctionCallIds)
+            ),
+            _instructions
+        );
         UpdatePendingFunctionCallIds(input.SelectMany(message => message.Contents), pendingFunctionCallIds);
         SavePendingFunctionCallIds(scopedSession, pendingFunctionCallIds);
         using var activity = StartExecutionActivity(input);
-        var turnPersistence = new ToolTurnPersistence(
-            InnerAgent,
-            scopedSession,
-            PersistToolBlockMessagesAsync);
+        var turnPersistence = new ToolTurnPersistence(InnerAgent, scopedSession, PersistToolBlockMessagesAsync);
         Exception? executionFailure = null;
         try
         {
@@ -196,9 +184,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                 yield return update;
             }
 
-            var stateSnapshots = await turnPersistence
-                .CompleteAsync(CancellationToken.None)
-                .ConfigureAwait(false);
+            var stateSnapshots = await turnPersistence.CompleteAsync(CancellationToken.None).ConfigureAwait(false);
             foreach (var stateSnapshot in stateSnapshots)
             {
                 var stateSnapshotUpdate = ToolStateSnapshots.ToUpdate(stateSnapshot);
@@ -210,12 +196,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         }
         finally
         {
-            await FinalizeTurnAsync(
-                    turnPersistence,
-                    scopedSession,
-                    activity,
-                    executionFailure)
-                .ConfigureAwait(false);
+            await FinalizeTurnAsync(turnPersistence, scopedSession, activity, executionFailure).ConfigureAwait(false);
         }
     }
 
@@ -223,16 +204,15 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         ToolTurnPersistence turnPersistence,
         AgentSession session,
         AgentflowNodeExecutionActivityScope? activity,
-        Exception? executionFailure)
+        Exception? executionFailure
+    )
     {
         Exception? cleanupFailure = null;
         if (!turnPersistence.CompletionAttempted)
         {
             try
             {
-                await turnPersistence
-                    .CompleteAsync(CancellationToken.None)
-                    .ConfigureAwait(false);
+                await turnPersistence.CompleteAsync(CancellationToken.None).ConfigureAwait(false);
             }
             catch (Exception exception)
             {
@@ -246,9 +226,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         }
         catch (Exception exception)
         {
-            cleanupFailure = cleanupFailure == null
-                ? exception
-                : new AggregateException(cleanupFailure, exception);
+            cleanupFailure = cleanupFailure == null ? exception : new AggregateException(cleanupFailure, exception);
         }
 
         if (cleanupFailure == null)
@@ -280,36 +258,33 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
             _name,
             _agentId,
             InnerAgent.Name,
-            input);
+            input
+        );
     }
 
     /// <summary>
     /// 获取或创建内层 Agent 会话，并将项目与 context 状态初始化到该会话。
     /// </summary>
-    private async Task<AgentSession> PrepareSessionAsync(
-        AgentSession? session,
-        CancellationToken cancellationToken)
+    private async Task<AgentSession> PrepareSessionAsync(AgentSession? session, CancellationToken cancellationToken)
     {
         if (_sessionScope != null && _agentId.HasValue)
         {
-            return await _sessionScope.GetOrCreateAsync(
+            return await _sessionScope
+                .GetOrCreateAsync(
                     InnerAgent,
                     _agentId.Value,
                     _agentflowId,
                     _historyNodeId,
                     _messageNodeName,
                     session,
-                    cancellationToken)
+                    cancellationToken
+                )
                 .ConfigureAwait(false);
         }
 
         AgentSession scopedSession =
             session ?? await InnerAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
-        _sessionScope?.Initialize(
-            scopedSession,
-            _agentflowId,
-            _historyNodeId,
-            _messageNodeName);
+        _sessionScope?.Initialize(scopedSession, _agentflowId, _historyNodeId, _messageNodeName);
         return scopedSession;
     }
 
@@ -322,17 +297,15 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                 _agentId.Value,
                 _agentflowId,
                 _historyNodeId,
-                CancellationToken.None)
+                CancellationToken.None
+            )
             : Task.CompletedTask;
     }
 
-    private Task PersistToolBlockMessagesAsync(
-        IReadOnlyList<ChatMessage> messages,
-        CancellationToken cancellationToken)
+    private Task PersistToolBlockMessagesAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken)
     {
         AddNodeName(messages);
-        return _sessionScope?.PersistToolBlockMessagesAsync(messages, cancellationToken) ??
-            Task.CompletedTask;
+        return _sessionScope?.PersistToolBlockMessagesAsync(messages, cancellationToken) ?? Task.CompletedTask;
     }
 
     private void AddNodeName(IEnumerable<ChatMessage> messages)
@@ -363,38 +336,38 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         update.AdditionalProperties = CreateNodeProperties(update.AdditionalProperties);
     }
 
-    private AdditionalPropertiesDictionary CreateNodeProperties(
-        AdditionalPropertiesDictionary? properties)
+    private AdditionalPropertiesDictionary CreateNodeProperties(AdditionalPropertiesDictionary? properties)
     {
-        var result = properties == null
-            ? new AdditionalPropertiesDictionary()
-            : new AdditionalPropertiesDictionary(properties);
+        var result =
+            properties == null ? new AdditionalPropertiesDictionary() : new AdditionalPropertiesDictionary(properties);
         result[NodeNamePropertyName] = _messageNodeName;
         return result;
     }
 
     private static HashSet<string> GetPendingFunctionCallIds(AgentSession session)
     {
-        return session.StateBag.TryGetValue<HashSet<string>>(
+        return
+            session.StateBag.TryGetValue<HashSet<string>>(
                 PendingFunctionCallIdsStateKey,
-                out var pendingFunctionCallIds) &&
-            pendingFunctionCallIds != null
-                ? new HashSet<string>(pendingFunctionCallIds, StringComparer.Ordinal)
-                : new HashSet<string>(StringComparer.Ordinal);
+                out var pendingFunctionCallIds
+            )
+            && pendingFunctionCallIds != null
+            ? new HashSet<string>(pendingFunctionCallIds, StringComparer.Ordinal)
+            : new HashSet<string>(StringComparer.Ordinal);
     }
 
-    private static void SavePendingFunctionCallIds(
-        AgentSession session,
-        HashSet<string> pendingFunctionCallIds)
+    private static void SavePendingFunctionCallIds(AgentSession session, HashSet<string> pendingFunctionCallIds)
     {
         session.StateBag.SetValue(
             PendingFunctionCallIdsStateKey,
-            new HashSet<string>(pendingFunctionCallIds, StringComparer.Ordinal));
+            new HashSet<string>(pendingFunctionCallIds, StringComparer.Ordinal)
+        );
     }
 
     private static void UpdatePendingFunctionCallIds(
         IEnumerable<Microsoft.Extensions.AI.AIContent> contents,
-        HashSet<string> pendingFunctionCallIds)
+        HashSet<string> pendingFunctionCallIds
+    )
     {
         foreach (var content in contents)
         {

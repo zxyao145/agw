@@ -10,10 +10,13 @@ public interface ITaskAppService
         string input,
         string user,
         string? contextId = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default
+    );
 
     Task<bool> HasTaskAsync(Guid taskId, Guid? projectId = null, CancellationToken cancellationToken = default);
 
-
-    Task<ExecutionTaskResolutionResult> ResolveTaskAsync(ExecutionTaskRequest request, CancellationToken cancellationToken);
+    Task<ExecutionTaskResolutionResult> ResolveTaskAsync(
+        ExecutionTaskRequest request,
+        CancellationToken cancellationToken
+    );
 }

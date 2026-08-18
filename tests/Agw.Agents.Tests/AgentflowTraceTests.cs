@@ -1,6 +1,5 @@
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Shared.Data.Entities.Agentflows;
-
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -21,27 +20,31 @@ public class AgentflowTraceTests
         var store = new CapturingTraceStore();
         using var collector = new AgentflowNodeExecutionTraceCollector(
             store,
-            NullLogger<AgentflowNodeExecutionTraceCollector>.Instance);
+            NullLogger<AgentflowNodeExecutionTraceCollector>.Instance
+        );
         await collector.StartAsync(TestContext.Current.CancellationToken);
 
-        var execution = new AgentflowExecutionTraceContext(
-            Guid.CreateVersion7(),
-            "context-1",
-            Guid.CreateVersion7());
+        var execution = new AgentflowExecutionTraceContext(Guid.CreateVersion7(), "context-1", Guid.CreateVersion7());
         var agentflowId = Guid.CreateVersion7();
         var agentId = Guid.CreateVersion7();
-        using (var scope = AgentflowNodeExecutionActivity.StartAgent(
-                   execution,
-                   agentflowId,
-                   "node-1",
-                   "Node Alias",
-                   agentId,
-                   "persisted-agent",
-                   [new ChatMessage(ChatRole.User, "hello")]))
+        using (
+            var scope = AgentflowNodeExecutionActivity.StartAgent(
+                execution,
+                agentflowId,
+                "node-1",
+                "Node Alias",
+                agentId,
+                "persisted-agent",
+                [new ChatMessage(ChatRole.User, "hello")]
+            )
+        )
         {
             Assert.NotNull(scope.Activity);
             Assert.Equal("Agw.Agentflow.Execution.Persistence", scope.Activity.Source.Name);
-            Assert.DoesNotContain(scope.Activity.TagObjects, tag => tag.Key.Contains("input", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain(
+                scope.Activity.TagObjects,
+                tag => tag.Key.Contains("input", StringComparison.OrdinalIgnoreCase)
+            );
             scope.Complete();
         }
 
@@ -70,15 +73,19 @@ public class AgentflowTraceTests
         var store = new ThrowingTraceStore();
         using var collector = new AgentflowNodeExecutionTraceCollector(
             store,
-            NullLogger<AgentflowNodeExecutionTraceCollector>.Instance);
+            NullLogger<AgentflowNodeExecutionTraceCollector>.Instance
+        );
         await collector.StartAsync(TestContext.Current.CancellationToken);
 
-        using (var scope = AgentflowNodeExecutionActivity.StartHumanGate(
-                   new AgentflowExecutionTraceContext(Guid.CreateVersion7(), "context-2", Guid.CreateVersion7()),
-                   Guid.CreateVersion7(),
-                   "human",
-                   "Approval",
-                   [new ChatMessage(ChatRole.User, "review")]))
+        using (
+            var scope = AgentflowNodeExecutionActivity.StartHumanGate(
+                new AgentflowExecutionTraceContext(Guid.CreateVersion7(), "context-2", Guid.CreateVersion7()),
+                Guid.CreateVersion7(),
+                "human",
+                "Approval",
+                [new ChatMessage(ChatRole.User, "review")]
+            )
+        )
         {
             scope.Fail(new InvalidOperationException("approval unavailable"));
         }
@@ -93,15 +100,19 @@ public class AgentflowTraceTests
         var store = new CapturingTraceStore();
         using var collector = new AgentflowNodeExecutionTraceCollector(
             store,
-            NullLogger<AgentflowNodeExecutionTraceCollector>.Instance);
+            NullLogger<AgentflowNodeExecutionTraceCollector>.Instance
+        );
         await collector.StartAsync(TestContext.Current.CancellationToken);
 
-        using (var scope = AgentflowNodeExecutionActivity.StartHumanGate(
-                   new AgentflowExecutionTraceContext(Guid.CreateVersion7(), "context-3", Guid.CreateVersion7()),
-                   Guid.CreateVersion7(),
-                   "human",
-                   "Approval",
-                   [new ChatMessage(ChatRole.User, "review")]))
+        using (
+            var scope = AgentflowNodeExecutionActivity.StartHumanGate(
+                new AgentflowExecutionTraceContext(Guid.CreateVersion7(), "context-3", Guid.CreateVersion7()),
+                Guid.CreateVersion7(),
+                "human",
+                "Approval",
+                [new ChatMessage(ChatRole.User, "review")]
+            )
+        )
         {
             scope.Reject();
         }
@@ -118,8 +129,9 @@ public class AgentflowTraceTests
 
     private sealed class CapturingTraceStore : IAgentflowNodeExecutionTraceStore
     {
-        private readonly TaskCompletionSource<AgentflowTrace> _trace =
-            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<AgentflowTrace> _trace = new(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
 
         public Task SaveAsync(AgentflowTrace trace, CancellationToken cancellationToken)
         {
@@ -127,14 +139,12 @@ public class AgentflowTraceTests
             return Task.CompletedTask;
         }
 
-        public Task<AgentflowTrace> WaitForTraceAsync() =>
-            _trace.Task.WaitAsync(TestContext.Current.CancellationToken);
+        public Task<AgentflowTrace> WaitForTraceAsync() => _trace.Task.WaitAsync(TestContext.Current.CancellationToken);
     }
 
     private sealed class ThrowingTraceStore : IAgentflowNodeExecutionTraceStore
     {
-        public TaskCompletionSource WriteAttempted { get; } =
-            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource WriteAttempted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public Task SaveAsync(AgentflowTrace trace, CancellationToken cancellationToken)
         {

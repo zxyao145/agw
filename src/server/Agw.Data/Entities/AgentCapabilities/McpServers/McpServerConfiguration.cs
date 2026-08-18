@@ -15,35 +15,54 @@ public class McpServerConfiguration : IEntityTypeConfiguration<McpServer>
         builder.Property(e => e.Command).HasMaxLength(200);
         builder.Property(e => e.WorkingDirectory).HasMaxLength(500);
         builder.Property(e => e.Url).HasMaxLength(1000);
-        builder.Property(e => e.Arguments)
+        builder
+            .Property(e => e.Arguments)
             .HasConversion(
                 v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
-                v => string.IsNullOrWhiteSpace(v)
-                    ? new List<string>()
-                    : System.Text.Json.JsonSerializer.Deserialize<List<string>>(v,
-                          (System.Text.Json.JsonSerializerOptions?)null)
-                      ?? new List<string>());
-        builder.Property(e => e.EnvironmentVariables).HasConversion(
-            v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
-            v => string.IsNullOrWhiteSpace(v)
-                ? new Dictionary<string, string>()
-                : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(v,
-                      (System.Text.Json.JsonSerializerOptions?)null)
-                  ?? new Dictionary<string, string>());
-        var headersProperty = builder.Property(e => e.Headers).HasConversion(
-            v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
-            v => string.IsNullOrWhiteSpace(v)
-                ? new Dictionary<string, string>()
-                : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(v,
-                      (System.Text.Json.JsonSerializerOptions?)null)
-                  ?? new Dictionary<string, string>());
-        headersProperty.Metadata.SetValueComparer(new ValueComparer<Dictionary<string, string>>(
-            (left, right) => left != null
-                && right != null
-                && left.OrderBy(pair => pair.Key).SequenceEqual(right.OrderBy(pair => pair.Key)),
-            value => value.OrderBy(pair => pair.Key).Aggregate(
-                0,
-                (hash, pair) => HashCode.Combine(hash, pair.Key, pair.Value)),
-            value => new Dictionary<string, string>(value, value.Comparer)));
+                v =>
+                    string.IsNullOrWhiteSpace(v)
+                        ? new List<string>()
+                        : System.Text.Json.JsonSerializer.Deserialize<List<string>>(
+                            v,
+                            (System.Text.Json.JsonSerializerOptions?)null
+                        ) ?? new List<string>()
+            );
+        builder
+            .Property(e => e.EnvironmentVariables)
+            .HasConversion(
+                v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
+                v =>
+                    string.IsNullOrWhiteSpace(v)
+                        ? new Dictionary<string, string>()
+                        : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(
+                            v,
+                            (System.Text.Json.JsonSerializerOptions?)null
+                        ) ?? new Dictionary<string, string>()
+            );
+        var headersProperty = builder
+            .Property(e => e.Headers)
+            .HasConversion(
+                v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
+                v =>
+                    string.IsNullOrWhiteSpace(v)
+                        ? new Dictionary<string, string>()
+                        : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(
+                            v,
+                            (System.Text.Json.JsonSerializerOptions?)null
+                        ) ?? new Dictionary<string, string>()
+            );
+        headersProperty.Metadata.SetValueComparer(
+            new ValueComparer<Dictionary<string, string>>(
+                (left, right) =>
+                    left != null
+                    && right != null
+                    && left.OrderBy(pair => pair.Key).SequenceEqual(right.OrderBy(pair => pair.Key)),
+                value =>
+                    value
+                        .OrderBy(pair => pair.Key)
+                        .Aggregate(0, (hash, pair) => HashCode.Combine(hash, pair.Key, pair.Value)),
+                value => new Dictionary<string, string>(value, value.Comparer)
+            )
+        );
     }
 }

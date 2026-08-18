@@ -6,7 +6,6 @@ using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Pagination;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Agents.Definitions.Agents;
@@ -14,7 +13,8 @@ namespace Agw.Agents.Definitions.Agents;
 public sealed record AgentModelRuntimeConfiguration(
     ModelProviderRelation ModelProvider,
     AgwAiModel Model,
-    Provider Provider);
+    Provider Provider
+);
 
 public class AgentAppService
 {
@@ -26,7 +26,7 @@ public class AgentAppService
         (AgentUpdateField.McpToolServerIds, "mcpToolServerIds"),
         (AgentUpdateField.ConnectionIds, "connectionIds"),
         (AgentUpdateField.EnableSummary, "enableSummary"),
-        (AgentUpdateField.SummaryModelProviderId, "summaryModelProviderId")
+        (AgentUpdateField.SummaryModelProviderId, "summaryModelProviderId"),
     ];
 
     private readonly IRepository<Agent> _agentRepository;
@@ -54,7 +54,8 @@ public class AgentAppService
         IRepository<Skill> skillRepository,
         IRepository<AgentSkillRelation> agentSkillRelationRepository,
         IUnitOfWork unitOfWork,
-        AgentDomainService agentDomainService)
+        AgentDomainService agentDomainService
+    )
     {
         _agentRepository = agentRepository;
         _agentConnectionRelationRepository = agentConnectionRelationRepository;
@@ -77,20 +78,19 @@ public class AgentAppService
             null,
             x => x.AgentMcpToolServers,
             x => x.AgentSkillRelations,
-            x => x.AgentConnectionRelations);
-        return agents
-            .OrderBy(x => x.Name)
-            .ThenByDescending(x => x.CreateTime)
-            .ToList();
+            x => x.AgentConnectionRelations
+        );
+        return agents.OrderBy(x => x.Name).ThenByDescending(x => x.CreateTime).ToList();
     }
 
     public Task<PagedResult<Agent>> ListAgentPageAsync(
         int pageIndex,
         int pageSize,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
-        var queryable = _agentRepository.Queryable
-            .Include(agent => agent.AgentMcpToolServers)
+        var queryable = _agentRepository
+            .Queryable.Include(agent => agent.AgentMcpToolServers)
             .Include(agent => agent.AgentSkillRelations)
             .Include(agent => agent.AgentConnectionRelations)
             .AsSplitQuery();
@@ -100,7 +100,8 @@ public class AgentAppService
             agent => agent.Id,
             pageIndex,
             pageSize,
-            cancellationToken);
+            cancellationToken
+        );
     }
 
     public async Task<Agent?> GetAgentAsync(Guid id)
@@ -110,7 +111,8 @@ public class AgentAppService
             null,
             x => x.AgentMcpToolServers,
             x => x.AgentSkillRelations,
-            x => x.AgentConnectionRelations);
+            x => x.AgentConnectionRelations
+        );
         return matches.FirstOrDefault();
     }
 
@@ -123,8 +125,8 @@ public class AgentAppService
         }
 
         var model = await _modelRepository.GetByIdAsync(modelProvider.ModelId);
-        var provider = await _providerRepository.Queryable
-            .Include(x => x.AuthConfigs)
+        var provider = await _providerRepository
+            .Queryable.Include(x => x.AuthConfigs)
             .SingleOrDefaultAsync(x => x.Id == modelProvider.ProviderId);
         return model == null || provider == null
             ? null
@@ -137,13 +139,9 @@ public class AgentAppService
         return await ListEnabledMcpToolServersAsync(links.Select(x => x.McpToolServerId));
     }
 
-    public async Task<IReadOnlyList<McpServer>> ListEnabledMcpToolServersAsync(
-        IEnumerable<Guid>? mcpToolServerIds)
+    public async Task<IReadOnlyList<McpServer>> ListEnabledMcpToolServersAsync(IEnumerable<Guid>? mcpToolServerIds)
     {
-        var serverIds = (mcpToolServerIds ?? [])
-            .Where(static id => id != Guid.Empty)
-            .Distinct()
-            .ToList();
+        var serverIds = (mcpToolServerIds ?? []).Where(static id => id != Guid.Empty).Distinct().ToList();
         if (serverIds.Count == 0)
         {
             return [];
@@ -160,10 +158,7 @@ public class AgentAppService
 
     public async Task<IReadOnlyList<Skill>> ListSkillsAsync(IEnumerable<Guid>? skillIds)
     {
-        var requestedSkillIds = (skillIds ?? [])
-            .Where(static id => id != Guid.Empty)
-            .Distinct()
-            .ToList();
+        var requestedSkillIds = (skillIds ?? []).Where(static id => id != Guid.Empty).Distinct().ToList();
         if (requestedSkillIds.Count == 0)
         {
             return [];
@@ -177,10 +172,13 @@ public class AgentAppService
         IEnumerable<Guid>? mcpToolServerIds,
         IEnumerable<Guid>? skillIds,
         IEnumerable<Guid>? connectionIds,
-        string user)
+        string user
+    )
     {
-        if (await HasInvalidModelProviderAsync(agent.ModelProviderId) ||
-            await HasInvalidModelProviderAsync(agent.SummaryModelProviderId))
+        if (
+            await HasInvalidModelProviderAsync(agent.ModelProviderId)
+            || await HasInvalidModelProviderAsync(agent.SummaryModelProviderId)
+        )
         {
             return null;
         }
@@ -194,10 +192,7 @@ public class AgentAppService
         return agent;
     }
 
-    public async Task<Agent?> UpdateAgentAsync(
-        Guid id,
-        AgentUpdateCommand command,
-        string user)
+    public async Task<Agent?> UpdateAgentAsync(Guid id, AgentUpdateCommand command, string user)
     {
         ArgumentNullException.ThrowIfNull(command);
 
@@ -210,22 +205,18 @@ public class AgentAppService
         if (existing.Type == AgentType.External)
         {
             ValidateExternalAgentUpdate(command);
-            _agentDomainService.ApplyUpdate(
-                existing,
-                agent => ApplyExternalAgentUpdate(agent, command),
-                user);
+            _agentDomainService.ApplyUpdate(existing, agent => ApplyExternalAgentUpdate(agent, command), user);
         }
         else
         {
             ValidateSystemAgentUpdate(command);
-            _agentDomainService.ApplyUpdate(
-                existing,
-                agent => ApplySystemAgentUpdate(agent, command),
-                user);
+            _agentDomainService.ApplyUpdate(existing, agent => ApplySystemAgentUpdate(agent, command), user);
         }
 
-        if (await HasInvalidModelProviderAsync(existing.ModelProviderId) ||
-            await HasInvalidModelProviderAsync(existing.SummaryModelProviderId))
+        if (
+            await HasInvalidModelProviderAsync(existing.ModelProviderId)
+            || await HasInvalidModelProviderAsync(existing.SummaryModelProviderId)
+        )
         {
             return null;
         }
@@ -287,7 +278,8 @@ public class AgentAppService
         {
             throw new AgwException(
                 ErrorCodes.InvalidParam,
-                $"External agents cannot update fields: {string.Join(", ", unsupportedFields)}.");
+                $"External agents cannot update fields: {string.Join(", ", unsupportedFields)}."
+            );
         }
 
         if (command.IsSpecified(AgentUpdateField.DisplayName) && command.DisplayName == null)
@@ -333,7 +325,8 @@ public class AgentAppService
         {
             throw new AgwException(
                 ErrorCodes.InvalidParam,
-                $"System agent update requires fields: {string.Join(", ", missingFields)}.");
+                $"System agent update requires fields: {string.Join(", ", missingFields)}."
+            );
         }
     }
 
@@ -395,11 +388,9 @@ public class AgentAppService
         var existingServers = await _mcpToolServerRepository.ListAsync(x => requestedIds.Contains(x.Id));
         foreach (var serverId in existingServers.Select(x => x.Id))
         {
-            await _agentMcpToolServerRepository.AddAsync(new AgentMcpServerRelation
-            {
-                AgentId = agentId,
-                McpToolServerId = serverId
-            });
+            await _agentMcpToolServerRepository.AddAsync(
+                new AgentMcpServerRelation { AgentId = agentId, McpToolServerId = serverId }
+            );
         }
     }
 
@@ -411,10 +402,7 @@ public class AgentAppService
             _agentSkillRelationRepository.Remove(link);
         }
 
-        var requestedIds = (skillIds ?? [])
-            .Where(static id => id != Guid.Empty)
-            .Distinct()
-            .ToList();
+        var requestedIds = (skillIds ?? []).Where(static id => id != Guid.Empty).Distinct().ToList();
         if (requestedIds.Count == 0)
         {
             return;
@@ -423,11 +411,9 @@ public class AgentAppService
         var existingSkills = await _skillRepository.ListAsync(x => requestedIds.Contains(x.Id));
         foreach (var skillId in existingSkills.Select(x => x.Id))
         {
-            await _agentSkillRelationRepository.AddAsync(new AgentSkillRelation
-            {
-                AgentId = agentId,
-                SkillId = skillId
-            });
+            await _agentSkillRelationRepository.AddAsync(
+                new AgentSkillRelation { AgentId = agentId, SkillId = skillId }
+            );
         }
     }
 
@@ -439,10 +425,7 @@ public class AgentAppService
             _agentConnectionRelationRepository.Remove(link);
         }
 
-        var requestedIds = (connectionIds ?? [])
-            .Where(static id => id != Guid.Empty)
-            .Distinct()
-            .ToList();
+        var requestedIds = (connectionIds ?? []).Where(static id => id != Guid.Empty).Distinct().ToList();
         if (requestedIds.Count == 0)
         {
             return;
@@ -451,11 +434,9 @@ public class AgentAppService
         var connections = await _connectionRepository.ListAsync(x => requestedIds.Contains(x.Id));
         foreach (var connectionId in connections.Select(x => x.Id))
         {
-            await _agentConnectionRelationRepository.AddAsync(new AgentConnectionRelation
-            {
-                AgentId = agentId,
-                ConnectionId = connectionId
-            });
+            await _agentConnectionRelationRepository.AddAsync(
+                new AgentConnectionRelation { AgentId = agentId, ConnectionId = connectionId }
+            );
         }
     }
 }

@@ -15,7 +15,8 @@ public sealed record RuntimeTurnContext
         string userName,
         string workspace,
         IExecutionMessageSink messageSink,
-        Action<HumanGateApprovalRequest?>? pendingHumanGateChanged = null)
+        Action<HumanGateApprovalRequest?>? pendingHumanGateChanged = null
+    )
     {
         Settings = settings;
         Task = task;

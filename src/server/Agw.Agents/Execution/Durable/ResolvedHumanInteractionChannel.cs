@@ -13,8 +13,7 @@ internal sealed class ResolvedHumanInteractionChannel : IHumanInteractionChannel
     /// <summary>
     /// 创建包含本次恢复分段全部已解析回答的预回答 channel。
     /// </summary>
-    public ResolvedHumanInteractionChannel(
-        IReadOnlyList<DurableResolvedInteraction> interactions)
+    public ResolvedHumanInteractionChannel(IReadOnlyList<DurableResolvedInteraction> interactions)
     {
         _interactions = interactions;
     }
@@ -24,14 +23,20 @@ internal sealed class ResolvedHumanInteractionChannel : IHumanInteractionChannel
     /// </summary>
     public ValueTask<HumanInteractionResponse> RequestAsync(
         HumanInteractionRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
         var resolved = _interactions.FirstOrDefault(item =>
-            (!string.IsNullOrWhiteSpace(request.CallId)
-             && string.Equals(item.Request.CallId, request.CallId, StringComparison.Ordinal))
-            || (string.IsNullOrWhiteSpace(request.CallId)
-                && string.Equals(item.Request.ToolName, request.ToolName, StringComparison.Ordinal)));
+            (
+                !string.IsNullOrWhiteSpace(request.CallId)
+                && string.Equals(item.Request.CallId, request.CallId, StringComparison.Ordinal)
+            )
+            || (
+                string.IsNullOrWhiteSpace(request.CallId)
+                && string.Equals(item.Request.ToolName, request.ToolName, StringComparison.Ordinal)
+            )
+        );
         if (resolved == null && _interactions.Count == 1)
         {
             resolved = _interactions[0];
@@ -40,12 +45,16 @@ internal sealed class ResolvedHumanInteractionChannel : IHumanInteractionChannel
         {
             throw new AgwException(
                 ErrorCodes.DurableExecutionConflict,
-                $"No persisted response matches human interaction Tool call '{request.CallId}'.");
+                $"No persisted response matches human interaction Tool call '{request.CallId}'."
+            );
         }
 
-        return ValueTask.FromResult(new HumanInteractionResponse(
-            request.RequestId,
-            Cancelled: !resolved.Response.Approved,
-            resolved.Response.ResponseData));
+        return ValueTask.FromResult(
+            new HumanInteractionResponse(
+                request.RequestId,
+                Cancelled: !resolved.Response.Approved,
+                resolved.Response.ResponseData
+            )
+        );
     }
 }

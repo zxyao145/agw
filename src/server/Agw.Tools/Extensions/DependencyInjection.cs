@@ -10,7 +10,6 @@ using Agw.Tools.ToolBlocks.Blocks.Mode;
 using Agw.Tools.ToolBlocks.Blocks.ProjectMemory;
 using Agw.Tools.ToolBlocks.Blocks.Todo;
 using Agw.Tools.ToolBlocks.Blocks.UserMemory;
-
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -37,7 +36,8 @@ public static class DependencyInjection
                 serviceProvider.GetRequiredService<ILogger<ToolRegistryService>>(),
                 serviceProvider,
                 serviceProvider.GetServices<IContextualTool>(),
-                serviceProvider.GetRequiredService<ToolBlockRegistry>());
+                serviceProvider.GetRequiredService<ToolBlockRegistry>()
+            );
             registry.ValidateDefinitionCoverage();
             return registry;
         });

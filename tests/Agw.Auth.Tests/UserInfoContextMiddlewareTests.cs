@@ -1,13 +1,10 @@
 using System.Security.Claims;
-
 using Agw.Auth.Application;
 using Agw.Auth.Extensions;
 using Agw.Auth.Middleware;
 using Agw.Shared.Exceptions;
-
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
-
 using Xunit;
 
 namespace Agw.Auth.Tests;
@@ -86,7 +83,8 @@ public sealed class UserInfoContextMiddlewareTests
         var observed = new Dictionary<string, string?>();
         var middleware = new UserInfoContextMiddleware(async context =>
         {
-            if (Interlocked.Increment(ref entered) == 2) release.SetResult();
+            if (Interlocked.Increment(ref entered) == 2)
+                release.SetResult();
             await release.Task;
             lock (observed)
             {
@@ -96,19 +94,20 @@ public sealed class UserInfoContextMiddlewareTests
         var firstContext = new DefaultHttpContext
         {
             TraceIdentifier = "first",
-            User = CreatePrincipal("first-user", "first-id")
+            User = CreatePrincipal("first-user", "first-id"),
         };
         var secondContext = new DefaultHttpContext
         {
             TraceIdentifier = "second",
-            User = CreatePrincipal("second-user", "second-id")
+            User = CreatePrincipal("second-user", "second-id"),
         };
 
         try
         {
             await Task.WhenAll(
                 middleware.InvokeAsync(firstContext, new UserInfoService()),
-                middleware.InvokeAsync(secondContext, new UserInfoService()));
+                middleware.InvokeAsync(secondContext, new UserInfoService())
+            );
 
             Assert.Equal("first-user", observed["first"]);
             Assert.Equal("second-user", observed["second"]);
@@ -190,7 +189,8 @@ public sealed class UserInfoContextMiddlewareTests
     private static ClaimsPrincipal CreatePrincipal(string name, string? userId)
     {
         var claims = new List<Claim> { new(ClaimTypes.Name, name) };
-        if (userId != null) claims.Add(new Claim(ClaimTypes.NameIdentifier, userId));
+        if (userId != null)
+            claims.Add(new Claim(ClaimTypes.NameIdentifier, userId));
         return new ClaimsPrincipal(new ClaimsIdentity(claims, AgwAuthDefaults.CookieScheme));
     }
 }

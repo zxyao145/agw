@@ -1,12 +1,10 @@
 using Agw.Shared.Data.Entities.Projects;
-
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Agw.Shared.Data.Entities.Executions;
 
-public sealed class AgentflowCheckpointRecordConfiguration :
-    IEntityTypeConfiguration<AgentflowCheckpointRecord>
+public sealed class AgentflowCheckpointRecordConfiguration : IEntityTypeConfiguration<AgentflowCheckpointRecord>
 {
     public void Configure(EntityTypeBuilder<AgentflowCheckpointRecord> builder)
     {
@@ -21,9 +19,10 @@ public sealed class AgentflowCheckpointRecordConfiguration :
         {
             item.ProjectConversationId,
             item.AgentflowId,
-            item.BoundarySequence
+            item.BoundarySequence,
         });
-        builder.HasOne<ProjectConversation>()
+        builder
+            .HasOne<ProjectConversation>()
             .WithMany()
             .HasForeignKey(item => item.ProjectConversationId)
             .OnDelete(DeleteBehavior.Cascade);

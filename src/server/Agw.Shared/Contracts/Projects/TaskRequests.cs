@@ -3,11 +3,7 @@ using Agw.Shared.Data.Entities.Projects;
 
 namespace Agw.Shared.Contracts.Projects;
 
-public record TaskCreateRequest(
-    Guid? JobId,
-    string Input,
-    string? Title = null,
-    string? ContextId = null);
+public record TaskCreateRequest(Guid? JobId, string Input, string? Title = null, string? ContextId = null);
 
 public record ProjectContextTitleUpdateRequest(string Title);
 
@@ -21,7 +17,8 @@ public record ProjectContextSummaryResponse(
     int MessageCount,
     DateTimeOffset CreateTime,
     DateTimeOffset? UpdateTime,
-    string? ErrorMessage);
+    string? ErrorMessage
+);
 
 public record ProjectContextResponse(
     string ProjectId,
@@ -34,4 +31,5 @@ public record ProjectContextResponse(
     DateTimeOffset? UpdateTime,
     string? ErrorMessage,
     ProjectContextUsage Usage,
-    IReadOnlyList<AgwMessage>? Messages);
+    IReadOnlyList<AgwMessage>? Messages
+);

@@ -13,8 +13,6 @@ public static class AgwDataProtectionConfiguration
 
     public static IDataProtectionProvider CreatePersistedProvider(DirectoryInfo keysDirectory)
     {
-        return DataProtectionProvider.Create(
-            keysDirectory,
-            builder => builder.ConfigureAgwApplication());
+        return DataProtectionProvider.Create(keysDirectory, builder => builder.ConfigureAgwApplication());
     }
 }

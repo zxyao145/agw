@@ -11,7 +11,8 @@ public record McpToolServerCreateRequest(
     Dictionary<string, string>? EnvironmentVariables,
     string? Url,
     Dictionary<string, string>? Headers,
-    bool Enabled = true);
+    bool Enabled = true
+);
 
 public record McpToolServerUpdateRequest(
     string Name,
@@ -23,9 +24,11 @@ public record McpToolServerUpdateRequest(
     Dictionary<string, string>? EnvironmentVariables,
     string? Url,
     Dictionary<string, string>? Headers,
-    bool Enabled = true);
+    bool Enabled = true
+);
 
 public record McpToolServerConnectRequest(Guid McpToolServerId);
 
 public record McpToolServerConnectResponse(string Status, List<McpToolItem> Tools);
+
 public record McpToolItem(string Name);

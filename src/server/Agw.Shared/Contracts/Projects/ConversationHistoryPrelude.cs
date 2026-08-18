@@ -1,5 +1,4 @@
 using System.Text.Json;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -28,16 +27,14 @@ public static class ConversationHistoryPrelude
 
         session.StateBag.SetValue(
             StateKey,
-            messages
-                .Select(message => JsonSerializer.Serialize(message, JsonOptions))
-                .ToList());
+            messages.Select(message => JsonSerializer.Serialize(message, JsonOptions)).ToList()
+        );
     }
 
     public static IReadOnlyList<ChatMessage> Take(AgentSession session)
     {
         ArgumentNullException.ThrowIfNull(session);
-        if (!session.StateBag.TryGetValue<List<string>>(StateKey, out var payloads) ||
-            payloads == null)
+        if (!session.StateBag.TryGetValue<List<string>>(StateKey, out var payloads) || payloads == null)
         {
             return [];
         }

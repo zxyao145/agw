@@ -8,4 +8,5 @@ public record JobLogResponse(
     DateTimeOffset? EndTime,
     bool Success,
     int Attempt,
-    string? ErrorMessage);
+    string? ErrorMessage
+);

@@ -9,14 +9,12 @@ public sealed class SetPermissionModeCommandHandler : IExecutionCommandHandler<S
     public Task HandleAsync(
         SetPermissionModeCommand command,
         ExecutionConnectionContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        if (!command.PermissionMode.HasValue ||
-            !Enum.IsDefined(command.PermissionMode.Value))
+        if (!command.PermissionMode.HasValue || !Enum.IsDefined(command.PermissionMode.Value))
         {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                "SetPermissionModeCommand.permissionMode is required.");
+            throw new AgwException(ErrorCodes.InvalidParam, "SetPermissionModeCommand.permissionMode is required.");
         }
 
         return context.SetPermissionModeAsync(command.PermissionMode.Value, cancellationToken);

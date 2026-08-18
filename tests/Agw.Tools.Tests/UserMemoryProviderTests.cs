@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-
 using Agw.Auth.Application;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
@@ -13,7 +12,6 @@ using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Data.Repositories;
 using Agw.Tools.Application;
 using Agw.Tools.ToolBlocks.Blocks.UserMemory;
-
 using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
@@ -38,20 +36,26 @@ public sealed class UserMemoryProviderTests
                 UserMemoryProvider.DeleteToolName,
                 UserMemoryProvider.ListToolName,
                 UserMemoryProvider.ReadToolName,
-                UserMemoryProvider.WriteToolName
+                UserMemoryProvider.WriteToolName,
             ],
-            context.Tools!.Select(tool => tool.Name).Order(StringComparer.Ordinal));
+            context.Tools!.Select(tool => tool.Name).Order(StringComparer.Ordinal)
+        );
         Assert.Null(context.Messages);
 
         var write = GetFunction(context, UserMemoryProvider.WriteToolName);
         Assert.Equal(
             "User memory 'Profile' written.",
-            ResultText(await write.InvokeAsync(
-                Arguments(
-                    ("name", "Profile"),
-                    ("content", "Secret full content"),
-                    ("description", "Answer preferences")),
-                cancellationToken)));
+            ResultText(
+                await write.InvokeAsync(
+                    Arguments(
+                        ("name", "Profile"),
+                        ("content", "Secret full content"),
+                        ("description", "Answer preferences")
+                    ),
+                    cancellationToken
+                )
+            )
+        );
 
         var refreshed = await InvokeProviderAsync(provider);
         var memoryContext = Assert.Single(refreshed.Messages!).Text;
@@ -62,10 +66,12 @@ public sealed class UserMemoryProviderTests
         var read = GetFunction(refreshed, UserMemoryProvider.ReadToolName);
         Assert.Equal(
             "Secret full content",
-            ResultText(await read.InvokeAsync(Arguments(("name", "profile")), cancellationToken)));
+            ResultText(await read.InvokeAsync(Arguments(("name", "profile")), cancellationToken))
+        );
         var list = ResultList<UserMemoryToolListItem>(
             await GetFunction(refreshed, UserMemoryProvider.ListToolName)
-                .InvokeAsync(new AIFunctionArguments(), cancellationToken));
+                .InvokeAsync(new AIFunctionArguments(), cancellationToken)
+        );
         var listItem = Assert.Single(list);
         Assert.Equal("Profile", listItem.Name);
         Assert.Equal("Answer preferences", listItem.Description);
@@ -80,8 +86,11 @@ public sealed class UserMemoryProviderTests
 
         Assert.Equal(
             "User memory 'PROFILE' deleted.",
-            ResultText(await GetFunction(refreshed, UserMemoryProvider.DeleteToolName)
-                .InvokeAsync(Arguments(("name", "PROFILE")), cancellationToken)));
+            ResultText(
+                await GetFunction(refreshed, UserMemoryProvider.DeleteToolName)
+                    .InvokeAsync(Arguments(("name", "PROFILE")), cancellationToken)
+            )
+        );
     }
 
     [Fact]
@@ -96,14 +105,16 @@ public sealed class UserMemoryProviderTests
                 Agent = new Agent { Id = Guid.CreateVersion7() },
                 Project = new Project { Id = Guid.CreateVersion7() },
                 Workspace = string.Empty,
-                DefaultMode = "plan"
+                DefaultMode = "plan",
             },
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(ToolBlockScope.Agent | ToolBlockScope.Project, block.Descriptor.Scopes);
         Assert.Equal(
             [UserMemoryProvider.ListToolName, UserMemoryProvider.ReadToolName],
-            contribution.PlanModeAllowedToolNames.Order(StringComparer.Ordinal));
+            contribution.PlanModeAllowedToolNames.Order(StringComparer.Ordinal)
+        );
         Assert.DoesNotContain(UserMemoryProvider.WriteToolName, contribution.PlanModeAllowedToolNames);
         Assert.DoesNotContain(UserMemoryProvider.DeleteToolName, contribution.PlanModeAllowedToolNames);
         Assert.Single(contribution.ContextProviders);
@@ -123,7 +134,8 @@ public sealed class UserMemoryProviderTests
                     $"Memory {index:D2}",
                     $"Summary {index:D2}",
                     $"Content {index:D2}",
-                    cancellationToken);
+                    cancellationToken
+                );
             }
         }
 
@@ -140,17 +152,15 @@ public sealed class UserMemoryProviderTests
 
     private static async Task<AIContext> InvokeProviderAsync(UserMemoryProvider provider)
     {
-        var agent = new ChatClientAgent(
-            new StubChatClient(),
-            new ChatClientAgentOptions { Name = "test-agent" });
+        var agent = new ChatClientAgent(new StubChatClient(), new ChatClientAgentOptions { Name = "test-agent" });
         return await provider.InvokingAsync(
             new AIContextProvider.InvokingContext(agent, null, new AIContext()),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
     }
 
     private static AIFunction GetFunction(AIContext context, string name) =>
-        Assert.IsAssignableFrom<AIFunction>(
-            Assert.Single(context.Tools!, tool => tool.Name == name));
+        Assert.IsAssignableFrom<AIFunction>(Assert.Single(context.Tools!, tool => tool.Name == name));
 
     private static AIFunctionArguments Arguments(params (string Name, object? Value)[] values) =>
         new(values.ToDictionary(value => value.Name, value => value.Value));
@@ -159,14 +169,11 @@ public sealed class UserMemoryProviderTests
         result is JsonElement element ? element.GetString() : Assert.IsType<string>(result);
 
     private static List<T> ResultList<T>(object? result) =>
-        Assert.IsType<JsonElement>(result)
-            .Deserialize<List<T>>(new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        Assert.IsType<JsonElement>(result).Deserialize<List<T>>(new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
 
     private sealed class StubChatClient : IChatClient
     {
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
 
         public object? GetService(Type serviceType, object? serviceKey = null) =>
             serviceType.IsInstanceOfType(this) ? this : null;
@@ -174,13 +181,14 @@ public sealed class UserMemoryProviderTests
         public Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, "done")]));
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, "done")]));
 
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+            [EnumeratorCancellation] CancellationToken cancellationToken = default
+        )
         {
             await Task.Yield();
             yield return new ChatResponseUpdate(ChatRole.Assistant, "done");
@@ -192,7 +200,8 @@ public sealed class UserMemoryProviderTests
         private Fixture(
             SqliteConnection connection,
             ServiceProvider serviceProvider,
-            UserMemoryAppServiceTests.TestUserInfoService userInfoService)
+            UserMemoryAppServiceTests.TestUserInfoService userInfoService
+        )
         {
             Connection = connection;
             ServiceProvider = serviceProvider;
@@ -218,8 +227,7 @@ public sealed class UserMemoryProviderTests
                 .UseSqlite(connection)
                 .UseSnakeCaseNamingConvention()
                 .Options;
-            var protector = new DataProtectionEncryptedDataProtector(
-                new EphemeralDataProtectionProvider());
+            var protector = new DataProtectionEncryptedDataProtector(new EphemeralDataProtectionProvider());
             var services = new ServiceCollection();
             services.AddScoped(_ => new AgwDbContext(options, protector));
             services.AddScoped<DbContext>(provider => provider.GetRequiredService<AgwDbContext>());
@@ -232,7 +240,8 @@ public sealed class UserMemoryProviderTests
             var serviceProvider = services.BuildServiceProvider();
             await using (var scope = serviceProvider.CreateAsyncScope())
             {
-                await scope.ServiceProvider.GetRequiredService<AgwDbContext>()
+                await scope
+                    .ServiceProvider.GetRequiredService<AgwDbContext>()
                     .Database.EnsureCreatedAsync(cancellationToken);
             }
             return new Fixture(connection, serviceProvider, userInfoService);

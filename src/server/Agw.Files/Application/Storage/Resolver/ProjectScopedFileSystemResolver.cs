@@ -1,9 +1,7 @@
 using System.Collections.Concurrent;
-
 using Agw.Files.Abstracts;
 using Agw.Files.Application.Storage.Local;
 using Agw.Files.Utils;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -19,7 +17,8 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver
     public ProjectScopedFileSystemResolver(
         IServiceScopeFactory scopeFactory,
         ILogger<ProjectScopedFileSystemResolver> logger,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider
+    )
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
@@ -57,19 +56,14 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver
         }
 
         var hasConfiguredWorkspace = !string.IsNullOrWhiteSpace(project.Workspace);
-        var rootPath = hasConfiguredWorkspace
-            ? project.Workspace!
-            : $"~/.agw/{project.Name}";
+        var rootPath = hasConfiguredWorkspace ? project.Workspace! : $"~/.agw/{project.Name}";
 
         if (!hasConfiguredWorkspace)
         {
             Directory.CreateDirectory(PathUtil.ExpandTilde(rootPath));
         }
 
-        _logger.LogInformation(
-            "Project {ProjectId} is using local workspace: {Path}",
-            projectId,
-            rootPath);
+        _logger.LogInformation("Project {ProjectId} is using local workspace: {Path}", projectId, rootPath);
         return CreateLocal(rootPath);
     }
 
@@ -77,7 +71,9 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver
     {
         var tempWorkspace = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".agw", "temp");
+            ".agw",
+            "temp"
+        );
 
         Directory.CreateDirectory(tempWorkspace);
         return CreateLocal(tempWorkspace);

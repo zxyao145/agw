@@ -1,6 +1,5 @@
 using Agw.Agents.Execution.Turns;
 using Agw.Skills.Contracts.Registration;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -18,7 +17,8 @@ public sealed class JobManagementSkillRegistration : IAgentSkillRegistration
 
     public JobManagementSkillRegistration(
         IServiceScopeFactory serviceScopeFactory,
-        IRuntimeTurnContextAccessor turnContextAccessor)
+        IRuntimeTurnContextAccessor turnContextAccessor
+    )
     {
         _serviceScopeFactory = serviceScopeFactory;
         _turnContextAccessor = turnContextAccessor;

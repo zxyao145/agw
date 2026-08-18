@@ -1,6 +1,5 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
-
 using Agw.Providers.Contracts.Manager;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Exceptions;
@@ -18,13 +17,15 @@ public class ProviderModelDiscoveryService : IProviderModelDiscoveryService
 
     public async Task<ProviderModelDiscoveryResponse> DiscoverAsync(
         ProviderModelDiscoveryRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         if (request.ProviderType is not ProviderType.OpenAIChatCompletions and not ProviderType.OpenAIResponses)
         {
             throw new AgwException(
                 ErrorCodes.UnsupportedProviderType,
-                $"Provider type '{request.ProviderType}' does not support model discovery.");
+                $"Provider type '{request.ProviderType}' does not support model discovery."
+            );
         }
 
         if (string.IsNullOrWhiteSpace(request.ApiKey))
@@ -33,8 +34,10 @@ public class ProviderModelDiscoveryService : IProviderModelDiscoveryService
         }
 
         var modelsEndpoint = $"{request.Endpoint.TrimEnd('/')}/models";
-        if (!Uri.TryCreate(modelsEndpoint, UriKind.Absolute, out var modelsUri) ||
-            (modelsUri.Scheme != Uri.UriSchemeHttp && modelsUri.Scheme != Uri.UriSchemeHttps))
+        if (
+            !Uri.TryCreate(modelsEndpoint, UriKind.Absolute, out var modelsUri)
+            || (modelsUri.Scheme != Uri.UriSchemeHttp && modelsUri.Scheme != Uri.UriSchemeHttps)
+        )
         {
             throw new AgwException(ErrorCodes.InvalidUrl, "Provider endpoint must be an absolute HTTP(S) URL.");
         }
@@ -52,17 +55,19 @@ public class ProviderModelDiscoveryService : IProviderModelDiscoveryService
             {
                 throw new AgwException(
                     ErrorCodes.ProviderModelDiscoveryFailed,
-                    $"Provider model discovery returned HTTP {(int)response.StatusCode}.");
+                    $"Provider model discovery returned HTTP {(int)response.StatusCode}."
+                );
             }
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            using var document = await JsonDocument.ParseAsync(
-                    stream,
-                    cancellationToken: cancellationToken)
+            using var document = await JsonDocument
+                .ParseAsync(stream, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
-            if (document.RootElement.ValueKind != JsonValueKind.Object ||
-                !document.RootElement.TryGetProperty("data", out var data) ||
-                data.ValueKind != JsonValueKind.Array)
+            if (
+                document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("data", out var data)
+                || data.ValueKind != JsonValueKind.Array
+            )
             {
                 throw new AgwException(ErrorCodes.ProviderModelDiscoveryFailed);
             }
@@ -71,9 +76,11 @@ public class ProviderModelDiscoveryService : IProviderModelDiscoveryService
             var seenNames = new HashSet<string>(StringComparer.Ordinal);
             foreach (var item in data.EnumerateArray())
             {
-                if (item.ValueKind != JsonValueKind.Object ||
-                    !item.TryGetProperty("id", out var id) ||
-                    id.ValueKind != JsonValueKind.String)
+                if (
+                    item.ValueKind != JsonValueKind.Object
+                    || !item.TryGetProperty("id", out var id)
+                    || id.ValueKind != JsonValueKind.String
+                )
                 {
                     continue;
                 }

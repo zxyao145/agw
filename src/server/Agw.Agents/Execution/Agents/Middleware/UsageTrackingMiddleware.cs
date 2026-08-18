@@ -1,7 +1,5 @@
 using System.Runtime.CompilerServices;
-
 using Agw.Shared.Contracts.Projects;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -19,7 +17,8 @@ public sealed class UsageTrackingMiddleware
     public UsageTrackingMiddleware(
         IProviderSessionState providerSessionState,
         IAgentUsageRecorder usageRecorder,
-        ILogger<UsageTrackingMiddleware> logger)
+        ILogger<UsageTrackingMiddleware> logger
+    )
     {
         _providerSessionState = providerSessionState;
         _usageRecorder = usageRecorder;
@@ -31,7 +30,8 @@ public sealed class UsageTrackingMiddleware
         AgentSession? session,
         AgentRunOptions? options,
         AIAgent innerAgent,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken
+    )
     {
         var combinedUsage = new UsageDetails();
         var hasUsage = false;
@@ -63,7 +63,8 @@ public sealed class UsageTrackingMiddleware
         AgentSession? session,
         AgentRunOptions? options,
         AIAgent innerAgent,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var response = await innerAgent.RunAsync(messages, session, options, cancellationToken).ConfigureAwait(false);
         if (response.Usage != null)
@@ -76,8 +77,10 @@ public sealed class UsageTrackingMiddleware
 
     private async Task RecordAsync(AgentSession? session, string agentName, UsageDetails usage)
     {
-        if (session == null ||
-            !_providerSessionState.TryGetProjectContext(session, out var projectId, out var contextId))
+        if (
+            session == null
+            || !_providerSessionState.TryGetProjectContext(session, out var projectId, out var contextId)
+        )
         {
             return;
         }
@@ -94,9 +97,10 @@ public sealed class UsageTrackingMiddleware
                     OutputTokenCount = usage.OutputTokenCount ?? 0,
                     TotalTokenCount = usage.TotalTokenCount ?? 0,
                     CachedInputTokenCount = usage.CachedInputTokenCount ?? 0,
-                    ReasoningTokenCount = usage.ReasoningTokenCount ?? 0
+                    ReasoningTokenCount = usage.ReasoningTokenCount ?? 0,
                 },
-                CancellationToken.None);
+                CancellationToken.None
+            );
         }
         catch (Exception exception)
         {
@@ -104,7 +108,8 @@ public sealed class UsageTrackingMiddleware
                 exception,
                 "Failed to record agent usage for project {ProjectId} and context {ContextId}.",
                 projectId,
-                contextId);
+                contextId
+            );
         }
     }
 

@@ -5,14 +5,10 @@ public enum FileOperationStatus
     Success,
     NotFound,
     InvalidRequest,
-    Failure
+    Failure,
 }
 
-public sealed record FileOperationResult<T>(
-    FileOperationStatus Status,
-    T? Value,
-    string? Message,
-    string? Details)
+public sealed record FileOperationResult<T>(FileOperationStatus Status, T? Value, string? Message, string? Details)
 {
     public static FileOperationResult<T> Succeeded(T value)
     {

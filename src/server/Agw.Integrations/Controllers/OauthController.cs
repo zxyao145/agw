@@ -1,13 +1,10 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
-
 using Agw.Integrations.Application.OAuth;
 using Agw.Integrations.Contracts.OAuth;
 using Agw.Shared;
 using Agw.Shared.Results;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Mvc;
@@ -25,7 +22,7 @@ public sealed class OAuthController : ControllerBase
     [
         "invalid_state",
         "authorization_denied",
-        "token_exchange_failed"
+        "token_exchange_failed",
     ];
 
     private readonly OAuthAuthorizationAppService _service;
@@ -35,7 +32,8 @@ public sealed class OAuthController : ControllerBase
     public OAuthController(
         OAuthAuthorizationAppService service,
         OAuthRefreshAppService refreshService,
-        OAuthRedirectUriResolver redirectUriResolver)
+        OAuthRedirectUriResolver redirectUriResolver
+    )
     {
         _service = service;
         _refreshService = refreshService;
@@ -46,17 +44,20 @@ public sealed class OAuthController : ControllerBase
     [ProducesApiResult(typeof(OAuthCallbackInfoResponse))]
     public IActionResult GetCallbackInfo()
     {
-        return ApiResult.Ok(new OAuthCallbackInfoResponse
-        {
-            CallbackUrl = _redirectUriResolver.ResolveCallbackUri(BuildRequestBaseUri())
-        });
+        return ApiResult.Ok(
+            new OAuthCallbackInfoResponse
+            {
+                CallbackUrl = _redirectUriResolver.ResolveCallbackUri(BuildRequestBaseUri()),
+            }
+        );
     }
 
     [HttpPost("authorize-start")]
     [ProducesApiResult(typeof(OAuthAuthorizeStartResponse))]
     public async Task<IActionResult> AuthorizeStartAsync(
         [FromBody] OAuthAuthorizeStartRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var response = await _service.StartAsync(
             request.ConnectionId,
@@ -64,7 +65,8 @@ public sealed class OAuthController : ControllerBase
             request.ReturnPath,
             request.CompletionTarget,
             User?.Identity?.Name ?? Constants.AdminUserName,
-            cancellationToken);
+            cancellationToken
+        );
         return ApiResult.Ok(response);
     }
 
@@ -77,15 +79,14 @@ public sealed class OAuthController : ControllerBase
             Request.Query["code"].ToString(),
             Request.Query["error"].ToString(),
             User?.Identity?.Name ?? Constants.AdminUserName,
-            cancellationToken);
+            cancellationToken
+        );
         if (result.CompletionTarget == OAuthCompletionTarget.Desktop)
         {
             return Redirect(BuildDesktopCompletionPath(result.RedirectPath));
         }
 
-        return Redirect(_redirectUriResolver.ResolveWebRedirectUri(
-            BuildRequestBaseUri(),
-            result.RedirectPath));
+        return Redirect(_redirectUriResolver.ResolveWebRedirectUri(BuildRequestBaseUri(), result.RedirectPath));
     }
 
     [HttpGet("desktop-complete")]
@@ -93,32 +94,25 @@ public sealed class OAuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status200OK)]
     public IActionResult DesktopComplete()
     {
-        var oauth = string.Equals(
-            Request.Query["oauth"].ToString(),
-            "authorized",
-            StringComparison.Ordinal)
+        var oauth = string.Equals(Request.Query["oauth"].ToString(), "authorized", StringComparison.Ordinal)
             ? "authorized"
             : "error";
-        var code = oauth == "error"
-            ? NormalizeDesktopErrorCode(Request.Query["code"].ToString())
-            : null;
-        var parameters = new Dictionary<string, string?>
-        {
-            ["oauth"] = oauth,
-            ["code"] = code
-        };
+        var code = oauth == "error" ? NormalizeDesktopErrorCode(Request.Query["code"].ToString()) : null;
+        var parameters = new Dictionary<string, string?> { ["oauth"] = oauth, ["code"] = code };
         var deepLink = QueryHelpers.AddQueryString(DesktopDeepLink, parameters);
         var encodedDeepLink = HtmlEncoder.Default.Encode(deepLink);
         var serializedDeepLink = JsonSerializer.Serialize(deepLink);
         var title = oauth == "authorized" ? "Authorization complete" : "Authorization failed";
-        var message = oauth == "authorized"
-            ? "Agw Desktop has been authorized. Opening Integrations…"
-            : "Agw Desktop could not complete authorization. Opening Integrations…";
+        var message =
+            oauth == "authorized"
+                ? "Agw Desktop has been authorized. Opening Integrations…"
+                : "Agw Desktop could not complete authorization. Opening Integrations…";
 
         Response.Headers.CacheControl = "no-store";
         Response.Headers.ContentSecurityPolicy =
             "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'";
-        return Content($$"""
+        return Content(
+            $$"""
             <!doctype html>
             <html lang="en">
             <head>
@@ -143,50 +137,46 @@ public sealed class OAuthController : ControllerBase
               <script>window.location.replace({{serializedDeepLink}});</script>
             </body>
             </html>
-            """, "text/html; charset=utf-8");
+            """,
+            "text/html; charset=utf-8"
+        );
     }
 
     [HttpPost("refresh")]
     [ProducesApiResult(typeof(OAuthRefreshResponse))]
     public async Task<IActionResult> RefreshAsync(
         [FromBody] OAuthRefreshRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var response = await _refreshService.RefreshAsync(
             request.ConnectionId,
             User?.Identity?.Name ?? Constants.AdminUserName,
-            cancellationToken);
+            cancellationToken
+        );
         return ApiResult.Ok(response);
     }
 
     private string BuildRequestBaseUri()
     {
-        return UriHelper.BuildAbsolute(
-            Request.Scheme,
-            Request.Host,
-            Request.PathBase,
-            "/");
+        return UriHelper.BuildAbsolute(Request.Scheme, Request.Host, Request.PathBase, "/");
     }
 
     private static string BuildDesktopCompletionPath(string redirectPath)
     {
         var queryIndex = redirectPath.IndexOf('?', StringComparison.Ordinal);
-        var query = queryIndex >= 0
-            ? QueryHelpers.ParseQuery(redirectPath[queryIndex..])
-            : new Dictionary<string, Microsoft.Extensions.Primitives.StringValues>();
+        var query =
+            queryIndex >= 0
+                ? QueryHelpers.ParseQuery(redirectPath[queryIndex..])
+                : new Dictionary<string, Microsoft.Extensions.Primitives.StringValues>();
         var oauth = string.Equals(query["oauth"].ToString(), "authorized", StringComparison.Ordinal)
             ? "authorized"
             : "error";
-        var code = oauth == "error"
-            ? NormalizeDesktopErrorCode(query["code"].ToString())
-            : null;
+        var code = oauth == "error" ? NormalizeDesktopErrorCode(query["code"].ToString()) : null;
         return QueryHelpers.AddQueryString(
             DesktopCompletionPath,
-            new Dictionary<string, string?>
-            {
-                ["oauth"] = oauth,
-                ["code"] = code
-            });
+            new Dictionary<string, string?> { ["oauth"] = oauth, ["code"] = code }
+        );
     }
 
     private static string NormalizeDesktopErrorCode(string code)

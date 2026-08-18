@@ -7,7 +7,9 @@ public class ConnectionConfiguration : IEntityTypeConfiguration<Connection>
 {
     public void Configure(EntityTypeBuilder<Connection> builder)
     {
-        builder.ToTable(table => table.HasComment("Represents an external account or service endpoint available to agents."));
+        builder.ToTable(table =>
+            table.HasComment("Represents an external account or service endpoint available to agents.")
+        );
         builder.HasKey(entity => entity.Id);
         builder.HasIndex(entity => entity.Alias).IsUnique();
         builder.HasIndex(entity => entity.PluginId);

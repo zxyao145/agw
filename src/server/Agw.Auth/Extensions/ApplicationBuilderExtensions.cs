@@ -1,5 +1,4 @@
 using Agw.Auth.Middleware;
-
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -19,8 +18,8 @@ public static class ApplicationBuilderExtensions
     /// <returns>同一个应用管道构建器。</returns>
     public static IApplicationBuilder UseAgwAuth(this IApplicationBuilder app)
     {
-        var allowDevelopmentDesktopOrigin = app.ApplicationServices
-            .GetRequiredService<IHostEnvironment>()
+        var allowDevelopmentDesktopOrigin = app
+            .ApplicationServices.GetRequiredService<IHostEnvironment>()
             .IsDevelopment();
 
         app.UseWebSockets();

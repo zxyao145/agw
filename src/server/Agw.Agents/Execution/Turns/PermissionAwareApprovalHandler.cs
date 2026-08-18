@@ -9,16 +9,10 @@ internal sealed class PermissionAwareApprovalHandler : IHumanGateApprovalHandler
     private readonly HumanGateApprovalCoordinator? _coordinator;
     private readonly PermissionModeState _permissionState;
 
-    public PermissionAwareApprovalHandler(
-        IHumanGateApprovalHandler inner,
-        PermissionMode? permissionMode)
-        : this(inner, new PermissionModeState(permissionMode))
-    {
-    }
+    public PermissionAwareApprovalHandler(IHumanGateApprovalHandler inner, PermissionMode? permissionMode)
+        : this(inner, new PermissionModeState(permissionMode)) { }
 
-    public PermissionAwareApprovalHandler(
-        IHumanGateApprovalHandler inner,
-        PermissionModeState permissionState)
+    public PermissionAwareApprovalHandler(IHumanGateApprovalHandler inner, PermissionModeState permissionState)
     {
         _inner = inner;
         _coordinator = inner as HumanGateApprovalCoordinator;
@@ -37,24 +31,22 @@ internal sealed class PermissionAwareApprovalHandler : IHumanGateApprovalHandler
     public bool RequiresHumanResponse(HumanGateApprovalRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return request.ToolApprovalRequest == null ||
-            _permissionState.Current != PermissionMode.FullAccess;
+        return request.ToolApprovalRequest == null || _permissionState.Current != PermissionMode.FullAccess;
     }
 
     public async ValueTask<HumanGateApprovalDecision> WaitForApprovalAsync(
         HumanGateApprovalRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (request.ToolApprovalRequest != null &&
-            _permissionState.Current == PermissionMode.FullAccess)
+        if (request.ToolApprovalRequest != null && _permissionState.Current == PermissionMode.FullAccess)
         {
             return CreateFullAccessDecision(request);
         }
 
         var pendingDecision = _inner.WaitForApprovalAsync(request, cancellationToken);
-        if (request.ToolApprovalRequest != null &&
-            _permissionState.Current == PermissionMode.FullAccess)
+        if (request.ToolApprovalRequest != null && _permissionState.Current == PermissionMode.FullAccess)
         {
             _coordinator?.ApprovePendingToolRequests();
         }
@@ -73,15 +65,10 @@ internal sealed class PermissionAwareApprovalHandler : IHumanGateApprovalHandler
                 PermissionMode.AlwaysAsk => "once",
                 PermissionMode.AllowSameArguments => "always-arguments",
                 _ => decision.ApprovalScope,
-            }
+            },
         };
     }
 
-    private static HumanGateApprovalDecision CreateFullAccessDecision(
-        HumanGateApprovalRequest request) =>
-        new(
-            request.RequestId,
-            Approved: true,
-            ResponseText: null,
-            ApprovalScope: "always-tool");
+    private static HumanGateApprovalDecision CreateFullAccessDecision(HumanGateApprovalRequest request) =>
+        new(request.RequestId, Approved: true, ResponseText: null, ApprovalScope: "always-tool");
 }

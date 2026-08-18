@@ -17,8 +17,7 @@ public sealed class PluginInstallationResponse
     public string ConnectorId { get; init; } = string.Empty;
     public string AuthSchemeId { get; init; } = string.Empty;
     public bool Enabled { get; init; }
-    public IReadOnlyDictionary<string, string?> Configuration { get; init; } =
-        new Dictionary<string, string?>();
+    public IReadOnlyDictionary<string, string?> Configuration { get; init; } = new Dictionary<string, string?>();
     public IReadOnlyDictionary<string, SecretFieldStateResponse> Secrets { get; init; } =
         new Dictionary<string, SecretFieldStateResponse>();
 }
@@ -67,8 +66,7 @@ public sealed class ConnectionResponse
     public DateTimeOffset? ExpiresAtUtc { get; init; }
     public DateTimeOffset? LastValidatedAtUtc { get; init; }
     public string? LastValidationErrorCode { get; init; }
-    public IReadOnlyDictionary<string, string?> Configuration { get; init; } =
-        new Dictionary<string, string?>();
+    public IReadOnlyDictionary<string, string?> Configuration { get; init; } = new Dictionary<string, string?>();
     public IReadOnlyDictionary<string, SecretFieldStateResponse> Secrets { get; init; } =
         new Dictionary<string, SecretFieldStateResponse>();
 }
@@ -84,7 +82,7 @@ public enum SecretUpdateAction
 {
     Keep,
     Set,
-    Clear
+    Clear,
 }
 
 public sealed class SecretFieldStateResponse
@@ -102,5 +100,5 @@ public enum ConnectionStatusResponse
     Expired,
     Invalid,
     Disabled,
-    DefinitionUnavailable
+    DefinitionUnavailable,
 }

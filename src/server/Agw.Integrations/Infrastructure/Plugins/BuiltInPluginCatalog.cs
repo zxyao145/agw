@@ -3,7 +3,6 @@ using Agw.Integrations.Domain.Plugins;
 
 namespace Agw.Integrations.Infrastructure.Plugins;
 
-
 /// <summary>
 /// 所有可以使用的 plugin 列表
 /// </summary>
@@ -71,21 +70,11 @@ public sealed class BuiltInPluginCatalog : IPluginCatalog
                     CapabilitySources =
                     [
                         // Agw 内部 C# Provider 创建工具。
-                        new NativeCapabilitySourceDefinition
-                        {
-                            Id = "github-native",
-                            Provider = "github",
-                        },
+                        new NativeCapabilitySourceDefinition { Id = "github-native", Provider = "github" },
                     ],
                 },
             ],
-            Skills =
-            [
-                new PluginSkillDefinition
-                {
-                    ContentPath = "Plugins/github/skills/github/SKILL.md",
-                },
-            ],
+            Skills = [new PluginSkillDefinition { ContentPath = "Plugins/github/skills/github/SKILL.md" }],
         },
     ];
 

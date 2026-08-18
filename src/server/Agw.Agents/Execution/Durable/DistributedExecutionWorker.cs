@@ -1,10 +1,8 @@
 using System.Collections.Concurrent;
-
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Runtime;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -37,7 +35,8 @@ internal sealed class DistributedExecutionWorker : BackgroundService
         IServerInitializationState initializationState,
         TimeProvider timeProvider,
         IOptions<ExecutionRuntimeOptions> options,
-        ILogger<DistributedExecutionWorker> logger)
+        ILogger<DistributedExecutionWorker> logger
+    )
     {
         _scopeFactory = scopeFactory;
         _applicationLock = applicationLock;
@@ -66,16 +65,13 @@ internal sealed class DistributedExecutionWorker : BackgroundService
                 var capacity = _options.MaxConcurrentExecutions - _runningExecutions.Count;
                 if (capacity > 0)
                 {
-                    await ScheduleRunnableExecutionsAsync(capacity, stoppingToken)
-                        .ConfigureAwait(false);
+                    await ScheduleRunnableExecutionsAsync(capacity, stoppingToken).ConfigureAwait(false);
                 }
 
                 await DelayAsync(stoppingToken).ConfigureAwait(false);
             }
         }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
-        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
         finally
         {
             await WaitForRunningExecutionsAsync().ConfigureAwait(false);
@@ -85,20 +81,15 @@ internal sealed class DistributedExecutionWorker : BackgroundService
     /// <summary>
     /// 从 PostgreSQL 查询候选记录，并为本 Server 尚未处理的 execution 启动竞争任务。
     /// </summary>
-    private async Task ScheduleRunnableExecutionsAsync(
-        int capacity,
-        CancellationToken cancellationToken)
+    private async Task ScheduleRunnableExecutionsAsync(int capacity, CancellationToken cancellationToken)
     {
         try
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
             var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-            var staleBefore = _timeProvider.GetUtcNow()
-                - TimeSpan.FromSeconds(_options.RecoveryProbeSeconds);
-            var executionIds = await store.GetRunnableExecutionIdsAsync(
-                    staleBefore,
-                    capacity + _runningExecutions.Count,
-                    cancellationToken)
+            var staleBefore = _timeProvider.GetUtcNow() - TimeSpan.FromSeconds(_options.RecoveryProbeSeconds);
+            var executionIds = await store
+                .GetRunnableExecutionIdsAsync(staleBefore, capacity + _runningExecutions.Count, cancellationToken)
                 .ConfigureAwait(false);
             var scheduled = 0;
             foreach (var executionId in executionIds)
@@ -119,9 +110,7 @@ internal sealed class DistributedExecutionWorker : BackgroundService
                 }
             }
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         catch (Exception exception)
         {
             _logger.LogError(exception, "Failed to query runnable distributed executions.");
@@ -131,23 +120,16 @@ internal sealed class DistributedExecutionWorker : BackgroundService
     /// <summary>
     /// 包装单个 execution 的完整处理过程，并保证异常不会终止后台轮询服务。
     /// </summary>
-    private async Task RunTrackedExecutionAsync(
-        Guid executionId,
-        CancellationToken cancellationToken)
+    private async Task RunTrackedExecutionAsync(Guid executionId, CancellationToken cancellationToken)
     {
         try
         {
             await RunExecutionAsync(executionId, cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         catch (Exception exception)
         {
-            _logger.LogError(
-                exception,
-                "Distributed execution {ExecutionId} worker failed.",
-                executionId);
+            _logger.LogError(exception, "Distributed execution {ExecutionId} worker failed.", executionId);
         }
         finally
         {
@@ -158,23 +140,26 @@ internal sealed class DistributedExecutionWorker : BackgroundService
     /// <summary>
     /// 尝试获取 execution 分布式锁；成功后只执行并持久化一个分段。
     /// </summary>
-    private async Task RunExecutionAsync(
-        Guid executionId,
-        CancellationToken cancellationToken)
+    private async Task RunExecutionAsync(Guid executionId, CancellationToken cancellationToken)
     {
         IAsyncDisposable executionLock;
-        using (var timeoutCancellation = new CancellationTokenSource(
-                   TimeSpan.FromMilliseconds(_options.LockAcquireTimeoutMilliseconds),
-                   _timeProvider))
-        using (var lockCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-                   cancellationToken,
-                   timeoutCancellation.Token))
+        using (
+            var timeoutCancellation = new CancellationTokenSource(
+                TimeSpan.FromMilliseconds(_options.LockAcquireTimeoutMilliseconds),
+                _timeProvider
+            )
+        )
+        using (
+            var lockCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken,
+                timeoutCancellation.Token
+            )
+        )
         {
             try
             {
-                executionLock = await _applicationLock.AcquireAsync(
-                        DurableExecutionLock.GetResourceName(executionId),
-                        lockCancellation.Token)
+                executionLock = await _applicationLock
+                    .AcquireAsync(DurableExecutionLock.GetResourceName(executionId), lockCancellation.Token)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
@@ -189,32 +174,23 @@ internal sealed class DistributedExecutionWorker : BackgroundService
             await using var scope = _scopeFactory.CreateAsyncScope();
             var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
             var executor = scope.ServiceProvider.GetRequiredService<DurableExecutionSegmentExecutor>();
-            var staleBefore = _timeProvider.GetUtcNow()
-                - TimeSpan.FromSeconds(_options.RecoveryProbeSeconds);
-            var snapshot = await store.TryBeginSegmentAsync(
-                    executionId,
-                    staleBefore,
-                    cancellationToken)
+            var staleBefore = _timeProvider.GetUtcNow() - TimeSpan.FromSeconds(_options.RecoveryProbeSeconds);
+            var snapshot = await store
+                .TryBeginSegmentAsync(executionId, staleBefore, cancellationToken)
                 .ConfigureAwait(false);
             if (snapshot == null)
             {
                 return;
             }
 
-            using var segmentCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken);
-            using var monitorCancellation = CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken);
-            var interruptMonitor = MonitorInterruptAsync(
-                executionId,
-                segmentCancellation,
-                monitorCancellation.Token);
+            using var segmentCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            using var monitorCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var interruptMonitor = MonitorInterruptAsync(executionId, segmentCancellation, monitorCancellation.Token);
             DurableExecutionSegmentResult result;
             try
             {
-                result = await executor.RunAsync(
-                        snapshot.CreateSegmentInput(),
-                        segmentCancellation.Token)
+                result = await executor
+                    .RunAsync(snapshot.CreateSegmentInput(), segmentCancellation.Token)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -233,13 +209,14 @@ internal sealed class DistributedExecutionWorker : BackgroundService
                     exception,
                     "Distributed execution {ExecutionId} segment {SegmentIndex} failed.",
                     executionId,
-                    snapshot.SegmentIndex);
+                    snapshot.SegmentIndex
+                );
                 result = new DurableExecutionSegmentResult
                 {
                     ExecutionId = executionId,
                     SegmentIndex = snapshot.SegmentIndex,
                     Status = DurableExecutionSegmentStatus.Failed,
-                    ErrorMessage = exception.Message
+                    ErrorMessage = exception.Message,
                 };
             }
             finally
@@ -249,27 +226,26 @@ internal sealed class DistributedExecutionWorker : BackgroundService
                 {
                     await interruptMonitor.ConfigureAwait(false);
                 }
-                catch (OperationCanceledException)
-                {
-                }
+                catch (OperationCanceledException) { }
                 catch (Exception exception)
                 {
                     _logger.LogWarning(
                         exception,
                         "Failed to monitor interrupt state for distributed execution {ExecutionId}.",
-                        executionId);
+                        executionId
+                    );
                 }
             }
 
-            var persisted = await store.SaveSegmentResultAsync(result, cancellationToken)
-                .ConfigureAwait(false);
+            var persisted = await store.SaveSegmentResultAsync(result, cancellationToken).ConfigureAwait(false);
             if (IsTerminal(persisted.Status))
             {
                 await PublishTerminalBestEffortAsync(
                         executionId,
                         result.SegmentIndex,
                         persisted.Status,
-                        cancellationToken)
+                        cancellationToken
+                    )
                     .ConfigureAwait(false);
             }
         }
@@ -278,16 +254,15 @@ internal sealed class DistributedExecutionWorker : BackgroundService
     private async Task MonitorInterruptAsync(
         Guid executionId,
         CancellationTokenSource segmentCancellation,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         while (!cancellationToken.IsCancellationRequested)
         {
-            await Task.Delay(InterruptPollingInterval, _timeProvider, cancellationToken)
-                .ConfigureAwait(false);
+            await Task.Delay(InterruptPollingInterval, _timeProvider, cancellationToken).ConfigureAwait(false);
             await using var scope = _scopeFactory.CreateAsyncScope();
             var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-            var snapshot = await store.GetAsync(executionId, cancellationToken)
-                .ConfigureAwait(false);
+            var snapshot = await store.GetAsync(executionId, cancellationToken).ConfigureAwait(false);
             if (snapshot.Status != DurableExecutionStatus.Interrupted)
             {
                 continue;
@@ -305,7 +280,8 @@ internal sealed class DistributedExecutionWorker : BackgroundService
         Guid executionId,
         int segmentIndex,
         DurableExecutionStatus status,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         try
         {
@@ -313,14 +289,16 @@ internal sealed class DistributedExecutionWorker : BackgroundService
             {
                 DurableExecutionStatus.Failed => "failed",
                 DurableExecutionStatus.Interrupted => "interrupted",
-                _ => "completed"
+                _ => "completed",
             };
-            await _eventStream.AppendAsync(
+            await _eventStream
+                .AppendAsync(
                     executionId,
                     segmentIndex,
                     int.MaxValue,
                     TurnMessageFactory.CreateFinished(terminalStatus),
-                    cancellationToken)
+                    cancellationToken
+                )
                 .ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
@@ -329,7 +307,8 @@ internal sealed class DistributedExecutionWorker : BackgroundService
             _logger.LogWarning(
                 exception,
                 "Failed to publish terminal output for distributed execution {ExecutionId}.",
-                executionId);
+                executionId
+            );
         }
     }
 
@@ -351,10 +330,7 @@ internal sealed class DistributedExecutionWorker : BackgroundService
     /// 使用统一时钟等待下一次 PostgreSQL 轮询。
     /// </summary>
     private Task DelayAsync(CancellationToken cancellationToken) =>
-        Task.Delay(
-            TimeSpan.FromMilliseconds(_options.WorkerPollingMilliseconds),
-            _timeProvider,
-            cancellationToken);
+        Task.Delay(TimeSpan.FromMilliseconds(_options.WorkerPollingMilliseconds), _timeProvider, cancellationToken);
 
     /// <summary>
     /// Host 关闭时等待当前 Server 已启动的 execution 任务释放分布式锁。
@@ -371,16 +347,15 @@ internal sealed class DistributedExecutionWorker : BackgroundService
         {
             await Task.WhenAll(tasks).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
-        {
-        }
+        catch (OperationCanceledException) { }
     }
 
     /// <summary>
     /// 判断执行状态是否已经终止。
     /// </summary>
     private static bool IsTerminal(DurableExecutionStatus status) =>
-        status is DurableExecutionStatus.Completed
-            or DurableExecutionStatus.Failed
-            or DurableExecutionStatus.Interrupted;
+        status
+            is DurableExecutionStatus.Completed
+                or DurableExecutionStatus.Failed
+                or DurableExecutionStatus.Interrupted;
 }

@@ -1,7 +1,6 @@
 using Agw.Agents.Execution.Agents.AIContextProviders.PlanMode;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Utils;
-
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
@@ -16,7 +15,8 @@ public static class AgwAgentExtensions
         ResolvedAgentDefinition definition,
         AgentCapabilityComposition capabilities,
         ILoggerFactory loggerFactory,
-        IServiceProvider services)
+        IServiceProvider services
+    )
     {
         ArgumentNullException.ThrowIfNull(chatClient);
         ArgumentNullException.ThrowIfNull(definition);
@@ -29,39 +29,42 @@ public static class AgwAgentExtensions
             ModelId = definition.ModelId,
             Instructions = AgentRuntimeServiceUtil.BuildInstructions(definition.SystemPrompt),
             Tools = capabilities.Tools.Count == 0 ? null : capabilities.Tools.ToList(),
-            MaxOutputTokens = definition.MaxOutputTokens
+            MaxOutputTokens = definition.MaxOutputTokens,
         };
         var modeProvider = capabilities.ContextProviders.OfType<AgentModeProvider>().FirstOrDefault();
         var contextProviders = capabilities.ContextProviders.ToList();
         if (modeProvider != null)
         {
-            contextProviders.Add(new PlanModeToolGuardProvider(
-                modeProvider,
-                capabilities.PlanModeAllowedToolNames,
-                loggerFactory.CreateLogger<PlanModeToolGuardProvider>()));
+            contextProviders.Add(
+                new PlanModeToolGuardProvider(
+                    modeProvider,
+                    capabilities.PlanModeAllowedToolNames,
+                    loggerFactory.CreateLogger<PlanModeToolGuardProvider>()
+                )
+            );
         }
 
         FunctionLoopContextTracker? functionLoopContextTracker = null;
         var compactionStateKey = definition.CompactionProvider is CompactionProvider compactionProvider
             ? compactionProvider.StateKeys.SingleOrDefault()
             : null;
-        var chatClientBuilder = chatClient.AsBuilder()
+        var chatClientBuilder = chatClient
+            .AsBuilder()
             .UseApprovalResponseBinding(loggerFactory)
             .UseApprovalNotRequiredFunctionBypassing()
             .UseFunctionInvocation(loggerFactory);
         if (definition.CompactionProvider != null)
         {
             functionLoopContextTracker = new FunctionLoopContextTracker();
-            chatClientBuilder.Use(innerClient =>
-                new FunctionLoopMessageIsolationChatClient(
-                    innerClient,
-                    functionLoopContextTracker));
+            chatClientBuilder.Use(innerClient => new FunctionLoopMessageIsolationChatClient(
+                innerClient,
+                functionLoopContextTracker
+            ));
         }
 
         if (modeProvider != null)
         {
-            chatClientBuilder.Use(static innerClient =>
-                new PlanModeToolVisibilityChatClient(innerClient));
+            chatClientBuilder.Use(static innerClient => new PlanModeToolVisibilityChatClient(innerClient));
         }
 
         chatClientBuilder
@@ -74,13 +77,15 @@ public static class AgwAgentExtensions
                 .Use(innerClient => new LocalHistoryCompactionScopeChatClient(
                     innerClient,
                     compactionStateKey,
-                    loggerFactory.CreateLogger<LocalHistoryCompactionScopeChatClient>()))
+                    loggerFactory.CreateLogger<LocalHistoryCompactionScopeChatClient>()
+                ))
                 .UseAIContextProviders(definition.CompactionProvider);
         }
 
         chatClientBuilder.UseOpenTelemetry(
             sourceName: definition.OpenTelemetrySourceName,
-            configure: static options => options.EnableSensitiveData = true);
+            configure: static options => options.EnableSensitiveData = true
+        );
 
         var configuredChatClient = chatClientBuilder.Build(services);
         capabilities.AddResource(configuredChatClient);
@@ -96,28 +101,31 @@ public static class AgwAgentExtensions
                 UseProvidedChatClientAsIs = true,
                 RequirePerServiceCallChatHistoryPersistence = true,
                 WarnOnChatHistoryProviderConflict = false,
-                ThrowOnChatHistoryProviderConflict = false
+                ThrowOnChatHistoryProviderConflict = false,
             },
             loggerFactory,
-            services);
+            services
+        );
 
         var agentBuilder = innerAgent.AsBuilder();
         if (capabilities.LoopEvaluators.Count > 0)
         {
-            agentBuilder.Use((inner, _) => new LoopAgent(
-                inner,
-                capabilities.LoopEvaluators,
-                new LoopAgentOptions { MaxIterations = 10 },
-                loggerFactory));
+            agentBuilder.Use(
+                (inner, _) =>
+                    new LoopAgent(
+                        inner,
+                        capabilities.LoopEvaluators,
+                        new LoopAgentOptions { MaxIterations = 10 },
+                        loggerFactory
+                    )
+            );
         }
 
         var todoProvider = capabilities.ContextProviders.OfType<TodoProvider>().FirstOrDefault();
         if (todoProvider != null)
         {
             var todoStateSnapshotMiddleware = new TodoStateSnapshotMiddleware(todoProvider);
-            agentBuilder.Use(
-                runFunc: null,
-                runStreamingFunc: todoStateSnapshotMiddleware.RunStreamingAsync);
+            agentBuilder.Use(runFunc: null, runStreamingFunc: todoStateSnapshotMiddleware.RunStreamingAsync);
         }
 
         if (modeProvider != null)
@@ -125,31 +133,31 @@ public static class AgwAgentExtensions
             var modeStateSnapshotMiddleware = new ModeStateSnapshotMiddleware(modeProvider);
             agentBuilder.Use(
                 runFunc: modeStateSnapshotMiddleware.RunAsync,
-                runStreamingFunc: modeStateSnapshotMiddleware.RunStreamingAsync);
+                runStreamingFunc: modeStateSnapshotMiddleware.RunStreamingAsync
+            );
         }
 
         if (capabilities.ToolWarnings.Count > 0)
         {
-            var warningMiddleware = new ToolWarningMiddleware(
-                capabilities.ToolWarnings);
+            var warningMiddleware = new ToolWarningMiddleware(capabilities.ToolWarnings);
             agentBuilder.Use(
                 runFunc: warningMiddleware.RunAsync,
-                runStreamingFunc: warningMiddleware.RunStreamingAsync);
+                runStreamingFunc: warningMiddleware.RunStreamingAsync
+            );
         }
 
         if (capabilities.ToolInvocationWarnings.Count > 0)
         {
-            var invocationWarningMiddleware = new ToolInvocationWarningMiddleware(
-                capabilities.ToolInvocationWarnings);
+            var invocationWarningMiddleware = new ToolInvocationWarningMiddleware(capabilities.ToolInvocationWarnings);
             agentBuilder.Use(
                 runFunc: invocationWarningMiddleware.RunAsync,
-                runStreamingFunc: invocationWarningMiddleware.RunStreamingAsync);
+                runStreamingFunc: invocationWarningMiddleware.RunStreamingAsync
+            );
         }
 
-        agentBuilder.UseToolApproval(new ToolApprovalAgentOptions
-        {
-            AutoApprovalRules = capabilities.AutoApprovalRules
-        });
+        agentBuilder.UseToolApproval(
+            new ToolApprovalAgentOptions { AutoApprovalRules = capabilities.AutoApprovalRules }
+        );
         agentBuilder.UseOpenTelemetry(sourceName: definition.OpenTelemetrySourceName);
         var agent = agentBuilder.Build(services);
         return functionLoopContextTracker == null

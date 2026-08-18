@@ -3,7 +3,6 @@ using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Agents.Execution.Durable;
@@ -53,12 +52,8 @@ internal sealed record DurableExecutionSnapshot
     /// </summary>
     public IReadOnlyList<DurableHumanInteractionSnapshot> GetUnansweredInteractions()
     {
-        var answered = Responses
-            .Select(item => item.RequestId)
-            .ToHashSet(StringComparer.Ordinal);
-        return PendingInteractions
-            .Where(item => !answered.Contains(item.RequestId))
-            .ToArray();
+        var answered = Responses.Select(item => item.RequestId).ToHashSet(StringComparer.Ordinal);
+        return PendingInteractions.Where(item => !answered.Contains(item.RequestId)).ToArray();
     }
 
     /// <summary>
@@ -67,26 +62,24 @@ internal sealed record DurableExecutionSnapshot
     public DurableExecutionSegmentInput CreateSegmentInput()
     {
         var responses = Responses.ToDictionary(item => item.RequestId, StringComparer.Ordinal);
-        if (responses.Count != Responses.Count
+        if (
+            responses.Count != Responses.Count
             || responses.Count != PendingInteractions.Count
             || Responses.Any(item => item.ExecutionId != Manifest.ExecutionId)
-            || PendingInteractions.Any(item => !responses.ContainsKey(item.RequestId)))
+            || PendingInteractions.Any(item => !responses.ContainsKey(item.RequestId))
+        )
         {
             throw new AgwException(
                 ErrorCodes.DurableExecutionConflict,
-                "A resumable execution requires one response for every pending interaction.");
+                "A resumable execution requires one response for every pending interaction."
+            );
         }
 
         var resolved = PendingInteractions
             .Select(item => new DurableResolvedInteraction(item, responses[item.RequestId]))
             .ToArray();
-        return new DurableExecutionSegmentInput(
-            Manifest.ExecutionId,
-            SegmentIndex,
-            resolved,
-            Checkpoint);
+        return new DurableExecutionSegmentInput(Manifest.ExecutionId, SegmentIndex, resolved, Checkpoint);
     }
-
 }
 
 /// <summary>
@@ -118,17 +111,19 @@ internal sealed class DurableExecutionStore
         AgwUserInput input,
         TaskProjection task,
         ExecutionSettings settings,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken
+    ) =>
         await RegisterAsync(
-            executionId,
-            userName,
-            Constants.AdminUserId,
-            agentId,
-            agentType,
-            input,
-            task,
-            settings,
-            cancellationToken)
+                executionId,
+                userName,
+                Constants.AdminUserId,
+                agentId,
+                agentType,
+                input,
+                task,
+                settings,
+                cancellationToken
+            )
             .ConfigureAwait(false);
 
     internal async Task<DurableExecutionSnapshot> RegisterAsync(
@@ -140,7 +135,8 @@ internal sealed class DurableExecutionStore
         AgwUserInput input,
         TaskProjection task,
         ExecutionSettings settings,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (executionId == Guid.Empty)
         {
@@ -161,7 +157,7 @@ internal sealed class DurableExecutionStore
             AgentType = agentType,
             Input = input,
             Task = DurableProjectTaskSnapshot.FromProjection(task),
-            Settings = DurableExecutionSettings.FromSettings(settings)
+            Settings = DurableExecutionSettings.FromSettings(settings),
         };
         var manifestJson = DurableExecutionJson.Serialize(manifest);
         var existing = await FindAsync(executionId, userName: null, tracking: false, cancellationToken)
@@ -180,7 +176,7 @@ internal sealed class DurableExecutionStore
             Status = DurableExecutionStatus.Queued,
             SegmentIndex = 0,
             StateChangedAt = now,
-            StateVersion = Guid.CreateVersion7()
+            StateVersion = Guid.CreateVersion7(),
         };
         _dbContext.Add(record);
         try
@@ -207,12 +203,10 @@ internal sealed class DurableExecutionStore
     /// <summary>
     /// 按 executionId 加载 execution 快照，供受信任的后台执行器使用。
     /// </summary>
-    internal async Task<DurableExecutionSnapshot> GetAsync(
-        Guid executionId,
-        CancellationToken cancellationToken)
+    internal async Task<DurableExecutionSnapshot> GetAsync(Guid executionId, CancellationToken cancellationToken)
     {
-        var record = await FindAsync(executionId, userName: null, tracking: false, cancellationToken)
-            .ConfigureAwait(false)
+        var record =
+            await FindAsync(executionId, userName: null, tracking: false, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
         return ToSnapshot(record);
     }
@@ -223,10 +217,11 @@ internal sealed class DurableExecutionStore
     internal async Task<DurableExecutionSnapshot> GetAuthorizedAsync(
         Guid executionId,
         string userName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var record = await FindAsync(executionId, userName, tracking: false, cancellationToken)
-            .ConfigureAwait(false)
+        var record =
+            await FindAsync(executionId, userName, tracking: false, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
         return ToSnapshot(record);
     }
@@ -237,31 +232,44 @@ internal sealed class DurableExecutionStore
     internal async Task<IReadOnlyList<Guid>> GetRunnableExecutionIdsAsync(
         DateTimeOffset staleRunningBefore,
         int limit,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (limit <= 0)
         {
             throw new AgwException(ErrorCodes.InvalidParam, "limit must be positive.");
         }
 
-        var candidates = _dbContext.Set<DurableExecutionRecord>()
+        var candidates = _dbContext
+            .Set<DurableExecutionRecord>()
             .AsNoTracking()
-            .Where(item => item.Status == DurableExecutionStatus.Queued
+            .Where(item =>
+                item.Status == DurableExecutionStatus.Queued
                 || item.Status == DurableExecutionStatus.Resuming
-                || item.Status == DurableExecutionStatus.Running);
-        if (string.Equals(
+                || item.Status == DurableExecutionStatus.Running
+            );
+        if (
+            string.Equals(
                 _dbContext.Database.ProviderName,
                 "Microsoft.EntityFrameworkCore.Sqlite",
-                StringComparison.Ordinal))
+                StringComparison.Ordinal
+            )
+        )
         {
             // SQLite 不能翻译 DateTimeOffset 的比较和排序；它只用于本地/测试，先缩小到可运行状态再在内存筛选。
             var localCandidates = await candidates
-                .Select(item => new { item.Id, item.Status, item.StateChangedAt })
+                .Select(item => new
+                {
+                    item.Id,
+                    item.Status,
+                    item.StateChangedAt,
+                })
                 .ToArrayAsync(cancellationToken)
                 .ConfigureAwait(false);
             return localCandidates
-                .Where(item => item.Status != DurableExecutionStatus.Running
-                    || item.StateChangedAt <= staleRunningBefore)
+                .Where(item =>
+                    item.Status != DurableExecutionStatus.Running || item.StateChangedAt <= staleRunningBefore
+                )
                 .OrderBy(item => item.Status == DurableExecutionStatus.Running ? 1 : 0)
                 .ThenBy(item => item.StateChangedAt)
                 .Select(item => item.Id)
@@ -270,8 +278,7 @@ internal sealed class DurableExecutionStore
         }
 
         return await candidates
-            .Where(item => item.Status != DurableExecutionStatus.Running
-                || item.StateChangedAt <= staleRunningBefore)
+            .Where(item => item.Status != DurableExecutionStatus.Running || item.StateChangedAt <= staleRunningBefore)
             .OrderBy(item => item.Status == DurableExecutionStatus.Running ? 1 : 0)
             .ThenBy(item => item.StateChangedAt)
             .Select(item => item.Id)
@@ -287,16 +294,16 @@ internal sealed class DurableExecutionStore
     internal async Task<DurableExecutionSnapshot?> TryBeginSegmentAsync(
         Guid executionId,
         DateTimeOffset staleRunningBefore,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         _dbContext.ChangeTracker.Clear();
-        var record = await FindAsync(executionId, userName: null, tracking: true, cancellationToken)
-            .ConfigureAwait(false)
+        var record =
+            await FindAsync(executionId, userName: null, tracking: true, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
-        var runnable = record.Status is DurableExecutionStatus.Queued
-            or DurableExecutionStatus.Resuming
-            || record.Status == DurableExecutionStatus.Running
-            && record.StateChangedAt <= staleRunningBefore;
+        var runnable =
+            record.Status is DurableExecutionStatus.Queued or DurableExecutionStatus.Resuming
+            || record.Status == DurableExecutionStatus.Running && record.StateChangedAt <= staleRunningBefore;
         if (!runnable)
         {
             return null;
@@ -322,19 +329,15 @@ internal sealed class DurableExecutionStore
     /// </summary>
     internal async Task<DurableExecutionSnapshot> SaveSegmentResultAsync(
         DurableExecutionSegmentResult result,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         ArgumentNullException.ThrowIfNull(result);
         _dbContext.ChangeTracker.Clear();
-        var record = await FindAsync(
-                result.ExecutionId,
-                userName: null,
-                tracking: true,
-                cancellationToken)
-            .ConfigureAwait(false)
+        var record =
+            await FindAsync(result.ExecutionId, userName: null, tracking: true, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
-        if (record.Status != DurableExecutionStatus.Running
-            || record.SegmentIndex != result.SegmentIndex)
+        if (record.Status != DurableExecutionStatus.Running || record.SegmentIndex != result.SegmentIndex)
         {
             if (record.Status == DurableExecutionStatus.Interrupted)
             {
@@ -343,7 +346,8 @@ internal sealed class DurableExecutionStore
 
             throw new AgwException(
                 ErrorCodes.DurableExecutionConflict,
-                "The persisted execution state does not match the completed segment.");
+                "The persisted execution state does not match the completed segment."
+            );
         }
 
         ApplySegmentResult(record, result);
@@ -366,13 +370,14 @@ internal sealed class DurableExecutionStore
     internal async Task<DurableExecutionSnapshot> SubmitHumanResponseAsync(
         SubmitDurableHumanResponseRequest request,
         string userName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         ArgumentNullException.ThrowIfNull(request);
         var requestId = request.RequestId.Trim();
         _dbContext.ChangeTracker.Clear();
-        var record = await FindAsync(request.ExecutionId, userName, tracking: true, cancellationToken)
-            .ConfigureAwait(false)
+        var record =
+            await FindAsync(request.ExecutionId, userName, tracking: true, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
         var snapshot = ToSnapshot(record);
         var response = new DurableHumanResponseEnvelope
@@ -381,28 +386,33 @@ internal sealed class DurableExecutionStore
             RequestId = requestId,
             Approved = request.Approved,
             ResponseText = request.ResponseText,
-            ApprovalScope = string.IsNullOrWhiteSpace(request.ApprovalScope)
-                ? "once"
-                : request.ApprovalScope.Trim(),
-            ResponseData = request.ResponseData
+            ApprovalScope = string.IsNullOrWhiteSpace(request.ApprovalScope) ? "once" : request.ApprovalScope.Trim(),
+            ResponseData = request.ResponseData,
         };
         var existing = snapshot.Responses.SingleOrDefault(item =>
-            string.Equals(item.RequestId, requestId, StringComparison.Ordinal));
+            string.Equals(item.RequestId, requestId, StringComparison.Ordinal)
+        );
         if (existing != null)
         {
-            if (string.Equals(
+            if (
+                string.Equals(
                     DurableExecutionJson.Serialize(existing),
                     DurableExecutionJson.Serialize(response),
-                    StringComparison.Ordinal))
+                    StringComparison.Ordinal
+                )
+            )
             {
                 return snapshot;
             }
 
             throw new AgwException(ErrorCodes.DurableExecutionConflict);
         }
-        if (snapshot.Status != DurableExecutionStatus.WaitingForHuman
+        if (
+            snapshot.Status != DurableExecutionStatus.WaitingForHuman
             || !snapshot.PendingInteractions.Any(item =>
-                string.Equals(item.RequestId, requestId, StringComparison.Ordinal)))
+                string.Equals(item.RequestId, requestId, StringComparison.Ordinal)
+            )
+        )
         {
             throw new AgwException(ErrorCodes.HumanInteractionNotFound);
         }
@@ -439,27 +449,35 @@ internal sealed class DurableExecutionStore
     internal async Task<bool> RequestInterruptAsync(
         Guid executionId,
         string userName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var now = _timeProvider.GetUtcNow();
-        var updatedCount = await _dbContext.Set<DurableExecutionRecord>()
-            .Where(item => item.Id == executionId
+        var updatedCount = await _dbContext
+            .Set<DurableExecutionRecord>()
+            .Where(item =>
+                item.Id == executionId
                 && item.UserName == userName
                 && item.Status != DurableExecutionStatus.Completed
                 && item.Status != DurableExecutionStatus.Failed
-                && item.Status != DurableExecutionStatus.Interrupted)
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(item => item.Status, DurableExecutionStatus.Interrupted)
-                .SetProperty(item => item.StateChangedAt, now)
-                .SetProperty(item => item.StateVersion, Guid.CreateVersion7()), cancellationToken)
+                && item.Status != DurableExecutionStatus.Interrupted
+            )
+            .ExecuteUpdateAsync(
+                setters =>
+                    setters
+                        .SetProperty(item => item.Status, DurableExecutionStatus.Interrupted)
+                        .SetProperty(item => item.StateChangedAt, now)
+                        .SetProperty(item => item.StateVersion, Guid.CreateVersion7()),
+                cancellationToken
+            )
             .ConfigureAwait(false);
         if (updatedCount > 0)
         {
             return true;
         }
 
-        var existing = await FindAsync(executionId, userName, tracking: false, cancellationToken)
-            .ConfigureAwait(false)
+        var existing =
+            await FindAsync(executionId, userName, tracking: false, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
         return false;
     }
@@ -471,7 +489,8 @@ internal sealed class DurableExecutionStore
         Guid executionId,
         string? userName,
         bool tracking,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         IQueryable<DurableExecutionRecord> query = _dbContext.Set<DurableExecutionRecord>();
         if (!tracking)
@@ -492,11 +511,14 @@ internal sealed class DurableExecutionStore
     private static DurableExecutionSnapshot EnsureIdempotentRegistration(
         DurableExecutionRecord existing,
         string userName,
-        string manifestJson)
+        string manifestJson
+    )
     {
         // ManifestJson 已由 EF 加密拦截器解密；比较规范化明文即可确认请求幂等。
-        if (!string.Equals(existing.UserName, userName, StringComparison.Ordinal)
-            || !string.Equals(existing.ManifestJson, manifestJson, StringComparison.Ordinal))
+        if (
+            !string.Equals(existing.UserName, userName, StringComparison.Ordinal)
+            || !string.Equals(existing.ManifestJson, manifestJson, StringComparison.Ordinal)
+        )
         {
             throw new AgwException(ErrorCodes.DurableExecutionConflict);
         }
@@ -507,9 +529,7 @@ internal sealed class DurableExecutionStore
     /// <summary>
     /// 把分段结果映射到同一条 execution 状态记录。
     /// </summary>
-    private static void ApplySegmentResult(
-        DurableExecutionRecord record,
-        DurableExecutionSegmentResult result)
+    private static void ApplySegmentResult(DurableExecutionRecord record, DurableExecutionSegmentResult result)
     {
         switch (result.Status)
         {
@@ -517,11 +537,9 @@ internal sealed class DurableExecutionStore
                 ValidatePendingInteractions(result.PendingInteractions);
                 record.Status = DurableExecutionStatus.WaitingForHuman;
                 record.SegmentIndex = checked(result.SegmentIndex + 1);
-                record.CheckpointJson = result.Checkpoint == null
-                    ? null
-                    : DurableExecutionJson.Serialize(result.Checkpoint);
-                record.PendingInteractionsJson = DurableExecutionJson.Serialize(
-                    result.PendingInteractions);
+                record.CheckpointJson =
+                    result.Checkpoint == null ? null : DurableExecutionJson.Serialize(result.Checkpoint);
+                record.PendingInteractionsJson = DurableExecutionJson.Serialize(result.PendingInteractions);
                 record.ResponsesJson = null;
                 record.ErrorMessage = null;
                 break;
@@ -532,34 +550,33 @@ internal sealed class DurableExecutionStore
                 SetTerminal(
                     record,
                     DurableExecutionStatus.Failed,
-                    result.ErrorMessage ?? "Distributed execution failed.");
+                    result.ErrorMessage ?? "Distributed execution failed."
+                );
                 break;
             default:
                 throw new AgwException(
                     ErrorCodes.DurableExecutionConflict,
-                    $"Unsupported durable segment status '{result.Status}'.");
+                    $"Unsupported durable segment status '{result.Status}'."
+                );
         }
     }
 
     /// <summary>
     /// 校验等待边界包含非空且互不重复的 requestId。
     /// </summary>
-    private static void ValidatePendingInteractions(
-        IReadOnlyList<DurableHumanInteractionSnapshot> pending)
+    private static void ValidatePendingInteractions(IReadOnlyList<DurableHumanInteractionSnapshot> pending)
     {
-        var distinct = pending
-            .Select(item => item.RequestId)
-            .Distinct(StringComparer.Ordinal)
-            .Count();
-        if (pending.Count == 0
+        var distinct = pending.Select(item => item.RequestId).Distinct(StringComparer.Ordinal).Count();
+        if (
+            pending.Count == 0
             || distinct != pending.Count
-            || pending.Any(item =>
-                string.IsNullOrWhiteSpace(item.RequestId)
-                || item.RequestId.Length > 128))
+            || pending.Any(item => string.IsNullOrWhiteSpace(item.RequestId) || item.RequestId.Length > 128)
+        )
         {
             throw new AgwException(
                 ErrorCodes.DurableExecutionConflict,
-                "A waiting durable segment requires valid, unique pending interactions.");
+                "A waiting durable segment requires valid, unique pending interactions."
+            );
         }
     }
 
@@ -568,17 +585,19 @@ internal sealed class DurableExecutionStore
     /// </summary>
     private async Task<DurableExecutionSnapshot> ResolveConcurrentSegmentResultAsync(
         Guid executionId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         _dbContext.ChangeTracker.Clear();
-        var record = await FindAsync(executionId, userName: null, tracking: true, cancellationToken)
-            .ConfigureAwait(false)
+        var record =
+            await FindAsync(executionId, userName: null, tracking: true, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
         if (record.Status != DurableExecutionStatus.Interrupted)
         {
             throw new AgwException(
                 ErrorCodes.DurableExecutionConflict,
-                "The distributed execution state changed while a segment result was being saved.");
+                "The distributed execution state changed while a segment result was being saved."
+            );
         }
         return ToSnapshot(record);
     }
@@ -590,18 +609,21 @@ internal sealed class DurableExecutionStore
     {
         var manifest = DurableExecutionJson.DeserializeRequired<DurableExecutionManifest>(
             record.ManifestJson,
-            "durable execution manifest");
+            "durable execution manifest"
+        );
         if (manifest.SchemaVersion != DurableExecutionManifest.CurrentSchemaVersion)
         {
             throw new AgwException(
                 ErrorCodes.DurableExecutionConflict,
-                $"Execution '{record.Id}' uses unsupported manifest schema version '{manifest.SchemaVersion}'.");
+                $"Execution '{record.Id}' uses unsupported manifest schema version '{manifest.SchemaVersion}'."
+            );
         }
         if (manifest.ExecutionId != record.Id)
         {
             throw new AgwException(
                 ErrorCodes.DurableExecutionConflict,
-                $"Execution '{record.Id}' contains an inconsistent manifest.");
+                $"Execution '{record.Id}' contains an inconsistent manifest."
+            );
         }
 
         return new DurableExecutionSnapshot
@@ -613,28 +635,28 @@ internal sealed class DurableExecutionStore
                 ? null
                 : DurableExecutionJson.DeserializeRequired<DurableAgentflowCheckpoint>(
                     record.CheckpointJson,
-                    "durable execution checkpoint"),
+                    "durable execution checkpoint"
+                ),
             PendingInteractions = string.IsNullOrWhiteSpace(record.PendingInteractionsJson)
                 ? []
                 : DurableExecutionJson.DeserializeRequired<DurableHumanInteractionSnapshot[]>(
                     record.PendingInteractionsJson,
-                    "durable execution pending interactions"),
+                    "durable execution pending interactions"
+                ),
             Responses = string.IsNullOrWhiteSpace(record.ResponsesJson)
                 ? []
                 : DurableExecutionJson.DeserializeRequired<DurableHumanResponseEnvelope[]>(
                     record.ResponsesJson,
-                    "durable execution responses"),
-            ErrorMessage = record.ErrorMessage
+                    "durable execution responses"
+                ),
+            ErrorMessage = record.ErrorMessage,
         };
     }
 
     /// <summary>
     /// 设置终态并清除仅恢复期间需要的 checkpoint、pending 和 response。
     /// </summary>
-    private static void SetTerminal(
-        DurableExecutionRecord record,
-        DurableExecutionStatus status,
-        string? errorMessage)
+    private static void SetTerminal(DurableExecutionRecord record, DurableExecutionStatus status, string? errorMessage)
     {
         record.Status = status;
         record.CheckpointJson = null;
@@ -646,9 +668,7 @@ internal sealed class DurableExecutionStore
     /// <summary>
     /// 更新时间与乐观并发版本后保存状态变更。
     /// </summary>
-    private async Task SaveStateAsync(
-        DurableExecutionRecord record,
-        CancellationToken cancellationToken)
+    private async Task SaveStateAsync(DurableExecutionRecord record, CancellationToken cancellationToken)
     {
         record.StateChangedAt = _timeProvider.GetUtcNow();
         record.StateVersion = Guid.CreateVersion7();

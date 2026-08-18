@@ -3,8 +3,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Agw.Shared.Data.Entities.Agents;
 
-public sealed class AgentSessionStateEntryConfiguration :
-    IEntityTypeConfiguration<AgentSessionStateEntry>
+public sealed class AgentSessionStateEntryConfiguration : IEntityTypeConfiguration<AgentSessionStateEntry>
 {
     public void Configure(EntityTypeBuilder<AgentSessionStateEntry> builder)
     {
@@ -12,17 +11,19 @@ public sealed class AgentSessionStateEntryConfiguration :
         {
             entry.ProjectConversationId,
             entry.AgentId,
-            entry.AgentflowNodeId
+            entry.AgentflowNodeId,
         });
         builder.Property(entry => entry.AgentflowNodeId).HasMaxLength(512);
         builder.Property(entry => entry.SerializedSession).IsRequired();
         builder.HasIndex(entry => entry.UpdatedAt);
 
-        builder.HasOne(entry => entry.ProjectConversation)
+        builder
+            .HasOne(entry => entry.ProjectConversation)
             .WithMany()
             .HasForeignKey(entry => entry.ProjectConversationId)
             .OnDelete(DeleteBehavior.Cascade);
-        builder.HasOne(entry => entry.Agent)
+        builder
+            .HasOne(entry => entry.Agent)
             .WithMany()
             .HasForeignKey(entry => entry.AgentId)
             .OnDelete(DeleteBehavior.Cascade);

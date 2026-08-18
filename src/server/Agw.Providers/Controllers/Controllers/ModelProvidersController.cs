@@ -4,9 +4,7 @@ using Agw.Shared;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Providers.Controllers.Controllers;
@@ -27,24 +25,26 @@ public class ModelProvidersController : ControllerBase
     public async Task<IActionResult> ListAsync([FromQuery] Guid? modelId = null, [FromQuery] Guid? providerId = null)
     {
         var entities = await _service.ListAsync(modelId, providerId);
-        var result = entities.Select(mp => new
-        {
-            mp.Id,
-            mp.ModelId,
-            mp.ProviderId,
-            ModelName = mp.Model?.Name ?? string.Empty,
-            ProviderName = mp.Provider?.Name ?? string.Empty,
-            ProviderType = mp.Provider?.ProviderType,
-            mp.InputPrice,
-            mp.OutputPrice,
-            mp.CacheRead,
-            mp.CacheWrite,
-            mp.RpsLimit,
-            mp.CreateTime,
-            mp.CreateBy,
-            mp.UpdateTime,
-            mp.UpdateBy
-        }).ToList();
+        var result = entities
+            .Select(mp => new
+            {
+                mp.Id,
+                mp.ModelId,
+                mp.ProviderId,
+                ModelName = mp.Model?.Name ?? string.Empty,
+                ProviderName = mp.Provider?.Name ?? string.Empty,
+                ProviderType = mp.Provider?.ProviderType,
+                mp.InputPrice,
+                mp.OutputPrice,
+                mp.CacheRead,
+                mp.CacheWrite,
+                mp.RpsLimit,
+                mp.CreateTime,
+                mp.CreateBy,
+                mp.UpdateTime,
+                mp.UpdateBy,
+            })
+            .ToList();
         return ApiResult.Ok(result);
     }
 

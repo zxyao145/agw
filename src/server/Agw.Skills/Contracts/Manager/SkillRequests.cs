@@ -1,5 +1,4 @@
 using Agw.Shared.Data.Entities.Skills;
-
 using Microsoft.AspNetCore.Http;
 
 namespace Agw.Skills.Contracts.Manager;
@@ -33,4 +32,5 @@ public sealed record SkillResponse(
     DateTimeOffset CreateTime,
     string? CreateBy,
     DateTimeOffset? UpdateTime,
-    string? UpdateBy);
+    string? UpdateBy
+);

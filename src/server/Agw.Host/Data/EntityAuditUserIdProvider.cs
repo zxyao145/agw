@@ -12,11 +12,10 @@ public class EntityAuditUserIdProvider : IEntityAuditUserIdProvider
     {
         _userInfoService = userInfoService;
     }
+
     public string GetUserId()
     {
         var userId = _userInfoService.UserId;
-        return string.IsNullOrWhiteSpace(userId)
-            ? Constants.AdminUserId
-            : userId;
+        return string.IsNullOrWhiteSpace(userId) ? Constants.AdminUserId : userId;
     }
 }

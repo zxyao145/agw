@@ -1,6 +1,5 @@
 using Agw.Infrastructure.Data;
 using Agw.Shared.Configuration;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -16,9 +15,7 @@ public sealed class InitialMigrationTests
     public void GenerateScript_SqliteAndPostgres_CreatesCurrentSchema(bool usePostgres)
     {
         var options = new DbContextOptionsBuilder<AgwDbContext>();
-        var provider = usePostgres
-            ? DatabaseProvider.Postgres
-            : DatabaseProvider.Sqlite;
+        var provider = usePostgres ? DatabaseProvider.Postgres : DatabaseProvider.Sqlite;
         var connectionString = usePostgres
             ? "Host=localhost;Database=agw;Username=agw;Password=unused"
             : "Data Source=:memory:";
@@ -33,10 +30,9 @@ public sealed class InitialMigrationTests
         Assert.EndsWith("_AddAgentflowCheckpoints", migrations[3], StringComparison.Ordinal);
         Assert.EndsWith("_AddModelCompactionLimits", migrations[4], StringComparison.Ordinal);
 
-        var script = dbContext.GetService<IMigrator>().GenerateScript(
-            Migration.InitialDatabase,
-            migrations[^1],
-            MigrationsSqlGenerationOptions.NoTransactions);
+        var script = dbContext
+            .GetService<IMigrator>()
+            .GenerateScript(Migration.InitialDatabase, migrations[^1], MigrationsSqlGenerationOptions.NoTransactions);
 
         Assert.Contains("integration_connection", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("plugin_installation", script, StringComparison.OrdinalIgnoreCase);
@@ -88,17 +84,15 @@ public sealed class InitialMigrationTests
         var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite(
                 connection,
-                migrations => migrations.MigrationsAssembly(
-                    AgwDbContextOptionsConfigurator.SqliteMigrationsAssembly))
+                migrations => migrations.MigrationsAssembly(AgwDbContextOptionsConfigurator.SqliteMigrationsAssembly)
+            )
             .UseSnakeCaseNamingConvention()
             .Options;
         await using var dbContext = new AgwDbContext(options);
 
         await dbContext.Database.MigrateAsync(cancellationToken);
 
-        var appliedMigrations = (await dbContext.Database
-                .GetAppliedMigrationsAsync(cancellationToken))
-            .ToArray();
+        var appliedMigrations = (await dbContext.Database.GetAppliedMigrationsAsync(cancellationToken)).ToArray();
         Assert.Equal(5, appliedMigrations.Length);
         Assert.EndsWith("_Init", appliedMigrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", appliedMigrations[1], StringComparison.Ordinal);
@@ -109,10 +103,7 @@ public sealed class InitialMigrationTests
         Assert.True(await TableExistsAsync(connection, "plugin_installation", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "project_memory", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "project_conversation", cancellationToken));
-        Assert.True(await TableExistsAsync(
-            connection,
-            "project_conversation_chat_history",
-            cancellationToken));
+        Assert.True(await TableExistsAsync(connection, "project_conversation_chat_history", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "durable_execution", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "execution_stream_entry", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "agentflow_checkpoint", cancellationToken));
@@ -123,40 +114,20 @@ public sealed class InitialMigrationTests
         Assert.True(await ColumnExistsAsync(connection, "api_token", "secret_hash", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "agent", "tools", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "project", "tools", cancellationToken));
-        Assert.True(await ColumnExistsAsync(
-            connection,
-            "model",
-            "max_context_window_tokens",
-            cancellationToken));
-        Assert.True(await ColumnExistsAsync(
-            connection,
-            "model",
-            "max_output_tokens",
-            cancellationToken));
+        Assert.True(await ColumnExistsAsync(connection, "model", "max_context_window_tokens", cancellationToken));
+        Assert.True(await ColumnExistsAsync(connection, "model", "max_output_tokens", cancellationToken));
         Assert.False(await ColumnExistsAsync(connection, "model", "max_tokens", cancellationToken));
         Assert.Equal(
             "256000",
-            await ColumnDefaultAsync(
-                connection,
-                "model",
-                "max_context_window_tokens",
-                cancellationToken));
-        Assert.Equal(
-            "64000",
-            await ColumnDefaultAsync(
-                connection,
-                "model",
-                "max_output_tokens",
-                cancellationToken));
+            await ColumnDefaultAsync(connection, "model", "max_context_window_tokens", cancellationToken)
+        );
+        Assert.Equal("64000", await ColumnDefaultAsync(connection, "model", "max_output_tokens", cancellationToken));
         Assert.Contains(
             "ck_model_token_limits",
             await TableSqlAsync(connection, "model", cancellationToken),
-            StringComparison.OrdinalIgnoreCase);
-        Assert.False(await ColumnExistsAsync(
-            connection,
-            "agent",
-            "building_blocks",
-            cancellationToken));
+            StringComparison.OrdinalIgnoreCase
+        );
+        Assert.False(await ColumnExistsAsync(connection, "agent", "building_blocks", cancellationToken));
         Assert.False(await TableExistsAsync(connection, "agent_file_memory", cancellationToken));
         Assert.False(await TableExistsAsync(connection, "project_context", cancellationToken));
         Assert.False(await TableExistsAsync(connection, "project_task_record", cancellationToken));
@@ -171,8 +142,8 @@ public sealed class InitialMigrationTests
         var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite(
                 connection,
-                migrations => migrations.MigrationsAssembly(
-                    AgwDbContextOptionsConfigurator.SqliteMigrationsAssembly))
+                migrations => migrations.MigrationsAssembly(AgwDbContextOptionsConfigurator.SqliteMigrationsAssembly)
+            )
             .UseSnakeCaseNamingConvention()
             .Options;
         await using var dbContext = new AgwDbContext(options);
@@ -183,8 +154,8 @@ public sealed class InitialMigrationTests
         await using (var insert = connection.CreateCommand())
         {
             insert.CommandText =
-                "INSERT INTO model (id, name, max_tokens, create_time) " +
-                "VALUES ($id, $name, $maxTokens, $createTime);";
+                "INSERT INTO model (id, name, max_tokens, create_time) "
+                + "VALUES ($id, $name, $maxTokens, $createTime);";
             insert.Parameters.AddWithValue("$id", modelId);
             insert.Parameters.AddWithValue("$name", "existing-model");
             insert.Parameters.AddWithValue("$maxTokens", 128_000);
@@ -195,8 +166,7 @@ public sealed class InitialMigrationTests
         await migrator.MigrateAsync(migrations[^1], cancellationToken);
 
         await using var select = connection.CreateCommand();
-        select.CommandText =
-            "SELECT max_context_window_tokens, max_output_tokens FROM model WHERE id = $id;";
+        select.CommandText = "SELECT max_context_window_tokens, max_output_tokens FROM model WHERE id = $id;";
         select.Parameters.AddWithValue("$id", modelId);
         await using var reader = await select.ExecuteReaderAsync(cancellationToken);
         Assert.True(await reader.ReadAsync(cancellationToken));
@@ -207,11 +177,11 @@ public sealed class InitialMigrationTests
     private static async Task<bool> TableExistsAsync(
         SqliteConnection connection,
         string tableName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await using var command = connection.CreateCommand();
-        command.CommandText =
-            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = $tableName;";
+        command.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = $tableName;";
         command.Parameters.AddWithValue("$tableName", tableName);
         return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken)) == 1;
     }
@@ -220,11 +190,11 @@ public sealed class InitialMigrationTests
         SqliteConnection connection,
         string tableName,
         string columnName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await using var command = connection.CreateCommand();
-        command.CommandText =
-            "SELECT COUNT(*) FROM pragma_table_info($tableName) WHERE name = $columnName;";
+        command.CommandText = "SELECT COUNT(*) FROM pragma_table_info($tableName) WHERE name = $columnName;";
         command.Parameters.AddWithValue("$tableName", tableName);
         command.Parameters.AddWithValue("$columnName", columnName);
         return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken)) == 1;
@@ -234,11 +204,11 @@ public sealed class InitialMigrationTests
         SqliteConnection connection,
         string tableName,
         string columnName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await using var command = connection.CreateCommand();
-        command.CommandText =
-            "SELECT dflt_value FROM pragma_table_info($tableName) WHERE name = $columnName;";
+        command.CommandText = "SELECT dflt_value FROM pragma_table_info($tableName) WHERE name = $columnName;";
         command.Parameters.AddWithValue("$tableName", tableName);
         command.Parameters.AddWithValue("$columnName", columnName);
         return Convert.ToString(await command.ExecuteScalarAsync(cancellationToken));
@@ -247,11 +217,11 @@ public sealed class InitialMigrationTests
     private static async Task<string> TableSqlAsync(
         SqliteConnection connection,
         string tableName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await using var command = connection.CreateCommand();
-        command.CommandText =
-            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = $tableName;";
+        command.CommandText = "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = $tableName;";
         command.Parameters.AddWithValue("$tableName", tableName);
         return Convert.ToString(await command.ExecuteScalarAsync(cancellationToken)) ?? string.Empty;
     }

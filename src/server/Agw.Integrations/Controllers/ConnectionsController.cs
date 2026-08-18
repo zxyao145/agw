@@ -3,9 +3,7 @@ using Agw.Integrations.Contracts.Management;
 using Agw.Shared;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Integrations.Controllers;
@@ -23,9 +21,7 @@ public sealed class ConnectionsController : ControllerBase
 
     [HttpGet]
     [ProducesApiResult(typeof(ConnectionResponse[]))]
-    public async Task<IActionResult> ListAsync(
-        [FromQuery] Guid? id,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> ListAsync([FromQuery] Guid? id, CancellationToken cancellationToken)
     {
         var response = await _service.ListAsync(id, cancellationToken);
         return id.HasValue && response.Count == 0
@@ -37,7 +33,8 @@ public sealed class ConnectionsController : ControllerBase
     [ProducesApiResult(typeof(ConnectionResponse))]
     public async Task<IActionResult> CreateAsync(
         [FromBody] ConnectionCreateRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var user = User?.Identity?.Name ?? Constants.AdminUserName;
         var response = await _service.CreateAsync(request, user, cancellationToken);
@@ -48,7 +45,8 @@ public sealed class ConnectionsController : ControllerBase
     [ProducesApiResult(typeof(ConnectionResponse))]
     public async Task<IActionResult> UpdateAsync(
         [FromBody] ConnectionUpdateRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var user = User?.Identity?.Name ?? Constants.AdminUserName;
         var response = await _service.UpdateAsync(request, user, cancellationToken);
@@ -57,9 +55,7 @@ public sealed class ConnectionsController : ControllerBase
 
     [HttpDelete]
     [ProducesApiResult]
-    public async Task<IActionResult> DeleteAsync(
-        [FromQuery] Guid id,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> DeleteAsync([FromQuery] Guid id, CancellationToken cancellationToken)
     {
         return await _service.DeleteAsync(id, cancellationToken)
             ? ApiResult.Ok()
@@ -70,7 +66,8 @@ public sealed class ConnectionsController : ControllerBase
     [ProducesApiResult(typeof(ConnectionResponse))]
     public async Task<IActionResult> ValidateAsync(
         [FromBody] ConnectionValidateRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var user = User?.Identity?.Name ?? Constants.AdminUserName;
         var response = await _service.ValidateAsync(request.Id, user, cancellationToken);

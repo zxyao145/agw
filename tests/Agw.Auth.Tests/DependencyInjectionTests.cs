@@ -1,15 +1,12 @@
 using System.Security.Claims;
-
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;
 using Agw.Auth.Extensions;
-
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-
 using Xunit;
 
 namespace Agw.Auth.Tests;
@@ -39,7 +36,8 @@ public sealed class DependencyInjectionTests
     [InlineData("2", true)]
     public async Task CookiePrincipal_SessionVersionMismatch_InvalidatesPrincipal(
         string sessionVersion,
-        bool remainsAuthenticated)
+        bool remainsAuthenticated
+    )
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -52,10 +50,14 @@ public sealed class DependencyInjectionTests
         var scheme = new AuthenticationScheme(
             AgwAuthDefaults.CookieScheme,
             AgwAuthDefaults.CookieScheme,
-            typeof(CookieAuthenticationHandler));
-        var principal = new ClaimsPrincipal(new ClaimsIdentity(
-            [new Claim(AgwAuthDefaults.SessionVersionClaimType, sessionVersion)],
-            AgwAuthDefaults.CookieScheme));
+            typeof(CookieAuthenticationHandler)
+        );
+        var principal = new ClaimsPrincipal(
+            new ClaimsIdentity(
+                [new Claim(AgwAuthDefaults.SessionVersionClaimType, sessionVersion)],
+                AgwAuthDefaults.CookieScheme
+            )
+        );
         var ticket = new AuthenticationTicket(principal, AgwAuthDefaults.CookieScheme);
         var httpContext = new DefaultHttpContext { RequestServices = provider };
         var context = new CookieValidatePrincipalContext(httpContext, scheme, options, ticket);
@@ -69,8 +71,7 @@ public sealed class DependencyInjectionTests
     {
         public AuthenticationSnapshot GetAuthenticationSnapshot() => new("hash", 2);
 
-        public Task UpdatePasswordAsync(
-            string passwordHash,
-            CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task UpdatePasswordAsync(string passwordHash, CancellationToken cancellationToken = default) =>
+            throw new NotImplementedException();
     }
 }

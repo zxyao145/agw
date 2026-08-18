@@ -1,7 +1,5 @@
 using System.Diagnostics;
-
 using Agw.Files.Services;
-
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Files.Tests;
@@ -26,9 +24,7 @@ public class GitCommandServiceTests
         repository.Write("untracked.txt", "new\n");
 
         var service = new GitCommandService(NullLogger<GitCommandService>.Instance);
-        var result = await service.GetChangedFilesAsync(
-            repository.Path,
-            TestContext.Current.CancellationToken);
+        var result = await service.GetChangedFilesAsync(repository.Path, TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
         AssertStatus(result, repository, "staged.txt", "modified", null);
@@ -49,17 +45,13 @@ public class GitCommandServiceTests
 
         var service = new GitCommandService(NullLogger<GitCommandService>.Instance);
         var filePath = repository.GetPath("mixed.txt");
-        var staged = await service.GetDiffAsync(
-            filePath,
-            TestContext.Current.CancellationToken,
-            GitDiffScope.Staged);
+        var staged = await service.GetDiffAsync(filePath, TestContext.Current.CancellationToken, GitDiffScope.Staged);
         var unstaged = await service.GetDiffAsync(
             filePath,
             TestContext.Current.CancellationToken,
-            GitDiffScope.Unstaged);
-        var all = await service.GetDiffAsync(
-            filePath,
-            TestContext.Current.CancellationToken);
+            GitDiffScope.Unstaged
+        );
+        var all = await service.GetDiffAsync(filePath, TestContext.Current.CancellationToken);
 
         Assert.True(staged.Success);
         Assert.Contains("+staged", staged.Diff, StringComparison.Ordinal);
@@ -84,7 +76,8 @@ public class GitCommandServiceTests
         var result = await service.GetDiffAsync(
             repository.GetPath("untracked.txt"),
             TestContext.Current.CancellationToken,
-            GitDiffScope.Unstaged);
+            GitDiffScope.Unstaged
+        );
 
         Assert.True(result.Success);
         Assert.Contains("+new content", result.Diff, StringComparison.Ordinal);
@@ -100,13 +93,8 @@ public class GitCommandServiceTests
         var service = new GitCommandService(NullLogger<GitCommandService>.Instance);
         var filePath = repository.GetPath("changed.txt");
 
-        var stageResult = await service.SetStagedAsync(
-            filePath,
-            staged: true,
-            TestContext.Current.CancellationToken);
-        var stagedFiles = await service.GetChangedFilesAsync(
-            repository.Path,
-            TestContext.Current.CancellationToken);
+        var stageResult = await service.SetStagedAsync(filePath, staged: true, TestContext.Current.CancellationToken);
+        var stagedFiles = await service.GetChangedFilesAsync(repository.Path, TestContext.Current.CancellationToken);
 
         Assert.True(stageResult.Success, $"{stageResult.Message}: {stageResult.Error}");
         Assert.NotNull(stagedFiles);
@@ -115,10 +103,9 @@ public class GitCommandServiceTests
         var unstageResult = await service.SetStagedAsync(
             filePath,
             staged: false,
-            TestContext.Current.CancellationToken);
-        var unstagedFiles = await service.GetChangedFilesAsync(
-            repository.Path,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
+        var unstagedFiles = await service.GetChangedFilesAsync(repository.Path, TestContext.Current.CancellationToken);
 
         Assert.True(unstageResult.Success);
         Assert.NotNull(unstagedFiles);
@@ -140,10 +127,9 @@ public class GitCommandServiceTests
         var result = await service.SetStagedAsync(
             repository.GetPath("src"),
             staged: true,
-            TestContext.Current.CancellationToken);
-        var changedFiles = await service.GetChangedFilesAsync(
-            repository.Path,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
+        var changedFiles = await service.GetChangedFilesAsync(repository.Path, TestContext.Current.CancellationToken);
 
         Assert.True(result.Success, $"{result.Message}: {result.Error}");
         Assert.NotNull(changedFiles);
@@ -153,10 +139,9 @@ public class GitCommandServiceTests
         var unstageResult = await service.SetStagedAsync(
             repository.GetPath("src"),
             staged: false,
-            TestContext.Current.CancellationToken);
-        var unstagedFiles = await service.GetChangedFilesAsync(
-            repository.Path,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
+        var unstagedFiles = await service.GetChangedFilesAsync(repository.Path, TestContext.Current.CancellationToken);
 
         Assert.True(unstageResult.Success, $"{unstageResult.Message}: {unstageResult.Error}");
         Assert.NotNull(unstagedFiles);
@@ -177,7 +162,8 @@ public class GitCommandServiceTests
         var result = await service.SetStagedAsync(
             repository.GetPath("missing.txt"),
             staged,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.False(result.Success);
         Assert.True(result.IsClientError);
@@ -194,13 +180,15 @@ public class GitCommandServiceTests
         await File.WriteAllTextAsync(
             repository.GetPath(".git/index.lock"),
             "locked",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         var service = new GitCommandService(NullLogger<GitCommandService>.Instance);
 
         var result = await service.SetStagedAsync(
             repository.GetPath("changed.txt"),
             staged: true,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.False(result.Success);
         Assert.False(result.IsClientError);
@@ -212,7 +200,8 @@ public class GitCommandServiceTests
         TempGitRepository repository,
         string relativePath,
         string? stagedStatus,
-        string? unstagedStatus)
+        string? unstagedStatus
+    )
     {
         var status = changedFiles.FileStatuses[repository.GetPath(relativePath)];
         Assert.Equal(stagedStatus, status.StagedStatus);
@@ -233,7 +222,8 @@ public class GitCommandServiceTests
             var path = System.IO.Path.Combine(
                 System.IO.Path.GetTempPath(),
                 "agw-git-command-tests",
-                Guid.CreateVersion7().ToString("N"));
+                Guid.CreateVersion7().ToString("N")
+            );
             Directory.CreateDirectory(path);
             var repository = new TempGitRepository(path);
             repository.Git("init");
@@ -262,21 +252,21 @@ public class GitCommandServiceTests
                 WorkingDirectory = Path,
                 RedirectStandardError = true,
                 RedirectStandardOutput = true,
-                UseShellExecute = false
+                UseShellExecute = false,
             };
             foreach (var argument in arguments)
             {
                 startInfo.ArgumentList.Add(argument);
             }
 
-            using var process = Process.Start(startInfo)
-                ?? throw new InvalidOperationException("Failed to start git");
+            using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Failed to start git");
             var standardOutput = process.StandardOutput.ReadToEnd();
             var standardError = process.StandardError.ReadToEnd();
             process.WaitForExit();
             Assert.True(
                 process.ExitCode == 0,
-                $"git {string.Join(' ', arguments)} failed: {standardError}{standardOutput}");
+                $"git {string.Join(' ', arguments)} failed: {standardError}{standardOutput}"
+            );
         }
 
         public void Dispose()

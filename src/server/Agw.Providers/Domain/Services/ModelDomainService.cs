@@ -23,16 +23,15 @@ public class ModelDomainService
     {
         if (maxContextWindowTokens <= 0)
         {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                "maxContextWindowTokens must be greater than zero.");
+            throw new AgwException(ErrorCodes.InvalidParam, "maxContextWindowTokens must be greater than zero.");
         }
 
         if (maxOutputTokens <= 0 || maxOutputTokens >= maxContextWindowTokens)
         {
             throw new AgwException(
                 ErrorCodes.InvalidParam,
-                "maxOutputTokens must be greater than zero and less than maxContextWindowTokens.");
+                "maxOutputTokens must be greater than zero and less than maxContextWindowTokens."
+            );
         }
     }
 

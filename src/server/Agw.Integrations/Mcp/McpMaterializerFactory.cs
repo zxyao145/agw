@@ -1,7 +1,5 @@
 using Agw.Shared.Exceptions;
-
 using Microsoft.Extensions.AI;
-
 using ModelContextProtocol.Client;
 
 namespace Agw.Integrations.Mcp;
@@ -23,7 +21,8 @@ internal sealed class ResolvedMcpStdioEndpoint : ResolvedMcpEndpoint
         string command,
         IReadOnlyList<string> arguments,
         string? workingDirectory,
-        IReadOnlyDictionary<string, string> environmentVariables)
+        IReadOnlyDictionary<string, string> environmentVariables
+    )
         : base(name)
     {
         Command = command;
@@ -43,11 +42,7 @@ internal sealed class ResolvedMcpStdioEndpoint : ResolvedMcpEndpoint
 
 internal sealed class ResolvedMcpHttpEndpoint : ResolvedMcpEndpoint
 {
-    public ResolvedMcpHttpEndpoint(
-        string name,
-        Uri endpoint,
-        IReadOnlyDictionary<string, string> headers,
-        bool useSse)
+    public ResolvedMcpHttpEndpoint(string name, Uri endpoint, IReadOnlyDictionary<string, string> headers, bool useSse)
         : base(name)
     {
         Endpoint = endpoint;
@@ -62,9 +57,7 @@ internal sealed class ResolvedMcpHttpEndpoint : ResolvedMcpEndpoint
     public bool UseSse { get; }
 }
 
-internal interface IMcpInitialTransport : IAsyncDisposable
-{
-}
+internal interface IMcpInitialTransport : IAsyncDisposable { }
 
 internal interface IMcpMaterializerClient : IAsyncDisposable
 {
@@ -75,9 +68,7 @@ internal interface IMcpMaterializerFactory
 {
     IMcpInitialTransport CreateTransport(ResolvedMcpEndpoint endpoint);
 
-    Task<IMcpMaterializerClient> CreateClientAsync(
-        IMcpInitialTransport transport,
-        CancellationToken cancellationToken);
+    Task<IMcpMaterializerClient> CreateClientAsync(IMcpInitialTransport transport, CancellationToken cancellationToken);
 }
 
 internal sealed class DefaultMcpMaterializerFactory : IMcpMaterializerFactory
@@ -101,12 +92,12 @@ internal sealed class DefaultMcpMaterializerFactory : IMcpMaterializerFactory
 
     public async Task<IMcpMaterializerClient> CreateClientAsync(
         IMcpInitialTransport transport,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var sdkTransport = (SdkInitialTransport)transport;
-        var client = await McpClient.CreateAsync(
-                sdkTransport.Transport,
-                cancellationToken: cancellationToken)
+        var client = await McpClient
+            .CreateAsync(sdkTransport.Transport, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         return new SdkMcpMaterializerClient(client);
     }
@@ -117,8 +108,7 @@ internal sealed class DefaultMcpMaterializerFactory : IMcpMaterializerFactory
         return new SdkInitialTransport(transport, owner: null);
     }
 
-    internal static StdioClientTransportOptions CreateStdioTransportOptions(
-        ResolvedMcpStdioEndpoint endpoint)
+    internal static StdioClientTransportOptions CreateStdioTransportOptions(ResolvedMcpStdioEndpoint endpoint)
     {
         var options = new StdioClientTransportOptions
         {
@@ -134,8 +124,11 @@ internal sealed class DefaultMcpMaterializerFactory : IMcpMaterializerFactory
 
         if (endpoint.EnvironmentVariables.Count > 0)
         {
-            options.EnvironmentVariables = endpoint.EnvironmentVariables
-                .ToDictionary(pair => pair.Key, pair => (string?)pair.Value, StringComparer.OrdinalIgnoreCase);
+            options.EnvironmentVariables = endpoint.EnvironmentVariables.ToDictionary(
+                pair => pair.Key,
+                pair => (string?)pair.Value,
+                StringComparer.OrdinalIgnoreCase
+            );
         }
 
         return options;
@@ -147,15 +140,14 @@ internal sealed class DefaultMcpMaterializerFactory : IMcpMaterializerFactory
         {
             Name = endpoint.Name,
             Endpoint = endpoint.Endpoint,
-            TransportMode = endpoint.UseSse
-                ? HttpTransportMode.Sse
-                : HttpTransportMode.AutoDetect,
+            TransportMode = endpoint.UseSse ? HttpTransportMode.Sse : HttpTransportMode.AutoDetect,
         };
         if (endpoint.Headers.Count > 0)
         {
             options.AdditionalHeaders = new Dictionary<string, string>(
                 endpoint.Headers,
-                StringComparer.OrdinalIgnoreCase);
+                StringComparer.OrdinalIgnoreCase
+            );
         }
 
         var httpClient = _httpClientFactory.CreateClient();

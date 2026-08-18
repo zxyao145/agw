@@ -1,5 +1,4 @@
 using Agw.Shared.Data;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Shared.Contracts.Projects;
@@ -13,12 +12,11 @@ public interface IConversationHandoffProvider
         Guid conversationId,
         AgentRuntimeType targetType,
         Guid targetId,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default
+    );
 }
 
-public sealed record ConversationHandoff(
-    IReadOnlyList<ChatMessage> Messages,
-    long? ThroughSequence)
+public sealed record ConversationHandoff(IReadOnlyList<ChatMessage> Messages, long? ThroughSequence)
 {
     public static ConversationHandoff Empty { get; } = new([], null);
 }

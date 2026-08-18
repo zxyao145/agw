@@ -49,7 +49,8 @@ public class McpToolServerDomainServiceTests
                 current.Headers = null!;
                 current.Name = "updated";
             },
-            "updater");
+            "updater"
+        );
 
         Assert.Equal("updated", server.Name);
         Assert.Empty(server.Arguments);

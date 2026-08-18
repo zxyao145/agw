@@ -12,7 +12,8 @@ public class PluginCatalogAppServiceTests
     {
         var service = new PluginCatalogAppService(
             new BuiltInPluginCatalog(),
-            new PluginSkillMetadataReader(new AppContextPluginContentRootProvider()));
+            new PluginSkillMetadataReader(new AppContextPluginContentRootProvider())
+        );
 
         var plugins = service.List();
 
@@ -52,9 +53,7 @@ public class PluginCatalogAppServiceTests
 
         var skill = Assert.Single(plugin.Skills);
         Assert.Equal("github", skill.Id);
-        Assert.Equal(
-            "Use connected GitHub tools to inspect and work with repositories.",
-            skill.Description);
+        Assert.Equal("Use connected GitHub tools to inspect and work with repositories.", skill.Description);
         Assert.EndsWith("SKILL.md", skill.ContentPath, StringComparison.Ordinal);
     }
 

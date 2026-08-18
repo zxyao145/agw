@@ -1,11 +1,8 @@
 using System.Security.Claims;
-
 using Agw.Auth.Application;
 using Agw.Auth.Middleware;
-
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Http;
-
 using Xunit;
 
 namespace Agw.Auth.Tests;
@@ -18,7 +15,8 @@ public sealed class AgwAntiforgeryMiddlewareTests
     [InlineData(AgwAuthDefaults.BearerScheme, 0)]
     public async Task InvokeAsync_UnsafeApiRequest_ValidatesExpectedAuthenticationTypes(
         string authenticationType,
-        int expectedValidationCount)
+        int expectedValidationCount
+    )
     {
         var middleware = new AgwAntiforgeryMiddleware(_ => Task.CompletedTask);
         var antiforgery = new RecordingAntiforgery();
@@ -34,10 +32,7 @@ public sealed class AgwAntiforgeryMiddlewareTests
     {
         var middleware = new AgwAntiforgeryMiddleware(_ => Task.CompletedTask);
         var antiforgery = new RecordingAntiforgery();
-        var context = CreateAuthenticatedRequest(
-            HttpMethods.Get,
-            "/api/projects",
-            AgwAuthDefaults.CookieScheme);
+        var context = CreateAuthenticatedRequest(HttpMethods.Get, "/api/projects", AgwAuthDefaults.CookieScheme);
 
         await middleware.InvokeAsync(context, antiforgery);
 
@@ -52,7 +47,8 @@ public sealed class AgwAntiforgeryMiddlewareTests
         var context = CreateAuthenticatedRequest(
             HttpMethods.Post,
             "/api/hubs/exec/negotiate",
-            AgwAuthDefaults.CookieScheme);
+            AgwAuthDefaults.CookieScheme
+        );
 
         await middleware.InvokeAsync(context, antiforgery);
 
@@ -67,24 +63,22 @@ public sealed class AgwAntiforgeryMiddlewareTests
         var context = CreateAuthenticatedRequest(
             HttpMethods.Post,
             "/api/hubs/other/negotiate",
-            AgwAuthDefaults.CookieScheme);
+            AgwAuthDefaults.CookieScheme
+        );
 
         await middleware.InvokeAsync(context, antiforgery);
 
         Assert.Equal(1, antiforgery.ValidationCount);
     }
 
-    private static DefaultHttpContext CreateAuthenticatedRequest(
-        string method,
-        string path,
-        string authenticationType)
+    private static DefaultHttpContext CreateAuthenticatedRequest(string method, string path, string authenticationType)
     {
         var context = new DefaultHttpContext();
         context.Request.Method = method;
         context.Request.Path = path;
-        context.User = new ClaimsPrincipal(new ClaimsIdentity(
-            [new Claim(ClaimTypes.Name, "tester")],
-            authenticationType));
+        context.User = new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.Name, "tester")], authenticationType)
+        );
         return context;
     }
 
@@ -92,17 +86,13 @@ public sealed class AgwAntiforgeryMiddlewareTests
     {
         public int ValidationCount { get; private set; }
 
-        public AntiforgeryTokenSet GetAndStoreTokens(HttpContext httpContext) =>
-            throw new NotImplementedException();
+        public AntiforgeryTokenSet GetAndStoreTokens(HttpContext httpContext) => throw new NotImplementedException();
 
-        public AntiforgeryTokenSet GetTokens(HttpContext httpContext) =>
-            throw new NotImplementedException();
+        public AntiforgeryTokenSet GetTokens(HttpContext httpContext) => throw new NotImplementedException();
 
-        public Task<bool> IsRequestValidAsync(HttpContext httpContext) =>
-            throw new NotImplementedException();
+        public Task<bool> IsRequestValidAsync(HttpContext httpContext) => throw new NotImplementedException();
 
-        public void SetCookieTokenAndHeader(HttpContext httpContext) =>
-            throw new NotImplementedException();
+        public void SetCookieTokenAndHeader(HttpContext httpContext) => throw new NotImplementedException();
 
         public Task ValidateRequestAsync(HttpContext httpContext)
         {

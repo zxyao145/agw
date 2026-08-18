@@ -1,6 +1,5 @@
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Tools.HumanInteraction;
@@ -9,9 +8,7 @@ public sealed class HumanInteractionRequiredAIFunction : DelegatingAIFunction
 {
     private readonly IHumanInteractionProtocol _protocol;
 
-    public HumanInteractionRequiredAIFunction(
-        AIFunction innerFunction,
-        IHumanInteractionProtocol protocol)
+    public HumanInteractionRequiredAIFunction(AIFunction innerFunction, IHumanInteractionProtocol protocol)
         : base(innerFunction)
     {
         ArgumentNullException.ThrowIfNull(protocol);
@@ -20,30 +17,34 @@ public sealed class HumanInteractionRequiredAIFunction : DelegatingAIFunction
 
     protected override async ValueTask<object?> InvokeCoreAsync(
         AIFunctionArguments arguments,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var accessor = arguments.Services?.GetService(typeof(IHumanInteractionContextAccessor))
+        var accessor =
+            arguments.Services?.GetService(typeof(IHumanInteractionContextAccessor))
             as IHumanInteractionContextAccessor;
         var channel = accessor?.Current;
         if (channel == null)
         {
             throw new AgwException(
                 ErrorCodes.AgentExecutionFailed,
-                $"Human interaction tool '{Name}' requires an active interactive channel.");
+                $"Human interaction tool '{Name}' requires an active interactive channel."
+            );
         }
 
         var currentCall = FunctionInvokingChatClient.CurrentContext?.CallContent;
         var request = _protocol.CreateRequest(Guid.CreateVersion7().ToString("N"), arguments) with
         {
             ToolName = currentCall?.Name ?? Name,
-            CallId = currentCall?.CallId
+            CallId = currentCall?.CallId,
         };
         var response = await channel.RequestAsync(request, cancellationToken).ConfigureAwait(false);
         if (!string.Equals(request.RequestId, response.RequestId, StringComparison.Ordinal))
         {
             throw new AgwException(
                 ErrorCodes.AgentExecutionFailed,
-                $"Human interaction response '{response.RequestId}' does not match request '{request.RequestId}'.");
+                $"Human interaction response '{response.RequestId}' does not match request '{request.RequestId}'."
+            );
         }
 
         if (response.Cancelled)

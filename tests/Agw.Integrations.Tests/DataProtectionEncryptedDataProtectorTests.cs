@@ -1,6 +1,5 @@
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Shared.Exceptions;
-
 using Microsoft.AspNetCore.DataProtection;
 
 namespace Agw.Integrations.Tests;
@@ -16,11 +15,13 @@ public class DataProtectionEncryptedDataProtectorTests
 
         var protectedValue = protector.Protect("integration_connection_credential", entityId, plaintext);
 
-        Assert.StartsWith(DataProtectionEncryptedDataProtector.EnvelopePrefix, protectedValue, StringComparison.Ordinal);
+        Assert.StartsWith(
+            DataProtectionEncryptedDataProtector.EnvelopePrefix,
+            protectedValue,
+            StringComparison.Ordinal
+        );
         Assert.DoesNotContain(plaintext, protectedValue, StringComparison.Ordinal);
-        Assert.Equal(
-            plaintext,
-            protector.Unprotect("integration_connection_credential", entityId, protectedValue));
+        Assert.Equal(plaintext, protector.Unprotect("integration_connection_credential", entityId, protectedValue));
     }
 
     [Fact]
@@ -43,12 +44,12 @@ public class DataProtectionEncryptedDataProtectorTests
         var protectedValue = protector.Protect("provider_auth_config", entityId, "secret");
 
         AssertEncryptedDataInvalid(() =>
-            protector.Unprotect("provider_auth_config", Guid.CreateVersion7(), protectedValue));
+            protector.Unprotect("provider_auth_config", Guid.CreateVersion7(), protectedValue)
+        );
 
         var characters = protectedValue.ToCharArray();
         characters[^1] = characters[^1] == 'A' ? 'B' : 'A';
-        AssertEncryptedDataInvalid(() =>
-            protector.Unprotect("provider_auth_config", entityId, new string(characters)));
+        AssertEncryptedDataInvalid(() => protector.Unprotect("provider_auth_config", entityId, new string(characters)));
     }
 
     [Fact]
@@ -67,8 +68,7 @@ public class DataProtectionEncryptedDataProtectorTests
             .Unprotect(payload);
 
         Assert.Equal("secret", plaintext);
-        AssertEncryptedDataInvalid(() =>
-            protector.Unprotect("another_table", entityId, protectedValue));
+        AssertEncryptedDataInvalid(() => protector.Unprotect("another_table", entityId, protectedValue));
     }
 
     [Fact]
@@ -88,9 +88,7 @@ public class DataProtectionEncryptedDataProtectorTests
             var secondProvider = AgwDataProtectionConfiguration.CreatePersistedProvider(keysDirectory);
             var secondProtector = new DataProtectionEncryptedDataProtector(secondProvider);
 
-            Assert.Equal(
-                "secret",
-                secondProtector.Unprotect("provider_auth_config", entityId, protectedValue));
+            Assert.Equal("secret", secondProtector.Unprotect("provider_auth_config", entityId, protectedValue));
         }
         finally
         {
@@ -106,12 +104,10 @@ public class DataProtectionEncryptedDataProtectorTests
     {
         var protector = CreateProtector();
 
-        AssertEncryptedDataInvalid(() =>
-            protector.Unprotect("provider_auth_config", Guid.CreateVersion7(), value));
+        AssertEncryptedDataInvalid(() => protector.Unprotect("provider_auth_config", Guid.CreateVersion7(), value));
     }
 
-    private static DataProtectionEncryptedDataProtector CreateProtector() =>
-        new(new EphemeralDataProtectionProvider());
+    private static DataProtectionEncryptedDataProtector CreateProtector() => new(new EphemeralDataProtectionProvider());
 
     private static void AssertEncryptedDataInvalid(Action action)
     {

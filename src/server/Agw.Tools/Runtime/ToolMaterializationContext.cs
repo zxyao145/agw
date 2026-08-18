@@ -1,6 +1,5 @@
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
-
 using Microsoft.Agents.AI;
 
 namespace Agw.Tools.Runtime;
@@ -27,14 +26,15 @@ public sealed class ToolMaterializationContext
     public IReadOnlySet<string> EnabledToolBlockNames { get; internal set; } =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-    public IReadOnlyDictionary<string, string> EnvironmentVariables { get; init; } =
-        new Dictionary<string, string>();
+    public IReadOnlyDictionary<string, string> EnvironmentVariables { get; init; } = new Dictionary<string, string>();
 
     public IReadOnlyList<AIAgent> BackgroundAgents { get; init; } = [];
 
-    public Func<IReadOnlyList<Guid>, CancellationToken, ValueTask<IReadOnlyList<AIAgent>>>?
-        BackgroundAgentFactory
-    { get; init; }
+    public Func<
+        IReadOnlyList<Guid>,
+        CancellationToken,
+        ValueTask<IReadOnlyList<AIAgent>>
+    >? BackgroundAgentFactory { get; init; }
 
     public bool SupportsHostedWebSearch { get; init; }
 

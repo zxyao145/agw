@@ -3,7 +3,6 @@ using Agw.Infrastructure.Repositories;
 using Agw.Projects.Application;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -29,7 +28,8 @@ public class TaskAppServiceTests
             parameter => Assert.Equal("input", parameter.Name),
             parameter => Assert.Equal("user", parameter.Name),
             parameter => Assert.Equal("contextId", parameter.Name),
-            parameter => Assert.Equal("cancellationToken", parameter.Name));
+            parameter => Assert.Equal("cancellationToken", parameter.Name)
+        );
     }
 
     [Fact]
@@ -53,14 +53,16 @@ public class TaskAppServiceTests
         var projectId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
-            seedContext.Projects.Add(new Project
-            {
-                Id = projectId,
-                Name = "Chat Project",
-                Type = ProjectType.UserDefined,
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
+            seedContext.Projects.Add(
+                new Project
+                {
+                    Id = projectId,
+                    Name = "Chat Project",
+                    Type = ProjectType.UserDefined,
+                    CreateBy = "tester",
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                }
+            );
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -72,15 +74,19 @@ public class TaskAppServiceTests
             taskId: null,
             input: "  hello world  ",
             user: "tester",
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
 
         Assert.NotNull(task);
         Assert.Null(task!.JobId);
         Assert.Equal("hello world", task.Title);
         Assert.NotNull(await dbContext.ProjectConversations.SingleOrDefaultAsync(cancellationToken));
-        Assert.NotNull(await dbContext.ProjectConversationChatHistories.SingleOrDefaultAsync(
-            record => record.TaskId == task.TaskId,
-            cancellationToken));
+        Assert.NotNull(
+            await dbContext.ProjectConversationChatHistories.SingleOrDefaultAsync(
+                record => record.TaskId == task.TaskId,
+                cancellationToken
+            )
+        );
     }
 
     [Fact]
@@ -107,25 +113,29 @@ public class TaskAppServiceTests
         var latestTaskId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
-            seedContext.Projects.Add(new Project
-            {
-                Id = projectId,
-                Name = "Chat Project",
-                Type = ProjectType.UserDefined,
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
-            seedContext.ProjectConversations.Add(new ProjectConversation
-            {
-                Id = contextRowId,
-                ProjectId = projectId,
-                ContextId = "context-1",
-                Title = "Chat",
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow().AddMinutes(-2),
-                UpdateBy = "tester",
-                UpdateTime = TimeProvider.System.GetUtcNow().AddMinutes(-1)
-            });
+            seedContext.Projects.Add(
+                new Project
+                {
+                    Id = projectId,
+                    Name = "Chat Project",
+                    Type = ProjectType.UserDefined,
+                    CreateBy = "tester",
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                }
+            );
+            seedContext.ProjectConversations.Add(
+                new ProjectConversation
+                {
+                    Id = contextRowId,
+                    ProjectId = projectId,
+                    ContextId = "context-1",
+                    Title = "Chat",
+                    CreateBy = "tester",
+                    CreateTime = TimeProvider.System.GetUtcNow().AddMinutes(-2),
+                    UpdateBy = "tester",
+                    UpdateTime = TimeProvider.System.GetUtcNow().AddMinutes(-1),
+                }
+            );
             seedContext.ProjectConversationChatHistories.AddRange(
                 new ProjectConversationChatHistory
                 {
@@ -134,7 +144,7 @@ public class TaskAppServiceTests
                     TaskId = oldTaskId,
                     Status = TaskExecutionStatus.Succeeded,
                     CreateTime = TimeProvider.System.GetUtcNow().AddMinutes(-2),
-                    UpdateTime = TimeProvider.System.GetUtcNow().AddMinutes(-2)
+                    UpdateTime = TimeProvider.System.GetUtcNow().AddMinutes(-2),
                 },
                 new ProjectConversationChatHistory
                 {
@@ -143,8 +153,9 @@ public class TaskAppServiceTests
                     TaskId = latestTaskId,
                     Status = TaskExecutionStatus.Running,
                     CreateTime = TimeProvider.System.GetUtcNow().AddMinutes(-1),
-                    UpdateTime = TimeProvider.System.GetUtcNow()
-                });
+                    UpdateTime = TimeProvider.System.GetUtcNow(),
+                }
+            );
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -158,8 +169,10 @@ public class TaskAppServiceTests
                 ContextId: "context-1",
                 Input: "resume",
                 Resume: true,
-                User: "tester"),
-            cancellationToken);
+                User: "tester"
+            ),
+            cancellationToken
+        );
 
         Assert.Null(result.Error);
         Assert.NotNull(result.Task);
@@ -176,12 +189,14 @@ public class TaskAppServiceTests
             dbContext,
             new Domain.Services.ProjectConversationChatHistoryDomainService(),
             new ProjectResolver(projectRepository),
-            TimeProvider.System);
+            TimeProvider.System
+        );
 
         return new TaskAppService(
             new EfRepository<ProjectConversation>(dbContext),
             new EfRepository<ProjectConversationChatHistory>(dbContext),
             new ProjectResolver(projectRepository),
-            taskExecutionAppService);
+            taskExecutionAppService
+        );
     }
 }

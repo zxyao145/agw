@@ -6,7 +6,6 @@ using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Infrastructure.Plugins;
 using Agw.Integrations.Mcp;
 using Agw.Integrations.Tools.GitHub;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -17,14 +16,17 @@ public static class DependencyInjection
     public static IServiceCollection AddIntegrations(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddDataProtection();
-        services.AddOptions<OAuthRedirectOptions>()
+        services
+            .AddOptions<OAuthRedirectOptions>()
             .Bind(configuration.GetSection(OAuthRedirectOptions.SectionName))
             .Validate(
                 options => OAuthRedirectUriResolver.IsValidOptionalBaseUrl(options.PublicBaseUrl),
-                "Integrations:OAuth:PublicBaseUrl must be an absolute HTTP(S) base URL.")
+                "Integrations:OAuth:PublicBaseUrl must be an absolute HTTP(S) base URL."
+            )
             .Validate(
                 options => OAuthRedirectUriResolver.IsValidOptionalBaseUrl(options.WebBaseUrl),
-                "Integrations:OAuth:WebBaseUrl must be an absolute HTTP(S) base URL.")
+                "Integrations:OAuth:WebBaseUrl must be an absolute HTTP(S) base URL."
+            )
             .ValidateOnStart();
         services.AddSingleton<IPluginCatalog, BuiltInPluginCatalog>();
         services.TryAddSingleton(TimeProvider.System);
@@ -44,7 +46,8 @@ public static class DependencyInjection
         services.AddSingleton<IConnectionNativeCapabilityProvider, GitHubConnectionNativeCapabilityProvider>();
         services.AddScoped<IConnectionCapabilityResolver, ConnectionCapabilityResolver>();
         services.AddScoped<IConnectionMcpInvocationSession>(provider =>
-            (ConnectionCapabilityResolver)provider.GetRequiredService<IConnectionCapabilityResolver>());
+            (ConnectionCapabilityResolver)provider.GetRequiredService<IConnectionCapabilityResolver>()
+        );
         services.AddScoped<IProjectWorkspaceResolver, ProjectWorkspaceResolver>();
         services.AddScoped<IGitHubConnectionInvoker, GitHubConnectionInvoker>();
 

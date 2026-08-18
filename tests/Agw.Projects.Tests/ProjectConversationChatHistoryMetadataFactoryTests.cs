@@ -1,6 +1,5 @@
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Contracts.Projects;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Projects.Tests;
@@ -18,10 +17,11 @@ public class ProjectConversationChatHistoryMetadataFactoryTests
                     AdditionalProperties = new AdditionalPropertiesDictionary
                     {
                         ["targetType"] = "agentflow",
-                        ["targetId"] = "11111111-1111-1111-1111-111111111111"
-                    }
-                }
-            ]);
+                        ["targetId"] = "11111111-1111-1111-1111-111111111111",
+                    },
+                },
+            ]
+        );
 
         var metadata = ProjectConversationChatHistoryMetadataFactory.FromMessage(message);
 
@@ -37,16 +37,14 @@ public class ProjectConversationChatHistoryMetadataFactoryTests
         {
             AdditionalProperties = new AdditionalPropertiesDictionary
             {
-                [ConversationHandoffMetadata.ThroughSequenceKey] = 42L
-            }
+                [ConversationHandoffMetadata.ThroughSequenceKey] = 42L,
+            },
         };
 
         var metadata = ProjectConversationChatHistoryMetadataFactory.FromMessage(message);
 
         Assert.NotNull(metadata);
-        Assert.Equal(
-            42,
-            metadata![ConversationHandoffMetadata.ThroughSequenceKey].GetInt64());
+        Assert.Equal(42, metadata![ConversationHandoffMetadata.ThroughSequenceKey].GetInt64());
     }
 
     [Fact]

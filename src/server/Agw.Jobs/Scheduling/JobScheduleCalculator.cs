@@ -1,6 +1,5 @@
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
-
 using Cronos;
 
 namespace Agw.Jobs.Scheduling;
@@ -19,7 +18,8 @@ public sealed class JobScheduleCalculator
                 {
                     throw new AgwException(
                         ErrorCodes.InvalidOnceTriggerValue,
-                        $"Invalid once trigger value: {job.TriggerValue}");
+                        $"Invalid once trigger value: {job.TriggerValue}"
+                    );
                 }
 
                 return onceRunTime > now ? onceRunTime : null;
@@ -29,7 +29,8 @@ public sealed class JobScheduleCalculator
                 {
                     throw new AgwException(
                         ErrorCodes.InvalidIntervalTriggerValue,
-                        $"Invalid interval trigger value: {job.TriggerValue}");
+                        $"Invalid interval trigger value: {job.TriggerValue}"
+                    );
                 }
 
                 return now.Add(interval);
@@ -41,7 +42,8 @@ public sealed class JobScheduleCalculator
             default:
                 throw new AgwException(
                     ErrorCodes.UnsupportedTriggerType,
-                    $"Unsupported trigger type: {job.TriggerType}");
+                    $"Unsupported trigger type: {job.TriggerType}"
+                );
         }
     }
 }

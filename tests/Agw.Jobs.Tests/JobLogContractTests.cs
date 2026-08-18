@@ -1,5 +1,4 @@
 using System.Reflection;
-
 using Agw.Jobs.Application.Contracts;
 using Agw.Shared.Data.Entities.Jobs;
 

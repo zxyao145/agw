@@ -1,5 +1,4 @@
 using System.Text.Json;
-
 using Agw.Shared.Runtime;
 
 namespace Agw.Host.Runtime;
@@ -8,7 +7,7 @@ public sealed class ServerRuntimeDescriptorStore
 {
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
     {
-        WriteIndented = true
+        WriteIndented = true,
     };
 
     private readonly AgwDataPaths _paths;
@@ -18,21 +17,22 @@ public sealed class ServerRuntimeDescriptorStore
         _paths = paths;
     }
 
-    public async Task WriteAsync(
-        ServerRuntimeDescriptor descriptor,
-        CancellationToken cancellationToken = default)
+    public async Task WriteAsync(ServerRuntimeDescriptor descriptor, CancellationToken cancellationToken = default)
     {
         Directory.CreateDirectory(_paths.RuntimeDirectory);
         var tempFile = $"{_paths.ServerRuntimeFile}.{Guid.CreateVersion7():N}.tmp";
         try
         {
-            await using (var stream = new FileStream(
-                tempFile,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                bufferSize: 4096,
-                useAsync: true))
+            await using (
+                var stream = new FileStream(
+                    tempFile,
+                    FileMode.CreateNew,
+                    FileAccess.Write,
+                    FileShare.None,
+                    bufferSize: 4096,
+                    useAsync: true
+                )
+            )
             {
                 await JsonSerializer.SerializeAsync(stream, descriptor, SerializerOptions, cancellationToken);
             }
@@ -45,13 +45,15 @@ public sealed class ServerRuntimeDescriptorStore
         }
         finally
         {
-            if (File.Exists(tempFile)) File.Delete(tempFile);
+            if (File.Exists(tempFile))
+                File.Delete(tempFile);
         }
     }
 
     public async Task DeleteIfOwnedAsync(int pid, CancellationToken cancellationToken = default)
     {
-        if (!File.Exists(_paths.ServerRuntimeFile)) return;
+        if (!File.Exists(_paths.ServerRuntimeFile))
+            return;
 
         try
         {
@@ -59,8 +61,10 @@ public sealed class ServerRuntimeDescriptorStore
             var descriptor = await JsonSerializer.DeserializeAsync<ServerRuntimeDescriptor>(
                 stream,
                 SerializerOptions,
-                cancellationToken);
-            if (descriptor?.Pid == pid) File.Delete(_paths.ServerRuntimeFile);
+                cancellationToken
+            );
+            if (descriptor?.Pid == pid)
+                File.Delete(_paths.ServerRuntimeFile);
         }
         catch (JsonException)
         {

@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Connections;
@@ -10,7 +9,6 @@ using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -43,7 +41,8 @@ internal sealed class DurableExecutionCoordinator
         TimeProvider timeProvider,
         IOptions<ExecutionRuntimeOptions> options,
         ILogger<DurableExecutionCoordinator> logger,
-        AgentflowCheckpointStore? checkpointStore = null)
+        AgentflowCheckpointStore? checkpointStore = null
+    )
     {
         _scopeFactory = scopeFactory;
         _applicationLock = applicationLock;
@@ -52,7 +51,8 @@ internal sealed class DurableExecutionCoordinator
         _logger = logger;
         _checkpointStore = checkpointStore;
         _streamPollingInterval = TimeSpan.FromMilliseconds(
-            options.Value.Distributed.EventStream.ReadPollingMilliseconds);
+            options.Value.Distributed.EventStream.ReadPollingMilliseconds
+        );
     }
 
     /// <summary>
@@ -64,20 +64,20 @@ internal sealed class DurableExecutionCoordinator
         ExecCommand command,
         TaskProjection task,
         ExecutionSettings settings,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var agentId = command.AgentId
-            ?? throw new AgwException(ErrorCodes.InvalidParam, "ExecCommand.agentId is required.");
+        var agentId =
+            command.AgentId ?? throw new AgwException(ErrorCodes.InvalidParam, "ExecCommand.agentId is required.");
         if (!command.Stream)
         {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                "Distributed execution requires ExecCommand.stream=true.");
+            throw new AgwException(ErrorCodes.InvalidParam, "Distributed execution requires ExecCommand.stream=true.");
         }
 
         await using var scope = _scopeFactory.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-        await store.RegisterAsync(
+        await store
+            .RegisterAsync(
                 executionId,
                 userName,
                 ResolveCurrentUserId(),
@@ -86,7 +86,8 @@ internal sealed class DurableExecutionCoordinator
                 command.Input,
                 task,
                 settings,
-                cancellationToken)
+                cancellationToken
+            )
             .ConfigureAwait(false);
     }
 
@@ -102,7 +103,8 @@ internal sealed class DurableExecutionCoordinator
     public async Task SubmitHumanResponseAsync(
         SubmitDurableHumanResponseRequest request,
         string userName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         ArgumentNullException.ThrowIfNull(request);
         if (request.ExecutionId == Guid.Empty || string.IsNullOrWhiteSpace(request.RequestId))
@@ -114,14 +116,12 @@ internal sealed class DurableExecutionCoordinator
             throw new AgwException(ErrorCodes.InvalidParam, "requestId is too long.");
         }
 
-        await using var executionLock = await _applicationLock.AcquireAsync(
-                DurableExecutionLock.GetResourceName(request.ExecutionId),
-                cancellationToken)
+        await using var executionLock = await _applicationLock
+            .AcquireAsync(DurableExecutionLock.GetResourceName(request.ExecutionId), cancellationToken)
             .ConfigureAwait(false);
         await using var scope = _scopeFactory.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-        await store.SubmitHumanResponseAsync(request, userName, cancellationToken)
-            .ConfigureAwait(false);
+        await store.SubmitHumanResponseAsync(request, userName, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -130,12 +130,12 @@ internal sealed class DurableExecutionCoordinator
     public async Task<DurableExecutionStatusResponse> GetStatusAsync(
         Guid executionId,
         string userName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-        var snapshot = await store.GetAuthorizedAsync(executionId, userName, cancellationToken)
-            .ConfigureAwait(false);
+        var snapshot = await store.GetAuthorizedAsync(executionId, userName, cancellationToken).ConfigureAwait(false);
         return ToStatus(snapshot);
     }
 
@@ -145,15 +145,13 @@ internal sealed class DurableExecutionCoordinator
     public async Task<IReadOnlyList<DurableHumanInteractionSnapshot>> GetPendingAsync(
         Guid executionId,
         string userName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-        var snapshot = await store.GetAuthorizedAsync(executionId, userName, cancellationToken)
-            .ConfigureAwait(false);
-        return snapshot.Status == DurableExecutionStatus.WaitingForHuman
-            ? snapshot.GetUnansweredInteractions()
-            : [];
+        var snapshot = await store.GetAuthorizedAsync(executionId, userName, cancellationToken).ConfigureAwait(false);
+        return snapshot.Status == DurableExecutionStatus.WaitingForHuman ? snapshot.GetUnansweredInteractions() : [];
     }
 
     /// <summary>
@@ -163,12 +161,12 @@ internal sealed class DurableExecutionCoordinator
         Guid executionId,
         string userName,
         string? reason,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-        return await store.RequestInterruptAsync(executionId, userName, cancellationToken)
-            .ConfigureAwait(false);
+        return await store.RequestInterruptAsync(executionId, userName, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -181,29 +179,34 @@ internal sealed class DurableExecutionCoordinator
         string contextId,
         Guid agentflowId,
         string userName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var checkpointStore = _checkpointStore
+        var checkpointStore =
+            _checkpointStore
             ?? throw new AgwException(
                 ErrorCodes.DurableExecutionUnavailable,
-                "Agentflow checkpoint services are not configured.");
-        var sourceExecutionId = await checkpointStore
-            .GetSourceExecutionIdAsync(occurrenceId, userName, cancellationToken)
-            .ConfigureAwait(false)
+                "Agentflow checkpoint services are not configured."
+            );
+        var sourceExecutionId =
+            await checkpointStore
+                .GetSourceExecutionIdAsync(occurrenceId, userName, cancellationToken)
+                .ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
 
-        await using var executionLock = await _applicationLock.AcquireAsync(
-                DurableExecutionLock.GetResourceName(sourceExecutionId),
-                cancellationToken)
+        await using var executionLock = await _applicationLock
+            .AcquireAsync(DurableExecutionLock.GetResourceName(sourceExecutionId), cancellationToken)
             .ConfigureAwait(false);
-        await checkpointStore.PrepareDistributedResumeAsync(
+        await checkpointStore
+            .PrepareDistributedResumeAsync(
                 occurrenceId,
                 resumeExecutionId,
                 projectId,
                 contextId,
                 agentflowId,
                 userName,
-                cancellationToken)
+                cancellationToken
+            )
             .ConfigureAwait(false);
     }
 
@@ -213,7 +216,8 @@ internal sealed class DurableExecutionCoordinator
     internal async IAsyncEnumerable<ExecutionStreamEntry> ReadAsync(
         Guid executionId,
         string? afterCursor,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken
+    )
     {
         var cursor = afterCursor;
         var emittedInteractions = new HashSet<string>(StringComparer.Ordinal);
@@ -224,22 +228,18 @@ internal sealed class DurableExecutionCoordinator
             IReadOnlyList<ExecutionStreamEntry> entries;
             try
             {
-                entries = await _eventStream.ReadAsync(
-                        executionId,
-                        cursor,
-                        cancellationToken)
-                    .ConfigureAwait(false);
+                entries = await _eventStream.ReadAsync(executionId, cursor, cancellationToken).ConfigureAwait(false);
                 streamFailureReported = false;
             }
-            catch (AgwException exception)
-                when (exception.Code == ErrorCodes.DurableExecutionUnavailable.Code)
+            catch (AgwException exception) when (exception.Code == ErrorCodes.DurableExecutionUnavailable.Code)
             {
                 if (!streamFailureReported)
                 {
                     _logger.LogWarning(
                         exception,
                         "Output replay is unavailable for distributed execution {ExecutionId}; PostgreSQL status polling will continue.",
-                        executionId);
+                        executionId
+                    );
                     streamFailureReported = true;
                 }
                 entries = [];
@@ -262,8 +262,7 @@ internal sealed class DurableExecutionCoordinator
             var now = _timeProvider.GetUtcNow();
             if (now >= nextStatusCheck)
             {
-                var snapshot = await GetSnapshotAsync(executionId, cancellationToken)
-                    .ConfigureAwait(false);
+                var snapshot = await GetSnapshotAsync(executionId, cancellationToken).ConfigureAwait(false);
                 if (snapshot.Status == DurableExecutionStatus.WaitingForHuman)
                 {
                     // pending 只在 checkpoint 与请求已经原子落库后合成，回答不会指向未持久化边界。
@@ -279,7 +278,9 @@ internal sealed class DurableExecutionCoordinator
                             DurableHumanInteractionMapper.ToMessage(
                                 interaction,
                                 executionId,
-                                ResolveStreamingScopeId(snapshot.Manifest)));
+                                ResolveStreamingScopeId(snapshot.Manifest)
+                            )
+                        );
                     }
                 }
                 if (IsTerminal(snapshot.Status))
@@ -288,22 +289,19 @@ internal sealed class DurableExecutionCoordinator
                     {
                         DurableExecutionStatus.Failed => "failed",
                         DurableExecutionStatus.Interrupted => "interrupted",
-                        _ => "completed"
+                        _ => "completed",
                     };
                     yield return new ExecutionStreamEntry(
                         cursor ?? "0-0",
-                        TurnMessageFactory.CreateFinished(terminalStatus, executionId));
+                        TurnMessageFactory.CreateFinished(terminalStatus, executionId)
+                    );
                     yield break;
                 }
 
                 nextStatusCheck = now + StatusPollingInterval;
             }
 
-            await Task.Delay(
-                    _streamPollingInterval,
-                    _timeProvider,
-                    cancellationToken)
-                .ConfigureAwait(false);
+            await Task.Delay(_streamPollingInterval, _timeProvider, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -311,10 +309,7 @@ internal sealed class DurableExecutionCoordinator
     /// 将 PostgreSQL 快照映射为连接层使用的最小状态响应。
     /// </summary>
     internal static DurableExecutionStatusResponse ToStatus(DurableExecutionSnapshot snapshot) =>
-        new(
-            snapshot.Manifest.ExecutionId,
-            snapshot.Status,
-            ResolveStreamingScopeId(snapshot.Manifest));
+        new(snapshot.Manifest.ExecutionId, snapshot.Status, ResolveStreamingScopeId(snapshot.Manifest));
 
     /// <summary>
     /// 获取跨 Server 稳定的前端消息作用域；旧客户端未提供消息标识时退回 executionId。
@@ -327,9 +322,7 @@ internal sealed class DurableExecutionCoordinator
     /// <summary>
     /// 在独立 DI scope 中加载 execution 快照，避免后台订阅持有 request scope DbContext。
     /// </summary>
-    private async Task<DurableExecutionSnapshot> GetSnapshotAsync(
-        Guid executionId,
-        CancellationToken cancellationToken)
+    private async Task<DurableExecutionSnapshot> GetSnapshotAsync(Guid executionId, CancellationToken cancellationToken)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
@@ -340,9 +333,10 @@ internal sealed class DurableExecutionCoordinator
     /// 判断执行状态是否已经终止。
     /// </summary>
     private static bool IsTerminal(DurableExecutionStatus status) =>
-        status is DurableExecutionStatus.Completed
-            or DurableExecutionStatus.Failed
-            or DurableExecutionStatus.Interrupted;
+        status
+            is DurableExecutionStatus.Completed
+                or DurableExecutionStatus.Failed
+                or DurableExecutionStatus.Interrupted;
 
     /// <summary>
     /// 判断回放消息是否为终止当前 turn 的控制消息。

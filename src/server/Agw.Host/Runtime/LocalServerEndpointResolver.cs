@@ -15,7 +15,8 @@ public static class LocalServerEndpointResolver
     public static string ResolveDefaultUrl(
         int preferredPort,
         Func<int, bool> isPortAvailable,
-        Func<int> allocateAvailablePort)
+        Func<int> allocateAvailablePort
+    )
     {
         var port = isPortAvailable(preferredPort) ? preferredPort : allocateAvailablePort();
         return $"http://127.0.0.1:{port}";

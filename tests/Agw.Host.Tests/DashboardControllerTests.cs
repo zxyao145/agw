@@ -5,11 +5,9 @@ using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
-
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-
 using Xunit;
 
 namespace Agw.Host.Tests;
@@ -25,7 +23,8 @@ public class DashboardControllerTests
         var projectId = Guid.CreateVersion7();
         dbContext.AgentUsages.AddRange(
             CreateAgentUsage(projectId, "context-1", 10, 20, 30),
-            CreateAgentUsage(projectId, "context-2", 5, 7, 12));
+            CreateAgentUsage(projectId, "context-2", 5, 7, 12)
+        );
         await dbContext.SaveChangesAsync(cancellationToken);
         var controller = CreateController(dbContext);
 
@@ -60,20 +59,24 @@ public class DashboardControllerTests
         await using var connection = await OpenConnectionAsync(cancellationToken);
         await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
         var projectId = Guid.CreateVersion7();
-        dbContext.Projects.Add(new Project
-        {
-            Id = projectId,
-            Name = "Deleted project",
-            CreateTime = TimeProvider.System.GetUtcNow()
-        });
-        dbContext.ProjectConversations.Add(new ProjectConversation
-        {
-            Id = Guid.CreateVersion7(),
-            ProjectId = projectId,
-            ContextId = "context-1",
-            Title = "Context",
-            CreateTime = TimeProvider.System.GetUtcNow()
-        });
+        dbContext.Projects.Add(
+            new Project
+            {
+                Id = projectId,
+                Name = "Deleted project",
+                CreateTime = TimeProvider.System.GetUtcNow(),
+            }
+        );
+        dbContext.ProjectConversations.Add(
+            new ProjectConversation
+            {
+                Id = Guid.CreateVersion7(),
+                ProjectId = projectId,
+                ContextId = "context-1",
+                Title = "Context",
+                CreateTime = TimeProvider.System.GetUtcNow(),
+            }
+        );
         dbContext.AgentUsages.Add(CreateAgentUsage(projectId, "context-1", 10, 20, 30));
         await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -95,7 +98,8 @@ public class DashboardControllerTests
 
     private static async Task<AgwDbContext> CreateDbContextAsync(
         SqliteConnection connection,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite(connection)
@@ -115,7 +119,8 @@ public class DashboardControllerTests
             new EfRepository<AgentUsage>(dbContext),
             new EfRepository<ProjectConversationChatHistory>(dbContext),
             new EfRepository<Agent>(dbContext),
-            new EfRepository<Agentflow>(dbContext));
+            new EfRepository<Agentflow>(dbContext)
+        );
     }
 
     private static AgentUsage CreateAgentUsage(
@@ -123,7 +128,9 @@ public class DashboardControllerTests
         string contextId,
         long inputTokenCount,
         long outputTokenCount,
-        long totalTokenCount) => new()
+        long totalTokenCount
+    ) =>
+        new()
         {
             Id = Guid.CreateVersion7(),
             ProjectId = projectId,
@@ -132,7 +139,7 @@ public class DashboardControllerTests
             RecordedAt = TimeProvider.System.GetUtcNow(),
             InputTokenCount = inputTokenCount,
             OutputTokenCount = outputTokenCount,
-            TotalTokenCount = totalTokenCount
+            TotalTokenCount = totalTokenCount,
         };
 
     private static DashboardStatsResponse ReadStats(IActionResult result)

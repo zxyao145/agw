@@ -10,7 +10,7 @@ files=$({
 if [ -n "$files" ]; then
     printf 'C# files:\n%s\n' "$files"
     # remove unused usings (IDE0005); CSharpier does not handle analyzer rules
-    dotnet format style --include $files --diagnostics IDE0005 --no-restore
+    # dotnet format style --include $files --diagnostics IDE0005 --no-restore
     # format code layout
     dotnet csharpier format $files
 fi

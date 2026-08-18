@@ -13,7 +13,8 @@ public static class DatabaseProviderResolver
             "postgres" => DatabaseProvider.Postgres,
             _ => throw new AgwException(
                 ErrorCodes.UnsupportedDatabaseProvider,
-                $"Database provider '{provider}' is not supported. Supported providers: sqlite, postgres.")
+                $"Database provider '{provider}' is not supported. Supported providers: sqlite, postgres."
+            ),
         };
     }
 }

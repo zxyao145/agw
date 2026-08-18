@@ -26,7 +26,8 @@ public class AgentflowAppService
         IRepository<ModelProviderRelation> modelProviderRepository,
         IUnitOfWork unitOfWork,
         AgentflowDomainService agentflowDomainService,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider
+    )
     {
         _agentflowRepository = agentflowRepository;
         _agentflowNodeRepository = agentflowNodeRepository;
@@ -43,13 +44,15 @@ public class AgentflowAppService
     public Task<PagedResult<Agentflow>> ListPageAsync(
         int pageIndex,
         int pageSize,
-        CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken = default
+    ) =>
         UpdatedTimePagination.ToPagedResultAsync(
             _agentflowRepository.Queryable,
             agentflow => agentflow.Id,
             pageIndex,
             pageSize,
-            cancellationToken);
+            cancellationToken
+        );
 
     public Task<Agentflow?> GetAsync(Guid id) => _agentflowRepository.GetByIdAsync(id);
 
@@ -63,7 +66,8 @@ public class AgentflowAppService
         Agentflow agentflow,
         IReadOnlyList<AgentflowNode> nodes,
         IReadOnlyList<AgentflowEdge> edges,
-        string user)
+        string user
+    )
     {
         if (!_agentflowDomainService.TryPrepareForCreate(agentflow, user))
         {
@@ -79,7 +83,8 @@ public class AgentflowAppService
             existingAgents.Keys.ToList(),
             agentflow.SummaryModelProviderId,
             existingModelProviderIds,
-            existingAgents);
+            existingAgents
+        );
         if (normalizedNodes == null || normalizedEdges == null)
         {
             return null;
@@ -109,7 +114,8 @@ public class AgentflowAppService
         Action<Agentflow> updateAction,
         IReadOnlyList<AgentflowNode>? nodes,
         IReadOnlyList<AgentflowEdge>? edges,
-        string user)
+        string user
+    )
     {
         var existing = await _agentflowRepository.GetByIdAsync(id);
         if (existing == null)
@@ -133,7 +139,8 @@ public class AgentflowAppService
                 existingAgents.Keys.ToList(),
                 existing.SummaryModelProviderId,
                 existingModelProviderIds,
-                existingAgents);
+                existingAgents
+            );
             if (normalizedNodes == null || normalizedEdges == null)
             {
                 return null;
@@ -201,8 +208,7 @@ public class AgentflowAppService
         return true;
     }
 
-    private async Task<IReadOnlyDictionary<Guid, string>> ListExistingAgentsAsync(
-        IReadOnlyList<AgentflowNode> nodes)
+    private async Task<IReadOnlyDictionary<Guid, string>> ListExistingAgentsAsync(IReadOnlyList<AgentflowNode> nodes)
     {
         var agentIds = nodes
             .Where(x => x.Kind == AgentflowNodeKind.Agent)

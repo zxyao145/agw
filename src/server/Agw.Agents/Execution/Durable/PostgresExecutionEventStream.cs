@@ -1,11 +1,9 @@
 using System.Data.Common;
 using System.Globalization;
-
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
-
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,9 +23,7 @@ internal sealed class PostgresExecutionEventStream : IExecutionEventStream
     /// <summary>
     /// 创建按操作获取独立 DbContext scope 的 PostgreSQL 消息回放实现。
     /// </summary>
-    public PostgresExecutionEventStream(
-        IServiceScopeFactory scopeFactory,
-        IOptions<ExecutionRuntimeOptions> options)
+    public PostgresExecutionEventStream(IServiceScopeFactory scopeFactory, IOptions<ExecutionRuntimeOptions> options)
     {
         _scopeFactory = scopeFactory;
         _readBatchSize = options.Value.Distributed.EventStream.ReadBatchSize;
@@ -41,7 +37,8 @@ internal sealed class PostgresExecutionEventStream : IExecutionEventStream
         int segmentIndex,
         int sequence,
         AgwMessage message,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         ArgumentNullException.ThrowIfNull(message);
         if (segmentIndex < 0)
@@ -58,24 +55,26 @@ internal sealed class PostgresExecutionEventStream : IExecutionEventStream
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
-            dbContext.Set<DurableExecutionEventRecord>().Add(new DurableExecutionEventRecord
-            {
-                Id = Guid.CreateVersion7(),
-                ExecutionId = executionId,
-                SegmentIndex = segmentIndex,
-                Sequence = sequence,
-                PayloadJson = payload
-            });
+            dbContext
+                .Set<DurableExecutionEventRecord>()
+                .Add(
+                    new DurableExecutionEventRecord
+                    {
+                        Id = Guid.CreateVersion7(),
+                        ExecutionId = executionId,
+                        SegmentIndex = segmentIndex,
+                        Sequence = sequence,
+                        PayloadJson = payload,
+                    }
+                );
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (DbUpdateException exception)
         {
-            if (await ExistsAtPositionAsync(
-                    executionId,
-                    segmentIndex,
-                    sequence,
-                    cancellationToken)
-                .ConfigureAwait(false))
+            if (
+                await ExistsAtPositionAsync(executionId, segmentIndex, sequence, cancellationToken)
+                    .ConfigureAwait(false)
+            )
             {
                 return;
             }
@@ -94,7 +93,8 @@ internal sealed class PostgresExecutionEventStream : IExecutionEventStream
     public async Task<IReadOnlyList<ExecutionStreamEntry>> ReadAsync(
         Guid executionId,
         string? afterCursor,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var cursor = ParseCursor(afterCursor);
         IReadOnlyList<DurableExecutionEventRecord> records;
@@ -102,15 +102,17 @@ internal sealed class PostgresExecutionEventStream : IExecutionEventStream
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
-            var query = dbContext.Set<DurableExecutionEventRecord>()
+            var query = dbContext
+                .Set<DurableExecutionEventRecord>()
                 .AsNoTracking()
                 .Where(item => item.ExecutionId == executionId);
             if (cursor.SegmentIndex >= 0)
             {
                 query = cursor.Sequence.HasValue
-                    ? query.Where(item => item.SegmentIndex > cursor.SegmentIndex
-                        || (item.SegmentIndex == cursor.SegmentIndex
-                            && item.Sequence > cursor.Sequence.Value))
+                    ? query.Where(item =>
+                        item.SegmentIndex > cursor.SegmentIndex
+                        || (item.SegmentIndex == cursor.SegmentIndex && item.Sequence > cursor.Sequence.Value)
+                    )
                     : query.Where(item => item.SegmentIndex > cursor.SegmentIndex);
             }
 
@@ -131,18 +133,19 @@ internal sealed class PostgresExecutionEventStream : IExecutionEventStream
         {
             cancellationToken.ThrowIfCancellationRequested();
             var streamCursor = CreateCursor(record.SegmentIndex, record.Sequence);
-            var message = JsonUtil.Deserialize<AgwMessage>(record.PayloadJson)
+            var message =
+                JsonUtil.Deserialize<AgwMessage>(record.PayloadJson)
                 ?? throw new AgwException(
                     ErrorCodes.DurableExecutionConflict,
-                    $"Execution stream entry '{streamCursor}' contains an invalid message.");
-            var properties = message.AdditionalProperties == null
-                ? new AdditionalPropertiesDictionary()
-                : new AdditionalPropertiesDictionary(message.AdditionalProperties);
+                    $"Execution stream entry '{streamCursor}' contains an invalid message."
+                );
+            var properties =
+                message.AdditionalProperties == null
+                    ? new AdditionalPropertiesDictionary()
+                    : new AdditionalPropertiesDictionary(message.AdditionalProperties);
             properties["executionId"] = executionId.ToString("D");
             properties["streamCursor"] = streamCursor;
-            result.Add(new ExecutionStreamEntry(
-                streamCursor,
-                message with { AdditionalProperties = properties }));
+            result.Add(new ExecutionStreamEntry(streamCursor, message with { AdditionalProperties = properties }));
         }
 
         return result;
@@ -156,17 +159,23 @@ internal sealed class PostgresExecutionEventStream : IExecutionEventStream
         Guid executionId,
         int segmentIndex,
         int sequence,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         try
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
-            return await dbContext.Set<DurableExecutionEventRecord>()
+            return await dbContext
+                .Set<DurableExecutionEventRecord>()
                 .AsNoTracking()
-                .AnyAsync(item => item.ExecutionId == executionId
-                    && item.SegmentIndex == segmentIndex
-                    && item.Sequence == sequence, cancellationToken)
+                .AnyAsync(
+                    item =>
+                        item.ExecutionId == executionId
+                        && item.SegmentIndex == segmentIndex
+                        && item.Sequence == sequence,
+                    cancellationToken
+                )
                 .ConfigureAwait(false);
         }
         catch (Exception exception) when (IsDatabaseFailure(exception))
@@ -192,27 +201,17 @@ internal sealed class PostgresExecutionEventStream : IExecutionEventStream
         }
 
         var parts = cursor.Trim().Split('-', 2, StringSplitOptions.None);
-        if (parts.Length != 2
-            || !int.TryParse(
-                parts[0],
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out var encodedSegment)
+        if (
+            parts.Length != 2
+            || !int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var encodedSegment)
             || encodedSegment <= 0
-            || !ulong.TryParse(
-                parts[1],
-                NumberStyles.None,
-                CultureInfo.InvariantCulture,
-                out var encodedSequence))
+            || !ulong.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var encodedSequence)
+        )
         {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                $"Execution stream cursor '{cursor}' is invalid.");
+            throw new AgwException(ErrorCodes.InvalidParam, $"Execution stream cursor '{cursor}' is invalid.");
         }
 
-        return (
-            encodedSegment - 1,
-            encodedSequence <= int.MaxValue ? (int)encodedSequence : null);
+        return (encodedSegment - 1, encodedSequence <= int.MaxValue ? (int)encodedSequence : null);
     }
 
     /// <summary>
@@ -224,11 +223,10 @@ internal sealed class PostgresExecutionEventStream : IExecutionEventStream
     /// <summary>
     /// 将数据库消息流故障映射为统一的可降级错误。
     /// </summary>
-    private static AgwException CreateUnavailableException(
-        string operation,
-        Exception exception) =>
+    private static AgwException CreateUnavailableException(string operation, Exception exception) =>
         new(
             ErrorCodes.DurableExecutionUnavailable,
             $"PostgreSQL execution event stream {operation} is unavailable.",
-            exception);
+            exception
+        );
 }

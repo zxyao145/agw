@@ -13,7 +13,7 @@ public enum ExecutionProvider
     /// <summary>
     /// 使用 PostgreSQL 持久化执行状态并通过分布式锁在多个 Server 间恢复。
     /// </summary>
-    Distributed = 1
+    Distributed = 1,
 }
 
 /// <summary>
@@ -82,7 +82,7 @@ public enum ExecutionEventStreamProvider
     /// <summary>
     /// 使用 Redis Stream 持久化并回放消息。
     /// </summary>
-    Redis = 1
+    Redis = 1,
 }
 
 /// <summary>
@@ -93,8 +93,7 @@ public sealed class ExecutionEventStreamOptions
     /// <summary>
     /// 获取或设置消息回放实现；默认使用 PostgreSQL，因此集群部署不强制引入 Redis。
     /// </summary>
-    public ExecutionEventStreamProvider Provider { get; set; } =
-        ExecutionEventStreamProvider.Postgres;
+    public ExecutionEventStreamProvider Provider { get; set; } = ExecutionEventStreamProvider.Postgres;
 
     /// <summary>
     /// 获取或设置订阅端没有新消息时的轮询间隔毫秒数。

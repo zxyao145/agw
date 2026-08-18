@@ -13,9 +13,12 @@ public class AgentRuntimeServiceDependencyTests
     public void Constructor_DoesNotDependOnRepositories()
     {
         var constructor = Assert.Single(typeof(AgentRuntimeService).GetConstructors());
-        var repositoryParameters = constructor.GetParameters()
-            .Where(parameter => parameter.ParameterType.IsGenericType
-                && parameter.ParameterType.GetGenericTypeDefinition() == typeof(IRepository<>))
+        var repositoryParameters = constructor
+            .GetParameters()
+            .Where(parameter =>
+                parameter.ParameterType.IsGenericType
+                && parameter.ParameterType.GetGenericTypeDefinition() == typeof(IRepository<>)
+            )
             .Select(parameter => parameter.Name)
             .ToArray();
 
@@ -27,9 +30,7 @@ public class AgentRuntimeServiceDependencyTests
     {
         var constructor = Assert.Single(typeof(AgentRuntimeService).GetConstructors());
 
-        Assert.Contains(
-            constructor.GetParameters(),
-            parameter => parameter.ParameterType == typeof(AgentAppService));
+        Assert.Contains(constructor.GetParameters(), parameter => parameter.ParameterType == typeof(AgentAppService));
     }
 
     [Fact]
@@ -39,7 +40,8 @@ public class AgentRuntimeServiceDependencyTests
 
         Assert.Contains(
             constructor.GetParameters(),
-            parameter => parameter.ParameterType == typeof(AgentSessionStateStore));
+            parameter => parameter.ParameterType == typeof(AgentSessionStateStore)
+        );
     }
 
     [Fact]
@@ -49,7 +51,8 @@ public class AgentRuntimeServiceDependencyTests
 
         Assert.Contains(
             constructor.GetParameters(),
-            parameter => parameter.ParameterType == typeof(IConversationHandoffProvider));
+            parameter => parameter.ParameterType == typeof(IConversationHandoffProvider)
+        );
     }
 
     [Fact]
@@ -58,7 +61,7 @@ public class AgentRuntimeServiceDependencyTests
         var requestOverload = typeof(IAgentRuntimeService).GetMethod(
             nameof(IAgentRuntimeService.ExecuteByIdAsync),
             [typeof(AgentExecuteByIdRequest), typeof(CancellationToken)]
-            );
+        );
         Assert.NotNull(requestOverload);
     }
 }

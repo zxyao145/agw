@@ -1,8 +1,6 @@
 using System.Reflection;
-
 using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -52,7 +50,10 @@ public class AgwToolFactory
 
         if (!method.IsStatic)
         {
-            throw new AgwException(ErrorCodes.MethodMustBeStatic, "Method must be static. For instance methods, use CreateFromMethod with a target.");
+            throw new AgwException(
+                ErrorCodes.MethodMustBeStatic,
+                "Method must be static. For instance methods, use CreateFromMethod with a target."
+            );
         }
 
         return AIFunctionFactory.Create(method, target: null, CreateOptions(method));
@@ -87,11 +88,7 @@ public class AgwToolFactory
     {
         ArgumentNullException.ThrowIfNull(method);
 
-        var options = new AIFunctionFactoryOptions
-        {
-            Name = name ?? method.Method.Name,
-            Description = description
-        };
+        var options = new AIFunctionFactoryOptions { Name = name ?? method.Method.Name, Description = description };
 
         return AIFunctionFactory.Create(method, options);
     }
@@ -149,14 +146,18 @@ public class AgwToolFactory
         }
 
         var type = instance.GetType();
-        foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                     .Where(m => m.GetCustomAttribute<AiToolAttribute>() != null))
+        foreach (
+            var method in type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .Where(m => m.GetCustomAttribute<AiToolAttribute>() != null)
+        )
         {
             tools.Add(CreateFromMethod(method, instance));
         }
 
-        foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                     .Where(m => m.GetCustomAttribute<AiToolAttribute>() != null))
+        foreach (
+            var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                .Where(m => m.GetCustomAttribute<AiToolAttribute>() != null)
+        )
         {
             tools.Add(CreateFromMethod(method));
         }
@@ -210,11 +211,7 @@ public class AgwToolFactory
         var description = method.GetCustomAttribute<DescriptionAttribute>()?.Description;
         var name = attr?.Name ?? method.Name;
 
-        return new AIFunctionFactoryOptions
-        {
-            Name = name,
-            Description = description
-        };
+        return new AIFunctionFactoryOptions { Name = name, Description = description };
     }
 
     private Func<AIFunctionArguments, object> CreateInstanceFactory(Type type)
@@ -227,7 +224,10 @@ public class AgwToolFactory
             }
 
             return Activator.CreateInstance(type)
-                ?? throw new AgwException(ErrorCodes.CannotCreateInstance, $"Cannot create instance of {type.FullName}");
+                ?? throw new AgwException(
+                    ErrorCodes.CannotCreateInstance,
+                    $"Cannot create instance of {type.FullName}"
+                );
         };
     }
 
@@ -240,8 +240,12 @@ public class AgwToolFactory
         }
         else
         {
-            instance = Activator.CreateInstance(type)
-                ?? throw new AgwException(ErrorCodes.CannotCreateInstance, $"Cannot create instance of {type.FullName}");
+            instance =
+                Activator.CreateInstance(type)
+                ?? throw new AgwException(
+                    ErrorCodes.CannotCreateInstance,
+                    $"Cannot create instance of {type.FullName}"
+                );
         }
 
         return (IAgwTool)instance;
@@ -253,21 +257,45 @@ public class AgwToolFactory
 /// </summary>
 public static class AiToolFactoryExtensions
 {
-    public static AITool Create(this AgwToolFactory factory, Func<string> func, string name, string? description = null)
-        => factory.CreateFromDelegate(func, name, description);
+    public static AITool Create(
+        this AgwToolFactory factory,
+        Func<string> func,
+        string name,
+        string? description = null
+    ) => factory.CreateFromDelegate(func, name, description);
 
-    public static AITool Create<T1>(this AgwToolFactory factory, Func<T1, string> func, string name, string? description = null)
-        => factory.CreateFromDelegate(func, name, description);
+    public static AITool Create<T1>(
+        this AgwToolFactory factory,
+        Func<T1, string> func,
+        string name,
+        string? description = null
+    ) => factory.CreateFromDelegate(func, name, description);
 
-    public static AITool Create<T1, T2>(this AgwToolFactory factory, Func<T1, T2, string> func, string name, string? description = null)
-        => factory.CreateFromDelegate(func, name, description);
+    public static AITool Create<T1, T2>(
+        this AgwToolFactory factory,
+        Func<T1, T2, string> func,
+        string name,
+        string? description = null
+    ) => factory.CreateFromDelegate(func, name, description);
 
-    public static AITool Create<T1, T2, T3>(this AgwToolFactory factory, Func<T1, T2, T3, string> func, string name, string? description = null)
-        => factory.CreateFromDelegate(func, name, description);
+    public static AITool Create<T1, T2, T3>(
+        this AgwToolFactory factory,
+        Func<T1, T2, T3, string> func,
+        string name,
+        string? description = null
+    ) => factory.CreateFromDelegate(func, name, description);
 
-    public static AITool CreateAsync(this AgwToolFactory factory, Func<CancellationToken, Task<string>> func, string name, string? description = null)
-        => factory.CreateFromDelegate(func, name, description);
+    public static AITool CreateAsync(
+        this AgwToolFactory factory,
+        Func<CancellationToken, Task<string>> func,
+        string name,
+        string? description = null
+    ) => factory.CreateFromDelegate(func, name, description);
 
-    public static AITool CreateAsync<T1>(this AgwToolFactory factory, Func<T1, CancellationToken, Task<string>> func, string name, string? description = null)
-        => factory.CreateFromDelegate(func, name, description);
+    public static AITool CreateAsync<T1>(
+        this AgwToolFactory factory,
+        Func<T1, CancellationToken, Task<string>> func,
+        string name,
+        string? description = null
+    ) => factory.CreateFromDelegate(func, name, description);
 }

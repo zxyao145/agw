@@ -10,12 +10,14 @@ public class AgentConnectionRelationConfiguration : IEntityTypeConfiguration<Age
         builder.ToTable(table => table.HasComment("Binds an agent to an integration connection."));
         builder.HasKey(entity => new { entity.AgentId, entity.ConnectionId });
 
-        builder.HasOne(entity => entity.Agent)
+        builder
+            .HasOne(entity => entity.Agent)
             .WithMany(agent => agent.AgentConnectionRelations)
             .HasForeignKey(entity => entity.AgentId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasOne(entity => entity.Connection)
+        builder
+            .HasOne(entity => entity.Connection)
             .WithMany()
             .HasForeignKey(entity => entity.ConnectionId)
             .OnDelete(DeleteBehavior.Cascade);

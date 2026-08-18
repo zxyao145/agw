@@ -10,12 +10,14 @@ public class ProjectConnectionRelationConfiguration : IEntityTypeConfiguration<P
         builder.ToTable(table => table.HasComment("Binds a project to an integration connection."));
         builder.HasKey(entity => new { entity.ProjectId, entity.ConnectionId });
 
-        builder.HasOne(entity => entity.Project)
+        builder
+            .HasOne(entity => entity.Project)
             .WithMany(project => project.ProjectConnectionRelations)
             .HasForeignKey(entity => entity.ProjectId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasOne(entity => entity.Connection)
+        builder
+            .HasOne(entity => entity.Connection)
             .WithMany()
             .HasForeignKey(entity => entity.ConnectionId)
             .OnDelete(DeleteBehavior.Cascade);

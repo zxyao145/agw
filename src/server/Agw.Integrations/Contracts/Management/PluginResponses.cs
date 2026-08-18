@@ -35,8 +35,7 @@ public sealed class PluginInstallationScopeResponse
 {
     public Guid Id { get; init; }
     public bool Enabled { get; init; }
-    public IReadOnlyDictionary<string, string?> Configuration { get; init; } =
-        new Dictionary<string, string?>();
+    public IReadOnlyDictionary<string, string?> Configuration { get; init; } = new Dictionary<string, string?>();
     public IReadOnlyDictionary<string, SecretFieldStateResponse> Secrets { get; init; } =
         new Dictionary<string, SecretFieldStateResponse>();
 }
@@ -46,7 +45,7 @@ public enum AuthSchemeTypeResponse
 {
     OAuth2,
     ApiKey,
-    AkSk
+    AkSk,
 }
 
 public sealed class FormFieldResponse
@@ -63,7 +62,7 @@ public enum FormFieldTypeResponse
 {
     Text,
     Secret,
-    Url
+    Url,
 }
 
 public sealed class OAuth2AuthorizationCodeResponse
@@ -95,7 +94,7 @@ public enum OAuthSubjectSourceResponse
 {
     UserInfo,
     TokenResponse,
-    IdToken
+    IdToken,
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -103,7 +102,7 @@ public enum OAuth2ClientAuthenticationMethodResponse
 {
     Body,
     Basic,
-    None
+    None,
 }
 
 public sealed class CapabilitySourceResponse
@@ -119,7 +118,7 @@ public sealed class CapabilitySourceResponse
 public enum CapabilitySourceKindResponse
 {
     Native,
-    Mcp
+    Mcp,
 }
 
 public sealed class McpTransportResponse
@@ -135,7 +134,7 @@ public enum McpTransportKindResponse
 {
     Stdio,
     Http,
-    Sse
+    Sse,
 }
 
 public sealed class CredentialBindingResponse
@@ -153,14 +152,14 @@ public enum CredentialValueSourceKindResponse
 {
     ConnectionField,
     InstallationField,
-    OAuthAccessToken
+    OAuthAccessToken,
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum CredentialBindingTargetResponse
 {
     EnvironmentVariable,
-    HttpHeader
+    HttpHeader,
 }
 
 public sealed class PluginSkillResponse

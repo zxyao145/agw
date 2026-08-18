@@ -13,7 +13,6 @@ using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution.Connections;
@@ -48,7 +47,8 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         ITaskAppService taskAppService,
         IProjectAppService projectAppService,
         DurableExecutionSession? durableSession = null,
-        AgentflowCheckpointStore? checkpointStore = null)
+        AgentflowCheckpointStore? checkpointStore = null
+    )
     {
         _userName = userName;
         _messageSink = messageSink;
@@ -93,9 +93,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         }
     }
 
-    public async Task ApplySettingsAsync(
-        ExecutionSettings settings,
-        CancellationToken cancellationToken)
+    public async Task ApplySettingsAsync(ExecutionSettings settings, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(settings);
         if (HasActiveTurn)
@@ -122,9 +120,11 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(command);
         if (HasActiveTurn)
         {
-            if (_durableSession != null
+            if (
+                _durableSession != null
                 && command.ExecutionId.HasValue
-                && command.ExecutionId == _durableSession.ActiveExecutionId)
+                && command.ExecutionId == _durableSession.ActiveExecutionId
+            )
             {
                 await SubscribeExecutionAsync(command.ExecutionId.Value, cursor: null, cancellationToken);
                 return;
@@ -139,8 +139,8 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             await _runtime.WhenIdleAsync();
         }
 
-        var agentId = command.AgentId
-            ?? throw new AgwException(ErrorCodes.InvalidParam, "ExecCommand.agentId is required.");
+        var agentId =
+            command.AgentId ?? throw new AgwException(ErrorCodes.InvalidParam, "ExecCommand.agentId is required.");
         if (agentId == Guid.Empty)
         {
             throw new AgwException(ErrorCodes.InvalidParam, "ExecCommand.agentId is required.");
@@ -153,11 +153,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         var target = new ExecutionTarget(agentId, command.AgentType);
         if (_durableSession != null)
         {
-            await _durableSession.StartAsync(
-                command,
-                _resolvedTask!,
-                Settings,
-                cancellationToken);
+            await _durableSession.StartAsync(command, _resolvedTask!, Settings, cancellationToken);
             _target = target;
             return;
         }
@@ -174,23 +170,21 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             _userName,
             _workspace!,
             _messageSink,
-            pending => _waitingForHuman = pending != null);
-        var requestedMode = command.AgentType == AgentRuntimeType.Agent &&
-            _pendingModeChange is { } pendingModeChange &&
-            pendingModeChange.AgentId == agentId
+            pending => _waitingForHuman = pending != null
+        );
+        var requestedMode =
+            command.AgentType == AgentRuntimeType.Agent
+            && _pendingModeChange is { } pendingModeChange
+            && pendingModeChange.AgentId == agentId
                 ? pendingModeChange.Mode
                 : null;
         var start = await _runtimeFactory.StartAsync(
-            new RuntimeStartRequest(
-                target.AgentId,
-                _resolvedTask!,
-                command,
-                _runtime,
-                turnContext)
+            new RuntimeStartRequest(target.AgentId, _resolvedTask!, command, _runtime, turnContext)
             {
                 RequestedMode = requestedMode,
             },
-            _hostToken);
+            _hostToken
+        );
         _runtime = start.Runtime;
         _target = start.Runtime == null ? null : target;
         if (requestedMode != null && start.Runtime != null)
@@ -205,23 +199,20 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         }
     }
 
-    public async Task SetModeAsync(
-        Guid agentId,
-        string mode,
-        CancellationToken cancellationToken)
+    public async Task SetModeAsync(Guid agentId, string mode, CancellationToken cancellationToken)
     {
         var change = new PendingModeChange(agentId, mode);
         _pendingModeChange = change;
-        if (_runtime is not AgentRuntime runtime ||
-            _target is not { AgentId: var targetAgentId } ||
-            targetAgentId != agentId)
+        if (
+            _runtime is not AgentRuntime runtime
+            || _target is not { AgentId: var targetAgentId }
+            || targetAgentId != agentId
+        )
         {
             return;
         }
 
-        if (runtime.TryScheduleAfterTurn(
-                SetModeAfterTurnActionKey,
-                _ => ApplyQueuedModeAsync(runtime, change)))
+        if (runtime.TryScheduleAfterTurn(SetModeAfterTurnActionKey, _ => ApplyQueuedModeAsync(runtime, change)))
         {
             return;
         }
@@ -235,12 +226,9 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         await SendModeStatusAsync(agentId, mode);
     }
 
-    public async Task SetPermissionModeAsync(
-        PermissionMode permissionMode,
-        CancellationToken cancellationToken)
+    public async Task SetPermissionModeAsync(PermissionMode permissionMode, CancellationToken cancellationToken)
     {
-        Settings = (Settings ?? ExecutionSettings.CreateDefault())
-            .WithPermissionMode(permissionMode);
+        Settings = (Settings ?? ExecutionSettings.CreateDefault()).WithPermissionMode(permissionMode);
         var runtime = _runtime;
         if (runtime == null)
         {
@@ -254,18 +242,13 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     /// <summary>
     /// 中断当前连接内的活动执行；进程内模式无需显式 executionId。
     /// </summary>
-    public Task InterruptTurnAsync(
-        string? reason,
-        CancellationToken cancellationToken) =>
+    public Task InterruptTurnAsync(string? reason, CancellationToken cancellationToken) =>
         InterruptTurnAsync(executionId: null, reason, cancellationToken);
 
     /// <summary>
     /// 中断指定 durable execution；进程内模式仍退化为中断当前 Turn。
     /// </summary>
-    public async Task InterruptTurnAsync(
-        Guid? executionId,
-        string? reason,
-        CancellationToken cancellationToken)
+    public async Task InterruptTurnAsync(Guid? executionId, string? reason, CancellationToken cancellationToken)
     {
         if (_durableSession != null)
         {
@@ -275,20 +258,15 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
         if (!HasActiveTurn)
         {
-            await SendSystemMessageAsync(
-                reason ?? "No active request is currently running.");
-            await _messageSink.WriteAsync(
-                TurnMessageFactory.CreateFinished("interrupted"),
-                CancellationToken.None);
+            await SendSystemMessageAsync(reason ?? "No active request is currently running.");
+            await _messageSink.WriteAsync(TurnMessageFactory.CreateFinished("interrupted"), CancellationToken.None);
             return;
         }
 
         _runtime!.RequestInterrupt();
     }
 
-    public async Task SubmitHumanDecisionAsync(
-        HumanResponseCommand command,
-        CancellationToken cancellationToken)
+    public async Task SubmitHumanDecisionAsync(HumanResponseCommand command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
         if (_durableSession != null)
@@ -297,62 +275,67 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             return;
         }
 
-        if (_runtime == null
-            || !await _runtime.TrySubmitHumanResponseAsync(command, cancellationToken))
+        if (_runtime == null || !await _runtime.TrySubmitHumanResponseAsync(command, cancellationToken))
         {
-            await SendSystemMessageAsync(
-                "No matching HumanGate request is waiting for this response.");
+            await SendSystemMessageAsync("No matching HumanGate request is waiting for this response.");
         }
     }
 
     public async Task<IReadOnlyList<AgentflowCheckpointAvailability>> GetAgentflowCheckpointsAsync(
         Guid agentflowId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (agentflowId == Guid.Empty)
         {
             throw new AgwException(ErrorCodes.InvalidParam, "agentflowId is required.");
         }
 
-        var checkpointStore = _checkpointStore
+        var checkpointStore =
+            _checkpointStore
+            ?? throw new AgwException(ErrorCodes.InvalidParam, "Agentflow checkpoint services are not configured.");
+        var settings =
+            Settings
             ?? throw new AgwException(
                 ErrorCodes.InvalidParam,
-                "Agentflow checkpoint services are not configured.");
-        var settings = Settings
-            ?? throw new AgwException(
-                ErrorCodes.InvalidParam,
-                "Execution settings must be configured before querying checkpoints.");
+                "Execution settings must be configured before querying checkpoints."
+            );
         IReadOnlySet<Guid>? inProcessOccurrences = null;
-        if (_durableSession == null
+        if (
+            _durableSession == null
             && _runtime is AgentflowRuntime runtime
             && _target is { AgentType: AgentRuntimeType.Agentflow, AgentId: var targetId }
-            && targetId == agentflowId)
+            && targetId == agentflowId
+        )
         {
             inProcessOccurrences = runtime.CheckpointOccurrenceIds;
         }
 
-        return await checkpointStore.ListAsync(
+        return await checkpointStore
+            .ListAsync(
                 ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId),
                 ContextIdUtil.ResolveContextId(settings.ContextId),
                 agentflowId,
                 _userName,
                 inProcessOccurrences,
-                cancellationToken)
+                cancellationToken
+            )
             .ConfigureAwait(false);
     }
 
-    public async Task ResumeCheckpointAsync(
-        ResumeCheckpointCommand command,
-        CancellationToken cancellationToken)
+    public async Task ResumeCheckpointAsync(ResumeCheckpointCommand command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
-        if (command.CheckpointOccurrenceId == Guid.Empty
+        if (
+            command.CheckpointOccurrenceId == Guid.Empty
             || command.ResumeExecutionId == Guid.Empty
-            || command.AgentflowId == Guid.Empty)
+            || command.AgentflowId == Guid.Empty
+        )
         {
             throw new AgwException(
                 ErrorCodes.InvalidParam,
-                "checkpointOccurrenceId, resumeExecutionId and agentflowId are required.");
+                "checkpointOccurrenceId, resumeExecutionId and agentflowId are required."
+            );
         }
         if (_lastResumeExecutionId == command.ResumeExecutionId)
         {
@@ -362,65 +345,73 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         {
             throw new AgwException(
                 ErrorCodes.DurableExecutionConflict,
-                "Stop the active Agentflow execution before resuming a checkpoint.");
+                "Stop the active Agentflow execution before resuming a checkpoint."
+            );
         }
 
-        var checkpointStore = _checkpointStore
+        var checkpointStore =
+            _checkpointStore
+            ?? throw new AgwException(ErrorCodes.InvalidParam, "Agentflow checkpoint services are not configured.");
+        var settings =
+            Settings
             ?? throw new AgwException(
                 ErrorCodes.InvalidParam,
-                "Agentflow checkpoint services are not configured.");
-        var settings = Settings
-            ?? throw new AgwException(
-                ErrorCodes.InvalidParam,
-                "Execution settings must be configured before resuming a checkpoint.");
+                "Execution settings must be configured before resuming a checkpoint."
+            );
         var projectId = ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId);
         var contextId = ContextIdUtil.ResolveContextId(settings.ContextId);
 
         if (_durableSession != null)
         {
-            await _durableSession.ResumeCheckpointAsync(
+            await _durableSession
+                .ResumeCheckpointAsync(
                     command.CheckpointOccurrenceId,
                     command.ResumeExecutionId,
                     projectId,
                     contextId,
                     command.AgentflowId,
-                    cancellationToken)
+                    cancellationToken
+                )
                 .ConfigureAwait(false);
             _target = new ExecutionTarget(command.AgentflowId, AgentRuntimeType.Agentflow);
             _lastResumeExecutionId = command.ResumeExecutionId;
             return;
         }
 
-        if (_runtime is not AgentflowRuntime runtime
+        if (
+            _runtime is not AgentflowRuntime runtime
             || _target is not { AgentType: AgentRuntimeType.Agentflow, AgentId: var targetId }
             || targetId != command.AgentflowId
-            || !runtime.TryGetCheckpoint(command.CheckpointOccurrenceId, out _))
+            || !runtime.TryGetCheckpoint(command.CheckpointOccurrenceId, out _)
+        )
         {
             throw new AgwException(
                 ErrorCodes.InvalidParam,
-                "The selected in-process checkpoint is no longer available.");
+                "The selected in-process checkpoint is no longer available."
+            );
         }
 
-        var snapshot = await checkpointStore.PrepareInProcessResumeAsync(
+        var snapshot = await checkpointStore
+            .PrepareInProcessResumeAsync(
                 command.CheckpointOccurrenceId,
                 projectId,
                 contextId,
                 command.AgentflowId,
                 _userName,
-                cancellationToken)
+                cancellationToken
+            )
             .ConfigureAwait(false);
         runtime.RemoveCheckpointsAfter(snapshot.BoundarySequence);
         await StartTurnAsync(
-                new ExecCommand(
-                    AgentRuntimeType.Agentflow,
-                    new AgwUserInput { Contents = [] })
+                new ExecCommand(AgentRuntimeType.Agentflow, new AgwUserInput { Contents = [] })
                 {
                     AgentId = command.AgentflowId,
                     ExecutionId = command.ResumeExecutionId,
                     Stream = true,
-                    ResumeCheckpoint = snapshot
+                    ResumeCheckpoint = snapshot,
                 },
-                cancellationToken)
+                cancellationToken
+            )
             .ConfigureAwait(false);
         _lastResumeExecutionId = command.ResumeExecutionId;
     }
@@ -458,28 +449,24 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     /// <summary>
     /// 等待连接内进程执行结束；durable execution 不依赖当前连接存活，因此无需等待。
     /// </summary>
-    internal Task WhenIdleAsync() => _durableSession != null
-        ? Task.CompletedTask
-        : _runtime?.WhenIdleAsync() ?? Task.CompletedTask;
+    internal Task WhenIdleAsync() =>
+        _durableSession != null ? Task.CompletedTask : _runtime?.WhenIdleAsync() ?? Task.CompletedTask;
 
     /// <summary>
     /// 将当前连接附着到已有 durable execution，并从指定 cursor 继续回放消息。
     /// </summary>
-    public async Task SubscribeExecutionAsync(
-        Guid executionId,
-        string? cursor,
-        CancellationToken cancellationToken)
+    public async Task SubscribeExecutionAsync(Guid executionId, string? cursor, CancellationToken cancellationToken)
     {
-        var session = _durableSession
+        var session =
+            _durableSession
             ?? throw new AgwException(
                 ErrorCodes.DurableExecutionUnavailable,
-                "Durable execution services are not configured.");
+                "Durable execution services are not configured."
+            );
         await session.AttachAsync(executionId, cursor, cancellationToken);
     }
 
-    private async Task ResolveExecutionContextAsync(
-        ExecCommand command,
-        CancellationToken cancellationToken)
+    private async Task ResolveExecutionContextAsync(ExecCommand command, CancellationToken cancellationToken)
     {
         if (_resolvedTask == null)
         {
@@ -490,9 +477,12 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                     ContextId: Settings.ContextId,
                     Input: AgwMessageUtil.ExtractInputText(command.Input),
                     Resume: Settings.Resume,
-                    User: _userName),
-                cancellationToken);
-            _resolvedTask = resolution.Task
+                    User: _userName
+                ),
+                cancellationToken
+            );
+            _resolvedTask =
+                resolution.Task
                 ?? throw new AgwException(ErrorCodes.InvalidParam, "Execution task could not be resolved.");
         }
 
@@ -501,10 +491,9 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             return;
         }
 
-        var project = await _projectAppService.GetAsync(_resolvedTask.ProjectId)
-            ?? throw new AgwException(
-                ErrorCodes.InvalidParam,
-                $"Project '{_resolvedTask.ProjectId}' was not found.");
+        var project =
+            await _projectAppService.GetAsync(_resolvedTask.ProjectId)
+            ?? throw new AgwException(ErrorCodes.InvalidParam, $"Project '{_resolvedTask.ProjectId}' was not found.");
         _workspace = Path.GetFullPath(PathUtil.ExpandTilde(project.GetMustWorkspace().Trim()));
     }
 
@@ -521,23 +510,23 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     }
 
     private Task SendErrorAsync(string message) =>
-        _messageSink.WriteAsync(
-            CreateMessage(new AgwErrorContent { Content = message }),
-            CancellationToken.None).AsTask();
+        _messageSink
+            .WriteAsync(CreateMessage(new AgwErrorContent { Content = message }), CancellationToken.None)
+            .AsTask();
 
     private Task SendSystemMessageAsync(string message) =>
-        _messageSink.WriteAsync(
-            CreateMessage(new AgwTextContent { Content = message }),
-            CancellationToken.None).AsTask();
+        _messageSink
+            .WriteAsync(CreateMessage(new AgwTextContent { Content = message }), CancellationToken.None)
+            .AsTask();
 
-    private async Task ApplyQueuedModeAsync(
-        AgentRuntime runtime,
-        PendingModeChange change)
+    private async Task ApplyQueuedModeAsync(AgentRuntime runtime, PendingModeChange change)
     {
-        if (!ReferenceEquals(_runtime, runtime) ||
-            _target is not { AgentId: var targetAgentId } ||
-            targetAgentId != change.AgentId ||
-            _pendingModeChange != change)
+        if (
+            !ReferenceEquals(_runtime, runtime)
+            || _target is not { AgentId: var targetAgentId }
+            || targetAgentId != change.AgentId
+            || _pendingModeChange != change
+        )
         {
             return;
         }
@@ -566,38 +555,48 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     }
 
     private Task SendModeStatusAsync(Guid agentId, string mode) =>
-        _messageSink.WriteAsync(
-            CreateMessage(
-                new AgwTextContent { Content = $"Agent mode changed to '{mode}'." },
-                new AdditionalPropertiesDictionary
-                {
-                    ["type"] = "mode-status",
-                    ["agentId"] = agentId,
-                    ["mode"] = mode,
-                }),
-            CancellationToken.None).AsTask();
+        _messageSink
+            .WriteAsync(
+                CreateMessage(
+                    new AgwTextContent { Content = $"Agent mode changed to '{mode}'." },
+                    new AdditionalPropertiesDictionary
+                    {
+                        ["type"] = "mode-status",
+                        ["agentId"] = agentId,
+                        ["mode"] = mode,
+                    }
+                ),
+                CancellationToken.None
+            )
+            .AsTask();
 
     private Task SendModeFailureAsync(Guid agentId, string mode, string message) =>
-        _messageSink.WriteAsync(
-            CreateMessage(
-                new AgwTextContent { Content = message },
-                new AdditionalPropertiesDictionary
-                {
-                    ["type"] = "mode-change-failed",
-                    ["agentId"] = agentId,
-                    ["mode"] = mode,
-                }),
-            CancellationToken.None).AsTask();
+        _messageSink
+            .WriteAsync(
+                CreateMessage(
+                    new AgwTextContent { Content = message },
+                    new AdditionalPropertiesDictionary
+                    {
+                        ["type"] = "mode-change-failed",
+                        ["agentId"] = agentId,
+                        ["mode"] = mode,
+                    }
+                ),
+                CancellationToken.None
+            )
+            .AsTask();
 
     private static AgwMessage CreateMessage(
         AgwContent content,
-        AdditionalPropertiesDictionary? additionalProperties = null) =>
+        AdditionalPropertiesDictionary? additionalProperties = null
+    ) =>
         new(
             Guid.CreateVersion7().ToString("D"),
             Constants.DefaultAgentAuthor,
             AiRole.System,
             [content],
-            additionalProperties);
+            additionalProperties
+        );
 
     private sealed record PendingModeChange(Guid AgentId, string Mode);
 }

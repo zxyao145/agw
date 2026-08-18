@@ -2,7 +2,6 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Providers;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,7 +21,8 @@ public class EntityAuditInterceptorTests
             .AddInterceptors(
                 new EntityCreatorInterceptor(userIdProvider, TimeProvider.System),
                 new EntityModifierInterceptor(userIdProvider, TimeProvider.System),
-                new EntitySoftDeleteInterceptor(userIdProvider, TimeProvider.System))
+                new EntitySoftDeleteInterceptor(userIdProvider, TimeProvider.System)
+            )
             .Options;
 
         await using var context = new AgwDbContext(options);
@@ -32,7 +32,7 @@ public class EntityAuditInterceptorTests
         {
             Name = "provider",
             ProviderType = ProviderType.OpenAIResponses,
-            Endpoint = "https://example.test"
+            Endpoint = "https://example.test",
         };
         context.Providers.Add(provider);
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -41,8 +41,8 @@ public class EntityAuditInterceptorTests
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
         context.ChangeTracker.Clear();
 
-        var persistedProvider = await context.Providers
-            .AsNoTracking()
+        var persistedProvider = await context
+            .Providers.AsNoTracking()
             .SingleAsync(item => item.Id == provider.Id, TestContext.Current.CancellationToken);
 
         Assert.Equal("user-1", persistedProvider.UpdateBy);
@@ -61,7 +61,8 @@ public class EntityAuditInterceptorTests
             .AddInterceptors(
                 new EntityCreatorInterceptor(userIdProvider, TimeProvider.System),
                 new EntityModifierInterceptor(userIdProvider, TimeProvider.System),
-                new EntitySoftDeleteInterceptor(userIdProvider, TimeProvider.System))
+                new EntitySoftDeleteInterceptor(userIdProvider, TimeProvider.System)
+            )
             .Options;
 
         await using var context = new AuditDbContext(options);
@@ -86,7 +87,7 @@ public class EntityAuditInterceptorTests
         {
             Name = "system",
             CreateBy = "a2a",
-            CreateTime = explicitCreateTime
+            CreateTime = explicitCreateTime,
         };
         context.Entities.Add(systemEntity);
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -104,14 +105,12 @@ public class EntityAuditInterceptorTests
         context.Entities.Remove(entity);
         await context.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var visibleEntities = await context.Entities
-            .AsNoTracking()
-            .ToListAsync(TestContext.Current.CancellationToken);
+        var visibleEntities = await context.Entities.AsNoTracking().ToListAsync(TestContext.Current.CancellationToken);
         Assert.DoesNotContain(visibleEntities, item => item.Id == entity.Id);
         Assert.Contains(visibleEntities, item => item.Id == systemEntity.Id);
 
-        var deleted = await context.Entities
-            .IgnoreQueryFilters([SoftDeleteQueryFilterNames.SoftDelete])
+        var deleted = await context
+            .Entities.IgnoreQueryFilters([SoftDeleteQueryFilterNames.SoftDelete])
             .AsNoTracking()
             .SingleAsync(item => item.Id == entity.Id, TestContext.Current.CancellationToken);
 
@@ -135,9 +134,7 @@ public class EntityAuditInterceptorTests
     private sealed class AuditDbContext : DbContext
     {
         public AuditDbContext(DbContextOptions<AuditDbContext> options)
-            : base(options)
-        {
-        }
+            : base(options) { }
 
         public DbSet<AuditEntity> Entities => Set<AuditEntity>();
 

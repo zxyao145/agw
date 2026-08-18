@@ -22,31 +22,29 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_api_token", x => x.id);
                 },
-                comment: "Stores hashed API tokens used by external Agw clients.");
+                comment: "Stores hashed API tokens used by external Agw clients."
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_api_token_normalized_name",
                 table: "api_token",
                 column: "normalized_name",
-                unique: true);
+                unique: true
+            );
 
-            migrationBuilder.CreateIndex(
-                name: "ix_api_token_prefix",
-                table: "api_token",
-                column: "prefix");
+            migrationBuilder.CreateIndex(name: "ix_api_token_prefix", table: "api_token", column: "prefix");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "api_token");
+            migrationBuilder.DropTable(name: "api_token");
         }
     }
 }

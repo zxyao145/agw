@@ -1,5 +1,4 @@
 using System.Text.Json;
-
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Shared.Data.Entities.Agents;
@@ -17,7 +16,7 @@ public class AgentRequestsTests
             Description = "Description",
             SystemPrompt = "",
             ModelProviderId = null,
-            Extra = "{\"sandbox\":false}"
+            Extra = "{\"sandbox\":false}",
         };
 
         Assert.Equal("{\"sandbox\":false}", request.Extra);
@@ -26,24 +25,22 @@ public class AgentRequestsTests
     [Fact]
     public void AgentCreateAndUpdateRequests_StoreEnvironmentVariables()
     {
-        var environmentVariables = new Dictionary<string, string>
-        {
-            ["AGW_TOKEN"] = "secret",
-        };
+        var environmentVariables = new Dictionary<string, string> { ["AGW_TOKEN"] = "secret" };
         var createRequest = new AgentCreateRequest(
             "Agent",
             "agent",
             "Description",
             "Prompt",
             Guid.CreateVersion7(),
-            EnvironmentVariables: environmentVariables);
+            EnvironmentVariables: environmentVariables
+        );
         var updateRequest = new AgentUpdateRequest
         {
             DisplayName = "Agent",
             Description = "Description",
             SystemPrompt = "Prompt",
             ModelProviderId = Guid.CreateVersion7(),
-            EnvironmentVariables = environmentVariables
+            EnvironmentVariables = environmentVariables,
         };
 
         Assert.Same(environmentVariables, createRequest.EnvironmentVariables);
@@ -57,10 +54,7 @@ public class AgentRequestsTests
         {
             Id = Guid.CreateVersion7(),
             Type = AgentType.System,
-            EnvironmentVariables = new Dictionary<string, string>
-            {
-                ["AGW_TOKEN"] = "secret",
-            },
+            EnvironmentVariables = new Dictionary<string, string> { ["AGW_TOKEN"] = "secret" },
         };
 
         var response = AgentResponse.FromDomain(agent);
@@ -78,19 +72,17 @@ public class AgentRequestsTests
             "Description",
             "Prompt",
             Guid.CreateVersion7(),
-            SummaryModelProviderId: summaryModelProviderId);
+            SummaryModelProviderId: summaryModelProviderId
+        );
         var updateRequest = new AgentUpdateRequest
         {
             DisplayName = "Agent",
             Description = "Description",
             SystemPrompt = "Prompt",
             ModelProviderId = Guid.CreateVersion7(),
-            SummaryModelProviderId = summaryModelProviderId
-        };
-        var response = AgentResponse.FromDomain(new Agent
-        {
             SummaryModelProviderId = summaryModelProviderId,
-        });
+        };
+        var response = AgentResponse.FromDomain(new Agent { SummaryModelProviderId = summaryModelProviderId });
 
         Assert.Equal(summaryModelProviderId, createRequest.SummaryModelProviderId);
         Assert.Equal(summaryModelProviderId, updateRequest.SummaryModelProviderId);
@@ -109,7 +101,8 @@ public class AgentRequestsTests
               "environmentVariables": null
             }
             """,
-            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        );
 
         var command = Assert.IsType<AgentUpdateCommand>(request?.ToCommand());
         Assert.True(command.IsSpecified(AgentUpdateField.DisplayName));

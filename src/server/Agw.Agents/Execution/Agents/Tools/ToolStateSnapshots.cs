@@ -1,5 +1,4 @@
 using Agw.Shared.Contracts.Agents;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -14,15 +13,17 @@ internal static class ToolStateSnapshots
             "background_agents_get_task_results",
             "background_agents_get_all_tasks",
             "background_agents_continue_task",
-            "background_agents_clear_completed_task"
+            "background_agents_clear_completed_task",
         ],
-        StringComparer.OrdinalIgnoreCase);
+        StringComparer.OrdinalIgnoreCase
+    );
 
     public static ValueTask<IReadOnlyList<ChatMessage>> CreateAsync(
         AIAgent agent,
         AgentSession session,
         IEnumerable<ChatMessage> turnMessages,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         ArgumentNullException.ThrowIfNull(turnMessages);
 
@@ -33,18 +34,23 @@ internal static class ToolStateSnapshots
         if (backgroundProvider != null && HasToolName(usedToolNames, BackgroundAgentToolNames))
         {
             var tasks = backgroundProvider.GetIncompleteTasks(session);
-            messages.Add(CreateMessage(
-                ToolMessageTypes.BackgroundTaskStatus,
-                new AdditionalPropertiesDictionary
-                {
-                    ["tasks"] = tasks.Select(static task => new
+            messages.Add(
+                CreateMessage(
+                    ToolMessageTypes.BackgroundTaskStatus,
+                    new AdditionalPropertiesDictionary
                     {
-                        id = task.Id,
-                        agentName = task.AgentName,
-                        description = task.Description,
-                        status = task.Status.ToString().ToLowerInvariant()
-                    }).ToArray()
-                }));
+                        ["tasks"] = tasks
+                            .Select(static task => new
+                            {
+                                id = task.Id,
+                                agentName = task.AgentName,
+                                description = task.Description,
+                                status = task.Status.ToString().ToLowerInvariant(),
+                            })
+                            .ToArray(),
+                    }
+                )
+            );
         }
 
         return ValueTask.FromResult<IReadOnlyList<ChatMessage>>(messages);
@@ -55,19 +61,19 @@ internal static class ToolStateSnapshots
         AgentSession session,
         string toolName,
         string callId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var mode = await provider
-            .GetModeAsync(session, cancellationToken)
-            .ConfigureAwait(false);
+        var mode = await provider.GetModeAsync(session, cancellationToken).ConfigureAwait(false);
         return CreateMessage(
             ToolMessageTypes.ModeStatus,
             new AdditionalPropertiesDictionary
             {
                 ["toolName"] = toolName,
                 ["callId"] = callId,
-                ["mode"] = mode
-            });
+                ["mode"] = mode,
+            }
+        );
     }
 
     public static async ValueTask<ChatMessage> CreateTodoAsync(
@@ -75,25 +81,27 @@ internal static class ToolStateSnapshots
         AgentSession session,
         string toolName,
         string callId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var items = await provider
-            .GetAllTodosAsync(session, cancellationToken)
-            .ConfigureAwait(false);
+        var items = await provider.GetAllTodosAsync(session, cancellationToken).ConfigureAwait(false);
         return CreateMessage(
             ToolMessageTypes.TodoSnapshot,
             new AdditionalPropertiesDictionary
             {
                 ["toolName"] = toolName,
                 ["callId"] = callId,
-                ["items"] = items.Select(static item => new
-                {
-                    id = item.Id,
-                    title = item.Title,
-                    description = item.Description,
-                    isComplete = item.IsComplete
-                }).ToArray()
-            });
+                ["items"] = items
+                    .Select(static item => new
+                    {
+                        id = item.Id,
+                        title = item.Title,
+                        description = item.Description,
+                        isComplete = item.IsComplete,
+                    })
+                    .ToArray(),
+            }
+        );
     }
 
     private static HashSet<string> GetCompletedToolNames(IEnumerable<ChatMessage> turnMessages)
@@ -105,25 +113,26 @@ internal static class ToolStateSnapshots
             {
                 FunctionCallContent functionCall => functionCall,
                 ToolApprovalRequestContent { ToolCall: FunctionCallContent functionCall } => functionCall,
-                _ => null
+                _ => null,
             };
 
-            if (call is not null &&
-                !string.IsNullOrWhiteSpace(call.CallId) &&
-                !call.InformationalOnly &&
-                !string.IsNullOrWhiteSpace(call.Name))
+            if (
+                call is not null
+                && !string.IsNullOrWhiteSpace(call.CallId)
+                && !call.InformationalOnly
+                && !string.IsNullOrWhiteSpace(call.Name)
+            )
             {
                 callNames[call.CallId] = call.Name;
             }
         }
 
         var completedToolNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var result in turnMessages
-                     .SelectMany(static message => message.Contents)
-                     .OfType<FunctionResultContent>())
+        foreach (
+            var result in turnMessages.SelectMany(static message => message.Contents).OfType<FunctionResultContent>()
+        )
         {
-            if (callNames.TryGetValue(result.CallId, out var name) &&
-                !string.IsNullOrWhiteSpace(name))
+            if (callNames.TryGetValue(result.CallId, out var name) && !string.IsNullOrWhiteSpace(name))
             {
                 completedToolNames.Add(name);
             }
@@ -132,9 +141,7 @@ internal static class ToolStateSnapshots
         return completedToolNames;
     }
 
-    private static bool HasToolName(
-        IReadOnlySet<string> usedToolNames,
-        IReadOnlySet<string> expectedToolNames) =>
+    private static bool HasToolName(IReadOnlySet<string> usedToolNames, IReadOnlySet<string> expectedToolNames) =>
         usedToolNames.Any(expectedToolNames.Contains);
 
     public static AgentResponseUpdate ToUpdate(ChatMessage message) =>
@@ -142,7 +149,7 @@ internal static class ToolStateSnapshots
         {
             AuthorName = message.AuthorName,
             MessageId = message.MessageId,
-            AdditionalProperties = message.AdditionalProperties
+            AdditionalProperties = message.AdditionalProperties,
         };
 
     public static ChatMessage ToMessage(AgentResponseUpdate update) =>
@@ -150,14 +157,12 @@ internal static class ToolStateSnapshots
         {
             AuthorName = update.AuthorName,
             MessageId = update.MessageId,
-            AdditionalProperties = update.AdditionalProperties
+            AdditionalProperties = update.AdditionalProperties,
         };
 
-    public static bool IsToolMessage(ChatMessage message) =>
-        IsToolMessage(message.AdditionalProperties);
+    public static bool IsToolMessage(ChatMessage message) => IsToolMessage(message.AdditionalProperties);
 
-    public static bool IsToolMessage(AgentResponseUpdate update) =>
-        IsToolMessage(update.AdditionalProperties);
+    public static bool IsToolMessage(AgentResponseUpdate update) => IsToolMessage(update.AdditionalProperties);
 
     public static bool RequiresSeparatePersistence(ChatMessage message) =>
         IsToolMessage(message) && !IsHistoryPrelude(message.AdditionalProperties);
@@ -166,34 +171,30 @@ internal static class ToolStateSnapshots
         IsToolMessage(update) && !IsHistoryPrelude(update.AdditionalProperties);
 
     private static bool IsToolMessage(AdditionalPropertiesDictionary? properties) =>
-        properties?.TryGetValue("type", out var type) == true &&
-        ToolMessageTypes.IsToolMessage(type?.ToString());
+        properties?.TryGetValue("type", out var type) == true && ToolMessageTypes.IsToolMessage(type?.ToString());
 
     private static bool IsHistoryPrelude(AdditionalPropertiesDictionary? properties)
     {
-        if (properties?.TryGetValue("type", out var type) != true ||
-            !string.Equals(
-                type?.ToString(),
-                ToolMessageTypes.Warning,
-                StringComparison.Ordinal))
+        if (
+            properties?.TryGetValue("type", out var type) != true
+            || !string.Equals(type?.ToString(), ToolMessageTypes.Warning, StringComparison.Ordinal)
+        )
         {
             return false;
         }
 
-        return properties.TryGetValue("persistSeparately", out var persistSeparately) != true ||
-            persistSeparately is not true;
+        return properties.TryGetValue("persistSeparately", out var persistSeparately) != true
+            || persistSeparately is not true;
     }
 
-    private static ChatMessage CreateMessage(
-        string type,
-        AdditionalPropertiesDictionary properties)
+    private static ChatMessage CreateMessage(string type, AdditionalPropertiesDictionary properties)
     {
         properties["type"] = type;
         return new ChatMessage(ChatRole.System, [new TextContent(string.Empty)])
         {
             MessageId = Guid.CreateVersion7().ToString("N"),
             AuthorName = "tools",
-            AdditionalProperties = properties
+            AdditionalProperties = properties,
         };
     }
 }

@@ -8,7 +8,7 @@ public sealed record ExecutionTaskRequest(
     string? ContextId,
     string Input,
     bool Resume,
-    string User);
-
+    string User
+);
 
 public readonly record struct ExecutionTaskResolutionResult(TaskProjection? Task, IActionResult? Error);

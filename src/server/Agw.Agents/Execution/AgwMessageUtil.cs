@@ -2,9 +2,7 @@ using Agw.Agents.Execution.Runtimes;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
-
 using ClaudeCodeSdk.MAF;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution;
@@ -19,9 +17,8 @@ internal static class AgwMessageUtil
 
         return string.Join(
             Environment.NewLine,
-            input.Contents
-                .Select(ExtractContentText)
-                .Where(static value => !string.IsNullOrWhiteSpace(value)));
+            input.Contents.Select(ExtractContentText).Where(static value => !string.IsNullOrWhiteSpace(value))
+        );
     }
 
     private static string? ExtractContentText(AgwContent content)
@@ -34,7 +31,7 @@ internal static class AgwMessageUtil
             AgwFunctionCallContent functionCall => functionCall.Content,
             AgwFunctionResultContent functionResult => functionResult.Content,
             AgwUriContent uri => uri.Uri.ToString(),
-            _ => null
+            _ => null,
         };
     }
 
@@ -47,12 +44,8 @@ internal static class AgwMessageUtil
 
         return new ChatMessage(ChatRole.User, ConvertToAIContents(input.Contents))
         {
-            MessageId = string.IsNullOrWhiteSpace(input.MessageId)
-                ? Guid.CreateVersion7().ToString()
-                : input.MessageId,
-            AuthorName = string.IsNullOrWhiteSpace(input.Author)
-                ? Constants.DefaultInputAuthor
-                : input.Author
+            MessageId = string.IsNullOrWhiteSpace(input.MessageId) ? Guid.CreateVersion7().ToString() : input.MessageId,
+            AuthorName = string.IsNullOrWhiteSpace(input.Author) ? Constants.DefaultInputAuthor : input.Author,
         };
     }
 
@@ -60,15 +53,14 @@ internal static class AgwMessageUtil
         AgwUserInput input,
         AgentRuntimeType targetType,
         Guid targetId,
-        ConversationHandoff handoff)
+        ConversationHandoff handoff
+    )
     {
         ArgumentNullException.ThrowIfNull(handoff);
 
         var currentMessage = CreateUserChatMessage(input);
         ApplyTargetMetadata(currentMessage, targetType, targetId);
-        ConversationHandoffMetadata.SetThroughSequence(
-            currentMessage,
-            handoff.ThroughSequence);
+        ConversationHandoffMetadata.SetThroughSequence(currentMessage, handoff.ThroughSequence);
 
         var messages = new List<ChatMessage>(handoff.Messages.Count + 1);
         messages.AddRange(handoff.Messages);
@@ -76,10 +68,7 @@ internal static class AgwMessageUtil
         return messages;
     }
 
-    private static void ApplyTargetMetadata(
-        ChatMessage message,
-        AgentRuntimeType targetType,
-        Guid targetId)
+    private static void ApplyTargetMetadata(ChatMessage message, AgentRuntimeType targetType, Guid targetId)
     {
         var content = message.Contents.FirstOrDefault();
         if (content == null)
@@ -92,7 +81,7 @@ internal static class AgwMessageUtil
         {
             AgentRuntimeType.Agent => "agent",
             AgentRuntimeType.Agentflow => "agentflow",
-            _ => targetType.ToString().ToLowerInvariant()
+            _ => targetType.ToString().ToLowerInvariant(),
         };
         content.AdditionalProperties["targetId"] = targetId.ToString("D");
     }
@@ -105,17 +94,21 @@ internal static class AgwMessageUtil
             switch (item)
             {
                 case AgwTextContent text:
-                    aiContents.Add(new TextContent(text.Content)
-                    {
-                        AdditionalProperties = CloneAdditionalProperties(text.AdditionalProperties)
-                    });
+                    aiContents.Add(
+                        new TextContent(text.Content)
+                        {
+                            AdditionalProperties = CloneAdditionalProperties(text.AdditionalProperties),
+                        }
+                    );
                     break;
 
                 case AgwUriContent uri:
-                    aiContents.Add(new UriContent(uri.Uri, uri.MediaType)
-                    {
-                        AdditionalProperties = CloneAdditionalProperties(uri.AdditionalProperties)
-                    });
+                    aiContents.Add(
+                        new UriContent(uri.Uri, uri.MediaType)
+                        {
+                            AdditionalProperties = CloneAdditionalProperties(uri.AdditionalProperties),
+                        }
+                    );
                     break;
             }
         }
@@ -124,10 +117,8 @@ internal static class AgwMessageUtil
     }
 
     private static AdditionalPropertiesDictionary? CloneAdditionalProperties(
-        AdditionalPropertiesDictionary? additionalProperties) =>
-        additionalProperties == null
-            ? null
-            : new AdditionalPropertiesDictionary(additionalProperties);
+        AdditionalPropertiesDictionary? additionalProperties
+    ) => additionalProperties == null ? null : new AdditionalPropertiesDictionary(additionalProperties);
 
     #region agents
 
@@ -141,22 +132,20 @@ internal static class AgwMessageUtil
     {
         if (IsResult(session, agwMessage))
         {
-            agwMessage = agwMessage with
-            {
-                Author = Constants.DefaultAgentAuthor
-            };
+            agwMessage = agwMessage with { Author = Constants.DefaultAgentAuthor };
         }
 
         return agwMessage;
     }
 
-
     public static bool IsResult(AgentRuntime session, AgwMessage agwMessage)
     {
         if (session.Agent is ClaudeCodeAIAgent)
         {
-            if (agwMessage.AdditionalProperties != null
-                && agwMessage.AdditionalProperties.TryGetValue("type", out object? type))
+            if (
+                agwMessage.AdditionalProperties != null
+                && agwMessage.AdditionalProperties.TryGetValue("type", out object? type)
+            )
             {
                 string? typeValue = (string?)type;
                 if (typeValue == "result")

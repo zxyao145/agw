@@ -3,7 +3,6 @@ using Agw.Shared;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Tests;
@@ -14,10 +13,7 @@ public class AgwMessageUtilTests
     public void CreateExecutionInputMessages_HandoffAndCurrentInput_PreservesOrderAndMetadata()
     {
         var targetId = Guid.CreateVersion7();
-        var handoffMessage = new ChatMessage(ChatRole.Assistant, "previous plan")
-        {
-            MessageId = "handoff-message"
-        };
+        var handoffMessage = new ChatMessage(ChatRole.Assistant, "previous plan") { MessageId = "handoff-message" };
         ConversationHandoffMetadata.MarkHandoffMessage(handoffMessage);
         var input = new AgwUserInput
         {
@@ -31,24 +27,23 @@ public class AgwMessageUtilTests
                     AdditionalProperties = new AdditionalPropertiesDictionary
                     {
                         ["existing"] = "kept",
-                        ["targetType"] = "wrong"
-                    }
-                }
-            ]
+                        ["targetType"] = "wrong",
+                    },
+                },
+            ],
         };
 
         var messages = AgwMessageUtil.CreateExecutionInputMessages(
             input,
             AgentRuntimeType.Agentflow,
             targetId,
-            new ConversationHandoff([handoffMessage], 41));
+            new ConversationHandoff([handoffMessage], 41)
+        );
 
         Assert.Equal(["previous plan", "implement it"], messages.Select(message => message.Text));
         Assert.Equal("current-message", messages[1].MessageId);
         Assert.Equal("requester", messages[1].AuthorName);
-        Assert.Equal(
-            41L,
-            messages[1].AdditionalProperties![ConversationHandoffMetadata.ThroughSequenceKey]);
+        Assert.Equal(41L, messages[1].AdditionalProperties![ConversationHandoffMetadata.ThroughSequenceKey]);
         var text = Assert.IsType<TextContent>(Assert.Single(messages[1].Contents));
         Assert.Equal("kept", text.AdditionalProperties!["existing"]);
         Assert.Equal("agentflow", text.AdditionalProperties["targetType"]);
@@ -66,13 +61,13 @@ public class AgwMessageUtilTests
                 new AgwTextContent
                 {
                     Content = "inspect",
-                    AdditionalProperties = new AdditionalPropertiesDictionary { ["text"] = "metadata" }
+                    AdditionalProperties = new AdditionalPropertiesDictionary { ["text"] = "metadata" },
                 },
                 new AgwUriContent(new Uri("https://example.com/file"), "text/plain")
                 {
-                    AdditionalProperties = new AdditionalPropertiesDictionary { ["uri"] = "metadata" }
-                }
-            ]
+                    AdditionalProperties = new AdditionalPropertiesDictionary { ["uri"] = "metadata" },
+                },
+            ],
         };
 
         var message = AgwMessageUtil.CreateUserChatMessage(input);

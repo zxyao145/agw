@@ -13,12 +13,14 @@ public class ModelProviderRelationConfiguration : IEntityTypeConfiguration<Model
         builder.Property(e => e.CacheRead).HasColumnType("decimal(18,4)");
         builder.Property(e => e.CacheWrite).HasColumnType("decimal(18,4)");
 
-        builder.HasOne(e => e.Model)
+        builder
+            .HasOne(e => e.Model)
             .WithMany(m => m.Providers)
             .HasForeignKey(e => e.ModelId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasOne(e => e.Provider)
+        builder
+            .HasOne(e => e.Provider)
             .WithMany(p => p.Models)
             .HasForeignKey(e => e.ProviderId)
             .OnDelete(DeleteBehavior.Cascade);

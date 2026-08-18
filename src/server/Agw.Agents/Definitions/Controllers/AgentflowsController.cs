@@ -5,9 +5,7 @@ using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Agents.Definitions.Controllers;
@@ -21,7 +19,8 @@ public class AgentflowsController : ControllerBase
 
     public AgentflowsController(
         AgentflowAppService agentflowAppService,
-        IAgentflowRuntimeService agentflowRuntimeService)
+        IAgentflowRuntimeService agentflowRuntimeService
+    )
     {
         _agentflowAppService = agentflowAppService;
         _agentflowRuntimeService = agentflowRuntimeService;
@@ -40,7 +39,8 @@ public class AgentflowsController : ControllerBase
     public async Task<IActionResult> ListPagedAsync(
         [FromQuery] int pageIndex = 1,
         [FromQuery] int pageSize = 20,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var page = await _agentflowAppService.ListPageAsync(pageIndex, pageSize, cancellationToken);
         return ApiResult.Ok(page);
@@ -99,11 +99,11 @@ public class AgentflowsController : ControllerBase
         {
             Name = request.Name,
             Description = request.Description,
-            SummaryModelProviderId = request.SummaryModelProviderId
+            SummaryModelProviderId = request.SummaryModelProviderId,
         };
 
-        var nodes = request.Nodes
-            .Select(x => new AgentflowNode
+        var nodes = request
+            .Nodes.Select(x => new AgentflowNode
             {
                 NodeId = x.NodeId,
                 Kind = x.Kind,
@@ -114,8 +114,8 @@ public class AgentflowsController : ControllerBase
                 ConfigJson = x.ConfigJson,
             })
             .ToList();
-        var edges = request.Edges
-            .Select(x => new AgentflowEdge
+        var edges = request
+            .Edges.Select(x => new AgentflowEdge
             {
                 EdgeId = x.EdgeId,
                 SourceNodeId = x.SourceNodeId,
@@ -131,7 +131,8 @@ public class AgentflowsController : ControllerBase
         return created == null
             ? ApiResult.BadRequest(
                 "Failed to create agentflow (validation failed or referenced resources not found).",
-                ErrorCodes.InvalidParam.Code)
+                ErrorCodes.InvalidParam.Code
+            )
             : ApiResult.Ok(created);
     }
 
@@ -140,8 +141,8 @@ public class AgentflowsController : ControllerBase
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] AgentflowUpdateRequest request)
     {
         var user = User?.Identity?.Name ?? Constants.AdminUserName;
-        var nodes = request.Nodes
-            .Select(x => new AgentflowNode
+        var nodes = request
+            .Nodes.Select(x => new AgentflowNode
             {
                 NodeId = x.NodeId,
                 Kind = x.Kind,
@@ -152,8 +153,8 @@ public class AgentflowsController : ControllerBase
                 ConfigJson = x.ConfigJson,
             })
             .ToList();
-        var edges = request.Edges
-            .Select(x => new AgentflowEdge
+        var edges = request
+            .Edges.Select(x => new AgentflowEdge
             {
                 EdgeId = x.EdgeId,
                 SourceNodeId = x.SourceNodeId,
@@ -175,7 +176,8 @@ public class AgentflowsController : ControllerBase
             },
             nodes,
             edges,
-            user);
+            user
+        );
 
         return updated == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(updated);
     }

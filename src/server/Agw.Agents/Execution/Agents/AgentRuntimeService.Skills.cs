@@ -4,7 +4,6 @@ using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Skills.Contracts.Registration;
 using Agw.Skills.Execution;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
 
@@ -12,8 +11,7 @@ namespace Agw.Agents.Execution.Agents;
 
 public partial class AgentRuntimeService
 {
-    private const string SkillsInstructionPrompt =
-        """
+    private const string SkillsInstructionPrompt = """
         # Skills
 
         The following skills are available:
@@ -34,10 +32,11 @@ public partial class AgentRuntimeService
     private async Task<AgentSkillsProvider?> CreateSkillsProviderAsync(
         Agent agent,
         Project project,
-        IReadOnlyList<PluginSkillReference> pluginSkills)
+        IReadOnlyList<PluginSkillReference> pluginSkills
+    )
     {
-        var skillIds = agent.AgentSkillRelations
-            .Select(relation => relation.SkillId)
+        var skillIds = agent
+            .AgentSkillRelations.Select(relation => relation.SkillId)
             .Concat(project.ProjectSkillRelations.Select(relation => relation.SkillId));
         var skills = await _agentAppService.ListSkillsAsync(skillIds);
         var classSkillRegistrations = skills
@@ -46,28 +45,24 @@ public partial class AgentRuntimeService
             .Cast<IAgentSkillRegistration>()
             .ToArray();
         var userSkillPaths = skills
-            .Where(skill =>
-                skill.Kind == SkillKind.Local &&
-                !_skillRegistrations.ContainsKey(skill.Id))
+            .Where(skill => skill.Kind == SkillKind.Local && !_skillRegistrations.ContainsKey(skill.Id))
             .Select(GetSkillAbsolutePath)
             .Where(Directory.Exists)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
-        var remoteSkills = _remoteSkillContentResolver == null
-            ? []
-            : skills
-                .Where(skill =>
-                    skill.Kind == SkillKind.Remote &&
-                    !_skillRegistrations.ContainsKey(skill.Id))
-                .Select(skill => new RemoteAgentSkill(
-                    skill.Id,
-                    skill.Name,
-                    skill.Description,
-                    _remoteSkillContentResolver))
-                .ToArray();
-        var userSkillNames = skills
-            .Select(skill => skill.Name)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var remoteSkills =
+            _remoteSkillContentResolver == null
+                ? []
+                : skills
+                    .Where(skill => skill.Kind == SkillKind.Remote && !_skillRegistrations.ContainsKey(skill.Id))
+                    .Select(skill => new RemoteAgentSkill(
+                        skill.Id,
+                        skill.Name,
+                        skill.Description,
+                        _remoteSkillContentResolver
+                    ))
+                    .ToArray();
+        var userSkillNames = skills.Select(skill => skill.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var pluginSkillPaths = new List<string>();
         var pluginSkillNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var pluginSkill in pluginSkills)
@@ -77,7 +72,8 @@ public partial class AgentRuntimeService
                 _logger.LogWarning(
                     "User skill {SkillName} overrides plugin skill from plugin {PluginId}",
                     pluginSkill.SkillId,
-                    pluginSkill.PluginId);
+                    pluginSkill.PluginId
+                );
                 continue;
             }
 
@@ -86,7 +82,8 @@ public partial class AgentRuntimeService
                 _logger.LogWarning(
                     "Plugin skill {SkillName} from plugin {PluginId} has no valid SKILL.md",
                     pluginSkill.SkillId,
-                    pluginSkill.PluginId);
+                    pluginSkill.PluginId
+                );
                 continue;
             }
 
@@ -95,30 +92,37 @@ public partial class AgentRuntimeService
                 _logger.LogWarning(
                     "Plugin skill {SkillName} from plugin {PluginId} conflicts with another plugin skill",
                     pluginSkill.SkillId,
-                    pluginSkill.PluginId);
+                    pluginSkill.PluginId
+                );
                 continue;
             }
 
             pluginSkillPaths.Add(skillDirectory);
         }
 
-        if (classSkillRegistrations.Length == 0 &&
-            userSkillPaths.Length == 0 &&
-            remoteSkills.Length == 0 &&
-            pluginSkillPaths.Count == 0)
+        if (
+            classSkillRegistrations.Length == 0
+            && userSkillPaths.Length == 0
+            && remoteSkills.Length == 0
+            && pluginSkillPaths.Count == 0
+        )
         {
-            if (agent.AgentSkillRelations.Count > 0 || project.ProjectSkillRelations.Count > 0 || pluginSkills.Count > 0)
+            if (
+                agent.AgentSkillRelations.Count > 0
+                || project.ProjectSkillRelations.Count > 0
+                || pluginSkills.Count > 0
+            )
             {
                 _logger.LogWarning(
                     "Agent {AgentId} has skill references configured but no valid skill sources were found.",
-                    agent.Id);
+                    agent.Id
+                );
             }
 
             return null;
         }
 
-        var builder = new AgentSkillsProviderBuilder()
-            .UsePromptTemplate(SkillsInstructionPrompt);
+        var builder = new AgentSkillsProviderBuilder().UsePromptTemplate(SkillsInstructionPrompt);
         foreach (var registration in classSkillRegistrations)
         {
             builder.UseSkill(registration.Create(project.Id));
@@ -132,7 +136,8 @@ public partial class AgentRuntimeService
                 {
                     AllowedScriptExtensions = [.. LocalSkillScriptRunner.SupportedScriptExtensions],
                 },
-                LocalSkillScriptRunner.RunAsync);
+                LocalSkillScriptRunner.RunAsync
+            );
         }
 
         if (remoteSkills.Length > 0)
@@ -144,11 +149,9 @@ public partial class AgentRuntimeService
         {
             builder.UseFileSkills(
                 pluginSkillPaths.Distinct(StringComparer.Ordinal),
-                new AgentFileSkillsSourceOptions
-                {
-                    AllowedScriptExtensions = [],
-                },
-                RejectPluginSkillScriptAsync);
+                new AgentFileSkillsSourceOptions { AllowedScriptExtensions = [] },
+                RejectPluginSkillScriptAsync
+            );
         }
 
         return builder.Build();
@@ -170,11 +173,10 @@ public partial class AgentRuntimeService
         skillDirectory = string.Empty;
         try
         {
-            if (!string.Equals(
-                    Path.GetFileName(skillFilePath),
-                    "SKILL.md",
-                    StringComparison.OrdinalIgnoreCase) ||
-                !File.Exists(skillFilePath))
+            if (
+                !string.Equals(Path.GetFileName(skillFilePath), "SKILL.md", StringComparison.OrdinalIgnoreCase)
+                || !File.Exists(skillFilePath)
+            )
             {
                 return false;
             }
@@ -182,7 +184,8 @@ public partial class AgentRuntimeService
             skillDirectory = Path.GetDirectoryName(Path.GetFullPath(skillFilePath)) ?? string.Empty;
             return !string.IsNullOrWhiteSpace(skillDirectory);
         }
-        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
+        catch (Exception exception)
+            when (exception is ArgumentException or NotSupportedException or PathTooLongException)
         {
             return false;
         }
@@ -193,9 +196,11 @@ public partial class AgentRuntimeService
         AgentFileSkillScript script,
         System.Text.Json.JsonElement? arguments,
         IServiceProvider? serviceProvider,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         return Task.FromException<object?>(
-            new InvalidOperationException("Plugin skill scripts are not trusted for execution."));
+            new InvalidOperationException("Plugin skill scripts are not trusted for execution.")
+        );
     }
 }

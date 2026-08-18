@@ -1,8 +1,6 @@
 using System.Diagnostics;
-
 using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Tools.Impl.Basic;
@@ -11,32 +9,32 @@ public class BashToolParams
 {
     [Description(
         """
-        The command to execute.
-        """
+            The command to execute.
+            """
     )]
     public string Command { get; set; } = "";
 
     [Description(
         """
-        Optional timeout in milliseconds (max 600000ms / 10 minutes). By default, your command will timeout after 20000ms (20 seconds).
-        """
+            Optional timeout in milliseconds (max 600000ms / 10 minutes). By default, your command will timeout after 20000ms (20 seconds).
+            """
     )]
     public int? Timeout { get; set; }
 
     [Description(
         """
-        Clear, concise description of what this command does in active voice. Never use words like "complex" or "risk" in the description - just describe what it does.
+            Clear, concise description of what this command does in active voice. Never use words like "complex" or "risk" in the description - just describe what it does.
 
-        For simple commands (git, npm, standard CLI tools), keep it brief (5-10 words):
-        - ls → "List files in current directory"
-        - git status → "Show working tree status"
-        - npm install → "Install package dependencies"
+            For simple commands (git, npm, standard CLI tools), keep it brief (5-10 words):
+            - ls → "List files in current directory"
+            - git status → "Show working tree status"
+            - npm install → "Install package dependencies"
 
-        For commands that are harder to parse at a glance (piped commands, obscure flags, etc.), add enough context to clarify what it does:
-        - find . -name "*.tmp" -exec rm {} \; → "Find and delete all .tmp files recursively"
-        - git reset --hard origin/main → "Discard all local changes and match remote main"
-        - curl -s url | jq '.data[]' → "Fetch JSON from URL and extract data array elements"
-        """
+            For commands that are harder to parse at a glance (piped commands, obscure flags, etc.), add enough context to clarify what it does:
+            - find . -name "*.tmp" -exec rm {} \; → "Find and delete all .tmp files recursively"
+            - git reset --hard origin/main → "Discard all local changes and match remote main"
+            - curl -s url | jq '.data[]' → "Fetch JSON from URL and extract data array elements"
+            """
     )]
     public string? Description { get; set; }
 }
@@ -56,9 +54,7 @@ internal class BashTool : IAgwTool
 {
     private readonly string? _shell;
 
-    public BashTool()
-    {
-    }
+    public BashTool() { }
 
     internal BashTool(string shell)
     {
@@ -71,10 +67,10 @@ internal class BashTool : IAgwTool
 
     [Description(
         """
-        Executes a given bash command and returns its output.
-        The working directory persists between commands, but shell state does not.
-        The shell environment is initialized from the user's profile (bash or zsh).
-        """
+            Executes a given bash command and returns its output.
+            The working directory persists between commands, but shell state does not.
+            The shell environment is initialized from the user's profile (bash or zsh).
+            """
     )]
     public BashToolResult Execute(BashToolParams toolParams)
     {
@@ -99,7 +95,7 @@ internal class BashTool : IAgwTool
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
-            WorkingDirectory = Directory.GetCurrentDirectory()
+            WorkingDirectory = Directory.GetCurrentDirectory(),
         };
 
         using var process = new Process();
@@ -114,7 +110,8 @@ internal class BashTool : IAgwTool
             return CreateErrorResult(
                 ErrorCodes.CommandExecutionFailed,
                 $"Failed to start process: {ex.Message}",
-                stopwatch);
+                stopwatch
+            );
         }
 
         var timeoutMs = toolParams.Timeout ?? 20000;
@@ -131,10 +128,7 @@ internal class BashTool : IAgwTool
                 // Ignore kill errors
             }
 
-            return CreateErrorResult(
-                ErrorCodes.CommandTimeout,
-                $"Command timed out after {timeoutMs}ms.",
-                stopwatch);
+            return CreateErrorResult(ErrorCodes.CommandTimeout, $"Command timed out after {timeoutMs}ms.", stopwatch);
         }
 
         var stdout = process.StandardOutput.ReadToEnd();
@@ -148,7 +142,7 @@ internal class BashTool : IAgwTool
             Stdout = stdout,
             Stderr = stderr,
             ExitCode = exitCode,
-            DurationMs = stopwatch.ElapsedMilliseconds
+            DurationMs = stopwatch.ElapsedMilliseconds,
         };
     }
 
@@ -158,10 +152,7 @@ internal class BashTool : IAgwTool
         return AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
     }
 
-    private static BashToolResult CreateErrorResult(
-        ErrorCode errorCode,
-        string errorMessage,
-        Stopwatch stopwatch)
+    private static BashToolResult CreateErrorResult(ErrorCode errorCode, string errorMessage, Stopwatch stopwatch)
     {
         stopwatch.Stop();
         return new BashToolResult
@@ -169,7 +160,7 @@ internal class BashTool : IAgwTool
             ExitCode = -1,
             DurationMs = stopwatch.ElapsedMilliseconds,
             ErrorCode = errorCode.Code,
-            ErrorMessage = errorMessage
+            ErrorMessage = errorMessage,
         };
     }
 }

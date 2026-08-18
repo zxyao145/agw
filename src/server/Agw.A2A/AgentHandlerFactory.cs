@@ -1,11 +1,8 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
-
 using A2A;
-
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -19,10 +16,7 @@ public class CommonAgentHandler : IAgentHandler
     private readonly A2AAgentService? _a2aAgentService;
     private readonly IServiceScopeFactory? _serviceScopeFactory;
 
-    public CommonAgentHandler(
-        string agentName,
-        IAgentExecutionBridge executionBridge,
-        A2AAgentService a2aAgentService)
+    public CommonAgentHandler(string agentName, IAgentExecutionBridge executionBridge, A2AAgentService a2aAgentService)
     {
         _agentName = agentName;
         _executionBridge = executionBridge;
@@ -32,7 +26,8 @@ public class CommonAgentHandler : IAgentHandler
     public CommonAgentHandler(
         string agentName,
         IAgentExecutionBridge executionBridge,
-        IServiceScopeFactory serviceScopeFactory)
+        IServiceScopeFactory serviceScopeFactory
+    )
     {
         _agentName = agentName;
         _executionBridge = executionBridge;
@@ -60,7 +55,11 @@ public class CommonAgentHandler : IAgentHandler
         return _agentCard;
     }
 
-    public async Task ExecuteAsync(RequestContext context, AgentEventQueue eventQueue, CancellationToken cancellationToken)
+    public async Task ExecuteAsync(
+        RequestContext context,
+        AgentEventQueue eventQueue,
+        CancellationToken cancellationToken
+    )
     {
         var updater = new TaskUpdater(eventQueue, context.TaskId, context.ContextId);
         await updater.SubmitAsync(cancellationToken).ConfigureAwait(false);
@@ -70,11 +69,15 @@ public class CommonAgentHandler : IAgentHandler
             var input = ToAgwUserInput(context);
             if (context.StreamingResponse)
             {
-                await updater.StartWorkAsync(CreateStatusMessage(context, "Working"), cancellationToken).ConfigureAwait(false);
+                await updater
+                    .StartWorkAsync(CreateStatusMessage(context, "Working"), cancellationToken)
+                    .ConfigureAwait(false);
 
-                await foreach (var message in _executionBridge
-                                   .ExecuteStreamingAsync(_agentName, context, input, cancellationToken)
-                                   .ConfigureAwait(false))
+                await foreach (
+                    var message in _executionBridge
+                        .ExecuteStreamingAsync(_agentName, context, input, cancellationToken)
+                        .ConfigureAwait(false)
+                )
                 {
                     await PublishArtifactsAsync(updater, message, cancellationToken).ConfigureAwait(false);
                 }
@@ -86,7 +89,10 @@ public class CommonAgentHandler : IAgentHandler
                     .ConfigureAwait(false);
                 if (result is null)
                 {
-                    throw new AgwException(ErrorCodes.AgentReturnedNoResult, $"Agent '{_agentName}' returned no result.");
+                    throw new AgwException(
+                        ErrorCodes.AgentReturnedNoResult,
+                        $"Agent '{_agentName}' returned no result."
+                    );
                 }
 
                 foreach (var message in result.Messages)
@@ -95,7 +101,9 @@ public class CommonAgentHandler : IAgentHandler
                 }
             }
 
-            await updater.CompleteAsync(CreateStatusMessage(context, "Completed"), cancellationToken).ConfigureAwait(false);
+            await updater
+                .CompleteAsync(CreateStatusMessage(context, "Completed"), cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -103,17 +111,20 @@ public class CommonAgentHandler : IAgentHandler
         }
     }
 
-    public async Task CancelAsync(RequestContext context, AgentEventQueue eventQueue, CancellationToken cancellationToken)
+    public async Task CancelAsync(
+        RequestContext context,
+        AgentEventQueue eventQueue,
+        CancellationToken cancellationToken
+    )
     {
-        await new TaskUpdater(eventQueue, context.TaskId, context.ContextId).CancelAsync(cancellationToken).ConfigureAwait(false);
+        await new TaskUpdater(eventQueue, context.TaskId, context.ContextId)
+            .CancelAsync(cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static AgwUserInput ToAgwUserInput(RequestContext context)
     {
-        var contents = context.Message.Parts
-            .Select(ConvertPart)
-            .OfType<AgwContent>()
-            .ToList();
+        var contents = context.Message.Parts.Select(ConvertPart).OfType<AgwContent>().ToList();
         if (contents.Count == 0)
         {
             contents.Add(new AgwTextContent { Content = context.UserText ?? string.Empty });
@@ -125,7 +136,7 @@ public class CommonAgentHandler : IAgentHandler
                 ? Guid.CreateVersion7().ToString("N")
                 : context.Message.MessageId,
             Author = Constants.DefaultInputAuthor,
-            Contents = contents
+            Contents = contents,
         };
     }
 
@@ -138,7 +149,10 @@ public class CommonAgentHandler : IAgentHandler
                 return new AgwTextContent { Content = part.Text };
 
             case PartContentCase.Url:
-                return new AgwUriContent(part.Url!, string.IsNullOrWhiteSpace(part.MediaType) ? "text/plain" : part.MediaType);
+                return new AgwUriContent(
+                    part.Url!,
+                    string.IsNullOrWhiteSpace(part.MediaType) ? "text/plain" : part.MediaType
+                );
 
             case PartContentCase.Raw:
                 return new AgwTextContent { Content = Convert.ToBase64String(part.Raw!) };
@@ -154,7 +168,8 @@ public class CommonAgentHandler : IAgentHandler
     private static async Task PublishArtifactsAsync(
         TaskUpdater updater,
         AgwMessage message,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (IsTurnFinished(message))
         {
@@ -167,10 +182,13 @@ public class CommonAgentHandler : IAgentHandler
             return;
         }
 
-        await updater.AddArtifactAsync(
-            parts,
-            artifactId: string.IsNullOrWhiteSpace(message.MessageId) ? null : message.MessageId,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        await updater
+            .AddArtifactAsync(
+                parts,
+                artifactId: string.IsNullOrWhiteSpace(message.MessageId) ? null : message.MessageId,
+                cancellationToken: cancellationToken
+            )
+            .ConfigureAwait(false);
     }
 
     private static List<Part> ConvertMessageToParts(AgwMessage message)
@@ -188,11 +206,13 @@ public class CommonAgentHandler : IAgentHandler
                     parts.Add(Part.FromText(reasoningContent.Content));
                     break;
 
-                case AgwFunctionCallContent functionCallContent when !string.IsNullOrWhiteSpace(functionCallContent.Content):
+                case AgwFunctionCallContent functionCallContent
+                    when !string.IsNullOrWhiteSpace(functionCallContent.Content):
                     parts.Add(Part.FromText(functionCallContent.Content));
                     break;
 
-                case AgwFunctionResultContent functionResultContent when !string.IsNullOrWhiteSpace(functionResultContent.Content):
+                case AgwFunctionResultContent functionResultContent
+                    when !string.IsNullOrWhiteSpace(functionResultContent.Content):
                     parts.Add(Part.FromText(functionResultContent.Content));
                     break;
 
@@ -221,20 +241,22 @@ public class CommonAgentHandler : IAgentHandler
         message.AdditionalProperties?.TryGetValue("type", out object? value) == true
         && string.Equals(value?.ToString(), "turn-finished", StringComparison.OrdinalIgnoreCase);
 
-    private static Message CreateStatusMessage(RequestContext context, string text) => new()
-    {
-        Role = Role.Agent,
-        MessageId = Guid.CreateVersion7().ToString("N"),
-        ContextId = context.ContextId,
-        TaskId = context.TaskId,
-        Parts = [Part.FromText(text)]
-    };
+    private static Message CreateStatusMessage(RequestContext context, string text) =>
+        new()
+        {
+            Role = Role.Agent,
+            MessageId = Guid.CreateVersion7().ToString("N"),
+            ContextId = context.ContextId,
+            TaskId = context.TaskId,
+            Parts = [Part.FromText(text)],
+        };
 }
 
 public class AgentHandlerFactory
 {
-    private readonly ConcurrentDictionary<string, Lazy<Task<IAgentHandler?>>> _handlers =
-        new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, Lazy<Task<IAgentHandler?>>> _handlers = new(
+        StringComparer.OrdinalIgnoreCase
+    );
 
     private readonly IServiceScopeFactory? _serviceScopeFactory;
     private readonly A2AAgentService? _a2aAgentService;
@@ -266,7 +288,9 @@ public class AgentHandlerFactory
             agentName,
             key => new Lazy<Task<IAgentHandler?>>(
                 () => CreateHandlerAsync(key),
-                LazyThreadSafetyMode.ExecutionAndPublication));
+                LazyThreadSafetyMode.ExecutionAndPublication
+            )
+        );
 
         try
         {

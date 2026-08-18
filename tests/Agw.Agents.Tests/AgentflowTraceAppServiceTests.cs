@@ -4,7 +4,6 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,19 +19,26 @@ public class AgentflowTraceAppServiceTests
         var otherProjectId = Guid.CreateVersion7();
 
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
-        await SeedTracesAsync(dbContext, new[]
-        {
-            BuildTrace(projectId, startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
-            BuildTrace(otherProjectId, startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
-        }, cancellationToken);
+        await SeedTracesAsync(
+            dbContext,
+            new[]
+            {
+                BuildTrace(projectId, startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
+                BuildTrace(otherProjectId, startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
+            },
+            cancellationToken
+        );
 
         var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
-        var result = await service.ListAsync(new AgentflowTraceQuery
-        {
-            ProjectId = projectId,
-            PageIndex = 1,
-            PageSize = 10,
-        }, cancellationToken);
+        var result = await service.ListAsync(
+            new AgentflowTraceQuery
+            {
+                ProjectId = projectId,
+                PageIndex = 1,
+                PageSize = 10,
+            },
+            cancellationToken
+        );
 
         Assert.Single(result.Items);
         Assert.Equal(projectId, result.Items[0].ProjectId);
@@ -43,19 +49,34 @@ public class AgentflowTraceAppServiceTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
-        await SeedTracesAsync(dbContext, new[]
-        {
-            BuildTrace(projectId: Guid.CreateVersion7(), contextId: "ctx-a", startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
-            BuildTrace(projectId: Guid.CreateVersion7(), contextId: "ctx-b", startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
-        }, cancellationToken);
+        await SeedTracesAsync(
+            dbContext,
+            new[]
+            {
+                BuildTrace(
+                    projectId: Guid.CreateVersion7(),
+                    contextId: "ctx-a",
+                    startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)
+                ),
+                BuildTrace(
+                    projectId: Guid.CreateVersion7(),
+                    contextId: "ctx-b",
+                    startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)
+                ),
+            },
+            cancellationToken
+        );
 
         var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
-        var result = await service.ListAsync(new AgentflowTraceQuery
-        {
-            ContextId = "ctx-a",
-            PageIndex = 1,
-            PageSize = 10,
-        }, cancellationToken);
+        var result = await service.ListAsync(
+            new AgentflowTraceQuery
+            {
+                ContextId = "ctx-a",
+                PageIndex = 1,
+                PageSize = 10,
+            },
+            cancellationToken
+        );
 
         Assert.Single(result.Items);
         Assert.Equal("ctx-a", result.Items[0].ContextId);
@@ -67,19 +88,34 @@ public class AgentflowTraceAppServiceTests
         var cancellationToken = TestContext.Current.CancellationToken;
         var agentflowId = Guid.CreateVersion7();
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
-        await SeedTracesAsync(dbContext, new[]
-        {
-            BuildTrace(projectId: Guid.CreateVersion7(), agentflowId: agentflowId, startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
-            BuildTrace(projectId: Guid.CreateVersion7(), agentflowId: Guid.CreateVersion7(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)),
-        }, cancellationToken);
+        await SeedTracesAsync(
+            dbContext,
+            new[]
+            {
+                BuildTrace(
+                    projectId: Guid.CreateVersion7(),
+                    agentflowId: agentflowId,
+                    startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)
+                ),
+                BuildTrace(
+                    projectId: Guid.CreateVersion7(),
+                    agentflowId: Guid.CreateVersion7(),
+                    startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)
+                ),
+            },
+            cancellationToken
+        );
 
         var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
-        var result = await service.ListAsync(new AgentflowTraceQuery
-        {
-            AgentflowId = agentflowId,
-            PageIndex = 1,
-            PageSize = 10,
-        }, cancellationToken);
+        var result = await service.ListAsync(
+            new AgentflowTraceQuery
+            {
+                AgentflowId = agentflowId,
+                PageIndex = 1,
+                PageSize = 10,
+            },
+            cancellationToken
+        );
 
         Assert.Single(result.Items);
         Assert.Equal(agentflowId, result.Items[0].AgentflowId);
@@ -93,23 +129,45 @@ public class AgentflowTraceAppServiceTests
         var toUtc = new DateTimeOffset(2026, 7, 13, 12, 0, 0, TimeSpan.Zero);
 
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
-        await SeedTracesAsync(dbContext, new[]
-        {
-            BuildTrace(projectId: Guid.CreateVersion7(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 9, 59, 59, TimeSpan.Zero)),
-            BuildTrace(projectId: Guid.CreateVersion7(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 10, 0, 0, TimeSpan.Zero)),
-            BuildTrace(projectId: Guid.CreateVersion7(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 11, 30, 0, TimeSpan.Zero)),
-            BuildTrace(projectId: Guid.CreateVersion7(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 12, 0, 0, TimeSpan.Zero)),
-            BuildTrace(projectId: Guid.CreateVersion7(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 12, 0, 1, TimeSpan.Zero)),
-        }, cancellationToken);
+        await SeedTracesAsync(
+            dbContext,
+            new[]
+            {
+                BuildTrace(
+                    projectId: Guid.CreateVersion7(),
+                    startTimeUtc: new DateTimeOffset(2026, 7, 13, 9, 59, 59, TimeSpan.Zero)
+                ),
+                BuildTrace(
+                    projectId: Guid.CreateVersion7(),
+                    startTimeUtc: new DateTimeOffset(2026, 7, 13, 10, 0, 0, TimeSpan.Zero)
+                ),
+                BuildTrace(
+                    projectId: Guid.CreateVersion7(),
+                    startTimeUtc: new DateTimeOffset(2026, 7, 13, 11, 30, 0, TimeSpan.Zero)
+                ),
+                BuildTrace(
+                    projectId: Guid.CreateVersion7(),
+                    startTimeUtc: new DateTimeOffset(2026, 7, 13, 12, 0, 0, TimeSpan.Zero)
+                ),
+                BuildTrace(
+                    projectId: Guid.CreateVersion7(),
+                    startTimeUtc: new DateTimeOffset(2026, 7, 13, 12, 0, 1, TimeSpan.Zero)
+                ),
+            },
+            cancellationToken
+        );
 
         var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
-        var result = await service.ListAsync(new AgentflowTraceQuery
-        {
-            FromUtc = fromUtc,
-            ToUtc = toUtc,
-            PageIndex = 1,
-            PageSize = 50,
-        }, cancellationToken);
+        var result = await service.ListAsync(
+            new AgentflowTraceQuery
+            {
+                FromUtc = fromUtc,
+                ToUtc = toUtc,
+                PageIndex = 1,
+                PageSize = 50,
+            },
+            cancellationToken
+        );
 
         Assert.Equal(3, result.Items.Count);
         Assert.All(result.Items, trace => Assert.InRange(trace.StartTimeUtc, fromUtc, toUtc));
@@ -120,23 +178,33 @@ public class AgentflowTraceAppServiceTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
-        await SeedTracesAsync(dbContext, new[]
-        {
-            BuildTrace(projectId: Guid.CreateVersion7(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 8, 0, 0, TimeSpan.Zero)),
-            BuildTrace(projectId: Guid.CreateVersion7(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 10, 0, 0, TimeSpan.Zero)),
-            BuildTrace(projectId: Guid.CreateVersion7(), startTimeUtc: new DateTimeOffset(2026, 7, 13, 9, 0, 0, TimeSpan.Zero)),
-        }, cancellationToken);
+        await SeedTracesAsync(
+            dbContext,
+            new[]
+            {
+                BuildTrace(
+                    projectId: Guid.CreateVersion7(),
+                    startTimeUtc: new DateTimeOffset(2026, 7, 13, 8, 0, 0, TimeSpan.Zero)
+                ),
+                BuildTrace(
+                    projectId: Guid.CreateVersion7(),
+                    startTimeUtc: new DateTimeOffset(2026, 7, 13, 10, 0, 0, TimeSpan.Zero)
+                ),
+                BuildTrace(
+                    projectId: Guid.CreateVersion7(),
+                    startTimeUtc: new DateTimeOffset(2026, 7, 13, 9, 0, 0, TimeSpan.Zero)
+                ),
+            },
+            cancellationToken
+        );
 
         var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
-        var result = await service.ListAsync(new AgentflowTraceQuery
-        {
-            PageIndex = 1,
-            PageSize = 50,
-        }, cancellationToken);
+        var result = await service.ListAsync(
+            new AgentflowTraceQuery { PageIndex = 1, PageSize = 50 },
+            cancellationToken
+        );
 
-        Assert.Equal(
-            new[] { 10, 9, 8 },
-            result.Items.Select(trace => trace.StartTimeUtc.Hour).ToArray());
+        Assert.Equal(new[] { 10, 9, 8 }, result.Items.Select(trace => trace.StartTimeUtc.Hour).ToArray());
     }
 
     [Fact]
@@ -144,18 +212,18 @@ public class AgentflowTraceAppServiceTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var projectId = Guid.CreateVersion7();
-        var traces = Enumerable.Range(0, 25)
+        var traces = Enumerable
+            .Range(0, 25)
             .Select(i => BuildTrace(projectId, startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, i, 0, TimeSpan.Zero)))
             .ToArray();
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
         await SeedTracesAsync(dbContext, traces, cancellationToken);
 
         var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
-        var result = await service.ListAsync(new AgentflowTraceQuery
-        {
-            PageIndex = 2,
-            PageSize = 10,
-        }, cancellationToken);
+        var result = await service.ListAsync(
+            new AgentflowTraceQuery { PageIndex = 2, PageSize = 10 },
+            cancellationToken
+        );
 
         Assert.Equal(10, result.Items.Count);
         Assert.Equal(25, result.Total);
@@ -163,7 +231,8 @@ public class AgentflowTraceAppServiceTests
         Assert.Equal(10, result.PageSize);
         Assert.Equal(
             new[] { 14, 13, 12, 11, 10, 9, 8, 7, 6, 5 },
-            result.Items.Select(trace => trace.StartTimeUtc.Minute).ToArray());
+            result.Items.Select(trace => trace.StartTimeUtc.Minute).ToArray()
+        );
     }
 
     [Fact]
@@ -183,16 +252,16 @@ public class AgentflowTraceAppServiceTests
             durationMilliseconds: 1234L,
             status: AgentflowNodeExecutionStatus.Succeeded,
             error: null,
-            startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero));
+            startTimeUtc: new DateTimeOffset(2026, 7, 13, 0, 0, 0, TimeSpan.Zero)
+        );
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
         await SeedTracesAsync(dbContext, [trace], cancellationToken);
 
         var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
-        var result = await service.ListAsync(new AgentflowTraceQuery
-        {
-            PageIndex = 1,
-            PageSize = 10,
-        }, cancellationToken);
+        var result = await service.ListAsync(
+            new AgentflowTraceQuery { PageIndex = 1, PageSize = 10 },
+            cancellationToken
+        );
 
         var dto = Assert.Single(result.Items);
         Assert.Equal(trace.Id, dto.Id);
@@ -225,11 +294,8 @@ public class AgentflowTraceAppServiceTests
         var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.ListAsync(new AgentflowTraceQuery
-            {
-                PageIndex = pageIndex,
-                PageSize = pageSize,
-            }, cancellationToken));
+            service.ListAsync(new AgentflowTraceQuery { PageIndex = pageIndex, PageSize = pageSize }, cancellationToken)
+        );
         Assert.Equal(ErrorCodes.InvalidPageSize.Code, exception.Code);
     }
 
@@ -241,13 +307,17 @@ public class AgentflowTraceAppServiceTests
         var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.ListAsync(new AgentflowTraceQuery
-            {
-                FromUtc = new DateTimeOffset(2026, 7, 13, 12, 0, 0, TimeSpan.Zero),
-                ToUtc = new DateTimeOffset(2026, 7, 13, 10, 0, 0, TimeSpan.Zero),
-                PageIndex = 1,
-                PageSize = 10,
-            }, cancellationToken));
+            service.ListAsync(
+                new AgentflowTraceQuery
+                {
+                    FromUtc = new DateTimeOffset(2026, 7, 13, 12, 0, 0, TimeSpan.Zero),
+                    ToUtc = new DateTimeOffset(2026, 7, 13, 10, 0, 0, TimeSpan.Zero),
+                    PageIndex = 1,
+                    PageSize = 10,
+                },
+                cancellationToken
+            )
+        );
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
     }
 
@@ -267,7 +337,8 @@ public class AgentflowTraceAppServiceTests
     private static Task SeedTracesAsync(
         AgwDbContext dbContext,
         IReadOnlyCollection<AgentflowTrace> traces,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         dbContext.AgentflowNodeExecutionTraces.AddRange(traces);
         return dbContext.SaveChangesAsync(cancellationToken);
@@ -286,7 +357,8 @@ public class AgentflowTraceAppServiceTests
         long durationMilliseconds = 100L,
         AgentflowNodeExecutionStatus status = AgentflowNodeExecutionStatus.Succeeded,
         string? error = null,
-        DateTimeOffset? startTimeUtc = null)
+        DateTimeOffset? startTimeUtc = null
+    )
     {
         return new AgentflowTrace
         {

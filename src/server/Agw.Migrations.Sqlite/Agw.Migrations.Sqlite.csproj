@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk">
-
   <ItemGroup>
     <ProjectReference Include="..\Agw.Infrastructure\Agw.Infrastructure.csproj" />
   </ItemGroup>
@@ -15,5 +14,4 @@
   <ItemGroup>
     <Folder Include="Migrations\" />
   </ItemGroup>
-
 </Project>

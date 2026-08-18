@@ -32,7 +32,8 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
         string userName,
         IExecutionMessageSink messageSink,
         CancellationToken hostToken,
-        DurableExecutionCoordinator coordinator)
+        DurableExecutionCoordinator coordinator
+    )
     {
         _userName = userName;
         _messageSink = messageSink;
@@ -66,32 +67,24 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
         ExecCommand command,
         TaskProjection task,
         ExecutionSettings settings,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var executionId = command.ExecutionId is { } requestedExecutionId
-                          && requestedExecutionId != Guid.Empty
-            ? requestedExecutionId
-            : Guid.CreateVersion7();
+        var executionId =
+            command.ExecutionId is { } requestedExecutionId && requestedExecutionId != Guid.Empty
+                ? requestedExecutionId
+                : Guid.CreateVersion7();
         command.ExecutionId = executionId;
-        await _coordinator.StartAsync(
-                executionId,
-                _userName,
-                command,
-                task,
-                settings,
-                cancellationToken)
+        await _coordinator
+            .StartAsync(executionId, _userName, command, task, settings, cancellationToken)
             .ConfigureAwait(false);
-        await AttachAsync(executionId, cursor: null, cancellationToken)
-            .ConfigureAwait(false);
+        await AttachAsync(executionId, cursor: null, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
     /// 鉴权并重新附着已有 execution，从指定 event stream cursor 继续订阅。
     /// </summary>
-    public async Task AttachAsync(
-        Guid executionId,
-        string? cursor,
-        CancellationToken cancellationToken)
+    public async Task AttachAsync(Guid executionId, string? cursor, CancellationToken cancellationToken)
     {
         if (executionId == Guid.Empty)
         {
@@ -99,11 +92,7 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
         }
 
         // 先完成 PostgreSQL 鉴权，再启动由协调器自行创建 DbContext scope 的后台 pump。
-        var status = await _coordinator.GetStatusAsync(
-                executionId,
-                _userName,
-                cancellationToken)
-            .ConfigureAwait(false);
+        var status = await _coordinator.GetStatusAsync(executionId, _userName, cancellationToken).ConfigureAwait(false);
         await StopSubscriptionAsync().ConfigureAwait(false);
         await SendTurnStateAsync(status, cancellationToken).ConfigureAwait(false);
         SetActiveExecution(IsTerminal(status.Status) ? null : executionId);
@@ -120,46 +109,35 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
     /// <summary>
     /// 终止显式指定或当前附着的 execution，并向当前 connection 发布终态。
     /// </summary>
-    public async Task InterruptAsync(
-        Guid? executionId,
-        string? reason,
-        CancellationToken cancellationToken)
+    public async Task InterruptAsync(Guid? executionId, string? reason, CancellationToken cancellationToken)
     {
         var targetExecutionId = executionId ?? ActiveExecutionId;
         if (!targetExecutionId.HasValue)
         {
-            await SendSystemMessageAsync(
-                    reason ?? "No active request is currently running.")
-                .ConfigureAwait(false);
-            await _messageSink.WriteAsync(
-                    TurnMessageFactory.CreateFinished("interrupted"),
-                    CancellationToken.None)
+            await SendSystemMessageAsync(reason ?? "No active request is currently running.").ConfigureAwait(false);
+            await _messageSink
+                .WriteAsync(TurnMessageFactory.CreateFinished("interrupted"), CancellationToken.None)
                 .ConfigureAwait(false);
             return;
         }
 
-        var interrupted = await _coordinator.InterruptAsync(
-                targetExecutionId.Value,
-                _userName,
-                reason,
-                cancellationToken)
+        var interrupted = await _coordinator
+            .InterruptAsync(targetExecutionId.Value, _userName, reason, cancellationToken)
             .ConfigureAwait(false);
         if (interrupted)
         {
             await StopSubscriptionAsync().ConfigureAwait(false);
-            await _messageSink.WriteAsync(
-                    TurnMessageFactory.CreateFinished(
-                        "interrupted",
-                        targetExecutionId.Value),
-                    CancellationToken.None)
+            await _messageSink
+                .WriteAsync(
+                    TurnMessageFactory.CreateFinished("interrupted", targetExecutionId.Value),
+                    CancellationToken.None
+                )
                 .ConfigureAwait(false);
         }
         else
         {
-            var status = await _coordinator.GetStatusAsync(
-                    targetExecutionId.Value,
-                    _userName,
-                    cancellationToken)
+            var status = await _coordinator
+                .GetStatusAsync(targetExecutionId.Value, _userName, cancellationToken)
                 .ConfigureAwait(false);
             await SendTurnStateAsync(status, cancellationToken).ConfigureAwait(false);
         }
@@ -170,50 +148,42 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
     /// <summary>
     /// 将 HumanResponseCommand 持久化到 PostgreSQL，并重新展示同批次中尚未回答的请求。
     /// </summary>
-    public async Task RespondAsync(
-        HumanResponseCommand command,
-        CancellationToken cancellationToken)
+    public async Task RespondAsync(HumanResponseCommand command, CancellationToken cancellationToken)
     {
         var executionId = command.ExecutionId ?? ActiveExecutionId;
         if (!executionId.HasValue)
         {
-            await SendSystemMessageAsync(
-                    "No matching durable human interaction is waiting for this response.")
+            await SendSystemMessageAsync("No matching durable human interaction is waiting for this response.")
                 .ConfigureAwait(false);
             return;
         }
 
-        await _coordinator.SubmitHumanResponseAsync(
+        await _coordinator
+            .SubmitHumanResponseAsync(
                 new SubmitDurableHumanResponseRequest(
                     executionId.Value,
                     command.RequestId,
                     command.Approved,
                     command.ResponseText,
                     command.ApprovalScope,
-                    command.ResponseData),
+                    command.ResponseData
+                ),
                 _userName,
-                cancellationToken)
+                cancellationToken
+            )
             .ConfigureAwait(false);
-        var remaining = await _coordinator.GetPendingAsync(
-                executionId.Value,
-                _userName,
-                cancellationToken)
+        var remaining = await _coordinator
+            .GetPendingAsync(executionId.Value, _userName, cancellationToken)
             .ConfigureAwait(false);
         foreach (var interaction in remaining)
         {
-            if (string.Equals(
-                    interaction.RequestId,
-                    command.RequestId,
-                    StringComparison.Ordinal))
+            if (string.Equals(interaction.RequestId, command.RequestId, StringComparison.Ordinal))
             {
                 continue;
             }
 
-            await _messageSink.WriteAsync(
-                    DurableHumanInteractionMapper.ToMessage(
-                        interaction,
-                        executionId.Value),
-                    cancellationToken)
+            await _messageSink
+                .WriteAsync(DurableHumanInteractionMapper.ToMessage(interaction, executionId.Value), cancellationToken)
                 .ConfigureAwait(false);
         }
     }
@@ -227,19 +197,21 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
         Guid projectId,
         string contextId,
         Guid agentflowId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        await _coordinator.ResumeCheckpointAsync(
+        await _coordinator
+            .ResumeCheckpointAsync(
                 occurrenceId,
                 resumeExecutionId,
                 projectId,
                 contextId,
                 agentflowId,
                 _userName,
-                cancellationToken)
+                cancellationToken
+            )
             .ConfigureAwait(false);
-        await AttachAsync(resumeExecutionId, cursor: null, cancellationToken)
-            .ConfigureAwait(false);
+        await AttachAsync(resumeExecutionId, cursor: null, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -259,19 +231,15 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
     /// <summary>
     /// 把协调器产生的回放和降级消息持续转发到当前 SignalR sink。
     /// </summary>
-    private async Task PumpAsync(
-        Guid executionId,
-        string? cursor,
-        CancellationToken cancellationToken)
+    private async Task PumpAsync(Guid executionId, string? cursor, CancellationToken cancellationToken)
     {
         try
         {
-            await foreach (var entry in _coordinator
-                               .ReadAsync(executionId, cursor, cancellationToken)
-                               .ConfigureAwait(false))
+            await foreach (
+                var entry in _coordinator.ReadAsync(executionId, cursor, cancellationToken).ConfigureAwait(false)
+            )
             {
-                await _messageSink.WriteAsync(entry.Message, cancellationToken)
-                    .ConfigureAwait(false);
+                await _messageSink.WriteAsync(entry.Message, cancellationToken).ConfigureAwait(false);
                 if (IsTurnFinished(entry.Message))
                 {
                     if (ActiveExecutionId == executionId)
@@ -282,9 +250,7 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
                 }
             }
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         catch (Exception exception)
         {
             await SendErrorAsync(exception.Message).ConfigureAwait(false);
@@ -309,9 +275,7 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
             await subscriptionCts.CancelAsync().ConfigureAwait(false);
             await subscriptionTask.ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
-        {
-        }
+        catch (OperationCanceledException) { }
         finally
         {
             subscriptionCts.Dispose();
@@ -332,21 +296,14 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
     /// <summary>
     /// 把 durable 状态转换为现有 turn-start/turn-finished 控制协议。
     /// </summary>
-    private Task SendTurnStateAsync(
-        DurableExecutionStatusResponse status,
-        CancellationToken cancellationToken)
+    private Task SendTurnStateAsync(DurableExecutionStatusResponse status, CancellationToken cancellationToken)
     {
         var message = status.Status switch
         {
-            DurableExecutionStatus.Completed =>
-                TurnMessageFactory.CreateFinished("completed", status.ExecutionId),
-            DurableExecutionStatus.Failed =>
-                TurnMessageFactory.CreateFinished("failed", status.ExecutionId),
-            DurableExecutionStatus.Interrupted =>
-                TurnMessageFactory.CreateFinished("interrupted", status.ExecutionId),
-            _ => TurnMessageFactory.CreateStarted(
-                status.ExecutionId,
-                status.StreamingScopeId)
+            DurableExecutionStatus.Completed => TurnMessageFactory.CreateFinished("completed", status.ExecutionId),
+            DurableExecutionStatus.Failed => TurnMessageFactory.CreateFinished("failed", status.ExecutionId),
+            DurableExecutionStatus.Interrupted => TurnMessageFactory.CreateFinished("interrupted", status.ExecutionId),
+            _ => TurnMessageFactory.CreateStarted(status.ExecutionId, status.StreamingScopeId),
         };
         return _messageSink.WriteAsync(message, cancellationToken).AsTask();
     }
@@ -355,35 +312,32 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
     /// 向当前 connection 发送错误内容。
     /// </summary>
     private Task SendErrorAsync(string message) =>
-        _messageSink.WriteAsync(
-            CreateMessage(new AgwErrorContent { Content = message }),
-            CancellationToken.None).AsTask();
+        _messageSink
+            .WriteAsync(CreateMessage(new AgwErrorContent { Content = message }), CancellationToken.None)
+            .AsTask();
 
     /// <summary>
     /// 向当前 connection 发送普通系统提示。
     /// </summary>
     private Task SendSystemMessageAsync(string message) =>
-        _messageSink.WriteAsync(
-            CreateMessage(new AgwTextContent { Content = message }),
-            CancellationToken.None).AsTask();
+        _messageSink
+            .WriteAsync(CreateMessage(new AgwTextContent { Content = message }), CancellationToken.None)
+            .AsTask();
 
     /// <summary>
     /// 创建不参与 durable 状态判定的系统消息。
     /// </summary>
     private static AgwMessage CreateMessage(AgwContent content) =>
-        new(
-            Guid.CreateVersion7().ToString("D"),
-            Constants.DefaultAgentAuthor,
-            AiRole.System,
-            [content]);
+        new(Guid.CreateVersion7().ToString("D"), Constants.DefaultAgentAuthor, AiRole.System, [content]);
 
     /// <summary>
     /// 判断状态是否已结束，不应再启动消息订阅。
     /// </summary>
     private static bool IsTerminal(DurableExecutionStatus status) =>
-        status is DurableExecutionStatus.Completed
-            or DurableExecutionStatus.Failed
-            or DurableExecutionStatus.Interrupted;
+        status
+            is DurableExecutionStatus.Completed
+                or DurableExecutionStatus.Failed
+                or DurableExecutionStatus.Interrupted;
 
     /// <summary>
     /// 判断消息是否为 turn-finished 控制消息。

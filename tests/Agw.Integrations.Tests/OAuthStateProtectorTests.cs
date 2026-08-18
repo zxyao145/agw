@@ -2,7 +2,6 @@ using Agw.Integrations.Application.OAuth;
 using Agw.Integrations.Contracts.OAuth;
 using Agw.Shared.Exceptions;
 using Agw.Testing;
-
 using Microsoft.AspNetCore.DataProtection;
 
 namespace Agw.Integrations.Tests;
@@ -23,7 +22,8 @@ public sealed class OAuthStateProtectorTests
             "verifier-secret",
             "/integrations/callback?from=settings",
             CallbackUri,
-            OAuthCompletionTarget.Desktop);
+            OAuthCompletionTarget.Desktop
+        );
 
         Assert.DoesNotContain(connectionId.ToString(), protectedState, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("verifier-secret", protectedState, StringComparison.Ordinal);
@@ -46,7 +46,8 @@ public sealed class OAuthStateProtectorTests
             "verifier",
             "/integrations",
             CallbackUri,
-            OAuthCompletionTarget.Web);
+            OAuthCompletionTarget.Web
+        );
         var replacement = protectedState[^1] == 'A' ? 'B' : 'A';
         var tamperedState = protectedState[..^1] + replacement;
 
@@ -64,7 +65,8 @@ public sealed class OAuthStateProtectorTests
             "verifier",
             "/integrations",
             CallbackUri,
-            OAuthCompletionTarget.Web);
+            OAuthCompletionTarget.Web
+        );
 
         timeProvider.SetUtcNow(timeProvider.GetUtcNow().AddMinutes(11));
 
@@ -85,12 +87,8 @@ public sealed class OAuthStateProtectorTests
         var service = CreateService(new TestTimeProvider(DateTimeOffset.UtcNow));
 
         var exception = Assert.Throws<AgwException>(() =>
-            service.Protect(
-                Guid.CreateVersion7(),
-                "verifier",
-                returnPath,
-                CallbackUri,
-                OAuthCompletionTarget.Web));
+            service.Protect(Guid.CreateVersion7(), "verifier", returnPath, CallbackUri, OAuthCompletionTarget.Web)
+        );
 
         Assert.Equal(ErrorCodes.OAuthReturnPathInvalid.Code, exception.Code);
     }

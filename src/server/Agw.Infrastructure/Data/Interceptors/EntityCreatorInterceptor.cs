@@ -1,5 +1,4 @@
 using Agw.Shared.Data.Abstractions;
-
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
@@ -10,24 +9,23 @@ public sealed class EntityCreatorInterceptor : SaveChangesInterceptor
     private readonly IEntityAuditUserIdProvider _entityAuditUserIdProvider;
     private readonly TimeProvider _timeProvider;
 
-    public EntityCreatorInterceptor(
-        IEntityAuditUserIdProvider entityAuditUserIdProvider,
-        TimeProvider timeProvider)
+    public EntityCreatorInterceptor(IEntityAuditUserIdProvider entityAuditUserIdProvider, TimeProvider timeProvider)
     {
         _entityAuditUserIdProvider = entityAuditUserIdProvider;
         _timeProvider = timeProvider;
     }
 
-    public override InterceptionResult<int> SavingChanges(
-       DbContextEventData eventData,
-       InterceptionResult<int> result)
+    public override InterceptionResult<int> SavingChanges(DbContextEventData eventData, InterceptionResult<int> result)
     {
         BeforeSaveChanges(eventData, _entityAuditUserIdProvider.GetUserId(), _timeProvider.GetUtcNow());
         return base.SavingChanges(eventData, result);
     }
 
-    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result,
-       CancellationToken cancellationToken = new CancellationToken())
+    public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+        DbContextEventData eventData,
+        InterceptionResult<int> result,
+        CancellationToken cancellationToken = new CancellationToken()
+    )
     {
         BeforeSaveChanges(eventData, _entityAuditUserIdProvider.GetUserId(), _timeProvider.GetUtcNow());
         return base.SavingChangesAsync(eventData, result, cancellationToken);

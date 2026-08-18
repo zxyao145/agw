@@ -8,7 +8,6 @@ using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Runtime;
 using Agw.Skills.Application.Remote;
 using Agw.Skills.Contracts.Registration;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -39,6 +38,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
 
     private readonly ILoggerFactory _loggerFactory;
     private readonly IServiceProvider _services;
+
     public AgentRuntimeService(
         AgentAppService agentAppService,
         IProjectAppService projectAppService,
@@ -59,7 +59,8 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         IServiceProvider? services = null,
         IConversationHistoryWriter? conversationHistoryWriter = null,
         HumanInteractionContextAccessor? humanInteractionContextAccessor = null,
-        IConversationHandoffProvider? conversationHandoffProvider = null)
+        IConversationHandoffProvider? conversationHandoffProvider = null
+    )
     {
         _agentAppService = agentAppService;
         _projectAppService = projectAppService;
@@ -74,8 +75,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         _observabilityMiddleware = observabilityMiddleware;
         _usageTrackingMiddleware = usageTrackingMiddleware;
         _summaryService = summaryService;
-        _conversationHistoryWriter =
-            conversationHistoryWriter ?? chatHistoryProvider as IConversationHistoryWriter;
+        _conversationHistoryWriter = conversationHistoryWriter ?? chatHistoryProvider as IConversationHistoryWriter;
         _skillRegistrations = (skillRegistrations ?? [])
             .GroupBy(registration => registration.Id)
             .ToDictionary(group => group.Key, group => group.First());

@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -20,7 +19,8 @@ public sealed class ObservabilityMiddleware
         AgentSession? session,
         AgentRunOptions? options,
         AIAgent innerAgent,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken
+    )
     {
         var agentName = innerAgent.Name;
         var inputMessages = messages.ToList();
@@ -43,18 +43,20 @@ public sealed class ObservabilityMiddleware
         AgentSession? session,
         AgentRunOptions? options,
         AIAgent innerAgent,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var agentName = innerAgent.Name;
         var inputMessages = messages.ToList();
         _logger.LogInformation("Executing agent {AgentName}", agentName);
         _logger.LogDebug("Agent {AgentName} input: {@Input}", agentName, inputMessages);
 
-        var response = await innerAgent.RunAsync(inputMessages, session, options, cancellationToken).ConfigureAwait(false);
+        var response = await innerAgent
+            .RunAsync(inputMessages, session, options, cancellationToken)
+            .ConfigureAwait(false);
 
         _logger.LogInformation("Executed agent {AgentName}", agentName);
         _logger.LogDebug("Agent {AgentName} output: {@Output}", agentName, response);
         return response;
     }
-
 }

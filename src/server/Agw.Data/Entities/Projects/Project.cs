@@ -1,9 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
-
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Tools;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Shared.Data.Entities.Projects;
@@ -26,8 +24,10 @@ public class Project : BaseEntity, IAggregateRoot
     public ICollection<ProjectConversation> Conversations { get; set; } = new List<ProjectConversation>();
 
     public ICollection<ProjectSkillRelation> ProjectSkillRelations { get; set; } = new List<ProjectSkillRelation>();
-    public ICollection<ProjectMcpServerRelation> ProjectMcpToolServers { get; set; } = new List<ProjectMcpServerRelation>();
-    public ICollection<ProjectConnectionRelation> ProjectConnectionRelations { get; set; } = new List<ProjectConnectionRelation>();
+    public ICollection<ProjectMcpServerRelation> ProjectMcpToolServers { get; set; } =
+        new List<ProjectMcpServerRelation>();
+    public ICollection<ProjectConnectionRelation> ProjectConnectionRelations { get; set; } =
+        new List<ProjectConnectionRelation>();
 
     public string GetMustWorkspace()
     {

@@ -23,25 +23,26 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_user_memory", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_user_memory_user_id_normalized_name",
                 table: "user_memory",
                 columns: new[] { "user_id", "normalized_name" },
-                unique: true);
+                unique: true
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "user_memory");
+            migrationBuilder.DropTable(name: "user_memory");
         }
     }
 }

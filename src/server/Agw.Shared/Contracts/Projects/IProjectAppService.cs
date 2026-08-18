@@ -1,5 +1,4 @@
 using System.Linq.Expressions;
-
 using Agw.Shared.Data.Entities.Projects;
 
 namespace Agw.Shared.Contracts.Projects;
@@ -19,7 +18,8 @@ public interface IProjectAppService
         IEnumerable<Guid>? mcpToolServerIds,
         IEnumerable<Guid>? skillIds,
         IEnumerable<Guid>? connectionIds,
-        string user) => CreateAsync(project, user);
+        string user
+    ) => CreateAsync(project, user);
 
     Task<bool> DeleteAsync(Guid id);
 
@@ -33,5 +33,6 @@ public interface IProjectAppService
         IEnumerable<Guid>? mcpToolServerIds,
         IEnumerable<Guid>? skillIds,
         IEnumerable<Guid>? connectionIds,
-        string user) => UpdateAsync(id, updateAction, user);
+        string user
+    ) => UpdateAsync(id, updateAction, user);
 }

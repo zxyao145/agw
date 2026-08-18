@@ -1,9 +1,6 @@
 using System.Text.RegularExpressions;
-
 using Agw.Shared.Results;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.Http;
 
 namespace Agw.Shared.Tests;
@@ -49,9 +46,7 @@ public class ApiResultMetadataTests
                     continue;
                 }
 
-                var actionSourceEnd = i + 1 < matches.Count
-                    ? matches[i + 1].Index
-                    : source.Length;
+                var actionSourceEnd = i + 1 < matches.Count ? matches[i + 1].Index : source.Length;
                 var actionSource = source[match.Index..actionSourceEnd];
                 var returnsApiResult =
                     actionSource.Contains("ApiResult.", StringComparison.Ordinal)
@@ -98,7 +93,7 @@ public class ApiResultMetadataTests
         {
             Path.Combine(repoRoot, "AGENTS.md"),
             Path.Combine(repoRoot, "CLAUDE.md"),
-            Path.Combine(repoRoot, "docs", "rules.md")
+            Path.Combine(repoRoot, "docs", "rules.md"),
         };
 
         foreach (var ruleFile in ruleFiles)
@@ -150,7 +145,8 @@ public class ApiResultMetadataTests
     {
         return new Regex(
             @"(?<attributes>(?:\s*\[[^\]]+\]\s*)+)\s*public\s+(?:async\s+)?(?:Task(?:<[^>]+>)?|ActionResult<[^>]+>|IActionResult)\s+(?<name>[A-Za-z0-9_]+)\s*\(",
-            RegexOptions.Compiled | RegexOptions.Multiline);
+            RegexOptions.Compiled | RegexOptions.Multiline
+        );
     }
 
     private static string FindRepositoryRoot()

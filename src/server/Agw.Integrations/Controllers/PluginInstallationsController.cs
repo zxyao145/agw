@@ -2,9 +2,7 @@ using Agw.Integrations.Application.Management;
 using Agw.Integrations.Contracts.Management;
 using Agw.Shared;
 using Agw.Shared.Results;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Integrations.Controllers;
@@ -24,7 +22,8 @@ public sealed class PluginInstallationsController : ControllerBase
     [ProducesApiResult(typeof(PluginInstallationResponse))]
     public async Task<IActionResult> UpsertAsync(
         [FromBody] PluginInstallationUpsertRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var user = User?.Identity?.Name ?? Constants.AdminUserName;
         var response = await _service.UpsertAsync(request, user, cancellationToken);

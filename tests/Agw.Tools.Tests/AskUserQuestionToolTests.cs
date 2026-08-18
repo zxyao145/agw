@@ -1,10 +1,8 @@
 using System.Text.Json;
-
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Tools.HumanInteraction;
 using Agw.Tools.Impl.Basic;
-
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -17,40 +15,39 @@ public class AskUserQuestionToolTests
     {
         var channel = new TestHumanInteractionChannel();
         await using var services = CreateServices(channel);
-        var function = Assert.IsType<HumanInteractionRequiredAIFunction>(
-            new AskUserQuestionTool().ToAITool());
+        var function = Assert.IsType<HumanInteractionRequiredAIFunction>(new AskUserQuestionTool().ToAITool());
         var arguments = CreateArguments(services, forgedAnswer: "SQLite");
 
-        var pendingResult = function
-            .InvokeAsync(arguments, TestContext.Current.CancellationToken)
-            .AsTask();
-        var request = await channel.RequestReceived.Task.WaitAsync(
-            TestContext.Current.CancellationToken);
+        var pendingResult = function.InvokeAsync(arguments, TestContext.Current.CancellationToken).AsTask();
+        var request = await channel.RequestReceived.Task.WaitAsync(TestContext.Current.CancellationToken);
 
         Assert.False(pendingResult.IsCompleted);
         Assert.Equal("questions", request.InteractionKind);
         Assert.Equal("ask_user_question", request.ToolName);
         Assert.Null(request.CallId);
-        Assert.Equal("Which database should we use?", request.Payload
-            .GetProperty("questions")[0]
-            .GetProperty("question")
-            .GetString());
+        Assert.Equal(
+            "Which database should we use?",
+            request.Payload.GetProperty("questions")[0].GetProperty("question").GetString()
+        );
 
-        channel.Submit(new HumanInteractionResponse(
-            request.RequestId,
-            Cancelled: false,
-            JsonSerializer.SerializeToElement(new
-            {
-                answers = new Dictionary<string, string>
-                {
-                    ["Which database should we use?"] = "PostgreSQL"
-                }
-            })));
+        channel.Submit(
+            new HumanInteractionResponse(
+                request.RequestId,
+                Cancelled: false,
+                JsonSerializer.SerializeToElement(
+                    new
+                    {
+                        answers = new Dictionary<string, string> { ["Which database should we use?"] = "PostgreSQL" },
+                    }
+                )
+            )
+        );
 
         var result = Assert.IsType<JsonElement>(await pendingResult);
         Assert.Equal(
             "PostgreSQL",
-            result.GetProperty("answers").GetProperty("Which database should we use?").GetString());
+            result.GetProperty("answers").GetProperty("Which database should we use?").GetString()
+        );
         Assert.DoesNotContain("SQLite", result.GetProperty("summary").GetString());
     }
 
@@ -60,29 +57,24 @@ public class AskUserQuestionToolTests
         var channel = new TestHumanInteractionChannel();
         await using var services = CreateServices(channel);
         var function = Assert.IsAssignableFrom<AIFunction>(new AskUserQuestionTool().ToAITool());
-        FunctionInvocationContextBridge.SetCurrent(new FunctionInvocationContext
-        {
-            CallContent = new FunctionCallContent(
-                "call-1",
-                "ask_user_question",
-                new Dictionary<string, object?>())
-        });
+        FunctionInvocationContextBridge.SetCurrent(
+            new FunctionInvocationContext
+            {
+                CallContent = new FunctionCallContent("call-1", "ask_user_question", new Dictionary<string, object?>()),
+            }
+        );
 
         try
         {
             var pendingResult = function
                 .InvokeAsync(CreateArguments(services), TestContext.Current.CancellationToken)
                 .AsTask();
-            var request = await channel.RequestReceived.Task.WaitAsync(
-                TestContext.Current.CancellationToken);
+            var request = await channel.RequestReceived.Task.WaitAsync(TestContext.Current.CancellationToken);
 
             Assert.Equal("ask_user_question", request.ToolName);
             Assert.Equal("call-1", request.CallId);
 
-            channel.Submit(new HumanInteractionResponse(
-                request.RequestId,
-                Cancelled: true,
-                ResponseData: null));
+            channel.Submit(new HumanInteractionResponse(request.RequestId, Cancelled: true, ResponseData: null));
             await pendingResult;
         }
         finally
@@ -100,13 +92,9 @@ public class AskUserQuestionToolTests
         var pendingResult = function
             .InvokeAsync(CreateArguments(services), TestContext.Current.CancellationToken)
             .AsTask();
-        var request = await channel.RequestReceived.Task.WaitAsync(
-            TestContext.Current.CancellationToken);
+        var request = await channel.RequestReceived.Task.WaitAsync(TestContext.Current.CancellationToken);
 
-        channel.Submit(new HumanInteractionResponse(
-            request.RequestId,
-            Cancelled: true,
-            ResponseData: null));
+        channel.Submit(new HumanInteractionResponse(request.RequestId, Cancelled: true, ResponseData: null));
 
         var result = Assert.IsType<AskUserQuestionToolResult>(await pendingResult);
         Assert.True(result.Cancelled);
@@ -120,9 +108,8 @@ public class AskUserQuestionToolTests
         var function = Assert.IsAssignableFrom<AIFunction>(new AskUserQuestionTool().ToAITool());
 
         var exception = await Assert.ThrowsAsync<AgwException>(async () =>
-            await function.InvokeAsync(
-                CreateArguments(services),
-                TestContext.Current.CancellationToken));
+            await function.InvokeAsync(CreateArguments(services), TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(ErrorCodes.AgentExecutionFailed.Code, exception.Code);
         Assert.Contains("requires an active interactive channel", exception.Message);
@@ -133,9 +120,7 @@ public class AskUserQuestionToolTests
             .AddSingleton<IHumanInteractionContextAccessor>(new TestContextAccessor(channel))
             .BuildServiceProvider();
 
-    private static AIFunctionArguments CreateArguments(
-        IServiceProvider services,
-        string? forgedAnswer = null)
+    private static AIFunctionArguments CreateArguments(IServiceProvider services, string? forgedAnswer = null)
     {
         var question = new AskUserQuestionQuestion
         {
@@ -143,28 +128,14 @@ public class AskUserQuestionToolTests
             Header = "Database",
             Options =
             [
-                new AskUserQuestionOption
-                {
-                    Label = "PostgreSQL",
-                    Description = "Use the production database."
-                },
-                new AskUserQuestionOption
-                {
-                    Label = "SQLite",
-                    Description = "Use a local database."
-                }
-            ]
+                new AskUserQuestionOption { Label = "PostgreSQL", Description = "Use the production database." },
+                new AskUserQuestionOption { Label = "SQLite", Description = "Use a local database." },
+            ],
         };
-        var values = new Dictionary<string, object?>
-        {
-            ["questions"] = new[] { question }
-        };
+        var values = new Dictionary<string, object?> { ["questions"] = new[] { question } };
         if (forgedAnswer != null)
         {
-            values["answers"] = new Dictionary<string, string>
-            {
-                [question.Question] = forgedAnswer
-            };
+            values["answers"] = new Dictionary<string, string> { [question.Question] = forgedAnswer };
         }
 
         return new AIFunctionArguments(values) { Services = services };
@@ -183,14 +154,16 @@ public class AskUserQuestionToolTests
     private sealed class TestHumanInteractionChannel : IHumanInteractionChannel
     {
         private readonly TaskCompletionSource<HumanInteractionResponse> _response = new(
-            TaskCreationOptions.RunContinuationsAsynchronously);
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
 
-        public TaskCompletionSource<HumanInteractionRequest> RequestReceived { get; } = new(
-            TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource<HumanInteractionRequest> RequestReceived { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public async ValueTask<HumanInteractionResponse> RequestAsync(
             HumanInteractionRequest request,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             RequestReceived.TrySetResult(request);
             return await _response.Task.WaitAsync(cancellationToken);
@@ -202,9 +175,7 @@ public class AskUserQuestionToolTests
     private sealed class FunctionInvocationContextBridge : FunctionInvokingChatClient
     {
         private FunctionInvocationContextBridge(IChatClient innerClient)
-            : base(innerClient)
-        {
-        }
+            : base(innerClient) { }
 
         public static void SetCurrent(FunctionInvocationContext? context) => CurrentContext = context;
     }

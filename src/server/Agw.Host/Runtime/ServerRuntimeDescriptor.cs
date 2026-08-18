@@ -7,4 +7,5 @@ public sealed record ServerRuntimeDescriptor(
     int Port,
     string ServerVersion,
     int ApiMajorVersion,
-    DateTimeOffset StartedAt);
+    DateTimeOffset StartedAt
+);

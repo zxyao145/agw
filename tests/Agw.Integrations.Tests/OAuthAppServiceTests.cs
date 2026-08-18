@@ -1,6 +1,5 @@
 using System.Net;
 using System.Text;
-
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Infrastructure.Repositories;
@@ -14,14 +13,12 @@ using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Testing;
-
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
-
 using IntegrationConnection = Agw.Shared.Data.Entities.Integrations.Connection;
 
 namespace Agw.Integrations.Tests;
@@ -37,7 +34,8 @@ public sealed class OAuthAppServiceTests
         await using var scope = await OAuthTestScope.CreateAsync(
             OAuth2ClientAuthenticationMethod.None,
             OAuthSubjectSource.TokenResponse,
-            cancellationToken);
+            cancellationToken
+        );
 
         var response = await scope.Authorization.StartAsync(
             scope.ConnectionId,
@@ -45,7 +43,8 @@ public sealed class OAuthAppServiceTests
             "/integrations?source=settings",
             OAuthCompletionTarget.Web,
             "tester",
-            cancellationToken);
+            cancellationToken
+        );
 
         var uri = new Uri(response.AuthorizationUrl);
         var query = QueryHelpers.ParseQuery(uri.Query);
@@ -56,12 +55,17 @@ public sealed class OAuthAppServiceTests
         Assert.Equal("S256", query["code_challenge_method"]);
         Assert.False(StringValues.IsNullOrEmpty(query["code_challenge"]));
         Assert.False(StringValues.IsNullOrEmpty(query["state"]));
-        Assert.DoesNotContain(scope.ConnectionId.ToString(), query["state"].ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            scope.ConnectionId.ToString(),
+            query["state"].ToString(),
+            StringComparison.OrdinalIgnoreCase
+        );
         Assert.Equal("fixed", query["prompt"]);
 
         var connection = await scope.DbContext.Connections.SingleAsync(
             item => item.Id == scope.ConnectionId,
-            cancellationToken);
+            cancellationToken
+        );
         Assert.Equal(ConnectionStatus.PendingAuthorization, connection.Status);
     }
 
@@ -77,15 +81,19 @@ public sealed class OAuthAppServiceTests
         await using var scope = await OAuthTestScope.CreateAsync(
             OAuth2ClientAuthenticationMethod.None,
             OAuthSubjectSource.TokenResponse,
-            cancellationToken);
+            cancellationToken
+        );
 
-        await Assert.ThrowsAsync<AgwException>(() => scope.Authorization.StartAsync(
-            scope.ConnectionId,
-            CallbackUri,
-            returnPath,
-            OAuthCompletionTarget.Web,
-            "tester",
-            cancellationToken));
+        await Assert.ThrowsAsync<AgwException>(() =>
+            scope.Authorization.StartAsync(
+                scope.ConnectionId,
+                CallbackUri,
+                returnPath,
+                OAuthCompletionTarget.Web,
+                "tester",
+                cancellationToken
+            )
+        );
 
         var connection = await scope.DbContext.Connections.SingleAsync(cancellationToken);
         Assert.Equal(ConnectionStatus.Unverified, connection.Status);
@@ -98,21 +106,26 @@ public sealed class OAuthAppServiceTests
         await using var scope = await OAuthTestScope.CreateAsync(
             OAuth2ClientAuthenticationMethod.Body,
             OAuthSubjectSource.TokenResponse,
-            cancellationToken);
+            cancellationToken
+        );
         const string accessToken = "access-token-sensitive";
         const string refreshToken = "refresh-token-sensitive";
         const string idToken = "id-token-sensitive";
         var otherConnectionId = await scope.SeedOtherConnectionAsync(cancellationToken);
-        scope.Handler.EnqueueJson(HttpStatusCode.OK, $$"""
+        scope.Handler.EnqueueJson(
+            HttpStatusCode.OK,
+            $$"""
             {"access_token":"{{accessToken}}","refresh_token":"{{refreshToken}}","id_token":"{{idToken}}","expires_in":3600,"account":{"name":"octocat"},"token_type":"Bearer"}
-            """);
+            """
+        );
         var started = await scope.Authorization.StartAsync(
             scope.ConnectionId,
             CallbackUri,
             "/integrations",
             OAuthCompletionTarget.Desktop,
             "tester",
-            cancellationToken);
+            cancellationToken
+        );
         var state = QueryHelpers.ParseQuery(new Uri(started.AuthorizationUrl).Query)["state"].ToString();
         var challenge = QueryHelpers.ParseQuery(new Uri(started.AuthorizationUrl).Query)["code_challenge"].ToString();
 
@@ -121,7 +134,8 @@ public sealed class OAuthAppServiceTests
             "authorization-code-sensitive",
             null,
             "tester",
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.True(result.Success);
         Assert.Equal(OAuthCompletionTarget.Desktop, result.CompletionTarget);
@@ -139,21 +153,25 @@ public sealed class OAuthAppServiceTests
         scope.DbContext.ChangeTracker.Clear();
         var connection = await scope.DbContext.Connections.SingleAsync(
             item => item.Id == scope.ConnectionId,
-            cancellationToken);
+            cancellationToken
+        );
         Assert.Equal(ConnectionStatus.Ready, connection.Status);
         Assert.Equal("octocat", connection.Subject);
         Assert.NotNull(connection.LastValidatedAtUtc);
-        var credentials = await scope.DbContext.ConnectionCredentials
-            .Where(item => item.ConnectionId == scope.ConnectionId)
+        var credentials = await scope
+            .DbContext.ConnectionCredentials.Where(item => item.ConnectionId == scope.ConnectionId)
             .ToDictionaryAsync(item => item.Slot, cancellationToken);
         Assert.Equal(3, credentials.Count);
         AssertProtected(scope, credentials[IntegrationCredentialSlots.OAuthAccessToken], accessToken);
         AssertProtected(scope, credentials[IntegrationCredentialSlots.OAuthRefreshToken], refreshToken);
         AssertProtected(scope, credentials[IntegrationCredentialSlots.OAuthIdToken], idToken);
         Assert.Equal(scope.Now.AddHours(1), credentials[IntegrationCredentialSlots.OAuthAccessToken].ExpiresAtUtc);
-        Assert.False(await scope.DbContext.ConnectionCredentials.AnyAsync(
-            item => item.ConnectionId == otherConnectionId,
-            cancellationToken));
+        Assert.False(
+            await scope.DbContext.ConnectionCredentials.AnyAsync(
+                item => item.ConnectionId == otherConnectionId,
+                cancellationToken
+            )
+        );
     }
 
     [Fact]
@@ -163,22 +181,19 @@ public sealed class OAuthAppServiceTests
         await using var scope = await OAuthTestScope.CreateAsync(
             OAuth2ClientAuthenticationMethod.Basic,
             OAuthSubjectSource.TokenResponse,
-            cancellationToken);
+            cancellationToken
+        );
         scope.Handler.EnqueueJson(HttpStatusCode.OK, "{\"access_token\":\"token\",\"account\":{\"name\":\"user\"}}");
         var state = await StartAndReadStateAsync(scope, cancellationToken);
 
-        await scope.Authorization.HandleCallbackAsync(
-            state,
-            "code",
-            null,
-            "tester",
-            cancellationToken);
+        await scope.Authorization.HandleCallbackAsync(state, "code", null, "tester", cancellationToken);
 
         var request = Assert.Single(scope.Handler.Requests);
         Assert.Equal("Basic", request.Authorization?.Scheme);
         Assert.Equal(
             Convert.ToBase64String(Encoding.UTF8.GetBytes("oauth-client:oauth-secret")),
-            request.Authorization?.Parameter);
+            request.Authorization?.Parameter
+        );
         var form = QueryHelpers.ParseQuery(request.Body);
         Assert.False(form.ContainsKey("client_id"));
         Assert.False(form.ContainsKey("client_secret"));
@@ -195,46 +210,48 @@ public sealed class OAuthAppServiceTests
             OAuthSubjectSource.TokenResponse,
             cancellationToken,
             clientId: clientId,
-            clientSecret: clientSecret);
+            clientSecret: clientSecret
+        );
         scope.Handler.EnqueueJson(HttpStatusCode.OK, "{\"access_token\":\"token\",\"account\":{\"name\":\"user\"}}");
         var state = await StartAndReadStateAsync(scope, cancellationToken);
 
-        await scope.Authorization.HandleCallbackAsync(
-            state,
-            "code",
-            null,
-            "tester",
-            cancellationToken);
+        await scope.Authorization.HandleCallbackAsync(state, "code", null, "tester", cancellationToken);
 
         var request = Assert.Single(scope.Handler.Requests);
         var expectedCredentials = $"{WebUtility.UrlEncode(clientId)}:{WebUtility.UrlEncode(clientSecret)}";
         Assert.Equal(
             Convert.ToBase64String(Encoding.UTF8.GetBytes(expectedCredentials)),
-            request.Authorization?.Parameter);
+            request.Authorization?.Parameter
+        );
     }
 
     [Theory]
-    [InlineData(OAuthSubjectSource.TokenResponse, "{\"access_token\":\"token\",\"account\":{\"name\":\"token-user\"}}", "token-user")]
-    [InlineData(OAuthSubjectSource.IdToken, "{\"access_token\":\"token\",\"id_token\":\"eyJhbGciOiJub25lIn0.eyJhY2NvdW50Ijp7Im5hbWUiOiJqd3QtdXNlciJ9fQ.\"}", "jwt-user")]
+    [InlineData(
+        OAuthSubjectSource.TokenResponse,
+        "{\"access_token\":\"token\",\"account\":{\"name\":\"token-user\"}}",
+        "token-user"
+    )]
+    [InlineData(
+        OAuthSubjectSource.IdToken,
+        "{\"access_token\":\"token\",\"id_token\":\"eyJhbGciOiJub25lIn0.eyJhY2NvdW50Ijp7Im5hbWUiOiJqd3QtdXNlciJ9fQ.\"}",
+        "jwt-user"
+    )]
     public async Task Callback_SubjectSource_ResolvesConfiguredJsonPath(
         OAuthSubjectSource source,
         string tokenResponse,
-        string expectedSubject)
+        string expectedSubject
+    )
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await OAuthTestScope.CreateAsync(
             OAuth2ClientAuthenticationMethod.None,
             source,
-            cancellationToken);
+            cancellationToken
+        );
         scope.Handler.EnqueueJson(HttpStatusCode.OK, tokenResponse);
         var state = await StartAndReadStateAsync(scope, cancellationToken);
 
-        var result = await scope.Authorization.HandleCallbackAsync(
-            state,
-            "code",
-            null,
-            "tester",
-            cancellationToken);
+        var result = await scope.Authorization.HandleCallbackAsync(state, "code", null, "tester", cancellationToken);
 
         Assert.True(result.Success);
         var connection = await scope.DbContext.Connections.SingleAsync(cancellationToken);
@@ -248,17 +265,13 @@ public sealed class OAuthAppServiceTests
         await using var scope = await OAuthTestScope.CreateAsync(
             OAuth2ClientAuthenticationMethod.None,
             OAuthSubjectSource.UserInfo,
-            cancellationToken);
+            cancellationToken
+        );
         scope.Handler.EnqueueJson(HttpStatusCode.OK, "{\"access_token\":\"userinfo-token\"}");
         scope.Handler.EnqueueJson(HttpStatusCode.OK, "{\"account\":{\"name\":\"userinfo-user\"}}");
         var state = await StartAndReadStateAsync(scope, cancellationToken);
 
-        var result = await scope.Authorization.HandleCallbackAsync(
-            state,
-            "code",
-            null,
-            "tester",
-            cancellationToken);
+        var result = await scope.Authorization.HandleCallbackAsync(state, "code", null, "tester", cancellationToken);
 
         Assert.True(result.Success);
         Assert.Equal(2, scope.Handler.Requests.Count);
@@ -277,17 +290,20 @@ public sealed class OAuthAppServiceTests
             OAuth2ClientAuthenticationMethod.Body,
             OAuthSubjectSource.TokenResponse,
             cancellationToken,
-            supportsRefresh: true);
+            supportsRefresh: true
+        );
         await scope.SeedConnectionCredentialAsync(
             IntegrationCredentialSlots.OAuthAccessToken,
             "old-access",
             scope.Now.AddMinutes(-1),
-            cancellationToken);
+            cancellationToken
+        );
         await scope.SeedConnectionCredentialAsync(
             IntegrationCredentialSlots.OAuthRefreshToken,
             "old-refresh",
             null,
-            cancellationToken);
+            cancellationToken
+        );
         scope.Handler.EnqueueJson(HttpStatusCode.OK, "{\"access_token\":\"new-access\",\"expires_in\":7200}");
 
         var response = await scope.Refresh.RefreshAsync(scope.ConnectionId, "tester", cancellationToken);
@@ -301,11 +317,13 @@ public sealed class OAuthAppServiceTests
         var access = await scope.Reader.ReadConnectionAsync(
             scope.ConnectionId,
             IntegrationCredentialSlots.OAuthAccessToken,
-            cancellationToken);
+            cancellationToken
+        );
         var refresh = await scope.Reader.ReadConnectionAsync(
             scope.ConnectionId,
             IntegrationCredentialSlots.OAuthRefreshToken,
-            cancellationToken);
+            cancellationToken
+        );
         Assert.Equal("new-access", access!.Value);
         Assert.Equal("old-refresh", refresh!.Value);
     }
@@ -317,7 +335,8 @@ public sealed class OAuthAppServiceTests
         await using var scope = await OAuthTestScope.CreateAsync(
             OAuth2ClientAuthenticationMethod.None,
             OAuthSubjectSource.TokenResponse,
-            cancellationToken);
+            cancellationToken
+        );
         const string leaked = "provider-leaked-secret";
         scope.Handler.EnqueueJson(HttpStatusCode.BadRequest, $$"""{"error":"bad","error_description":"{{leaked}}"}""");
         var state = await StartAndReadStateAsync(scope, cancellationToken);
@@ -327,7 +346,8 @@ public sealed class OAuthAppServiceTests
             "callback-code-secret",
             null,
             "tester",
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.False(result.Success);
         Assert.DoesNotContain(leaked, result.RedirectPath, StringComparison.Ordinal);
@@ -345,7 +365,8 @@ public sealed class OAuthAppServiceTests
         await using var scope = await OAuthTestScope.CreateAsync(
             OAuth2ClientAuthenticationMethod.None,
             OAuthSubjectSource.TokenResponse,
-            cancellationToken);
+            cancellationToken
+        );
         var state = await StartAndReadStateAsync(scope, cancellationToken);
 
         var result = await scope.Authorization.HandleCallbackAsync(
@@ -353,7 +374,8 @@ public sealed class OAuthAppServiceTests
             null,
             "access_denied:secret-provider-description",
             "tester",
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.False(result.Success);
         Assert.Contains("code=authorization_denied", result.RedirectPath, StringComparison.Ordinal);
@@ -363,9 +385,7 @@ public sealed class OAuthAppServiceTests
         Assert.Equal(ConnectionStatus.PendingAuthorization, connection.Status);
     }
 
-    private static async Task<string> StartAndReadStateAsync(
-        OAuthTestScope scope,
-        CancellationToken cancellationToken)
+    private static async Task<string> StartAndReadStateAsync(OAuthTestScope scope, CancellationToken cancellationToken)
     {
         var started = await scope.Authorization.StartAsync(
             scope.ConnectionId,
@@ -373,14 +393,12 @@ public sealed class OAuthAppServiceTests
             "/integrations",
             OAuthCompletionTarget.Web,
             "tester",
-            cancellationToken);
+            cancellationToken
+        );
         return QueryHelpers.ParseQuery(new Uri(started.AuthorizationUrl).Query)["state"].ToString();
     }
 
-    private static void AssertProtected(
-        OAuthTestScope scope,
-        ConnectionCredential credential,
-        string expectedValue)
+    private static void AssertProtected(OAuthTestScope scope, ConnectionCredential credential, string expectedValue)
     {
         Assert.Equal(expectedValue, credential.Value);
     }
@@ -398,7 +416,8 @@ public sealed class OAuthAppServiceTests
             OAuthAuthorizationAppService authorization,
             OAuthRefreshAppService refresh,
             QueueHttpMessageHandler handler,
-            ListLogger<OAuthAuthorizationAppService> logger)
+            ListLogger<OAuthAuthorizationAppService> logger
+        )
         {
             _connection = connection;
             DbContext = dbContext;
@@ -426,7 +445,8 @@ public sealed class OAuthAppServiceTests
             CancellationToken cancellationToken,
             bool supportsRefresh = false,
             string clientId = "oauth-client",
-            string clientSecret = "oauth-secret")
+            string clientSecret = "oauth-secret"
+        )
         {
             var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=False");
             await connection.OpenAsync(cancellationToken);
@@ -435,7 +455,8 @@ public sealed class OAuthAppServiceTests
                 .UseSnakeCaseNamingConvention()
                 .Options;
             var encryptedDataProtector = new DataProtectionEncryptedDataProtector(
-                new EphemeralDataProtectionProvider());
+                new EphemeralDataProtectionProvider()
+            );
             var dbContext = new AgwDbContext(options, encryptedDataProtector);
             await dbContext.Database.EnsureCreatedAsync(cancellationToken);
             var now = new DateTimeOffset(2026, 7, 15, 8, 0, 0, TimeSpan.Zero);
@@ -448,13 +469,17 @@ public sealed class OAuthAppServiceTests
             IRepository<PluginInstallation> installationRepository = new EfRepository<PluginInstallation>(dbContext);
             IRepository<PluginInstallationCredential> installationCredentialRepository =
                 new EfRepository<PluginInstallationCredential>(dbContext);
-            IRepository<IntegrationConnection> connectionRepository = new EfRepository<IntegrationConnection>(dbContext);
-            IRepository<ConnectionCredential> connectionCredentialRepository =
-                new EfRepository<ConnectionCredential>(dbContext);
+            IRepository<IntegrationConnection> connectionRepository = new EfRepository<IntegrationConnection>(
+                dbContext
+            );
+            IRepository<ConnectionCredential> connectionCredentialRepository = new EfRepository<ConnectionCredential>(
+                dbContext
+            );
             IUnitOfWork unitOfWork = dbContext;
             var reader = new ConnectionCredentialReader(
                 installationCredentialRepository,
-                connectionCredentialRepository);
+                connectionCredentialRepository
+            );
             var stateProtector = new OAuthStateProtector(new EphemeralDataProtectionProvider(), timeProvider);
             var authorization = new OAuthAuthorizationAppService(
                 connectionRepository,
@@ -466,7 +491,8 @@ public sealed class OAuthAppServiceTests
                 httpClientFactory,
                 stateProtector,
                 timeProvider,
-                logger);
+                logger
+            );
             var refresh = new OAuthRefreshAppService(authorization);
 
             var installation = new PluginInstallation
@@ -474,48 +500,61 @@ public sealed class OAuthAppServiceTests
                 Id = Guid.CreateVersion7(),
                 PluginId = OAuthTestCatalog.PluginId,
                 Enabled = true,
-                ConfigurationJson = IntegrationConfigurationCodec.Write(new Dictionary<string, string?>
-                {
-                    [IntegrationConfigurationCodec.InstallationKey(
-                        OAuthTestCatalog.ConnectorId,
-                        OAuthTestCatalog.AuthSchemeId,
-                        "client-id")] = clientId
-                }),
+                ConfigurationJson = IntegrationConfigurationCodec.Write(
+                    new Dictionary<string, string?>
+                    {
+                        [
+                            IntegrationConfigurationCodec.InstallationKey(
+                                OAuthTestCatalog.ConnectorId,
+                                OAuthTestCatalog.AuthSchemeId,
+                                "client-id"
+                            )
+                        ] = clientId,
+                    }
+                ),
                 CreateBy = "seed",
-                CreateTime = now
+                CreateTime = now,
             };
             dbContext.PluginInstallations.Add(installation);
-            if (clientAuthenticationMethod is OAuth2ClientAuthenticationMethod.Body
-                or OAuth2ClientAuthenticationMethod.Basic)
+            if (
+                clientAuthenticationMethod
+                is OAuth2ClientAuthenticationMethod.Body
+                    or OAuth2ClientAuthenticationMethod.Basic
+            )
             {
-                dbContext.PluginInstallationCredentials.Add(new PluginInstallationCredential
-                {
-                    Id = Guid.CreateVersion7(),
-                    PluginInstallationId = installation.Id,
-                    Slot = IntegrationCredentialSlots.InstallationField(
-                        OAuthTestCatalog.ConnectorId,
-                        OAuthTestCatalog.AuthSchemeId,
-                        "client-secret"),
-                    Value = clientSecret,
-                    CreateBy = "seed",
-                    CreateTime = now
-                });
+                dbContext.PluginInstallationCredentials.Add(
+                    new PluginInstallationCredential
+                    {
+                        Id = Guid.CreateVersion7(),
+                        PluginInstallationId = installation.Id,
+                        Slot = IntegrationCredentialSlots.InstallationField(
+                            OAuthTestCatalog.ConnectorId,
+                            OAuthTestCatalog.AuthSchemeId,
+                            "client-secret"
+                        ),
+                        Value = clientSecret,
+                        CreateBy = "seed",
+                        CreateTime = now,
+                    }
+                );
             }
 
             var connectionId = Guid.CreateVersion7();
-            dbContext.Connections.Add(new IntegrationConnection
-            {
-                Id = connectionId,
-                PluginId = OAuthTestCatalog.PluginId,
-                ConnectorId = OAuthTestCatalog.ConnectorId,
-                AuthSchemeId = OAuthTestCatalog.AuthSchemeId,
-                DisplayName = "OAuth test",
-                Alias = $"oauth-{Guid.CreateVersion7():N}",
-                Enabled = true,
-                Status = ConnectionStatus.Unverified,
-                CreateBy = "seed",
-                CreateTime = now
-            });
+            dbContext.Connections.Add(
+                new IntegrationConnection
+                {
+                    Id = connectionId,
+                    PluginId = OAuthTestCatalog.PluginId,
+                    ConnectorId = OAuthTestCatalog.ConnectorId,
+                    AuthSchemeId = OAuthTestCatalog.AuthSchemeId,
+                    DisplayName = "OAuth test",
+                    Alias = $"oauth-{Guid.CreateVersion7():N}",
+                    Enabled = true,
+                    Status = ConnectionStatus.Unverified,
+                    CreateBy = "seed",
+                    CreateTime = now,
+                }
+            );
             await dbContext.SaveChangesAsync(cancellationToken);
             dbContext.ChangeTracker.Clear();
 
@@ -528,25 +567,29 @@ public sealed class OAuthAppServiceTests
                 authorization,
                 refresh,
                 handler,
-                logger);
+                logger
+            );
         }
 
         public async Task SeedConnectionCredentialAsync(
             string slot,
             string value,
             DateTimeOffset? expiresAtUtc,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
-            DbContext.ConnectionCredentials.Add(new ConnectionCredential
-            {
-                Id = Guid.CreateVersion7(),
-                ConnectionId = ConnectionId,
-                Slot = slot,
-                Value = value,
-                ExpiresAtUtc = expiresAtUtc,
-                CreateBy = "seed",
-                CreateTime = Now
-            });
+            DbContext.ConnectionCredentials.Add(
+                new ConnectionCredential
+                {
+                    Id = Guid.CreateVersion7(),
+                    ConnectionId = ConnectionId,
+                    Slot = slot,
+                    Value = value,
+                    ExpiresAtUtc = expiresAtUtc,
+                    CreateBy = "seed",
+                    CreateTime = Now,
+                }
+            );
             await DbContext.SaveChangesAsync(cancellationToken);
             DbContext.ChangeTracker.Clear();
         }
@@ -554,19 +597,21 @@ public sealed class OAuthAppServiceTests
         public async Task<Guid> SeedOtherConnectionAsync(CancellationToken cancellationToken)
         {
             var connectionId = Guid.CreateVersion7();
-            DbContext.Connections.Add(new IntegrationConnection
-            {
-                Id = connectionId,
-                PluginId = OAuthTestCatalog.PluginId,
-                ConnectorId = OAuthTestCatalog.ConnectorId,
-                AuthSchemeId = OAuthTestCatalog.AuthSchemeId,
-                DisplayName = "Other OAuth test",
-                Alias = $"oauth-{Guid.CreateVersion7():N}",
-                Enabled = true,
-                Status = ConnectionStatus.Unverified,
-                CreateBy = "seed",
-                CreateTime = Now
-            });
+            DbContext.Connections.Add(
+                new IntegrationConnection
+                {
+                    Id = connectionId,
+                    PluginId = OAuthTestCatalog.PluginId,
+                    ConnectorId = OAuthTestCatalog.ConnectorId,
+                    AuthSchemeId = OAuthTestCatalog.AuthSchemeId,
+                    DisplayName = "Other OAuth test",
+                    Alias = $"oauth-{Guid.CreateVersion7():N}",
+                    Enabled = true,
+                    Status = ConnectionStatus.Unverified,
+                    CreateBy = "seed",
+                    CreateTime = Now,
+                }
+            );
             await DbContext.SaveChangesAsync(cancellationToken);
             DbContext.ChangeTracker.Clear();
             return connectionId;
@@ -590,14 +635,15 @@ public sealed class OAuthAppServiceTests
         public OAuthTestCatalog(
             OAuth2ClientAuthenticationMethod clientAuthenticationMethod,
             OAuthSubjectSource subjectSource,
-            bool supportsRefresh)
+            bool supportsRefresh
+        )
         {
-            var installationFields = new List<FormFieldDefinition>
-            {
-                Field("client-id", FormFieldType.Text)
-            };
-            if (clientAuthenticationMethod is OAuth2ClientAuthenticationMethod.Body
-                or OAuth2ClientAuthenticationMethod.Basic)
+            var installationFields = new List<FormFieldDefinition> { Field("client-id", FormFieldType.Text) };
+            if (
+                clientAuthenticationMethod
+                is OAuth2ClientAuthenticationMethod.Body
+                    or OAuth2ClientAuthenticationMethod.Basic
+            )
             {
                 installationFields.Add(Field("client-secret", FormFieldType.Secret));
             }
@@ -625,18 +671,20 @@ public sealed class OAuthAppServiceTests
                                 {
                                     AuthorizationEndpoint = "https://provider.test/authorize",
                                     TokenEndpoint = "https://provider.test/token",
-                                    UserInfoEndpoint = subjectSource == OAuthSubjectSource.UserInfo
-                                        ? "https://provider.test/userinfo"
-                                        : null,
+                                    UserInfoEndpoint =
+                                        subjectSource == OAuthSubjectSource.UserInfo
+                                            ? "https://provider.test/userinfo"
+                                            : null,
                                     ClientIdFieldId = "client-id",
-                                    ClientSecretFieldId = clientAuthenticationMethod is OAuth2ClientAuthenticationMethod.Body
-                                        or OAuth2ClientAuthenticationMethod.Basic
+                                    ClientSecretFieldId = clientAuthenticationMethod
+                                        is OAuth2ClientAuthenticationMethod.Body
+                                            or OAuth2ClientAuthenticationMethod.Basic
                                         ? "client-secret"
                                         : null,
                                     SubjectResolution = new OAuthSubjectResolutionDefinition
                                     {
                                         Source = subjectSource,
-                                        Field = "account.name"
+                                        Field = "account.name",
                                     },
                                     UsePkce = true,
                                     ClientAuthenticationMethod = clientAuthenticationMethod,
@@ -644,19 +692,19 @@ public sealed class OAuthAppServiceTests
                                     Scopes = ["repo", "read:user"],
                                     AdditionalAuthorizeParameters = new Dictionary<string, string>
                                     {
-                                        ["prompt"] = "fixed"
+                                        ["prompt"] = "fixed",
                                     },
                                     AdditionalTokenParameters = new Dictionary<string, string>
                                     {
                                         ["audience"] = "agw",
                                         ["client_id"] = "must-not-win",
-                                        ["client_secret"] = "must-not-be-sent"
-                                    }
-                                }
-                            }
-                        ]
-                    }
-                ]
+                                        ["client_secret"] = "must-not-be-sent",
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                ],
             };
             PluginCatalogValidator.Validate([_plugin]);
         }
@@ -666,13 +714,14 @@ public sealed class OAuthAppServiceTests
         public PluginDefinition? Find(string pluginId) =>
             string.Equals(pluginId, PluginId, StringComparison.OrdinalIgnoreCase) ? _plugin : null;
 
-        private static FormFieldDefinition Field(string id, FormFieldType type) => new()
-        {
-            Id = id,
-            Label = id,
-            Type = type,
-            IsRequired = true
-        };
+        private static FormFieldDefinition Field(string id, FormFieldType type) =>
+            new()
+            {
+                Id = id,
+                Label = id,
+                Type = type,
+                IsRequired = true,
+            };
     }
 
     private sealed class TestHttpClientFactory : IHttpClientFactory
@@ -695,26 +744,32 @@ public sealed class OAuthAppServiceTests
 
         public void EnqueueJson(HttpStatusCode statusCode, string content)
         {
-            _responses.Enqueue(new HttpResponseMessage(statusCode)
-            {
-                Content = new StringContent(content, Encoding.UTF8, "application/json")
-            });
+            _responses.Enqueue(
+                new HttpResponseMessage(statusCode)
+                {
+                    Content = new StringContent(content, Encoding.UTF8, "application/json"),
+                }
+            );
         }
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
-            Requests.Add(new CapturedRequest
-            {
-                Method = request.Method,
-                Uri = request.RequestUri!,
-                Authorization = request.Headers.Authorization,
-                UserAgent = request.Headers.UserAgent.ToString(),
-                Body = request.Content == null
-                    ? string.Empty
-                    : await request.Content.ReadAsStringAsync(cancellationToken)
-            });
+            Requests.Add(
+                new CapturedRequest
+                {
+                    Method = request.Method,
+                    Uri = request.RequestUri!,
+                    Authorization = request.Headers.Authorization,
+                    UserAgent = request.Headers.UserAgent.ToString(),
+                    Body =
+                        request.Content == null
+                            ? string.Empty
+                            : await request.Content.ReadAsStringAsync(cancellationToken),
+                }
+            );
             return _responses.Dequeue();
         }
     }
@@ -732,7 +787,8 @@ public sealed class OAuthAppServiceTests
     {
         public List<string> Messages { get; } = [];
 
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
 
         public bool IsEnabled(LogLevel logLevel) => true;
 
@@ -741,7 +797,8 @@ public sealed class OAuthAppServiceTests
             EventId eventId,
             TState state,
             Exception? exception,
-            Func<TState, Exception?, string> formatter)
+            Func<TState, Exception?, string> formatter
+        )
         {
             Messages.Add(formatter(state, exception));
         }

@@ -1,9 +1,7 @@
 using System.Text.Json;
-
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Tools.HumanInteraction;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -20,16 +18,18 @@ internal sealed class ModeSetHumanInteractionProvider : AIContextProvider
 
     protected override ValueTask<AIContext> InvokingCoreAsync(
         InvokingContext context,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         if (context.AIContext.Tools != null)
         {
-            context.AIContext.Tools = context.AIContext.Tools
-                .Select(static tool =>
-                    tool is AIFunction function &&
-                    string.Equals(function.Name, ModeSetToolName, StringComparison.OrdinalIgnoreCase)
+            context.AIContext.Tools = context
+                .AIContext.Tools.Select(static tool =>
+                    tool is AIFunction function
+                    && string.Equals(function.Name, ModeSetToolName, StringComparison.OrdinalIgnoreCase)
                         ? new HumanInteractionRequiredAIFunction(function, _protocol)
-                        : tool)
+                        : tool
+                )
                 .ToArray();
         }
 
@@ -38,37 +38,32 @@ internal sealed class ModeSetHumanInteractionProvider : AIContextProvider
 
     private sealed class ModeSetInteractionProtocol : IHumanInteractionProtocol
     {
-        public HumanInteractionRequest CreateRequest(
-            string requestId,
-            AIFunctionArguments arguments)
+        public HumanInteractionRequest CreateRequest(string requestId, AIFunctionArguments arguments)
         {
             var mode = ReadMode(arguments);
             return new HumanInteractionRequest(
                 requestId,
                 InteractionKind,
                 $"The agent wants to switch to {ToDisplayName(mode)} mode.",
-                JsonSerializer.SerializeToElement(new { mode }));
+                JsonSerializer.SerializeToElement(new { mode })
+            );
         }
 
-        public AIFunctionArguments BindResponse(
-            AIFunctionArguments arguments,
-            HumanInteractionResponse response)
+        public AIFunctionArguments BindResponse(AIFunctionArguments arguments, HumanInteractionResponse response)
         {
-            if (response.ResponseData is not { ValueKind: JsonValueKind.Object } responseData ||
-                !responseData.TryGetProperty("confirmed", out var confirmed) ||
-                confirmed.ValueKind != JsonValueKind.True)
+            if (
+                response.ResponseData is not { ValueKind: JsonValueKind.Object } responseData
+                || !responseData.TryGetProperty("confirmed", out var confirmed)
+                || confirmed.ValueKind != JsonValueKind.True
+            )
             {
-                throw new AgwException(
-                    ErrorCodes.InvalidParam,
-                    "Mode change confirmation is required.");
+                throw new AgwException(ErrorCodes.InvalidParam, "Mode change confirmation is required.");
             }
 
             return arguments;
         }
 
-        public object CreateCancelledResult(
-            AIFunctionArguments arguments,
-            HumanInteractionResponse response)
+        public object CreateCancelledResult(AIFunctionArguments arguments, HumanInteractionResponse response)
         {
             var mode = ReadMode(arguments);
             return $"Mode change to \"{mode}\" was cancelled by the user.";
@@ -78,30 +73,24 @@ internal sealed class ModeSetHumanInteractionProvider : AIContextProvider
         {
             if (!arguments.TryGetValue("mode", out var value))
             {
-                throw new AgwException(
-                    ErrorCodes.InvalidParam,
-                    "mode_set.mode is required.");
+                throw new AgwException(ErrorCodes.InvalidParam, "mode_set.mode is required.");
             }
 
             var mode = value switch
             {
                 string text => text,
                 JsonElement { ValueKind: JsonValueKind.String } element => element.GetString(),
-                _ => null
+                _ => null,
             };
             if (mode is not ("plan" or "execute"))
             {
-                throw new AgwException(
-                    ErrorCodes.InvalidParam,
-                    "mode_set.mode must be either 'plan' or 'execute'.");
+                throw new AgwException(ErrorCodes.InvalidParam, "mode_set.mode must be either 'plan' or 'execute'.");
             }
 
             return mode;
         }
 
         private static string ToDisplayName(string mode) =>
-            string.Equals(mode, "plan", StringComparison.Ordinal)
-                ? "Plan"
-                : "Execute";
+            string.Equals(mode, "plan", StringComparison.Ordinal) ? "Plan" : "Execute";
     }
 }

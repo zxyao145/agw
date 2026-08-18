@@ -2,9 +2,7 @@ using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Exceptions;
 using Agw.Tools.Contracts.UserMemories;
 using Agw.Tools.Controllers;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Tools.Tests;
@@ -21,7 +19,8 @@ public sealed class UserMemoriesControllerTests
 
         var createResult = await ownerController.CreateAsync(
             new UserMemoryCreateRequest("Preferences", "Answer style", "Use Markdown."),
-            cancellationToken);
+            cancellationToken
+        );
         var created = Assert.IsType<UserMemoryDetailResponse>(ReadApiResultData(createResult));
         var pageResult = await ownerController.ListPagedAsync(1, 20, cancellationToken);
         var page = Assert.IsType<PagedResult<UserMemorySummaryResponse>>(ReadApiResultData(pageResult));

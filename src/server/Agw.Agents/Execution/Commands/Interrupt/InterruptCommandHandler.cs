@@ -8,6 +8,6 @@ public sealed class InterruptCommandHandler : IExecutionCommandHandler<Interrupt
     public Task HandleAsync(
         InterruptCommand command,
         ExecutionConnectionContext context,
-        CancellationToken cancellationToken) =>
-        context.InterruptTurnAsync(command.ExecutionId, command.Reason, cancellationToken);
+        CancellationToken cancellationToken
+    ) => context.InterruptTurnAsync(command.ExecutionId, command.Reason, cancellationToken);
 }

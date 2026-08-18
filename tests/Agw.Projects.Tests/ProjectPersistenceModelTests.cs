@@ -1,5 +1,4 @@
 using Agw.Infrastructure.Data;
-
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 
@@ -33,10 +32,15 @@ public class ProjectPersistenceModelTests
         Assert.NotNull(relation);
         Assert.Equal(
             ["ProjectId", relatedIdPropertyName],
-            relation.FindPrimaryKey()!.Properties.Select(property => property.Name).ToArray());
+            relation.FindPrimaryKey()!.Properties.Select(property => property.Name).ToArray()
+        );
         Assert.Contains(
             relation.GetIndexes(),
-            index => index.Properties.Select(property => property.Name).SequenceEqual([relatedIdPropertyName]));
-        Assert.All(relation.GetForeignKeys(), foreignKey => Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior));
+            index => index.Properties.Select(property => property.Name).SequenceEqual([relatedIdPropertyName])
+        );
+        Assert.All(
+            relation.GetForeignKeys(),
+            foreignKey => Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior)
+        );
     }
 }

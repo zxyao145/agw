@@ -1,9 +1,7 @@
 using System.Diagnostics;
 using System.Net;
-
 using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -13,15 +11,15 @@ public class WebFetchToolParams
 {
     [Description(
         """
-        The URL to fetch content from.
-        """
+            The URL to fetch content from.
+            """
     )]
     public string Url { get; set; } = "";
 
     [Description(
         """
-        The prompt to run on the fetched content.
-        """
+            The prompt to run on the fetched content.
+            """
     )]
     public string Prompt { get; set; } = "";
 }
@@ -46,11 +44,11 @@ internal class WebFetchTool : IAgwTool
 
     [Description(
         """
-        Fetches content from a specified URL and processes it using the provided prompt.
-        IMPORTANT: WebFetch WILL FAIL for authenticated or private URLs. Before using this tool,
-        check if the URL points to an authenticated service (e.g. Google Docs, Confluence, Jira, GitHub).
-        If so, look for a specialized MCP tool that provides authenticated access.
-        """
+            Fetches content from a specified URL and processes it using the provided prompt.
+            IMPORTANT: WebFetch WILL FAIL for authenticated or private URLs. Before using this tool,
+            check if the URL points to an authenticated service (e.g. Google Docs, Confluence, Jira, GitHub).
+            If so, look for a specialized MCP tool that provides authenticated access.
+            """
     )]
     public WebFetchToolResult Execute(WebFetchToolParams toolParams)
     {
@@ -89,13 +87,17 @@ internal class WebFetchTool : IAgwTool
         var codeText = response.StatusCode.ToString();
 
         // Handle redirects
-        if (response.StatusCode is HttpStatusCode.MovedPermanently
-            or HttpStatusCode.Redirect
-            or HttpStatusCode.TemporaryRedirect
-            or HttpStatusCode.PermanentRedirect)
+        if (
+            response.StatusCode
+            is HttpStatusCode.MovedPermanently
+                or HttpStatusCode.Redirect
+                or HttpStatusCode.TemporaryRedirect
+                or HttpStatusCode.PermanentRedirect
+        )
         {
             var redirectUrl = response.Headers.Location?.ToString() ?? "Unknown";
-            var message = $"REDIRECT DETECTED: The URL redirects to a different host.\n\nOriginal URL: {toolParams.Url}\nRedirect URL: {redirectUrl}\nStatus: {(int)response.StatusCode} {codeText}\n\nTo complete your request, use WebFetch again with url: \"{redirectUrl}\"";
+            var message =
+                $"REDIRECT DETECTED: The URL redirects to a different host.\n\nOriginal URL: {toolParams.Url}\nRedirect URL: {redirectUrl}\nStatus: {(int)response.StatusCode} {codeText}\n\nTo complete your request, use WebFetch again with url: \"{redirectUrl}\"";
 
             stopwatch.Stop();
             return new WebFetchToolResult
@@ -105,7 +107,7 @@ internal class WebFetchTool : IAgwTool
                 CodeText = codeText,
                 Result = message,
                 DurationMs = stopwatch.ElapsedMilliseconds,
-                Url = toolParams.Url
+                Url = toolParams.Url,
             };
         }
 
@@ -121,7 +123,7 @@ internal class WebFetchTool : IAgwTool
             CodeText = codeText,
             Result = result,
             DurationMs = stopwatch.ElapsedMilliseconds,
-            Url = toolParams.Url
+            Url = toolParams.Url,
         };
     }
 

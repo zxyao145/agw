@@ -8,7 +8,6 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Skills;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,13 +18,12 @@ public class ProjectAppServiceTests
     [Fact]
     public async Task ProjectFileSystemConfigurationProvider_WhenCanceled_StopsBeforeLookup()
     {
-        await using var scope = await ProjectAppServiceTestScope.CreateAsync(
-            TestContext.Current.CancellationToken);
-        IProjectFileSystemConfigurationProvider provider =
-            new ProjectFileSystemConfigurationProvider(scope.Service);
+        await using var scope = await ProjectAppServiceTestScope.CreateAsync(TestContext.Current.CancellationToken);
+        IProjectFileSystemConfigurationProvider provider = new ProjectFileSystemConfigurationProvider(scope.Service);
 
         await Assert.ThrowsAsync<OperationCanceledException>(() =>
-            provider.GetAsync(Guid.CreateVersion7(), new CancellationToken(canceled: true)));
+            provider.GetAsync(Guid.CreateVersion7(), new CancellationToken(canceled: true))
+        );
     }
 
     [Fact]
@@ -40,8 +38,9 @@ public class ProjectAppServiceTests
             project.Workspace = workspace;
             project.ExtraSetting = "{\"fileStorage\":{\"type\":\"local\"}}";
             var created = await scope.Service.CreateAsync(project, "tester");
-            IProjectFileSystemConfigurationProvider provider =
-                new ProjectFileSystemConfigurationProvider(scope.Service);
+            IProjectFileSystemConfigurationProvider provider = new ProjectFileSystemConfigurationProvider(
+                scope.Service
+            );
             var configuration = await provider.GetAsync(created!.Id, cancellationToken);
 
             Assert.NotNull(configuration);
@@ -69,19 +68,29 @@ public class ProjectAppServiceTests
             [scope.FirstMcpToolServerId, scope.FirstMcpToolServerId, Guid.Empty, Guid.CreateVersion7()],
             [scope.FirstSkillId, scope.FirstSkillId, Guid.Empty, Guid.CreateVersion7()],
             [scope.FirstConnectionId, scope.FirstConnectionId, Guid.Empty, Guid.CreateVersion7()],
-            "tester");
+            "tester"
+        );
 
         Assert.NotNull(created);
         await using var assertContext = scope.CreateDbContext();
         Assert.Equal(
             [scope.FirstMcpToolServerId],
-            await assertContext.ProjectMcpToolServers.Select(relation => relation.McpToolServerId).ToArrayAsync(cancellationToken));
+            await assertContext
+                .ProjectMcpToolServers.Select(relation => relation.McpToolServerId)
+                .ToArrayAsync(cancellationToken)
+        );
         Assert.Equal(
             [scope.FirstSkillId],
-            await assertContext.ProjectSkillRelations.Select(relation => relation.SkillId).ToArrayAsync(cancellationToken));
+            await assertContext
+                .ProjectSkillRelations.Select(relation => relation.SkillId)
+                .ToArrayAsync(cancellationToken)
+        );
         Assert.Equal(
             [scope.FirstConnectionId],
-            await assertContext.ProjectConnectionRelations.Select(relation => relation.ConnectionId).ToArrayAsync(cancellationToken));
+            await assertContext
+                .ProjectConnectionRelations.Select(relation => relation.ConnectionId)
+                .ToArrayAsync(cancellationToken)
+        );
     }
 
     [Fact]
@@ -94,7 +103,8 @@ public class ProjectAppServiceTests
             [scope.FirstMcpToolServerId],
             [scope.FirstSkillId],
             [scope.FirstConnectionId],
-            "tester");
+            "tester"
+        );
 
         var updated = await scope.Service.UpdateAsync(
             created!.Id,
@@ -102,19 +112,29 @@ public class ProjectAppServiceTests
             [scope.SecondMcpToolServerId],
             [scope.SecondSkillId],
             [scope.SecondConnectionId],
-            "updater");
+            "updater"
+        );
 
         Assert.NotNull(updated);
         await using var assertContext = scope.CreateDbContext();
         Assert.Equal(
             [scope.SecondMcpToolServerId],
-            await assertContext.ProjectMcpToolServers.Select(relation => relation.McpToolServerId).ToArrayAsync(cancellationToken));
+            await assertContext
+                .ProjectMcpToolServers.Select(relation => relation.McpToolServerId)
+                .ToArrayAsync(cancellationToken)
+        );
         Assert.Equal(
             [scope.SecondSkillId],
-            await assertContext.ProjectSkillRelations.Select(relation => relation.SkillId).ToArrayAsync(cancellationToken));
+            await assertContext
+                .ProjectSkillRelations.Select(relation => relation.SkillId)
+                .ToArrayAsync(cancellationToken)
+        );
         Assert.Equal(
             [scope.SecondConnectionId],
-            await assertContext.ProjectConnectionRelations.Select(relation => relation.ConnectionId).ToArrayAsync(cancellationToken));
+            await assertContext
+                .ProjectConnectionRelations.Select(relation => relation.ConnectionId)
+                .ToArrayAsync(cancellationToken)
+        );
     }
 
     [Fact]
@@ -127,7 +147,8 @@ public class ProjectAppServiceTests
             [scope.FirstMcpToolServerId],
             [scope.FirstSkillId],
             [scope.FirstConnectionId],
-            "tester");
+            "tester"
+        );
 
         var updated = await scope.Service.UpdateAsync(
             created!.Id,
@@ -135,13 +156,29 @@ public class ProjectAppServiceTests
             null,
             null,
             null,
-            "updater");
+            "updater"
+        );
 
         Assert.NotNull(updated);
         await using var assertContext = scope.CreateDbContext();
-        Assert.Equal(scope.FirstMcpToolServerId, await assertContext.ProjectMcpToolServers.Select(relation => relation.McpToolServerId).SingleAsync(cancellationToken));
-        Assert.Equal(scope.FirstSkillId, await assertContext.ProjectSkillRelations.Select(relation => relation.SkillId).SingleAsync(cancellationToken));
-        Assert.Equal(scope.FirstConnectionId, await assertContext.ProjectConnectionRelations.Select(relation => relation.ConnectionId).SingleAsync(cancellationToken));
+        Assert.Equal(
+            scope.FirstMcpToolServerId,
+            await assertContext
+                .ProjectMcpToolServers.Select(relation => relation.McpToolServerId)
+                .SingleAsync(cancellationToken)
+        );
+        Assert.Equal(
+            scope.FirstSkillId,
+            await assertContext
+                .ProjectSkillRelations.Select(relation => relation.SkillId)
+                .SingleAsync(cancellationToken)
+        );
+        Assert.Equal(
+            scope.FirstConnectionId,
+            await assertContext
+                .ProjectConnectionRelations.Select(relation => relation.ConnectionId)
+                .SingleAsync(cancellationToken)
+        );
     }
 
     [Fact]
@@ -154,7 +191,8 @@ public class ProjectAppServiceTests
             [scope.FirstMcpToolServerId],
             [scope.FirstSkillId],
             [scope.FirstConnectionId],
-            "tester");
+            "tester"
+        );
 
         var updated = await scope.Service.UpdateAsync(
             created!.Id,
@@ -162,7 +200,8 @@ public class ProjectAppServiceTests
             [],
             [],
             [],
-            "updater");
+            "updater"
+        );
 
         Assert.NotNull(updated);
         await using var assertContext = scope.CreateDbContext();
@@ -181,18 +220,35 @@ public class ProjectAppServiceTests
             [scope.FirstMcpToolServerId],
             [scope.FirstSkillId],
             [scope.FirstConnectionId],
-            "tester");
+            "tester"
+        );
 
         var updated = await scope.Service.UpdateAsync(
             created!.Id,
             project => project.Description = "Updated",
-            "updater");
+            "updater"
+        );
 
         Assert.NotNull(updated);
         await using var assertContext = scope.CreateDbContext();
-        Assert.Equal(scope.FirstMcpToolServerId, await assertContext.ProjectMcpToolServers.Select(relation => relation.McpToolServerId).SingleAsync(cancellationToken));
-        Assert.Equal(scope.FirstSkillId, await assertContext.ProjectSkillRelations.Select(relation => relation.SkillId).SingleAsync(cancellationToken));
-        Assert.Equal(scope.FirstConnectionId, await assertContext.ProjectConnectionRelations.Select(relation => relation.ConnectionId).SingleAsync(cancellationToken));
+        Assert.Equal(
+            scope.FirstMcpToolServerId,
+            await assertContext
+                .ProjectMcpToolServers.Select(relation => relation.McpToolServerId)
+                .SingleAsync(cancellationToken)
+        );
+        Assert.Equal(
+            scope.FirstSkillId,
+            await assertContext
+                .ProjectSkillRelations.Select(relation => relation.SkillId)
+                .SingleAsync(cancellationToken)
+        );
+        Assert.Equal(
+            scope.FirstConnectionId,
+            await assertContext
+                .ProjectConnectionRelations.Select(relation => relation.ConnectionId)
+                .SingleAsync(cancellationToken)
+        );
     }
 
     [Fact]
@@ -205,7 +261,8 @@ public class ProjectAppServiceTests
             [scope.FirstMcpToolServerId],
             [scope.FirstSkillId],
             [scope.FirstConnectionId],
-            "tester");
+            "tester"
+        );
 
         var updated = await scope.Service.UpdateAsync(
             created!.Id,
@@ -213,7 +270,8 @@ public class ProjectAppServiceTests
             [scope.FirstMcpToolServerId],
             [scope.FirstSkillId],
             [scope.FirstConnectionId],
-            "updater");
+            "updater"
+        );
 
         Assert.NotNull(updated);
         AssertProjectRelations(updated, scope.FirstMcpToolServerId, scope.FirstSkillId, scope.FirstConnectionId);
@@ -229,7 +287,8 @@ public class ProjectAppServiceTests
             [scope.FirstMcpToolServerId],
             [scope.FirstSkillId],
             [scope.FirstConnectionId],
-            "tester");
+            "tester"
+        );
 
         var listed = Assert.Single(await scope.Service.ListAsync());
         var fetched = await scope.Service.GetAsync(created!.Id);
@@ -249,18 +308,21 @@ public class ProjectAppServiceTests
             [scope.FirstMcpToolServerId],
             [scope.FirstSkillId],
             [scope.FirstConnectionId],
-            "tester");
+            "tester"
+        );
         await using (var usageContext = scope.CreateDbContext())
         {
-            usageContext.AgentUsages.Add(new AgentUsage
-            {
-                Id = Guid.CreateVersion7(),
-                ProjectId = created!.Id,
-                ContextId = "context-1",
-                AgentName = "planner",
-                RecordedAt = TimeProvider.System.GetUtcNow(),
-                TotalTokenCount = 10
-            });
+            usageContext.AgentUsages.Add(
+                new AgentUsage
+                {
+                    Id = Guid.CreateVersion7(),
+                    ProjectId = created!.Id,
+                    ContextId = "context-1",
+                    AgentName = "planner",
+                    RecordedAt = TimeProvider.System.GetUtcNow(),
+                    TotalTokenCount = 10,
+                }
+            );
             await usageContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -271,7 +333,10 @@ public class ProjectAppServiceTests
         Assert.False(await assertContext.ProjectMcpToolServers.AnyAsync(cancellationToken));
         Assert.False(await assertContext.ProjectSkillRelations.AnyAsync(cancellationToken));
         Assert.False(await assertContext.ProjectConnectionRelations.AnyAsync(cancellationToken));
-        Assert.Equal(created.Id, Assert.Single(await assertContext.AgentUsages.ToListAsync(cancellationToken)).ProjectId);
+        Assert.Equal(
+            created.Id,
+            Assert.Single(await assertContext.AgentUsages.ToListAsync(cancellationToken)).ProjectId
+        );
     }
 
     [Fact]
@@ -304,9 +369,10 @@ public class ProjectAppServiceTests
                 {
                     Name = "Project A",
                     Type = ProjectType.UserDefined,
-                    Workspace = workspace
+                    Workspace = workspace,
                 },
-                "tester");
+                "tester"
+            );
 
             Assert.NotNull(created);
             Assert.True(Directory.Exists(workspace));
@@ -335,21 +401,19 @@ public class ProjectAppServiceTests
             new EfRepository<AgentflowTrace>(dbContext),
             dbContext,
             new ProjectDomainService(TimeProvider.System),
-            new ProjectResolver(projectRepository));
+            new ProjectResolver(projectRepository)
+        );
     }
 
-    private static Project CreateProject(string name) => new()
-    {
-        Name = name,
-        Type = ProjectType.UserDefined,
-        Workspace = Path.GetTempPath()
-    };
+    private static Project CreateProject(string name) =>
+        new()
+        {
+            Name = name,
+            Type = ProjectType.UserDefined,
+            Workspace = Path.GetTempPath(),
+        };
 
-    private static void AssertProjectRelations(
-        Project project,
-        Guid mcpToolServerId,
-        Guid skillId,
-        Guid connectionId)
+    private static void AssertProjectRelations(Project project, Guid mcpToolServerId, Guid skillId, Guid connectionId)
     {
         Assert.Equal(mcpToolServerId, Assert.Single(project.ProjectMcpToolServers).McpToolServerId);
         Assert.Equal(skillId, Assert.Single(project.ProjectSkillRelations).SkillId);
@@ -365,7 +429,8 @@ public class ProjectAppServiceTests
         private ProjectAppServiceTestScope(
             SqliteConnection connection,
             DbContextOptions<AgwDbContext> options,
-            AgwDbContext dbContext)
+            AgwDbContext dbContext
+        )
         {
             _connection = connection;
             _options = options;
@@ -394,10 +459,24 @@ public class ProjectAppServiceTests
             var scope = new ProjectAppServiceTestScope(connection, options, dbContext);
             dbContext.McpToolServers.AddRange(
                 new McpServer { Id = scope.FirstMcpToolServerId, Name = "MCP 1" },
-                new McpServer { Id = scope.SecondMcpToolServerId, Name = "MCP 2" });
+                new McpServer { Id = scope.SecondMcpToolServerId, Name = "MCP 2" }
+            );
             dbContext.Skills.AddRange(
-                new Skill { Id = scope.FirstSkillId, Name = "skill-1", Description = "Skill 1", ContentPath = "/skills/1" },
-                new Skill { Id = scope.SecondSkillId, Name = "skill-2", Description = "Skill 2", ContentPath = "/skills/2" });
+                new Skill
+                {
+                    Id = scope.FirstSkillId,
+                    Name = "skill-1",
+                    Description = "Skill 1",
+                    ContentPath = "/skills/1",
+                },
+                new Skill
+                {
+                    Id = scope.SecondSkillId,
+                    Name = "skill-2",
+                    Description = "Skill 2",
+                    ContentPath = "/skills/2",
+                }
+            );
             dbContext.Connections.AddRange(
                 new Connection
                 {
@@ -406,7 +485,7 @@ public class ProjectAppServiceTests
                     ConnectorId = "github-cloud",
                     AuthSchemeId = "oauth",
                     DisplayName = "Work GitHub",
-                    Alias = "work-github"
+                    Alias = "work-github",
                 },
                 new Connection
                 {
@@ -415,8 +494,9 @@ public class ProjectAppServiceTests
                     ConnectorId = "github-cloud",
                     AuthSchemeId = "oauth",
                     DisplayName = "Personal GitHub",
-                    Alias = "personal-github"
-                });
+                    Alias = "personal-github",
+                }
+            );
             await dbContext.SaveChangesAsync(cancellationToken);
             return scope;
         }

@@ -1,8 +1,6 @@
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
-
 using A2A;
-
 using Agw.A2A.Extensions;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Dtos;
@@ -12,11 +10,9 @@ using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-
 using AgwTaskProjection = Agw.Shared.Contracts.Projects.TaskProjection;
 
 namespace Agw.A2A.Tests;
@@ -28,11 +24,9 @@ public class A2ADependencyInjectionTests
     {
         var services = CreateA2AServices();
 
-        using var provider = services.BuildServiceProvider(new ServiceProviderOptions
-        {
-            ValidateOnBuild = true,
-            ValidateScopes = true
-        });
+        using var provider = services.BuildServiceProvider(
+            new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true }
+        );
 
         Assert.NotNull(provider.GetRequiredService<AgentHandlerFactory>());
     }
@@ -44,41 +38,46 @@ public class A2ADependencyInjectionTests
         var runtime = new FakeAgentRuntimeService();
         var services = new ServiceCollection();
         services.AddScoped<IAgentRuntimeService>(_ => runtime);
-        services.AddScoped<IRepository<Agent>>(_ => new RepositoryStub<Agent>(
-        [
-            new Agent { Id = agentId, Name = "alpha", SystemPrompt = "Alpha prompt" }
+        services.AddScoped<IRepository<Agent>>(_ => new RepositoryStub<Agent>([
+            new Agent
+            {
+                Id = agentId,
+                Name = "alpha",
+                SystemPrompt = "Alpha prompt",
+            },
         ]));
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IAgentExecutionBridge, A2AAgentExecutionBridge>();
 
-        using var provider = services.BuildServiceProvider(new ServiceProviderOptions
-        {
-            ValidateOnBuild = true,
-            ValidateScopes = true
-        });
+        using var provider = services.BuildServiceProvider(
+            new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true }
+        );
 
-        var result = await provider.GetRequiredService<IAgentExecutionBridge>().ExecuteAsync(
-            "alpha",
-            new RequestContext
-            {
-                TaskId = Guid.CreateVersion7().ToString("D"),
-                ContextId = "ctx-a2a",
-                StreamingResponse = false,
-                Message = new Message
+        var result = await provider
+            .GetRequiredService<IAgentExecutionBridge>()
+            .ExecuteAsync(
+                "alpha",
+                new RequestContext
                 {
-                    Role = Role.User,
-                    MessageId = "msg-user",
+                    TaskId = Guid.CreateVersion7().ToString("D"),
                     ContextId = "ctx-a2a",
-                    Parts = [Part.FromText("hello")]
-                }
-            },
-            new AgwUserInput
-            {
-                MessageId = "msg-user",
-                Author = "user",
-                Contents = [new AgwTextContent { Content = "hello" }]
-            },
-            TestContext.Current.CancellationToken);
+                    StreamingResponse = false,
+                    Message = new Message
+                    {
+                        Role = Role.User,
+                        MessageId = "msg-user",
+                        ContextId = "ctx-a2a",
+                        Parts = [Part.FromText("hello")],
+                    },
+                },
+                new AgwUserInput
+                {
+                    MessageId = "msg-user",
+                    Author = "user",
+                    Contents = [new AgwTextContent { Content = "hello" }],
+                },
+                TestContext.Current.CancellationToken
+            );
 
         Assert.NotNull(result);
         Assert.NotNull(runtime.CapturedRequest);
@@ -92,7 +91,10 @@ public class A2ADependencyInjectionTests
         services.AddScoped<IAgentRuntimeService, FakeAgentRuntimeService>();
         services.AddScoped<IRepository<Agent>, RepositoryStub<Agent>>();
         services.AddScoped<IRepository<ProjectConversation>, RepositoryStub<ProjectConversation>>();
-        services.AddScoped<IRepository<ProjectConversationChatHistory>, RepositoryStub<ProjectConversationChatHistory>>();
+        services.AddScoped<
+            IRepository<ProjectConversationChatHistory>,
+            RepositoryStub<ProjectConversationChatHistory>
+        >();
         services.AddScoped<IUnitOfWork, UnitOfWorkStub>();
         services.AddA2A(new ConfigurationManager());
         return services;
@@ -102,37 +104,36 @@ public class A2ADependencyInjectionTests
     {
         public AgentExecuteByIdRequest? CapturedRequest { get; private set; }
 
-        public Task<AIAgent?> CreateAiAgentAsync(
-            Guid agentId,
-            CancellationToken cancellationToken = default) =>
+        public Task<AIAgent?> CreateAiAgentAsync(Guid agentId, CancellationToken cancellationToken = default) =>
             Task.FromResult<AIAgent?>(null);
 
         public Task<AIAgent?> CreateAiAgentAsync(
             Guid agentId,
             Guid? projectId,
             bool resume,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<AIAgent?>(null);
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<AIAgent?>(null);
 
         public Task<AIAgent?> CreateAiAgentAsync(
             Guid agentId,
             Guid? projectId,
             bool resume,
             IReadOnlyDictionary<string, string>? environmentVariables,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<AIAgent?>(null);
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<AIAgent?>(null);
 
         public Task<AgentRuntime?> CreateRuntimeAsync(
             Guid agentId,
             AgwTaskProjection task,
             SettingCommand settings,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<AgentRuntime?>(null);
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<AgentRuntime?>(null);
 
         public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
             AgentRuntime session,
             AgwUserInput input,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+            [EnumeratorCancellation] CancellationToken cancellationToken = default
+        )
         {
             await Task.CompletedTask;
             yield break;
@@ -141,17 +142,18 @@ public class A2ADependencyInjectionTests
         public Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
             AgentRuntime session,
             AgwUserInput input,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult<IReadOnlyList<AgwMessage>>([]);
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<IReadOnlyList<AgwMessage>>([]);
 
         public Task<AgentExecutionResult?> ExecuteByIdAsync(
             AgentExecuteByIdRequest request,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             CapturedRequest = request;
-            return Task.FromResult<AgentExecutionResult?>(new AgentExecutionResult(
-                request.TaskId?.ToString("D") ?? Guid.CreateVersion7().ToString("D"),
-                []));
+            return Task.FromResult<AgentExecutionResult?>(
+                new AgentExecutionResult(request.TaskId?.ToString("D") ?? Guid.CreateVersion7().ToString("D"), [])
+            );
         }
     }
 
@@ -162,17 +164,17 @@ public class A2ADependencyInjectionTests
 
         public IQueryable<TEntity> Queryable => _entities.AsQueryable();
 
-        public Task<TEntity?> GetByIdAsync(object id) =>
-            Task.FromResult<TEntity?>(null);
+        public Task<TEntity?> GetByIdAsync(object id) => Task.FromResult<TEntity?>(null);
 
         public Task<TEntity?> SingleOrDefaultAsync(
             Expression<Func<TEntity, bool>> predicate,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(_entities.AsQueryable().SingleOrDefault(predicate));
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(_entities.AsQueryable().SingleOrDefault(predicate));
 
         public Task<IReadOnlyList<TEntity>> ListAsync(
             Expression<Func<TEntity, bool>>? predicate = null,
-            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null)
+            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
+        )
         {
             var query = ApplyPredicate(predicate);
             var results = orderBy is null ? query.ToList() : orderBy(query).ToList();
@@ -182,8 +184,8 @@ public class A2ADependencyInjectionTests
         public Task<IReadOnlyList<TEntity>> ListAsync(
             Expression<Func<TEntity, bool>>? predicate = null,
             Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
-            params Expression<Func<TEntity, object>>[] includes) =>
-            ListAsync(predicate, orderBy);
+            params Expression<Func<TEntity, object>>[] includes
+        ) => ListAsync(predicate, orderBy);
 
         public Task AddAsync(TEntity entity)
         {
@@ -191,17 +193,14 @@ public class A2ADependencyInjectionTests
             return Task.CompletedTask;
         }
 
-        public void Update(TEntity entity)
-        {
-        }
+        public void Update(TEntity entity) { }
 
         public void Remove(TEntity entity)
         {
             _entities.Remove(entity);
         }
 
-        public Task SaveChangesAsync(CancellationToken cancellationToken) =>
-            Task.CompletedTask;
+        public Task SaveChangesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
         private IQueryable<TEntity> ApplyPredicate(Expression<Func<TEntity, bool>>? predicate) =>
             predicate is null ? _entities.AsQueryable() : _entities.AsQueryable().Where(predicate);
@@ -209,14 +208,10 @@ public class A2ADependencyInjectionTests
 
     private sealed class UnitOfWorkStub : IUnitOfWork
     {
-        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(0);
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(0);
 
-        public Task<bool> SaveEntitiesAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
+        public Task<bool> SaveEntitiesAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
 
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
     }
 }

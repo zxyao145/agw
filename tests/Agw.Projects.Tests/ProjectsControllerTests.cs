@@ -1,10 +1,8 @@
 using System.Linq.Expressions;
-
 using Agw.Projects.Controllers;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Tools;
-
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Projects.Tests;
@@ -21,7 +19,9 @@ public class ProjectsControllerTests
         var listResult = await controller.ListAsync();
         var getResult = await controller.GetAsync(project.Id);
 
-        var listed = Assert.Single(Assert.IsAssignableFrom<IEnumerable<ProjectResponse>>(ReadApiResultData(listResult)));
+        var listed = Assert.Single(
+            Assert.IsAssignableFrom<IEnumerable<ProjectResponse>>(ReadApiResultData(listResult))
+        );
         var fetched = Assert.IsType<ProjectResponse>(ReadApiResultData(getResult));
         Assert.Equal(project.Id, listed.Id);
         Assert.Equal(project.Id, fetched.Id);
@@ -45,14 +45,16 @@ public class ProjectsControllerTests
             [mcpToolServerId],
             [skillId],
             [appInstanceId],
-            new Dictionary<string, string> { ["API_KEY"] = "secret" });
+            new Dictionary<string, string> { ["API_KEY"] = "secret" }
+        );
 
         var result = await controller.CreateAsync(request);
 
         var response = Assert.IsType<ProjectResponse>(ReadApiResultData(result));
         Assert.Equal(project.Id, response.Id);
         Assert.IsType<WebSearchToolDefinition>(
-            Assert.IsType<ToolValue>(Assert.Single(service.CreatedProject!.Tools)).Definition);
+            Assert.IsType<ToolValue>(Assert.Single(service.CreatedProject!.Tools)).Definition
+        );
         Assert.Equal("secret", service.CreatedProject.EnvironmentVariables["API_KEY"]);
         Assert.Equal([mcpToolServerId], service.McpToolServerIds);
         Assert.Equal([skillId], service.SkillIds);
@@ -77,14 +79,14 @@ public class ProjectsControllerTests
             [mcpToolServerId],
             [skillId],
             [appInstanceId],
-            new Dictionary<string, string> { ["MODE"] = "safe" });
+            new Dictionary<string, string> { ["MODE"] = "safe" }
+        );
 
         var result = await controller.UpdateAsync(project.Id, request);
 
         var response = Assert.IsType<ProjectResponse>(ReadApiResultData(result));
         Assert.Equal(project.Id, response.Id);
-        Assert.IsType<WebFetchToolDefinition>(
-            Assert.IsType<ToolValue>(Assert.Single(project.Tools)).Definition);
+        Assert.IsType<WebFetchToolDefinition>(Assert.IsType<ToolValue>(Assert.Single(project.Tools)).Definition);
         Assert.Equal("safe", project.EnvironmentVariables["MODE"]);
         Assert.Equal([mcpToolServerId], service.McpToolServerIds);
         Assert.Equal([skillId], service.SkillIds);
@@ -104,8 +106,7 @@ public class ProjectsControllerTests
         var result = await controller.UpdateAsync(project.Id, request);
 
         Assert.IsType<ProjectResponse>(ReadApiResultData(result));
-        Assert.IsType<WebSearchToolDefinition>(
-            Assert.IsType<ToolValue>(Assert.Single(project.Tools)).Definition);
+        Assert.IsType<WebSearchToolDefinition>(Assert.IsType<ToolValue>(Assert.Single(project.Tools)).Definition);
         Assert.Equal("secret", project.EnvironmentVariables["API_KEY"]);
         Assert.Null(service.McpToolServerIds);
         Assert.Null(service.SkillIds);
@@ -129,7 +130,8 @@ public class ProjectsControllerTests
             [],
             [],
             [],
-            new Dictionary<string, string>());
+            new Dictionary<string, string>()
+        );
 
         var result = await controller.UpdateAsync(project.Id, request);
 
@@ -151,15 +153,16 @@ public class ProjectsControllerTests
         return data;
     }
 
-    private static Project CreateProject() => new()
-    {
-        Id = Guid.CreateVersion7(),
-        Name = "Project A",
-        Type = ProjectType.UserDefined,
-        Workspace = "~/project-a",
-        EnvironmentVariables = new Dictionary<string, string>(),
-        CreateTime = new DateTimeOffset(2026, 7, 13, 1, 0, 0, TimeSpan.Zero)
-    };
+    private static Project CreateProject() =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Project A",
+            Type = ProjectType.UserDefined,
+            Workspace = "~/project-a",
+            EnvironmentVariables = new Dictionary<string, string>(),
+            CreateTime = new DateTimeOffset(2026, 7, 13, 1, 0, 0, TimeSpan.Zero),
+        };
 
     private sealed class CapturingProjectAppService : IProjectAppService
     {
@@ -178,11 +181,9 @@ public class ProjectsControllerTests
         public Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null) =>
             Task.FromResult<IReadOnlyList<Project>>([_project]);
 
-        public Task<string?> GetProjectExtraSettingAsync(Guid? projectId) =>
-            throw new NotSupportedException();
+        public Task<string?> GetProjectExtraSettingAsync(Guid? projectId) => throw new NotSupportedException();
 
-        public Task<Guid?> ResolveProjectIdAsync(Guid? projectId) =>
-            throw new NotSupportedException();
+        public Task<Guid?> ResolveProjectIdAsync(Guid? projectId) => throw new NotSupportedException();
 
         public Task<Project?> CreateAsync(Project project, string user)
         {
@@ -195,7 +196,8 @@ public class ProjectsControllerTests
             IEnumerable<Guid>? mcpToolServerIds,
             IEnumerable<Guid>? skillIds,
             IEnumerable<Guid>? connectionIds,
-            string user)
+            string user
+        )
         {
             CreatedProject = project;
             CaptureRelationIds(mcpToolServerIds, skillIds, connectionIds);
@@ -218,7 +220,8 @@ public class ProjectsControllerTests
             IEnumerable<Guid>? mcpToolServerIds,
             IEnumerable<Guid>? skillIds,
             IEnumerable<Guid>? connectionIds,
-            string user)
+            string user
+        )
         {
             updateAction(_project);
             CaptureRelationIds(mcpToolServerIds, skillIds, connectionIds);
@@ -228,7 +231,8 @@ public class ProjectsControllerTests
         private void CaptureRelationIds(
             IEnumerable<Guid>? mcpToolServerIds,
             IEnumerable<Guid>? skillIds,
-            IEnumerable<Guid>? connectionIds)
+            IEnumerable<Guid>? connectionIds
+        )
         {
             McpToolServerIds = mcpToolServerIds?.ToList();
             SkillIds = skillIds?.ToList();

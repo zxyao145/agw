@@ -1,5 +1,4 @@
 using System.Text.Json;
-
 using Agw.Integrations.Domain.Plugins;
 
 namespace Agw.Integrations.Tests;

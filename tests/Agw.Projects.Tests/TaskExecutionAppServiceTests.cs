@@ -5,7 +5,6 @@ using Agw.Projects.Domain.Services;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -26,7 +25,8 @@ public class TaskExecutionAppServiceTests
                     && parameters[1].Name == "AgentflowId"
                     && parameters[2].Name == "AgentId"
                     && parameters[3].Name == "Description";
-            });
+            }
+        );
     }
 
     [Fact]
@@ -56,8 +56,10 @@ public class TaskExecutionAppServiceTests
                 JobId: jobId,
                 Input: "Run scheduled sync",
                 Title: "Nightly sync",
-                ContextId: "context-1"),
-            "job-executor");
+                ContextId: "context-1"
+            ),
+            "job-executor"
+        );
 
         Assert.Equal(ApplicationResultType.Success, result.Type);
         var response = Assert.IsType<TaskExecutionSnapshot>(result.Value);
@@ -106,8 +108,10 @@ public class TaskExecutionAppServiceTests
                 JobId: Guid.CreateVersion7(),
                 Input: "Run scheduled sync",
                 Title: "Nightly sync",
-                ContextId: "context-1"),
-            "job-executor");
+                ContextId: "context-1"
+            ),
+            "job-executor"
+        );
         var createdTask = Assert.IsType<TaskExecutionSnapshot>(createResult.Value);
 
         var result = await service.MarkSucceededAsync(createdTask.TaskId, "job-executor");
@@ -143,11 +147,9 @@ public class TaskExecutionAppServiceTests
         var result = await service.CreateForExecutionAsync(
             projectId,
             taskId,
-            new TaskCreateRequest(
-                JobId: null,
-                Input: "Run scheduled sync",
-                Title: "Nightly sync"),
-            "job-executor");
+            new TaskCreateRequest(JobId: null, Input: "Run scheduled sync", Title: "Nightly sync"),
+            "job-executor"
+        );
 
         Assert.Equal(ApplicationResultType.Success, result.Type);
         var response = Assert.IsType<TaskExecutionSnapshot>(result.Value);
@@ -182,24 +184,26 @@ public class TaskExecutionAppServiceTests
             new TaskCreateRequest(
                 JobId: null,
                 Input: "First task",
-                ContextId: contextGuid.ToString("D").ToUpperInvariant()),
-            "tester");
+                ContextId: contextGuid.ToString("D").ToUpperInvariant()
+            ),
+            "tester"
+        );
         var lowercaseResult = await service.CreateForExecutionAsync(
             projectId,
             taskId: null,
-            new TaskCreateRequest(
-                JobId: null,
-                Input: "Second task",
-                ContextId: contextGuid.Normalize()),
-            "tester");
+            new TaskCreateRequest(JobId: null, Input: "Second task", ContextId: contextGuid.Normalize()),
+            "tester"
+        );
 
         Assert.Equal(ApplicationResultType.Success, uppercaseResult.Type);
         Assert.Equal(ApplicationResultType.Success, lowercaseResult.Type);
         var context = Assert.Single(await dbContext.ProjectConversations.ToListAsync(cancellationToken));
         Assert.Equal(contextGuid.Normalize(), context.ContextId);
         Assert.Equal(2, await dbContext.ProjectConversationChatHistories.CountAsync(cancellationToken));
-        Assert.All(await dbContext.ProjectConversationChatHistories.ToListAsync(cancellationToken),
-            record => Assert.Equal(context.Id, record.ConversationId));
+        Assert.All(
+            await dbContext.ProjectConversationChatHistories.ToListAsync(cancellationToken),
+            record => Assert.Equal(context.Id, record.ConversationId)
+        );
     }
 
     [Fact]
@@ -218,7 +222,8 @@ public class TaskExecutionAppServiceTests
             Guid.CreateVersion7(),
             projectId,
             contextGuid.ToString("D").ToUpperInvariant(),
-            "Legacy context");
+            "Legacy context"
+        );
         await using (var seedContext = new AgwDbContext(options))
         {
             seedContext.Projects.Add(CreateProject(projectId, "Context Project"));
@@ -232,11 +237,9 @@ public class TaskExecutionAppServiceTests
         var result = await service.CreateForExecutionAsync(
             projectId,
             taskId: null,
-            new TaskCreateRequest(
-                JobId: null,
-                Input: "Continue task",
-                ContextId: contextGuid.Normalize()),
-            "tester");
+            new TaskCreateRequest(JobId: null, Input: "Continue task", ContextId: contextGuid.Normalize()),
+            "tester"
+        );
 
         Assert.Equal(ApplicationResultType.Success, result.Type);
         var persistedContext = Assert.Single(await dbContext.ProjectConversations.ToListAsync(cancellationToken));
@@ -264,11 +267,13 @@ public class TaskExecutionAppServiceTests
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
             seedContext.ProjectConversations.AddRange(
                 CreateContext(contextId, projectId, "context-1", "Task"),
-                CreateContext(otherContextId, projectId, "context-2", "Other Task"));
+                CreateContext(otherContextId, projectId, "context-2", "Other Task")
+            );
             seedContext.ProjectConversationChatHistories.AddRange(
                 CreateRecord(contextId, taskId),
                 CreateRecord(contextId, taskId),
-                CreateRecord(otherContextId, otherTaskId));
+                CreateRecord(otherContextId, otherTaskId)
+            );
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -278,55 +283,60 @@ public class TaskExecutionAppServiceTests
         var result = await service.ClearRecordsAsync(projectId, taskId);
 
         Assert.Equal(ApplicationResultType.Success, result.Type);
-        Assert.Empty(await dbContext.ProjectConversationChatHistories
-            .Where(record => record.TaskId == taskId)
-            .ToListAsync(cancellationToken));
+        Assert.Empty(
+            await dbContext
+                .ProjectConversationChatHistories.Where(record => record.TaskId == taskId)
+                .ToListAsync(cancellationToken)
+        );
         var remainingRecord = await dbContext.ProjectConversationChatHistories.SingleAsync(cancellationToken);
         Assert.Equal(otherTaskId, remainingRecord.TaskId);
     }
 
     private static DbContextOptions<AgwDbContext> CreateOptions(SqliteConnection connection) =>
-        new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(connection)
-            .UseSnakeCaseNamingConvention()
-            .Options;
+        new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).UseSnakeCaseNamingConvention().Options;
 
-    private static async Task EnsureCreatedAsync(DbContextOptions<AgwDbContext> options, CancellationToken cancellationToken)
+    private static async Task EnsureCreatedAsync(
+        DbContextOptions<AgwDbContext> options,
+        CancellationToken cancellationToken
+    )
     {
         await using var setupContext = new AgwDbContext(options);
         await setupContext.Database.EnsureCreatedAsync(cancellationToken);
     }
 
-    private static Project CreateProject(Guid projectId, string name) => new()
-    {
-        Id = projectId,
-        Name = name,
-        Type = ProjectType.UserDefined,
-        CreateBy = "tester",
-        CreateTime = TimeProvider.System.GetUtcNow()
-    };
+    private static Project CreateProject(Guid projectId, string name) =>
+        new()
+        {
+            Id = projectId,
+            Name = name,
+            Type = ProjectType.UserDefined,
+            CreateBy = "tester",
+            CreateTime = TimeProvider.System.GetUtcNow(),
+        };
 
-    private static ProjectConversation CreateContext(Guid id, Guid projectId, string contextId, string title) => new()
-    {
-        Id = id,
-        ProjectId = projectId,
-        ContextId = contextId,
-        Title = title,
-        CreateBy = "tester",
-        CreateTime = TimeProvider.System.GetUtcNow(),
-        UpdateBy = "tester",
-        UpdateTime = TimeProvider.System.GetUtcNow()
-    };
+    private static ProjectConversation CreateContext(Guid id, Guid projectId, string contextId, string title) =>
+        new()
+        {
+            Id = id,
+            ProjectId = projectId,
+            ContextId = contextId,
+            Title = title,
+            CreateBy = "tester",
+            CreateTime = TimeProvider.System.GetUtcNow(),
+            UpdateBy = "tester",
+            UpdateTime = TimeProvider.System.GetUtcNow(),
+        };
 
-    private static ProjectConversationChatHistory CreateRecord(Guid contextId, Guid taskId) => new()
-    {
-        Id = Guid.CreateVersion7(),
-        ConversationId = contextId,
-        TaskId = taskId,
-        Status = TaskExecutionStatus.Running,
-        CreateTime = TimeProvider.System.GetUtcNow(),
-        UpdateTime = TimeProvider.System.GetUtcNow()
-    };
+    private static ProjectConversationChatHistory CreateRecord(Guid contextId, Guid taskId) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            ConversationId = contextId,
+            TaskId = taskId,
+            Status = TaskExecutionStatus.Running,
+            CreateTime = TimeProvider.System.GetUtcNow(),
+            UpdateTime = TimeProvider.System.GetUtcNow(),
+        };
 
     private static TaskExecutionAppService CreateService(AgwDbContext dbContext)
     {
@@ -338,6 +348,7 @@ public class TaskExecutionAppServiceTests
             dbContext,
             new ProjectConversationChatHistoryDomainService(),
             new ProjectResolver(projectRepository),
-            TimeProvider.System);
+            TimeProvider.System
+        );
     }
 }

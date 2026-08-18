@@ -17,7 +17,8 @@ public sealed class ToolBlockRegistry
             {
                 throw new AgwException(
                     ErrorCodes.InvalidParam,
-                    $"Tool Block '{toolBlock.Descriptor.Name}' is registered more than once.");
+                    $"Tool Block '{toolBlock.Descriptor.Name}' is registered more than once."
+                );
             }
 
             foreach (var memberToolName in toolBlock.Descriptor.MemberToolNames)
@@ -26,7 +27,8 @@ public sealed class ToolBlockRegistry
                 {
                     throw new AgwException(
                         ErrorCodes.InvalidParam,
-                        $"Tool '{memberToolName}' belongs to more than one Tool Block.");
+                        $"Tool '{memberToolName}' belongs to more than one Tool Block."
+                    );
                 }
             }
         }
@@ -37,7 +39,8 @@ public sealed class ToolBlockRegistry
             {
                 throw new AgwException(
                     ErrorCodes.InvalidParam,
-                    $"Tool Block '{entry.Key}' conflicts with member Tool '{entry.Key}' owned by Tool Block '{owner}'.");
+                    $"Tool Block '{entry.Key}' conflicts with member Tool '{entry.Key}' owned by Tool Block '{owner}'."
+                );
             }
         }
 
@@ -46,8 +49,8 @@ public sealed class ToolBlockRegistry
     }
 
     public IReadOnlyList<ToolBlockDescriptor> GetDescriptors() =>
-        _toolBlocks.Values
-            .Select(static item => item.Descriptor)
+        _toolBlocks
+            .Values.Select(static item => item.Descriptor)
             .OrderBy(static item => item.DisplayName, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -80,7 +83,8 @@ public sealed class ToolBlockRegistry
         IEnumerable<ToolBlockDefinition> definitions,
         ToolBlockScope scope,
         ToolMaterializationContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var result = new ToolContribution();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -92,26 +96,25 @@ public sealed class ToolBlockRegistry
             foreach (var definition in definitions)
             {
                 var definitionName = definition.GetDefinitionName();
-                if (string.IsNullOrWhiteSpace(definitionName) ||
-                    !seen.Add(definitionName))
+                if (string.IsNullOrWhiteSpace(definitionName) || !seen.Add(definitionName))
                 {
                     throw new AgwException(
                         ErrorCodes.InvalidParam,
-                        $"Tool Block name '{definitionName}' is empty or duplicated.");
+                        $"Tool Block name '{definitionName}' is empty or duplicated."
+                    );
                 }
 
                 if (!_toolBlocks.TryGetValue(definitionName, out var toolBlock))
                 {
-                    throw new AgwException(
-                        ErrorCodes.InvalidParam,
-                        $"Unknown Tool Block '{definitionName}'.");
+                    throw new AgwException(ErrorCodes.InvalidParam, $"Unknown Tool Block '{definitionName}'.");
                 }
 
                 if ((toolBlock.Descriptor.Scopes & scope) == 0)
                 {
                     throw new AgwException(
                         ErrorCodes.InvalidParam,
-                        $"Tool Block '{definitionName}' is not supported for scope '{scope}'.");
+                        $"Tool Block '{definitionName}' is not supported for scope '{scope}'."
+                    );
                 }
 
                 resolvedDefinitions.Add((definition, toolBlock));
@@ -137,9 +140,7 @@ public sealed class ToolBlockRegistry
         }
     }
 
-    private static void AddContribution(
-        ToolContribution destination,
-        ToolContribution contribution)
+    private static void AddContribution(ToolContribution destination, ToolContribution contribution)
     {
         destination.Tools.AddRange(contribution.Tools);
         destination.PlanModeAllowedToolNames.UnionWith(contribution.PlanModeAllowedToolNames);

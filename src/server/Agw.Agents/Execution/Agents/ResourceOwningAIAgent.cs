@@ -1,5 +1,4 @@
 using System.Runtime.ExceptionServices;
-
 using Microsoft.Agents.AI;
 
 namespace Agw.Agents.Execution.Agents;
@@ -52,8 +51,7 @@ internal sealed class ResourceOwningAIAgent : DelegatingAIAgent, IAsyncDisposabl
 
         if (failure != null && resourceFailure != null)
         {
-            ExceptionDispatchInfo.Capture(
-                new AggregateException(failure, resourceFailure)).Throw();
+            ExceptionDispatchInfo.Capture(new AggregateException(failure, resourceFailure)).Throw();
         }
 
         if (failure != null)

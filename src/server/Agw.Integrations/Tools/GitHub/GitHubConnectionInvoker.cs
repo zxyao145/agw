@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
-
 using Agw.Integrations.Application.Credentials;
 using Agw.Integrations.Application.Management;
 using Agw.Integrations.Tools.GitHub.Dtos;
@@ -24,16 +23,16 @@ public sealed partial class GitHubConnectionInvoker : IGitHubConnectionInvoker
     public GitHubConnectionInvoker(
         IConnectionCredentialReader credentialReader,
         IHttpClientFactory httpClientFactory,
-        IProjectWorkspaceResolver workspaceResolver)
-        : this(credentialReader, httpClientFactory, workspaceResolver, new GitHubGitProcessRunner())
-    {
-    }
+        IProjectWorkspaceResolver workspaceResolver
+    )
+        : this(credentialReader, httpClientFactory, workspaceResolver, new GitHubGitProcessRunner()) { }
 
     internal GitHubConnectionInvoker(
         IConnectionCredentialReader credentialReader,
         IHttpClientFactory httpClientFactory,
         IProjectWorkspaceResolver workspaceResolver,
-        IGitHubGitProcessRunner gitProcessRunner)
+        IGitHubGitProcessRunner gitProcessRunner
+    )
     {
         _credentialReader = credentialReader;
         _httpClientFactory = httpClientFactory;
@@ -41,22 +40,19 @@ public sealed partial class GitHubConnectionInvoker : IGitHubConnectionInvoker
         _gitProcessRunner = gitProcessRunner;
     }
 
-    public async Task<GitHubUserInfo> GetCurrentUserAsync(
-        Guid connectionId,
-        CancellationToken cancellationToken)
+    public async Task<GitHubUserInfo> GetCurrentUserAsync(Guid connectionId, CancellationToken cancellationToken)
     {
         var token = await ReadAccessTokenAsync(connectionId, cancellationToken);
-        return await SendAsync<GitHubUserInfo>(CurrentUserEndpoint, token, cancellationToken)
-            ?? throw RemoteFailure();
+        return await SendAsync<GitHubUserInfo>(CurrentUserEndpoint, token, cancellationToken) ?? throw RemoteFailure();
     }
 
     public async Task<IReadOnlyList<GitHubRepoInfo>> ListRepositoriesAsync(
         Guid connectionId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var token = await ReadAccessTokenAsync(connectionId, cancellationToken);
-        return await SendAsync<List<GitHubRepoInfo>>(RepositoriesEndpoint, token, cancellationToken)
-            ?? [];
+        return await SendAsync<List<GitHubRepoInfo>>(RepositoriesEndpoint, token, cancellationToken) ?? [];
     }
 
     public async Task<CloneResult> CloneRepositoryAsync(
@@ -65,7 +61,8 @@ public sealed partial class GitHubConnectionInvoker : IGitHubConnectionInvoker
         string owner,
         string repository,
         string? relativePath,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (!RepositoryPartRegex().IsMatch(owner) || !RepositoryPartRegex().IsMatch(repository))
         {
@@ -96,7 +93,7 @@ public sealed partial class GitHubConnectionInvoker : IGitHubConnectionInvoker
                 "clone",
                 "--",
                 remoteUrl,
-                targetPath
+                targetPath,
             ],
             EnvironmentVariables = new Dictionary<string, string>(StringComparer.Ordinal)
             {
@@ -107,9 +104,9 @@ public sealed partial class GitHubConnectionInvoker : IGitHubConnectionInvoker
                 ["SSH_ASKPASS"] = string.Empty,
                 ["GIT_CONFIG_NOSYSTEM"] = "1",
                 ["GIT_CONFIG_GLOBAL"] = OperatingSystem.IsWindows() ? "NUL" : "/dev/null",
-                ["GIT_ATTR_NOSYSTEM"] = "1"
+                ["GIT_ATTR_NOSYSTEM"] = "1",
             },
-            SecretsToRedact = [token, authorizationHeader]
+            SecretsToRedact = [token, authorizationHeader],
         };
 
         GitHubGitProcessResult result;
@@ -134,7 +131,8 @@ public sealed partial class GitHubConnectionInvoker : IGitHubConnectionInvoker
             result.ExitCode == 0,
             result.ExitCode == 0 ? null : "GitHub clone failed.",
             Redact(result.StandardOutput, request.SecretsToRedact),
-            Redact(result.StandardError, request.SecretsToRedact));
+            Redact(result.StandardError, request.SecretsToRedact)
+        );
     }
 
     internal static string ResolveCloneTarget(string workspace, string relativePath)
@@ -147,26 +145,26 @@ public sealed partial class GitHubConnectionInvoker : IGitHubConnectionInvoker
         var workspacePath = Path.GetFullPath(workspace);
         var targetPath = Path.GetFullPath(Path.Combine(workspacePath, relativePath));
         var resolvedRelativePath = Path.GetRelativePath(workspacePath, targetPath);
-        if (Path.IsPathRooted(resolvedRelativePath) ||
-            resolvedRelativePath == ".." ||
-            resolvedRelativePath.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+        if (
+            Path.IsPathRooted(resolvedRelativePath)
+            || resolvedRelativePath == ".."
+            || resolvedRelativePath.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+        )
         {
             throw InvalidClonePath();
         }
 
         var workspaceInfo = new DirectoryInfo(workspacePath);
-        var workspaceTarget = workspaceInfo.LinkTarget == null
-            ? null
-            : workspaceInfo.ResolveLinkTarget(returnFinalTarget: true);
+        var workspaceTarget =
+            workspaceInfo.LinkTarget == null ? null : workspaceInfo.ResolveLinkTarget(returnFinalTarget: true);
         var physicalWorkspace = Path.GetFullPath(workspaceTarget?.FullName ?? workspacePath);
         var physicalTarget = physicalWorkspace;
         foreach (var segment in resolvedRelativePath.Split(Path.DirectorySeparatorChar))
         {
             var candidate = Path.Combine(physicalTarget, segment);
             var candidateInfo = new DirectoryInfo(candidate);
-            var candidateTarget = candidateInfo.LinkTarget == null
-                ? null
-                : candidateInfo.ResolveLinkTarget(returnFinalTarget: true);
+            var candidateTarget =
+                candidateInfo.LinkTarget == null ? null : candidateInfo.ResolveLinkTarget(returnFinalTarget: true);
             physicalTarget = Path.GetFullPath(candidateTarget?.FullName ?? candidate);
             if (!IsWithinDirectory(physicalWorkspace, physicalTarget))
             {
@@ -179,11 +177,12 @@ public sealed partial class GitHubConnectionInvoker : IGitHubConnectionInvoker
 
     private static bool IsWithinDirectory(string root, string path)
     {
-        var comparison = OperatingSystem.IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-        return string.Equals(root, path, comparison) ||
-            path.StartsWith(string.Concat(root.TrimEnd(Path.DirectorySeparatorChar), Path.DirectorySeparatorChar), comparison);
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        return string.Equals(root, path, comparison)
+            || path.StartsWith(
+                string.Concat(root.TrimEnd(Path.DirectorySeparatorChar), Path.DirectorySeparatorChar),
+                comparison
+            );
     }
 
     private async Task<string> ReadAccessTokenAsync(Guid connectionId, CancellationToken cancellationToken)
@@ -193,7 +192,8 @@ public sealed partial class GitHubConnectionInvoker : IGitHubConnectionInvoker
             var credential = await _credentialReader.ReadConnectionAsync(
                 connectionId,
                 IntegrationCredentialSlots.OAuthAccessToken,
-                cancellationToken);
+                cancellationToken
+            );
             if (credential != null && !string.IsNullOrWhiteSpace(credential.Value))
             {
                 return credential.Value;
@@ -203,17 +203,12 @@ public sealed partial class GitHubConnectionInvoker : IGitHubConnectionInvoker
         {
             throw;
         }
-        catch
-        {
-        }
+        catch { }
 
         throw new AgwException(ErrorCodes.IntegrationCredentialUnavailable);
     }
 
-    private async Task<T?> SendAsync<T>(
-        Uri endpoint,
-        string token,
-        CancellationToken cancellationToken)
+    private async Task<T?> SendAsync<T>(Uri endpoint, string token, CancellationToken cancellationToken)
     {
         try
         {
@@ -280,9 +275,7 @@ public sealed partial class GitHubConnectionInvoker : IGitHubConnectionInvoker
 
         if (path.StartsWith($"~{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
         {
-            return Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                path[2..]);
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), path[2..]);
         }
 
         return path;
@@ -304,9 +297,7 @@ public sealed partial class GitHubConnectionInvoker : IGitHubConnectionInvoker
 
 internal interface IGitHubGitProcessRunner
 {
-    Task<GitHubGitProcessResult> RunCloneAsync(
-        GitHubGitProcessRequest request,
-        CancellationToken cancellationToken);
+    Task<GitHubGitProcessResult> RunCloneAsync(GitHubGitProcessRequest request, CancellationToken cancellationToken);
 }
 
 internal sealed class GitHubGitProcessRequest
@@ -320,22 +311,17 @@ internal sealed class GitHubGitProcessRequest
     public required IReadOnlyList<string> SecretsToRedact { get; init; }
 }
 
-internal sealed record GitHubGitProcessResult(
-    int ExitCode,
-    string StandardOutput,
-    string StandardError);
+internal sealed record GitHubGitProcessResult(int ExitCode, string StandardOutput, string StandardError);
 
 internal sealed class GitHubGitProcessRunner : IGitHubGitProcessRunner
 {
     public async Task<GitHubGitProcessResult> RunCloneAsync(
         GitHubGitProcessRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         Directory.CreateDirectory(request.WorkingDirectory);
-        using var process = new Process
-        {
-            StartInfo = CreateStartInfo(request)
-        };
+        using var process = new Process { StartInfo = CreateStartInfo(request) };
 
         try
         {
@@ -343,10 +329,7 @@ internal sealed class GitHubGitProcessRunner : IGitHubGitProcessRunner
             var standardOutput = process.StandardOutput.ReadToEndAsync(cancellationToken);
             var standardError = process.StandardError.ReadToEndAsync(cancellationToken);
             await process.WaitForExitAsync(cancellationToken);
-            return new GitHubGitProcessResult(
-                process.ExitCode,
-                await standardOutput,
-                await standardError);
+            return new GitHubGitProcessResult(process.ExitCode, await standardOutput, await standardError);
         }
         catch (OperationCanceledException)
         {
@@ -368,7 +351,7 @@ internal sealed class GitHubGitProcessRunner : IGitHubGitProcessRunner
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            CreateNoWindow = true
+            CreateNoWindow = true,
         };
         foreach (var argument in request.Arguments)
         {
@@ -387,9 +370,11 @@ internal sealed class GitHubGitProcessRunner : IGitHubGitProcessRunner
 
     internal static void HardenGitEnvironment(IDictionary<string, string?> environment)
     {
-        foreach (var inheritedName in environment.Keys
-                     .Where(item => item.StartsWith("GIT_", StringComparison.OrdinalIgnoreCase))
-                     .ToArray())
+        foreach (
+            var inheritedName in environment
+                .Keys.Where(item => item.StartsWith("GIT_", StringComparison.OrdinalIgnoreCase))
+                .ToArray()
+        )
         {
             environment.Remove(inheritedName);
         }
@@ -404,8 +389,6 @@ internal sealed class GitHubGitProcessRunner : IGitHubGitProcessRunner
                 process.Kill(entireProcessTree: true);
             }
         }
-        catch
-        {
-        }
+        catch { }
     }
 }

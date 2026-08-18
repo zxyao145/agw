@@ -21,7 +21,8 @@ public interface IConnectionMcpToolInvoker
         string sourceId,
         string operationName,
         AIFunctionArguments arguments,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken
+    );
 }
 
 /// <summary>
@@ -43,5 +44,6 @@ internal interface IConnectionMcpInvocationSession
         string sourceId,
         string operationName,
         AIFunctionArguments arguments,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken
+    );
 }

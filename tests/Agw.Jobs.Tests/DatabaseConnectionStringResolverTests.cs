@@ -1,5 +1,4 @@
 using System.Data.Common;
-
 using Agw.Infrastructure.Configuration;
 using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
@@ -13,10 +12,7 @@ public class DatabaseConnectionStringResolverTests
     {
         var paths = AgwDataPaths.Resolve("/tmp/agw-data", "/unused");
 
-        var result = DatabaseConnectionStringResolver.Resolve(
-            DatabaseProvider.Sqlite,
-            "Data Source=custom.db",
-            paths);
+        var result = DatabaseConnectionStringResolver.Resolve(DatabaseProvider.Sqlite, "Data Source=custom.db", paths);
 
         Assert.Equal($"Data Source={Path.Combine(paths.Root, "database", "custom.db")}", result);
     }
@@ -27,10 +23,7 @@ public class DatabaseConnectionStringResolverTests
         const string connectionString = "Host=db;Database=agw";
         var paths = AgwDataPaths.Resolve("/tmp/agw-data", "/unused");
 
-        var result = DatabaseConnectionStringResolver.Resolve(
-            DatabaseProvider.Postgres,
-            connectionString,
-            paths);
+        var result = DatabaseConnectionStringResolver.Resolve(DatabaseProvider.Postgres, connectionString, paths);
 
         Assert.Equal(connectionString, result);
     }
@@ -42,10 +35,7 @@ public class DatabaseConnectionStringResolverTests
             "Host=db;Database=agw;Username=postgres;Password=super-secret;Application Name=agw-server";
 
         var result = DatabaseConnectionStringResolver.ToSafeLogValue(connectionString);
-        var builder = new DbConnectionStringBuilder
-        {
-            ConnectionString = result
-        };
+        var builder = new DbConnectionStringBuilder { ConnectionString = result };
 
         Assert.Equal("db", builder["Host"]);
         Assert.Equal("agw", builder["Database"]);
@@ -61,10 +51,7 @@ public class DatabaseConnectionStringResolverTests
     public void ToSafeLogValue_WhenConnectionStringContainsSensitiveAlias_RedactsValue(string key)
     {
         var result = DatabaseConnectionStringResolver.ToSafeLogValue($"Host=db;{key}=super-secret");
-        var builder = new DbConnectionStringBuilder
-        {
-            ConnectionString = result
-        };
+        var builder = new DbConnectionStringBuilder { ConnectionString = result };
 
         Assert.Equal("***", builder[key]);
         Assert.DoesNotContain("super-secret", result, StringComparison.Ordinal);
@@ -78,5 +65,4 @@ public class DatabaseConnectionStringResolverTests
         Assert.Equal("<invalid connection string>", result);
         Assert.DoesNotContain("secret", result, StringComparison.Ordinal);
     }
-
 }

@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations.Schema;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Shared.Data.Entities.Projects;

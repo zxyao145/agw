@@ -3,9 +3,7 @@ using Agw.Shared;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Projects.Controllers;
@@ -39,7 +37,9 @@ public class ProjectContextsController : ControllerBase
     public async Task<IActionResult> ClearRecordsAsync(Guid projectId, string contextId)
     {
         var result = await _projectContextAppService.ClearRecordsAsync(projectId, contextId);
-        return result.Type == ApplicationResultType.Success ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
+        return result.Type == ApplicationResultType.Success
+            ? ApiResult.Ok()
+            : ErrorCodes.ResourceNotFound.ToApiResult();
     }
 
     [HttpPut("{contextId}/title")]
@@ -47,7 +47,8 @@ public class ProjectContextsController : ControllerBase
     public async Task<IActionResult> UpdateTitleAsync(
         Guid projectId,
         string contextId,
-        [FromBody] ProjectContextTitleUpdateRequest request)
+        [FromBody] ProjectContextTitleUpdateRequest request
+    )
     {
         var user = User?.Identity?.Name ?? Constants.AdminUserName;
         var result = await _projectContextAppService.UpdateTitleAsync(projectId, contextId, request.Title, user);
@@ -58,10 +59,9 @@ public class ProjectContextsController : ControllerBase
             ApplicationResultType.NotFound => ErrorCodes.ResourceNotFound.ToApiResult(),
             ApplicationResultType.Invalid => ApiResult.BadRequest(
                 result.Error ?? "Invalid request.",
-                ErrorCodes.InvalidParam.Code),
-            _ => ApiResult.BadRequest(
-                result.Error ?? "Invalid request.",
-                ErrorCodes.InvalidParam.Code)
+                ErrorCodes.InvalidParam.Code
+            ),
+            _ => ApiResult.BadRequest(result.Error ?? "Invalid request.", ErrorCodes.InvalidParam.Code),
         };
     }
 
@@ -70,7 +70,9 @@ public class ProjectContextsController : ControllerBase
     public async Task<IActionResult> DeleteAllAsync(Guid projectId)
     {
         var result = await _projectContextAppService.DeleteAllAsync(projectId);
-        return result.Type == ApplicationResultType.Success ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
+        return result.Type == ApplicationResultType.Success
+            ? ApiResult.Ok()
+            : ErrorCodes.ResourceNotFound.ToApiResult();
     }
 
     [HttpDelete("{contextId}")]
