@@ -9,6 +9,7 @@ using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
+using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
@@ -49,8 +50,17 @@ public partial class AgentRuntimeService
 
         try
         {
+            var requestMessages = await CreateExecutionInputMessagesAsync(
+                    session,
+                    input,
+                    cancellationToken)
+                .ConfigureAwait(false);
             await foreach (var message in session
-                               .ExecuteStreamingAsync(input, approvalHandler, cancellationToken)
+                               .ExecuteStreamingAsync(
+                                   requestMessages,
+                                   input,
+                                   approvalHandler,
+                                   cancellationToken)
                                .ConfigureAwait(false))
             {
                 yield return AgwMessageUtil.PostAgwMessage(session, message);
@@ -133,7 +143,17 @@ public partial class AgentRuntimeService
 
         try
         {
-            var messages = await session.ExecuteAsync(input, approvalHandler, cancellationToken);
+            var requestMessages = await CreateExecutionInputMessagesAsync(
+                    session,
+                    input,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            var messages = await session.ExecuteAsync(
+                    requestMessages,
+                    input,
+                    approvalHandler,
+                    cancellationToken)
+                .ConfigureAwait(false);
             return messages.Select(message => AgwMessageUtil.PostAgwMessage(session, message)).ToArray();
         }
         finally
@@ -148,6 +168,32 @@ public partial class AgentRuntimeService
                     CancellationToken.None);
             }
         }
+    }
+
+    private async Task<List<ChatMessage>> CreateExecutionInputMessagesAsync(
+        AgentRuntime session,
+        AgwUserInput input,
+        CancellationToken cancellationToken)
+    {
+        var sessionScope = session.SessionStateScope;
+        if (sessionScope == null)
+        {
+            return [AgwMessageUtil.CreateUserChatMessage(input)];
+        }
+
+        var handoff = _conversationHandoffProvider == null
+            ? ConversationHandoff.Empty
+            : await _conversationHandoffProvider.CreateAsync(
+                    sessionScope.ProjectConversationId,
+                    AgentRuntimeType.Agent,
+                    sessionScope.AgentId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        return AgwMessageUtil.CreateExecutionInputMessages(
+            input,
+            AgentRuntimeType.Agent,
+            sessionScope.AgentId,
+            handoff);
     }
 
     public async Task<AgentExecutionResult?> ExecuteByIdAsync(

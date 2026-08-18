@@ -63,6 +63,52 @@ public sealed class ModeStateSnapshotMiddlewareTests
     }
 
     [Fact]
+    public async Task RunStreamingAsync_ModeGetCompleted_DoesNotEmitSnapshot()
+    {
+        var modeProvider = new AgentModeProvider(
+            new AgentModeProviderOptions { DefaultMode = "plan" });
+        using var providerResource = modeProvider;
+        var session = new TestAgentSession();
+        var middleware = new ModeStateSnapshotMiddleware(modeProvider);
+        var updates = new List<AgentResponseUpdate>();
+
+        await foreach (var update in middleware.RunStreamingAsync(
+                           [new ChatMessage(ChatRole.User, "get mode")],
+                           session,
+                           options: null,
+                           new FunctionTranscriptAgent("Current mode is plan.", "mode_get"),
+                           TestContext.Current.CancellationToken))
+        {
+            updates.Add(update);
+        }
+
+        Assert.Equal(2, updates.Count);
+        Assert.IsType<FunctionCallContent>(Assert.Single(updates[0].Contents));
+        Assert.IsType<FunctionResultContent>(Assert.Single(updates[1].Contents));
+    }
+
+    [Fact]
+    public async Task RunAsync_ModeGetCompleted_DoesNotEmitSnapshot()
+    {
+        var modeProvider = new AgentModeProvider(
+            new AgentModeProviderOptions { DefaultMode = "plan" });
+        using var providerResource = modeProvider;
+        var session = new TestAgentSession();
+        var middleware = new ModeStateSnapshotMiddleware(modeProvider);
+
+        var response = await middleware.RunAsync(
+            [new ChatMessage(ChatRole.User, "get mode")],
+            session,
+            options: null,
+            new FunctionTranscriptAgent("Current mode is plan.", "mode_get"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, response.Messages.Count);
+        Assert.IsType<FunctionCallContent>(Assert.Single(response.Messages[0].Contents));
+        Assert.IsType<FunctionResultContent>(Assert.Single(response.Messages[1].Contents));
+    }
+
+    [Fact]
     public async Task CreateAsync_ModeToolCompleted_DoesNotCreateDuplicateTurnSnapshot()
     {
         var agent = new FunctionTranscriptAgent("Mode changed to \"execute\".");
@@ -91,10 +137,12 @@ public sealed class ModeStateSnapshotMiddlewareTests
     private sealed class FunctionTranscriptAgent : AIAgent
     {
         private readonly string _result;
+        private readonly string _toolName;
 
-        public FunctionTranscriptAgent(string result)
+        public FunctionTranscriptAgent(string result, string toolName = "mode_set")
         {
             _result = result;
+            _toolName = toolName;
         }
 
         protected override Task<AgentResponse> RunCoreAsync(
@@ -132,13 +180,13 @@ public sealed class ModeStateSnapshotMiddlewareTests
             CancellationToken cancellationToken) =>
             ValueTask.FromResult<AgentSession>(new TestAgentSession());
 
-        private static ChatMessage CreateFunctionCallMessage() =>
+        private ChatMessage CreateFunctionCallMessage() =>
             new(
                 ChatRole.Assistant,
                 [
                     new FunctionCallContent(
                         "mode-call-1",
-                        "mode_set",
+                        _toolName,
                         new Dictionary<string, object?> { ["mode"] = "execute" })
                 ]);
 

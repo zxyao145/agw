@@ -1,4 +1,5 @@
 using Agw.Projects.Domain.Services;
+using Agw.Shared.Contracts.Projects;
 
 using Microsoft.Extensions.AI;
 
@@ -27,6 +28,25 @@ public class ProjectConversationChatHistoryMetadataFactoryTests
         Assert.NotNull(metadata);
         Assert.Equal("agentflow", metadata!["targetType"].GetString());
         Assert.Equal("11111111-1111-1111-1111-111111111111", metadata["targetId"].GetString());
+    }
+
+    [Fact]
+    public void FromMessage_CopiesConversationHandoffCursorFromMessageMetadata()
+    {
+        var message = new ChatMessage(ChatRole.User, "continue")
+        {
+            AdditionalProperties = new AdditionalPropertiesDictionary
+            {
+                [ConversationHandoffMetadata.ThroughSequenceKey] = 42L
+            }
+        };
+
+        var metadata = ProjectConversationChatHistoryMetadataFactory.FromMessage(message);
+
+        Assert.NotNull(metadata);
+        Assert.Equal(
+            42,
+            metadata![ConversationHandoffMetadata.ThroughSequenceKey].GetInt64());
     }
 
     [Fact]

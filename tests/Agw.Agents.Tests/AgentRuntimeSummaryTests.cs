@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 
+using Agw.Agents.Execution;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Summaries;
@@ -140,6 +141,37 @@ public class AgentRuntimeSummaryTests
 
         Assert.Single(messages);
         Assert.Empty(summaryService.Calls);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RequestMessageList_PassesHandoffBeforeCurrentInput()
+    {
+        var chatClient = new StubChatClient("assistant response");
+        var agent = CreateAgent(chatClient);
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var runtime = new AgentRuntime(
+            NullLogger.Instance,
+            agent,
+            session,
+            Guid.CreateVersion7(),
+            "context-1",
+            sessionStateScope: null);
+        var summaryInput = new AgwUserInput
+        {
+            Contents = [new AgwTextContent { Content = "current input" }]
+        };
+
+        await runtime.ExecuteAsync(
+            [
+                new ChatMessage(ChatRole.Assistant, "previous plan"),
+                AgwMessageUtil.CreateUserChatMessage(summaryInput)
+            ],
+            summaryInput,
+            approvalHandler: null,
+            TestContext.Current.CancellationToken);
+
+        var request = Assert.Single(chatClient.Requests);
+        Assert.Equal(["previous plan", "current input"], request.Select(message => message.Text));
     }
 
     [Fact]
@@ -452,6 +484,8 @@ public class AgentRuntimeSummaryTests
 
     private sealed class StubChatClient(string responseText, params string[] streamingChunks) : IChatClient
     {
+        public List<List<ChatMessage>> Requests { get; } = [];
+
         public void Dispose()
         {
         }
@@ -462,14 +496,18 @@ public class AgentRuntimeSummaryTests
         public Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, responseText)]));
+            CancellationToken cancellationToken = default)
+        {
+            Requests.Add(messages.ToList());
+            return Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, responseText)]));
+        }
 
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
+            Requests.Add(messages.ToList());
             await Task.Yield();
             foreach (var chunk in streamingChunks.Length == 0 ? [responseText] : streamingChunks)
             {

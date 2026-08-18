@@ -35,6 +35,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
     private readonly IReadOnlyDictionary<Guid, IAgentSkillRegistration> _skillRegistrations;
     private readonly IRemoteSkillContentResolver? _remoteSkillContentResolver;
     private readonly HumanInteractionContextAccessor? _humanInteractionContextAccessor;
+    private readonly IConversationHandoffProvider? _conversationHandoffProvider;
 
     private readonly ILoggerFactory _loggerFactory;
     private readonly IServiceProvider _services;
@@ -57,7 +58,8 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         ILoggerFactory? loggerFactory = null,
         IServiceProvider? services = null,
         IConversationHistoryWriter? conversationHistoryWriter = null,
-        HumanInteractionContextAccessor? humanInteractionContextAccessor = null)
+        HumanInteractionContextAccessor? humanInteractionContextAccessor = null,
+        IConversationHandoffProvider? conversationHandoffProvider = null)
     {
         _agentAppService = agentAppService;
         _projectAppService = projectAppService;
@@ -79,6 +81,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
             .ToDictionary(group => group.Key, group => group.First());
         _remoteSkillContentResolver = remoteSkillContentResolver;
         _humanInteractionContextAccessor = humanInteractionContextAccessor;
+        _conversationHandoffProvider = conversationHandoffProvider;
         _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
         _services = services ?? new ServiceCollection().BuildServiceProvider();
     }

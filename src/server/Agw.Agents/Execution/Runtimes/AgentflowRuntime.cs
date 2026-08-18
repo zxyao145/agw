@@ -44,7 +44,7 @@ public sealed class AgentflowRuntime : RuntimeBase
         CancellationToken cancellationToken) =>
         _runtimeService.ExecuteStreamingWithPermissionStateAsync(
             _agentflowId,
-            AgwMessageUtil.ExtractInputText(command.Input),
+            command.Input,
             cancellationToken,
             ProjectDefaults.GetDefaultProjectIdentifier(_settings.ProjectId),
             _task.ContextId,

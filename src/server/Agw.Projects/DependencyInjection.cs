@@ -24,6 +24,7 @@ public static class DependencyInjection
         services.AddScoped<ProjectContextAppService>();
         services.AddScoped<ProjectResolver>();
         services.AddScoped<ProjectConversationChatHistoryDomainService>();
+        services.AddScoped<IConversationHandoffProvider, ConversationHandoffProvider>();
 
         services.AddSingleton<EfCoreChatHistoryProvider>();
         services.AddSingleton<ChatHistoryProvider>(sp =>

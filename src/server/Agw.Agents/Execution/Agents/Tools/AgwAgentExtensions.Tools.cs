@@ -3,6 +3,7 @@ using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Utils;
 
 using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -40,10 +41,23 @@ public static class AgwAgentExtensions
                 loggerFactory.CreateLogger<PlanModeToolGuardProvider>()));
         }
 
+        FunctionLoopContextTracker? functionLoopContextTracker = null;
+        var compactionStateKey = definition.CompactionProvider is CompactionProvider compactionProvider
+            ? compactionProvider.StateKeys.SingleOrDefault()
+            : null;
         var chatClientBuilder = chatClient.AsBuilder()
             .UseApprovalResponseBinding(loggerFactory)
             .UseApprovalNotRequiredFunctionBypassing()
             .UseFunctionInvocation(loggerFactory);
+        if (definition.CompactionProvider != null)
+        {
+            functionLoopContextTracker = new FunctionLoopContextTracker();
+            chatClientBuilder.Use(innerClient =>
+                new FunctionLoopMessageIsolationChatClient(
+                    innerClient,
+                    functionLoopContextTracker));
+        }
+
         if (modeProvider != null)
         {
             chatClientBuilder.Use(static innerClient =>
@@ -57,7 +71,10 @@ public static class AgwAgentExtensions
         if (definition.CompactionProvider != null)
         {
             chatClientBuilder
-                .Use(static innerClient => new LocalHistoryCompactionScopeChatClient(innerClient))
+                .Use(innerClient => new LocalHistoryCompactionScopeChatClient(
+                    innerClient,
+                    compactionStateKey,
+                    loggerFactory.CreateLogger<LocalHistoryCompactionScopeChatClient>()))
                 .UseAIContextProviders(definition.CompactionProvider);
         }
 
@@ -134,6 +151,9 @@ public static class AgwAgentExtensions
             AutoApprovalRules = capabilities.AutoApprovalRules
         });
         agentBuilder.UseOpenTelemetry(sourceName: definition.OpenTelemetrySourceName);
-        return agentBuilder.Build(services);
+        var agent = agentBuilder.Build(services);
+        return functionLoopContextTracker == null
+            ? agent
+            : new FunctionLoopContextScopeAgent(agent, functionLoopContextTracker);
     }
 }

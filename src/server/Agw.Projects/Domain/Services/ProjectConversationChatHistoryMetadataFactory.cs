@@ -1,5 +1,7 @@
 using System.Text.Json;
 
+using Agw.Shared.Contracts.Projects;
+
 using Microsoft.Extensions.AI;
 
 namespace Agw.Projects.Domain.Services;
@@ -11,22 +13,31 @@ public static class ProjectConversationChatHistoryMetadataFactory
         ArgumentNullException.ThrowIfNull(message);
 
         var properties = message.Contents
-            .OfType<TextContent>()
             .Select(content => content.AdditionalProperties)
             .FirstOrDefault(additionalProperties =>
                 additionalProperties != null
                 && additionalProperties.ContainsKey("targetType")
                 && additionalProperties.ContainsKey("targetId"));
 
-        if (properties == null)
+        Dictionary<string, JsonElement>? metadata = null;
+        if (properties != null)
         {
-            return null;
+            metadata = new Dictionary<string, JsonElement>
+            {
+                ["targetType"] = JsonSerializer.SerializeToElement(properties["targetType"]),
+                ["targetId"] = JsonSerializer.SerializeToElement(properties["targetId"]),
+            };
         }
 
-        return new Dictionary<string, JsonElement>
+        if (message.AdditionalProperties?.TryGetValue(
+                ConversationHandoffMetadata.ThroughSequenceKey,
+                out var throughSequence) == true)
         {
-            ["targetType"] = JsonSerializer.SerializeToElement(properties["targetType"]),
-            ["targetId"] = JsonSerializer.SerializeToElement(properties["targetId"]),
-        };
+            metadata ??= [];
+            metadata[ConversationHandoffMetadata.ThroughSequenceKey] =
+                JsonSerializer.SerializeToElement(throughSequence);
+        }
+
+        return metadata;
     }
 }

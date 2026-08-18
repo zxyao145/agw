@@ -2,6 +2,7 @@ using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Store;
+using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Repositories;
 
 namespace Agw.Agents.Tests;
@@ -39,6 +40,16 @@ public class AgentRuntimeServiceDependencyTests
         Assert.Contains(
             constructor.GetParameters(),
             parameter => parameter.ParameterType == typeof(AgentSessionStateStore));
+    }
+
+    [Fact]
+    public void Constructor_UsesConversationHandoffProviderForCrossTargetContext()
+    {
+        var constructor = Assert.Single(typeof(AgentRuntimeService).GetConstructors());
+
+        Assert.Contains(
+            constructor.GetParameters(),
+            parameter => parameter.ParameterType == typeof(IConversationHandoffProvider));
     }
 
     [Fact]

@@ -11,6 +11,7 @@ using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
+using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
@@ -58,6 +59,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
     private readonly HumanInteractionContextAccessor? _humanInteractionContextAccessor;
     private readonly AgentflowCheckpointStore? _checkpointStore;
     private readonly IRuntimeTurnContextAccessor? _turnContextAccessor;
+    private readonly IConversationHandoffProvider? _conversationHandoffProvider;
     private readonly AgentflowWorkflowCompiler _workflowCompiler = new();
 
     public AgentflowRuntimeService(
@@ -73,7 +75,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         IConversationHistoryWriter? conversationHistoryWriter = null,
         HumanInteractionContextAccessor? humanInteractionContextAccessor = null,
         AgentflowCheckpointStore? checkpointStore = null,
-        IRuntimeTurnContextAccessor? turnContextAccessor = null)
+        IRuntimeTurnContextAccessor? turnContextAccessor = null,
+        IConversationHandoffProvider? conversationHandoffProvider = null)
     {
         _logger = logger;
         _agentflowRepository = agentflowRepository;
@@ -88,6 +91,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         _humanInteractionContextAccessor = humanInteractionContextAccessor;
         _checkpointStore = checkpointStore;
         _turnContextAccessor = turnContextAccessor;
+        _conversationHandoffProvider = conversationHandoffProvider;
     }
 
     public async Task<string?> GetMermaidAsync(Guid agentflowId, CancellationToken cancellationToken = default)
@@ -128,7 +132,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         PermissionMode? permissionMode = null) =>
         ExecuteStreamingCoreAsync(
             agentflowId,
-            input,
+            CreateUserInput(input),
             cancellationToken,
             projectId,
             contextId,
@@ -143,7 +147,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
 
     internal IAsyncEnumerable<AgwMessage> ExecuteStreamingWithPermissionStateAsync(
         Guid agentflowId,
-        string input,
+        AgwUserInput input,
         CancellationToken cancellationToken,
         Guid? projectId,
         string? contextId,
@@ -172,7 +176,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
 
     private async IAsyncEnumerable<AgwMessage> ExecuteStreamingCoreAsync(
         Guid agentflowId,
-        string input,
+        AgwUserInput input,
         [EnumeratorCancellation] CancellationToken cancellationToken,
         Guid? projectId,
         string? contextId,
@@ -228,7 +232,14 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         var mermaidString = WorkflowVisualizer.ToMermaidString(workflow);
         _logger.LogInformation("Constructed workflow: {Workflow}", mermaidString);
 
-        var messages = CreateWorkflowInputMessages(input);
+        var messages = resumeCheckpoint == null
+            ? await CreateWorkflowInputMessagesAsync(
+                    agentflow.Id,
+                    sessionScope.ConversationId,
+                    input,
+                    cancellationToken)
+                .ConfigureAwait(false)
+            : [];
         var checkpointedRun = await StartCheckpointedRunAsync(
                 workflow,
                 messages,
@@ -550,9 +561,15 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         StreamingRun run;
         if (input.SegmentIndex == 0)
         {
+            var messages = await CreateWorkflowInputMessagesAsync(
+                    agentflow.Id,
+                    manifest.Task.ProjectConversationId,
+                    manifest.Input,
+                    cancellationToken)
+                .ConfigureAwait(false);
             run = await InProcessExecution.RunStreamingAsync(
                 workflow,
-                CreateWorkflowInputMessages(AgwMessageUtil.ExtractInputText(manifest.Input)),
+                messages,
                 checkpointManager,
                 sessionId,
                 cancellationToken);
@@ -1051,12 +1068,40 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
     }
 
     internal static List<ChatMessage> CreateWorkflowInputMessages(string input) =>
-    [
-        new(ChatRole.User, input)
-        {
-            AuthorName = Constants.DefaultInputAuthor
-        }
-    ];
+        [AgwMessageUtil.CreateUserChatMessage(CreateUserInput(input))];
+
+    private async Task<List<ChatMessage>> CreateWorkflowInputMessagesAsync(
+        Guid agentflowId,
+        Guid conversationId,
+        AgwUserInput input,
+        CancellationToken cancellationToken)
+    {
+        var handoff = _conversationHandoffProvider == null
+            ? ConversationHandoff.Empty
+            : await _conversationHandoffProvider.CreateAsync(
+                    conversationId,
+                    AgentRuntimeType.Agentflow,
+                    agentflowId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        return CreateWorkflowInputMessages(input, agentflowId, handoff);
+    }
+
+    internal static List<ChatMessage> CreateWorkflowInputMessages(
+        AgwUserInput input,
+        Guid agentflowId,
+        ConversationHandoff handoff) =>
+        AgwMessageUtil.CreateExecutionInputMessages(
+            input,
+            AgentRuntimeType.Agentflow,
+            agentflowId,
+            handoff);
+
+    private static AgwUserInput CreateUserInput(string input) => new()
+    {
+        Author = Constants.DefaultInputAuthor,
+        Contents = [new AgwTextContent { Content = input }]
+    };
 
     private static IReadOnlyList<AgwMessage> ConvertChatMessages(IEnumerable<ChatMessage> messages)
     {

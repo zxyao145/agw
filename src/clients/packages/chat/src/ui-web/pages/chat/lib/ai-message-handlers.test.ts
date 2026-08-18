@@ -77,6 +77,27 @@ test("Tool state messages are not collapsed with adjacent system messages", () =
   assert.deepEqual(collapseConsecutiveSystemMessages([todo, mode, warning]), [todo, mode, warning]);
 });
 
+test("read-only mode snapshots are hidden while mode changes remain visible", () => {
+  const modeGet = {
+    messageId: "mode-get",
+    role: "system",
+    contents: [{ type: "TextContent", content: "" }],
+    additionalProperties: { type: "tool-mode-status", toolName: "mode_get", mode: "plan" },
+  };
+  const modeSet = {
+    messageId: "mode-set",
+    role: "system",
+    contents: [{ type: "TextContent", content: "" }],
+    additionalProperties: { type: "tool-mode-status", toolName: "mode_set", mode: "execute" },
+  };
+
+  assert.deepEqual(collapseConsecutiveSystemMessages([modeGet, modeSet]), [modeSet]);
+  assert.deepEqual(prepareClaudeHistory([modeGet, modeSet]), {
+    messages: [modeSet],
+    commands: [],
+  });
+});
+
 test("system result with top-level marker stops executing and appends the message", () => {
   const message = {
     messageId: "result-1",

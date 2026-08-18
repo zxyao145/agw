@@ -9,7 +9,11 @@ import MdCard from "./md-card";
 
 const COPY_STATE_DURATION_MS = 2_000;
 
-export default function PlanCard({ markdown, trailingMarkdown }: ProposedPlanPresentation) {
+export default function PlanCard({
+  leadingMarkdown,
+  markdown,
+  trailingMarkdown,
+}: ProposedPlanPresentation) {
   const headingId = React.useId();
   const resetTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [copied, setCopied] = React.useState(false);
@@ -39,6 +43,11 @@ export default function PlanCard({ markdown, trailingMarkdown }: ProposedPlanPre
 
   return (
     <>
+      {leadingMarkdown ? (
+        <div className="msg-content mb-4">
+          <MdCard mdText={leadingMarkdown} />
+        </div>
+      ) : null}
       <section
         aria-labelledby={headingId}
         className="w-full overflow-hidden px-4 sm:px-5 rounded-2xl border border-border/70 bg-card text-card-foreground shadow-xs"

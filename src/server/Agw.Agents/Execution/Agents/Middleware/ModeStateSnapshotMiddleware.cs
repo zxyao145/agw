@@ -9,8 +9,8 @@ namespace Agw.Agents.Execution.Agents.Middleware;
 
 internal sealed class ModeStateSnapshotMiddleware
 {
-    private static readonly IReadOnlySet<string> ModeToolNames = new HashSet<string>(
-        ["mode_set", "mode_get"],
+    private static readonly IReadOnlySet<string> ModeMutationToolNames = new HashSet<string>(
+        ["mode_set"],
         StringComparer.OrdinalIgnoreCase);
 
     private readonly AgentModeProvider _provider;
@@ -117,7 +117,7 @@ internal sealed class ModeStateSnapshotMiddleware
         {
             if (result.Exception != null ||
                 !callNames.TryGetValue(result.CallId, out var toolName) ||
-                !ModeToolNames.Contains(toolName) ||
+                !ModeMutationToolNames.Contains(toolName) ||
                 !snapshottedCallIds.Add(result.CallId))
             {
                 continue;

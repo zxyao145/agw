@@ -10,8 +10,9 @@ const rendererSource = readFileSync(new URL("./index.tsx", import.meta.url), "ut
 const messageSource = readFileSync(new URL("../message.tsx", import.meta.url), "utf8");
 const planCardHtml = renderToStaticMarkup(
   React.createElement(PlanCard, {
+    leadingMarkdown: "Context before the plan",
     markdown: "# Decision-complete plan",
-    trailingMarkdown: "",
+    trailingMarkdown: "Notes after the plan",
     isClosed: true,
   }),
 );
@@ -21,6 +22,8 @@ test("Plan Card renders parsed Markdown without protocol tags", () => {
   assert.match(planCardHtml, /<h1>Decision-complete plan<\/h1>/);
   assert.match(planCardHtml, /aria-label="Copy plan"/);
   assert.doesNotMatch(planCardHtml, /proposed_plan/);
+  assert.ok(planCardHtml.indexOf("Context before the plan") < planCardHtml.indexOf("<section"));
+  assert.ok(planCardHtml.indexOf("Notes after the plan") > planCardHtml.indexOf("</section>"));
 });
 
 test("Plan Card uses a full-width accessible chat surface", () => {

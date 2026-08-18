@@ -286,6 +286,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
     {
         ArgumentNullException.ThrowIfNull(messages);
         var persistableMessages = messages
+            .Where(message => !ConversationHandoffMetadata.IsHandoffMessage(message))
             .Select(RemoveBlankTextualContent)
             .OfType<ChatMessage>()
             .ToList();
