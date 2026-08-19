@@ -2,10 +2,20 @@ export type SuggestionTrigger = {
   type: "command" | "file";
   query: string;
   start: number;
+  end: number;
 };
 
-export function getTrailingSuggestionTrigger(input: string): SuggestionTrigger | null {
-  const match = /(^|\s)([/@])([^\s]*)$/.exec(input);
+export type SuggestionReplacement = {
+  value: string;
+  caretIndex: number;
+};
+
+export function getSuggestionTrigger(input: string, caretIndex: number): SuggestionTrigger | null {
+  if (caretIndex < 0 || caretIndex > input.length) {
+    return null;
+  }
+
+  const match = /(^|\s)([/@])([^\s]*)$/.exec(input.slice(0, caretIndex));
   if (!match || match.index === undefined) {
     return null;
   }
@@ -16,14 +26,26 @@ export function getTrailingSuggestionTrigger(input: string): SuggestionTrigger |
     type: marker === "/" ? "command" : "file",
     query: match[3],
     start: match.index + prefix.length,
+    end: caretIndex,
   };
 }
 
-export function replaceTrailingSuggestion(input: string, suggestionText: string): string {
-  const trigger = getTrailingSuggestionTrigger(input);
+export function replaceSuggestion(
+  input: string,
+  suggestionText: string,
+  caretIndex: number,
+): SuggestionReplacement {
+  const trigger = getSuggestionTrigger(input, caretIndex);
   if (!trigger) {
-    return input;
+    return { value: input, caretIndex };
   }
 
-  return `${input.slice(0, trigger.start)}${suggestionText} `;
+  const suffix = input.slice(trigger.end);
+  const hasWhitespaceSeparator = /^\s/.test(suffix);
+  const separator = hasWhitespaceSeparator ? "" : " ";
+  const value = `${input.slice(0, trigger.start)}${suggestionText}${separator}${suffix}`;
+  const nextCaretIndex =
+    trigger.start + suggestionText.length + (hasWhitespaceSeparator ? 1 : separator.length);
+
+  return { value, caretIndex: nextCaretIndex };
 }

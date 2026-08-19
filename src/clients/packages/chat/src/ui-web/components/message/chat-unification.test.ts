@@ -299,7 +299,7 @@ test("shared Chat input provides slash and project file suggestions", async () =
 
   assert.match(chatSource, /getAgentSuggestionQueryParams\(projectId, target\)/);
   assert.match(chatSource, /toCommandSource\(agentSuggestionsQuery\.data, claudeCommands\)/);
-  assert.match(inputSource, /getTrailingSuggestionTrigger\(input\)/);
+  assert.match(inputSource, /getSuggestionTrigger\(input, caretIndex\)/);
   assert.match(inputSource, /searchCommand\(trigger\.query, commandSource\)/);
   assert.match(inputSource, /searchFile\(projectId, trigger\.query\)/);
   assert.match(searchFileSource, /response\.results\.slice\(0, 5\)/);
