@@ -12,6 +12,7 @@ function FileViewer({
   setComments,
   isDiffView,
   commentSide = CommentSide.Current,
+  diffScope,
 }: FileViewerProps) {
   const [activeCommentLine, setActiveCommentLine] = React.useState<number | null>(null);
   const [hoveredLine, setHoveredLine] = React.useState<number | null>(null);
@@ -36,12 +37,20 @@ function FileViewer({
   const commentsByLine = React.useMemo(() => {
     const groupedComments = new Map<number, LineComment[]>();
     comments.forEach((comment) => {
+      if (
+        comment.filePath !== filePath ||
+        comment.side !== commentSide ||
+        comment.diffScope !== diffScope
+      ) {
+        return;
+      }
+
       const lineComments = groupedComments.get(comment.lineNumber) ?? [];
       lineComments.push(comment);
       groupedComments.set(comment.lineNumber, lineComments);
     });
     return groupedComments;
-  }, [comments]);
+  }, [commentSide, comments, diffScope, filePath]);
 
   const handleAddComment = (lineNumber: number, content: string) => {
     if (!content.trim()) return;
@@ -49,6 +58,7 @@ function FileViewer({
     const newComment: LineComment = {
       id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       side: commentSide,
+      ...(diffScope ? { diffScope } : {}),
       filePath: filePath,
       lineNumber,
       content: content.trim(),
@@ -70,7 +80,7 @@ function FileViewer({
   };
 
   return (
-    <div className={cn("font-mono text-sm", isDiffView && "w-max min-w-full")}>
+    <div className={cn("font-mono text-sm", isDiffView && "w-full min-w-0")}>
       {lines.map((line, index) => {
         if (line.kind === "hunk") {
           return (

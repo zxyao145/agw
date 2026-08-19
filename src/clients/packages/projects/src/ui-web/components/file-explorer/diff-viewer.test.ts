@@ -47,7 +47,8 @@ test("diff panes expose synchronized horizontal scrolling", async () => {
   assert.doesNotMatch(diffViewerSource, /requestAnimationFrame/);
   assert.equal((diffViewerSource.match(/onScroll=\{\(event\) => syncScroll/g) ?? []).length, 2);
   assert.equal((diffViewerSource.match(/overflow-auto agw-scrollbar/g) ?? []).length, 2);
-  assert.match(fileViewerSource, /isDiffView && "w-max min-w-full"/);
+  assert.match(fileViewerSource, /isDiffView && "w-full min-w-0"/);
+  assert.doesNotMatch(fileViewerSource, /w-max min-w-full/);
   assert.match(fileViewerSource, /isDiffView \? "min-w-max"/);
   assert.match(fileViewerSource, /sticky left-0 z-10.*bg-background/);
   assert.match(fileViewerSource, /export default React\.memo\(FileViewer\)/);
@@ -67,4 +68,18 @@ test("file viewer renders no-newline annotations", async () => {
 
   assert.match(source, /line\.kind === "annotation"/);
   assert.match(source, /<code>\{line\.content\}<\/code>/);
+});
+
+test("file comments stay isolated by project-relative path, side, and diff scope", async () => {
+  const [diffViewerSource, fileViewerSource] = await Promise.all([
+    readFile(DIFF_VIEWER_URL, "utf8"),
+    readFile(FILE_VIEWER_URL, "utf8"),
+  ]);
+
+  assert.match(fileViewerSource, /comment\.filePath !== filePath/);
+  assert.match(fileViewerSource, /comment\.side !== commentSide/);
+  assert.match(fileViewerSource, /comment\.diffScope !== diffScope/);
+  assert.match(diffViewerSource, /comment\.filePath === filePath/);
+  assert.match(diffViewerSource, /comment\.diffScope === scope/);
+  assert.match(diffViewerSource, /diffScope=\{scope\}/);
 });

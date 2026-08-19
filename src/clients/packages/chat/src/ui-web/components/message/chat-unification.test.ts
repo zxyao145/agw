@@ -304,3 +304,35 @@ test("shared Chat input provides slash and project file suggestions", async () =
   assert.match(inputSource, /searchFile\(projectId, trigger\.query\)/);
   assert.match(searchFileSource, /response\.results\.slice\(0, 5\)/);
 });
+
+test("shared Chat renders only the pending file comment count in the composer", async () => {
+  const [chatSource, inputSource, workspaceSource] = await Promise.all([
+    readFile(CHAT_URL, "utf8"),
+    readFile(CHAT_INPUT_URL, "utf8"),
+    readFile(CHAT_WORKSPACE_URL, "utf8"),
+  ]);
+
+  assert.match(chatSource, /pendingFileCommentCount=\{pendingFileComments\.length\}/);
+  assert.match(inputSource, /pendingFileCommentCount: number/);
+  assert.match(inputSource, /\{pendingFileCommentCount\} code comment/);
+  assert.match(inputSource, /aria-label="Clear pending code comments"/);
+  assert.match(inputSource, /hasAdditionalInput=\{pendingFileCommentCount > 0\}/);
+  assert.doesNotMatch(inputSource, /LineComment|filePath|lineNumber|comment\.content/);
+  assert.match(workspaceSource, /pendingFileComments=\{comments\}/);
+  assert.match(workspaceSource, /new Set\(commentIds\)/);
+});
+
+test("shared Chat consumes only submitted file comments after execution succeeds", async () => {
+  const source = await readFile(CHAT_URL, "utf8");
+  const executeIndex = source.indexOf("await client.execute");
+  const removeIndex = source.indexOf("onPendingFileCommentsRemove?.(", executeIndex);
+
+  assert.match(source, /const submittedFileComments = \[\.\.\.pendingFileComments\]/);
+  assert.match(source, /buildFileCommentPrompt\(value, submittedFileComments\)/);
+  assert.ok(executeIndex >= 0 && removeIndex > executeIndex);
+  assert.match(
+    source.slice(executeIndex, removeIndex),
+    /generation !== executionGenerationRef\.current[\s\S]*?executionClientRef\.current !== client/,
+  );
+  assert.match(source, /submittedFileComments\.map\(\(comment\) => comment\.id\)/);
+});

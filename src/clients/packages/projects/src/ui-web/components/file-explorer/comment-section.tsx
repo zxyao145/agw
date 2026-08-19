@@ -33,7 +33,8 @@ function CommentInput({
         className="min-h-20 text-sm resize-none bg-background"
         autoFocus={autoFocus}
         onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+          if (e.key === "Enter" && (e.ctrlKey || e.metaKey || e.shiftKey)) {
+            e.preventDefault();
             if (value.trim()) {
               onSubmit();
             }
@@ -44,7 +45,9 @@ function CommentInput({
         }}
       />
       <div className="flex items-center justify-between mt-2.5">
-        <span className="text-xs text-muted-foreground">Ctrl+Enter to submit, Esc to cancel</span>
+        <span className="text-xs text-muted-foreground">
+          Ctrl/Shift+Enter to submit, Esc to cancel
+        </span>
       </div>
     </div>
   );
@@ -129,7 +132,7 @@ export function CommentSection({
                 />
               ) : (
                 <p
-                  className="text-sm whitespace-pre-wrap wrap-break-word cursor-text hover:bg-muted/50 rounded px-1 -mx-1 transition-colors"
+                  className="text-sm whitespace-pre-wrap wrap-anywhere cursor-text hover:bg-muted/50 rounded px-1 -mx-1 transition-colors"
                   onDoubleClick={() => handleStartEditing(comment.id, comment.content)}
                   title="Double-click to edit"
                 >
@@ -139,7 +142,7 @@ export function CommentSection({
             </div>
             <button
               onClick={() => onDeleteComment(comment.id)}
-              className="text-destructive hover:bg-destructive/10 p-1.5 rounded transition-colors cursor-pointer"
+              className="sticky right-3 z-10 shrink-0 self-start rounded p-1.5 text-destructive transition-colors hover:bg-destructive/10 cursor-pointer"
               title="Delete comment"
             >
               <Trash2 className="h-3.5 w-3.5" />

@@ -49,6 +49,7 @@ export default function FileContent({
                   <UnChangedFile
                     diffContentData={diffContentData}
                     selectedFile={selectedFile}
+                    diffScope={diffScope}
                     comments={comments}
                     setComments={setComments}
                   />

@@ -4,6 +4,7 @@ import { CommentSide, UnChangedFileProps } from "./types";
 export default function UnChangedFile({
   diffContentData,
   selectedFile,
+  diffScope,
   comments,
   setComments,
 }: UnChangedFileProps): React.ReactNode {
@@ -20,6 +21,7 @@ export default function UnChangedFile({
           setComments={setComments}
           isDiffView={true}
           commentSide={CommentSide.Original}
+          diffScope={diffScope}
         />
       )}
     </div>

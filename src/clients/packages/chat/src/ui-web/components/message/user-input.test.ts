@@ -51,6 +51,13 @@ test("suggestions use the current caret and restore it after selection", () => {
   assert.match(source, /setSelectionRange\(replacement\.caretIndex, replacement\.caretIndex\)/);
 });
 
+test("composer context and additional input participate in submission", () => {
+  assert.match(source, /hasAdditionalInput\?: boolean/);
+  assert.match(source, /UserInput\.Context/);
+  assert.match(source, /!input\.trim\(\) && !hasAdditionalInput/);
+  assert.match(source, /input\.trim\(\) \|\| hasAdditionalInput/);
+});
+
 test("suggestion descriptions use phrasing elements inside ItemDescription", () => {
   assert.match(source, /<ItemDescription>[\s\S]*?<span className="flex item-start">/);
   assert.match(source, /<span className="text-\[11px\]">\{suggestion\.description\}<\/span>/);

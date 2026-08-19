@@ -19,7 +19,7 @@ import {
   type PendingHumanGate,
   type PermissionMode,
 } from "../../../services/execution-hub";
-import { clearProjectContextRecords } from "@agw/projects";
+import { clearProjectContextRecords, type LineComment } from "@agw/projects";
 import { ChatAside } from "./chat-aside";
 import { ChatInput } from "./chat-input";
 import { Conversation } from "./conversation";
@@ -58,6 +58,7 @@ import {
 import type { AiMessage } from "@agw/api";
 import type { ChatTargetOption } from "@agw/api";
 import { hasMatchingHumanInteractionCall } from "../../../services/human-interaction-call";
+import { buildFileCommentPrompt } from "../../../lib/chat/file-comment-prompt";
 
 export interface ChatSessionSeed {
   revision: string | number;
@@ -76,6 +77,8 @@ export interface ChatProps {
   onContextIdChange?: (contextId: string | null) => void;
   onConversationChange?: () => void | Promise<void>;
   onExecutionError?: (error: unknown) => void;
+  pendingFileComments?: readonly LineComment[];
+  onPendingFileCommentsRemove?: (commentIds: readonly string[]) => void;
   /** 将 SignalR 重连状态同步给更高层的工作区遮罩。 */
   onReconnectStateChange?: (state: ExecutionReconnectState | null) => void;
   /** 历史水合完成后，允许仅对已有 durable attachment 自动重订阅。 */
@@ -84,6 +87,7 @@ export interface ChatProps {
 }
 
 const DEFAULT_AGENT_MODE: AgentMode = "execute";
+const EMPTY_FILE_COMMENTS: readonly LineComment[] = [];
 
 function prepareChatHistory(messages: AiMessage[]) {
   const preparedHistory = prepareClaudeHistory(messages);
@@ -144,6 +148,8 @@ export function Chat({
   onContextIdChange,
   onConversationChange,
   onExecutionError,
+  pendingFileComments = EMPTY_FILE_COMMENTS,
+  onPendingFileCommentsRemove,
   onReconnectStateChange,
   restoreDurableExecution = false,
 }: ChatProps) {
@@ -776,8 +782,9 @@ export function Chat({
         return;
       }
 
-      const trimmedValue = value.trim();
-      if (!trimmedValue) {
+      const submittedFileComments = [...pendingFileComments];
+      const resolvedInput = buildFileCommentPrompt(value, submittedFileComments);
+      if (!resolvedInput) {
         toast.error("Please enter a prompt");
         return;
       }
@@ -792,7 +799,7 @@ export function Chat({
 
       const nextId = ensureContextId(true);
 
-      const userMessage = createUserTextMessage(trimmedValue);
+      const userMessage = createUserTextMessage(resolvedInput);
       const firstContent = userMessage.contents[0];
       if (firstContent) {
         firstContent.additionalProperties = {
@@ -842,6 +849,9 @@ export function Chat({
         ) {
           return;
         }
+        if (submittedFileComments.length > 0) {
+          onPendingFileCommentsRemove?.(submittedFileComments.map((comment) => comment.id));
+        }
         void onConversationChange?.();
       } catch (error) {
         if (generation === executionGenerationRef.current) {
@@ -858,6 +868,8 @@ export function Chat({
       isTransitioning,
       notifyExecutionError,
       onConversationChange,
+      onPendingFileCommentsRemove,
+      pendingFileComments,
       projectId,
       reconnectState,
       target,
@@ -1102,6 +1114,11 @@ export function Chat({
     projectId,
   ]);
 
+  const handleClearPendingFileComments = React.useCallback(() => {
+    if (pendingFileComments.length === 0) return;
+    onPendingFileCommentsRemove?.(pendingFileComments.map((comment) => comment.id));
+  }, [onPendingFileCommentsRemove, pendingFileComments]);
+
   const handleScrollToTop = React.useCallback(() => {
     autoScrollStateRef.current = {
       ...autoScrollStateRef.current,
@@ -1193,6 +1210,8 @@ export function Chat({
             agentMode={agentMode}
             onPermissionModeChange={handlePermissionModeChange}
             onAgentModeChange={handleAgentModeChange}
+            pendingFileCommentCount={pendingFileComments.length}
+            onClearPendingFileComments={handleClearPendingFileComments}
             placeholder={placeholder}
             userInputRef={userInputRef}
           />

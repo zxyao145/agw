@@ -23,6 +23,7 @@ export interface UserInputProps {
   ) => SuggestionItem[] | Promise<SuggestionItem[]>;
   // Execution state
   isExecuting?: boolean;
+  hasAdditionalInput?: boolean;
 
   // Actions
   onExecute?: (value: string) => void;
@@ -38,6 +39,7 @@ export interface UserInputProps {
 }
 
 interface UserInputSlots {
+  context: ReactNode[];
   topLeft: ReactNode[];
   topRight: ReactNode[];
   bottomLeft: ReactNode[];
@@ -47,6 +49,7 @@ interface UserInputSlots {
 
 interface UserInputRootProps {
   isExecuting: boolean;
+  hasAdditionalInput: boolean;
   placeholder: string;
   rows: number;
   maxHeight: string;
@@ -62,6 +65,7 @@ interface UserInputRootProps {
 
 function UserInputRoot({
   isExecuting,
+  hasAdditionalInput,
   placeholder,
   rows,
   maxHeight,
@@ -74,9 +78,9 @@ function UserInputRoot({
   onStop,
   textareaRef,
 }: UserInputRootProps) {
-  const { topLeft, topRight, bottomLeft, help, sender } = slots;
+  const { context, topLeft, topRight, bottomLeft, help, sender } = slots;
   const canStop = isExecuting && Boolean(onStop);
-  const isDisabled = isExecuting ? !canStop : !input.trim();
+  const isDisabled = isExecuting ? !canStop : !input.trim() && !hasAdditionalInput;
   const handleClick = () => {
     if (canStop) {
       onStop?.();
@@ -106,6 +110,7 @@ function UserInputRoot({
         {suggestions}
 
         <div className="pointer-events-auto relative px-2 pt-2 pb-11 rounded-xl border bg-background shadow-sm">
+          {context.length > 0 ? <div className="mb-2">{context}</div> : null}
           <Textarea
             ref={textareaRef}
             value={input}
@@ -146,6 +151,7 @@ function UserInputRoot({
 
 function getUserInputSlots(children?: ReactNode): UserInputSlots {
   const slots: UserInputSlots = {
+    context: [],
     topLeft: [],
     topRight: [],
     bottomLeft: [],
@@ -165,6 +171,9 @@ function getUserInputSlots(children?: ReactNode): UserInputSlots {
 
     const element = child as { type: { displayName?: string } };
     switch (element.type?.displayName) {
+      case "UserInput.Context":
+        slots.context.push(child);
+        break;
       case "UserInput.TopLeft":
         slots.topLeft.push(child);
         break;
@@ -245,6 +254,7 @@ export interface UserInputRef {
 
 function UserInputContainer({
   isExecuting = false,
+  hasAdditionalInput = false,
   onExecute,
   onStop,
   placeholder = "Type your message...",
@@ -357,7 +367,7 @@ function UserInputContainer({
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && (event.ctrlKey || event.shiftKey)) {
       event.preventDefault();
-      if (input && input.trim()) {
+      if (input.trim() || hasAdditionalInput) {
         handleSend();
       }
     }
@@ -366,6 +376,7 @@ function UserInputContainer({
   return (
     <UserInputRoot
       isExecuting={isExecuting}
+      hasAdditionalInput={hasAdditionalInput}
       placeholder={placeholder}
       rows={rows}
       maxHeight={maxHeight}
@@ -380,6 +391,15 @@ function UserInputContainer({
     />
   );
 }
+
+interface ContextProps {
+  children: ReactNode;
+}
+
+function Context({ children }: ContextProps) {
+  return <>{children}</>;
+}
+Context.displayName = "UserInput.Context";
 
 // TopLeftSlots component
 interface TopLeftProps {
@@ -443,6 +463,7 @@ const UserInputWithRef = forwardRef<UserInputRef, UserInputProps>((props, ref) =
 UserInputWithRef.displayName = "UserInput";
 
 export const UserInput = Object.assign(UserInputWithRef, {
+  Context,
   TopLeft: TopLeft,
   TopRight: TopRight,
   BottomLeft: BottomLeft,
