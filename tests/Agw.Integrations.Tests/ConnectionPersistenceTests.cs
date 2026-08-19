@@ -2,11 +2,9 @@ using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
-
 using IntegrationConnection = Agw.Shared.Data.Entities.Integrations.Connection;
 
 namespace Agw.Integrations.Tests;
@@ -26,8 +24,18 @@ public class ConnectionPersistenceTests
         AssertEntity(dbContext.Model, typeof(PluginInstallationCredential), "plugin_installation_credential", ["Id"]);
         AssertEntity(dbContext.Model, typeof(IntegrationConnection), "integration_connection", ["Id"]);
         AssertEntity(dbContext.Model, typeof(ConnectionCredential), "integration_connection_credential", ["Id"]);
-        AssertEntity(dbContext.Model, typeof(AgentConnectionRelation), "agent_connection_relation", ["AgentId", "ConnectionId"]);
-        AssertEntity(dbContext.Model, typeof(ProjectConnectionRelation), "project_connection_relation", ["ProjectId", "ConnectionId"]);
+        AssertEntity(
+            dbContext.Model,
+            typeof(AgentConnectionRelation),
+            "agent_connection_relation",
+            ["AgentId", "ConnectionId"]
+        );
+        AssertEntity(
+            dbContext.Model,
+            typeof(ProjectConnectionRelation),
+            "project_connection_relation",
+            ["ProjectId", "ConnectionId"]
+        );
 
         AssertUniqueIndex(dbContext.Model, typeof(PluginInstallation), ["PluginId"]);
         AssertUniqueIndex(dbContext.Model, typeof(IntegrationConnection), ["Alias"]);
@@ -56,17 +64,17 @@ public class ConnectionPersistenceTests
     [Fact]
     public async Task PluginInstallation_WhenPluginIdDuplicated_RejectsInsert()
     {
-        await AssertUniqueConstraintAsync(context => context.PluginInstallations.AddRange(
-            CreatePluginInstallation("github"),
-            CreatePluginInstallation("github")));
+        await AssertUniqueConstraintAsync(context =>
+            context.PluginInstallations.AddRange(CreatePluginInstallation("github"), CreatePluginInstallation("github"))
+        );
     }
 
     [Fact]
     public async Task Connection_WhenAliasDuplicated_RejectsInsert()
     {
-        await AssertUniqueConstraintAsync(context => context.Connections.AddRange(
-            CreateConnection("work"),
-            CreateConnection("work")));
+        await AssertUniqueConstraintAsync(context =>
+            context.Connections.AddRange(CreateConnection("work"), CreateConnection("work"))
+        );
     }
 
     [Fact]
@@ -79,7 +87,8 @@ public class ConnectionPersistenceTests
             context.PluginInstallations.Add(installation);
             context.PluginInstallationCredentials.AddRange(
                 CreatePluginInstallationCredential(installation.Id, "client-secret"),
-                CreatePluginInstallationCredential(installation.Id, "client-secret"));
+                CreatePluginInstallationCredential(installation.Id, "client-secret")
+            );
         });
     }
 
@@ -93,7 +102,8 @@ public class ConnectionPersistenceTests
             context.Connections.Add(integrationConnection);
             context.ConnectionCredentials.AddRange(
                 CreateConnectionCredential(integrationConnection.Id, "access-token"),
-                CreateConnectionCredential(integrationConnection.Id, "access-token"));
+                CreateConnectionCredential(integrationConnection.Id, "access-token")
+            );
         });
     }
 
@@ -115,16 +125,12 @@ public class ConnectionPersistenceTests
             seedContext.Projects.Add(project);
             seedContext.Connections.Add(integrationConnection);
             seedContext.ConnectionCredentials.Add(CreateConnectionCredential(integrationConnection.Id, "access-token"));
-            seedContext.AgentConnectionRelations.Add(new AgentConnectionRelation
-            {
-                AgentId = agent.Id,
-                ConnectionId = integrationConnection.Id
-            });
-            seedContext.ProjectConnectionRelations.Add(new ProjectConnectionRelation
-            {
-                ProjectId = project.Id,
-                ConnectionId = integrationConnection.Id
-            });
+            seedContext.AgentConnectionRelations.Add(
+                new AgentConnectionRelation { AgentId = agent.Id, ConnectionId = integrationConnection.Id }
+            );
+            seedContext.ProjectConnectionRelations.Add(
+                new ProjectConnectionRelation { ProjectId = project.Id, ConnectionId = integrationConnection.Id }
+            );
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -155,7 +161,8 @@ public class ConnectionPersistenceTests
         {
             seedContext.PluginInstallations.Add(installation);
             seedContext.PluginInstallationCredentials.Add(
-                CreatePluginInstallationCredential(installation.Id, "client-secret"));
+                CreatePluginInstallationCredential(installation.Id, "client-secret")
+            );
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -187,16 +194,12 @@ public class ConnectionPersistenceTests
             seedContext.Agents.Add(agent);
             seedContext.Projects.Add(project);
             seedContext.Connections.Add(integrationConnection);
-            seedContext.AgentConnectionRelations.Add(new AgentConnectionRelation
-            {
-                AgentId = agent.Id,
-                ConnectionId = integrationConnection.Id
-            });
-            seedContext.ProjectConnectionRelations.Add(new ProjectConnectionRelation
-            {
-                ProjectId = project.Id,
-                ConnectionId = integrationConnection.Id
-            });
+            seedContext.AgentConnectionRelations.Add(
+                new AgentConnectionRelation { AgentId = agent.Id, ConnectionId = integrationConnection.Id }
+            );
+            seedContext.ProjectConnectionRelations.Add(
+                new ProjectConnectionRelation { ProjectId = project.Id, ConnectionId = integrationConnection.Id }
+            );
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -228,84 +231,88 @@ public class ConnectionPersistenceTests
     }
 
     private static DbContextOptions<AgwDbContext> CreateOptions(SqliteConnection connection) =>
-        new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(connection)
-            .UseSnakeCaseNamingConvention()
-            .Options;
+        new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).UseSnakeCaseNamingConvention().Options;
 
     private static async Task EnsureCreatedAsync(
         DbContextOptions<AgwDbContext> options,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await using var setupContext = new AgwDbContext(options);
         await setupContext.Database.EnsureCreatedAsync(cancellationToken);
     }
 
-    private static PluginInstallation CreatePluginInstallation(string pluginId) => new()
-    {
-        Id = Guid.CreateVersion7(),
-        PluginId = pluginId,
-        Enabled = true,
-        ConfigurationJson = "{}",
-        CreateBy = "tester",
-        CreateTime = TimeProvider.System.GetUtcNow()
-    };
+    private static PluginInstallation CreatePluginInstallation(string pluginId) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            PluginId = pluginId,
+            Enabled = true,
+            ConfigurationJson = "{}",
+            CreateBy = "tester",
+            CreateTime = TimeProvider.System.GetUtcNow(),
+        };
 
-    private static PluginInstallationCredential CreatePluginInstallationCredential(Guid ownerId, string slot) => new()
-    {
-        Id = Guid.CreateVersion7(),
-        PluginInstallationId = ownerId,
-        Slot = slot,
-        Value = "protected-payload",
-        CreateBy = "tester",
-        CreateTime = TimeProvider.System.GetUtcNow()
-    };
+    private static PluginInstallationCredential CreatePluginInstallationCredential(Guid ownerId, string slot) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            PluginInstallationId = ownerId,
+            Slot = slot,
+            Value = "protected-payload",
+            CreateBy = "tester",
+            CreateTime = TimeProvider.System.GetUtcNow(),
+        };
 
-    private static IntegrationConnection CreateConnection(string alias) => new()
-    {
-        Id = Guid.CreateVersion7(),
-        PluginId = "github",
-        ConnectorId = "github-cloud",
-        AuthSchemeId = "oauth2",
-        DisplayName = alias,
-        Alias = alias,
-        ConfigurationJson = "{}",
-        Enabled = true,
-        Status = ConnectionStatus.Ready,
-        CreateBy = "tester",
-        CreateTime = TimeProvider.System.GetUtcNow()
-    };
+    private static IntegrationConnection CreateConnection(string alias) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            PluginId = "github",
+            ConnectorId = "github-cloud",
+            AuthSchemeId = "oauth2",
+            DisplayName = alias,
+            Alias = alias,
+            ConfigurationJson = "{}",
+            Enabled = true,
+            Status = ConnectionStatus.Ready,
+            CreateBy = "tester",
+            CreateTime = TimeProvider.System.GetUtcNow(),
+        };
 
-    private static ConnectionCredential CreateConnectionCredential(Guid connectionId, string slot) => new()
-    {
-        Id = Guid.CreateVersion7(),
-        ConnectionId = connectionId,
-        Slot = slot,
-        Value = "protected-payload",
-        ExpiresAtUtc = TimeProvider.System.GetUtcNow().AddHours(1),
-        CreateBy = "tester",
-        CreateTime = TimeProvider.System.GetUtcNow()
-    };
+    private static ConnectionCredential CreateConnectionCredential(Guid connectionId, string slot) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            ConnectionId = connectionId,
+            Slot = slot,
+            Value = "protected-payload",
+            ExpiresAtUtc = TimeProvider.System.GetUtcNow().AddHours(1),
+            CreateBy = "tester",
+            CreateTime = TimeProvider.System.GetUtcNow(),
+        };
 
-    private static Agent CreateAgent() => new()
-    {
-        Id = Guid.CreateVersion7(),
-        Name = $"agent-{Guid.CreateVersion7():N}",
-        DisplayName = "Agent",
-        Description = "Test agent",
-        SystemPrompt = "Test prompt",
-        Type = AgentType.System,
-        CreateBy = "tester",
-        CreateTime = TimeProvider.System.GetUtcNow()
-    };
+    private static Agent CreateAgent() =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            Name = $"agent-{Guid.CreateVersion7():N}",
+            DisplayName = "Agent",
+            Description = "Test agent",
+            SystemPrompt = "Test prompt",
+            Type = AgentType.System,
+            CreateBy = "tester",
+            CreateTime = TimeProvider.System.GetUtcNow(),
+        };
 
-    private static Project CreateProject() => new()
-    {
-        Id = Guid.CreateVersion7(),
-        Name = $"project-{Guid.CreateVersion7():N}",
-        CreateBy = "tester",
-        CreateTime = TimeProvider.System.GetUtcNow()
-    };
+    private static Project CreateProject() =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            Name = $"project-{Guid.CreateVersion7():N}",
+            CreateBy = "tester",
+            CreateTime = TimeProvider.System.GetUtcNow(),
+        };
 
     private static void AssertEntity(IModel model, Type clrType, string tableName, string[] primaryKey)
     {
@@ -321,8 +328,8 @@ public class ConnectionPersistenceTests
         Assert.NotNull(entity);
         Assert.Contains(
             entity.GetIndexes(),
-            index => index.IsUnique
-                && index.Properties.Select(property => property.Name).SequenceEqual(properties));
+            index => index.IsUnique && index.Properties.Select(property => property.Name).SequenceEqual(properties)
+        );
     }
 
     private static void AssertIndex(IModel model, Type clrType, string[] properties)
@@ -331,7 +338,8 @@ public class ConnectionPersistenceTests
         Assert.NotNull(entity);
         Assert.Contains(
             entity.GetIndexes(),
-            index => index.Properties.Select(property => property.Name).SequenceEqual(properties));
+            index => index.Properties.Select(property => property.Name).SequenceEqual(properties)
+        );
     }
 
     private static void AssertCascadeRelations(IModel model, Type clrType)
@@ -339,6 +347,9 @@ public class ConnectionPersistenceTests
         var entity = model.FindEntityType(clrType);
         Assert.NotNull(entity);
         Assert.NotEmpty(entity.GetForeignKeys());
-        Assert.All(entity.GetForeignKeys(), foreignKey => Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior));
+        Assert.All(
+            entity.GetForeignKeys(),
+            foreignKey => Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior)
+        );
     }
 }

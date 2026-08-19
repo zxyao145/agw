@@ -1,11 +1,9 @@
 using System.Collections.Concurrent;
-
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Agents.Execution.Connections;
 using Agw.Shared.Exceptions;
-
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -25,7 +23,8 @@ public sealed class ExecutionConnectionRegistry : IAsyncDisposable
         IServiceScopeFactory scopeFactory,
         IHubContext<ExecutionHub, IExecutionHubClient> hubContext,
         IHostApplicationLifetime applicationLifetime,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory
+    )
     {
         _scopeFactory = scopeFactory;
         _hubContext = hubContext;
@@ -42,9 +41,10 @@ public sealed class ExecutionConnectionRegistry : IAsyncDisposable
             connectionId,
             _hubContext,
             () => connection?.IsAttached == true,
-            logger);
-        var context = scope.ServiceProvider
-            .GetRequiredService<ExecutionConnectionContextFactory>()
+            logger
+        );
+        var context = scope
+            .ServiceProvider.GetRequiredService<ExecutionConnectionContextFactory>()
             .Create(userName, sink, _hostToken);
         connection = new ExecutionConnection(
             connectionId,
@@ -52,7 +52,8 @@ public sealed class ExecutionConnectionRegistry : IAsyncDisposable
             scope,
             scope.ServiceProvider.GetRequiredService<ExecutionCommandDispatcher>(),
             context,
-            logger);
+            logger
+        );
         if (!_connections.TryAdd(connectionId, connection))
         {
             _ = connection.DisposeAsync();
@@ -63,10 +64,13 @@ public sealed class ExecutionConnectionRegistry : IAsyncDisposable
         string connectionId,
         string userName,
         AgentRunCommand command,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        if (!_connections.TryGetValue(connectionId, out var connection)
-            || !string.Equals(connection.UserName, userName, StringComparison.Ordinal))
+        if (
+            !_connections.TryGetValue(connectionId, out var connection)
+            || !string.Equals(connection.UserName, userName, StringComparison.Ordinal)
+        )
         {
             throw new AgwException(ErrorCodes.InvalidParam, "Execution connection is not available.");
         }
@@ -78,10 +82,13 @@ public sealed class ExecutionConnectionRegistry : IAsyncDisposable
         string connectionId,
         string userName,
         Guid agentflowId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        if (!_connections.TryGetValue(connectionId, out var connection)
-            || !string.Equals(connection.UserName, userName, StringComparison.Ordinal))
+        if (
+            !_connections.TryGetValue(connectionId, out var connection)
+            || !string.Equals(connection.UserName, userName, StringComparison.Ordinal)
+        )
         {
             throw new AgwException(ErrorCodes.InvalidParam, "Execution connection is not available.");
         }

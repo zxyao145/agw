@@ -5,9 +5,7 @@ using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
 using Agw.Skills.Application;
 using Agw.Skills.Contracts.Manager;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Skills.Controllers;
@@ -36,16 +34,19 @@ public class SkillsController : ControllerBase
     public async Task<IActionResult> ListPagedAsync(
         [FromQuery] int pageIndex = 1,
         [FromQuery] int pageSize = 20,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var page = await _skillAppService.ListPageAsync(pageIndex, pageSize, cancellationToken);
-        return ApiResult.Ok(new PagedResult<SkillResponse>
-        {
-            Items = page.Items.Select(Map).ToList(),
-            Total = page.Total,
-            PageIndex = page.PageIndex,
-            PageSize = page.PageSize,
-        });
+        return ApiResult.Ok(
+            new PagedResult<SkillResponse>
+            {
+                Items = page.Items.Select(Map).ToList(),
+                Total = page.Total,
+                PageIndex = page.PageIndex,
+                PageSize = page.PageSize,
+            }
+        );
     }
 
     [HttpGet("{id:guid}")]
@@ -62,7 +63,8 @@ public class SkillsController : ControllerBase
     [ProducesApiResult(typeof(SkillResponse))]
     public async Task<IActionResult> CreateAsync(
         [FromForm] SkillCreateRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         try
         {
@@ -79,7 +81,8 @@ public class SkillsController : ControllerBase
                 request.Archive,
                 user,
                 request.RemoteUrl,
-                cancellationToken);
+                cancellationToken
+            );
             return ApiResult.Ok(Map(created));
         }
         catch (AgwException ex)
@@ -95,7 +98,8 @@ public class SkillsController : ControllerBase
     public async Task<IActionResult> UpdateAsync(
         Guid id,
         [FromForm] SkillUpdateRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         try
         {
@@ -107,7 +111,8 @@ public class SkillsController : ControllerBase
                 request.Archive,
                 user,
                 request.RemoteUrl,
-                cancellationToken);
+                cancellationToken
+            );
             return updated == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(Map(updated));
         }
         catch (AgwException ex)
@@ -118,9 +123,7 @@ public class SkillsController : ControllerBase
 
     [HttpDelete("{id:guid}")]
     [ProducesApiResult]
-    public async Task<IActionResult> DeleteAsync(
-        Guid id,
-        CancellationToken cancellationToken)
+    public async Task<IActionResult> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
         var deleted = await _skillAppService.DeleteAsync(id, cancellationToken);
         return deleted ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
@@ -141,6 +144,7 @@ public class SkillsController : ControllerBase
             skill.CreateTime,
             skill.CreateBy,
             skill.UpdateTime,
-            skill.UpdateBy);
+            skill.UpdateBy
+        );
     }
 }

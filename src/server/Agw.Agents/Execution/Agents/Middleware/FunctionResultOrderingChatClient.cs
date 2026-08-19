@@ -9,21 +9,19 @@ namespace Agw.Agents.Execution.Agents.Middleware;
 internal sealed class FunctionResultOrderingChatClient : DelegatingChatClient
 {
     public FunctionResultOrderingChatClient(IChatClient innerClient)
-        : base(innerClient)
-    {
-    }
+        : base(innerClient) { }
 
     public override Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,
-        CancellationToken cancellationToken = default) =>
-        base.GetResponseAsync(OrderMessages(messages), options, cancellationToken);
+        CancellationToken cancellationToken = default
+    ) => base.GetResponseAsync(OrderMessages(messages), options, cancellationToken);
 
     public override IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,
-        CancellationToken cancellationToken = default) =>
-        base.GetStreamingResponseAsync(OrderMessages(messages), options, cancellationToken);
+        CancellationToken cancellationToken = default
+    ) => base.GetStreamingResponseAsync(OrderMessages(messages), options, cancellationToken);
 
     private static IEnumerable<ChatMessage> OrderMessages(IEnumerable<ChatMessage> messages)
     {
@@ -44,15 +42,13 @@ internal sealed class FunctionResultOrderingChatClient : DelegatingChatClient
         }
 
         var functionResultStart = lastFunctionResultIndex;
-        while (functionResultStart > 0 &&
-               IsFunctionResultMessage(messageList[functionResultStart - 1]))
+        while (functionResultStart > 0 && IsFunctionResultMessage(messageList[functionResultStart - 1]))
         {
             functionResultStart--;
         }
 
         var functionResultEnd = lastFunctionResultIndex + 1;
-        while (functionResultEnd < messageList.Count &&
-               IsFunctionResultMessage(messageList[functionResultEnd]))
+        while (functionResultEnd < messageList.Count && IsFunctionResultMessage(messageList[functionResultEnd]))
         {
             functionResultEnd++;
         }
@@ -73,8 +69,8 @@ internal sealed class FunctionResultOrderingChatClient : DelegatingChatClient
                 continue;
             }
 
-            var candidateCallIds = messageList[index].Contents
-                .OfType<FunctionCallContent>()
+            var candidateCallIds = messageList[index]
+                .Contents.OfType<FunctionCallContent>()
                 .Select(content => content.CallId)
                 .ToHashSet(StringComparer.Ordinal);
             if (resultCallIds.IsSubsetOf(candidateCallIds))
@@ -89,8 +85,10 @@ internal sealed class FunctionResultOrderingChatClient : DelegatingChatClient
         if (functionCallIndex >= 0 && functionCallIds != null)
         {
             insertionIndex = functionCallIndex + 1;
-            while (insertionIndex < functionResultStart &&
-                   IsFunctionResultMessageForCalls(messageList[insertionIndex], functionCallIds))
+            while (
+                insertionIndex < functionResultStart
+                && IsFunctionResultMessageForCalls(messageList[insertionIndex], functionCallIds)
+            )
             {
                 insertionIndex++;
             }
@@ -103,8 +101,9 @@ internal sealed class FunctionResultOrderingChatClient : DelegatingChatClient
 
         for (var index = insertionIndex; index < functionResultStart; index++)
         {
-            if (messageList[index].GetAgentRequestMessageSourceType() !=
-                AgentRequestMessageSourceType.AIContextProvider)
+            if (
+                messageList[index].GetAgentRequestMessageSourceType() != AgentRequestMessageSourceType.AIContextProvider
+            )
             {
                 return messageList;
             }
@@ -113,21 +112,16 @@ internal sealed class FunctionResultOrderingChatClient : DelegatingChatClient
         // Per-service persistence prepends the matching function call, while context providers can
         // leave their messages before the in-flight result. Move only that final result group.
         var reordered = messageList.ToList();
-        var functionResults = reordered.GetRange(
-            functionResultStart,
-            functionResultEnd - functionResultStart);
+        var functionResults = reordered.GetRange(functionResultStart, functionResultEnd - functionResultStart);
         reordered.RemoveRange(functionResultStart, functionResults.Count);
         reordered.InsertRange(insertionIndex, functionResults);
         return reordered;
     }
 
     private static bool IsFunctionResultMessage(ChatMessage message) =>
-        message.Role == ChatRole.Tool &&
-        message.Contents.OfType<FunctionResultContent>().Any();
+        message.Role == ChatRole.Tool && message.Contents.OfType<FunctionResultContent>().Any();
 
-    private static bool IsFunctionResultMessageForCalls(
-        ChatMessage message,
-        IReadOnlySet<string> functionCallIds)
+    private static bool IsFunctionResultMessageForCalls(ChatMessage message, IReadOnlySet<string> functionCallIds)
     {
         if (message.Role != ChatRole.Tool)
         {
@@ -135,7 +129,6 @@ internal sealed class FunctionResultOrderingChatClient : DelegatingChatClient
         }
 
         var functionResults = message.Contents.OfType<FunctionResultContent>().ToList();
-        return functionResults.Count > 0 &&
-               functionResults.All(result => functionCallIds.Contains(result.CallId));
+        return functionResults.Count > 0 && functionResults.All(result => functionCallIds.Contains(result.CallId));
     }
 }

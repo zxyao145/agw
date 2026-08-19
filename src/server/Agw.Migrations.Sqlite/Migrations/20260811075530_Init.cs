@@ -23,12 +23,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     output_token_count = table.Column<long>(type: "INTEGER", nullable: false),
                     total_token_count = table.Column<long>(type: "INTEGER", nullable: false),
                     cached_input_token_count = table.Column<long>(type: "INTEGER", nullable: false),
-                    reasoning_token_count = table.Column<long>(type: "INTEGER", nullable: false)
+                    reasoning_token_count = table.Column<long>(type: "INTEGER", nullable: false),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_agent_usage", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "agentflow",
@@ -42,12 +43,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_agentflow", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "agentflow_trace",
@@ -67,12 +69,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     input = table.Column<string>(type: "text", nullable: false),
                     duration_milliseconds = table.Column<long>(type: "INTEGER", nullable: false),
                     status = table.Column<int>(type: "INTEGER", nullable: false),
-                    error = table.Column<string>(type: "text", nullable: true)
+                    error = table.Column<string>(type: "text", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_agentflow_trace", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "durable_execution",
@@ -92,12 +95,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_durable_execution", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "execution_stream_entry",
@@ -111,12 +115,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_execution_stream_entry", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "integration_connection",
@@ -138,13 +143,14 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_integration_connection", x => x.id);
                 },
-                comment: "Represents an external account or service endpoint available to agents.");
+                comment: "Represents an external account or service endpoint available to agents."
+            );
 
             migrationBuilder.CreateTable(
                 name: "job",
@@ -168,12 +174,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_job", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "job_log",
@@ -190,12 +197,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_job_log", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "mcp_server",
@@ -215,12 +223,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_mcp_server", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "model",
@@ -233,12 +242,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_model", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "plugin_installation",
@@ -251,13 +261,14 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_plugin_installation", x => x.id);
                 },
-                comment: "Stores platform-wide plugin installation configuration.");
+                comment: "Stores platform-wide plugin installation configuration."
+            );
 
             migrationBuilder.CreateTable(
                 name: "project",
@@ -274,12 +285,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_project", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "project_memory",
@@ -289,12 +301,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     project_id = table.Column<Guid>(type: "TEXT", nullable: false),
                     path = table.Column<string>(type: "TEXT", maxLength: 1024, nullable: false),
                     content = table.Column<string>(type: "TEXT", nullable: false),
-                    updated_at = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
+                    updated_at = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_project_memory", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "provider",
@@ -308,12 +321,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_provider", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "skill",
@@ -328,12 +342,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_skill", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "agentflow_node",
@@ -350,12 +365,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_agentflow_node", x => new { x.agentflow_id, x.node_id });
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "integration_connection_credential",
@@ -371,13 +387,14 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_integration_connection_credential", x => x.id);
                 },
-                comment: "Stores protected credentials owned by an integration connection.");
+                comment: "Stores protected credentials owned by an integration connection."
+            );
 
             migrationBuilder.CreateTable(
                 name: "plugin_installation_credential",
@@ -391,26 +408,28 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_plugin_installation_credential", x => x.id);
                 },
-                comment: "Stores protected credentials owned by a plugin installation.");
+                comment: "Stores protected credentials owned by a plugin installation."
+            );
 
             migrationBuilder.CreateTable(
                 name: "project_connection_relation",
                 columns: table => new
                 {
                     project_id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    connection_id = table.Column<Guid>(type: "TEXT", nullable: false)
+                    connection_id = table.Column<Guid>(type: "TEXT", nullable: false),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_project_connection_relation", x => new { x.project_id, x.connection_id });
                 },
-                comment: "Binds a project to an integration connection.");
+                comment: "Binds a project to an integration connection."
+            );
 
             migrationBuilder.CreateTable(
                 name: "project_conversation",
@@ -420,28 +439,35 @@ namespace Agw.Migrations.Sqlite.Migrations
                     project_id = table.Column<Guid>(type: "TEXT", nullable: false),
                     job_id = table.Column<Guid>(type: "TEXT", nullable: true),
                     context_id = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
-                    title = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false, defaultValue: "Untitled"),
+                    title = table.Column<string>(
+                        type: "TEXT",
+                        maxLength: 200,
+                        nullable: false,
+                        defaultValue: "Untitled"
+                    ),
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_project_conversation", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "project_mcp_server_relation",
                 columns: table => new
                 {
                     project_id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    mcp_tool_server_id = table.Column<Guid>(type: "TEXT", nullable: false)
+                    mcp_tool_server_id = table.Column<Guid>(type: "TEXT", nullable: false),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_project_mcp_server_relation", x => new { x.project_id, x.mcp_tool_server_id });
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "model_provider_relation",
@@ -458,12 +484,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_model_provider_relation", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "provider_auth_config",
@@ -478,24 +505,26 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_provider_auth_config", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "project_skill_relation",
                 columns: table => new
                 {
                     project_id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    skill_id = table.Column<Guid>(type: "TEXT", nullable: false)
+                    skill_id = table.Column<Guid>(type: "TEXT", nullable: false),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_project_skill_relation", x => new { x.project_id, x.skill_id });
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "remote_skill_cache",
@@ -504,12 +533,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     skill_id = table.Column<Guid>(type: "TEXT", nullable: false),
                     source_url = table.Column<string>(type: "TEXT", maxLength: 2048, nullable: false),
                     content_json = table.Column<string>(type: "TEXT", nullable: false),
-                    fetched_at = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
+                    fetched_at = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_remote_skill_cache", x => x.skill_id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "agentflow_edge",
@@ -526,12 +556,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_agentflow_edge", x => new { x.agentflow_id, x.edge_id });
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "project_conversation_chat_history",
@@ -550,12 +581,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     metadata = table.Column<string>(type: "TEXT", nullable: true),
                     error = table.Column<string>(type: "text", nullable: true),
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
-                    update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true)
+                    update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_project_conversation_chat_history", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "task_session_binding",
@@ -569,12 +601,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_task_session_binding", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "agent",
@@ -595,37 +628,40 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_agent", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "agent_connection_relation",
                 columns: table => new
                 {
                     agent_id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    connection_id = table.Column<Guid>(type: "TEXT", nullable: false)
+                    connection_id = table.Column<Guid>(type: "TEXT", nullable: false),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_agent_connection_relation", x => new { x.agent_id, x.connection_id });
                 },
-                comment: "Binds an agent to an integration connection.");
+                comment: "Binds an agent to an integration connection."
+            );
 
             migrationBuilder.CreateTable(
                 name: "agent_mcp_server_relation",
                 columns: table => new
                 {
                     agent_id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    mcp_tool_server_id = table.Column<Guid>(type: "TEXT", nullable: false)
+                    mcp_tool_server_id = table.Column<Guid>(type: "TEXT", nullable: false),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_agent_mcp_server_relation", x => new { x.agent_id, x.mcp_tool_server_id });
-                });
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "agent_session_state",
@@ -635,385 +671,383 @@ namespace Agw.Migrations.Sqlite.Migrations
                     agent_id = table.Column<Guid>(type: "TEXT", nullable: false),
                     agentflow_node_id = table.Column<string>(type: "TEXT", maxLength: 512, nullable: false),
                     serialized_session = table.Column<string>(type: "TEXT", nullable: false),
-                    updated_at = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
+                    updated_at = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("pk_agent_session_state", x => new { x.project_conversation_id, x.agent_id, x.agentflow_node_id });
-                });
+                    table.PrimaryKey(
+                        "pk_agent_session_state",
+                        x => new
+                        {
+                            x.project_conversation_id,
+                            x.agent_id,
+                            x.agentflow_node_id,
+                        }
+                    );
+                }
+            );
 
             migrationBuilder.CreateTable(
                 name: "agent_skill_relation",
                 columns: table => new
                 {
                     agent_id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    skill_id = table.Column<Guid>(type: "TEXT", nullable: false)
+                    skill_id = table.Column<Guid>(type: "TEXT", nullable: false),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_agent_skill_relation", x => new { x.agent_id, x.skill_id });
-                });
+                }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_agent_model_provider_id",
                 table: "agent",
-                column: "model_provider_id");
+                column: "model_provider_id"
+            );
 
-            migrationBuilder.CreateIndex(
-                name: "ix_agent_name",
-                table: "agent",
-                column: "name",
-                unique: true);
+            migrationBuilder.CreateIndex(name: "ix_agent_name", table: "agent", column: "name", unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "ix_agent_connection_relation_connection_id",
                 table: "agent_connection_relation",
-                column: "connection_id");
+                column: "connection_id"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_agent_mcp_server_relation_mcp_tool_server_id",
                 table: "agent_mcp_server_relation",
-                column: "mcp_tool_server_id");
+                column: "mcp_tool_server_id"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_agent_session_state_agent_id",
                 table: "agent_session_state",
-                column: "agent_id");
+                column: "agent_id"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_agent_session_state_updated_at",
                 table: "agent_session_state",
-                column: "updated_at");
+                column: "updated_at"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_agent_skill_relation_skill_id",
                 table: "agent_skill_relation",
-                column: "skill_id");
+                column: "skill_id"
+            );
 
-            migrationBuilder.CreateIndex(
-                name: "ix_agent_usage_agent_name",
-                table: "agent_usage",
-                column: "agent_name");
+            migrationBuilder.CreateIndex(name: "ix_agent_usage_agent_name", table: "agent_usage", column: "agent_name");
 
             migrationBuilder.CreateIndex(
                 name: "ix_agent_usage_project_id_context_id",
                 table: "agent_usage",
-                columns: new[] { "project_id", "context_id" });
+                columns: new[] { "project_id", "context_id" }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_agent_usage_recorded_at",
                 table: "agent_usage",
-                column: "recorded_at");
+                column: "recorded_at"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_agentflow_edge_agentflow_id_source_node_id",
                 table: "agentflow_edge",
-                columns: new[] { "agentflow_id", "source_node_id" });
+                columns: new[] { "agentflow_id", "source_node_id" }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_agentflow_edge_agentflow_id_target_node_id",
                 table: "agentflow_edge",
-                columns: new[] { "agentflow_id", "target_node_id" });
+                columns: new[] { "agentflow_id", "target_node_id" }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_agentflow_node_agentflow_id_kind_relate_id",
                 table: "agentflow_node",
-                columns: new[] { "agentflow_id", "kind", "relate_id" });
+                columns: new[] { "agentflow_id", "kind", "relate_id" }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_agentflow_trace_agentflow_id_node_id_start_time_utc",
                 table: "agentflow_trace",
-                columns: new[] { "agentflow_id", "node_id", "start_time_utc" });
+                columns: new[] { "agentflow_id", "node_id", "start_time_utc" }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_agentflow_trace_project_id_context_id_task_id_start_time_utc",
                 table: "agentflow_trace",
-                columns: new[] { "project_id", "context_id", "task_id", "start_time_utc" });
+                columns: new[] { "project_id", "context_id", "task_id", "start_time_utc" }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_durable_execution_status_state_changed_at",
                 table: "durable_execution",
-                columns: new[] { "status", "state_changed_at" });
+                columns: new[] { "status", "state_changed_at" }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_execution_stream_entry_execution_id_segment_index_sequence",
                 table: "execution_stream_entry",
                 columns: new[] { "execution_id", "segment_index", "sequence" },
-                unique: true);
+                unique: true
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_integration_connection_alias",
                 table: "integration_connection",
                 column: "alias",
-                unique: true);
+                unique: true
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_integration_connection_plugin_id",
                 table: "integration_connection",
-                column: "plugin_id");
+                column: "plugin_id"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_integration_connection_status",
                 table: "integration_connection",
-                column: "status");
+                column: "status"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_integration_connection_credential_connection_id_slot",
                 table: "integration_connection_credential",
                 columns: new[] { "connection_id", "slot" },
-                unique: true);
+                unique: true
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_integration_connection_credential_expires_at_utc",
                 table: "integration_connection_credential",
-                column: "expires_at_utc");
+                column: "expires_at_utc"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_task_next_run_time",
                 table: "job",
-                columns: new[] { "is_enabled", "status", "next_run_time" });
+                columns: new[] { "is_enabled", "status", "next_run_time" }
+            );
 
-            migrationBuilder.CreateIndex(
-                name: "ix_task_project",
-                table: "job",
-                column: "project_id");
+            migrationBuilder.CreateIndex(name: "ix_task_project", table: "job", column: "project_id");
 
             migrationBuilder.CreateIndex(
                 name: "ix_job_log_job_id_start_time",
                 table: "job_log",
-                columns: new[] { "job_id", "start_time" });
+                columns: new[] { "job_id", "start_time" }
+            );
 
-            migrationBuilder.CreateIndex(
-                name: "ix_model_name",
-                table: "model",
-                column: "name",
-                unique: true);
+            migrationBuilder.CreateIndex(name: "ix_model_name", table: "model", column: "name", unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "ix_model_provider_relation_model_id",
                 table: "model_provider_relation",
-                column: "model_id");
+                column: "model_id"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_model_provider_relation_provider_id",
                 table: "model_provider_relation",
-                column: "provider_id");
+                column: "provider_id"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_plugin_installation_plugin_id",
                 table: "plugin_installation",
                 column: "plugin_id",
-                unique: true);
+                unique: true
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_plugin_installation_credential_plugin_installation_id_slot",
                 table: "plugin_installation_credential",
                 columns: new[] { "plugin_installation_id", "slot" },
-                unique: true);
+                unique: true
+            );
 
-            migrationBuilder.CreateIndex(
-                name: "ix_project_name",
-                table: "project",
-                column: "name",
-                unique: true);
+            migrationBuilder.CreateIndex(name: "ix_project_name", table: "project", column: "name", unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "ix_project_connection_relation_connection_id",
                 table: "project_connection_relation",
-                column: "connection_id");
+                column: "connection_id"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_project_conversation_job_id",
                 table: "project_conversation",
-                column: "job_id");
+                column: "job_id"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_project_conversation_project_id",
                 table: "project_conversation",
-                column: "project_id");
+                column: "project_id"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_project_conversation_project_id_context_id",
                 table: "project_conversation",
                 columns: new[] { "project_id", "context_id" },
-                unique: true);
+                unique: true
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_project_conversation_update_time",
                 table: "project_conversation",
-                column: "update_time");
+                column: "update_time"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_project_conversation_chat_history_project_conversation_id",
                 table: "project_conversation_chat_history",
-                column: "project_conversation_id");
+                column: "project_conversation_id"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_project_conversation_chat_history_project_conversation_id_conversation_sequence",
                 table: "project_conversation_chat_history",
-                columns: new[] { "project_conversation_id", "conversation_sequence" });
+                columns: new[] { "project_conversation_id", "conversation_sequence" }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_project_conversation_chat_history_task_id_conversation_sequence",
                 table: "project_conversation_chat_history",
-                columns: new[] { "task_id", "conversation_sequence" });
+                columns: new[] { "task_id", "conversation_sequence" }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_project_conversation_chat_history_task_id_create_time",
                 table: "project_conversation_chat_history",
-                columns: new[] { "task_id", "create_time" });
+                columns: new[] { "task_id", "create_time" }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_project_mcp_server_relation_mcp_tool_server_id",
                 table: "project_mcp_server_relation",
-                column: "mcp_tool_server_id");
+                column: "mcp_tool_server_id"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_project_memory_project_id_path",
                 table: "project_memory",
                 columns: new[] { "project_id", "path" },
-                unique: true);
+                unique: true
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_project_memory_updated_at",
                 table: "project_memory",
-                column: "updated_at");
+                column: "updated_at"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_project_skill_relation_skill_id",
                 table: "project_skill_relation",
-                column: "skill_id");
+                column: "skill_id"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_provider_name_provider_type",
                 table: "provider",
                 columns: new[] { "name", "provider_type" },
-                unique: true);
+                unique: true
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_provider_auth_config_provider_id",
                 table: "provider_auth_config",
-                column: "provider_id");
+                column: "provider_id"
+            );
 
-            migrationBuilder.CreateIndex(
-                name: "ix_skill_name",
-                table: "skill",
-                column: "name",
-                unique: true);
+            migrationBuilder.CreateIndex(name: "ix_skill_name", table: "skill", column: "name", unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "ix_task_session_binding_external_agent_name_provider_session_id",
                 table: "task_session_binding",
-                columns: new[] { "external_agent_name", "provider_session_id" });
+                columns: new[] { "external_agent_name", "provider_session_id" }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_task_session_binding_project_conversation_id_agent_id_external_agent_name",
                 table: "task_session_binding",
                 columns: new[] { "project_conversation_id", "agent_id", "external_agent_name" },
-                unique: true);
+                unique: true
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "agent_connection_relation");
+            migrationBuilder.DropTable(name: "agent_connection_relation");
 
-            migrationBuilder.DropTable(
-                name: "agent_mcp_server_relation");
+            migrationBuilder.DropTable(name: "agent_mcp_server_relation");
 
-            migrationBuilder.DropTable(
-                name: "agent_session_state");
+            migrationBuilder.DropTable(name: "agent_session_state");
 
-            migrationBuilder.DropTable(
-                name: "agent_skill_relation");
+            migrationBuilder.DropTable(name: "agent_skill_relation");
 
-            migrationBuilder.DropTable(
-                name: "agent_usage");
+            migrationBuilder.DropTable(name: "agent_usage");
 
-            migrationBuilder.DropTable(
-                name: "agentflow_edge");
+            migrationBuilder.DropTable(name: "agentflow_edge");
 
-            migrationBuilder.DropTable(
-                name: "agentflow_trace");
+            migrationBuilder.DropTable(name: "agentflow_trace");
 
-            migrationBuilder.DropTable(
-                name: "durable_execution");
+            migrationBuilder.DropTable(name: "durable_execution");
 
-            migrationBuilder.DropTable(
-                name: "execution_stream_entry");
+            migrationBuilder.DropTable(name: "execution_stream_entry");
 
-            migrationBuilder.DropTable(
-                name: "integration_connection_credential");
+            migrationBuilder.DropTable(name: "integration_connection_credential");
 
-            migrationBuilder.DropTable(
-                name: "job");
+            migrationBuilder.DropTable(name: "job");
 
-            migrationBuilder.DropTable(
-                name: "job_log");
+            migrationBuilder.DropTable(name: "job_log");
 
-            migrationBuilder.DropTable(
-                name: "plugin_installation_credential");
+            migrationBuilder.DropTable(name: "plugin_installation_credential");
 
-            migrationBuilder.DropTable(
-                name: "project_connection_relation");
+            migrationBuilder.DropTable(name: "project_connection_relation");
 
-            migrationBuilder.DropTable(
-                name: "project_conversation_chat_history");
+            migrationBuilder.DropTable(name: "project_conversation_chat_history");
 
-            migrationBuilder.DropTable(
-                name: "project_mcp_server_relation");
+            migrationBuilder.DropTable(name: "project_mcp_server_relation");
 
-            migrationBuilder.DropTable(
-                name: "project_memory");
+            migrationBuilder.DropTable(name: "project_memory");
 
-            migrationBuilder.DropTable(
-                name: "project_skill_relation");
+            migrationBuilder.DropTable(name: "project_skill_relation");
 
-            migrationBuilder.DropTable(
-                name: "provider_auth_config");
+            migrationBuilder.DropTable(name: "provider_auth_config");
 
-            migrationBuilder.DropTable(
-                name: "remote_skill_cache");
+            migrationBuilder.DropTable(name: "remote_skill_cache");
 
-            migrationBuilder.DropTable(
-                name: "task_session_binding");
+            migrationBuilder.DropTable(name: "task_session_binding");
 
-            migrationBuilder.DropTable(
-                name: "agent");
+            migrationBuilder.DropTable(name: "agent");
 
-            migrationBuilder.DropTable(
-                name: "agentflow_node");
+            migrationBuilder.DropTable(name: "agentflow_node");
 
-            migrationBuilder.DropTable(
-                name: "plugin_installation");
+            migrationBuilder.DropTable(name: "plugin_installation");
 
-            migrationBuilder.DropTable(
-                name: "integration_connection");
+            migrationBuilder.DropTable(name: "integration_connection");
 
-            migrationBuilder.DropTable(
-                name: "mcp_server");
+            migrationBuilder.DropTable(name: "mcp_server");
 
-            migrationBuilder.DropTable(
-                name: "skill");
+            migrationBuilder.DropTable(name: "skill");
 
-            migrationBuilder.DropTable(
-                name: "project_conversation");
+            migrationBuilder.DropTable(name: "project_conversation");
 
-            migrationBuilder.DropTable(
-                name: "model_provider_relation");
+            migrationBuilder.DropTable(name: "model_provider_relation");
 
-            migrationBuilder.DropTable(
-                name: "agentflow");
+            migrationBuilder.DropTable(name: "agentflow");
 
-            migrationBuilder.DropTable(
-                name: "project");
+            migrationBuilder.DropTable(name: "project");
 
-            migrationBuilder.DropTable(
-                name: "model");
+            migrationBuilder.DropTable(name: "model");
 
-            migrationBuilder.DropTable(
-                name: "provider");
+            migrationBuilder.DropTable(name: "provider");
         }
     }
 }

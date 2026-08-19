@@ -4,9 +4,7 @@ using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
-
 using Bens.Results;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Projects.Application;
@@ -22,7 +20,8 @@ public class TaskAppService : ITaskAppService
         IRepository<ProjectConversation> contextRepository,
         IRepository<ProjectConversationChatHistory> recordRepository,
         ProjectResolver projectResolver,
-        TaskExecutionAppService taskExecutionAppService)
+        TaskExecutionAppService taskExecutionAppService
+    )
     {
         _contextRepository = contextRepository;
         _recordRepository = recordRepository;
@@ -38,14 +37,16 @@ public class TaskAppService : ITaskAppService
         string input,
         string user,
         string? contextId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var normalizedInput = input.Trim();
         var request = new TaskCreateRequest(
             JobId: null,
             Input: normalizedInput,
             Title: TaskTitleFactory.Create(normalizedInput),
-            ContextId: contextId);
+            ContextId: contextId
+        );
 
         var result = await _taskExecutionAppService.CreateForExecutionAsync(projectId, taskId, request, user);
         if (result.Value == null)
@@ -59,7 +60,8 @@ public class TaskAppService : ITaskAppService
     public async Task<bool> HasTaskAsync(
         Guid taskId,
         Guid? projectId = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         if (projectId != null)
         {
@@ -68,11 +70,13 @@ public class TaskAppService : ITaskAppService
             {
                 return false;
             }
-            var existInProject = await _recordRepository.Queryable
-                .AnyAsync(
-                r => r.TaskId == taskId && r.ProjectConversation != null && r.ProjectConversation.ProjectId == project.Id,
+            var existInProject = await _recordRepository.Queryable.AnyAsync(
+                r =>
+                    r.TaskId == taskId
+                    && r.ProjectConversation != null
+                    && r.ProjectConversation.ProjectId == project.Id,
                 cancellationToken
-                );
+            );
             return existInProject;
         }
 
@@ -80,20 +84,20 @@ public class TaskAppService : ITaskAppService
         return exist;
     }
 
-
-
     #region ResolveTaskAsync
 
     public async Task<ExecutionTaskResolutionResult> ResolveTaskAsync(
-   ExecutionTaskRequest request,
-   CancellationToken cancellationToken)
+        ExecutionTaskRequest request,
+        CancellationToken cancellationToken
+    )
     {
         var resolvedProjectId = await _projectResolver.ResolveProjectIdAsync(request.ProjectId);
         if (!resolvedProjectId.HasValue)
         {
             return new ExecutionTaskResolutionResult(
                 null,
-                ApiResult.BadRequest("Project not found.", ErrorCodes.InvalidParam.Code));
+                ApiResult.BadRequest("Project not found.", ErrorCodes.InvalidParam.Code)
+            );
         }
 
         if (request.Resume)
@@ -105,7 +109,8 @@ public class TaskAppService : ITaskAppService
                 {
                     return new ExecutionTaskResolutionResult(
                         null,
-                        ApiResult.BadRequest("Task not found.", ErrorCodes.InvalidParam.Code));
+                        ApiResult.BadRequest("Task not found.", ErrorCodes.InvalidParam.Code)
+                    );
                 }
 
                 if (existingTask.ProjectId != resolvedProjectId.Value)
@@ -114,7 +119,9 @@ public class TaskAppService : ITaskAppService
                         null,
                         ApiResult.BadRequest(
                             "Task does not belong to the supplied projectId.",
-                            ErrorCodes.InvalidParam.Code));
+                            ErrorCodes.InvalidParam.Code
+                        )
+                    );
                 }
 
                 return new ExecutionTaskResolutionResult(existingTask, null);
@@ -124,20 +131,21 @@ public class TaskAppService : ITaskAppService
             {
                 return new ExecutionTaskResolutionResult(
                     null,
-                    ApiResult.BadRequest(
-                        "ContextId is required when resume is true.",
-                        ErrorCodes.InvalidParam.Code));
+                    ApiResult.BadRequest("ContextId is required when resume is true.", ErrorCodes.InvalidParam.Code)
+                );
             }
 
             var latestTask = await GetLatestTaskByContextAsync(
                 resolvedProjectId.Value,
                 request.ContextId,
-                cancellationToken);
+                cancellationToken
+            );
             if (latestTask == null)
             {
                 return new ExecutionTaskResolutionResult(
                     null,
-                    ApiResult.BadRequest("ProjectContext not found.", ErrorCodes.InvalidParam.Code));
+                    ApiResult.BadRequest("ProjectContext not found.", ErrorCodes.InvalidParam.Code)
+                );
             }
             return new ExecutionTaskResolutionResult(latestTask, null);
         }
@@ -150,7 +158,8 @@ public class TaskAppService : ITaskAppService
                 request.ContextId,
                 request.Input,
                 request.User,
-                cancellationToken);
+                cancellationToken
+            );
         }
 
         var task = await GetTaskAsync(request.TaskId.Value);
@@ -162,16 +171,16 @@ public class TaskAppService : ITaskAppService
                 request.ContextId,
                 request.Input,
                 request.User,
-                cancellationToken);
+                cancellationToken
+            );
         }
 
         if (task.ProjectId != resolvedProjectId.Value)
         {
             return new ExecutionTaskResolutionResult(
                 null,
-                ApiResult.BadRequest(
-                    "Task does not belong to the supplied projectId.",
-                    ErrorCodes.InvalidParam.Code));
+                ApiResult.BadRequest("Task does not belong to the supplied projectId.", ErrorCodes.InvalidParam.Code)
+            );
         }
 
         return new ExecutionTaskResolutionResult(task, null);
@@ -183,11 +192,13 @@ public class TaskAppService : ITaskAppService
     private async Task<TaskProjection?> GetLatestTaskByContextAsync(
         Guid projectId,
         string contextId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var normalizedContextId = ContextIdUtil.NormalizeContextId(contextId);
-        var context = await _contextRepository.SingleOrDefaultAsync(
-            item => item.ProjectId == projectId && item.ContextId == normalizedContextId);
+        var context = await _contextRepository.SingleOrDefaultAsync(item =>
+            item.ProjectId == projectId && item.ContextId == normalizedContextId
+        );
         if (context == null)
         {
             return null;
@@ -208,27 +219,22 @@ public class TaskAppService : ITaskAppService
             .FirstOrDefault();
     }
 
-
     private async Task<ExecutionTaskResolutionResult> CreateTaskAsync(
         Guid projectId,
         Guid? taskId,
         string? contextId,
         string input,
         string user,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var task = await CreateTaskForExecutionAsync(
-            projectId,
-            taskId,
-            input,
-            user,
-            contextId,
-            cancellationToken);
+        var task = await CreateTaskForExecutionAsync(projectId, taskId, input, user, contextId, cancellationToken);
         if (task == null)
         {
             return new ExecutionTaskResolutionResult(
                 null,
-                ApiResult.BadRequest("Failed to create task.", ErrorCodes.InvalidParam.Code));
+                ApiResult.BadRequest("Failed to create task.", ErrorCodes.InvalidParam.Code)
+            );
         }
 
         return new ExecutionTaskResolutionResult(task, null);

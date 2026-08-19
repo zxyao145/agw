@@ -4,10 +4,7 @@ namespace Agw.Setup.Contracts;
 
 public sealed class SetupConfiguration
 {
-    public SetupConfiguration(
-        DeploymentMode deploymentMode,
-        DatabaseProvider provider,
-        string connectionString)
+    public SetupConfiguration(DeploymentMode deploymentMode, DatabaseProvider provider, string connectionString)
     {
         DeploymentMode = deploymentMode;
         Provider = provider;

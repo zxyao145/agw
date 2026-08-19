@@ -10,7 +10,8 @@ public record ProviderCreateRequest(
     string? Description,
     string Endpoint,
     IReadOnlyList<ProviderAuthConfigRequest>? AuthConfigs,
-    IReadOnlyList<string>? ModelNames = null);
+    IReadOnlyList<string>? ModelNames = null
+);
 
 public record ProviderUpdateRequest(
     string Name,
@@ -18,11 +19,9 @@ public record ProviderUpdateRequest(
     string? Description,
     string Endpoint,
     IReadOnlyList<ProviderAuthConfigRequest>? AuthConfigs,
-    IReadOnlyList<string>? ModelNames = null);
+    IReadOnlyList<string>? ModelNames = null
+);
 
-public record ProviderModelDiscoveryRequest(
-    ProviderType ProviderType,
-    string Endpoint,
-    string ApiKey);
+public record ProviderModelDiscoveryRequest(ProviderType ProviderType, string Endpoint, string ApiKey);
 
 public record ProviderModelDiscoveryResponse(IReadOnlyList<string> ModelNames);

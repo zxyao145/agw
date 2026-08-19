@@ -1,6 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Reflection;
-
 using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
@@ -12,7 +11,6 @@ using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Entities.Tools;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Infrastructure.Tests;
@@ -22,9 +20,7 @@ public class EntityTypeConfigurationTests
     [Fact]
     public void GuidPrimaryKey_WhenGeneratedByEfCore_UsesVersion7()
     {
-        var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite("Data Source=:memory:")
-            .Options;
+        var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite("Data Source=:memory:").Options;
         using var context = new AgwDbContext(options);
         var authConfig = new ProviderAuthConfig();
 
@@ -42,7 +38,8 @@ public class EntityTypeConfigurationTests
             typeof(AgwAiModel),
             typeof(ModelProviderRelation),
             typeof(Skill),
-            typeof(RemoteSkillCache));
+            typeof(RemoteSkillCache)
+        );
     }
 
     [Fact]
@@ -54,22 +51,16 @@ public class EntityTypeConfigurationTests
     [Fact]
     public void RemoteSkillCache_UsesSkillPrimaryKeyAndCascadeDelete()
     {
-        var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite("Data Source=:memory:")
-            .Options;
+        var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite("Data Source=:memory:").Options;
         using var context = new AgwDbContext(options);
         var entityType = context.Model.FindEntityType(typeof(RemoteSkillCache));
 
         Assert.NotNull(entityType);
-        Assert.Equal(
-            nameof(RemoteSkillCache.SkillId),
-            Assert.Single(entityType.FindPrimaryKey()!.Properties).Name);
+        Assert.Equal(nameof(RemoteSkillCache.SkillId), Assert.Single(entityType.FindPrimaryKey()!.Properties).Name);
         var foreignKey = Assert.Single(entityType.GetForeignKeys());
         Assert.Equal(DeleteBehavior.Cascade, foreignKey.DeleteBehavior);
         Assert.Equal(typeof(Skill), foreignKey.PrincipalEntityType.ClrType);
-        Assert.Equal(
-            2048,
-            entityType.FindProperty(nameof(RemoteSkillCache.SourceUrl))!.GetMaxLength());
+        Assert.Equal(2048, entityType.FindProperty(nameof(RemoteSkillCache.SourceUrl))!.GetMaxLength());
     }
 
     [Fact]
@@ -82,7 +73,8 @@ public class EntityTypeConfigurationTests
             typeof(AgentSkillRelation),
             typeof(McpServer),
             typeof(AgentMcpServerRelation),
-            typeof(UserMemory));
+            typeof(UserMemory)
+        );
     }
 
     [Fact]
@@ -97,41 +89,38 @@ public class EntityTypeConfigurationTests
         var entityType = context.Model.FindEntityType(typeof(AgentSessionStateEntry))!;
         var primaryKey = entityType.FindPrimaryKey()!;
         var projectConversationIdProperty = entityType.FindProperty(
-            nameof(AgentSessionStateEntry.ProjectConversationId))!;
+            nameof(AgentSessionStateEntry.ProjectConversationId)
+        )!;
 
         Assert.Equal(
             [
                 nameof(AgentSessionStateEntry.ProjectConversationId),
                 nameof(AgentSessionStateEntry.AgentId),
-                nameof(AgentSessionStateEntry.AgentflowNodeId)
+                nameof(AgentSessionStateEntry.AgentflowNodeId),
             ],
-            primaryKey.Properties.Select(property => property.Name));
+            primaryKey.Properties.Select(property => property.Name)
+        );
         Assert.Equal("project_conversation_id", projectConversationIdProperty.GetColumnName());
 
         var conversationForeignKey = Assert.Single(
             entityType.GetForeignKeys(),
-            foreignKey => foreignKey.Properties.SequenceEqual([projectConversationIdProperty]));
+            foreignKey => foreignKey.Properties.SequenceEqual([projectConversationIdProperty])
+        );
         Assert.Equal(typeof(ProjectConversation), conversationForeignKey.PrincipalEntityType.ClrType);
     }
 
     [Fact]
     public void ProjectMemory_UsesProjectAndPathAsUniqueScope()
     {
-        var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite("Data Source=:memory:")
-            .Options;
+        var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite("Data Source=:memory:").Options;
         using var context = new AgwDbContext(options);
         var entityType = context.Model.FindEntityType(typeof(ProjectMemoryEntry))!;
-        var uniqueIndex = Assert.Single(
-            entityType.GetIndexes(),
-            index => index.IsUnique);
+        var uniqueIndex = Assert.Single(entityType.GetIndexes(), index => index.IsUnique);
 
         Assert.Equal(
-            [
-                nameof(ProjectMemoryEntry.ProjectId),
-                nameof(ProjectMemoryEntry.Path)
-            ],
-            uniqueIndex.Properties.Select(property => property.Name));
+            [nameof(ProjectMemoryEntry.ProjectId), nameof(ProjectMemoryEntry.Path)],
+            uniqueIndex.Properties.Select(property => property.Name)
+        );
     }
 
     [Fact]
@@ -142,7 +131,8 @@ public class EntityTypeConfigurationTests
             typeof(AgentflowNode),
             typeof(AgentflowEdge),
             typeof(AgentflowTrace),
-            typeof(AgentUsage));
+            typeof(AgentUsage)
+        );
     }
 
     [Fact]
@@ -156,7 +146,8 @@ public class EntityTypeConfigurationTests
             typeof(ProjectConnectionRelation),
             typeof(ProjectConversation),
             typeof(TaskSessionBinding),
-            typeof(ProjectConversationChatHistory));
+            typeof(ProjectConversationChatHistory)
+        );
     }
 
     [Fact]
@@ -168,7 +159,8 @@ public class EntityTypeConfigurationTests
             typeof(PluginInstallation),
             typeof(PluginInstallationCredential),
             typeof(Connection),
-            typeof(ConnectionCredential));
+            typeof(ConnectionCredential)
+        );
     }
 
     [Fact]
@@ -177,14 +169,15 @@ public class EntityTypeConfigurationTests
         AssertConfigured(
             typeof(AgentflowCheckpointRecord),
             typeof(DurableExecutionRecord),
-            typeof(DurableExecutionEventRecord));
+            typeof(DurableExecutionEventRecord)
+        );
     }
 
     [Fact]
     public void PersistedEntities_AllDeclareMatchingConfigurations()
     {
-        var entityTypes = typeof(Project).Assembly
-            .GetTypes()
+        var entityTypes = typeof(Project)
+            .Assembly.GetTypes()
             .Where(type => type.GetCustomAttribute<TableAttribute>() is not null)
             .OrderBy(type => type.FullName)
             .ToArray();

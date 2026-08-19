@@ -22,7 +22,8 @@ public sealed class JobAgentExecutor : IJobAgentExecutor
     public JobAgentExecutor(
         IAgentRuntimeService agentRuntimeService,
         IAgentflowRuntimeService agentflowRuntimeService,
-        TaskExecutionAppService taskExecutionAppService)
+        TaskExecutionAppService taskExecutionAppService
+    )
     {
         _agentRuntimeService = agentRuntimeService;
         _agentflowRuntimeService = agentflowRuntimeService;
@@ -40,18 +41,16 @@ public sealed class JobAgentExecutor : IJobAgentExecutor
         var contextId = ContextIdUtil.GenContextId();
         var createResult = await _taskExecutionAppService.CreateRunningAsync(
             job.ProjectId,
-            new TaskCreateRequest(
-                JobId: job.Id,
-                Input: prompt,
-                Title: title,
-                ContextId: contextId),
-            JobExecutorUser);
+            new TaskCreateRequest(JobId: job.Id, Input: prompt, Title: title, ContextId: contextId),
+            JobExecutorUser
+        );
 
         if (createResult.Type != ApplicationResultType.Success || createResult.Value == null)
         {
             throw new AgwException(
                 ErrorCodes.TaskCreationFailed,
-                createResult.Error ?? "Failed to create task for job execution.");
+                createResult.Error ?? "Failed to create task for job execution."
+            );
         }
 
         var taskId = createResult.Value.TaskId;
@@ -62,17 +61,20 @@ public sealed class JobAgentExecutor : IJobAgentExecutor
             {
                 AgentRuntimeType.Agent => await _agentRuntimeService.ExecuteByIdAsync(
                     new AgentExecuteByIdRequest(prompt, job.AgentId.Value, taskId, job.ProjectId, contextId),
-                    cancellationToken),
+                    cancellationToken
+                ),
                 AgentRuntimeType.Agentflow => await _agentflowRuntimeService.ExecuteAsync(
                     job.AgentId.Value,
                     taskId,
                     prompt,
                     cancellationToken,
                     job.ProjectId,
-                    contextId),
+                    contextId
+                ),
                 _ => throw new AgwException(
                     ErrorCodes.UnsupportedAgentType,
-                    $"Unsupported agent type: {job.AgentType}")
+                    $"Unsupported agent type: {job.AgentType}"
+                ),
             };
 
             if (execution == null)
@@ -80,27 +82,24 @@ public sealed class JobAgentExecutor : IJobAgentExecutor
                 var targetText = job.AgentType == AgentRuntimeType.Agent ? "Agent" : "Agentflow";
                 throw new AgwException(
                     ErrorCodes.AgentExecutionFailed,
-                    $"{targetText} execution failed (target disabled/missing or runtime unavailable).");
+                    $"{targetText} execution failed (target disabled/missing or runtime unavailable)."
+                );
             }
 
-            var succeededTask = await _taskExecutionAppService.MarkSucceededAsync(
-                taskId,
-                JobExecutorUser);
+            var succeededTask = await _taskExecutionAppService.MarkSucceededAsync(taskId, JobExecutorUser);
             if (succeededTask == null)
             {
                 throw new AgwException(
                     ErrorCodes.TaskMarkSucceededFailed,
-                    $"Failed to mark task {taskId} as succeeded.");
+                    $"Failed to mark task {taskId} as succeeded."
+                );
             }
 
             return taskId;
         }
         catch (Exception ex)
         {
-            _ = await _taskExecutionAppService.MarkFailedAsync(
-                taskId,
-                ex.Message,
-                JobExecutorUser);
+            _ = await _taskExecutionAppService.MarkFailedAsync(taskId, ex.Message, JobExecutorUser);
             throw;
         }
     }

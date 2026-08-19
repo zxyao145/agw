@@ -1,7 +1,6 @@
 using Agw.Infrastructure.Data;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Projects.Tests;
@@ -11,9 +10,7 @@ public class TaskProjectionModelTests
     [Fact]
     public void TaskProjection_IsNotEfEntity()
     {
-        var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite("DataSource=:memory:")
-            .Options;
+        var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite("DataSource=:memory:").Options;
 
         using var dbContext = new AgwDbContext(options);
         var entityType = dbContext.Model.FindEntityType(typeof(TaskProjection));
@@ -38,8 +35,9 @@ public class TaskProjectionModelTests
         Assert.NotNull(projectIdProperty);
         Assert.NotNull(contextIdProperty);
 
-        var contextIdIndex = entityType.GetIndexes().Single(index =>
-            index.Properties.SequenceEqual([projectIdProperty, contextIdProperty]));
+        var contextIdIndex = entityType
+            .GetIndexes()
+            .Single(index => index.Properties.SequenceEqual([projectIdProperty, contextIdProperty]));
 
         Assert.True(contextIdIndex.IsUnique);
     }
@@ -66,8 +64,11 @@ public class TaskProjectionModelTests
         Assert.NotNull(externalAgentNameProperty);
         Assert.Equal("project_conversation_id", contextIdProperty.GetColumnName());
 
-        var bindingIndex = entityType.GetIndexes().Single(index =>
-            index.Properties.SequenceEqual([contextIdProperty, agentIdProperty, externalAgentNameProperty]));
+        var bindingIndex = entityType
+            .GetIndexes()
+            .Single(index =>
+                index.Properties.SequenceEqual([contextIdProperty, agentIdProperty, externalAgentNameProperty])
+            );
 
         Assert.True(bindingIndex.IsUnique);
     }
@@ -86,21 +87,24 @@ public class TaskProjectionModelTests
         Assert.Equal("project_conversation_chat_history", entityType.GetTableName());
 
         var contextIdProperty = entityType.FindProperty(nameof(ProjectConversationChatHistory.ConversationId));
-        var conversationSequenceProperty = entityType.FindProperty(nameof(ProjectConversationChatHistory.ConversationSequence));
+        var conversationSequenceProperty = entityType.FindProperty(
+            nameof(ProjectConversationChatHistory.ConversationSequence)
+        );
         Assert.NotNull(contextIdProperty);
         Assert.NotNull(conversationSequenceProperty);
         Assert.Equal("project_conversation_id", contextIdProperty.GetColumnName());
 
         Assert.Contains(
             entityType.GetIndexes(),
-            index => index.Properties.SequenceEqual([contextIdProperty, conversationSequenceProperty]));
+            index => index.Properties.SequenceEqual([contextIdProperty, conversationSequenceProperty])
+        );
     }
 
     [Fact]
     public void SharedTaskContracts_DoNotExposeInternalTaskResponseTypes()
     {
-        var contractTypeNames = typeof(TaskCreateRequest).Assembly
-            .GetTypes()
+        var contractTypeNames = typeof(TaskCreateRequest)
+            .Assembly.GetTypes()
             .Where(type => type.Namespace == "Agw.Shared.Contracts.Projects")
             .Select(type => type.Name)
             .ToArray();

@@ -6,5 +6,6 @@ public interface IProviderModelDiscoveryService
 {
     Task<ProviderModelDiscoveryResponse> DiscoverAsync(
         ProviderModelDiscoveryRequest request,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default
+    );
 }

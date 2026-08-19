@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands.Hitl;
 
@@ -17,7 +16,8 @@ public sealed class HumanGateApprovalCoordinator : IHumanGateApprovalHandler
 
     public async ValueTask<HumanGateApprovalDecision> WaitForApprovalAsync(
         HumanGateApprovalRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -25,8 +25,9 @@ public sealed class HumanGateApprovalCoordinator : IHumanGateApprovalHandler
             request.RequestId,
             _ => new PendingApproval(
                 request,
-                new TaskCompletionSource<HumanGateApprovalDecision>(
-                    TaskCreationOptions.RunContinuationsAsynchronously)));
+                new TaskCompletionSource<HumanGateApprovalDecision>(TaskCreationOptions.RunContinuationsAsynchronously)
+            )
+        );
         _pendingChanged?.Invoke(pending.Request);
 
         try
@@ -43,15 +44,15 @@ public sealed class HumanGateApprovalCoordinator : IHumanGateApprovalHandler
         }
     }
 
-    public ValueTask<bool> TrySubmitAsync(
-        HumanResponseCommand command,
-        CancellationToken cancellationToken)
+    public ValueTask<bool> TrySubmitAsync(HumanResponseCommand command, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        if (cancellationToken.IsCancellationRequested ||
-            string.IsNullOrWhiteSpace(command.RequestId) ||
-            !_pending.TryRemove(command.RequestId, out var pending))
+        if (
+            cancellationToken.IsCancellationRequested
+            || string.IsNullOrWhiteSpace(command.RequestId)
+            || !_pending.TryRemove(command.RequestId, out var pending)
+        )
         {
             return ValueTask.FromResult(false);
         }
@@ -61,7 +62,8 @@ public sealed class HumanGateApprovalCoordinator : IHumanGateApprovalHandler
             command.Approved,
             command.ResponseText,
             command.ApprovalScope,
-            command.ResponseData);
+            command.ResponseData
+        );
         var submitted = pending.Source.TrySetResult(decision);
         if (submitted)
         {
@@ -76,17 +78,21 @@ public sealed class HumanGateApprovalCoordinator : IHumanGateApprovalHandler
         var approvedCount = 0;
         foreach (var (requestId, pending) in _pending.ToArray())
         {
-            if (pending.Request.ToolApprovalRequest == null ||
-                !_pending.TryRemove(requestId, out _))
+            if (pending.Request.ToolApprovalRequest == null || !_pending.TryRemove(requestId, out _))
             {
                 continue;
             }
 
-            if (pending.Source.TrySetResult(new HumanGateApprovalDecision(
-                    pending.Request.RequestId,
-                    Approved: true,
-                    ResponseText: null,
-                    ApprovalScope: "always-tool")))
+            if (
+                pending.Source.TrySetResult(
+                    new HumanGateApprovalDecision(
+                        pending.Request.RequestId,
+                        Approved: true,
+                        ResponseText: null,
+                        ApprovalScope: "always-tool"
+                    )
+                )
+            )
             {
                 approvedCount++;
             }
@@ -115,5 +121,6 @@ public sealed class HumanGateApprovalCoordinator : IHumanGateApprovalHandler
 
     private sealed record PendingApproval(
         HumanGateApprovalRequest Request,
-        TaskCompletionSource<HumanGateApprovalDecision> Source);
+        TaskCompletionSource<HumanGateApprovalDecision> Source
+    );
 }

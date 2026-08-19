@@ -1,12 +1,10 @@
 using System.Globalization;
-
 using Agw.Jobs.Application.Contracts;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Jobs.Application.Services;
@@ -30,7 +28,8 @@ public class JobAppService
         IUnitOfWork unitOfWork,
         JobScheduleCalculator jobScheduleCalculator,
         JobSchedulerWakeSignal schedulerWakeSignal,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider
+    )
     {
         _jobTaskRepository = jobTaskRepository;
         _jobExecutionLogRepository = jobExecutionLogRepository;
@@ -44,25 +43,21 @@ public class JobAppService
 
     public async Task<IReadOnlyList<Job>> ListAsync(CancellationToken cancellationToken = default)
     {
-        var jobs = await _jobTaskRepository.Queryable
-            .ToListAsync(cancellationToken);
+        var jobs = await _jobTaskRepository.Queryable.ToListAsync(cancellationToken);
 
-        return jobs
-            .OrderBy(t => t.NextRunTime)
-            .ToList();
+        return jobs.OrderBy(t => t.NextRunTime).ToList();
     }
 
     public async Task<IReadOnlyList<Job>> ListByProjectAsync(
         Guid projectId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
-        var jobs = await _jobTaskRepository.Queryable
-            .Where(job => job.ProjectId == projectId)
+        var jobs = await _jobTaskRepository
+            .Queryable.Where(job => job.ProjectId == projectId)
             .ToListAsync(cancellationToken);
 
-        return jobs
-            .OrderBy(job => job.NextRunTime)
-            .ToList();
+        return jobs.OrderBy(job => job.NextRunTime).ToList();
     }
 
     public Task<Job?> GetAsync(Guid id)
@@ -70,21 +65,21 @@ public class JobAppService
         return _jobTaskRepository.GetByIdAsync(id);
     }
 
-    public Task<Job?> GetByProjectAsync(
-        Guid id,
-        Guid projectId,
-        CancellationToken cancellationToken = default)
+    public Task<Job?> GetByProjectAsync(Guid id, Guid projectId, CancellationToken cancellationToken = default)
     {
-        return _jobTaskRepository.Queryable
-            .SingleOrDefaultAsync(
-                job => job.Id == id && job.ProjectId == projectId,
-                cancellationToken);
+        return _jobTaskRepository.Queryable.SingleOrDefaultAsync(
+            job => job.Id == id && job.ProjectId == projectId,
+            cancellationToken
+        );
     }
 
-    public async Task<IReadOnlyList<JobLogResponse>> ListLogsAsync(Guid jobId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<JobLogResponse>> ListLogsAsync(
+        Guid jobId,
+        CancellationToken cancellationToken = default
+    )
     {
-        var logs = await _jobExecutionLogRepository.Queryable
-            .Where(log => log.JobId == jobId)
+        var logs = await _jobExecutionLogRepository
+            .Queryable.Where(log => log.JobId == jobId)
             .ToListAsync(cancellationToken);
 
         if (logs.Count == 0)
@@ -93,23 +88,23 @@ public class JobAppService
         }
 
         var taskIds = logs.Select(log => log.TaskId).ToHashSet();
-        var chatHistories = await _chatHistoryRepository.Queryable
-            .AsNoTracking()
+        var chatHistories = await _chatHistoryRepository
+            .Queryable.AsNoTracking()
             .Where(record => taskIds.Contains(record.TaskId))
             .ToListAsync(cancellationToken);
         var contextIds = chatHistories.Select(record => record.ConversationId).ToHashSet();
-        var contexts = await _projectConversationRepository.Queryable
-            .AsNoTracking()
+        var contexts = await _projectConversationRepository
+            .Queryable.AsNoTracking()
             .Where(context => contextIds.Contains(context.Id))
             .ToListAsync(cancellationToken);
         var contextIdByTaskId = chatHistories
             .GroupBy(record => record.TaskId)
             .ToDictionary(
                 group => group.Key,
-                group => contexts.FirstOrDefault(context => context.Id == group.First().ConversationId)?.ContextId);
+                group => contexts.FirstOrDefault(context => context.Id == group.First().ConversationId)?.ContextId
+            );
 
-        return logs
-            .OrderByDescending(log => log.StartTime)
+        return logs.OrderByDescending(log => log.StartTime)
             .Select(log => new JobLogResponse(
                 log.Id,
                 log.JobId,
@@ -118,7 +113,8 @@ public class JobAppService
                 log.EndTime,
                 log.Success,
                 log.Attempt,
-                log.ErrorMessage))
+                log.ErrorMessage
+            ))
             .ToList();
     }
 
@@ -142,7 +138,7 @@ public class JobAppService
             CreateBy = user,
             CreateTime = now,
             UpdateBy = user,
-            UpdateTime = now
+            UpdateTime = now,
         };
         entity.NextRunTime = ResolveNextRunTime(entity, now);
 
@@ -160,11 +156,7 @@ public class JobAppService
             return null;
         }
 
-        return await UpdateEntityAsync(
-            entity,
-            request,
-            user,
-            recalculateSchedule: true);
+        return await UpdateEntityAsync(entity, request, user, recalculateSchedule: true);
     }
 
     public async Task<Job?> UpdateByProjectAsync(
@@ -173,7 +165,8 @@ public class JobAppService
         JobUpdateRequest request,
         string user,
         bool recalculateSchedule,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var entity = await GetByProjectAsync(id, projectId, cancellationToken);
         if (entity == null)
@@ -182,12 +175,7 @@ public class JobAppService
         }
 
         request.ProjectId = projectId;
-        return await UpdateEntityAsync(
-            entity,
-            request,
-            user,
-            recalculateSchedule,
-            cancellationToken);
+        return await UpdateEntityAsync(entity, request, user, recalculateSchedule, cancellationToken);
     }
 
     private async Task<Job> UpdateEntityAsync(
@@ -195,7 +183,8 @@ public class JobAppService
         JobUpdateRequest request,
         string user,
         bool recalculateSchedule,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var now = _timeProvider.GetUtcNow();
         var nextRunTime = entity.NextRunTime;
@@ -211,9 +200,7 @@ public class JobAppService
         entity.Status = request.Status;
         entity.UpdateBy = user;
         entity.UpdateTime = now;
-        entity.NextRunTime = recalculateSchedule
-            ? ResolveNextRunTime(entity, now)
-            : nextRunTime;
+        entity.NextRunTime = recalculateSchedule ? ResolveNextRunTime(entity, now) : nextRunTime;
 
         _jobTaskRepository.Update(entity);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -256,10 +243,7 @@ public class JobAppService
         return true;
     }
 
-    public async Task<Job?> DeleteByProjectAsync(
-        Guid id,
-        Guid projectId,
-        CancellationToken cancellationToken = default)
+    public async Task<Job?> DeleteByProjectAsync(Guid id, Guid projectId, CancellationToken cancellationToken = default)
     {
         var entity = await GetByProjectAsync(id, projectId, cancellationToken);
         if (entity == null)

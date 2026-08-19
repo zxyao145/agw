@@ -11,8 +11,7 @@ internal sealed class AgentflowCheckpointRuntimeState
 
     public IReadOnlySet<Guid> OccurrenceIds => _snapshots.Keys.ToHashSet();
 
-    public void Register(AgentflowCheckpointSnapshot snapshot) =>
-        _snapshots[snapshot.OccurrenceId] = snapshot;
+    public void Register(AgentflowCheckpointSnapshot snapshot) => _snapshots[snapshot.OccurrenceId] = snapshot;
 
     public bool TryGet(Guid occurrenceId, out AgentflowCheckpointSnapshot? snapshot) =>
         _snapshots.TryGetValue(occurrenceId, out snapshot);

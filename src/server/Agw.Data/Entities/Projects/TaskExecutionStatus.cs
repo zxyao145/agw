@@ -6,5 +6,5 @@ public enum TaskExecutionStatus
     Running = 1,
     Succeeded = 2,
     Failed = 3,
-    Canceled = 4
+    Canceled = 4,
 }

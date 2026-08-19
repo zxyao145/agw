@@ -1,10 +1,7 @@
 using System.Collections.Concurrent;
-
 using Agw.Files.Utils;
-
 using CliWrap;
 using CliWrap.Buffered;
-
 using Microsoft.Extensions.Logging;
 
 namespace Agw.Files.Services;
@@ -13,12 +10,10 @@ public enum GitDiffScope
 {
     All,
     Staged,
-    Unstaged
+    Unstaged,
 }
 
-public sealed record GitFileStatus(
-    string? StagedStatus,
-    string? UnstagedStatus)
+public sealed record GitFileStatus(string? StagedStatus, string? UnstagedStatus)
 {
     public string? AggregateStatus
     {
@@ -43,47 +38,30 @@ public sealed record GitFileStatus(
         }
     }
 
-    public string? GetStatus(GitDiffScope scope) => scope switch
-    {
-        GitDiffScope.Staged => StagedStatus,
-        GitDiffScope.Unstaged => UnstagedStatus,
-        _ => AggregateStatus
-    };
+    public string? GetStatus(GitDiffScope scope) =>
+        scope switch
+        {
+            GitDiffScope.Staged => StagedStatus,
+            GitDiffScope.Unstaged => UnstagedStatus,
+            _ => AggregateStatus,
+        };
 }
 
-public record GitChangedFiles(
-    Dictionary<string, GitFileStatus> FileStatuses,
-    HashSet<string> DeletedFiles);
+public record GitChangedFiles(Dictionary<string, GitFileStatus> FileStatuses, HashSet<string> DeletedFiles);
 
-public record GitDiffResult(
-    bool Success,
-    string Diff,
-    bool Unchanged,
-    string? OriginalContent,
-    string? Error);
+public record GitDiffResult(bool Success, string Diff, bool Unchanged, string? OriginalContent, string? Error);
 
-public record GitResetResult(
-    bool Success,
-    string Message,
-    string? Error,
-    bool IsClientError);
+public record GitResetResult(bool Success, string Message, string? Error, bool IsClientError);
 
-public record GitIndexResult(
-    bool Success,
-    string Message,
-    string? Error,
-    bool IsClientError);
+public record GitIndexResult(bool Success, string Message, string? Error, bool IsClientError);
 
-public record GitCloneResult(
-    bool Success,
-    string? Error,
-    string? Stdout,
-    string? Stderr);
+public record GitCloneResult(bool Success, string? Error, string? Stdout, string? Stderr);
 
 public class GitCommandService : IGitCommandService
 {
-    private static readonly ConcurrentDictionary<string, SemaphoreSlim> IndexMutationLocks =
-        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> IndexMutationLocks = new(
+        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal
+    );
 
     private readonly ILogger<GitCommandService> _logger;
 
@@ -92,7 +70,10 @@ public class GitCommandService : IGitCommandService
         _logger = logger;
     }
 
-    public async Task<GitChangedFiles?> GetChangedFilesAsync(string directory, CancellationToken cancellationToken = default)
+    public async Task<GitChangedFiles?> GetChangedFilesAsync(
+        string directory,
+        CancellationToken cancellationToken = default
+    )
     {
         var gitDirectory = FindGitDirectory(directory);
         if (gitDirectory == null)
@@ -115,7 +96,8 @@ public class GitCommandService : IGitCommandService
 
             foreach (var line in lines)
             {
-                if (line.Length < 3) continue;
+                if (line.Length < 3)
+                    continue;
 
                 var statusCode = line.Substring(0, 2);
                 var filename = line.Substring(3).Trim().Trim('"');
@@ -128,9 +110,7 @@ public class GitCommandService : IGitCommandService
                 }
                 else
                 {
-                    status = new GitFileStatus(
-                        MapStatus(statusCode[0]),
-                        MapStatus(statusCode[1]));
+                    status = new GitFileStatus(MapStatus(statusCode[0]), MapStatus(statusCode[1]));
                 }
 
                 if (status.StagedStatus == "deleted" || status.UnstagedStatus == "deleted")
@@ -153,7 +133,8 @@ public class GitCommandService : IGitCommandService
     public async Task<GitDiffResult> GetDiffAsync(
         string filePath,
         CancellationToken cancellationToken = default,
-        GitDiffScope scope = GitDiffScope.All)
+        GitDiffScope scope = GitDiffScope.All
+    )
     {
         var gitDirectory = FindGitDirectory(filePath);
         if (gitDirectory == null)
@@ -165,7 +146,7 @@ public class GitCommandService : IGitCommandService
         {
             GitDiffScope.Staged => ["diff", "--cached", "HEAD", "--", filePath],
             GitDiffScope.Unstaged => ["diff", "--", filePath],
-            _ => ["diff", "HEAD", "--", filePath]
+            _ => ["diff", "HEAD", "--", filePath],
         };
         var diffResult = await RunGitAsync(gitDirectory, diffArguments, cancellationToken);
         if (diffResult.ExitCode != 0 && !string.IsNullOrEmpty(diffResult.StandardError))
@@ -180,20 +161,14 @@ public class GitCommandService : IGitCommandService
 
         if (scope == GitDiffScope.Unstaged)
         {
-            var untrackedDiff = await GetUntrackedDiffAsync(
-                gitDirectory,
-                filePath,
-                cancellationToken);
+            var untrackedDiff = await GetUntrackedDiffAsync(gitDirectory, filePath, cancellationToken);
             if (untrackedDiff != null)
             {
                 return untrackedDiff;
             }
         }
 
-        var gitRootResult = await RunGitAsync(
-            gitDirectory,
-            ["rev-parse", "--show-toplevel"],
-            cancellationToken);
+        var gitRootResult = await RunGitAsync(gitDirectory, ["rev-parse", "--show-toplevel"], cancellationToken);
         if (gitRootResult.ExitCode != 0)
         {
             return new GitDiffResult(false, string.Empty, false, null, "Failed to get git root directory");
@@ -201,9 +176,7 @@ public class GitCommandService : IGitCommandService
 
         var gitRoot = gitRootResult.StandardOutput.Trim();
         var relativePath = Path.GetRelativePath(gitRoot, filePath).Replace("\\", "/");
-        var baseline = scope == GitDiffScope.Unstaged
-            ? $":{relativePath}"
-            : $"HEAD:{relativePath}";
+        var baseline = scope == GitDiffScope.Unstaged ? $":{relativePath}" : $"HEAD:{relativePath}";
         var showResult = await RunGitAsync(gitDirectory, ["show", baseline], cancellationToken);
         if (showResult.ExitCode == 0)
         {
@@ -213,24 +186,27 @@ public class GitCommandService : IGitCommandService
         return new GitDiffResult(true, string.Empty, false, null, null);
     }
 
-    private static string? MapStatus(char statusCode) => statusCode switch
-    {
-        ' ' => null,
-        'A' => "added",
-        'D' => "deleted",
-        '?' => "untracked",
-        _ => "modified"
-    };
+    private static string? MapStatus(char statusCode) =>
+        statusCode switch
+        {
+            ' ' => null,
+            'A' => "added",
+            'D' => "deleted",
+            '?' => "untracked",
+            _ => "modified",
+        };
 
     private static async Task<GitDiffResult?> GetUntrackedDiffAsync(
         string gitDirectory,
         string filePath,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var untrackedResult = await RunGitAsync(
             gitDirectory,
             ["ls-files", "--others", "--exclude-standard", "--", filePath],
-            cancellationToken);
+            cancellationToken
+        );
         if (untrackedResult.ExitCode != 0 || string.IsNullOrWhiteSpace(untrackedResult.StandardOutput))
         {
             return null;
@@ -242,7 +218,8 @@ public class GitCommandService : IGitCommandService
             var diffResult = await RunGitAsync(
                 gitDirectory,
                 ["diff", "--no-index", "--", emptyFile, filePath],
-                cancellationToken);
+                cancellationToken
+            );
             if (string.IsNullOrWhiteSpace(diffResult.StandardOutput))
             {
                 if (diffResult.ExitCode == 0)
@@ -250,12 +227,7 @@ public class GitCommandService : IGitCommandService
                     return new GitDiffResult(true, string.Empty, false, null, null);
                 }
 
-                return new GitDiffResult(
-                    false,
-                    string.Empty,
-                    false,
-                    null,
-                    diffResult.StandardError);
+                return new GitDiffResult(false, string.Empty, false, null, diffResult.StandardError);
             }
 
             return new GitDiffResult(true, diffResult.StandardOutput, false, null, null);
@@ -305,7 +277,8 @@ public class GitCommandService : IGitCommandService
     public async Task<GitIndexResult> SetStagedAsync(
         string path,
         bool staged,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var gitDirectory = FindGitDirectory(path);
         if (gitDirectory == null)
@@ -315,7 +288,8 @@ public class GitCommandService : IGitCommandService
 
         var indexMutationLock = IndexMutationLocks.GetOrAdd(
             Path.GetFullPath(gitDirectory),
-            static _ => new SemaphoreSlim(1, 1));
+            static _ => new SemaphoreSlim(1, 1)
+        );
         await indexMutationLock.WaitAsync(cancellationToken);
         try
         {
@@ -323,14 +297,11 @@ public class GitCommandService : IGitCommandService
             var statusResult = await RunGitAsync(
                 gitDirectory,
                 ["status", "--porcelain", "--", relativePath],
-                cancellationToken);
+                cancellationToken
+            );
             if (statusResult.ExitCode != 0)
             {
-                return new GitIndexResult(
-                    false,
-                    "Failed to check git status",
-                    statusResult.StandardError,
-                    false);
+                return new GitIndexResult(false, "Failed to check git status", statusResult.StandardError, false);
             }
 
             if (string.IsNullOrWhiteSpace(statusResult.StandardOutput))
@@ -339,16 +310,13 @@ public class GitCommandService : IGitCommandService
                     false,
                     staged ? "Path has no changes to stage" : "Path has no staged changes to unstage",
                     null,
-                    true);
+                    true
+                );
             }
 
             if (!staged && !HasStagedChanges(statusResult.StandardOutput))
             {
-                return new GitIndexResult(
-                    false,
-                    "Path has no staged changes to unstage",
-                    null,
-                    true);
+                return new GitIndexResult(false, "Path has no staged changes to unstage", null, true);
             }
 
             IReadOnlyCollection<string> arguments = staged
@@ -361,14 +329,16 @@ public class GitCommandService : IGitCommandService
                     false,
                     staged ? "Failed to stage changes" : "Failed to unstage changes",
                     result.StandardError,
-                    IsPathspecError(result.StandardError));
+                    IsPathspecError(result.StandardError)
+                );
             }
 
             return new GitIndexResult(
                 true,
                 staged ? "Changes staged successfully" : "Changes unstaged successfully",
                 null,
-                false);
+                false
+            );
         }
         finally
         {
@@ -389,7 +359,11 @@ public class GitCommandService : IGitCommandService
             && standardError.Contains("did not match", StringComparison.OrdinalIgnoreCase);
     }
 
-    public async Task<GitCloneResult> CloneRepositoryAsync(string gitAddress, string workingDirectory, CancellationToken cancellationToken = default)
+    public async Task<GitCloneResult> CloneRepositoryAsync(
+        string gitAddress,
+        string workingDirectory,
+        CancellationToken cancellationToken = default
+    )
     {
         var dirFullInfo = PathUtil.ExpandTilde(workingDirectory);
         if (!Directory.Exists(dirFullInfo))
@@ -409,7 +383,8 @@ public class GitCommandService : IGitCommandService
     private static async Task<BufferedCommandResult> RunGitAsync(
         string workingDirectory,
         IReadOnlyCollection<string> arguments,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         return await Cli.Wrap("git")
             .WithArguments(arguments)
@@ -420,9 +395,7 @@ public class GitCommandService : IGitCommandService
 
     private static string? FindGitDirectory(string filePath)
     {
-        string? directory = Directory.Exists(filePath)
-            ? filePath
-            : Path.GetDirectoryName(filePath);
+        string? directory = Directory.Exists(filePath) ? filePath : Path.GetDirectoryName(filePath);
 
         while (directory != null)
         {

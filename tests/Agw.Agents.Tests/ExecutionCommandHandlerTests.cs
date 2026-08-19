@@ -1,7 +1,6 @@
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.Commands.Interrupt;
@@ -18,7 +17,6 @@ using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Projects;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -37,17 +35,18 @@ public class ExecutionCommandHandlerTests
         await handler.HandleAsync(
             new SettingCommand(task.ProjectId, contextId: "old"),
             context,
-            TestContext.Current.CancellationToken);
-        await context.StartTurnAsync(
-            CreateExecCommand(Guid.CreateVersion7()),
-            TestContext.Current.CancellationToken);
-        var runtime = Assert.IsType<TestRuntime>(runtimeFactory.StartRequests[0].CurrentRuntime
-            ?? runtimeFactory.CreatedRuntimes[0]);
+            TestContext.Current.CancellationToken
+        );
+        await context.StartTurnAsync(CreateExecCommand(Guid.CreateVersion7()), TestContext.Current.CancellationToken);
+        var runtime = Assert.IsType<TestRuntime>(
+            runtimeFactory.StartRequests[0].CurrentRuntime ?? runtimeFactory.CreatedRuntimes[0]
+        );
 
         await handler.HandleAsync(
             new SettingCommand(Guid.CreateVersion7(), contextId: "new"),
             context,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.True(runtime.Disposed);
         Assert.Null(context.ResolvedTask);
@@ -65,17 +64,14 @@ public class ExecutionCommandHandlerTests
         var runtimeFactory = new FakeRuntimeFactory { HoldTurnOpen = true };
         var context = CreateContext(runtimeFactory, task, sink: sink);
         var current = new SettingCommand(task.ProjectId, contextId: "current");
-        await context.ApplySettingsAsync(
-            ExecutionSettings.FromCommand(current),
-            TestContext.Current.CancellationToken);
-        await context.StartTurnAsync(
-            CreateExecCommand(Guid.CreateVersion7()),
-            TestContext.Current.CancellationToken);
+        await context.ApplySettingsAsync(ExecutionSettings.FromCommand(current), TestContext.Current.CancellationToken);
+        await context.StartTurnAsync(CreateExecCommand(Guid.CreateVersion7()), TestContext.Current.CancellationToken);
 
         await new SettingCommandHandler().HandleAsync(
             new SettingCommand(Guid.CreateVersion7(), contextId: "new"),
             context,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal("current", context.Settings!.ContextId);
         Assert.IsType<AgwErrorContent>(Assert.Single(sink.Messages).Contents[0]);
@@ -94,45 +90,39 @@ public class ExecutionCommandHandlerTests
         await new InterruptCommandHandler().HandleAsync(
             new InterruptCommand { Reason = "nothing running" },
             context,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Collection(
             sink.Messages,
-            message => Assert.Equal(
-                "nothing running",
-                Assert.IsType<AgwTextContent>(Assert.Single(message.Contents)).Content),
+            message =>
+                Assert.Equal("nothing running", Assert.IsType<AgwTextContent>(Assert.Single(message.Contents)).Content),
             message =>
             {
                 Assert.Equal("turn-finished", message.AdditionalProperties!["type"]);
                 Assert.Equal("interrupted", message.AdditionalProperties["status"]);
-            });
+            }
+        );
     }
 
     [Fact]
     public async Task DurableSession_InterruptWithoutActiveExecution_SendsInterruptedFinish()
     {
         var sink = new CapturingSink();
-        await using var session = new DurableExecutionSession(
-            "user",
-            sink,
-            CancellationToken.None,
-            coordinator: null!);
+        await using var session = new DurableExecutionSession("user", sink, CancellationToken.None, coordinator: null!);
 
-        await session.InterruptAsync(
-            executionId: null,
-            "nothing running",
-            TestContext.Current.CancellationToken);
+        await session.InterruptAsync(executionId: null, "nothing running", TestContext.Current.CancellationToken);
 
         Assert.Collection(
             sink.Messages,
-            message => Assert.Equal(
-                "nothing running",
-                Assert.IsType<AgwTextContent>(Assert.Single(message.Contents)).Content),
+            message =>
+                Assert.Equal("nothing running", Assert.IsType<AgwTextContent>(Assert.Single(message.Contents)).Content),
             message =>
             {
                 Assert.Equal("turn-finished", message.AdditionalProperties!["type"]);
                 Assert.Equal("interrupted", message.AdditionalProperties["status"]);
-            });
+            }
+        );
     }
 
     [Fact]
@@ -140,14 +130,13 @@ public class ExecutionCommandHandlerTests
     {
         var runtimeFactory = new FakeRuntimeFactory { HoldTurnOpen = true };
         await using var context = CreateContext(runtimeFactory, CreateTask("active"));
-        await context.StartTurnAsync(
-            CreateExecCommand(Guid.CreateVersion7()),
-            TestContext.Current.CancellationToken);
+        await context.StartTurnAsync(CreateExecCommand(Guid.CreateVersion7()), TestContext.Current.CancellationToken);
 
         await new InterruptCommandHandler().HandleAsync(
             new InterruptCommand { Reason = "stop" },
             context,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.True(runtimeFactory.HeldTurnCancellation!.IsCancellationRequested);
         runtimeFactory.CompleteHeldTurn();
@@ -163,7 +152,8 @@ public class ExecutionCommandHandlerTests
         await new HumanResponseCommandHandler().HandleAsync(
             new HumanResponseCommand("missing", approved: true),
             context,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         var content = Assert.IsType<AgwTextContent>(Assert.Single(sink.Messages).Contents[0]);
         Assert.Equal("No matching HumanGate request is waiting for this response.", content.Content);
@@ -175,18 +165,14 @@ public class ExecutionCommandHandlerTests
         var sink = new CapturingSink();
         var runtimeFactory = new FakeRuntimeFactory();
         var agentId = Guid.CreateVersion7();
-        await using var context = CreateContext(
-            runtimeFactory,
-            CreateTask("mode-context"),
-            sink: sink);
+        await using var context = CreateContext(runtimeFactory, CreateTask("mode-context"), sink: sink);
 
         await new SetModeCommandHandler().HandleAsync(
             new SetModeCommand { AgentId = agentId, Mode = "execute" },
             context,
-            TestContext.Current.CancellationToken);
-        await context.StartTurnAsync(
-            CreateExecCommand(agentId),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
+        await context.StartTurnAsync(CreateExecCommand(agentId), TestContext.Current.CancellationToken);
 
         Assert.Equal("execute", Assert.Single(runtimeFactory.StartRequests).RequestedMode);
         var status = Assert.Single(sink.Messages);
@@ -200,23 +186,20 @@ public class ExecutionCommandHandlerTests
         var sink = new CapturingSink();
         var runtimeFactory = new ModeTestRuntimeFactory();
         var agentId = Guid.CreateVersion7();
-        await using var context = CreateContext(
-            runtimeFactory,
-            CreateTask("mode-context"),
-            sink: sink);
-        await context.StartTurnAsync(
-            CreateExecCommand(agentId),
-            TestContext.Current.CancellationToken);
+        await using var context = CreateContext(runtimeFactory, CreateTask("mode-context"), sink: sink);
+        await context.StartTurnAsync(CreateExecCommand(agentId), TestContext.Current.CancellationToken);
         var handler = new SetModeCommandHandler();
 
         await handler.HandleAsync(
             new SetModeCommand { AgentId = agentId, Mode = "plan" },
             context,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         await handler.HandleAsync(
             new SetModeCommand { AgentId = agentId, Mode = "execute" },
             context,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Empty(runtimeFactory.ModeChanges);
         runtimeFactory.CompleteHeldTurn();
@@ -239,7 +222,9 @@ public class ExecutionCommandHandlerTests
             new SetModeCommandHandler().HandleAsync(
                 new SetModeCommand { AgentId = Guid.CreateVersion7(), Mode = mode },
                 context,
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(Agw.Shared.Exceptions.ErrorCodes.InvalidParam.Code, exception.Code);
     }
@@ -252,7 +237,8 @@ public class ExecutionCommandHandlerTests
         await new SetPermissionModeCommandHandler().HandleAsync(
             new SetPermissionModeCommand { PermissionMode = PermissionMode.AllowSameArguments },
             context,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(PermissionMode.AllowSameArguments, context.Settings!.PermissionMode);
     }
@@ -261,17 +247,14 @@ public class ExecutionCommandHandlerTests
     public async Task SetPermissionModeCommand_DuringActiveTurn_AppliesImmediately()
     {
         var runtimeFactory = new PermissionTestRuntimeFactory();
-        await using var context = CreateContext(
-            runtimeFactory,
-            CreateTask("permission-context"));
-        await context.StartTurnAsync(
-            CreateExecCommand(Guid.CreateVersion7()),
-            TestContext.Current.CancellationToken);
+        await using var context = CreateContext(runtimeFactory, CreateTask("permission-context"));
+        await context.StartTurnAsync(CreateExecCommand(Guid.CreateVersion7()), TestContext.Current.CancellationToken);
 
         await new SetPermissionModeCommandHandler().HandleAsync(
             new SetPermissionModeCommand { PermissionMode = PermissionMode.FullAccess },
             context,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(PermissionMode.FullAccess, context.Settings!.PermissionMode);
         Assert.Equal([PermissionMode.FullAccess], runtimeFactory.ActiveChanges);
@@ -290,7 +273,9 @@ public class ExecutionCommandHandlerTests
             new SetPermissionModeCommandHandler().HandleAsync(
                 new SetPermissionModeCommand(),
                 context,
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(Agw.Shared.Exceptions.ErrorCodes.InvalidParam.Code, exception.Code);
     }
@@ -306,7 +291,8 @@ public class ExecutionCommandHandlerTests
             runtimeFactory,
             task,
             taskAppService: taskAppService,
-            projectAppService: projectAppService);
+            projectAppService: projectAppService
+        );
         var command = CreateExecCommand(Guid.CreateVersion7());
         var handler = new ExecCommandHandler();
 
@@ -317,9 +303,7 @@ public class ExecutionCommandHandlerTests
         Assert.Equal(1, projectAppService.GetCount);
         Assert.Equal(2, runtimeFactory.StartRequests.Count);
         Assert.Null(runtimeFactory.StartRequests[0].CurrentRuntime);
-        Assert.Same(
-            runtimeFactory.CreatedRuntimes[0],
-            runtimeFactory.StartRequests[1].CurrentRuntime);
+        Assert.Same(runtimeFactory.CreatedRuntimes[0], runtimeFactory.StartRequests[1].CurrentRuntime);
     }
 
     [Fact]
@@ -332,12 +316,14 @@ public class ExecutionCommandHandlerTests
         await handler.HandleAsync(
             CreateExecCommand(Guid.CreateVersion7()),
             context,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         var previous = runtimeFactory.CreatedRuntimes[0];
         await handler.HandleAsync(
             CreateExecCommand(Guid.CreateVersion7()),
             context,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.True(previous.Disposed);
         Assert.Null(runtimeFactory.StartRequests[1].CurrentRuntime);
@@ -351,12 +337,14 @@ public class ExecutionCommandHandlerTests
         await using var context = CreateContext(
             runtimeFactory,
             CreateTask("resolved"),
-            projectAppService: new FakeProjectAppService(configuredWorkspace));
+            projectAppService: new FakeProjectAppService(configuredWorkspace)
+        );
 
         await new ExecCommandHandler().HandleAsync(
             CreateExecCommand(Guid.CreateVersion7()),
             context,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         var expectedWorkspace = Path.GetFullPath(PathUtil.ExpandTilde(configuredWorkspace));
         var turnContext = Assert.Single(runtimeFactory.StartRequests).TurnContext;
@@ -374,22 +362,19 @@ public class ExecutionCommandHandlerTests
         TaskProjection task,
         IExecutionMessageSink? sink = null,
         ITaskAppService? taskAppService = null,
-        IProjectAppService? projectAppService = null) =>
+        IProjectAppService? projectAppService = null
+    ) =>
         new(
             "user",
             sink ?? new CapturingSink(),
             CancellationToken.None,
             runtimeFactory,
             taskAppService ?? new FakeTaskAppService(task),
-            projectAppService ?? new FakeProjectAppService("~/.agw/temp"));
+            projectAppService ?? new FakeProjectAppService("~/.agw/temp")
+        );
 
     private static ExecCommand CreateExecCommand(Guid agentId) =>
-        new(
-            AgentRuntimeType.Agent,
-            new AgwUserInput
-            {
-                Contents = [new AgwTextContent { Content = "hello" }],
-            })
+        new(AgentRuntimeType.Agent, new AgwUserInput { Contents = [new AgwTextContent { Content = "hello" }] })
         {
             AgentId = agentId,
         };
@@ -417,9 +402,7 @@ public class ExecutionCommandHandlerTests
 
         public List<TestRuntime> CreatedRuntimes { get; } = [];
 
-        public Task<RuntimeStartResult> StartAsync(
-            RuntimeStartRequest request,
-            CancellationToken cancellationToken)
+        public Task<RuntimeStartResult> StartAsync(RuntimeStartRequest request, CancellationToken cancellationToken)
         {
             StartRequests.Add(request);
             var runtime = request.CurrentRuntime as TestRuntime;
@@ -431,13 +414,12 @@ public class ExecutionCommandHandlerTests
 
             if (!HoldTurnOpen)
             {
-                return Task.FromResult(new RuntimeStartResult(
-                    runtime,
-                    new ActiveTurn(Task.CompletedTask, new CancellationTokenSource())));
+                return Task.FromResult(
+                    new RuntimeStartResult(runtime, new ActiveTurn(Task.CompletedTask, new CancellationTokenSource()))
+                );
             }
 
-            _heldTurnCompletion = new TaskCompletionSource(
-                TaskCreationOptions.RunContinuationsAsynchronously);
+            _heldTurnCompletion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             HeldTurnCancellation = new CancellationTokenSource();
             var activeTurn = new ActiveTurn(_heldTurnCompletion.Task, HeldTurnCancellation);
             runtime.TryStartTurn(activeTurn);
@@ -460,7 +442,8 @@ public class ExecutionCommandHandlerTests
 
         public Task<ExecutionTaskResolutionResult> ResolveTaskAsync(
             ExecutionTaskRequest request,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             ResolveCount++;
             return Task.FromResult(new ExecutionTaskResolutionResult(_task, null));
@@ -474,20 +457,19 @@ public class ExecutionCommandHandlerTests
             string input,
             string user,
             string? contextId = null,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
 
         public Task<bool> HasTaskAsync(
             Guid taskId,
             Guid? projectId = null,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
     }
 
     private sealed class ModeTestRuntimeFactory : IRuntimeFactory
     {
-        private readonly TaskCompletionSource _turnCompletion = new(
-            TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _turnCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public ModeTestRuntimeFactory()
         {
@@ -497,28 +479,22 @@ public class ExecutionCommandHandlerTests
                 new ModeTestSession(),
                 Guid.CreateVersion7(),
                 "mode-context",
-                sessionStateScope: null);
+                sessionStateScope: null
+            );
         }
 
         public AgentRuntime Runtime { get; }
 
         public List<string> ModeChanges { get; } = [];
 
-        public Task<RuntimeStartResult> StartAsync(
-            RuntimeStartRequest request,
-            CancellationToken cancellationToken)
+        public Task<RuntimeStartResult> StartAsync(RuntimeStartRequest request, CancellationToken cancellationToken)
         {
-            var activeTurn = new ActiveTurn(
-                _turnCompletion.Task,
-                new CancellationTokenSource());
+            var activeTurn = new ActiveTurn(_turnCompletion.Task, new CancellationTokenSource());
             Runtime.TryStartTurn(activeTurn);
             return Task.FromResult(new RuntimeStartResult(Runtime, activeTurn));
         }
 
-        public Task SetModeAsync(
-            RuntimeBase runtime,
-            string mode,
-            CancellationToken cancellationToken)
+        public Task SetModeAsync(RuntimeBase runtime, string mode, CancellationToken cancellationToken)
         {
             Assert.Same(Runtime, runtime);
             ModeChanges.Add(mode);
@@ -530,8 +506,7 @@ public class ExecutionCommandHandlerTests
 
     private sealed class PermissionTestRuntimeFactory : IRuntimeFactory
     {
-        private readonly TaskCompletionSource _turnCompletion = new(
-            TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _turnCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public TestRuntime Runtime { get; } = new();
 
@@ -539,9 +514,7 @@ public class ExecutionCommandHandlerTests
 
         public List<PermissionMode> RuntimeChanges { get; } = [];
 
-        public Task<RuntimeStartResult> StartAsync(
-            RuntimeStartRequest request,
-            CancellationToken cancellationToken)
+        public Task<RuntimeStartResult> StartAsync(RuntimeStartRequest request, CancellationToken cancellationToken)
         {
             var activeTurn = new ActiveTurn(
                 _turnCompletion.Task,
@@ -550,7 +523,8 @@ public class ExecutionCommandHandlerTests
                 {
                     ActiveChanges.Add(permissionMode);
                     return ValueTask.CompletedTask;
-                });
+                }
+            );
             Runtime.TryStartTurn(activeTurn);
             return Task.FromResult(new RuntimeStartResult(Runtime, activeTurn));
         }
@@ -558,7 +532,8 @@ public class ExecutionCommandHandlerTests
         public Task SetPermissionModeAsync(
             RuntimeBase runtime,
             PermissionMode permissionMode,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             Assert.Same(Runtime, runtime);
             RuntimeChanges.Add(permissionMode);
@@ -570,34 +545,34 @@ public class ExecutionCommandHandlerTests
 
     private sealed class ModeTestAgent : AIAgent
     {
-        protected override ValueTask<AgentSession> CreateSessionCoreAsync(
-            CancellationToken cancellationToken) =>
+        protected override ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken) =>
             ValueTask.FromResult<AgentSession>(new ModeTestSession());
 
         protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
             AgentSession session,
             JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
 
         protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
             JsonElement sessionState,
             JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult<AgentSession>(new ModeTestSession());
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult<AgentSession>(new ModeTestSession());
 
         protected override Task<AgentResponse> RunCoreAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
-            CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            CancellationToken cancellationToken
+        ) => throw new NotSupportedException();
 
         protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
-            [EnumeratorCancellation] CancellationToken cancellationToken)
+            [EnumeratorCancellation] CancellationToken cancellationToken
+        )
         {
             await Task.Yield();
             yield break;
@@ -626,17 +601,13 @@ public class ExecutionCommandHandlerTests
         public Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null) =>
             throw new NotSupportedException();
 
-        public Task<string?> GetProjectExtraSettingAsync(Guid? projectId) =>
-            throw new NotSupportedException();
+        public Task<string?> GetProjectExtraSettingAsync(Guid? projectId) => throw new NotSupportedException();
 
-        public Task<Guid?> ResolveProjectIdAsync(Guid? projectId) =>
-            throw new NotSupportedException();
+        public Task<Guid?> ResolveProjectIdAsync(Guid? projectId) => throw new NotSupportedException();
 
-        public Task<Project?> CreateAsync(Project project, string user) =>
-            throw new NotSupportedException();
+        public Task<Project?> CreateAsync(Project project, string user) => throw new NotSupportedException();
 
-        public Task<bool> DeleteAsync(Guid id) =>
-            throw new NotSupportedException();
+        public Task<bool> DeleteAsync(Guid id) => throw new NotSupportedException();
 
         public Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction, string user) =>
             throw new NotSupportedException();

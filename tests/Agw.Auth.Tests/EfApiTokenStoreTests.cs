@@ -3,31 +3,26 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-
 using Xunit;
 
 namespace Agw.Auth.Tests;
 
 public sealed class EfApiTokenStoreTests
 {
-    private static readonly DateTimeOffset CreatedAt =
-        new(2026, 8, 12, 8, 30, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset CreatedAt = new(2026, 8, 12, 8, 30, 0, TimeSpan.Zero);
 
     [Fact]
     public async Task CreateTokenAsync_PersistsHashCreatorAndUtcCreationTime()
     {
         await using var fixture = await TokenStoreFixture.CreateAsync();
 
-        var created = await fixture.Store.CreateTokenAsync(
-            "Desktop",
-            TestContext.Current.CancellationToken);
+        var created = await fixture.Store.CreateTokenAsync("Desktop", TestContext.Current.CancellationToken);
         fixture.Context.ChangeTracker.Clear();
 
-        var persisted = await fixture.Context.ApiTokens
-            .AsNoTracking()
+        var persisted = await fixture
+            .Context.ApiTokens.AsNoTracking()
             .SingleAsync(TestContext.Current.CancellationToken);
         Assert.StartsWith("agw_", created.Token);
         Assert.Equal("Desktop", persisted.Name);
@@ -37,23 +32,18 @@ public sealed class EfApiTokenStoreTests
         Assert.Equal(CreatedAt, created.CreatedAt);
         Assert.DoesNotContain(created.Token, persisted.SecretHash, StringComparison.Ordinal);
         Assert.Equal(64, persisted.SecretHash.Length);
-        Assert.True(await fixture.Store.ValidateTokenAsync(
-            created.Token,
-            TestContext.Current.CancellationToken));
+        Assert.True(await fixture.Store.ValidateTokenAsync(created.Token, TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task CreateTokenAsync_WhenNameOnlyDiffersByCase_ThrowsConflict()
     {
         await using var fixture = await TokenStoreFixture.CreateAsync();
-        await fixture.Store.CreateTokenAsync(
-            "Desktop",
-            TestContext.Current.CancellationToken);
+        await fixture.Store.CreateTokenAsync("Desktop", TestContext.Current.CancellationToken);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            fixture.Store.CreateTokenAsync(
-                " desktop ",
-                TestContext.Current.CancellationToken));
+            fixture.Store.CreateTokenAsync(" desktop ", TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(ErrorCodes.ApiTokenNameAlreadyExists.Code, exception.Code);
     }
@@ -62,27 +52,18 @@ public sealed class EfApiTokenStoreTests
     public async Task RevokeTokenAsync_WhenTokenExists_DeletesAndInvalidatesIt()
     {
         await using var fixture = await TokenStoreFixture.CreateAsync();
-        var created = await fixture.Store.CreateTokenAsync(
-            "CLI",
-            TestContext.Current.CancellationToken);
+        var created = await fixture.Store.CreateTokenAsync("CLI", TestContext.Current.CancellationToken);
 
-        var revoked = await fixture.Store.RevokeTokenAsync(
-            created.Id,
-            TestContext.Current.CancellationToken);
+        var revoked = await fixture.Store.RevokeTokenAsync(created.Id, TestContext.Current.CancellationToken);
 
         Assert.True(revoked);
-        Assert.False(await fixture.Store.ValidateTokenAsync(
-            created.Token,
-            TestContext.Current.CancellationToken));
-        Assert.Empty(await fixture.Store.ListTokensAsync(
-            TestContext.Current.CancellationToken));
+        Assert.False(await fixture.Store.ValidateTokenAsync(created.Token, TestContext.Current.CancellationToken));
+        Assert.Empty(await fixture.Store.ListTokensAsync(TestContext.Current.CancellationToken));
     }
 
     private sealed class TokenStoreFixture : IAsyncDisposable
     {
-        private TokenStoreFixture(
-            SqliteConnection connection,
-            AgwDbContext context)
+        private TokenStoreFixture(SqliteConnection connection, AgwDbContext context)
         {
             Connection = connection;
             Context = context;
@@ -100,9 +81,9 @@ public sealed class EfApiTokenStoreTests
             var options = new DbContextOptionsBuilder<AgwDbContext>()
                 .UseSqlite(connection)
                 .UseSnakeCaseNamingConvention()
-                .AddInterceptors(new EntityCreatorInterceptor(
-                    new TestUserIdProvider("creator-42"),
-                    new FixedTimeProvider(CreatedAt)))
+                .AddInterceptors(
+                    new EntityCreatorInterceptor(new TestUserIdProvider("creator-42"), new FixedTimeProvider(CreatedAt))
+                )
                 .Options;
             var context = new AgwDbContext(options);
             await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);

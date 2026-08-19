@@ -15,10 +15,7 @@ public class ExecutionCommandDispatcherTests
         var dispatcher = new ExecutionCommandDispatcher([handler]);
         var command = new InterruptCommand { Reason = "stop" };
 
-        await dispatcher.DispatchAsync(
-            command,
-            context: null!,
-            TestContext.Current.CancellationToken);
+        await dispatcher.DispatchAsync(command, context: null!, TestContext.Current.CancellationToken);
 
         Assert.Same(command, handler.Command);
     }
@@ -28,10 +25,9 @@ public class ExecutionCommandDispatcherTests
     {
         var dispatcher = new ExecutionCommandDispatcher([]);
 
-        await Assert.ThrowsAsync<AgwException>(() => dispatcher.DispatchAsync(
-            new InterruptCommand(),
-            context: null!,
-            TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<AgwException>(() =>
+            dispatcher.DispatchAsync(new InterruptCommand(), context: null!, TestContext.Current.CancellationToken)
+        );
     }
 
     [Fact]
@@ -52,7 +48,8 @@ public class ExecutionCommandDispatcherTests
         public Task HandleAsync(
             AgentRunCommand command,
             ExecutionConnectionContext context,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             Command = command;
             return Task.CompletedTask;

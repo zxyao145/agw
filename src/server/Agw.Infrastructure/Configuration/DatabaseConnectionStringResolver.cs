@@ -1,8 +1,6 @@
 using System.Data.Common;
-
 using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
-
 using Microsoft.Data.Sqlite;
 
 namespace Agw.Infrastructure.Configuration;
@@ -30,14 +28,8 @@ public static class DatabaseConnectionStringResolver
 
         try
         {
-            var builder = new DbConnectionStringBuilder
-            {
-                ConnectionString = connectionString
-            };
-            var sensitiveKeys = builder.Keys
-                .Cast<string>()
-                .Where(IsSensitiveKey)
-                .ToArray();
+            var builder = new DbConnectionStringBuilder { ConnectionString = connectionString };
+            var sensitiveKeys = builder.Keys.Cast<string>().Where(IsSensitiveKey).ToArray();
             foreach (var key in sensitiveKeys)
             {
                 builder[key] = RedactedValue;
@@ -60,7 +52,9 @@ public static class DatabaseConnectionStringResolver
         }
         else if (builder.DataSource != ":memory:" && !Path.IsPathRooted(builder.DataSource))
         {
-            builder.DataSource = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(paths.DatabaseFile)!, builder.DataSource));
+            builder.DataSource = Path.GetFullPath(
+                Path.Combine(Path.GetDirectoryName(paths.DatabaseFile)!, builder.DataSource)
+            );
         }
 
         return builder.ToString();
@@ -69,15 +63,16 @@ public static class DatabaseConnectionStringResolver
     private static bool IsSensitiveKey(string key)
     {
         var normalizedKey = string.Concat(key.Where(char.IsLetterOrDigit)).ToLowerInvariant();
-        return normalizedKey is "password"
-            or "pwd"
-            or "passfile"
-            or "sslpassword"
-            or "token"
-            or "accesstoken"
-            or "apikey"
-            or "clientsecret"
-            or "accountkey"
-            or "sharedaccesskey";
+        return normalizedKey
+            is "password"
+                or "pwd"
+                or "passfile"
+                or "sslpassword"
+                or "token"
+                or "accesstoken"
+                or "apikey"
+                or "clientsecret"
+                or "accountkey"
+                or "sharedaccesskey";
     }
 }

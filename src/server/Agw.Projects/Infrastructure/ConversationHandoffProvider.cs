@@ -1,5 +1,4 @@
 using System.Text.Json;
-
 using Agw.Projects.Domain.Services;
 using Agw.Shared;
 using Agw.Shared.Contracts.Projects;
@@ -7,7 +6,6 @@ using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Extensions;
-
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -23,8 +21,7 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
 
     private readonly IRepository<ProjectConversationChatHistory> _recordRepository;
 
-    public ConversationHandoffProvider(
-        IRepository<ProjectConversationChatHistory> recordRepository)
+    public ConversationHandoffProvider(IRepository<ProjectConversationChatHistory> recordRepository)
     {
         _recordRepository = recordRepository;
     }
@@ -33,15 +30,16 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
         Guid conversationId,
         AgentRuntimeType targetType,
         Guid targetId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         if (conversationId == Guid.Empty || targetId == Guid.Empty)
         {
             return ConversationHandoff.Empty;
         }
 
-        var records = await _recordRepository.Queryable
-            .AsNoTracking()
+        var records = await _recordRepository
+            .Queryable.AsNoTracking()
             .Where(record => record.ConversationId == conversationId)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -79,13 +77,10 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
         candidates = DeduplicateByMessageId(candidates);
 
         var selected = SelectRecentMessages(candidates);
-        return new ConversationHandoff(
-            selected,
-            throughSequence >= 0 ? throughSequence : null);
+        return new ConversationHandoff(selected, throughSequence >= 0 ? throughSequence : null);
     }
 
-    private static List<AttributedRecord> AttributeTargets(
-        IReadOnlyList<ProjectConversationChatHistory> records)
+    private static List<AttributedRecord> AttributeTargets(IReadOnlyList<ProjectConversationChatHistory> records)
     {
         var result = new List<AttributedRecord>(records.Count);
         TargetIdentity? activeTarget = null;
@@ -97,10 +92,7 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
                 activeTarget = explicitTarget;
             }
 
-            result.Add(new AttributedRecord(
-                record,
-                record.ConversationSequence ?? long.MinValue,
-                activeTarget));
+            result.Add(new AttributedRecord(record, record.ConversationSequence ?? long.MinValue, activeTarget));
         }
 
         return result;
@@ -120,9 +112,10 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
         }
 
         var separatorIndex = historyScope.IndexOf(":node:", StringComparison.Ordinal);
-        var idText = separatorIndex < 0
-            ? historyScope["agentflow:".Length..]
-            : historyScope["agentflow:".Length..separatorIndex];
+        var idText =
+            separatorIndex < 0
+                ? historyScope["agentflow:".Length..]
+                : historyScope["agentflow:".Length..separatorIndex];
         return Guid.TryParse(idText, out var agentflowId)
             ? new TargetIdentity(AgentRuntimeType.Agentflow, agentflowId)
             : null;
@@ -130,14 +123,17 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
 
     private static bool TryGetTargetFromMetadata(
         IReadOnlyDictionary<string, JsonElement>? metadata,
-        out TargetIdentity target)
+        out TargetIdentity target
+    )
     {
         target = default;
-        if (metadata?.TryGetValue(TargetTypeMetadataKey, out var typeElement) != true
+        if (
+            metadata?.TryGetValue(TargetTypeMetadataKey, out var typeElement) != true
             || metadata.TryGetValue(TargetIdMetadataKey, out var idElement) != true
             || typeElement.ValueKind != JsonValueKind.String
             || idElement.ValueKind != JsonValueKind.String
-            || !Guid.TryParse(idElement.GetString(), out var targetId))
+            || !Guid.TryParse(idElement.GetString(), out var targetId)
+        )
         {
             return false;
         }
@@ -146,7 +142,7 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
         {
             "agent" => AgentRuntimeType.Agent,
             "agentflow" => AgentRuntimeType.Agentflow,
-            _ => (AgentRuntimeType?)null
+            _ => (AgentRuntimeType?)null,
         };
         if (!targetType.HasValue)
         {
@@ -159,28 +155,24 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
 
     private static long? GetThroughSequence(IReadOnlyDictionary<string, JsonElement>? metadata)
     {
-        if (metadata?.TryGetValue(
-                ConversationHandoffMetadata.ThroughSequenceKey,
-                out var sequenceElement) != true)
+        if (metadata?.TryGetValue(ConversationHandoffMetadata.ThroughSequenceKey, out var sequenceElement) != true)
         {
             return null;
         }
 
-        if (sequenceElement.ValueKind == JsonValueKind.Number
-            && sequenceElement.TryGetInt64(out var sequence))
+        if (sequenceElement.ValueKind == JsonValueKind.Number && sequenceElement.TryGetInt64(out var sequence))
         {
             return sequence;
         }
 
-        return sequenceElement.ValueKind == JsonValueKind.String
+        return
+            sequenceElement.ValueKind == JsonValueKind.String
             && long.TryParse(sequenceElement.GetString(), out sequence)
-                ? sequence
-                : null;
+            ? sequence
+            : null;
     }
 
-    private static bool IsAlreadyVisibleToTarget(
-        ProjectConversationChatHistory record,
-        AgentRuntimeType targetType)
+    private static bool IsAlreadyVisibleToTarget(ProjectConversationChatHistory record, AgentRuntimeType targetType)
     {
         if (targetType != AgentRuntimeType.Agent || GetHistoryScope(record) != null)
         {
@@ -193,8 +185,10 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
 
     private static string? GetHistoryScope(ProjectConversationChatHistory record)
     {
-        if (record.Metadata?.TryGetValue(HistoryScopeMetadataKey, out var scopeElement) != true
-            || scopeElement.ValueKind != JsonValueKind.String)
+        if (
+            record.Metadata?.TryGetValue(HistoryScopeMetadataKey, out var scopeElement) != true
+            || scopeElement.ValueKind != JsonValueKind.String
+        )
         {
             return null;
         }
@@ -228,8 +222,8 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
             return null;
         }
 
-        var textContents = message.Contents
-            .OfType<TextContent>()
+        var textContents = message
+            .Contents.OfType<TextContent>()
             .Where(content => !string.IsNullOrWhiteSpace(content.Text))
             .Select(content => (AIContent)new TextContent(content.Text))
             .ToList();
@@ -238,26 +232,24 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
             return null;
         }
 
-        var handoffMessage = new ChatMessage(
-            isResult ? ChatRole.Assistant : message.Role,
-            textContents)
+        var handoffMessage = new ChatMessage(isResult ? ChatRole.Assistant : message.Role, textContents)
         {
             MessageId = message.MessageId,
-            AuthorName = message.AuthorName
+            AuthorName = message.AuthorName,
         }.WithAgentRequestMessageSource(
             AgentRequestMessageSourceType.AIContextProvider,
-            nameof(ConversationHandoffProvider));
+            nameof(ConversationHandoffProvider)
+        );
         ConversationHandoffMetadata.MarkHandoffMessage(handoffMessage);
 
         return new HandoffCandidate(
             item.Sequence,
             handoffMessage,
-            textContents.OfType<TextContent>().Sum(content => content.Text.Length));
+            textContents.OfType<TextContent>().Sum(content => content.Text.Length)
+        );
     }
 
-    private static bool IsRealUserMessage(
-        ChatMessage message,
-        IReadOnlyDictionary<string, JsonElement>? metadata) =>
+    private static bool IsRealUserMessage(ChatMessage message, IReadOnlyDictionary<string, JsonElement>? metadata) =>
         string.Equals(message.AuthorName, Constants.DefaultInputAuthor, StringComparison.Ordinal)
         || metadata?.ContainsKey(TargetTypeMetadataKey) == true;
 
@@ -268,41 +260,37 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
             return true;
         }
 
-        return GetMessageType(message) is
-            "agentflow-checkpoint" or
-            "human-interaction-request" or
-            "human-gate-request" or
-            "tool-approval-request" or
-            "turn-start" or
-            "turn-finished";
+        return GetMessageType(message)
+            is "agentflow-checkpoint"
+                or "human-interaction-request"
+                or "human-gate-request"
+                or "tool-approval-request"
+                or "turn-start"
+                or "turn-finished";
     }
 
     private static bool HasMessageType(ChatMessage message, string expected) =>
         string.Equals(GetMessageType(message), expected, StringComparison.Ordinal);
 
     private static string? GetMessageType(ChatMessage message) =>
-        message.AdditionalProperties?.TryGetValue("type", out var value) == true
-            ? value?.ToString()
-            : null;
+        message.AdditionalProperties?.TryGetValue("type", out var value) == true ? value?.ToString() : null;
 
-    private static List<HandoffCandidate> DeduplicateByMessageId(
-        IReadOnlyList<HandoffCandidate> candidates)
+    private static List<HandoffCandidate> DeduplicateByMessageId(IReadOnlyList<HandoffCandidate> candidates)
     {
         var lastSequenceByMessage = candidates
             .Where(candidate => !string.IsNullOrWhiteSpace(candidate.Message.MessageId))
-            .GroupBy(
-                candidate => candidate.Message.MessageId!,
-                candidate => candidate.Sequence)
+            .GroupBy(candidate => candidate.Message.MessageId!, candidate => candidate.Sequence)
             .ToDictionary(group => group.Key, group => group.Max(), StringComparer.Ordinal);
 
         return candidates
-            .Where(candidate => string.IsNullOrWhiteSpace(candidate.Message.MessageId)
-                || lastSequenceByMessage[candidate.Message.MessageId!] == candidate.Sequence)
+            .Where(candidate =>
+                string.IsNullOrWhiteSpace(candidate.Message.MessageId)
+                || lastSequenceByMessage[candidate.Message.MessageId!] == candidate.Sequence
+            )
             .ToList();
     }
 
-    private static IReadOnlyList<ChatMessage> SelectRecentMessages(
-        IReadOnlyList<HandoffCandidate> candidates)
+    private static IReadOnlyList<ChatMessage> SelectRecentMessages(IReadOnlyList<HandoffCandidate> candidates)
     {
         var selected = new List<HandoffCandidate>();
         var characterCount = 0;
@@ -327,10 +315,8 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
     private sealed record AttributedRecord(
         ProjectConversationChatHistory Record,
         long Sequence,
-        TargetIdentity? Target);
+        TargetIdentity? Target
+    );
 
-    private sealed record HandoffCandidate(
-        long Sequence,
-        ChatMessage Message,
-        int CharacterCount);
+    private sealed record HandoffCandidate(long Sequence, ChatMessage Message, int CharacterCount);
 }

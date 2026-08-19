@@ -4,7 +4,6 @@ using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Exceptions;
 using Agw.Tools.ToolBlocks.Storage;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -22,20 +21,16 @@ public sealed class ProjectMemoryToolBlock : IToolBlock
     public ProjectMemoryToolBlock(
         IServiceScopeFactory serviceScopeFactory,
         TimeProvider timeProvider,
-        IAgwFileSystemResolver fileSystemResolver)
-        : this(
-            serviceScopeFactory,
-            timeProvider,
-            fileSystemResolver,
-            InMemoryApplicationLock.Shared)
-    {
-    }
+        IAgwFileSystemResolver fileSystemResolver
+    )
+        : this(serviceScopeFactory, timeProvider, fileSystemResolver, InMemoryApplicationLock.Shared) { }
 
     public ProjectMemoryToolBlock(
         IServiceScopeFactory serviceScopeFactory,
         TimeProvider timeProvider,
         IAgwFileSystemResolver fileSystemResolver,
-        IApplicationLock applicationLock)
+        IApplicationLock applicationLock
+    )
     {
         _serviceScopeFactory = serviceScopeFactory;
         _timeProvider = timeProvider;
@@ -43,31 +38,35 @@ public sealed class ProjectMemoryToolBlock : IToolBlock
         _applicationLock = applicationLock;
     }
 
-    public ToolBlockDescriptor Descriptor { get; } = new(
-        ToolBlockNames.ProjectMemory,
-        "Project Memory",
-        "Provides database-backed or workspace-backed memory shared across the current project.",
-        ToolBlockScope.Agent | ToolBlockScope.Project,
-        [
-            ProjectMemoryProvider.WriteToolName,
-            ProjectMemoryProvider.ReadFileToolName,
-            ProjectMemoryProvider.DeleteFileToolName,
-            ProjectMemoryProvider.LsToolName,
-            ProjectMemoryProvider.GrepToolName,
-            ProjectMemoryProvider.ReplaceToolName,
-            ProjectMemoryProvider.ReplaceLinesToolName
-        ]);
+    public ToolBlockDescriptor Descriptor { get; } =
+        new(
+            ToolBlockNames.ProjectMemory,
+            "Project Memory",
+            "Provides database-backed or workspace-backed memory shared across the current project.",
+            ToolBlockScope.Agent | ToolBlockScope.Project,
+            [
+                ProjectMemoryProvider.WriteToolName,
+                ProjectMemoryProvider.ReadFileToolName,
+                ProjectMemoryProvider.DeleteFileToolName,
+                ProjectMemoryProvider.LsToolName,
+                ProjectMemoryProvider.GrepToolName,
+                ProjectMemoryProvider.ReplaceToolName,
+                ProjectMemoryProvider.ReplaceLinesToolName,
+            ]
+        );
 
     public ValueTask<ToolContribution> MaterializeAsync(
         ToolBlockDefinition definition,
         ToolMaterializationContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (definition is not ProjectMemoryToolBlockDefinition { Options: not null } projectMemoryDefinition)
         {
             throw new AgwException(
                 ErrorCodes.InvalidParam,
-                $"Tool Block '{definition.GetDefinitionName()}' does not contain project memory options.");
+                $"Tool Block '{definition.GetDefinitionName()}' does not contain project memory options."
+            );
         }
 
         var contribution = new ToolContribution();
@@ -78,31 +77,30 @@ public sealed class ProjectMemoryToolBlock : IToolBlock
                 _serviceScopeFactory,
                 _timeProvider,
                 _applicationLock,
-                context.ProjectId),
+                context.ProjectId
+            ),
             ProjectMemoryStorage.FileSystem => new ProjectAgentFileStore(
                 _fileSystemResolver,
                 context.ProjectId,
-                FileSystemRoot),
+                FileSystemRoot
+            ),
             _ => throw new AgwException(
                 ErrorCodes.InvalidParam,
-                $"Project Memory storage '{storage}' is not supported.")
+                $"Project Memory storage '{storage}' is not supported."
+            ),
         };
-        contribution.PlanModeAllowedToolNames.UnionWith(
-            [
-                ProjectMemoryProvider.ReadFileToolName,
-                ProjectMemoryProvider.LsToolName,
-                ProjectMemoryProvider.GrepToolName
-            ]);
-        contribution.ContextProviders.Add(new ProjectMemoryProvider(
-            store,
-            _applicationLock,
-            GetMutationResourceName(context, storage)));
+        contribution.PlanModeAllowedToolNames.UnionWith([
+            ProjectMemoryProvider.ReadFileToolName,
+            ProjectMemoryProvider.LsToolName,
+            ProjectMemoryProvider.GrepToolName,
+        ]);
+        contribution.ContextProviders.Add(
+            new ProjectMemoryProvider(store, _applicationLock, GetMutationResourceName(context, storage))
+        );
         return ValueTask.FromResult(contribution);
     }
 
-    internal static string GetMutationResourceName(
-        ToolMaterializationContext context,
-        ProjectMemoryStorage storage)
+    internal static string GetMutationResourceName(ToolMaterializationContext context, ProjectMemoryStorage storage)
     {
         if (storage == ProjectMemoryStorage.Database)
         {
@@ -113,7 +111,8 @@ public sealed class ProjectMemoryToolBlock : IToolBlock
             ? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 ".agw",
-                context.Project.Name)
+                context.Project.Name
+            )
             : PathUtil.ExpandTilde(context.Project.Workspace);
         var normalizedWorkspace = Path.TrimEndingDirectorySeparator(Path.GetFullPath(workspace));
         if (OperatingSystem.IsWindows())

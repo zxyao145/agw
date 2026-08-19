@@ -16,7 +16,8 @@ public class ModelProviderAppService : IModelProviderAppService
         IRepository<ModelProviderRelation> repository,
         IUnitOfWork unitOfWork,
         ModelProviderDomainService domainService,
-        ModelProviderUsageGuard usageGuard)
+        ModelProviderUsageGuard usageGuard
+    )
     {
         _repository = repository;
         _unitOfWork = unitOfWork;
@@ -30,17 +31,19 @@ public class ModelProviderAppService : IModelProviderAppService
         if (!modelId.HasValue && !providerId.HasValue)
         {
             modelProviders = await _repository.ListAsync(
-                includes: [modelProvider => modelProvider.Model!, modelProvider => modelProvider.Provider!]);
+                includes: [modelProvider => modelProvider.Model!, modelProvider => modelProvider.Provider!]
+            );
         }
         else
         {
             modelProviders = await _repository.ListAsync(
                 modelProvider =>
-                    (!modelId.HasValue || modelProvider.ModelId == modelId.Value) &&
-                    (!providerId.HasValue || modelProvider.ProviderId == providerId.Value),
+                    (!modelId.HasValue || modelProvider.ModelId == modelId.Value)
+                    && (!providerId.HasValue || modelProvider.ProviderId == providerId.Value),
                 null,
                 modelProvider => modelProvider.Model!,
-                modelProvider => modelProvider.Provider!);
+                modelProvider => modelProvider.Provider!
+            );
         }
 
         return modelProviders.OrderByDescending(modelProvider => modelProvider.CreateTime).ToList();
@@ -62,7 +65,7 @@ public class ModelProviderAppService : IModelProviderAppService
             OutputPrice = request.OutputPrice,
             CacheRead = request.CacheRead,
             CacheWrite = request.CacheWrite,
-            RpsLimit = request.RpsLimit
+            RpsLimit = request.RpsLimit,
         };
 
         _domainService.PrepareForCreate(entity, user);
@@ -79,14 +82,18 @@ public class ModelProviderAppService : IModelProviderAppService
             return null;
         }
 
-        _domainService.ApplyUpdate(existing, entity =>
-        {
-            entity.InputPrice = request.InputPrice;
-            entity.OutputPrice = request.OutputPrice;
-            entity.CacheRead = request.CacheRead;
-            entity.CacheWrite = request.CacheWrite;
-            entity.RpsLimit = request.RpsLimit;
-        }, user);
+        _domainService.ApplyUpdate(
+            existing,
+            entity =>
+            {
+                entity.InputPrice = request.InputPrice;
+                entity.OutputPrice = request.OutputPrice;
+                entity.CacheRead = request.CacheRead;
+                entity.CacheWrite = request.CacheWrite;
+                entity.RpsLimit = request.RpsLimit;
+            },
+            user
+        );
 
         _repository.Update(existing);
         await _unitOfWork.SaveChangesAsync();

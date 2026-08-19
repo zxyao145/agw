@@ -1,5 +1,4 @@
 using System.ClientModel;
-
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Tools;
@@ -7,15 +6,12 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Exceptions;
-
 using Anthropic;
 using Anthropic.Core;
-
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-
 using OpenAI;
 
 namespace Agw.Agents.Execution.Agents;
@@ -30,15 +26,17 @@ public partial class AgentRuntimeService
         string defaultMode,
         CancellationToken cancellationToken,
         int backgroundDepth = 0,
-        bool deferHumanInteractions = false)
+        bool deferHumanInteractions = false
+    )
     {
         if (!agentDefinition.ModelProviderId.HasValue)
         {
             return null;
         }
 
-        var runtimeConfiguration =
-            await _agentAppService.GetModelRuntimeConfigurationAsync(agentDefinition.ModelProviderId.Value);
+        var runtimeConfiguration = await _agentAppService.GetModelRuntimeConfigurationAsync(
+            agentDefinition.ModelProviderId.Value
+        );
         if (runtimeConfiguration == null)
         {
             return null;
@@ -55,16 +53,18 @@ public partial class AgentRuntimeService
 
         var authConfig = authConfigs[Random.Shared.Next(authConfigs.Count)];
         var supportsHostedWebSearch = provider.ProviderType == ProviderType.OpenAIResponses;
-        Func<IReadOnlyList<Guid>, CancellationToken, ValueTask<IReadOnlyList<AIAgent>>>?
-            backgroundAgentFactory = backgroundDepth == 0
-                ? (ids, token) => CreateBackgroundAgentsAsync(
-                    ids,
-                    agentDefinition.Id,
-                    project,
-                    conversationId,
-                    environmentVariables,
-                    defaultMode,
-                    token)
+        Func<IReadOnlyList<Guid>, CancellationToken, ValueTask<IReadOnlyList<AIAgent>>>? backgroundAgentFactory =
+            backgroundDepth == 0
+                ? (ids, token) =>
+                    CreateBackgroundAgentsAsync(
+                        ids,
+                        agentDefinition.Id,
+                        project,
+                        conversationId,
+                        environmentVariables,
+                        defaultMode,
+                        token
+                    )
                 : null;
         var capabilities = await _capabilityComposer
             .ComposeAsync(
@@ -76,85 +76,76 @@ public partial class AgentRuntimeService
                 defaultMode,
                 backgroundAgentFactory,
                 conversationId,
-                deferHumanInteractions)
+                deferHumanInteractions
+            )
             .ConfigureAwait(false);
         AIAgent? aiAgent = null;
         try
         {
-            var skillsProvider = await CreateSkillsProviderAsync(
-                    agentDefinition,
-                    project,
-                    capabilities.PluginSkills)
+            var skillsProvider = await CreateSkillsProviderAsync(agentDefinition, project, capabilities.PluginSkills)
                 .ConfigureAwait(false);
             if (skillsProvider != null)
             {
                 capabilities.AddResource(skillsProvider);
                 capabilities.AddContextProvider(skillsProvider);
                 capabilities.AddAutoApprovalRule(AgentSkillsProvider.ReadOnlyToolsAutoApprovalRule);
-                capabilities.AddPlanModeAllowedToolNames(
-                    [
-                        AgentSkillsProvider.LoadSkillToolName,
-                        AgentSkillsProvider.ReadSkillResourceToolName
-                    ]);
+                capabilities.AddPlanModeAllowedToolNames([
+                    AgentSkillsProvider.LoadSkillToolName,
+                    AgentSkillsProvider.ReadSkillResourceToolName,
+                ]);
             }
 
             var chatClient = provider.ProviderType switch
             {
-                ProviderType.OpenAIChatCompletions => CreateOpenAiChatClient(
-                    model,
-                    provider,
-                    authConfig),
-                ProviderType.OpenAIResponses => CreateOpenAiResponsesChatClient(
-                    model,
-                    provider,
-                    authConfig),
-                ProviderType.Anthropic => CreateAnthropicChatClient(
-                    model,
-                    provider,
-                    authConfig),
+                ProviderType.OpenAIChatCompletions => CreateOpenAiChatClient(model, provider, authConfig),
+                ProviderType.OpenAIResponses => CreateOpenAiResponsesChatClient(model, provider, authConfig),
+                ProviderType.Anthropic => CreateAnthropicChatClient(model, provider, authConfig),
                 _ => throw new AgwException(
                     ErrorCodes.UnsupportedProviderType,
-                    $"Provider type '{provider.ProviderType}' is not supported")
+                    $"Provider type '{provider.ProviderType}' is not supported"
+                ),
             };
 
             _logger.LogInformation("Creating definition agent {AgentName}", agentDefinition.Name);
 
             aiAgent = chatClient.AsAgwAgent(
-                    new ResolvedAgentDefinition
-                    {
-                        Id = agentDefinition.Id.ToString("N"),
-                        Name = agentDefinition.Name,
-                        Description = agentDefinition.Description,
-                        SystemPrompt = agentDefinition.SystemPrompt,
-                        ModelId = model.Name,
-                        OpenTelemetrySourceName = provider.Name,
-                        ChatHistoryProvider = _chatHistoryProvider,
-                        CompactionProvider = new CompactionProvider(
-                            new ContextWindowCompactionStrategy(
-                                model.MaxContextWindowTokens,
-                                model.MaxOutputTokens),
-                            stateKey: $"agw.compaction.{agentDefinition.Id:N}",
-                            loggerFactory: _loggerFactory),
-                        MaxOutputTokens = model.MaxOutputTokens
-                    },
-                    capabilities,
-                    _loggerFactory,
-                    _services);
+                new ResolvedAgentDefinition
+                {
+                    Id = agentDefinition.Id.ToString("N"),
+                    Name = agentDefinition.Name,
+                    Description = agentDefinition.Description,
+                    SystemPrompt = agentDefinition.SystemPrompt,
+                    ModelId = model.Name,
+                    OpenTelemetrySourceName = provider.Name,
+                    ChatHistoryProvider = _chatHistoryProvider,
+                    CompactionProvider = new CompactionProvider(
+                        new ContextWindowCompactionStrategy(model.MaxContextWindowTokens, model.MaxOutputTokens),
+                        stateKey: $"agw.compaction.{agentDefinition.Id:N}",
+                        loggerFactory: _loggerFactory
+                    ),
+                    MaxOutputTokens = model.MaxOutputTokens,
+                },
+                capabilities,
+                _loggerFactory,
+                _services
+            );
             var agentBuilder = aiAgent
                 .AsBuilder()
                 .Use(
                     runFunc: _usageTrackingMiddleware.TrackRunMiddleware,
-                    runStreamingFunc: _usageTrackingMiddleware.TrackStreamingMiddleware)
+                    runStreamingFunc: _usageTrackingMiddleware.TrackStreamingMiddleware
+                )
                 .Use(
                     runFunc: _observabilityMiddleware.LogRunMiddleware,
-                    runStreamingFunc: _observabilityMiddleware.LogStreamingMiddleware);
+                    runStreamingFunc: _observabilityMiddleware.LogStreamingMiddleware
+                );
             if (backgroundDepth > 0)
             {
-                var approvalMiddleware = new BackgroundAgentApprovalMiddleware(
-                    _humanInteractionContextAccessor);
+                var approvalMiddleware = new BackgroundAgentApprovalMiddleware(_humanInteractionContextAccessor);
                 agentBuilder.Use(
                     runFunc: approvalMiddleware.RejectNewApprovalAsync,
-                    runStreamingFunc: approvalMiddleware.RejectNewApprovalStreamingAsync);
+                    runStreamingFunc: approvalMiddleware.RejectNewApprovalStreamingAsync
+                );
             }
 
             aiAgent = agentBuilder.Build();
@@ -172,31 +163,22 @@ public partial class AgentRuntimeService
         }
     }
 
-    private IChatClient CreateOpenAiChatClient(
-        AgwAiModel model,
-        Provider provider,
-        ProviderAuthConfig authConfig)
+    private IChatClient CreateOpenAiChatClient(AgwAiModel model, Provider provider, ProviderAuthConfig authConfig)
     {
         var apiKey = ResolveApiKey(authConfig);
         var credential = new ApiKeyCredential(apiKey);
-        var options = new OpenAIClientOptions
-        {
-            Endpoint = new Uri(provider.Endpoint),
-        };
+        var options = new OpenAIClientOptions { Endpoint = new Uri(provider.Endpoint) };
         var client = new OpenAIClient(credential, options);
         var chatCompletionClient = client.GetChatClient(model.Name);
         return chatCompletionClient.AsIChatClient();
     }
 
-    private IChatClient CreateAnthropicChatClient(
-        AgwAiModel model,
-        Provider provider,
-        ProviderAuthConfig authConfig)
+    private IChatClient CreateAnthropicChatClient(AgwAiModel model, Provider provider, ProviderAuthConfig authConfig)
     {
         var anthropicClientOptions = new ClientOptions
         {
             ApiKey = ResolveApiKey(authConfig),
-            BaseUrl = provider.Endpoint
+            BaseUrl = provider.Endpoint,
         };
         var client = new AnthropicClient(anthropicClientOptions);
         return client.AsIChatClient(model.Name);
@@ -205,14 +187,12 @@ public partial class AgentRuntimeService
     private IChatClient CreateOpenAiResponsesChatClient(
         AgwAiModel model,
         Provider provider,
-        ProviderAuthConfig authConfig)
+        ProviderAuthConfig authConfig
+    )
     {
         var apiKey = ResolveApiKey(authConfig);
         var credential = new ApiKeyCredential(apiKey);
-        var options = new OpenAIClientOptions
-        {
-            Endpoint = new Uri(provider.Endpoint),
-        };
+        var options = new OpenAIClientOptions { Endpoint = new Uri(provider.Endpoint) };
         var client = new OpenAIClient(credential, options);
 #pragma warning disable OPENAI001
         return client.GetResponsesClient().AsIChatClient(model.Name);
@@ -231,7 +211,8 @@ public partial class AgentRuntimeService
         Guid conversationId,
         IReadOnlyDictionary<string, string> environmentVariables,
         string defaultMode,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var agents = new List<AIAgent>();
         try
@@ -254,7 +235,8 @@ public partial class AgentRuntimeService
                             environmentVariables,
                             defaultMode,
                             cancellationToken,
-                            backgroundDepth: 1)
+                            backgroundDepth: 1
+                        )
                         .ConfigureAwait(false);
                 }
                 else if (definition.Type == AgentType.External)
@@ -267,12 +249,7 @@ public partial class AgentRuntimeService
                         EnvironmentVariables = environmentVariables,
                         Resume = false,
                     };
-                    if (!TryCreateExternalAgent(
-                            request,
-                            project,
-                            environmentVariables,
-                            out agent,
-                            isBackground: true))
+                    if (!TryCreateExternalAgent(request, project, environmentVariables, out agent, isBackground: true))
                     {
                         continue;
                     }
@@ -315,9 +292,7 @@ public partial class AgentRuntimeService
                     break;
             }
         }
-        catch
-        {
-        }
+        catch { }
     }
 
     private static async ValueTask DisposeResourceWithoutThrowingAsync(IAsyncDisposable resource)
@@ -326,8 +301,6 @@ public partial class AgentRuntimeService
         {
             await resource.DisposeAsync().ConfigureAwait(false);
         }
-        catch
-        {
-        }
+        catch { }
     }
 }

@@ -1,5 +1,4 @@
 using Agw.Setup.Services;
-
 using Xunit;
 
 namespace Agw.Setup.Tests;

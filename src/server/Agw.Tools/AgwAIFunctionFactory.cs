@@ -1,15 +1,12 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Domain.Tools;
 
 internal static class AgwAIFunctionFactory
 {
-    public static AITool CreateParameterObjectFunction<TParams, TResult>(
-        Func<TParams, TResult> function,
-        string name)
+    public static AITool CreateParameterObjectFunction<TParams, TResult>(Func<TParams, TResult> function, string name)
     {
         var innerFunction = AIFunctionFactory.Create(function, name);
         return new FlattenedParameterObjectAIFunction(innerFunction);
@@ -17,7 +14,8 @@ internal static class AgwAIFunctionFactory
 
     public static AITool CreateParameterObjectFunction<TParams, TResult>(
         Func<TParams, CancellationToken, Task<TResult>> function,
-        string name)
+        string name
+    )
     {
         var innerFunction = AIFunctionFactory.Create(function, name);
         return new FlattenedParameterObjectAIFunction(innerFunction);
@@ -39,7 +37,8 @@ internal static class AgwAIFunctionFactory
 
         protected override ValueTask<object?> InvokeCoreAsync(
             AIFunctionArguments arguments,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             if (arguments.ContainsKey(_parameterName))
             {
@@ -47,12 +46,11 @@ internal static class AgwAIFunctionFactory
             }
 
             var parameterObject = new Dictionary<string, object?>(arguments, StringComparer.Ordinal);
-            var wrappedArguments = new AIFunctionArguments(new Dictionary<string, object?>
+            var wrappedArguments = new AIFunctionArguments(
+                new Dictionary<string, object?> { [_parameterName] = parameterObject }
+            )
             {
-                [_parameterName] = parameterObject
-            })
-            {
-                Services = arguments.Services
+                Services = arguments.Services,
             };
 
             return base.InvokeCoreAsync(wrappedArguments, cancellationToken);
@@ -79,17 +77,21 @@ internal static class AgwAIFunctionFactory
         private static JsonElement FlattenSchema(JsonElement schema, string parameterName)
         {
             var rootNode = JsonNode.Parse(schema.GetRawText()) as JsonObject;
-            if (rootNode?["properties"] is not JsonObject properties
+            if (
+                rootNode?["properties"] is not JsonObject properties
                 || !properties.TryGetPropertyValue(parameterName, out var parameterSchema)
-                || parameterSchema is not JsonObject parameterObjectSchema)
+                || parameterSchema is not JsonObject parameterObjectSchema
+            )
             {
                 return schema.Clone();
             }
 
             var flattened = parameterObjectSchema.DeepClone().AsObject();
-            if (!flattened.ContainsKey("$defs")
+            if (
+                !flattened.ContainsKey("$defs")
                 && rootNode.TryGetPropertyValue("$defs", out var definitions)
-                && definitions is not null)
+                && definitions is not null
+            )
             {
                 flattened["$defs"] = definitions.DeepClone();
             }

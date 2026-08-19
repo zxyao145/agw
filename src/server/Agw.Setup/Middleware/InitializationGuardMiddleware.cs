@@ -1,5 +1,4 @@
 using Agw.Shared.Runtime;
-
 using Microsoft.AspNetCore.Http;
 
 namespace Agw.Setup.Middleware;
@@ -21,9 +20,11 @@ public class InitializationGuardMiddleware
 
         if (!initializationState.IsInitialized)
         {
-            if (path.StartsWithSegments("/api/server-info")
+            if (
+                path.StartsWithSegments("/api/server-info")
                 || path.StartsWithSegments("/api/health/live")
-                || path.StartsWithSegments("/api/health/ready"))
+                || path.StartsWithSegments("/api/health/ready")
+            )
             {
                 await _next(context);
                 return;
@@ -35,12 +36,16 @@ public class InitializationGuardMiddleware
                 return;
             }
 
-            if (path.StartsWithSegments("/api") || path.StartsWithSegments("/openapi") ||
-                path.StartsWithSegments("/scalar"))
+            if (
+                path.StartsWithSegments("/api")
+                || path.StartsWithSegments("/openapi")
+                || path.StartsWithSegments("/scalar")
+            )
             {
                 context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                await context.Response.WriteAsJsonAsync(new
-                { message = "System is not initialized yet. Complete /setup first." });
+                await context.Response.WriteAsJsonAsync(
+                    new { message = "System is not initialized yet. Complete /setup first." }
+                );
                 return;
             }
 
@@ -62,7 +67,6 @@ public class InitializationGuardMiddleware
             return;
         }
 #endif
-
 
         await _next(context);
     }

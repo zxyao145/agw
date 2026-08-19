@@ -1,5 +1,4 @@
 using Agw.Shared.Data.Repositories;
-
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 
@@ -12,21 +11,23 @@ namespace Agw.Shared.Data.Abstractions;
 /// </summary>
 public partial class EFContext : DbContext, IUnitOfWork, ITransaction
 {
-    public EFContext() : base()
-    {
+    public EFContext()
+        : base() { }
 
-    }
-    public EFContext(DbContextOptions options) : base(options)
-    {
-
-    }
+    public EFContext(DbContextOptions options)
+        : base(options) { }
 
     #region ITransaction
 
     private IDbContextTransaction? _currentTransaction;
+
     public IDbContextTransaction? GetCurrentTransaction() => _currentTransaction;
+
     public bool HasActiveTransaction => _currentTransaction != null;
-    public virtual async Task<IDbContextTransaction> TransactionBeginAsync(CancellationToken cancellationToken = default)
+
+    public virtual async Task<IDbContextTransaction> TransactionBeginAsync(
+        CancellationToken cancellationToken = default
+    )
     {
         if (_currentTransaction != null)
         {
@@ -102,9 +103,7 @@ public partial class EFContext : DbContext, IUnitOfWork, ITransaction
         }
     }
 
-
     #endregion
-
 }
 
 #endregion

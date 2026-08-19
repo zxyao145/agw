@@ -1,9 +1,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Text.Json;
-
 using Agw.Shared.Exceptions;
-
 using Microsoft.Agents.AI;
 
 namespace Agw.Skills.Execution;
@@ -12,15 +10,15 @@ public static class LocalSkillScriptRunner
 {
     private static readonly TimeSpan DefaultTimeout = TimeSpan.FromMinutes(2);
 
-    public static IReadOnlyList<string> SupportedScriptExtensions { get; } =
-        [".py", ".js", ".cs"];
+    public static IReadOnlyList<string> SupportedScriptExtensions { get; } = [".py", ".js", ".cs"];
 
     public static Task<object?> RunAsync(
         AgentFileSkill skill,
         AgentFileSkillScript script,
         JsonElement? arguments,
         IServiceProvider? serviceProvider,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         return RunAsync(skill.Path, script.FullPath, arguments, cancellationToken);
     }
@@ -30,7 +28,8 @@ public static class LocalSkillScriptRunner
         string scriptPath,
         JsonElement? arguments,
         CancellationToken cancellationToken,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null
+    )
     {
         var skillRoot = Path.GetFullPath(skillPath);
         var fullScriptPath = Path.GetFullPath(scriptPath);
@@ -45,7 +44,8 @@ public static class LocalSkillScriptRunner
             {
                 throw new AgwException(
                     ErrorCodes.CommandExecutionFailed,
-                    $"Failed to start skill script '{Path.GetFileName(fullScriptPath)}'.");
+                    $"Failed to start skill script '{Path.GetFileName(fullScriptPath)}'."
+                );
             }
         }
         catch (AgwException)
@@ -57,7 +57,8 @@ public static class LocalSkillScriptRunner
             throw new AgwException(
                 ErrorCodes.CommandExecutionFailed,
                 $"Failed to start skill script '{Path.GetFileName(fullScriptPath)}'.",
-                exception);
+                exception
+            );
         }
 
         var standardOutputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
@@ -65,7 +66,8 @@ public static class LocalSkillScriptRunner
         using var timeoutSource = new CancellationTokenSource(timeout ?? DefaultTimeout);
         using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
-            timeoutSource.Token);
+            timeoutSource.Token
+        );
 
         try
         {
@@ -77,7 +79,8 @@ public static class LocalSkillScriptRunner
             await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
             throw new AgwException(
                 ErrorCodes.CommandTimeout,
-                $"Skill script '{Path.GetFileName(fullScriptPath)}' timed out.");
+                $"Skill script '{Path.GetFileName(fullScriptPath)}' timed out."
+            );
         }
         catch (OperationCanceledException)
         {
@@ -102,7 +105,8 @@ public static class LocalSkillScriptRunner
     internal static ProcessStartInfo CreateStartInfo(
         string skillRoot,
         string scriptPath,
-        IReadOnlyList<string> scriptArguments)
+        IReadOnlyList<string> scriptArguments
+    )
     {
         var extension = Path.GetExtension(scriptPath);
         var startInfo = new ProcessStartInfo
@@ -136,7 +140,8 @@ public static class LocalSkillScriptRunner
         {
             throw new AgwException(
                 ErrorCodes.CommandExecutionFailed,
-                $"Skill script extension '{extension}' is not supported.");
+                $"Skill script extension '{extension}' is not supported."
+            );
         }
 
         foreach (var argument in scriptArguments)
@@ -151,27 +156,26 @@ public static class LocalSkillScriptRunner
     {
         if (!Directory.Exists(skillRoot))
         {
-            throw new AgwException(
-                ErrorCodes.CommandExecutionFailed,
-                $"Skill directory '{skillRoot}' does not exist.");
+            throw new AgwException(ErrorCodes.CommandExecutionFailed, $"Skill directory '{skillRoot}' does not exist.");
         }
 
         var relativePath = Path.GetRelativePath(skillRoot, scriptPath);
-        if (Path.IsPathRooted(relativePath)
+        if (
+            Path.IsPathRooted(relativePath)
             || relativePath.Equals("..", StringComparison.Ordinal)
             || relativePath.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-            || relativePath.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal))
+            || relativePath.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal)
+        )
         {
             throw new AgwException(
                 ErrorCodes.CommandExecutionFailed,
-                $"Skill script '{scriptPath}' is outside the skill directory.");
+                $"Skill script '{scriptPath}' is outside the skill directory."
+            );
         }
 
         if (!File.Exists(scriptPath))
         {
-            throw new AgwException(
-                ErrorCodes.CommandExecutionFailed,
-                $"Skill script '{scriptPath}' does not exist.");
+            throw new AgwException(ErrorCodes.CommandExecutionFailed, $"Skill script '{scriptPath}' does not exist.");
         }
 
         var extension = Path.GetExtension(scriptPath);
@@ -179,7 +183,8 @@ public static class LocalSkillScriptRunner
         {
             throw new AgwException(
                 ErrorCodes.CommandExecutionFailed,
-                $"Skill script extension '{extension}' is not supported.");
+                $"Skill script extension '{extension}' is not supported."
+            );
         }
     }
 
@@ -194,7 +199,8 @@ public static class LocalSkillScriptRunner
         {
             throw new AgwException(
                 ErrorCodes.CommandExecutionFailed,
-                "Skill script arguments must be an array of strings.");
+                "Skill script arguments must be an array of strings."
+            );
         }
 
         var values = new List<string>();
@@ -204,7 +210,8 @@ public static class LocalSkillScriptRunner
             {
                 throw new AgwException(
                     ErrorCodes.CommandExecutionFailed,
-                    "Skill script arguments must be an array of strings.");
+                    "Skill script arguments must be an array of strings."
+                );
             }
 
             values.Add(argument.GetString()!);
@@ -222,11 +229,7 @@ public static class LocalSkillScriptRunner
                 process.Kill(entireProcessTree: true);
             }
         }
-        catch (InvalidOperationException)
-        {
-        }
-        catch (Win32Exception)
-        {
-        }
+        catch (InvalidOperationException) { }
+        catch (Win32Exception) { }
     }
 }

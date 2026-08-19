@@ -2,7 +2,6 @@ using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Messaging;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution.Turns;
@@ -15,7 +14,8 @@ internal sealed class ExecutionHumanInteractionChannel : IHumanInteractionChanne
 
     public ExecutionHumanInteractionChannel(
         IHumanGateApprovalHandler responseHandler,
-        IExecutionMessageSink messageSink)
+        IExecutionMessageSink messageSink
+    )
     {
         _responseHandler = responseHandler;
         _messageSink = messageSink;
@@ -23,7 +23,8 @@ internal sealed class ExecutionHumanInteractionChannel : IHumanInteractionChanne
 
     public async ValueTask<HumanInteractionResponse> RequestAsync(
         HumanInteractionRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -40,7 +41,8 @@ internal sealed class ExecutionHumanInteractionChannel : IHumanInteractionChanne
 
     private async ValueTask<HumanInteractionResponse> RequestCoreAsync(
         HumanInteractionRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         using var requestCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
@@ -50,10 +52,9 @@ internal sealed class ExecutionHumanInteractionChannel : IHumanInteractionChanne
             null,
             "interaction",
             request.Prompt,
-            []);
-        var pendingResponse = _responseHandler
-            .WaitForApprovalAsync(gateRequest, requestCts.Token)
-            .AsTask();
+            []
+        );
+        var pendingResponse = _responseHandler.WaitForApprovalAsync(gateRequest, requestCts.Token).AsTask();
         try
         {
             await _messageSink.WriteAsync(CreateMessage(request), cancellationToken);
@@ -61,7 +62,8 @@ internal sealed class ExecutionHumanInteractionChannel : IHumanInteractionChanne
             return new HumanInteractionResponse(
                 request.RequestId,
                 Cancelled: !decision.Approved,
-                decision.ResponseData);
+                decision.ResponseData
+            );
         }
         catch
         {
@@ -86,7 +88,7 @@ internal sealed class ExecutionHumanInteractionChannel : IHumanInteractionChanne
             { "requestId", request.RequestId },
             { "interactionKind", request.InteractionKind },
             { "prompt", request.Prompt },
-            { "payload", request.Payload }
+            { "payload", request.Payload },
         };
         if (!string.IsNullOrWhiteSpace(request.ToolName))
         {
@@ -102,6 +104,7 @@ internal sealed class ExecutionHumanInteractionChannel : IHumanInteractionChanne
             Constants.DefaultAgentAuthor,
             AiRole.System,
             [new AgwTextContent { Content = request.Prompt }],
-            properties);
+            properties
+        );
     }
 }

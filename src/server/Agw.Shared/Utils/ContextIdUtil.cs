@@ -1,5 +1,4 @@
 using System.Diagnostics;
-
 using Agw.Shared.Extensions;
 
 namespace Agw.Shared.Utils;
@@ -21,9 +20,7 @@ public class ContextIdUtil
     /// </summary>
     public static string ResolveContextId(string? contextId)
     {
-        var resolvedContextId = string.IsNullOrWhiteSpace(contextId)
-            ? GenContextId()
-            : contextId;
+        var resolvedContextId = string.IsNullOrWhiteSpace(contextId) ? GenContextId() : contextId;
 
         return NormalizeContextId(resolvedContextId);
     }

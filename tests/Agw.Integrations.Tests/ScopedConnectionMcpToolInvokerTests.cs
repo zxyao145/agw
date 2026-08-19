@@ -1,6 +1,5 @@
 using Agw.Integrations.Application.Capabilities;
 using Agw.Integrations.Extensions;
-
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,21 +17,22 @@ public class ScopedConnectionMcpToolInvokerTests
         services.AddSingleton(recorder);
         services.AddScoped<IConnectionMcpInvocationSession, TrackingInvocationSession>();
         await using var provider = services.BuildServiceProvider(validateScopes: true);
-        var invoker = new ScopedConnectionMcpToolInvoker(
-            provider.GetRequiredService<IServiceScopeFactory>());
+        var invoker = new ScopedConnectionMcpToolInvoker(provider.GetRequiredService<IServiceScopeFactory>());
 
         var first = await invoker.InvokeAsync(
             Guid.CreateVersion7(),
             "source",
             "operation",
             new AIFunctionArguments(),
-            cancellationToken);
+            cancellationToken
+        );
         var second = await invoker.InvokeAsync(
             Guid.CreateVersion7(),
             "source",
             "operation",
             new AIFunctionArguments(),
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.NotEqual(first, second);
         Assert.Equal(2, recorder.Created.Count);
@@ -45,10 +45,14 @@ public class ScopedConnectionMcpToolInvokerTests
         var services = new ServiceCollection();
         services.AddIntegrations(new ConfigurationBuilder().Build());
 
-        var invoker = Assert.Single(services, descriptor =>
-            descriptor.ServiceType == typeof(IConnectionMcpToolInvoker));
-        var session = Assert.Single(services, descriptor =>
-            descriptor.ServiceType == typeof(IConnectionMcpInvocationSession));
+        var invoker = Assert.Single(
+            services,
+            descriptor => descriptor.ServiceType == typeof(IConnectionMcpToolInvoker)
+        );
+        var session = Assert.Single(
+            services,
+            descriptor => descriptor.ServiceType == typeof(IConnectionMcpInvocationSession)
+        );
 
         Assert.Equal(ServiceLifetime.Singleton, invoker.Lifetime);
         Assert.Equal(ServiceLifetime.Scoped, session.Lifetime);
@@ -77,7 +81,8 @@ public class ScopedConnectionMcpToolInvokerTests
             string sourceId,
             string operationName,
             AIFunctionArguments arguments,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             return ValueTask.FromResult<object?>(_id);
         }

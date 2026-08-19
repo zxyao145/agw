@@ -8,10 +8,8 @@ using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Skills;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-
 using Xunit;
 
 namespace Agw.Host.Tests;
@@ -97,7 +95,8 @@ public class ProjectTraceCleanupTests
 
     private static async Task<AgwDbContext> CreateDbContextAsync(
         SqliteConnection connection,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite(connection)
@@ -112,48 +111,55 @@ public class ProjectTraceCleanupTests
         AgwDbContext dbContext,
         Guid projectId,
         CancellationToken cancellationToken,
-        string contextPrefix = "")
+        string contextPrefix = ""
+    )
     {
-        dbContext.Projects.Add(new Project
-        {
-            Id = projectId,
-            Name = $"Project-{projectId:N}",
-            Type = ProjectType.UserDefined,
-            CreateBy = "tester",
-            CreateTime = TimeProvider.System.GetUtcNow(),
-        });
+        dbContext.Projects.Add(
+            new Project
+            {
+                Id = projectId,
+                Name = $"Project-{projectId:N}",
+                Type = ProjectType.UserDefined,
+                CreateBy = "tester",
+                CreateTime = TimeProvider.System.GetUtcNow(),
+            }
+        );
         dbContext.ProjectConversations.AddRange(
             CreateProjectConversation(projectId, $"{contextPrefix}context-1"),
-            CreateProjectConversation(projectId, $"{contextPrefix}context-2"));
+            CreateProjectConversation(projectId, $"{contextPrefix}context-2")
+        );
         dbContext.AgentflowNodeExecutionTraces.AddRange(
             CreateTrace(projectId, $"{contextPrefix}context-1"),
-            CreateTrace(projectId, $"{contextPrefix}context-2"));
+            CreateTrace(projectId, $"{contextPrefix}context-2")
+        );
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    private static ProjectConversation CreateProjectConversation(Guid projectId, string contextId) => new()
-    {
-        Id = Guid.CreateVersion7(),
-        ProjectId = projectId,
-        ContextId = contextId,
-        Title = contextId,
-        CreateBy = "tester",
-        CreateTime = TimeProvider.System.GetUtcNow(),
-    };
+    private static ProjectConversation CreateProjectConversation(Guid projectId, string contextId) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            ProjectId = projectId,
+            ContextId = contextId,
+            Title = contextId,
+            CreateBy = "tester",
+            CreateTime = TimeProvider.System.GetUtcNow(),
+        };
 
-    private static AgentflowTrace CreateTrace(Guid projectId, string contextId) => new()
-    {
-        Id = Guid.CreateVersion7(),
-        StartTimeUtc = TimeProvider.System.GetUtcNow(),
-        ProjectId = projectId,
-        ContextId = contextId,
-        TaskId = Guid.CreateVersion7(),
-        AgentflowId = Guid.CreateVersion7(),
-        NodeId = "node-1",
-        NodeKind = AgentflowNodeKind.Agent,
-        Input = "input",
-        Status = AgentflowNodeExecutionStatus.Succeeded,
-    };
+    private static AgentflowTrace CreateTrace(Guid projectId, string contextId) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            StartTimeUtc = TimeProvider.System.GetUtcNow(),
+            ProjectId = projectId,
+            ContextId = contextId,
+            TaskId = Guid.CreateVersion7(),
+            AgentflowId = Guid.CreateVersion7(),
+            NodeId = "node-1",
+            NodeKind = AgentflowNodeKind.Agent,
+            Input = "input",
+            Status = AgentflowNodeExecutionStatus.Succeeded,
+        };
 
     private static ProjectContextAppService CreateProjectConversationService(AgwDbContext dbContext)
     {
@@ -171,8 +177,10 @@ public class ProjectTraceCleanupTests
                 new EfRepository<TaskSessionBinding>(dbContext),
                 new EfRepository<ProjectConversation>(dbContext),
                 dbContext,
-                TimeProvider.System),
-            TimeProvider.System);
+                TimeProvider.System
+            ),
+            TimeProvider.System
+        );
     }
 
     private static ProjectAppService CreateProjectService(AgwDbContext dbContext)
@@ -187,8 +195,9 @@ public class ProjectTraceCleanupTests
             new EfRepository<ProjectConnectionRelation>(dbContext),
             new EfRepository<Connection>(dbContext),
             new EfRepository<AgentflowTrace>(dbContext),
-                dbContext,
+            dbContext,
             new ProjectDomainService(TimeProvider.System),
-            new ProjectResolver(projectRepository));
+            new ProjectResolver(projectRepository)
+        );
     }
 }

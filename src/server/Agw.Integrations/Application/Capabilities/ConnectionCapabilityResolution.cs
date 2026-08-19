@@ -1,5 +1,4 @@
 using Agw.Shared.Exceptions;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Integrations.Application.Capabilities;
@@ -14,7 +13,8 @@ public sealed class ConnectionCapabilityResolution : IAsyncDisposable
         IReadOnlyList<ResolvedMcpCapabilitySource> mcpSources,
         IReadOnlyList<PluginSkillReference> pluginSkills,
         IReadOnlyList<ConnectionCapabilityWarning> warnings,
-        ConnectionCapabilityLease lease)
+        ConnectionCapabilityLease lease
+    )
     {
         NativeTools = nativeTools;
         McpTools = mcpTools;
@@ -134,8 +134,6 @@ public sealed class ConnectionCapabilityLease : IAsyncDisposable
         {
             await DisposeAsync().ConfigureAwait(false);
         }
-        catch
-        {
-        }
+        catch { }
     }
 }

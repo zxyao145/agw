@@ -1,9 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-
 using Agw.Shared.Exceptions;
-
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Agents.AI.Workflows.Checkpointing;
 
@@ -38,22 +36,20 @@ internal sealed class DurableAgentflowCheckpointStore : ICheckpointStore<JsonEle
     /// </summary>
     public ValueTask<IEnumerable<CheckpointInfo>> RetrieveIndexAsync(
         string sessionId,
-        CheckpointInfo? withParent = null)
+        CheckpointInfo? withParent = null
+    )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
 
         var checkpoints = _checkpoints
             .Where(item =>
                 string.Equals(item.SessionId, sessionId, StringComparison.Ordinal)
-                && (withParent == null
-                    || string.Equals(
-                        item.ParentSessionId,
-                        withParent.SessionId,
-                        StringComparison.Ordinal)
-                    && string.Equals(
-                        item.ParentCheckpointId,
-                        withParent.CheckpointId,
-                        StringComparison.Ordinal)))
+                && (
+                    withParent == null
+                    || string.Equals(item.ParentSessionId, withParent.SessionId, StringComparison.Ordinal)
+                        && string.Equals(item.ParentCheckpointId, withParent.CheckpointId, StringComparison.Ordinal)
+                )
+            )
             .Select(item => new CheckpointInfo(item.SessionId, item.CheckpointId))
             .ToArray();
         return ValueTask.FromResult<IEnumerable<CheckpointInfo>>(checkpoints);
@@ -65,7 +61,8 @@ internal sealed class DurableAgentflowCheckpointStore : ICheckpointStore<JsonEle
     public ValueTask<CheckpointInfo> CreateCheckpointAsync(
         string sessionId,
         JsonElement value,
-        CheckpointInfo? parent = null)
+        CheckpointInfo? parent = null
+    )
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
 
@@ -75,40 +72,43 @@ internal sealed class DurableAgentflowCheckpointStore : ICheckpointStore<JsonEle
             _checkpoints.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
             parent?.SessionId ?? string.Empty,
             parent?.CheckpointId ?? string.Empty,
-            value.GetRawText());
-        var checkpointId = Convert.ToHexString(
-                SHA256.HashData(Encoding.UTF8.GetBytes(checkpointIdInput)))
+            value.GetRawText()
+        );
+        var checkpointId = Convert
+            .ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(checkpointIdInput)))
             .ToLowerInvariant();
         var checkpointInfo = new CheckpointInfo(sessionId, checkpointId);
-        _checkpoints.Add(new DurableAgentflowCheckpoint
-        {
-            SessionId = checkpointInfo.SessionId,
-            CheckpointId = checkpointInfo.CheckpointId,
-            ParentSessionId = parent?.SessionId,
-            ParentCheckpointId = parent?.CheckpointId,
-            Payload = value.Clone()
-        });
+        _checkpoints.Add(
+            new DurableAgentflowCheckpoint
+            {
+                SessionId = checkpointInfo.SessionId,
+                CheckpointId = checkpointInfo.CheckpointId,
+                ParentSessionId = parent?.SessionId,
+                ParentCheckpointId = parent?.CheckpointId,
+                Payload = value.Clone(),
+            }
+        );
         return ValueTask.FromResult(checkpointInfo);
     }
 
     /// <summary>
     /// 读取指定 checkpoint 的独立 JSON 副本。
     /// </summary>
-    public ValueTask<JsonElement> RetrieveCheckpointAsync(
-        string sessionId,
-        CheckpointInfo key)
+    public ValueTask<JsonElement> RetrieveCheckpointAsync(string sessionId, CheckpointInfo key)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
         ArgumentNullException.ThrowIfNull(key);
 
         var checkpoint = _checkpoints.SingleOrDefault(item =>
             string.Equals(item.SessionId, sessionId, StringComparison.Ordinal)
-            && string.Equals(item.CheckpointId, key.CheckpointId, StringComparison.Ordinal));
+            && string.Equals(item.CheckpointId, key.CheckpointId, StringComparison.Ordinal)
+        );
         if (checkpoint == null)
         {
             throw new AgwException(
                 ErrorCodes.DurableExecutionConflict,
-                $"Checkpoint '{sessionId}/{key.CheckpointId}' was not found.");
+                $"Checkpoint '{sessionId}/{key.CheckpointId}' was not found."
+            );
         }
 
         return ValueTask.FromResult(checkpoint.Payload.Clone());

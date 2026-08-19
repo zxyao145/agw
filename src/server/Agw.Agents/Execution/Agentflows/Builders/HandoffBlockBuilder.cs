@@ -17,7 +17,8 @@ internal static class HandoffBlockBuilder
 
         var participantAgents = participants.Select(participant => participant.Agent).ToList();
         var config = AgentflowBlockBuildSupport.ReadConfig(context.BlockNode);
-        var builder = AgentWorkflowBuilder.CreateHandoffBuilderWith(participantAgents[0])
+        var builder = AgentWorkflowBuilder
+            .CreateHandoffBuilderWith(participantAgents[0])
             .AddParticipants(participantAgents.Skip(1));
         if (!string.IsNullOrWhiteSpace(config.HandoffInstructions))
         {
@@ -36,7 +37,8 @@ internal static class HandoffBlockBuilder
                 config.ContinuationPrompt,
                 participantAgents,
                 null!,
-                null!);
+                null!
+            );
         }
 
         return AgentflowBlockBuildSupport.BindWorkflow(context, builder.Build());

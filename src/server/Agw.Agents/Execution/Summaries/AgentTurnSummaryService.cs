@@ -1,5 +1,4 @@
 using Agw.Shared.Contracts.Projects;
-
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -11,10 +10,10 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService
     private const string SummaryAgentName = "$summary";
 
     private const string DefaultInstructions =
-        "You summarize one completed agent turn. Use the same language as the user's input when identifiable. " +
-        "Concisely capture the user's request, the agent's answer or actions, the outcome, and any unresolved items. " +
-        "Return only the summary text. Use Markdown when it improves readability. Plain text is also acceptable. " +
-        "Do not return JSON, XML, wrapper objects, or transport metadata.";
+        "You summarize one completed agent turn. Use the same language as the user's input when identifiable. "
+        + "Concisely capture the user's request, the agent's answer or actions, the outcome, and any unresolved items. "
+        + "Return only the summary text. Use Markdown when it improves readability. Plain text is also acceptable. "
+        + "Do not return JSON, XML, wrapper objects, or transport metadata.";
 
     private readonly ISummaryChatClientFactory _chatClientFactory;
     private readonly IConversationHistoryWriter _conversationHistoryWriter;
@@ -25,7 +24,8 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService
         ISummaryChatClientFactory chatClientFactory,
         IConversationHistoryWriter conversationHistoryWriter,
         IAgentUsageRecorder usageRecorder,
-        ILogger<AgentTurnSummaryService> logger)
+        ILogger<AgentTurnSummaryService> logger
+    )
     {
         _chatClientFactory = chatClientFactory;
         _conversationHistoryWriter = conversationHistoryWriter;
@@ -39,7 +39,8 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService
         Guid projectId,
         string contextId,
         string? customInstructions,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         string resultText;
         try
@@ -53,9 +54,11 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService
             }
             else
             {
-                var response = await chatClient.GetResponseAsync(
-                    CreatePromptMessages(sourceMessages, customInstructions),
-                    cancellationToken: cancellationToken)
+                var response = await chatClient
+                    .GetResponseAsync(
+                        CreatePromptMessages(sourceMessages, customInstructions),
+                        cancellationToken: cancellationToken
+                    )
                     .ConfigureAwait(false);
                 if (response.Usage != null)
                 {
@@ -80,16 +83,14 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService
                 exception,
                 "Failed to generate summary for project {ProjectId} and context {ContextId}.",
                 projectId,
-                contextId);
+                contextId
+            );
             resultText = FailureText;
         }
 
         var result = CreateResultMessage(resultText);
-        await _conversationHistoryWriter.AppendAsync(
-            projectId,
-            contextId,
-            [result],
-            cancellationToken)
+        await _conversationHistoryWriter
+            .AppendAsync(projectId, contextId, [result], cancellationToken)
             .ConfigureAwait(false);
         return result;
     }
@@ -99,28 +100,23 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService
         {
             MessageId = Guid.CreateVersion7().ToString(),
             AuthorName = Constants.DefaultAgentAuthor,
-            AdditionalProperties = new AdditionalPropertiesDictionary
-            {
-                ["type"] = "result"
-            }
+            AdditionalProperties = new AdditionalPropertiesDictionary { ["type"] = "result" },
         };
 
     private static IReadOnlyList<ChatMessage> CreatePromptMessages(
         IReadOnlyList<ChatMessage> sourceMessages,
-        string? customInstructions)
+        string? customInstructions
+    )
     {
         var instructions = string.IsNullOrWhiteSpace(customInstructions)
             ? DefaultInstructions
             : $"{DefaultInstructions}{Environment.NewLine}{Environment.NewLine}Additional requirements:{Environment.NewLine}{customInstructions.Trim()}";
         var transcript = string.Join(
             Environment.NewLine,
-            sourceMessages.Select(FormatSourceMessage).Where(text => text != null));
+            sourceMessages.Select(FormatSourceMessage).Where(text => text != null)
+        );
 
-        return
-        [
-            new ChatMessage(ChatRole.System, instructions),
-            new ChatMessage(ChatRole.User, transcript)
-        ];
+        return [new ChatMessage(ChatRole.System, instructions), new ChatMessage(ChatRole.User, transcript)];
     }
 
     private static string? FormatSourceMessage(ChatMessage message)
@@ -139,33 +135,37 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService
 
     private static string ExtractText(ChatResponse response) =>
         string.Concat(
-                response.Messages
-                    .SelectMany(message => message.Contents)
+                response
+                    .Messages.SelectMany(message => message.Contents)
                     .OfType<TextContent>()
-                    .Select(content => content.Text))
+                    .Select(content => content.Text)
+            )
             .Trim();
 
     private async Task RecordUsageAsync(
         Guid projectId,
         string contextId,
         UsageDetails usage,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         try
         {
-            await _usageRecorder.AddAsync(
-                projectId,
-                contextId,
-                SummaryAgentName,
-                new ProjectContextUsage
-                {
-                    InputTokenCount = usage.InputTokenCount ?? 0,
-                    OutputTokenCount = usage.OutputTokenCount ?? 0,
-                    TotalTokenCount = usage.TotalTokenCount ?? 0,
-                    CachedInputTokenCount = usage.CachedInputTokenCount ?? 0,
-                    ReasoningTokenCount = usage.ReasoningTokenCount ?? 0
-                },
-                cancellationToken)
+            await _usageRecorder
+                .AddAsync(
+                    projectId,
+                    contextId,
+                    SummaryAgentName,
+                    new ProjectContextUsage
+                    {
+                        InputTokenCount = usage.InputTokenCount ?? 0,
+                        OutputTokenCount = usage.OutputTokenCount ?? 0,
+                        TotalTokenCount = usage.TotalTokenCount ?? 0,
+                        CachedInputTokenCount = usage.CachedInputTokenCount ?? 0,
+                        ReasoningTokenCount = usage.ReasoningTokenCount ?? 0,
+                    },
+                    cancellationToken
+                )
                 .ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -178,7 +178,8 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService
                 exception,
                 "Failed to record summary usage for project {ProjectId} and context {ContextId}.",
                 projectId,
-                contextId);
+                contextId
+            );
         }
     }
 }

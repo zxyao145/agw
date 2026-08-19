@@ -6,10 +6,8 @@ using Agw.Integrations.Mcp;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
-
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
-
 using IntegrationConnection = Agw.Shared.Data.Entities.Integrations.Connection;
 
 namespace Agw.Integrations.Application.Capabilities;
@@ -35,7 +33,8 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         IMcpToolMaterializer mcpToolMaterializer,
         IConnectionMcpToolInvoker mcpToolInvoker,
         PluginSkillMetadataReader pluginSkillMetadataReader,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider
+    )
     {
         _connectionRepository = connectionRepository;
         _installationRepository = installationRepository;
@@ -51,19 +50,20 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
     public async Task<ConnectionCapabilityResolution> ResolveAsync(
         Guid projectId,
         IReadOnlyCollection<Guid> connectionIds,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         ArgumentNullException.ThrowIfNull(connectionIds);
 
         var orderedIds = connectionIds.Distinct().ToArray();
-        var storedConnections = await _connectionRepository.Queryable
-            .AsNoTracking()
+        var storedConnections = await _connectionRepository
+            .Queryable.AsNoTracking()
             .Where(item => orderedIds.Contains(item.Id))
             .ToListAsync(cancellationToken);
         var connections = storedConnections.ToDictionary(item => item.Id);
         var pluginIds = storedConnections.Select(item => item.PluginId).Distinct().ToArray();
-        var installations = await _installationRepository.Queryable
-            .AsNoTracking()
+        var installations = await _installationRepository
+            .Queryable.AsNoTracking()
             .Where(item => pluginIds.Contains(item.PluginId))
             .ToDictionaryAsync(item => item.PluginId, StringComparer.OrdinalIgnoreCase, cancellationToken);
 
@@ -83,10 +83,13 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!connections.TryGetValue(connectionId, out var connection))
                 {
-                    warnings.Add(Warning(
-                        connectionId,
-                        ConnectionCapabilityWarningCodes.ConnectionNotFound,
-                        "The connection was not found."));
+                    warnings.Add(
+                        Warning(
+                            connectionId,
+                            ConnectionCapabilityWarningCodes.ConnectionNotFound,
+                            "The connection was not found."
+                        )
+                    );
                     continue;
                 }
 
@@ -94,7 +97,8 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                     connection,
                     installations,
                     warnings,
-                    cancellationToken);
+                    cancellationToken
+                );
                 if (resolved == null)
                 {
                     continue;
@@ -117,7 +121,8 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                             mcpTools,
                             mcpSources,
                             toolNames,
-                            cancellationToken);
+                            cancellationToken
+                        );
                     }
                 }
 
@@ -127,13 +132,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                 }
             }
 
-            return new ConnectionCapabilityResolution(
-                nativeTools,
-                mcpTools,
-                mcpSources,
-                pluginSkills,
-                warnings,
-                lease);
+            return new ConnectionCapabilityResolution(nativeTools, mcpTools, mcpSources, pluginSkills, warnings, lease);
         }
         catch (OperationCanceledException)
         {
@@ -156,34 +155,49 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         IntegrationConnection connection,
         IReadOnlyDictionary<string, PluginInstallation> installations,
         ICollection<ConnectionCapabilityWarning> warnings,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (!connection.Enabled)
         {
-            warnings.Add(Warning(connection.Id, ConnectionCapabilityWarningCodes.ConnectionDisabled, "The connection is disabled."));
+            warnings.Add(
+                Warning(
+                    connection.Id,
+                    ConnectionCapabilityWarningCodes.ConnectionDisabled,
+                    "The connection is disabled."
+                )
+            );
             return null;
         }
 
         var plugin = _pluginCatalog.Find(connection.PluginId);
         var connector = plugin?.Connectors.FirstOrDefault(item =>
-            string.Equals(item.Id, connection.ConnectorId, StringComparison.OrdinalIgnoreCase));
+            string.Equals(item.Id, connection.ConnectorId, StringComparison.OrdinalIgnoreCase)
+        );
         var authScheme = connector?.AuthSchemes.FirstOrDefault(item =>
-            string.Equals(item.Id, connection.AuthSchemeId, StringComparison.OrdinalIgnoreCase));
+            string.Equals(item.Id, connection.AuthSchemeId, StringComparison.OrdinalIgnoreCase)
+        );
         if (plugin == null || connector == null || authScheme == null)
         {
-            warnings.Add(Warning(
-                connection.Id,
-                ConnectionCapabilityWarningCodes.DefinitionUnavailable,
-                "The connection definition is unavailable."));
+            warnings.Add(
+                Warning(
+                    connection.Id,
+                    ConnectionCapabilityWarningCodes.DefinitionUnavailable,
+                    "The connection definition is unavailable."
+                )
+            );
             return null;
         }
 
         if (!installations.TryGetValue(connection.PluginId, out var installation) || !installation.Enabled)
         {
-            warnings.Add(Warning(
-                connection.Id,
-                ConnectionCapabilityWarningCodes.PluginInstallationUnavailable,
-                "The plugin installation is unavailable."));
+            warnings.Add(
+                Warning(
+                    connection.Id,
+                    ConnectionCapabilityWarningCodes.PluginInstallationUnavailable,
+                    "The plugin installation is unavailable."
+                )
+            );
             return null;
         }
 
@@ -198,7 +212,8 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
             installation,
             connector,
             authScheme,
-            cancellationToken);
+            cancellationToken
+        );
         if (credentialStatus != null)
         {
             warnings.Add(credentialStatus);
@@ -213,7 +228,8 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         PluginInstallation installation,
         ConnectorDefinition connector,
         AuthSchemeDefinition authScheme,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         Dictionary<string, string?> connectionConfiguration;
         Dictionary<string, string?> installationConfiguration;
@@ -227,32 +243,42 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
             return Warning(
                 connection.Id,
                 ConnectionCapabilityWarningCodes.ConnectionNeedsConfiguration,
-                "The connection configuration is unavailable.");
+                "The connection configuration is unavailable."
+            );
         }
 
-        foreach (var field in authScheme.InstallationFields.Where(item => item.IsRequired && item.Type != FormFieldType.Secret))
+        foreach (
+            var field in authScheme.InstallationFields.Where(item =>
+                item.IsRequired && item.Type != FormFieldType.Secret
+            )
+        )
         {
             var key = IntegrationConfigurationCodec.InstallationKey(
                 connection.ConnectorId,
                 connection.AuthSchemeId,
-                field.Id);
+                field.Id
+            );
             if (!installationConfiguration.TryGetValue(key, out var value) || string.IsNullOrWhiteSpace(value))
             {
                 return Warning(
                     connection.Id,
                     ConnectionCapabilityWarningCodes.ConnectionNeedsConfiguration,
-                    "A required plugin installation setting is unavailable.");
+                    "A required plugin installation setting is unavailable."
+                );
             }
         }
 
-        foreach (var field in authScheme.ConnectionFields.Where(item => item.IsRequired && item.Type != FormFieldType.Secret))
+        foreach (
+            var field in authScheme.ConnectionFields.Where(item => item.IsRequired && item.Type != FormFieldType.Secret)
+        )
         {
             if (!connectionConfiguration.TryGetValue(field.Id, out var value) || string.IsNullOrWhiteSpace(value))
             {
                 return Warning(
                     connection.Id,
                     ConnectionCapabilityWarningCodes.ConnectionNeedsConfiguration,
-                    "A required connection setting is unavailable.");
+                    "A required connection setting is unavailable."
+                );
             }
         }
 
@@ -261,13 +287,15 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
             var accessToken = await TryReadConnectionCredentialAsync(
                 connection.Id,
                 IntegrationCredentialSlots.OAuthAccessToken,
-                cancellationToken);
+                cancellationToken
+            );
             if (accessToken == null)
             {
                 return Warning(
                     connection.Id,
                     ConnectionCapabilityWarningCodes.CredentialUnavailable,
-                    "A required connection credential is unavailable.");
+                    "A required connection credential is unavailable."
+                );
             }
 
             if (accessToken.ExpiresAtUtc <= _timeProvider.GetUtcNow())
@@ -275,40 +303,48 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                 return Warning(
                     connection.Id,
                     ConnectionCapabilityWarningCodes.ConnectionExpired,
-                    "The connection credential is expired.");
+                    "The connection credential is expired."
+                );
             }
         }
 
-        foreach (var field in authScheme.InstallationFields.Where(item => item.IsRequired && item.Type == FormFieldType.Secret))
+        foreach (
+            var field in authScheme.InstallationFields.Where(item =>
+                item.IsRequired && item.Type == FormFieldType.Secret
+            )
+        )
         {
             var credential = await TryReadInstallationCredentialAsync(
                 installation.Id,
-                IntegrationCredentialSlots.InstallationField(
-                    connection.ConnectorId,
-                    connection.AuthSchemeId,
-                    field.Id),
-                cancellationToken);
+                IntegrationCredentialSlots.InstallationField(connection.ConnectorId, connection.AuthSchemeId, field.Id),
+                cancellationToken
+            );
             if (credential == null)
             {
                 return Warning(
                     connection.Id,
                     ConnectionCapabilityWarningCodes.CredentialUnavailable,
-                    "A required plugin installation credential is unavailable.");
+                    "A required plugin installation credential is unavailable."
+                );
             }
         }
 
-        foreach (var field in authScheme.ConnectionFields.Where(item => item.IsRequired && item.Type == FormFieldType.Secret))
+        foreach (
+            var field in authScheme.ConnectionFields.Where(item => item.IsRequired && item.Type == FormFieldType.Secret)
+        )
         {
             var credential = await TryReadConnectionCredentialAsync(
                 connection.Id,
                 IntegrationCredentialSlots.ConnectionField(field.Id),
-                cancellationToken);
+                cancellationToken
+            );
             if (credential == null)
             {
                 return Warning(
                     connection.Id,
                     ConnectionCapabilityWarningCodes.CredentialUnavailable,
-                    "A required connection credential is unavailable.");
+                    "A required connection credential is unavailable."
+                );
             }
 
             if (credential.ExpiresAtUtc <= _timeProvider.GetUtcNow())
@@ -316,28 +352,36 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                 return Warning(
                     connection.Id,
                     ConnectionCapabilityWarningCodes.ConnectionExpired,
-                    "A required connection credential is expired.");
+                    "A required connection credential is expired."
+                );
             }
         }
 
         foreach (var source in connector.CapabilitySources.OfType<McpCapabilitySourceDefinition>())
         {
-            foreach (var binding in source.CredentialBindings.Where(item => string.Equals(
-                         item.ValueSource.AuthSchemeId,
-                         connection.AuthSchemeId,
-                         StringComparison.OrdinalIgnoreCase)))
+            foreach (
+                var binding in source.CredentialBindings.Where(item =>
+                    string.Equals(
+                        item.ValueSource.AuthSchemeId,
+                        connection.AuthSchemeId,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
+            )
             {
                 var credential = await TryReadBindingCredentialAsync(
                     connection,
                     installation,
                     binding,
-                    cancellationToken);
+                    cancellationToken
+                );
                 if (credential == null)
                 {
                     return Warning(
                         connection.Id,
                         ConnectionCapabilityWarningCodes.CredentialUnavailable,
-                        "A declared capability credential is unavailable.");
+                        "A declared capability credential is unavailable."
+                    );
                 }
 
                 if (credential.ExpiresAtUtc <= _timeProvider.GetUtcNow())
@@ -345,7 +389,8 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                     return Warning(
                         connection.Id,
                         ConnectionCapabilityWarningCodes.ConnectionExpired,
-                        "A declared capability credential is expired.");
+                        "A declared capability credential is expired."
+                    );
                 }
             }
         }
@@ -358,27 +403,33 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         IntegrationConnection connection,
         NativeCapabilitySourceDefinition source,
         ICollection<AITool> target,
-        ISet<string> toolNames)
+        ISet<string> toolNames
+    )
     {
         if (!_nativeProviders.TryGetValue(source.Provider, out var provider))
         {
             throw new AgwException(
                 ErrorCodes.IntegrationNativeProviderUnavailable,
-                $"Native capability provider '{source.Provider}' is unavailable.");
+                $"Native capability provider '{source.Provider}' is unavailable."
+            );
         }
 
-        var tools = provider.CreateTools(new ConnectionNativeCapabilityContext
-        {
-            ConnectionId = connection.Id,
-            ProjectId = projectId,
-            Alias = connection.Alias,
-            Source = source
-        });
+        var tools = provider.CreateTools(
+            new ConnectionNativeCapabilityContext
+            {
+                ConnectionId = connection.Id,
+                ProjectId = projectId,
+                Alias = connection.Alias,
+                Source = source,
+            }
+        );
         var requiredPrefix = $"{connection.Alias}__";
         foreach (var tool in tools)
         {
-            if (!tool.Name.StartsWith(requiredPrefix, StringComparison.Ordinal) ||
-                tool.Name.Length == requiredPrefix.Length)
+            if (
+                !tool.Name.StartsWith(requiredPrefix, StringComparison.Ordinal)
+                || tool.Name.Length == requiredPrefix.Length
+            )
             {
                 throw new AgwException(ErrorCodes.IntegrationToolNameInvalid);
             }
@@ -394,17 +445,15 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         ICollection<AITool> target,
         ICollection<ResolvedMcpCapabilitySource> sources,
         ISet<string> toolNames,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var descriptor = await CreateMcpDescriptorAsync(
-            connection,
-            installation,
-            source,
-            cancellationToken);
+        var descriptor = await CreateMcpDescriptorAsync(connection, installation, source, cancellationToken);
         await using var sourceLease = await _mcpToolMaterializer.MaterializeAsync(
             descriptor,
             runtimeOverrides: null,
-            cancellationToken);
+            cancellationToken
+        );
 
         var names = new List<string>();
         foreach (var rawTool in sourceLease.Tools)
@@ -419,24 +468,27 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                 connection.Id,
                 source.Id,
                 function,
-                _mcpToolInvoker);
+                _mcpToolInvoker
+            );
             AddTool(tool, target, toolNames);
             names.Add(tool.Name);
         }
 
-        sources.Add(new ResolvedMcpCapabilitySource
-        {
-            ConnectionId = connection.Id,
-            SourceId = source.Id,
-            Transport = source.Transport switch
+        sources.Add(
+            new ResolvedMcpCapabilitySource
             {
-                StdioMcpTransportDefinition => "stdio",
-                HttpMcpTransportDefinition => "http",
-                SseMcpTransportDefinition => "sse",
-                _ => "unknown"
-            },
-            ToolNames = names
-        });
+                ConnectionId = connection.Id,
+                SourceId = source.Id,
+                Transport = source.Transport switch
+                {
+                    StdioMcpTransportDefinition => "stdio",
+                    HttpMcpTransportDefinition => "http",
+                    SseMcpTransportDefinition => "sse",
+                    _ => "unknown",
+                },
+                ToolNames = names,
+            }
+        );
     }
 
     async ValueTask<object?> IConnectionMcpInvocationSession.InvokeMcpToolAsync(
@@ -444,14 +496,10 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         string sourceId,
         string operationName,
         AIFunctionArguments arguments,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        return await InvokeMcpToolAsync(
-            connectionId,
-            sourceId,
-            operationName,
-            arguments,
-            cancellationToken);
+        return await InvokeMcpToolAsync(connectionId, sourceId, operationName, arguments, cancellationToken);
     }
 
     internal async ValueTask<object?> InvokeMcpToolAsync(
@@ -459,45 +507,46 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         string sourceId,
         string operationName,
         AIFunctionArguments arguments,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         try
         {
-            var connection = await _connectionRepository.Queryable
-                .AsNoTracking()
+            var connection = await _connectionRepository
+                .Queryable.AsNoTracking()
                 .SingleOrDefaultAsync(item => item.Id == connectionId, cancellationToken);
             if (connection == null)
             {
                 throw new AgwException(ErrorCodes.IntegrationDataInvalid);
             }
 
-            var installation = await _installationRepository.Queryable
-                .AsNoTracking()
+            var installation = await _installationRepository
+                .Queryable.AsNoTracking()
                 .SingleOrDefaultAsync(item => item.PluginId == connection.PluginId, cancellationToken);
             var plugin = _pluginCatalog.Find(connection.PluginId);
             var connector = plugin?.Connectors.FirstOrDefault(item =>
-                string.Equals(item.Id, connection.ConnectorId, StringComparison.OrdinalIgnoreCase));
-            var authSchemeExists = connector?.AuthSchemes.Any(item =>
-                string.Equals(item.Id, connection.AuthSchemeId, StringComparison.OrdinalIgnoreCase)) == true;
-            var source = connector?.CapabilitySources
-                .OfType<McpCapabilitySourceDefinition>()
+                string.Equals(item.Id, connection.ConnectorId, StringComparison.OrdinalIgnoreCase)
+            );
+            var authSchemeExists =
+                connector?.AuthSchemes.Any(item =>
+                    string.Equals(item.Id, connection.AuthSchemeId, StringComparison.OrdinalIgnoreCase)
+                ) == true;
+            var source = connector
+                ?.CapabilitySources.OfType<McpCapabilitySourceDefinition>()
                 .FirstOrDefault(item => string.Equals(item.Id, sourceId, StringComparison.OrdinalIgnoreCase));
             if (installation == null || !authSchemeExists || source == null)
             {
                 throw new AgwException(ErrorCodes.IntegrationDataInvalid);
             }
 
-            var descriptor = await CreateMcpDescriptorAsync(
-                connection,
-                installation,
-                source,
-                cancellationToken);
+            var descriptor = await CreateMcpDescriptorAsync(connection, installation, source, cancellationToken);
             await using var invocationLease = await _mcpToolMaterializer.MaterializeAsync(
                 descriptor,
                 runtimeOverrides: null,
-                cancellationToken);
-            var function = invocationLease.Tools
-                .OfType<AIFunction>()
+                cancellationToken
+            );
+            var function = invocationLease
+                .Tools.OfType<AIFunction>()
                 .SingleOrDefault(item => string.Equals(item.Name, operationName, StringComparison.Ordinal));
             if (function == null)
             {
@@ -520,24 +569,29 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         IntegrationConnection connection,
         PluginInstallation installation,
         McpCapabilitySourceDefinition source,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var credentialEnvironment = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var credentialHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var binding in source.CredentialBindings)
         {
-            if (!string.Equals(
+            if (
+                !string.Equals(
                     binding.ValueSource.AuthSchemeId,
                     connection.AuthSchemeId,
-                    StringComparison.OrdinalIgnoreCase))
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
             {
                 continue;
             }
 
             var value = await ResolveBindingValueAsync(connection, installation, binding, cancellationToken);
-            var targetValues = binding.Target == CredentialBindingTarget.EnvironmentVariable
-                ? credentialEnvironment
-                : credentialHeaders;
+            var targetValues =
+                binding.Target == CredentialBindingTarget.EnvironmentVariable
+                    ? credentialEnvironment
+                    : credentialHeaders;
             targetValues[binding.TargetName] = string.Concat(binding.ValuePrefix, value);
         }
 
@@ -545,20 +599,18 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
             $"{connection.Alias}__{source.Id}",
             source.Transport,
             credentialEnvironment,
-            credentialHeaders);
+            credentialHeaders
+        );
     }
 
     private async Task<string> ResolveBindingValueAsync(
         IntegrationConnection connection,
         PluginInstallation installation,
         CredentialBindingDefinition binding,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var credential = await TryReadBindingCredentialAsync(
-            connection,
-            installation,
-            binding,
-            cancellationToken);
+        var credential = await TryReadBindingCredentialAsync(connection, installation, binding, cancellationToken);
 
         if (credential == null)
         {
@@ -572,29 +624,32 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         IntegrationConnection connection,
         PluginInstallation installation,
         CredentialBindingDefinition binding,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         return binding.ValueSource switch
         {
-            ConnectionFieldCredentialValueSourceDefinition connectionField =>
-                await TryReadConnectionCredentialAsync(
-                    connection.Id,
-                    IntegrationCredentialSlots.ConnectionField(connectionField.FieldId),
-                    cancellationToken),
+            ConnectionFieldCredentialValueSourceDefinition connectionField => await TryReadConnectionCredentialAsync(
+                connection.Id,
+                IntegrationCredentialSlots.ConnectionField(connectionField.FieldId),
+                cancellationToken
+            ),
             InstallationFieldCredentialValueSourceDefinition installationField =>
                 await TryReadInstallationCredentialAsync(
                     installation.Id,
                     IntegrationCredentialSlots.InstallationField(
                         connection.ConnectorId,
                         connection.AuthSchemeId,
-                        installationField.FieldId),
-                    cancellationToken),
-            OAuthAccessTokenCredentialValueSourceDefinition =>
-                await TryReadConnectionCredentialAsync(
-                    connection.Id,
-                    IntegrationCredentialSlots.OAuthAccessToken,
-                    cancellationToken),
-            _ => null
+                        installationField.FieldId
+                    ),
+                    cancellationToken
+                ),
+            OAuthAccessTokenCredentialValueSourceDefinition => await TryReadConnectionCredentialAsync(
+                connection.Id,
+                IntegrationCredentialSlots.OAuthAccessToken,
+                cancellationToken
+            ),
+            _ => null,
         };
     }
 
@@ -602,7 +657,8 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         string name,
         McpTransportDefinition transport,
         IReadOnlyDictionary<string, string> credentialEnvironment,
-        IReadOnlyDictionary<string, string> credentialHeaders)
+        IReadOnlyDictionary<string, string> credentialHeaders
+    )
     {
         return transport switch
         {
@@ -610,16 +666,19 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                 name,
                 stdio.Command,
                 stdio.Arguments,
-                credentialEnvironmentVariables: credentialEnvironment),
+                credentialEnvironmentVariables: credentialEnvironment
+            ),
             HttpMcpTransportDefinition http => new McpHttpEndpointDescriptor(
                 name,
                 new Uri(http.Endpoint, UriKind.Absolute),
-                credentialHeaders: credentialHeaders),
+                credentialHeaders: credentialHeaders
+            ),
             SseMcpTransportDefinition sse => new McpSseEndpointDescriptor(
                 name,
                 new Uri(sse.Endpoint, UriKind.Absolute),
-                credentialHeaders: credentialHeaders),
-            _ => throw new AgwException(ErrorCodes.UnsupportedTransportType)
+                credentialHeaders: credentialHeaders
+            ),
+            _ => throw new AgwException(ErrorCodes.UnsupportedTransportType),
         };
     }
 
@@ -627,7 +686,8 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         Guid connectionId,
         PluginDefinition plugin,
         ICollection<PluginSkillReference> target,
-        ICollection<ConnectionCapabilityWarning> warnings)
+        ICollection<ConnectionCapabilityWarning> warnings
+    )
     {
         foreach (var skill in plugin.Skills)
         {
@@ -637,20 +697,23 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                 continue;
             }
 
-            target.Add(new PluginSkillReference
-            {
-                PluginId = plugin.Id,
-                SkillId = metadata.Id,
-                Description = metadata.Description,
-                SkillFilePath = metadata.SkillFilePath
-            });
+            target.Add(
+                new PluginSkillReference
+                {
+                    PluginId = plugin.Id,
+                    SkillId = metadata.Id,
+                    Description = metadata.Description,
+                    SkillFilePath = metadata.SkillFilePath,
+                }
+            );
         }
     }
 
     private async Task<ResolvedCredential?> TryReadConnectionCredentialAsync(
         Guid connectionId,
         string slot,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         try
         {
@@ -669,7 +732,8 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
     private async Task<ResolvedCredential?> TryReadInstallationCredentialAsync(
         Guid installationId,
         string slot,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         try
         {
@@ -691,7 +755,8 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         {
             throw new AgwException(
                 ErrorCodes.IntegrationToolNameConflict,
-                $"Connection tool name '{tool.Name}' conflicts with another capability source.");
+                $"Connection tool name '{tool.Name}' conflicts with another capability source."
+            );
         }
 
         target.Add(tool);
@@ -708,7 +773,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
             ConnectionStatus.Invalid => ConnectionCapabilityWarningCodes.ConnectionInvalid,
             ConnectionStatus.Disabled => ConnectionCapabilityWarningCodes.ConnectionDisabled,
             ConnectionStatus.DefinitionUnavailable => ConnectionCapabilityWarningCodes.DefinitionUnavailable,
-            _ => ConnectionCapabilityWarningCodes.ConnectionInvalid
+            _ => ConnectionCapabilityWarningCodes.ConnectionInvalid,
         };
         return Warning(connection.Id, code, "The connection is not ready.");
     }
@@ -718,7 +783,8 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         return Warning(
             connectionId,
             ConnectionCapabilityWarningCodes.PluginSkillUnavailable,
-            "A plugin skill is unavailable.");
+            "A plugin skill is unavailable."
+        );
     }
 
     private static ConnectionCapabilityWarning Warning(Guid connectionId, string code, string message)
@@ -727,7 +793,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         {
             ConnectionId = connectionId,
             Code = code,
-            Message = message
+            Message = message,
         };
     }
 
@@ -735,5 +801,6 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         PluginDefinition Plugin,
         ConnectorDefinition Connector,
         AuthSchemeDefinition AuthScheme,
-        PluginInstallation Installation);
+        PluginInstallation Installation
+    );
 }

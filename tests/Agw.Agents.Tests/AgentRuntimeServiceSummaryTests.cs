@@ -3,7 +3,6 @@ using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Summaries;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data.Entities.Agents;
-
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -30,7 +29,7 @@ public class AgentRuntimeServiceSummaryTests
         };
         var outputs = new List<AgwMessage>
         {
-            new("assistant-1", "agent", AiRole.Assistant, [new AgwTextContent { Content = "done" }])
+            new("assistant-1", "agent", AiRole.Assistant, [new AgwTextContent { Content = "done" }]),
         };
 
         var result = await service.AppendDefinitionSummaryAsync(
@@ -39,7 +38,8 @@ public class AgentRuntimeServiceSummaryTests
             outputs,
             projectId,
             "context-1",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(2, result.Count);
         Assert.Equal("result", result[1].AdditionalProperties!["type"]);
@@ -67,7 +67,8 @@ public class AgentRuntimeServiceSummaryTests
             [new AgwMessage("assistant-1", "agent", AiRole.Assistant, [])],
             Guid.CreateVersion7(),
             "context-1",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(agentModelProviderId, Assert.Single(summaryService.Calls).ModelProviderId);
     }
@@ -77,7 +78,8 @@ public class AgentRuntimeServiceSummaryTests
     [InlineData(AgentType.External, false)]
     public async Task AppendDefinitionSummaryAsync_SummaryDisabled_ReturnsOriginalMessages(
         AgentType agentType,
-        bool enableSummary)
+        bool enableSummary
+    )
     {
         var summaryService = new RecordingSummaryService();
         var service = CreateService(summaryService);
@@ -94,7 +96,8 @@ public class AgentRuntimeServiceSummaryTests
             [output],
             Guid.CreateVersion7(),
             "context-1",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Same(output, Assert.Single(result));
         Assert.Empty(summaryService.Calls);
@@ -114,7 +117,8 @@ public class AgentRuntimeServiceSummaryTests
             logger: NullLogger<AgentRuntimeService>.Instance,
             observabilityMiddleware: new ObservabilityMiddleware(NullLogger<ObservabilityMiddleware>.Instance),
             usageTrackingMiddleware: null!,
-            summaryService);
+            summaryService
+        );
 
     private sealed class RecordingSummaryService : IAgentTurnSummaryService
     {
@@ -126,7 +130,8 @@ public class AgentRuntimeServiceSummaryTests
             Guid projectId,
             string contextId,
             string? customInstructions,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Calls.Add(new Call(modelProviderId, sourceMessages));
             return Task.FromResult(AgentTurnSummaryService.CreateResultMessage("summary"));

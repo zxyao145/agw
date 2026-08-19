@@ -7,26 +7,31 @@ public sealed class FileEndpointExceptionMappingMiddleware
 {
     public const string ResolvedPathItemKey = "Agw.Files.ResolvedPath";
 
-    private static readonly IReadOnlyDictionary<string, FileEndpointExceptionTemplate> Templates =
-        new Dictionary<string, FileEndpointExceptionTemplate>(StringComparer.OrdinalIgnoreCase)
-        {
-            ["list"] = new("reading directory", "Failed to read directory"),
-            ["read"] = new("reading file", "Failed to read file"),
-            ["diff"] = new("getting git diff", "Failed to get git diff"),
-            ["delete"] = new("deleting", "Failed to delete"),
-            ["reset"] = new("resetting file", "Failed to reset file"),
-            ["search"] = new("searching directory", "Failed to search directory")
-        };
+    private static readonly IReadOnlyDictionary<string, FileEndpointExceptionTemplate> Templates = new Dictionary<
+        string,
+        FileEndpointExceptionTemplate
+    >(StringComparer.OrdinalIgnoreCase)
+    {
+        ["list"] = new("reading directory", "Failed to read directory"),
+        ["read"] = new("reading file", "Failed to read file"),
+        ["diff"] = new("getting git diff", "Failed to get git diff"),
+        ["delete"] = new("deleting", "Failed to delete"),
+        ["reset"] = new("resetting file", "Failed to reset file"),
+        ["search"] = new("searching directory", "Failed to search directory"),
+    };
 
-    private static readonly FileEndpointExceptionTemplate DefaultTemplate =
-        new("processing file request", "Failed to process file request");
+    private static readonly FileEndpointExceptionTemplate DefaultTemplate = new(
+        "processing file request",
+        "Failed to process file request"
+    );
 
     private readonly RequestDelegate _next;
     private readonly ILogger<FileEndpointExceptionMappingMiddleware> _logger;
 
     public FileEndpointExceptionMappingMiddleware(
         RequestDelegate next,
-        ILogger<FileEndpointExceptionMappingMiddleware> logger)
+        ILogger<FileEndpointExceptionMappingMiddleware> logger
+    )
     {
         _next = next;
         _logger = logger;
@@ -79,8 +84,8 @@ public sealed class FileEndpointExceptionMappingMiddleware
             return DefaultTemplate;
         }
 
-        var endpointName = remaining.Value?
-            .Trim('/')
+        var endpointName = remaining
+            .Value?.Trim('/')
             .Split('/', StringSplitOptions.RemoveEmptyEntries)
             .FirstOrDefault();
 
@@ -91,9 +96,11 @@ public sealed class FileEndpointExceptionMappingMiddleware
 
     private static string ResolvePathForLogging(HttpContext context)
     {
-        if (context.Items.TryGetValue(ResolvedPathItemKey, out var resolvedPath)
+        if (
+            context.Items.TryGetValue(ResolvedPathItemKey, out var resolvedPath)
             && resolvedPath is string value
-            && !string.IsNullOrWhiteSpace(value))
+            && !string.IsNullOrWhiteSpace(value)
+        )
         {
             return value;
         }

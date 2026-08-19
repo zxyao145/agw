@@ -1,5 +1,4 @@
 using System.Text.Json;
-
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Application.Capabilities;
@@ -11,12 +10,10 @@ using Agw.Integrations.Tools.GitHub;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
-
 using IntegrationConnection = Agw.Shared.Data.Entities.Integrations.Connection;
 
 namespace Agw.Integrations.Tests;
@@ -34,14 +31,20 @@ public class ConnectionCapabilityResolverTests
         await using var resolution = await scope.Resolver.ResolveAsync(
             Guid.CreateVersion7(),
             [work.Id, personal.Id],
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.Contains(resolution.NativeTools, tool => tool.Name == "work__current_user");
         Assert.Contains(resolution.NativeTools, tool => tool.Name == "personal__current_user");
-        Assert.All(resolution.Tools, tool => Assert.DoesNotContain("token", tool.Description, StringComparison.OrdinalIgnoreCase));
+        Assert.All(
+            resolution.Tools,
+            tool => Assert.DoesNotContain("token", tool.Description, StringComparison.OrdinalIgnoreCase)
+        );
 
         scope.Invocations.Tokens[work.Id] = "work-token-v1";
-        var workTool = Assert.IsAssignableFrom<AIFunction>(resolution.Tools.Single(tool => tool.Name == "work__current_user"));
+        var workTool = Assert.IsAssignableFrom<AIFunction>(
+            resolution.Tools.Single(tool => tool.Name == "work__current_user")
+        );
         var firstUser = Assert.IsType<JsonElement>(await workTool.InvokeAsync(cancellationToken: cancellationToken));
         Assert.Equal("work-token-v1", firstUser.GetProperty("login").GetString());
 
@@ -62,7 +65,8 @@ public class ConnectionCapabilityResolverTests
         await using var resolution = await scope.Resolver.ResolveAsync(
             Guid.CreateVersion7(),
             [work.Id, work.Id, personal.Id],
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.Equal(6, resolution.NativeTools.Count);
         Assert.Single(resolution.PluginSkills);
@@ -80,7 +84,8 @@ public class ConnectionCapabilityResolverTests
     [InlineData(ConnectionStatus.DefinitionUnavailable, ConnectionCapabilityWarningCodes.DefinitionUnavailable)]
     public async Task Resolve_NonReadyConnection_SkipsWholeConnectionWithStableWarning(
         ConnectionStatus status,
-        string expectedCode)
+        string expectedCode
+    )
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await ResolverTestScope.CreateAsync(cancellationToken);
@@ -89,7 +94,8 @@ public class ConnectionCapabilityResolverTests
         await using var resolution = await scope.Resolver.ResolveAsync(
             Guid.CreateVersion7(),
             [connection.Id],
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.Empty(resolution.Tools);
         var warning = Assert.Single(resolution.Warnings);
@@ -107,7 +113,7 @@ public class ConnectionCapabilityResolverTests
         scope.Credentials.Values[(expired.Id, "oauth.access-token")] = new ResolvedCredential
         {
             Value = "never-expose-expired-secret",
-            ExpiresAtUtc = now.AddMinutes(-1)
+            ExpiresAtUtc = now.AddMinutes(-1),
         };
         var missing = await scope.AddReadyConnectionAsync("missing", cancellationToken);
         scope.Credentials.Values.Remove((missing.Id, "oauth.access-token"));
@@ -115,14 +121,26 @@ public class ConnectionCapabilityResolverTests
         await using var resolution = await scope.Resolver.ResolveAsync(
             Guid.CreateVersion7(),
             [expired.Id, missing.Id],
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.Empty(resolution.Tools);
-        Assert.Contains(resolution.Warnings, warning =>
-            warning.ConnectionId == expired.Id && warning.Code == ConnectionCapabilityWarningCodes.ConnectionExpired);
-        Assert.Contains(resolution.Warnings, warning =>
-            warning.ConnectionId == missing.Id && warning.Code == ConnectionCapabilityWarningCodes.CredentialUnavailable);
-        Assert.DoesNotContain("never-expose-expired-secret", string.Join('|', resolution.Warnings.Select(item => item.Message)), StringComparison.Ordinal);
+        Assert.Contains(
+            resolution.Warnings,
+            warning =>
+                warning.ConnectionId == expired.Id && warning.Code == ConnectionCapabilityWarningCodes.ConnectionExpired
+        );
+        Assert.Contains(
+            resolution.Warnings,
+            warning =>
+                warning.ConnectionId == missing.Id
+                && warning.Code == ConnectionCapabilityWarningCodes.CredentialUnavailable
+        );
+        Assert.DoesNotContain(
+            "never-expose-expired-secret",
+            string.Join('|', resolution.Warnings.Select(item => item.Message)),
+            StringComparison.Ordinal
+        );
     }
 
     [Fact]
@@ -133,10 +151,9 @@ public class ConnectionCapabilityResolverTests
         var connection = await scope.AddReadyConnectionAsync("work", cancellationToken);
         scope.Credentials.ReadException = new OperationCanceledException(cancellationToken);
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => scope.Resolver.ResolveAsync(
-            Guid.CreateVersion7(),
-            [connection.Id],
-            cancellationToken));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            scope.Resolver.ResolveAsync(Guid.CreateVersion7(), [connection.Id], cancellationToken)
+        );
     }
 
     [Fact]
@@ -147,7 +164,8 @@ public class ConnectionCapabilityResolverTests
         await using var scope = await ResolverTestScope.CreateAsync(
             cancellationToken,
             catalog: new McpTestCatalog(sourceCount: 1),
-            mcpToolMaterializer: materializer);
+            mcpToolMaterializer: materializer
+        );
         var connection = await scope.AddConnectionAsync(
             "docs",
             ConnectionStatus.Ready,
@@ -155,23 +173,29 @@ public class ConnectionCapabilityResolverTests
             cancellationToken,
             pluginId: "mcp-test",
             connectorId: "remote",
-            authSchemeId: "oauth2");
+            authSchemeId: "oauth2"
+        );
         scope.Credentials.Values[(connection.Id, "oauth.access-token")] = new ResolvedCredential
         {
-            Value = "mcp-secret"
+            Value = "mcp-secret",
         };
 
         await using var resolution = await scope.Resolver.ResolveAsync(
             Guid.CreateVersion7(),
             [connection.Id],
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.Equal("docs__search", Assert.Single(resolution.McpTools).Name);
         var descriptor = Assert.IsType<McpHttpEndpointDescriptor>(Assert.Single(materializer.Descriptors));
         Assert.Empty(descriptor.Headers);
         Assert.Equal("Bearer mcp-secret", descriptor.CredentialHeaders["Authorization"]);
         Assert.DoesNotContain("X-Other-Auth", descriptor.CredentialHeaders.Keys, StringComparer.OrdinalIgnoreCase);
-        Assert.DoesNotContain("mcp-secret", Assert.Single(resolution.McpSources).ToolNames[0], StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "mcp-secret",
+            Assert.Single(resolution.McpSources).ToolNames[0],
+            StringComparison.Ordinal
+        );
     }
 
     [Fact]
@@ -182,7 +206,8 @@ public class ConnectionCapabilityResolverTests
         await using var scope = await ResolverTestScope.CreateAsync(
             cancellationToken,
             catalog: new McpTestCatalog(sourceCount: 1),
-            mcpToolMaterializer: materializer);
+            mcpToolMaterializer: materializer
+        );
         var connection = await scope.AddConnectionAsync(
             "docs",
             ConnectionStatus.Ready,
@@ -190,21 +215,23 @@ public class ConnectionCapabilityResolverTests
             cancellationToken,
             pluginId: "mcp-test",
             connectorId: "remote",
-            authSchemeId: "oauth2");
+            authSchemeId: "oauth2"
+        );
         scope.Credentials.Values[(connection.Id, "oauth.access-token")] = new ResolvedCredential
         {
-            Value = "mcp-secret-v1"
+            Value = "mcp-secret-v1",
         };
 
         await using var resolution = await scope.Resolver.ResolveAsync(
             Guid.CreateVersion7(),
             [connection.Id],
-            cancellationToken);
+            cancellationToken
+        );
         var tool = Assert.IsAssignableFrom<AIFunction>(Assert.Single(resolution.McpTools));
 
         scope.Credentials.Values[(connection.Id, "oauth.access-token")] = new ResolvedCredential
         {
-            Value = "mcp-secret-v2"
+            Value = "mcp-secret-v2",
         };
         await tool.InvokeAsync(cancellationToken: cancellationToken);
 
@@ -222,7 +249,8 @@ public class ConnectionCapabilityResolverTests
         await using var scope = await ResolverTestScope.CreateAsync(
             cancellationToken,
             catalog: new McpTestCatalog(sourceCount: 1, useMissingConnectionBinding: true),
-            mcpToolMaterializer: materializer);
+            mcpToolMaterializer: materializer
+        );
         var connection = await scope.AddConnectionAsync(
             "docs",
             ConnectionStatus.Ready,
@@ -230,18 +258,25 @@ public class ConnectionCapabilityResolverTests
             cancellationToken,
             pluginId: "mcp-test",
             connectorId: "remote",
-            authSchemeId: "oauth2");
-        scope.Credentials.Values[(connection.Id, "oauth.access-token")] = new ResolvedCredential { Value = "oauth-secret" };
+            authSchemeId: "oauth2"
+        );
+        scope.Credentials.Values[(connection.Id, "oauth.access-token")] = new ResolvedCredential
+        {
+            Value = "oauth-secret",
+        };
 
         await using var resolution = await scope.Resolver.ResolveAsync(
             Guid.CreateVersion7(),
             [connection.Id],
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.Empty(resolution.Tools);
         Assert.Empty(materializer.Descriptors);
-        Assert.Contains(resolution.Warnings, warning =>
-            warning.Code == ConnectionCapabilityWarningCodes.CredentialUnavailable);
+        Assert.Contains(
+            resolution.Warnings,
+            warning => warning.Code == ConnectionCapabilityWarningCodes.CredentialUnavailable
+        );
     }
 
     [Fact]
@@ -252,7 +287,8 @@ public class ConnectionCapabilityResolverTests
         await using var scope = await ResolverTestScope.CreateAsync(
             cancellationToken,
             catalog: new McpTestCatalog(sourceCount: 2),
-            mcpToolMaterializer: materializer);
+            mcpToolMaterializer: materializer
+        );
         var connection = await scope.AddConnectionAsync(
             "docs",
             ConnectionStatus.Ready,
@@ -260,13 +296,13 @@ public class ConnectionCapabilityResolverTests
             cancellationToken,
             pluginId: "mcp-test",
             connectorId: "remote",
-            authSchemeId: "oauth2");
+            authSchemeId: "oauth2"
+        );
         scope.Credentials.Values[(connection.Id, "oauth.access-token")] = new ResolvedCredential { Value = "secret" };
 
-        var error = await Assert.ThrowsAsync<AgwException>(() => scope.Resolver.ResolveAsync(
-            Guid.CreateVersion7(),
-            [connection.Id],
-            cancellationToken));
+        var error = await Assert.ThrowsAsync<AgwException>(() =>
+            scope.Resolver.ResolveAsync(Guid.CreateVersion7(), [connection.Id], cancellationToken)
+        );
 
         Assert.Equal(ErrorCodes.IntegrationToolNameConflict.Code, error.Code);
         Assert.All(materializer.Resources, resource => Assert.Equal(1, resource.DisposeCount));
@@ -283,7 +319,8 @@ public class ConnectionCapabilityResolverTests
             await using var scope = await ResolverTestScope.CreateAsync(
                 cancellationToken,
                 catalog: new UnsafeSkillCatalog(),
-                pluginContentRoot: root);
+                pluginContentRoot: root
+            );
             var connection = await scope.AddConnectionAsync(
                 "unsafe",
                 ConnectionStatus.Ready,
@@ -291,16 +328,20 @@ public class ConnectionCapabilityResolverTests
                 cancellationToken,
                 pluginId: "unsafe-plugin",
                 connectorId: "connector",
-                authSchemeId: "api-key");
+                authSchemeId: "api-key"
+            );
 
             await using var resolution = await scope.Resolver.ResolveAsync(
                 Guid.CreateVersion7(),
                 [connection.Id],
-                cancellationToken);
+                cancellationToken
+            );
 
             Assert.Empty(resolution.PluginSkills);
-            Assert.Contains(resolution.Warnings, warning =>
-                warning.Code == ConnectionCapabilityWarningCodes.PluginSkillUnavailable);
+            Assert.Contains(
+                resolution.Warnings,
+                warning => warning.Code == ConnectionCapabilityWarningCodes.PluginSkillUnavailable
+            );
         }
         finally
         {
@@ -322,7 +363,8 @@ public class ConnectionCapabilityResolverTests
             await using var scope = await ResolverTestScope.CreateAsync(
                 cancellationToken,
                 catalog: new UnsafeSkillCatalog("skills/linked/SKILL.md"),
-                pluginContentRoot: root);
+                pluginContentRoot: root
+            );
             var connection = await scope.AddConnectionAsync(
                 "unsafe",
                 ConnectionStatus.Ready,
@@ -330,16 +372,20 @@ public class ConnectionCapabilityResolverTests
                 cancellationToken,
                 pluginId: "unsafe-plugin",
                 connectorId: "connector",
-                authSchemeId: "api-key");
+                authSchemeId: "api-key"
+            );
 
             await using var resolution = await scope.Resolver.ResolveAsync(
                 Guid.CreateVersion7(),
                 [connection.Id],
-                cancellationToken);
+                cancellationToken
+            );
 
             Assert.Empty(resolution.PluginSkills);
-            Assert.Contains(resolution.Warnings, warning =>
-                warning.Code == ConnectionCapabilityWarningCodes.PluginSkillUnavailable);
+            Assert.Contains(
+                resolution.Warnings,
+                warning => warning.Code == ConnectionCapabilityWarningCodes.PluginSkillUnavailable
+            );
         }
         finally
         {
@@ -357,7 +403,8 @@ public class ConnectionCapabilityResolverTests
             AgwDbContext dbContext,
             ConnectionCapabilityResolver resolver,
             MutableCredentialReader credentials,
-            TrackingGitHubInvoker invocations)
+            TrackingGitHubInvoker invocations
+        )
         {
             _sqlite = sqlite;
             DbContext = dbContext;
@@ -376,7 +423,8 @@ public class ConnectionCapabilityResolverTests
             DateTimeOffset? now = null,
             IPluginCatalog? catalog = null,
             IMcpToolMaterializer? mcpToolMaterializer = null,
-            string? pluginContentRoot = null)
+            string? pluginContentRoot = null
+        )
         {
             var sqlite = new SqliteConnection("Data Source=:memory:;Foreign Keys=False");
             await sqlite.OpenAsync(cancellationToken);
@@ -392,10 +440,13 @@ public class ConnectionCapabilityResolverTests
             services.AddScoped<IGitHubConnectionInvoker>(_ => invocations);
             var provider = services.BuildServiceProvider();
             var nativeProvider = new GitHubConnectionNativeCapabilityProvider(
-                provider.GetRequiredService<IServiceScopeFactory>());
+                provider.GetRequiredService<IServiceScopeFactory>()
+            );
 
             var credentials = new MutableCredentialReader();
-            IRepository<IntegrationConnection> connectionRepository = new EfRepository<IntegrationConnection>(dbContext);
+            IRepository<IntegrationConnection> connectionRepository = new EfRepository<IntegrationConnection>(
+                dbContext
+            );
             IRepository<PluginInstallation> installationRepository = new EfRepository<PluginInstallation>(dbContext);
             var mcpToolInvoker = new ForwardingMcpToolInvoker();
             var resolver = new ConnectionCapabilityResolver(
@@ -407,15 +458,15 @@ public class ConnectionCapabilityResolverTests
                 mcpToolMaterializer ?? new EmptyMcpToolMaterializer(),
                 mcpToolInvoker,
                 new PluginSkillMetadataReader(
-                    new FixedPluginContentRootProvider(pluginContentRoot ?? AppContext.BaseDirectory)),
-                new FixedTimeProvider(now ?? TimeProvider.System.GetUtcNow()));
+                    new FixedPluginContentRootProvider(pluginContentRoot ?? AppContext.BaseDirectory)
+                ),
+                new FixedTimeProvider(now ?? TimeProvider.System.GetUtcNow())
+            );
             mcpToolInvoker.Resolver = resolver;
             return new ResolverTestScope(sqlite, dbContext, resolver, credentials, invocations);
         }
 
-        public Task<IntegrationConnection> AddReadyConnectionAsync(
-            string alias,
-            CancellationToken cancellationToken)
+        public Task<IntegrationConnection> AddReadyConnectionAsync(string alias, CancellationToken cancellationToken)
         {
             return AddConnectionAsync(alias, ConnectionStatus.Ready, enabled: true, cancellationToken);
         }
@@ -427,7 +478,8 @@ public class ConnectionCapabilityResolverTests
             CancellationToken cancellationToken,
             string pluginId = "github",
             string connectorId = "github-cloud",
-            string authSchemeId = "oauth2")
+            string authSchemeId = "oauth2"
+        )
         {
             var connection = new IntegrationConnection
             {
@@ -440,24 +492,26 @@ public class ConnectionCapabilityResolverTests
                 Status = status,
                 Enabled = enabled,
                 CreateBy = "test",
-                CreateTime = TimeProvider.System.GetUtcNow()
+                CreateTime = TimeProvider.System.GetUtcNow(),
             };
             DbContext.Connections.Add(connection);
             if (!await DbContext.PluginInstallations.AnyAsync(item => item.PluginId == pluginId, cancellationToken))
             {
-                DbContext.PluginInstallations.Add(new PluginInstallation
-                {
-                    Id = Guid.CreateVersion7(),
-                    PluginId = pluginId,
-                    Enabled = true,
-                    CreateBy = "test",
-                    CreateTime = TimeProvider.System.GetUtcNow()
-                });
+                DbContext.PluginInstallations.Add(
+                    new PluginInstallation
+                    {
+                        Id = Guid.CreateVersion7(),
+                        PluginId = pluginId,
+                        Enabled = true,
+                        CreateBy = "test",
+                        CreateTime = TimeProvider.System.GetUtcNow(),
+                    }
+                );
             }
             await DbContext.SaveChangesAsync(cancellationToken);
             Credentials.Values[(connection.Id, "oauth.access-token")] = new ResolvedCredential
             {
-                Value = $"{alias}-token"
+                Value = $"{alias}-token",
             };
             return connection;
         }
@@ -478,14 +532,10 @@ public class ConnectionCapabilityResolverTests
             string sourceId,
             string operationName,
             AIFunctionArguments arguments,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
-            return Resolver.InvokeMcpToolAsync(
-                connectionId,
-                sourceId,
-                operationName,
-                arguments,
-                cancellationToken);
+            return Resolver.InvokeMcpToolAsync(connectionId, sourceId, operationName, arguments, cancellationToken);
         }
     }
 
@@ -495,7 +545,11 @@ public class ConnectionCapabilityResolverTests
 
         public Exception? ReadException { get; set; }
 
-        public Task<ResolvedCredential?> ReadConnectionAsync(Guid connectionId, string slot, CancellationToken cancellationToken)
+        public Task<ResolvedCredential?> ReadConnectionAsync(
+            Guid connectionId,
+            string slot,
+            CancellationToken cancellationToken
+        )
         {
             if (ReadException != null)
             {
@@ -506,7 +560,11 @@ public class ConnectionCapabilityResolverTests
             return Task.FromResult(value);
         }
 
-        public Task<ResolvedCredential?> ReadPluginInstallationAsync(Guid pluginInstallationId, string slot, CancellationToken cancellationToken)
+        public Task<ResolvedCredential?> ReadPluginInstallationAsync(
+            Guid pluginInstallationId,
+            string slot,
+            CancellationToken cancellationToken
+        )
         {
             if (ReadException != null)
             {
@@ -529,7 +587,10 @@ public class ConnectionCapabilityResolverTests
             return Task.FromResult(new GitHubUserInfo { Login = Tokens[connectionId] });
         }
 
-        public Task<IReadOnlyList<Tools.GitHub.Dtos.GitHubRepoInfo>> ListRepositoriesAsync(Guid connectionId, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<Tools.GitHub.Dtos.GitHubRepoInfo>> ListRepositoriesAsync(
+            Guid connectionId,
+            CancellationToken cancellationToken
+        )
         {
             ConnectionIds.Add(connectionId);
             return Task.FromResult<IReadOnlyList<Tools.GitHub.Dtos.GitHubRepoInfo>>([]);
@@ -541,7 +602,8 @@ public class ConnectionCapabilityResolverTests
             string owner,
             string repository,
             string? relativePath,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             ConnectionIds.Add(connectionId);
             return Task.FromResult(new Tools.GitHub.Dtos.CloneResult(true, null, null, null));
@@ -553,7 +615,8 @@ public class ConnectionCapabilityResolverTests
         public Task<ConnectionToolLease> MaterializeAsync(
             McpEndpointDescriptor descriptor,
             McpRuntimeOverrides? runtimeOverrides = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             return Task.FromResult(new ConnectionToolLease([], []));
         }
@@ -574,14 +637,16 @@ public class ConnectionCapabilityResolverTests
         public Task<ConnectionToolLease> MaterializeAsync(
             McpEndpointDescriptor descriptor,
             McpRuntimeOverrides? runtimeOverrides = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Descriptors.Add(descriptor);
             var resource = new TrackingResource();
             Resources.Add(resource);
             AITool tool = AIFunctionFactory.Create(
                 (Func<string>)(() => "ok"),
-                new AIFunctionFactoryOptions { Name = _toolName });
+                new AIFunctionFactoryOptions { Name = _toolName }
+            );
             return Task.FromResult(new ConnectionToolLease([tool], [resource]));
         }
     }
@@ -625,32 +690,23 @@ public class ConnectionCapabilityResolverTests
                                 SubjectResolution = new OAuthSubjectResolutionDefinition
                                 {
                                     Source = OAuthSubjectSource.UserInfo,
-                                    Field = "login"
+                                    Field = "login",
                                 },
-                                ClientAuthenticationMethod = OAuth2ClientAuthenticationMethod.None
-                            }
-                        }
+                                ClientAuthenticationMethod = OAuth2ClientAuthenticationMethod.None,
+                            },
+                        },
                     ],
                     CapabilitySources =
                     [
-                        new NativeCapabilitySourceDefinition
-                        {
-                            Id = "github-native",
-                            Provider = "github"
-                        }
-                    ]
-                }
+                        new NativeCapabilitySourceDefinition { Id = "github-native", Provider = "github" },
+                    ],
+                },
             ],
-            Skills =
-            [
-                new PluginSkillDefinition
-                {
-                    ContentPath = "Plugins/github/skills/github/SKILL.md"
-                }
-            ]
+            Skills = [new PluginSkillDefinition { ContentPath = "Plugins/github/skills/github/SKILL.md" }],
         };
 
         public IReadOnlyList<PluginDefinition> List() => [_plugin];
+
         public PluginDefinition? Find(string pluginId) =>
             string.Equals(pluginId, _plugin.Id, StringComparison.OrdinalIgnoreCase) ? _plugin : null;
     }
@@ -661,40 +717,44 @@ public class ConnectionCapabilityResolverTests
 
         public McpTestCatalog(int sourceCount, bool useMissingConnectionBinding = false)
         {
-            var sources = Enumerable.Range(1, sourceCount)
-                .Select(index => (CapabilitySourceDefinition)new McpCapabilitySourceDefinition
-                {
-                    Id = $"remote-{index}",
-                    Transport = new HttpMcpTransportDefinition { Endpoint = "https://mcp.example.test" },
-                    CredentialBindings =
-                    [
-                        new CredentialBindingDefinition
+            var sources = Enumerable
+                .Range(1, sourceCount)
+                .Select(index =>
+                    (CapabilitySourceDefinition)
+                        new McpCapabilitySourceDefinition
                         {
-                            ValueSource = useMissingConnectionBinding
-                                ? new ConnectionFieldCredentialValueSourceDefinition
+                            Id = $"remote-{index}",
+                            Transport = new HttpMcpTransportDefinition { Endpoint = "https://mcp.example.test" },
+                            CredentialBindings =
+                            [
+                                new CredentialBindingDefinition
                                 {
-                                    AuthSchemeId = "oauth2",
-                                    FieldId = "mcp-token"
-                                }
-                                : new OAuthAccessTokenCredentialValueSourceDefinition
-                                {
-                                    AuthSchemeId = "oauth2"
+                                    ValueSource = useMissingConnectionBinding
+                                        ? new ConnectionFieldCredentialValueSourceDefinition
+                                        {
+                                            AuthSchemeId = "oauth2",
+                                            FieldId = "mcp-token",
+                                        }
+                                        : new OAuthAccessTokenCredentialValueSourceDefinition
+                                        {
+                                            AuthSchemeId = "oauth2",
+                                        },
+                                    Target = CredentialBindingTarget.HttpHeader,
+                                    TargetName = "Authorization",
+                                    ValuePrefix = "Bearer ",
                                 },
-                            Target = CredentialBindingTarget.HttpHeader,
-                            TargetName = "Authorization",
-                            ValuePrefix = "Bearer "
-                        },
-                        new CredentialBindingDefinition
-                        {
-                            ValueSource = new OAuthAccessTokenCredentialValueSourceDefinition
-                            {
-                                AuthSchemeId = "other-auth"
-                            },
-                            Target = CredentialBindingTarget.HttpHeader,
-                            TargetName = "X-Other-Auth"
+                                new CredentialBindingDefinition
+                                {
+                                    ValueSource = new OAuthAccessTokenCredentialValueSourceDefinition
+                                    {
+                                        AuthSchemeId = "other-auth",
+                                    },
+                                    Target = CredentialBindingTarget.HttpHeader,
+                                    TargetName = "X-Other-Auth",
+                                },
+                            ],
                         }
-                    ]
-                })
+                )
                 .ToArray();
             _plugin = new PluginDefinition
             {
@@ -722,19 +782,20 @@ public class ConnectionCapabilityResolverTests
                                     SubjectResolution = new OAuthSubjectResolutionDefinition
                                     {
                                         Source = OAuthSubjectSource.UserInfo,
-                                        Field = "login"
+                                        Field = "login",
                                     },
-                                    ClientAuthenticationMethod = OAuth2ClientAuthenticationMethod.None
-                                }
-                            }
+                                    ClientAuthenticationMethod = OAuth2ClientAuthenticationMethod.None,
+                                },
+                            },
                         ],
-                        CapabilitySources = sources
-                    }
-                ]
+                        CapabilitySources = sources,
+                    },
+                ],
             };
         }
 
         public IReadOnlyList<PluginDefinition> List() => [_plugin];
+
         public PluginDefinition? Find(string pluginId) => pluginId == _plugin.Id ? _plugin : null;
     }
 
@@ -761,22 +822,17 @@ public class ConnectionCapabilityResolverTests
                             {
                                 Id = "api-key",
                                 DisplayName = "API key",
-                                Type = AuthSchemeType.ApiKey
-                            }
-                        ]
-                    }
+                                Type = AuthSchemeType.ApiKey,
+                            },
+                        ],
+                    },
                 ],
-                Skills =
-                [
-                    new PluginSkillDefinition
-                    {
-                        ContentPath = contentPath
-                    }
-                ]
+                Skills = [new PluginSkillDefinition { ContentPath = contentPath }],
             };
         }
 
         public IReadOnlyList<PluginDefinition> List() => [_plugin];
+
         public PluginDefinition? Find(string pluginId) => pluginId == _plugin.Id ? _plugin : null;
     }
 

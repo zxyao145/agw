@@ -19,10 +19,12 @@ public sealed class JobSchedulerWakeSignal
     public void NotifyCreated(Job job)
     {
         var now = _timeProvider.GetUtcNow();
-        if (job.TriggerType == TriggerType.Once
+        if (
+            job.TriggerType == TriggerType.Once
             && job.IsEnabled
             && job.Status == JobStatus.Pending
-            && job.NextRunTime < now.Add(JobSchedulingDefaults.PrefetchInterval))
+            && job.NextRunTime < now.Add(JobSchedulingDefaults.PrefetchInterval)
+        )
         {
             _signal.Release();
         }

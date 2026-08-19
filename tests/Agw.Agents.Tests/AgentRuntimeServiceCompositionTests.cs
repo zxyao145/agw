@@ -3,7 +3,6 @@ using Agw.Agents.Execution.Agents.Utils;
 using Agw.Agents.ExternalAgents;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
-
 using OpenAI.CodexSdk.MAF;
 
 namespace Agw.Agents.Tests;
@@ -29,20 +28,14 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void MergeEnvironmentVariables_ExecutionValuesOverrideAgentDefinitionValues()
     {
-        var agentVariables = new Dictionary<string, string>
-        {
-            ["SHARED"] = "agent",
-            ["AGENT_ONLY"] = "agent",
-        };
+        var agentVariables = new Dictionary<string, string> { ["SHARED"] = "agent", ["AGENT_ONLY"] = "agent" };
         var executionVariables = new Dictionary<string, string>
         {
             ["SHARED"] = "session",
             ["SESSION_ONLY"] = "session",
         };
 
-        var result = AgentRuntimeServiceUtil.MergeEnvironmentVariables(
-            agentVariables,
-            executionVariables);
+        var result = AgentRuntimeServiceUtil.MergeEnvironmentVariables(agentVariables, executionVariables);
 
         Assert.Equal("session", result["SHARED"]);
         Assert.Equal("agent", result["AGENT_ONLY"]);
@@ -73,7 +66,8 @@ public class AgentRuntimeServiceCompositionTests
         var result = AgentRuntimeServiceUtil.MergeEnvironmentVariables(
             agentVariables,
             projectVariables,
-            executionVariables);
+            executionVariables
+        );
 
         Assert.Equal("session", result["SHARED"]);
         Assert.Equal("project", result["PROJECT_SHARED"]);
@@ -85,9 +79,7 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void ExternalAgentNames_Codex_HasDefaultCodexOptions()
     {
-        var codexAgent = Assert.Single(
-            AgentNames.ExternalAgentNames,
-            agent => agent.Name == AgentNames.Codex);
+        var codexAgent = Assert.Single(AgentNames.ExternalAgentNames, agent => agent.Name == AgentNames.Codex);
 
         Assert.False(string.IsNullOrWhiteSpace(codexAgent.Extra));
         var options = JsonUtil.Deserialize<CodexAIAgentOptions>(codexAgent.Extra!);
@@ -106,7 +98,8 @@ public class AgentRuntimeServiceCompositionTests
             """,
             "D:\\source\\workspace",
             threadId: null,
-            resume: false);
+            resume: false
+        );
 
         Assert.NotNull(options);
         Assert.Equal("D:\\source\\workspace", options.ThreadOptions.WorkingDirectory);
@@ -121,11 +114,7 @@ public class AgentRuntimeServiceCompositionTests
     {
         var threadId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
-        var options = BuildCodexAIAgentOptions(
-            "{}",
-            workspace: null,
-            threadId,
-            resume);
+        var options = BuildCodexAIAgentOptions("{}", workspace: null, threadId, resume);
 
         Assert.NotNull(options);
         Assert.Equal(threadId, options.ThreadId);
@@ -135,8 +124,7 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void BuildCodexAIAgentOptions_WhenThreadStartedCallbackProvided_PreservesCallback()
     {
-        ValueTask OnThreadStartedAsync(string threadId, CancellationToken cancellationToken) =>
-            ValueTask.CompletedTask;
+        ValueTask OnThreadStartedAsync(string threadId, CancellationToken cancellationToken) => ValueTask.CompletedTask;
 
         Func<string, CancellationToken, ValueTask> callback = OnThreadStartedAsync;
 
@@ -146,7 +134,8 @@ public class AgentRuntimeServiceCompositionTests
             threadId: null,
             resume: false,
             environmentVariables: null,
-            onThreadStartedAsync: callback);
+            onThreadStartedAsync: callback
+        );
 
         Assert.NotNull(options);
         Assert.Same(callback, options.OnThreadStartedAsync);
@@ -165,10 +154,8 @@ public class AgentRuntimeServiceCompositionTests
                 workspace: null,
                 threadId: null,
                 resume: false,
-                new Dictionary<string, string>
-                {
-                    ["AGW_TOKEN"] = "secret"
-                });
+                new Dictionary<string, string> { ["AGW_TOKEN"] = "secret" }
+            );
 
             Assert.NotNull(options);
             Assert.NotNull(options.CodexOptions.Env);
@@ -198,15 +185,17 @@ public class AgentRuntimeServiceCompositionTests
         Guid? threadId,
         bool resume,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
-        Func<string, CancellationToken, ValueTask>? onThreadStartedAsync = null)
+        Func<string, CancellationToken, ValueTask>? onThreadStartedAsync = null
+    )
     {
         var method = typeof(AgentRuntimeService).GetMethod(
             "BuildCodexAIAgentOptions",
-            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic
+        );
 
         Assert.NotNull(method);
-        return Assert.IsType<CodexAIAgentOptions>(method.Invoke(null,
-            [extra, workspace, threadId, resume, environmentVariables, onThreadStartedAsync]));
+        return Assert.IsType<CodexAIAgentOptions>(
+            method.Invoke(null, [extra, workspace, threadId, resume, environmentVariables, onThreadStartedAsync])
+        );
     }
-
 }

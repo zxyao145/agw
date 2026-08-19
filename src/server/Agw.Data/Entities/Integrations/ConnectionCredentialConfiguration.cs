@@ -12,13 +12,11 @@ public class ConnectionCredentialConfiguration : IEntityTypeConfiguration<Connec
         builder.HasIndex(entity => new { entity.ConnectionId, entity.Slot }).IsUnique();
         builder.HasIndex(entity => entity.ExpiresAtUtc);
         builder.Property(entity => entity.Slot).IsRequired().HasMaxLength(512);
-        builder.Property(entity => entity.Value)
-            .HasColumnName("protected_value")
-            .IsRequired()
-            .HasMaxLength(16000);
+        builder.Property(entity => entity.Value).HasColumnName("protected_value").IsRequired().HasMaxLength(16000);
         builder.Property(entity => entity.MetadataJson).HasMaxLength(8000);
 
-        builder.HasOne(entity => entity.Connection)
+        builder
+            .HasOne(entity => entity.Connection)
             .WithMany(connection => connection.Credentials)
             .HasForeignKey(entity => entity.ConnectionId)
             .OnDelete(DeleteBehavior.Cascade);

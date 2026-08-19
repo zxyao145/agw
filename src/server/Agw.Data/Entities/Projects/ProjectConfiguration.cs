@@ -1,5 +1,4 @@
 using Agw.Shared.Data.Entities.Tools;
-
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -19,23 +18,32 @@ public class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.Property(e => e.Description).HasMaxLength(1000);
         builder.Property(e => e.Workspace).HasMaxLength(1000);
         builder.Property(e => e.ExtraSetting).HasMaxLength(16000);
-        var tools = builder.Property(e => e.Tools)
+        var tools = builder
+            .Property(e => e.Tools)
             .HasConversion(
                 value => ToolValueObjectJson.Serialize(value),
-                value => ToolValueObjectJson.Deserialize(value))
+                value => ToolValueObjectJson.Deserialize(value)
+            )
             .HasMaxLength(16000)
             .IsRequired();
         tools.Metadata.SetValueComparer(
             new ValueComparer<List<ToolValueObject>>(
                 (left, right) => ToolValueObjectJson.SequenceEqual(left, right),
                 value => ToolValueObjectJson.GetSequenceHashCode(value),
-                value => ToolValueObjectJson.Clone(value)));
-        builder.Property(e => e.EnvironmentVariables).HasConversion(
-            v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
-            v => string.IsNullOrWhiteSpace(v)
-                ? new Dictionary<string, string>()
-                : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(v,
-                      (System.Text.Json.JsonSerializerOptions?)null)
-                  ?? new Dictionary<string, string>());
+                value => ToolValueObjectJson.Clone(value)
+            )
+        );
+        builder
+            .Property(e => e.EnvironmentVariables)
+            .HasConversion(
+                v => System.Text.Json.JsonSerializer.Serialize(v, (System.Text.Json.JsonSerializerOptions?)null),
+                v =>
+                    string.IsNullOrWhiteSpace(v)
+                        ? new Dictionary<string, string>()
+                        : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(
+                            v,
+                            (System.Text.Json.JsonSerializerOptions?)null
+                        ) ?? new Dictionary<string, string>()
+            );
     }
 }

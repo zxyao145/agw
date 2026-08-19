@@ -6,7 +6,6 @@ using Agw.Shared.Configuration;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
 using Agw.Shared.Runtime;
-
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -28,7 +27,8 @@ public class SetupController : Controller
         SetupCodeService setupCodeService,
         AuthenticationAttemptLimiter attemptLimiter,
         TimeProvider timeProvider,
-        AgwDataPaths paths)
+        AgwDataPaths paths
+    )
     {
         _stateStore = stateStore;
         _setupInitializationService = setupInitializationService;
@@ -44,21 +44,22 @@ public class SetupController : Controller
     public IActionResult Index()
     {
 #if !DEBUG
-       // 初始化后，setup 页面将返回 404
+        // 初始化后，setup 页面将返回 404
         if (_stateStore.IsInitialized)
         {
             return ErrorCodes.ResourceNotFound.ToApiResult();
         }
 #endif
 
-
         ViewData["RequireSetupCode"] = !LocalTrustedRequest.IsLocalTrusted(HttpContext);
-        return View(new SetupRequest
-        {
-            DeploymentMode = DeploymentMode.Standalone,
-            Provider = DatabaseProvider.Sqlite,
-            SqlitePath = _paths.DatabaseFile
-        });
+        return View(
+            new SetupRequest
+            {
+                DeploymentMode = DeploymentMode.Standalone,
+                Provider = DatabaseProvider.Sqlite,
+                SqlitePath = _paths.DatabaseFile,
+            }
+        );
     }
 
     [HttpPost("")]
@@ -89,8 +90,10 @@ public class SetupController : Controller
             if (requiresSetupCode && _attemptLimiter.IsBlocked(clientKey, now))
             {
                 Response.StatusCode = StatusCodes.Status429TooManyRequests;
-                ModelState.AddModelError(nameof(request.SetupCode),
-                    "Too many failed Setup Code attempts. Try again later.");
+                ModelState.AddModelError(
+                    nameof(request.SetupCode),
+                    "Too many failed Setup Code attempts. Try again later."
+                );
                 ViewData["RequireSetupCode"] = true;
                 return View(request);
             }

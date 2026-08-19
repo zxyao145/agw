@@ -2,7 +2,6 @@ using Agw.Files.Abstracts;
 using Agw.Files.Abstracts.Dtos;
 using Agw.Files.Application.Storage.Local;
 using Agw.Files.Services;
-
 using Microsoft.Extensions.Logging;
 
 namespace Agw.Files.Application.Files;
@@ -12,17 +11,9 @@ public sealed class FileAppService
     private const string GitRequiresLocalFileSystem =
         "Git operations are only supported for local project file systems";
 
-    private static readonly HashSet<string> IgnoreDirectories = new()
-    {
-        "node_modules",
-        "obj",
-        "bin"
-    };
+    private static readonly HashSet<string> IgnoreDirectories = new() { "node_modules", "obj", "bin" };
 
-    private static readonly HashSet<string> IgnoreFiles = new()
-    {
-        "tmpclaude*"
-    };
+    private static readonly HashSet<string> IgnoreFiles = new() { "tmpclaude*" };
 
     private readonly IAgwFileSystemResolver _fileSystemResolver;
     private readonly IGitCommandService _gitCommandService;
@@ -31,7 +22,8 @@ public sealed class FileAppService
     public FileAppService(
         IAgwFileSystemResolver fileSystemResolver,
         IGitCommandService gitCommandService,
-        ILogger<FileAppService> logger)
+        ILogger<FileAppService> logger
+    )
     {
         _fileSystemResolver = fileSystemResolver;
         _gitCommandService = gitCommandService;
@@ -43,7 +35,8 @@ public sealed class FileAppService
         string? path,
         bool diff,
         bool recursive,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
         if (fileSystem == null)
@@ -64,10 +57,7 @@ public sealed class FileAppService
 
         if (recursive && diff)
         {
-            return await GetAllChangedFilesAsync(
-                (LocalFileSystem)fileSystem,
-                path,
-                cancellationToken);
+            return await GetAllChangedFilesAsync((LocalFileSystem)fileSystem, path, cancellationToken);
         }
 
         GitChangedFiles? changedFiles = null;
@@ -76,9 +66,7 @@ public sealed class FileAppService
         {
             local = (LocalFileSystem)fileSystem;
             var physicalPath = local.ResolvePhysicalPath(path);
-            changedFiles = await _gitCommandService.GetChangedFilesAsync(
-                physicalPath,
-                cancellationToken);
+            changedFiles = await _gitCommandService.GetChangedFilesAsync(physicalPath, cancellationToken);
             if (changedFiles == null || changedFiles.FileStatuses.Count == 0)
             {
                 return FileOperationResult<FileListOutput>.Succeeded(new FileListOutput([]));
@@ -86,11 +74,7 @@ public sealed class FileAppService
         }
 
         var items = new List<FileListEntry>();
-        await foreach (var entry in fileSystem.EnumerateAsync(
-                           path,
-                           "*",
-                           recursive: false,
-                           cancellationToken))
+        await foreach (var entry in fileSystem.EnumerateAsync(path, "*", recursive: false, cancellationToken))
         {
             cancellationToken.ThrowIfCancellationRequested();
             GitFileStatus? gitStatus = null;
@@ -99,8 +83,8 @@ public sealed class FileAppService
                 var physicalEntryPath = local.ResolvePhysicalPath(entry.Path);
                 if (entry.IsDirectory)
                 {
-                    var descendantStatuses = changedFiles.FileStatuses
-                        .Where(change => IsPathUnderDirectory(change.Key, physicalEntryPath))
+                    var descendantStatuses = changedFiles
+                        .FileStatuses.Where(change => IsPathUnderDirectory(change.Key, physicalEntryPath))
                         .Select(change => change.Value)
                         .ToList();
                     if (descendantStatuses.Count == 0)
@@ -125,10 +109,7 @@ public sealed class FileAppService
             foreach (var deletedFile in changedFiles.DeletedFiles)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (!string.Equals(
-                        Path.GetDirectoryName(deletedFile),
-                        physicalDirectory,
-                        PathComparison))
+                if (!string.Equals(Path.GetDirectoryName(deletedFile), physicalDirectory, PathComparison))
                 {
                     continue;
                 }
@@ -141,15 +122,18 @@ public sealed class FileAppService
                 }
 
                 var gitStatus = changedFiles.FileStatuses[deletedFile];
-                items.Add(new FileListEntry(
-                    GetFileName(relativePath),
-                    normalizedPath,
-                    "file",
-                    null,
-                    null,
-                    gitStatus.AggregateStatus,
-                    gitStatus.StagedStatus,
-                    gitStatus.UnstagedStatus));
+                items.Add(
+                    new FileListEntry(
+                        GetFileName(relativePath),
+                        normalizedPath,
+                        "file",
+                        null,
+                        null,
+                        gitStatus.AggregateStatus,
+                        gitStatus.StagedStatus,
+                        gitStatus.UnstagedStatus
+                    )
+                );
             }
         }
 
@@ -164,7 +148,8 @@ public sealed class FileAppService
     public async Task<FileOperationResult<string>> ReadAsync(
         Guid projectId,
         string? path,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
         if (fileSystem == null)
@@ -190,7 +175,8 @@ public sealed class FileAppService
         Guid projectId,
         string? path,
         string? scope,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
         if (fileSystem == null)
@@ -210,44 +196,40 @@ public sealed class FileAppService
 
         if (!TryParseDiffScope(scope, out var diffScope))
         {
-            return FileOperationResult<FileDiffOutput>.Invalid(
-                "Scope must be 'staged' or 'unstaged'");
+            return FileOperationResult<FileDiffOutput>.Invalid("Scope must be 'staged' or 'unstaged'");
         }
 
         var physicalPath = localFileSystem.ResolvePhysicalPath(path);
         if (!await fileSystem.ExistsFileAsync(path, cancellationToken))
         {
-            var changedFiles = await _gitCommandService.GetChangedFilesAsync(
-                physicalPath,
-                cancellationToken);
-            if (changedFiles == null
+            var changedFiles = await _gitCommandService.GetChangedFilesAsync(physicalPath, cancellationToken);
+            if (
+                changedFiles == null
                 || !changedFiles.FileStatuses.TryGetValue(physicalPath, out var gitStatus)
-                || gitStatus.GetStatus(diffScope) == null)
+                || gitStatus.GetStatus(diffScope) == null
+            )
             {
                 return FileOperationResult<FileDiffOutput>.Missing("File not found");
             }
         }
 
-        var result = await _gitCommandService.GetDiffAsync(
-            physicalPath,
-            cancellationToken,
-            diffScope);
+        var result = await _gitCommandService.GetDiffAsync(physicalPath, cancellationToken, diffScope);
         if (!result.Success)
         {
             _logger.LogWarning("Git diff failed: {Error}", result.Error);
             return FileOperationResult<FileDiffOutput>.Invalid("Git diff failed", result.Error);
         }
 
-        return FileOperationResult<FileDiffOutput>.Succeeded(new FileDiffOutput(
-            result.Diff,
-            result.Unchanged,
-            result.OriginalContent));
+        return FileOperationResult<FileDiffOutput>.Succeeded(
+            new FileDiffOutput(result.Diff, result.Unchanged, result.OriginalContent)
+        );
     }
 
     public async Task<FileOperationResult<FileMutationOutput>> DeleteAsync(
         Guid projectId,
         string? path,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
         if (fileSystem == null)
@@ -261,12 +243,10 @@ public sealed class FileAppService
         }
 
         var isFile = await fileSystem.ExistsFileAsync(path, cancellationToken);
-        var isDirectory = !isFile
-            && await fileSystem.ExistsDirectoryAsync(path, cancellationToken);
+        var isDirectory = !isFile && await fileSystem.ExistsDirectoryAsync(path, cancellationToken);
         if (!isFile && !isDirectory)
         {
-            return FileOperationResult<FileMutationOutput>.Missing(
-                "File or directory not found");
+            return FileOperationResult<FileMutationOutput>.Missing("File or directory not found");
         }
 
         await fileSystem.DeleteAsync(path, cancellationToken);
@@ -274,17 +254,19 @@ public sealed class FileAppService
             "Deleted {EntryType} in project {ProjectId}: {Path}",
             isDirectory ? "directory" : "file",
             projectId,
-            path);
+            path
+        );
 
-        return FileOperationResult<FileMutationOutput>.Succeeded(new FileMutationOutput(
-            true,
-            isDirectory ? "Directory deleted successfully" : "File deleted successfully"));
+        return FileOperationResult<FileMutationOutput>.Succeeded(
+            new FileMutationOutput(true, isDirectory ? "Directory deleted successfully" : "File deleted successfully")
+        );
     }
 
     public async Task<FileOperationResult<FileMutationOutput>> ResetAsync(
         Guid projectId,
         string? path,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
         if (fileSystem == null)
@@ -322,22 +304,18 @@ public sealed class FileAppService
 
         if (!result.Success)
         {
-            return FileOperationResult<FileMutationOutput>.Succeeded(
-                new FileMutationOutput(false, result.Message));
+            return FileOperationResult<FileMutationOutput>.Succeeded(new FileMutationOutput(false, result.Message));
         }
 
-        _logger.LogInformation(
-            "Reset file to HEAD in project {ProjectId}: {Path}",
-            projectId,
-            path);
-        return FileOperationResult<FileMutationOutput>.Succeeded(
-            new FileMutationOutput(true, result.Message));
+        _logger.LogInformation("Reset file to HEAD in project {ProjectId}: {Path}", projectId, path);
+        return FileOperationResult<FileMutationOutput>.Succeeded(new FileMutationOutput(true, result.Message));
     }
 
     public Task<FileOperationResult<FileMutationOutput>> StageAsync(
         Guid projectId,
         string? path,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         return SetStagedAsync(projectId, path, staged: true, cancellationToken);
     }
@@ -345,7 +323,8 @@ public sealed class FileAppService
     public Task<FileOperationResult<FileMutationOutput>> UnstageAsync(
         Guid projectId,
         string? path,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         return SetStagedAsync(projectId, path, staged: false, cancellationToken);
     }
@@ -356,7 +335,8 @@ public sealed class FileAppService
         string? keyword,
         int limit,
         bool recursive,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
         if (fileSystem == null)
@@ -377,15 +357,7 @@ public sealed class FileAppService
         }
 
         var results = new List<FileSearchEntry>();
-        await SearchDirectoryAsync(
-            fileSystem,
-            path,
-            path,
-            keyword,
-            limit,
-            recursive,
-            results,
-            cancellationToken);
+        await SearchDirectoryAsync(fileSystem, path, path, keyword, limit, recursive, results, cancellationToken);
 
         var sortedResults = results
             .OrderBy(result => result.Type == "file")
@@ -393,29 +365,24 @@ public sealed class FileAppService
             .Take(limit)
             .ToList();
 
-        return FileOperationResult<FileSearchOutput>.Succeeded(
-            new FileSearchOutput(sortedResults));
+        return FileOperationResult<FileSearchOutput>.Succeeded(new FileSearchOutput(sortedResults));
     }
 
-    private static readonly StringComparison PathComparison =
-        OperatingSystem.IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
+    private static readonly StringComparison PathComparison = OperatingSystem.IsWindows()
+        ? StringComparison.OrdinalIgnoreCase
+        : StringComparison.Ordinal;
 
-    private async Task<IAgwFileSystem?> ResolveFileSystemAsync(
-        Guid projectId,
-        CancellationToken cancellationToken)
+    private async Task<IAgwFileSystem?> ResolveFileSystemAsync(Guid projectId, CancellationToken cancellationToken)
     {
-        return projectId == Guid.Empty
-            ? null
-            : await _fileSystemResolver.ResolveAsync(projectId, cancellationToken);
+        return projectId == Guid.Empty ? null : await _fileSystemResolver.ResolveAsync(projectId, cancellationToken);
     }
 
     private async Task<FileOperationResult<FileMutationOutput>> SetStagedAsync(
         Guid projectId,
         string? path,
         bool staged,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
         if (fileSystem == null)
@@ -435,15 +402,11 @@ public sealed class FileAppService
 
         if (TargetsWorkspaceRoot(path))
         {
-            return FileOperationResult<FileMutationOutput>.Invalid(
-                "Workspace root cannot be staged or unstaged");
+            return FileOperationResult<FileMutationOutput>.Invalid("Workspace root cannot be staged or unstaged");
         }
 
         var physicalPath = localFileSystem.ResolvePhysicalPath(path);
-        var result = await _gitCommandService.SetStagedAsync(
-            physicalPath,
-            staged,
-            cancellationToken);
+        var result = await _gitCommandService.SetStagedAsync(physicalPath, staged, cancellationToken);
         if (!result.Success && result.IsClientError)
         {
             return FileOperationResult<FileMutationOutput>.Invalid(result.Message, result.Error);
@@ -451,10 +414,7 @@ public sealed class FileAppService
 
         if (!result.Success)
         {
-            _logger.LogError(
-                "Git {Operation} failed: {Error}",
-                staged ? "stage" : "unstage",
-                result.Error);
+            _logger.LogError("Git {Operation} failed: {Error}", staged ? "stage" : "unstage", result.Error);
             return FileOperationResult<FileMutationOutput>.Failed(result.Message, result.Error);
         }
 
@@ -462,20 +422,19 @@ public sealed class FileAppService
             "{Operation} changes in project {ProjectId}: {Path}",
             staged ? "Staged" : "Unstaged",
             projectId,
-            path);
-        return FileOperationResult<FileMutationOutput>.Succeeded(
-            new FileMutationOutput(true, result.Message));
+            path
+        );
+        return FileOperationResult<FileMutationOutput>.Succeeded(new FileMutationOutput(true, result.Message));
     }
 
     private async Task<FileOperationResult<FileListOutput>> GetAllChangedFilesAsync(
         LocalFileSystem fileSystem,
         string directoryPath,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var physicalDirectory = fileSystem.ResolvePhysicalPath(directoryPath);
-        var changedFiles = await _gitCommandService.GetChangedFilesAsync(
-            physicalDirectory,
-            cancellationToken);
+        var changedFiles = await _gitCommandService.GetChangedFilesAsync(physicalDirectory, cancellationToken);
         if (changedFiles == null || changedFiles.FileStatuses.Count == 0)
         {
             return FileOperationResult<FileListOutput>.Succeeded(new FileListOutput([]));
@@ -485,30 +444,33 @@ public sealed class FileAppService
         foreach (var (physicalPath, status) in changedFiles.FileStatuses)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!IsPathUnderDirectory(physicalPath, physicalDirectory)
-                || string.Equals(physicalPath, physicalDirectory, PathComparison))
+            if (
+                !IsPathUnderDirectory(physicalPath, physicalDirectory)
+                || string.Equals(physicalPath, physicalDirectory, PathComparison)
+            )
             {
                 continue;
             }
 
             var relativePath = fileSystem.GetRelativePath(physicalPath);
             var entry = await fileSystem.StatAsync(relativePath, cancellationToken);
-            items.Add(entry == null
-                ? new FileListEntry(
-                    GetFileName(relativePath),
-                    NormalizePath(relativePath),
-                    "file",
-                    null,
-                    null,
-                    status.AggregateStatus,
-                    status.StagedStatus,
-                    status.UnstagedStatus)
-                : ToListEntry(entry, status));
+            items.Add(
+                entry == null
+                    ? new FileListEntry(
+                        GetFileName(relativePath),
+                        NormalizePath(relativePath),
+                        "file",
+                        null,
+                        null,
+                        status.AggregateStatus,
+                        status.StagedStatus,
+                        status.UnstagedStatus
+                    )
+                    : ToListEntry(entry, status)
+            );
         }
 
-        var sortedItems = items
-            .OrderBy(item => item.Path, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        var sortedItems = items.OrderBy(item => item.Path, StringComparer.OrdinalIgnoreCase).ToList();
         return FileOperationResult<FileListOutput>.Succeeded(new FileListOutput(sortedItems));
     }
 
@@ -523,7 +485,8 @@ public sealed class FileAppService
             entry.LastModifiedUtc,
             gitStatus?.AggregateStatus,
             gitStatus?.StagedStatus,
-            gitStatus?.UnstagedStatus);
+            gitStatus?.UnstagedStatus
+        );
     }
 
     private static GitFileStatus CombineGitStatuses(IEnumerable<GitFileStatus> statuses)
@@ -531,16 +494,21 @@ public sealed class FileAppService
         var values = statuses.ToList();
         return new GitFileStatus(
             GetAggregatedStatus(values.Select(status => status.StagedStatus)),
-            GetAggregatedStatus(values.Select(status => status.UnstagedStatus)));
+            GetAggregatedStatus(values.Select(status => status.UnstagedStatus))
+        );
     }
 
     private static string? GetAggregatedStatus(IEnumerable<string?> statuses)
     {
         var values = statuses.Where(status => status != null).ToHashSet();
-        if (values.Contains("modified")) return "modified";
-        if (values.Contains("added")) return "added";
-        if (values.Contains("untracked")) return "untracked";
-        if (values.Contains("deleted")) return "deleted";
+        if (values.Contains("modified"))
+            return "modified";
+        if (values.Contains("added"))
+            return "added";
+        if (values.Contains("untracked"))
+            return "untracked";
+        if (values.Contains("deleted"))
+            return "deleted";
         return null;
     }
 
@@ -610,7 +578,8 @@ public sealed class FileAppService
         int limit,
         bool recursive,
         List<FileSearchEntry> results,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (results.Count >= limit)
         {
@@ -618,11 +587,7 @@ public sealed class FileAppService
         }
 
         var entries = new List<FileEntry>();
-        await foreach (var entry in fileSystem.EnumerateAsync(
-                           currentPath,
-                           "*",
-                           recursive: false,
-                           cancellationToken))
+        await foreach (var entry in fileSystem.EnumerateAsync(currentPath, "*", recursive: false, cancellationToken))
         {
             entries.Add(entry);
         }
@@ -632,10 +597,7 @@ public sealed class FileAppService
         {
             cancellationToken.ThrowIfCancellationRequested();
             var relativePath = GetPathRelativeTo(entry.Path, rootPath);
-            if (ShouldIgnoreSearchEntry(
-                    relativePath,
-                    isDirectory: true,
-                    recursive: recursive))
+            if (ShouldIgnoreSearchEntry(relativePath, isDirectory: true, recursive: recursive))
             {
                 continue;
             }
@@ -652,10 +614,7 @@ public sealed class FileAppService
         {
             cancellationToken.ThrowIfCancellationRequested();
             var relativePath = GetPathRelativeTo(entry.Path, rootPath);
-            if (ShouldIgnoreSearchEntry(
-                    relativePath,
-                    isDirectory: false,
-                    recursive: recursive))
+            if (ShouldIgnoreSearchEntry(relativePath, isDirectory: false, recursive: recursive))
             {
                 continue;
             }
@@ -682,7 +641,8 @@ public sealed class FileAppService
                 limit,
                 recursive: true,
                 results,
-                cancellationToken);
+                cancellationToken
+            );
             if (results.Count >= limit)
             {
                 return;
@@ -695,25 +655,23 @@ public sealed class FileAppService
         string relativePath,
         string keyword,
         int limit,
-        List<FileSearchEntry> results)
+        List<FileSearchEntry> results
+    )
     {
         if (results.Count >= limit)
         {
             return;
         }
 
-        var resultPath = entry.IsDirectory
-            ? $"{relativePath.TrimEnd('/')}/"
-            : relativePath;
+        var resultPath = entry.IsDirectory ? $"{relativePath.TrimEnd('/')}/" : relativePath;
         if (!resultPath.Contains(keyword, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
-        results.Add(new FileSearchEntry(
-            NormalizePath(entry.Path),
-            resultPath,
-            entry.IsDirectory ? "directory" : "file"));
+        results.Add(
+            new FileSearchEntry(NormalizePath(entry.Path), resultPath, entry.IsDirectory ? "directory" : "file")
+        );
     }
 
     private static bool IsIgnoredDirectoryPath(string path)
@@ -723,27 +681,20 @@ public sealed class FileAppService
             .Any(segment => segment.StartsWith('.') || IgnoreDirectories.Contains(segment));
     }
 
-    private static bool ShouldIgnoreSearchEntry(
-        string relativePath,
-        bool isDirectory,
-        bool recursive)
+    private static bool ShouldIgnoreSearchEntry(string relativePath, bool isDirectory, bool recursive)
     {
-        var segments = NormalizePath(relativePath)
-            .Split('/', StringSplitOptions.RemoveEmptyEntries);
-        var directorySegmentCount = isDirectory
-            ? segments.Length
-            : Math.Max(0, segments.Length - 1);
-        if (segments
-            .Take(directorySegmentCount)
-            .Any(segment => segment.StartsWith('.') || IgnoreDirectories.Contains(segment)))
+        var segments = NormalizePath(relativePath).Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var directorySegmentCount = isDirectory ? segments.Length : Math.Max(0, segments.Length - 1);
+        if (
+            segments
+                .Take(directorySegmentCount)
+                .Any(segment => segment.StartsWith('.') || IgnoreDirectories.Contains(segment))
+        )
         {
             return true;
         }
 
-        return recursive
-            && !isDirectory
-            && segments.Length > 0
-            && ShouldIgnoreFile(segments[^1]);
+        return recursive && !isDirectory && segments.Length > 0 && ShouldIgnoreFile(segments[^1]);
     }
 
     private static bool ShouldIgnoreFile(string fileName)

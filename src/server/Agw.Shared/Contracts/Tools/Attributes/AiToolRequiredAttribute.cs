@@ -4,6 +4,4 @@ namespace Agw.Shared.Contracts.Tools.Attributes;
 /// Marks a parameter as required for the tool execution.
 /// </summary>
 [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false)]
-public sealed class AiToolRequiredAttribute : Attribute
-{
-}
+public sealed class AiToolRequiredAttribute : Attribute { }

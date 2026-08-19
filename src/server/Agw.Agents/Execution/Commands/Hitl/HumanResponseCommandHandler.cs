@@ -8,6 +8,6 @@ public sealed class HumanResponseCommandHandler : IExecutionCommandHandler<Human
     public Task HandleAsync(
         HumanResponseCommand command,
         ExecutionConnectionContext context,
-        CancellationToken cancellationToken) =>
-        context.SubmitHumanDecisionAsync(command, cancellationToken);
+        CancellationToken cancellationToken
+    ) => context.SubmitHumanDecisionAsync(command, cancellationToken);
 }

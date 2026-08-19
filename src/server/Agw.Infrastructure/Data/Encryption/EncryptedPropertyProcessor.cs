@@ -1,5 +1,4 @@
 using Agw.Shared.Exceptions;
-
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 
@@ -19,8 +18,11 @@ internal sealed class EncryptedPropertyProcessor
         var restores = new List<EncryptedPropertyRestore>();
         try
         {
-            foreach (var entry in changeTracker.Entries()
-                         .Where(entry => entry.State is EntityState.Added or EntityState.Modified))
+            foreach (
+                var entry in changeTracker
+                    .Entries()
+                    .Where(entry => entry.State is EntityState.Added or EntityState.Modified)
+            )
             {
                 var encryptedProperties = EncryptedEntityMetadata.GetEncryptedProperties(entry.Metadata).ToList();
                 if (encryptedProperties.Count == 0)
@@ -83,31 +85,37 @@ internal sealed class EncryptedPropertyProcessor
         }
     }
 
-    private object? EncryptValue(string tableName, Guid entityId, object? value) => value switch
-    {
-        null => null,
-        string plaintext => _protector.Protect(tableName, entityId, plaintext),
-        Dictionary<string, string> values => values.ToDictionary(
-            pair => pair.Key,
-            pair => _protector.Protect(tableName, entityId, pair.Value),
-            values.Comparer),
-        _ => throw new AgwException(
-            ErrorCodes.EncryptedModelInvalid,
-            $"Encrypted value type '{value.GetType().Name}' is not supported.")
-    };
+    private object? EncryptValue(string tableName, Guid entityId, object? value) =>
+        value switch
+        {
+            null => null,
+            string plaintext => _protector.Protect(tableName, entityId, plaintext),
+            Dictionary<string, string> values => values.ToDictionary(
+                pair => pair.Key,
+                pair => _protector.Protect(tableName, entityId, pair.Value),
+                values.Comparer
+            ),
+            _ => throw new AgwException(
+                ErrorCodes.EncryptedModelInvalid,
+                $"Encrypted value type '{value.GetType().Name}' is not supported."
+            ),
+        };
 
-    private object? DecryptValue(string tableName, Guid entityId, object? value) => value switch
-    {
-        null => null,
-        string protectedValue => _protector.Unprotect(tableName, entityId, protectedValue),
-        Dictionary<string, string> values => values.ToDictionary(
-            pair => pair.Key,
-            pair => _protector.Unprotect(tableName, entityId, pair.Value),
-            values.Comparer),
-        _ => throw new AgwException(
-            ErrorCodes.EncryptedModelInvalid,
-            $"Encrypted value type '{value.GetType().Name}' is not supported.")
-    };
+    private object? DecryptValue(string tableName, Guid entityId, object? value) =>
+        value switch
+        {
+            null => null,
+            string protectedValue => _protector.Unprotect(tableName, entityId, protectedValue),
+            Dictionary<string, string> values => values.ToDictionary(
+                pair => pair.Key,
+                pair => _protector.Unprotect(tableName, entityId, pair.Value),
+                values.Comparer
+            ),
+            _ => throw new AgwException(
+                ErrorCodes.EncryptedModelInvalid,
+                $"Encrypted value type '{value.GetType().Name}' is not supported."
+            ),
+        };
 }
 
 internal sealed record EncryptedPropertyRestore(PropertyEntry PropertyEntry, object? Plaintext);

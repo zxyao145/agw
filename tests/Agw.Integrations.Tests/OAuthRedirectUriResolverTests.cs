@@ -1,5 +1,4 @@
 using Agw.Integrations.Application.OAuth;
-
 using Microsoft.Extensions.Options;
 
 namespace Agw.Integrations.Tests;
@@ -9,9 +8,7 @@ public sealed class OAuthRedirectUriResolverTests
     [Fact]
     public void ResolveCallbackUri_ConfiguredPublicBaseUrl_UsesApiOrigin()
     {
-        var resolver = CreateResolver(
-            publicBaseUrl: "https://api.agw.test/base",
-            webBaseUrl: "https://app.agw.test");
+        var resolver = CreateResolver(publicBaseUrl: "https://api.agw.test/base", webBaseUrl: "https://app.agw.test");
 
         var result = resolver.ResolveCallbackUri("https://proxy.agw.test/");
 
@@ -21,13 +18,9 @@ public sealed class OAuthRedirectUriResolverTests
     [Fact]
     public void ResolveWebRedirectUri_ConfiguredWebBaseUrl_ReturnsIntegrationsPage()
     {
-        var resolver = CreateResolver(
-            publicBaseUrl: "https://api.agw.test",
-            webBaseUrl: "https://app.agw.test");
+        var resolver = CreateResolver(publicBaseUrl: "https://api.agw.test", webBaseUrl: "https://app.agw.test");
 
-        var result = resolver.ResolveWebRedirectUri(
-            "https://api.agw.test/",
-            "/integrations?oauth=authorized");
+        var result = resolver.ResolveWebRedirectUri("https://api.agw.test/", "/integrations?oauth=authorized");
 
         Assert.Equal("https://app.agw.test/integrations?oauth=authorized", result);
     }
@@ -39,20 +32,18 @@ public sealed class OAuthRedirectUriResolverTests
 
         Assert.Equal(
             "https://agw.test/api/integrations/oauth/callback",
-            resolver.ResolveCallbackUri("https://agw.test/"));
+            resolver.ResolveCallbackUri("https://agw.test/")
+        );
         Assert.Equal(
             "https://agw.test/integrations?oauth=authorized",
-            resolver.ResolveWebRedirectUri("https://agw.test/", "/integrations?oauth=authorized"));
+            resolver.ResolveWebRedirectUri("https://agw.test/", "/integrations?oauth=authorized")
+        );
     }
 
-    private static OAuthRedirectUriResolver CreateResolver(
-        string? publicBaseUrl,
-        string? webBaseUrl)
+    private static OAuthRedirectUriResolver CreateResolver(string? publicBaseUrl, string? webBaseUrl)
     {
-        return new OAuthRedirectUriResolver(Options.Create(new OAuthRedirectOptions
-        {
-            PublicBaseUrl = publicBaseUrl,
-            WebBaseUrl = webBaseUrl
-        }));
+        return new OAuthRedirectUriResolver(
+            Options.Create(new OAuthRedirectOptions { PublicBaseUrl = publicBaseUrl, WebBaseUrl = webBaseUrl })
+        );
     }
 }

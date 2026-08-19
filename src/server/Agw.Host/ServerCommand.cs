@@ -1,7 +1,6 @@
 using Agw.Auth.Application;
 using Agw.Setup.Services;
 using Agw.Shared.Runtime;
-
 using Microsoft.AspNetCore.Identity;
 
 namespace Agw.Host;
@@ -10,9 +9,11 @@ public static class ServerCommand
 {
     public static async Task<bool> TryRunAsync(string[] args, AgwDataPaths paths)
     {
-        if (args.Length != 2
+        if (
+            args.Length != 2
             || !string.Equals(args[0], "auth", StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(args[1], "reset-password", StringComparison.OrdinalIgnoreCase))
+            || !string.Equals(args[1], "reset-password", StringComparison.OrdinalIgnoreCase)
+        )
         {
             return false;
         }
@@ -34,8 +35,7 @@ public static class ServerCommand
         }
 
         var hasher = new PasswordHasher<object>();
-        IAuthenticationStateStore authenticationStateStore =
-            new JsonInitializationStateStore(paths);
+        IAuthenticationStateStore authenticationStateStore = new JsonInitializationStateStore(paths);
         await authenticationStateStore.UpdatePasswordAsync(hasher.HashPassword(new object(), password));
         Console.WriteLine("Administrator password reset. Existing web sessions were invalidated.");
         return true;

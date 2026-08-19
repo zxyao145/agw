@@ -4,9 +4,7 @@ using Agw.Shared;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Providers.Controllers.Controllers;
@@ -18,9 +16,7 @@ public class ProvidersController : ControllerBase
     private readonly IProviderAppService _service;
     private readonly IProviderModelDiscoveryService _modelDiscoveryService;
 
-    public ProvidersController(
-        IProviderAppService service,
-        IProviderModelDiscoveryService modelDiscoveryService)
+    public ProvidersController(IProviderAppService service, IProviderModelDiscoveryService modelDiscoveryService)
     {
         _service = service;
         _modelDiscoveryService = modelDiscoveryService;
@@ -55,7 +51,8 @@ public class ProvidersController : ControllerBase
     [ProducesApiResult(typeof(ProviderModelDiscoveryResponse))]
     public async Task<IActionResult> DiscoverModelsAsync(
         [FromBody] ProviderModelDiscoveryRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var result = await _modelDiscoveryService.DiscoverAsync(request, cancellationToken);
         return ApiResult.Ok(result);

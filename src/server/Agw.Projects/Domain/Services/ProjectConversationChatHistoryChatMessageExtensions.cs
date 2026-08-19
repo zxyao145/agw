@@ -1,7 +1,5 @@
 using System.Text.Json;
-
 using Agw.Shared.Data.Entities.Projects;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Projects.Domain.Services;
@@ -23,9 +21,7 @@ public static class ProjectConversationChatHistoryChatMessageExtensions
     public static string GetText(this ProjectConversationChatHistory record)
     {
         return string.Concat(
-            record.ToChatMessage()?.Contents
-                .OfType<TextContent>()
-                .Select(content => content.Text)
-            ?? []);
+            record.ToChatMessage()?.Contents.OfType<TextContent>().Select(content => content.Text) ?? []
+        );
     }
 }

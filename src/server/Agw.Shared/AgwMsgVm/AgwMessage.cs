@@ -1,5 +1,4 @@
 using System.Text.Json.Serialization;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Shared.AgwMsgVm;
@@ -21,7 +20,8 @@ public record AgwMessage
         string? author,
         AiRole role,
         List<AgwContent> contents,
-        AdditionalPropertiesDictionary? additionalProperties = null)
+        AdditionalPropertiesDictionary? additionalProperties = null
+    )
     {
         MessageId = messageId;
         Author = author;
@@ -35,7 +35,8 @@ public record AgwMessage
         string? author,
         AiRole role,
         List<AgwContent> contents,
-        Dictionary<string, object?>? additionalProperties)
+        Dictionary<string, object?>? additionalProperties
+    )
     {
         MessageId = messageId;
         Author = author;

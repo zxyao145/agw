@@ -1,6 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
-
 using Agw.Shared.Exceptions;
 
 namespace Agw.Shared.Utils;
@@ -27,7 +26,10 @@ public class ThrowUtil
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     [return: NotNull]
-    public static string IfNullOrWhitespace([NotNull] string? argument, [CallerArgumentExpression("argument")] string paramName = "")
+    public static string IfNullOrWhitespace(
+        [NotNull] string? argument,
+        [CallerArgumentExpression("argument")] string paramName = ""
+    )
     {
         if (string.IsNullOrWhiteSpace(argument))
         {

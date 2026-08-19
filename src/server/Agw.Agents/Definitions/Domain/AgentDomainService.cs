@@ -1,5 +1,4 @@
 using System.Text.Json;
-
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
@@ -66,24 +65,25 @@ public class AgentDomainService
 
     public IReadOnlyList<Guid> NormalizeMcpToolServerIds(IEnumerable<Guid>? mcpToolServerIds)
     {
-        return (mcpToolServerIds ?? [])
-            .Where(id => id != Guid.Empty)
-            .Distinct()
-            .ToList();
+        return (mcpToolServerIds ?? []).Where(id => id != Guid.Empty).Distinct().ToList();
     }
 
     private static void EnsureModelProviderIsPresentWhenRequired(Agent agent)
     {
         if (agent.Type == AgentType.System && !agent.ModelProviderId.HasValue)
         {
-            throw new AgwException(ErrorCodes.SystemAgentRequiresModelProvider, "System agents must have a ModelProviderId.");
+            throw new AgwException(
+                ErrorCodes.SystemAgentRequiresModelProvider,
+                "System agents must have a ModelProviderId."
+            );
         }
 
-        if (agent.Type == AgentType.External &&
-            agent.EnableSummary &&
-            !agent.SummaryModelProviderId.HasValue)
+        if (agent.Type == AgentType.External && agent.EnableSummary && !agent.SummaryModelProviderId.HasValue)
         {
-            throw new AgwException(ErrorCodes.InvalidParam, "External agent Summary requires a SummaryModelProviderId.");
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "External agent Summary requires a SummaryModelProviderId."
+            );
         }
     }
 
@@ -103,9 +103,7 @@ public class AgentDomainService
                 return normalized;
             }
         }
-        catch (JsonException)
-        {
-        }
+        catch (JsonException) { }
 
         throw new AgwException(ErrorCodes.InvalidAgentExtraSettings);
     }
@@ -116,10 +114,12 @@ public class AgentDomainService
         foreach (var (name, value) in agent.EnvironmentVariables ?? [])
         {
             var normalizedName = name.Trim();
-            if (string.IsNullOrEmpty(normalizedName)
+            if (
+                string.IsNullOrEmpty(normalizedName)
                 || normalizedName.Contains('=')
                 || normalizedName.Contains('\0')
-                || !normalized.TryAdd(normalizedName, value ?? string.Empty))
+                || !normalized.TryAdd(normalizedName, value ?? string.Empty)
+            )
             {
                 throw new AgwException(ErrorCodes.InvalidAgentEnvironmentVariableName);
             }

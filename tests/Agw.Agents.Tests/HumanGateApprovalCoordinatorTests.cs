@@ -1,10 +1,8 @@
 using System.Text.Json;
-
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Turns;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Tests;
@@ -21,17 +19,17 @@ public class HumanGateApprovalCoordinatorTests
             "Review Gate",
             "approval",
             "Approve next step?",
-            []);
+            []
+        );
 
-        var pendingDecision = coordinator.WaitForApprovalAsync(
-            request,
-            TestContext.Current.CancellationToken).AsTask();
+        var pendingDecision = coordinator.WaitForApprovalAsync(request, TestContext.Current.CancellationToken).AsTask();
 
         Assert.False(pendingDecision.IsCompleted);
 
         var accepted = await coordinator.TrySubmitAsync(
             new HumanResponseCommand("request-1", approved: true, responseText: "looks good"),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.True(accepted);
         var decision = await pendingDecision;
@@ -51,17 +49,14 @@ public class HumanGateApprovalCoordinatorTests
             "Agent",
             "tool-approval",
             "Allow tool?",
-            []);
-        var pendingDecision = coordinator.WaitForApprovalAsync(
-            request,
-            TestContext.Current.CancellationToken).AsTask();
+            []
+        );
+        var pendingDecision = coordinator.WaitForApprovalAsync(request, TestContext.Current.CancellationToken).AsTask();
 
         var accepted = await coordinator.TrySubmitAsync(
-            new HumanResponseCommand(
-                "request-standing",
-                approved: true,
-                approvalScope: "always-arguments"),
-            TestContext.Current.CancellationToken);
+            new HumanResponseCommand("request-standing", approved: true, approvalScope: "always-arguments"),
+            TestContext.Current.CancellationToken
+        );
 
         Assert.True(accepted);
         Assert.Equal("always-arguments", (await pendingDecision).ApprovalScope);
@@ -77,29 +72,23 @@ public class HumanGateApprovalCoordinatorTests
             null,
             "interaction",
             "Choose a database",
-            []);
-        var pendingDecision = coordinator.WaitForApprovalAsync(
-            request,
-            TestContext.Current.CancellationToken).AsTask();
-        var responseData = JsonSerializer.SerializeToElement(new
-        {
-            answers = new Dictionary<string, string> { ["Database?"] = "PostgreSQL" }
-        });
+            []
+        );
+        var pendingDecision = coordinator.WaitForApprovalAsync(request, TestContext.Current.CancellationToken).AsTask();
+        var responseData = JsonSerializer.SerializeToElement(
+            new { answers = new Dictionary<string, string> { ["Database?"] = "PostgreSQL" } }
+        );
 
         var accepted = await coordinator.TrySubmitAsync(
-            new HumanResponseCommand(
-                "request-input",
-                approved: true,
-                responseData: responseData),
-            TestContext.Current.CancellationToken);
+            new HumanResponseCommand("request-input", approved: true, responseData: responseData),
+            TestContext.Current.CancellationToken
+        );
 
         Assert.True(accepted);
         Assert.Equal(
             "PostgreSQL",
-            (await pendingDecision).ResponseData!.Value
-                .GetProperty("answers")
-                .GetProperty("Database?")
-                .GetString());
+            (await pendingDecision).ResponseData!.Value.GetProperty("answers").GetProperty("Database?").GetString()
+        );
     }
 
     [Fact]
@@ -115,11 +104,10 @@ public class HumanGateApprovalCoordinatorTests
             {
                 forwarded = response;
                 return ValueTask.FromResult(true);
-            });
+            }
+        );
 
-        var accepted = await activeTurn.TrySubmitHumanResponseAsync(
-            command,
-            TestContext.Current.CancellationToken);
+        var accepted = await activeTurn.TrySubmitHumanResponseAsync(command, TestContext.Current.CancellationToken);
 
         Assert.True(accepted);
         Assert.Same(command, forwarded);
@@ -130,15 +118,9 @@ public class HumanGateApprovalCoordinatorTests
     {
         var request = new ToolApprovalRequestContent(
             "approval-1",
-            new FunctionCallContent(
-                "call-1",
-                "run_shell",
-                new Dictionary<string, object?>()));
-        var decision = new HumanGateApprovalDecision(
-            "approval-1",
-            true,
-            null,
-            null!);
+            new FunctionCallContent("call-1", "run_shell", new Dictionary<string, object?>())
+        );
+        var decision = new HumanGateApprovalDecision("approval-1", true, null, null!);
 
         var response = ToolApprovalSupport.CreateResponse(request, decision);
 
@@ -162,18 +144,14 @@ public class HumanGateApprovalCoordinatorTests
                             question = "Which database?",
                             header = "Database",
                             multiSelect = false,
-                            options = new[]
-                            {
-                                new { label = "PostgreSQL", description = "Cluster deployment" }
-                            }
-                        }
+                            options = new[] { new { label = "PostgreSQL", description = "Cluster deployment" } },
+                        },
                     },
-                    ["answers"] = new Dictionary<string, string>
-                    {
-                        ["Which database?"] = "forged-by-model"
-                    },
-                    ["metadata"] = new { source = "test" }
-                }));
+                    ["answers"] = new Dictionary<string, string> { ["Which database?"] = "forged-by-model" },
+                    ["metadata"] = new { source = "test" },
+                }
+            )
+        );
 
         var request = ToolApprovalSupport.CreateRequest(approval, "agent", "Agent");
         var snapshot = DurableHumanInteractionMapper.FromRequest(request);

@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-
 using Microsoft.AspNetCore.Http;
 
 namespace Agw.Auth.Application;
@@ -13,7 +12,8 @@ public sealed class AuthenticationAttemptLimiter
 
     public bool IsBlocked(string clientKey, DateTimeOffset now)
     {
-        if (!_windows.TryGetValue(clientKey, out var window)) return false;
+        if (!_windows.TryGetValue(clientKey, out var window))
+            return false;
         lock (window.Failures)
         {
             RemoveExpired(window.Failures, now);
@@ -37,7 +37,8 @@ public sealed class AuthenticationAttemptLimiter
     private static void RemoveExpired(Queue<DateTimeOffset> failures, DateTimeOffset now)
     {
         var cutoff = now - Window;
-        while (failures.TryPeek(out var failure) && failure < cutoff) failures.Dequeue();
+        while (failures.TryPeek(out var failure) && failure < cutoff)
+            failures.Dequeue();
     }
 
     private sealed class FailureWindow

@@ -1,5 +1,4 @@
 using System.Text.Json;
-
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
@@ -12,7 +11,6 @@ using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,9 +26,7 @@ public sealed class AgentflowCheckpointStoreTests
         var fixture = await database.SeedAsync();
         var store = database.CreateStore();
         var cancellationToken = TestContext.Current.CancellationToken;
-        var fingerprint = await store.GetDefinitionFingerprintAsync(
-            fixture.AgentflowId,
-            cancellationToken);
+        var fingerprint = await store.GetDefinitionFingerprintAsync(fixture.AgentflowId, cancellationToken);
 
         var first = await store.RecordAsync(
             Guid.CreateVersion7(),
@@ -44,7 +40,8 @@ public sealed class AgentflowCheckpointStoreTests
             fingerprint!,
             CreateCheckpoint("checkpoint-1"),
             new Dictionary<string, string> { ["checkpoint-node"] = "Review saved" },
-            cancellationToken);
+            cancellationToken
+        );
         Assert.NotNull(first);
 
         await database.AppendHistoryAsync(fixture, sequence: 2, "after first");
@@ -60,7 +57,8 @@ public sealed class AgentflowCheckpointStoreTests
             fingerprint!,
             CreateCheckpoint("checkpoint-2"),
             new Dictionary<string, string> { ["checkpoint-node"] = "Review saved" },
-            cancellationToken);
+            cancellationToken
+        );
         Assert.NotNull(second);
         Assert.NotEqual(first.Snapshot.OccurrenceId, second.Snapshot.OccurrenceId);
 
@@ -69,12 +67,9 @@ public sealed class AgentflowCheckpointStoreTests
             fixture.ContextId,
             fixture.AgentflowId,
             "user",
-            new HashSet<Guid>
-            {
-                first.Snapshot.OccurrenceId,
-                second.Snapshot.OccurrenceId
-            },
-            cancellationToken);
+            new HashSet<Guid> { first.Snapshot.OccurrenceId, second.Snapshot.OccurrenceId },
+            cancellationToken
+        );
         Assert.Equal(2, availability.Count);
         Assert.All(availability, checkpoint => Assert.True(checkpoint.Available));
 
@@ -84,18 +79,19 @@ public sealed class AgentflowCheckpointStoreTests
             fixture.ContextId,
             fixture.AgentflowId,
             "user",
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.Equal(first.Snapshot.BoundarySequence, restored.BoundarySequence);
         await using var context = database.CreateContext();
         Assert.Equal(
             [0L, first.Snapshot.BoundarySequence],
-            await context.ProjectConversationChatHistories
-                .OrderBy(item => item.ConversationSequence)
+            await context
+                .ProjectConversationChatHistories.OrderBy(item => item.ConversationSequence)
                 .Select(item => item.ConversationSequence!.Value)
-                .ToArrayAsync(cancellationToken));
-        var remaining = await context.AgentflowCheckpoints
-            .SingleAsync(cancellationToken);
+                .ToArrayAsync(cancellationToken)
+        );
+        var remaining = await context.AgentflowCheckpoints.SingleAsync(cancellationToken);
         Assert.Equal(first.Snapshot.OccurrenceId, remaining.Id);
     }
 
@@ -106,9 +102,7 @@ public sealed class AgentflowCheckpointStoreTests
         var fixture = await database.SeedAsync();
         var store = database.CreateStore();
         var cancellationToken = TestContext.Current.CancellationToken;
-        var fingerprint = await store.GetDefinitionFingerprintAsync(
-            fixture.AgentflowId,
-            cancellationToken);
+        var fingerprint = await store.GetDefinitionFingerprintAsync(fixture.AgentflowId, cancellationToken);
 
         var recorded = await store.RecordAsync(
             Guid.CreateVersion7(),
@@ -121,34 +115,32 @@ public sealed class AgentflowCheckpointStoreTests
             isDurable: false,
             fingerprint!,
             CreateCheckpoint("checkpoint-1"),
-            new Dictionary<string, string>
-            {
-                ["checkpoint-a"] = "Review A",
-                ["checkpoint-b"] = "Review B"
-            },
-            cancellationToken);
+            new Dictionary<string, string> { ["checkpoint-a"] = "Review A", ["checkpoint-b"] = "Review B" },
+            cancellationToken
+        );
 
         Assert.NotNull(recorded);
         Assert.Equal(2, recorded.Messages.Count);
         Assert.Equal(2, recorded.Snapshot.Markers.Count);
         Assert.All(
             recorded.Messages,
-            message => Assert.Equal(
-                recorded.Snapshot.OccurrenceId.ToString("D"),
-                message.AdditionalProperties!["checkpointOccurrenceId"]));
+            message =>
+                Assert.Equal(
+                    recorded.Snapshot.OccurrenceId.ToString("D"),
+                    message.AdditionalProperties!["checkpointOccurrenceId"]
+                )
+        );
 
         await using var context = database.CreateContext();
         var checkpoint = await context.AgentflowCheckpoints.SingleAsync(cancellationToken);
         Assert.Equal(recorded.Snapshot.OccurrenceId, checkpoint.Id);
         Assert.Equal(2, checkpoint.BoundarySequence);
-        var checkpointSequences = await context.ProjectConversationChatHistories
-            .Where(item => item.ConversationSequence > 0)
+        var checkpointSequences = await context
+            .ProjectConversationChatHistories.Where(item => item.ConversationSequence > 0)
             .OrderBy(item => item.ConversationSequence)
             .Select(item => item.ConversationSequence!.Value)
             .ToArrayAsync(cancellationToken);
-        Assert.Equal(
-            [1L, 2L],
-            checkpointSequences);
+        Assert.Equal([1L, 2L], checkpointSequences);
     }
 
     [Fact]
@@ -158,9 +150,7 @@ public sealed class AgentflowCheckpointStoreTests
         var fixture = await database.SeedAsync();
         var store = database.CreateStore();
         var cancellationToken = TestContext.Current.CancellationToken;
-        var fingerprint = await store.GetDefinitionFingerprintAsync(
-            fixture.AgentflowId,
-            cancellationToken);
+        var fingerprint = await store.GetDefinitionFingerprintAsync(fixture.AgentflowId, cancellationToken);
         var recorded = await store.RecordAsync(
             Guid.CreateVersion7(),
             fixture.ProjectId,
@@ -173,23 +163,25 @@ public sealed class AgentflowCheckpointStoreTests
             fingerprint!,
             CreateCheckpoint("checkpoint-1"),
             new Dictionary<string, string> { ["checkpoint-node"] = "Saved" },
-            cancellationToken);
+            cancellationToken
+        );
         Assert.NotNull(recorded);
         await database.AppendHistoryAsync(fixture, sequence: 2, "must remain");
         await database.ChangeDefinitionAsync(fixture.AgentflowId);
 
-        await Assert.ThrowsAsync<AgwException>(() => store.PrepareInProcessResumeAsync(
-            recorded.Snapshot.OccurrenceId,
-            fixture.ProjectId,
-            fixture.ContextId,
-            fixture.AgentflowId,
-            "user",
-            cancellationToken));
+        await Assert.ThrowsAsync<AgwException>(() =>
+            store.PrepareInProcessResumeAsync(
+                recorded.Snapshot.OccurrenceId,
+                fixture.ProjectId,
+                fixture.ContextId,
+                fixture.AgentflowId,
+                "user",
+                cancellationToken
+            )
+        );
 
         await using var context = database.CreateContext();
-        Assert.Equal(
-            3,
-            await context.ProjectConversationChatHistories.CountAsync(cancellationToken));
+        Assert.Equal(3, await context.ProjectConversationChatHistories.CountAsync(cancellationToken));
         Assert.Equal(1, await context.AgentflowCheckpoints.CountAsync(cancellationToken));
     }
 
@@ -201,13 +193,8 @@ public sealed class AgentflowCheckpointStoreTests
         var store = database.CreateStore();
         var cancellationToken = TestContext.Current.CancellationToken;
         var sourceExecutionId = Guid.CreateVersion7();
-        await database.AddDurableExecutionAsync(
-            fixture,
-            sourceExecutionId,
-            DurableExecutionStatus.Completed);
-        var fingerprint = await store.GetDefinitionFingerprintAsync(
-            fixture.AgentflowId,
-            cancellationToken);
+        await database.AddDurableExecutionAsync(fixture, sourceExecutionId, DurableExecutionStatus.Completed);
+        var fingerprint = await store.GetDefinitionFingerprintAsync(fixture.AgentflowId, cancellationToken);
         var recorded = await store.RecordAsync(
             sourceExecutionId,
             fixture.ProjectId,
@@ -220,7 +207,8 @@ public sealed class AgentflowCheckpointStoreTests
             fingerprint!,
             CreateCheckpoint("checkpoint-1"),
             new Dictionary<string, string> { ["checkpoint-node"] = "Saved" },
-            cancellationToken);
+            cancellationToken
+        );
         Assert.NotNull(recorded);
         await database.AppendHistoryAsync(fixture, sequence: 2, "old branch");
         var resumeExecutionId = Guid.CreateVersion7();
@@ -232,7 +220,8 @@ public sealed class AgentflowCheckpointStoreTests
             fixture.ContextId,
             fixture.AgentflowId,
             "user",
-            cancellationToken);
+            cancellationToken
+        );
         await store.PrepareDistributedResumeAsync(
             recorded.Snapshot.OccurrenceId,
             resumeExecutionId,
@@ -240,23 +229,25 @@ public sealed class AgentflowCheckpointStoreTests
             fixture.ContextId,
             fixture.AgentflowId,
             "user",
-            cancellationToken);
+            cancellationToken
+        );
 
         await using (var context = database.CreateContext())
         {
-            var branch = await context.DurableExecutions
-                .SingleAsync(item => item.Id == resumeExecutionId, cancellationToken);
+            var branch = await context.DurableExecutions.SingleAsync(
+                item => item.Id == resumeExecutionId,
+                cancellationToken
+            );
             var branchManifest = DurableExecutionJson.DeserializeRequired<DurableExecutionManifest>(
                 branch.ManifestJson,
-                "resume branch manifest");
+                "resume branch manifest"
+            );
             Assert.Equal(DurableExecutionStatus.Resuming, branch.Status);
             Assert.Equal(1, branch.SegmentIndex);
             Assert.Equal(recorded.Snapshot.OccurrenceId, branchManifest.ResumeCheckpointOccurrenceId);
             Assert.Equal(["checkpoint-node"], branchManifest.ResumeCheckpointNodeIds);
             Assert.Equal(2, await context.DurableExecutions.CountAsync(cancellationToken));
-            Assert.Equal(
-                2,
-                await context.ProjectConversationChatHistories.CountAsync(cancellationToken));
+            Assert.Equal(2, await context.ProjectConversationChatHistories.CountAsync(cancellationToken));
             branch.Status = DurableExecutionStatus.Completed;
             await context.SaveChangesAsync(cancellationToken);
         }
@@ -270,13 +261,12 @@ public sealed class AgentflowCheckpointStoreTests
             fixture.ContextId,
             fixture.AgentflowId,
             "user",
-            cancellationToken);
+            cancellationToken
+        );
 
         await using var finalContext = database.CreateContext();
         Assert.Equal(3, await finalContext.DurableExecutions.CountAsync(cancellationToken));
-        Assert.Equal(
-            2,
-            await finalContext.ProjectConversationChatHistories.CountAsync(cancellationToken));
+        Assert.Equal(2, await finalContext.ProjectConversationChatHistories.CountAsync(cancellationToken));
     }
 
     [Fact]
@@ -287,13 +277,8 @@ public sealed class AgentflowCheckpointStoreTests
         var store = database.CreateStore();
         var cancellationToken = TestContext.Current.CancellationToken;
         var sourceExecutionId = Guid.CreateVersion7();
-        await database.AddDurableExecutionAsync(
-            fixture,
-            sourceExecutionId,
-            DurableExecutionStatus.Running);
-        var fingerprint = await store.GetDefinitionFingerprintAsync(
-            fixture.AgentflowId,
-            cancellationToken);
+        await database.AddDurableExecutionAsync(fixture, sourceExecutionId, DurableExecutionStatus.Running);
+        var fingerprint = await store.GetDefinitionFingerprintAsync(fixture.AgentflowId, cancellationToken);
         var recorded = await store.RecordAsync(
             sourceExecutionId,
             fixture.ProjectId,
@@ -306,23 +291,25 @@ public sealed class AgentflowCheckpointStoreTests
             fingerprint!,
             CreateCheckpoint("checkpoint-1"),
             new Dictionary<string, string> { ["checkpoint-node"] = "Saved" },
-            cancellationToken);
+            cancellationToken
+        );
         Assert.NotNull(recorded);
         await database.AppendHistoryAsync(fixture, sequence: 2, "must remain");
 
-        await Assert.ThrowsAsync<AgwException>(() => store.PrepareDistributedResumeAsync(
-            recorded.Snapshot.OccurrenceId,
-            Guid.CreateVersion7(),
-            fixture.ProjectId,
-            fixture.ContextId,
-            fixture.AgentflowId,
-            "user",
-            cancellationToken));
+        await Assert.ThrowsAsync<AgwException>(() =>
+            store.PrepareDistributedResumeAsync(
+                recorded.Snapshot.OccurrenceId,
+                Guid.CreateVersion7(),
+                fixture.ProjectId,
+                fixture.ContextId,
+                fixture.AgentflowId,
+                "user",
+                cancellationToken
+            )
+        );
 
         await using var context = database.CreateContext();
-        Assert.Equal(
-            3,
-            await context.ProjectConversationChatHistories.CountAsync(cancellationToken));
+        Assert.Equal(3, await context.ProjectConversationChatHistories.CountAsync(cancellationToken));
         Assert.Equal(1, await context.DurableExecutions.CountAsync(cancellationToken));
         Assert.Equal(1, await context.AgentflowCheckpoints.CountAsync(cancellationToken));
     }
@@ -332,15 +319,10 @@ public sealed class AgentflowCheckpointStoreTests
         {
             SessionId = "session-1",
             CheckpointId = checkpointId,
-            Payload = JsonSerializer.SerializeToElement(new { checkpointId })
+            Payload = JsonSerializer.SerializeToElement(new { checkpointId }),
         };
 
-    private sealed record Fixture(
-        Guid ProjectId,
-        Guid ConversationId,
-        string ContextId,
-        Guid TaskId,
-        Guid AgentflowId);
+    private sealed record Fixture(Guid ProjectId, Guid ConversationId, string ContextId, Guid TaskId, Guid AgentflowId);
 
     private sealed class TestDatabase : IAsyncDisposable
     {
@@ -351,7 +333,8 @@ public sealed class AgentflowCheckpointStoreTests
         private TestDatabase(
             SqliteConnection connection,
             DbContextOptions<AgwDbContext> options,
-            ServiceProvider serviceProvider)
+            ServiceProvider serviceProvider
+        )
         {
             _connection = connection;
             _options = options;
@@ -383,7 +366,8 @@ public sealed class AgentflowCheckpointStoreTests
             new(
                 _serviceProvider.GetRequiredService<IServiceScopeFactory>(),
                 new InMemoryApplicationLock(),
-                TimeProvider.System);
+                TimeProvider.System
+            );
 
         public async Task<Fixture> SeedAsync()
         {
@@ -393,49 +377,60 @@ public sealed class AgentflowCheckpointStoreTests
                 Guid.CreateVersion7(),
                 "context-1",
                 Guid.CreateVersion7(),
-                Guid.CreateVersion7());
+                Guid.CreateVersion7()
+            );
             await using var context = CreateContext();
-            context.Projects.Add(new Project
-            {
-                Id = fixture.ProjectId,
-                Name = "Project",
-                Workspace = "/tmp",
-                CreateTime = now
-            });
-            context.ProjectConversations.Add(new ProjectConversation
-            {
-                Id = fixture.ConversationId,
-                ProjectId = fixture.ProjectId,
-                ContextId = fixture.ContextId,
-                Title = "Conversation",
-                CreateTime = now
-            });
-            context.Agentflows.Add(new Agentflow
-            {
-                Id = fixture.AgentflowId,
-                Name = "Flow",
-                SystemPrompt = "original",
-                CreateTime = now
-            });
-            context.AgentflowNodes.Add(new AgentflowNode
-            {
-                AgentflowId = fixture.AgentflowId,
-                NodeId = "checkpoint-node",
-                Kind = AgentflowNodeKind.CheckpointMarker,
-                Name = "Saved",
-                ConfigJson = "{\"checkpointName\":\"Saved\"}",
-                CreateTime = now
-            });
-            context.ProjectConversationChatHistories.Add(new ProjectConversationChatHistory
-            {
-                Id = Guid.CreateVersion7(),
-                ConversationId = fixture.ConversationId,
-                TaskId = fixture.TaskId,
-                Status = TaskExecutionStatus.Succeeded,
-                ConversationSequence = 0,
-                ConversationPayload = "{}",
-                CreateTime = now
-            });
+            context.Projects.Add(
+                new Project
+                {
+                    Id = fixture.ProjectId,
+                    Name = "Project",
+                    Workspace = "/tmp",
+                    CreateTime = now,
+                }
+            );
+            context.ProjectConversations.Add(
+                new ProjectConversation
+                {
+                    Id = fixture.ConversationId,
+                    ProjectId = fixture.ProjectId,
+                    ContextId = fixture.ContextId,
+                    Title = "Conversation",
+                    CreateTime = now,
+                }
+            );
+            context.Agentflows.Add(
+                new Agentflow
+                {
+                    Id = fixture.AgentflowId,
+                    Name = "Flow",
+                    SystemPrompt = "original",
+                    CreateTime = now,
+                }
+            );
+            context.AgentflowNodes.Add(
+                new AgentflowNode
+                {
+                    AgentflowId = fixture.AgentflowId,
+                    NodeId = "checkpoint-node",
+                    Kind = AgentflowNodeKind.CheckpointMarker,
+                    Name = "Saved",
+                    ConfigJson = "{\"checkpointName\":\"Saved\"}",
+                    CreateTime = now,
+                }
+            );
+            context.ProjectConversationChatHistories.Add(
+                new ProjectConversationChatHistory
+                {
+                    Id = Guid.CreateVersion7(),
+                    ConversationId = fixture.ConversationId,
+                    TaskId = fixture.TaskId,
+                    Status = TaskExecutionStatus.Succeeded,
+                    ConversationSequence = 0,
+                    ConversationPayload = "{}",
+                    CreateTime = now,
+                }
+            );
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
             return fixture;
         }
@@ -443,16 +438,18 @@ public sealed class AgentflowCheckpointStoreTests
         public async Task AppendHistoryAsync(Fixture fixture, long sequence, string text)
         {
             await using var context = CreateContext();
-            context.ProjectConversationChatHistories.Add(new ProjectConversationChatHistory
-            {
-                Id = Guid.CreateVersion7(),
-                ConversationId = fixture.ConversationId,
-                TaskId = fixture.TaskId,
-                Status = TaskExecutionStatus.Succeeded,
-                ConversationSequence = sequence,
-                ConversationPayload = text,
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
+            context.ProjectConversationChatHistories.Add(
+                new ProjectConversationChatHistory
+                {
+                    Id = Guid.CreateVersion7(),
+                    ConversationId = fixture.ConversationId,
+                    TaskId = fixture.TaskId,
+                    Status = TaskExecutionStatus.Succeeded,
+                    ConversationSequence = sequence,
+                    ConversationPayload = text,
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                }
+            );
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
@@ -461,15 +458,13 @@ public sealed class AgentflowCheckpointStoreTests
             await using var context = CreateContext();
             var agentflow = await context.Agentflows.SingleAsync(
                 item => item.Id == agentflowId,
-                TestContext.Current.CancellationToken);
+                TestContext.Current.CancellationToken
+            );
             agentflow.SystemPrompt = "changed";
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        public async Task AddDurableExecutionAsync(
-            Fixture fixture,
-            Guid executionId,
-            DurableExecutionStatus status)
+        public async Task AddDurableExecutionAsync(Fixture fixture, Guid executionId, DurableExecutionStatus status)
         {
             var manifest = new DurableExecutionManifest
             {
@@ -483,23 +478,25 @@ public sealed class AgentflowCheckpointStoreTests
                     TaskId = fixture.TaskId,
                     ProjectConversationId = fixture.ConversationId,
                     ProjectId = fixture.ProjectId,
-                    ContextId = fixture.ContextId
+                    ContextId = fixture.ContextId,
                 },
                 Settings = DurableExecutionSettings.FromSettings(
-                    ExecutionSettings.FromCommand(
-                        new SettingCommand(fixture.ProjectId, contextId: fixture.ContextId)))
+                    ExecutionSettings.FromCommand(new SettingCommand(fixture.ProjectId, contextId: fixture.ContextId))
+                ),
             };
             await using var context = CreateContext();
-            context.DurableExecutions.Add(new DurableExecutionRecord
-            {
-                Id = executionId,
-                UserName = "user",
-                ManifestJson = DurableExecutionJson.Serialize(manifest),
-                Status = status,
-                StateChangedAt = TimeProvider.System.GetUtcNow(),
-                StateVersion = Guid.CreateVersion7(),
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
+            context.DurableExecutions.Add(
+                new DurableExecutionRecord
+                {
+                    Id = executionId,
+                    UserName = "user",
+                    ManifestJson = DurableExecutionJson.Serialize(manifest),
+                    Status = status,
+                    StateChangedAt = TimeProvider.System.GetUtcNow(),
+                    StateVersion = Guid.CreateVersion7(),
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                }
+            );
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 

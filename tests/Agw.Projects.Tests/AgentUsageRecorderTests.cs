@@ -2,7 +2,6 @@ using Agw.Infrastructure.Data;
 using Agw.Projects.Infrastructure;
 using Agw.Shared.Contracts.Projects;
 using Agw.Testing;
-
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -25,7 +24,8 @@ public class AgentUsageRecorderTests
             await using var serviceProvider = CreateServiceProvider(options);
             var recorder = new AgentUsageRecorder(
                 serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-                new TestTimeProvider(RecordedAt));
+                new TestTimeProvider(RecordedAt)
+            );
             var projectId = Guid.CreateVersion7();
             var contextId = Guid.CreateVersion7();
 
@@ -39,9 +39,10 @@ public class AgentUsageRecorderTests
                     OutputTokenCount = 20,
                     TotalTokenCount = 30,
                     CachedInputTokenCount = 4,
-                    ReasoningTokenCount = 5
+                    ReasoningTokenCount = 5,
                 },
-                cancellationToken);
+                cancellationToken
+            );
 
             await using var verifyContext = new AgwDbContext(options);
             var usage = await verifyContext.AgentUsages.SingleAsync(cancellationToken);
@@ -76,7 +77,8 @@ public class AgentUsageRecorderTests
             await using var serviceProvider = CreateServiceProvider(options);
             var recorder = new AgentUsageRecorder(
                 serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-                new TestTimeProvider(RecordedAt));
+                new TestTimeProvider(RecordedAt)
+            );
             var projectId = Guid.CreateVersion7();
 
             await recorder.AddAsync(
@@ -84,13 +86,15 @@ public class AgentUsageRecorderTests
                 "context-1",
                 "agent-1",
                 new ProjectContextUsage { TotalTokenCount = 3 },
-                cancellationToken);
+                cancellationToken
+            );
             await recorder.AddAsync(
                 projectId,
                 "context-1",
                 "agent-1",
                 new ProjectContextUsage { TotalTokenCount = 7 },
-                cancellationToken);
+                cancellationToken
+            );
 
             await using var verifyContext = new AgwDbContext(options);
             var usages = await verifyContext.AgentUsages.ToListAsync(cancellationToken);
@@ -116,13 +120,15 @@ public class AgentUsageRecorderTests
             await using var serviceProvider = CreateServiceProvider(options);
             var recorder = new AgentUsageRecorder(
                 serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-                new TestTimeProvider(RecordedAt));
+                new TestTimeProvider(RecordedAt)
+            );
             var projectId = Guid.CreateVersion7();
             var usage = new ProjectContextUsage { TotalTokenCount = 3 };
 
             await Task.WhenAll(
                 recorder.AddAsync(projectId, "context-1", "agent-1", usage, cancellationToken),
-                recorder.AddAsync(projectId, "context-1", "agent-1", usage, cancellationToken));
+                recorder.AddAsync(projectId, "context-1", "agent-1", usage, cancellationToken)
+            );
 
             await using var verifyContext = new AgwDbContext(options);
             var usages = await verifyContext.AgentUsages.ToListAsync(cancellationToken);
@@ -150,7 +156,8 @@ public class AgentUsageRecorderTests
 
     private static async Task EnsureCreatedAsync(
         DbContextOptions<AgwDbContext> options,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await using var dbContext = new AgwDbContext(options);
         await dbContext.Database.EnsureCreatedAsync(cancellationToken);

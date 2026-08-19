@@ -20,10 +20,11 @@ public sealed class AgwFilesException : Exception
 
     public int Code => (int)ErrorCode;
 
-    public HttpStatusCode StatusCode => ErrorCode switch
-    {
-        FilesErrorCode.InvalidParameter => HttpStatusCode.BadRequest,
-        FilesErrorCode.PathOutsideRoot => HttpStatusCode.Forbidden,
-        _ => HttpStatusCode.InternalServerError
-    };
+    public HttpStatusCode StatusCode =>
+        ErrorCode switch
+        {
+            FilesErrorCode.InvalidParameter => HttpStatusCode.BadRequest,
+            FilesErrorCode.PathOutsideRoot => HttpStatusCode.Forbidden,
+            _ => HttpStatusCode.InternalServerError,
+        };
 }

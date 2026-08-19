@@ -3,7 +3,6 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Skills;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -28,16 +27,12 @@ public class AgwDbContextIntegrationTests
             seed.McpToolServers.Add(CreateMcpServer(mcpId));
             seed.Connections.Add(CreateConnection(connectionId, "project-connection"));
             seed.ProjectSkillRelations.Add(new ProjectSkillRelation { ProjectId = projectId, SkillId = skillId });
-            seed.ProjectMcpToolServers.Add(new ProjectMcpServerRelation
-            {
-                ProjectId = projectId,
-                McpToolServerId = mcpId
-            });
-            seed.ProjectConnectionRelations.Add(new ProjectConnectionRelation
-            {
-                ProjectId = projectId,
-                ConnectionId = connectionId
-            });
+            seed.ProjectMcpToolServers.Add(
+                new ProjectMcpServerRelation { ProjectId = projectId, McpToolServerId = mcpId }
+            );
+            seed.ProjectConnectionRelations.Add(
+                new ProjectConnectionRelation { ProjectId = projectId, ConnectionId = connectionId }
+            );
             await seed.SaveChangesAsync(cancellationToken);
         }
 
@@ -67,23 +62,21 @@ public class AgwDbContextIntegrationTests
             seed.Agents.Add(CreateAgent(agentId));
             seed.Projects.Add(CreateProject(projectId));
             seed.Connections.Add(CreateConnection(connectionId, "shared-connection"));
-            seed.ConnectionCredentials.Add(new ConnectionCredential
-            {
-                Id = Guid.CreateVersion7(),
-                ConnectionId = connectionId,
-                Slot = "oauth.access-token",
-                Value = "plaintext"
-            });
-            seed.AgentConnectionRelations.Add(new AgentConnectionRelation
-            {
-                AgentId = agentId,
-                ConnectionId = connectionId
-            });
-            seed.ProjectConnectionRelations.Add(new ProjectConnectionRelation
-            {
-                ProjectId = projectId,
-                ConnectionId = connectionId
-            });
+            seed.ConnectionCredentials.Add(
+                new ConnectionCredential
+                {
+                    Id = Guid.CreateVersion7(),
+                    ConnectionId = connectionId,
+                    Slot = "oauth.access-token",
+                    Value = "plaintext",
+                }
+            );
+            seed.AgentConnectionRelations.Add(
+                new AgentConnectionRelation { AgentId = agentId, ConnectionId = connectionId }
+            );
+            seed.ProjectConnectionRelations.Add(
+                new ProjectConnectionRelation { ProjectId = projectId, ConnectionId = connectionId }
+            );
             await seed.SaveChangesAsync(cancellationToken);
         }
 
@@ -111,67 +104,63 @@ public class AgwDbContextIntegrationTests
         {
             seed.Agents.Add(CreateAgent(agentId));
             seed.Connections.Add(CreateConnection(connectionId, "agent-connection"));
-            seed.AgentConnectionRelations.Add(new AgentConnectionRelation
-            {
-                AgentId = agentId,
-                ConnectionId = connectionId
-            });
+            seed.AgentConnectionRelations.Add(
+                new AgentConnectionRelation { AgentId = agentId, ConnectionId = connectionId }
+            );
             await seed.SaveChangesAsync(cancellationToken);
         }
 
         await using var duplicate = scope.CreateContext();
-        duplicate.AgentConnectionRelations.Add(new AgentConnectionRelation
-        {
-            AgentId = agentId,
-            ConnectionId = connectionId
-        });
+        duplicate.AgentConnectionRelations.Add(
+            new AgentConnectionRelation { AgentId = agentId, ConnectionId = connectionId }
+        );
 
         await Assert.ThrowsAsync<DbUpdateException>(() => duplicate.SaveChangesAsync(cancellationToken));
     }
 
-    private static Agent CreateAgent(Guid id) => new()
-    {
-        Id = id,
-        Name = $"agent-{id:N}",
-        DisplayName = "Agent",
-        Description = "desc",
-        SystemPrompt = "prompt",
-        Type = AgentType.External,
-        CreateBy = "tester",
-        CreateTime = TimeProvider.System.GetUtcNow()
-    };
+    private static Agent CreateAgent(Guid id) =>
+        new()
+        {
+            Id = id,
+            Name = $"agent-{id:N}",
+            DisplayName = "Agent",
+            Description = "desc",
+            SystemPrompt = "prompt",
+            Type = AgentType.External,
+            CreateBy = "tester",
+            CreateTime = TimeProvider.System.GetUtcNow(),
+        };
 
-    private static Project CreateProject(Guid id) => new()
-    {
-        Id = id,
-        Name = $"project-{id:N}",
-        CreateBy = "tester",
-        CreateTime = TimeProvider.System.GetUtcNow()
-    };
+    private static Project CreateProject(Guid id) =>
+        new()
+        {
+            Id = id,
+            Name = $"project-{id:N}",
+            CreateBy = "tester",
+            CreateTime = TimeProvider.System.GetUtcNow(),
+        };
 
-    private static Skill CreateSkill(Guid id) => new()
-    {
-        Id = id,
-        Name = $"skill-{id:N}",
-        Description = "Skill",
-        ContentPath = $"/skills/{id:N}"
-    };
+    private static Skill CreateSkill(Guid id) =>
+        new()
+        {
+            Id = id,
+            Name = $"skill-{id:N}",
+            Description = "Skill",
+            ContentPath = $"/skills/{id:N}",
+        };
 
-    private static McpServer CreateMcpServer(Guid id) => new()
-    {
-        Id = id,
-        Name = $"mcp-{id:N}"
-    };
+    private static McpServer CreateMcpServer(Guid id) => new() { Id = id, Name = $"mcp-{id:N}" };
 
-    private static Connection CreateConnection(Guid id, string alias) => new()
-    {
-        Id = id,
-        PluginId = "github",
-        ConnectorId = "github-cloud",
-        AuthSchemeId = "oauth",
-        DisplayName = alias,
-        Alias = alias
-    };
+    private static Connection CreateConnection(Guid id, string alias) =>
+        new()
+        {
+            Id = id,
+            PluginId = "github",
+            ConnectorId = "github-cloud",
+            AuthSchemeId = "oauth",
+            DisplayName = alias,
+            Alias = alias,
+        };
 
     private sealed class TestScope : IAsyncDisposable
     {
@@ -187,7 +176,8 @@ public class AgwDbContextIntegrationTests
         public static async Task<TestScope> CreateAsync(bool foreignKeys, CancellationToken cancellationToken)
         {
             var connection = new SqliteConnection(
-                $"Data Source=:memory:;Foreign Keys={(foreignKeys ? "True" : "False")}");
+                $"Data Source=:memory:;Foreign Keys={(foreignKeys ? "True" : "False")}"
+            );
             await connection.OpenAsync(cancellationToken);
             var options = new DbContextOptionsBuilder<AgwDbContext>()
                 .UseSqlite(connection)

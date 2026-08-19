@@ -34,10 +34,7 @@ public class McpToolServerDomainService
 
     public IReadOnlyList<Guid> NormalizeAgentIds(IEnumerable<Guid>? agentIds)
     {
-        return (agentIds ?? [])
-            .Where(id => id != Guid.Empty)
-            .Distinct()
-            .ToList();
+        return (agentIds ?? []).Where(id => id != Guid.Empty).Distinct().ToList();
     }
 
     private static void NormalizeCollections(McpServer server)

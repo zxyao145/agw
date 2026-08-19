@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -17,7 +16,8 @@ internal sealed class LocalHistoryCompactionScopeChatClient : DelegatingChatClie
     public LocalHistoryCompactionScopeChatClient(
         IChatClient innerClient,
         string? compactionStateKey,
-        ILogger<LocalHistoryCompactionScopeChatClient> logger)
+        ILogger<LocalHistoryCompactionScopeChatClient> logger
+    )
         : base(innerClient)
     {
         _compactionStateKey = compactionStateKey;
@@ -30,7 +30,8 @@ internal sealed class LocalHistoryCompactionScopeChatClient : DelegatingChatClie
     public override async Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var isolatedMessages = ChatMessageSourceIsolation.CloneMessages(messages);
         var originalContext = AIAgent.CurrentRunContext;
@@ -38,15 +39,13 @@ internal sealed class LocalHistoryCompactionScopeChatClient : DelegatingChatClie
         var compactionContext = CreateCompactionContext(originalContext, options);
         if (compactionContext == null)
         {
-            return await base.GetResponseAsync(isolatedMessages, options, cancellationToken)
-                .ConfigureAwait(false);
+            return await base.GetResponseAsync(isolatedMessages, options, cancellationToken).ConfigureAwait(false);
         }
 
         RunContextAccessor.SetCurrent(compactionContext);
         try
         {
-            return await base.GetResponseAsync(isolatedMessages, options, cancellationToken)
-                .ConfigureAwait(false);
+            return await base.GetResponseAsync(isolatedMessages, options, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -57,7 +56,8 @@ internal sealed class LocalHistoryCompactionScopeChatClient : DelegatingChatClie
     public override async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default
+    )
     {
         var isolatedMessages = ChatMessageSourceIsolation.CloneMessages(messages);
         var originalContext = AIAgent.CurrentRunContext;
@@ -65,10 +65,10 @@ internal sealed class LocalHistoryCompactionScopeChatClient : DelegatingChatClie
         var compactionContext = CreateCompactionContext(originalContext, options);
         if (compactionContext == null)
         {
-            await foreach (var update in base.GetStreamingResponseAsync(
-                               isolatedMessages,
-                               options,
-                               cancellationToken).ConfigureAwait(false))
+            await foreach (
+                var update in base.GetStreamingResponseAsync(isolatedMessages, options, cancellationToken)
+                    .ConfigureAwait(false)
+            )
             {
                 yield return update;
             }
@@ -79,10 +79,10 @@ internal sealed class LocalHistoryCompactionScopeChatClient : DelegatingChatClie
         RunContextAccessor.SetCurrent(compactionContext);
         try
         {
-            await foreach (var update in base.GetStreamingResponseAsync(
-                               isolatedMessages,
-                               options,
-                               cancellationToken).ConfigureAwait(false))
+            await foreach (
+                var update in base.GetStreamingResponseAsync(isolatedMessages, options, cancellationToken)
+                    .ConfigureAwait(false)
+            )
             {
                 yield return update;
             }
@@ -95,17 +95,19 @@ internal sealed class LocalHistoryCompactionScopeChatClient : DelegatingChatClie
 
     private void EnsureCompatibleCompactionState(AgentSession? session)
     {
-        if (session == null ||
-            string.IsNullOrWhiteSpace(_compactionStateKey) ||
-            string.IsNullOrWhiteSpace(_compactionVersionStateKey))
+        if (
+            session == null
+            || string.IsNullOrWhiteSpace(_compactionStateKey)
+            || string.IsNullOrWhiteSpace(_compactionVersionStateKey)
+        )
         {
             return;
         }
 
-        if (session.StateBag.TryGetValue<string>(
-                _compactionVersionStateKey,
-                out var version) &&
-            string.Equals(version, CompactionIndexVersion, StringComparison.Ordinal))
+        if (
+            session.StateBag.TryGetValue<string>(_compactionVersionStateKey, out var version)
+            && string.Equals(version, CompactionIndexVersion, StringComparison.Ordinal)
+        )
         {
             return;
         }
@@ -116,13 +118,12 @@ internal sealed class LocalHistoryCompactionScopeChatClient : DelegatingChatClie
         {
             _logger.LogWarning(
                 "Resetting legacy compaction state {CompactionStateKey} so it can be rebuilt from complete chat history.",
-                _compactionStateKey);
+                _compactionStateKey
+            );
         }
     }
 
-    private static AgentRunContext? CreateCompactionContext(
-        AgentRunContext? runContext,
-        ChatOptions? options)
+    private static AgentRunContext? CreateCompactionContext(AgentRunContext? runContext, ChatOptions? options)
     {
         if (runContext?.Session == null || !string.IsNullOrWhiteSpace(options?.ConversationId))
         {
@@ -143,7 +144,8 @@ internal sealed class LocalHistoryCompactionScopeChatClient : DelegatingChatClie
             runContext.Agent,
             localHistorySession,
             runContext.RequestMessages,
-            runContext.RunOptions);
+            runContext.RunOptions
+        );
     }
 
     private sealed class LocalHistorySession : AgentSession
@@ -163,8 +165,7 @@ internal sealed class LocalHistoryCompactionScopeChatClient : DelegatingChatClie
                 return null;
             }
 
-            return _innerSession.GetService(serviceType, serviceKey) ??
-                base.GetService(serviceType, serviceKey);
+            return _innerSession.GetService(serviceType, serviceKey) ?? base.GetService(serviceType, serviceKey);
         }
     }
 

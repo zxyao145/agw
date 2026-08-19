@@ -1,7 +1,6 @@
 using Agw.Jobs.Execution;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Extensions.Logging;
 
 namespace Agw.Jobs.Scheduling.Attempts;
@@ -23,7 +22,8 @@ public sealed class JobAttemptRunner
         IJobAgentExecutor jobAgentExecutor,
         JobScheduleCalculator scheduleCalculator,
         TimeProvider timeProvider,
-        ILogger<JobAttemptRunner> logger)
+        ILogger<JobAttemptRunner> logger
+    )
     {
         _jobStore = jobStore;
         _jobAgentExecutor = jobAgentExecutor;
@@ -32,36 +32,28 @@ public sealed class JobAttemptRunner
         _logger = logger;
     }
 
-    public async Task<JobAttemptResult> RunAsync(
-        ScheduledJob scheduledJob,
-        CancellationToken cancellationToken)
+    public async Task<JobAttemptResult> RunAsync(ScheduledJob scheduledJob, CancellationToken cancellationToken)
     {
         var start = _timeProvider.GetUtcNow();
         var taskId = Guid.Empty;
 
         try
         {
-            var markedRunning = await _jobStore.MarkRunningAsync(
-                scheduledJob.JobId,
-                cancellationToken);
+            var markedRunning = await _jobStore.MarkRunningAsync(scheduledJob.JobId, cancellationToken);
             if (!markedRunning)
             {
                 _logger.LogInformation(
                     "Job {JobId} is no longer enabled/pending. Dropping stale in-memory entry.",
-                    scheduledJob.JobId);
+                    scheduledJob.JobId
+                );
                 return new JobAttemptResult.Drop();
             }
 
             var job = ToJob(scheduledJob);
             taskId = await _jobAgentExecutor.ExecuteAsync(job, cancellationToken);
 
-            var nextRunTime = _scheduleCalculator.GetNextRunTime(
-                job,
-                _timeProvider.GetUtcNow());
-            await _jobStore.MarkSucceededAsync(
-                scheduledJob.JobId,
-                nextRunTime,
-                cancellationToken);
+            var nextRunTime = _scheduleCalculator.GetNextRunTime(job, _timeProvider.GetUtcNow());
+            await _jobStore.MarkSucceededAsync(scheduledJob.JobId, nextRunTime, cancellationToken);
             await _jobStore.AddExecutionLogAsync(
                 scheduledJob.JobId,
                 taskId,
@@ -70,23 +62,18 @@ public sealed class JobAttemptRunner
                 success: true,
                 attempt: scheduledJob.RetryCount + 1,
                 errorMessage: null,
-                cancellationToken);
+                cancellationToken
+            );
 
             return nextRunTime.HasValue
-                ? new JobAttemptResult.Reschedule(scheduledJob with
-                {
-                    NextRunTime = nextRunTime.Value,
-                    RetryCount = 0
-                })
+                ? new JobAttemptResult.Reschedule(scheduledJob with { NextRunTime = nextRunTime.Value, RetryCount = 0 })
                 : new JobAttemptResult.Drop();
         }
         catch (Exception ex)
         {
             if (IsMissingJobException(ex))
             {
-                _logger.LogWarning(
-                    "Job {JobId} no longer exists. Dropping stale in-memory entry.",
-                    scheduledJob.JobId);
+                _logger.LogWarning("Job {JobId} no longer exists. Dropping stale in-memory entry.", scheduledJob.JobId);
                 return new JobAttemptResult.Drop();
             }
 
@@ -103,7 +90,8 @@ public sealed class JobAttemptRunner
                         nextRunTime,
                         retryCount,
                         ex.Message,
-                        cancellationToken);
+                        cancellationToken
+                    );
                     await _jobStore.AddExecutionLogAsync(
                         scheduledJob.JobId,
                         taskId,
@@ -112,30 +100,30 @@ public sealed class JobAttemptRunner
                         success: false,
                         attempt: retryCount,
                         errorMessage: ex.Message,
-                        cancellationToken);
+                        cancellationToken
+                    );
                 }
                 catch (Exception bookkeepingEx) when (IsMissingJobException(bookkeepingEx))
                 {
                     _logger.LogWarning(
                         "Job {JobId} disappeared during retry bookkeeping. Dropping stale in-memory entry.",
-                        scheduledJob.JobId);
+                        scheduledJob.JobId
+                    );
                     return new JobAttemptResult.Drop();
                 }
 
-                return new JobAttemptResult.Reschedule(scheduledJob with
-                {
-                    NextRunTime = nextRunTime,
-                    RetryCount = retryCount
-                });
+                return new JobAttemptResult.Reschedule(
+                    scheduledJob with
+                    {
+                        NextRunTime = nextRunTime,
+                        RetryCount = retryCount,
+                    }
+                );
             }
 
             try
             {
-                await _jobStore.MarkFailedAsync(
-                    scheduledJob.JobId,
-                    retryCount,
-                    ex.Message,
-                    cancellationToken);
+                await _jobStore.MarkFailedAsync(scheduledJob.JobId, retryCount, ex.Message, cancellationToken);
                 await _jobStore.AddExecutionLogAsync(
                     scheduledJob.JobId,
                     taskId,
@@ -144,13 +132,15 @@ public sealed class JobAttemptRunner
                     success: false,
                     attempt: retryCount,
                     errorMessage: ex.Message,
-                    cancellationToken);
+                    cancellationToken
+                );
             }
             catch (Exception bookkeepingEx) when (IsMissingJobException(bookkeepingEx))
             {
                 _logger.LogWarning(
                     "Job {JobId} disappeared during failure bookkeeping. Dropping stale in-memory entry.",
-                    scheduledJob.JobId);
+                    scheduledJob.JobId
+                );
             }
 
             return new JobAttemptResult.Drop();
@@ -159,8 +149,7 @@ public sealed class JobAttemptRunner
 
     private static bool IsMissingJobException(Exception exception)
     {
-        return exception is AgwException agwException
-            && agwException.Code == ErrorCodes.JobNotFound.Code;
+        return exception is AgwException agwException && agwException.Code == ErrorCodes.JobNotFound.Code;
     }
 
     private static Job ToJob(ScheduledJob scheduledJob)
@@ -177,7 +166,7 @@ public sealed class JobAttemptRunner
             TriggerValue = scheduledJob.TriggerValue,
             NextRunTime = scheduledJob.NextRunTime,
             RetryCount = scheduledJob.RetryCount,
-            MaxRetryCount = scheduledJob.MaxRetryCount
+            MaxRetryCount = scheduledJob.MaxRetryCount,
         };
     }
 }

@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
-
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agentflows.Builders;
 using Agw.Agents.Execution.Agentflows.Observability;
@@ -12,12 +11,10 @@ using Agw.Agents.Execution.Summaries;
 using Agw.Shared;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
-
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
-
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace Agw.Agents.Tests;
@@ -48,9 +45,7 @@ public class AgentflowWorkflowCompilerTests
             Assert.True(builderType.IsSealed);
             Assert.False(builderType.IsPublic);
 
-            var buildMethod = builderType.GetMethod(
-                "Build",
-                BindingFlags.Static | BindingFlags.NonPublic);
+            var buildMethod = builderType.GetMethod("Build", BindingFlags.Static | BindingFlags.NonPublic);
 
             Assert.NotNull(buildMethod);
             Assert.Equal(typeof(ExecutorBinding), buildMethod.ReturnType);
@@ -65,40 +60,26 @@ public class AgentflowWorkflowCompilerTests
         var instruction = Assert.Single(result);
         Assert.Equal(ChatRole.System, instruction.Role);
         Assert.Equal(Constants.DefaultInputAuthor, instruction.AuthorName);
-        Assert.Equal(
-            AgentRequestMessageSourceType.AIContextProvider,
-            instruction.GetAgentRequestMessageSourceType());
+        Assert.Equal(AgentRequestMessageSourceType.AIContextProvider, instruction.GetAgentRequestMessageSourceType());
     }
 
     [Fact]
     public void CreateFeedbackLoopAgentInput_KeepsOnlyLatestUpstreamResultAndHumanReply()
     {
-        var staleReview = new ChatMessage(ChatRole.Assistant, "stale review")
-        {
-            AuthorName = "general-agent",
-        };
+        var staleReview = new ChatMessage(ChatRole.Assistant, "stale review") { AuthorName = "general-agent" };
         var latestReview = new ChatMessage(ChatRole.Assistant, "latest review")
         {
             AuthorName = "general-agent",
-            AdditionalProperties = new AdditionalPropertiesDictionary
-            {
-                ["nodeName"] = "Code Review",
-            },
+            AdditionalProperties = new AdditionalPropertiesDictionary { ["nodeName"] = "Code Review" },
         };
-        var humanReply = new ChatMessage(ChatRole.User, "yes")
-        {
-            AuthorName = "human",
-        };
+        var humanReply = new ChatMessage(ChatRole.User, "yes") { AuthorName = "human" };
 
-        var result = AgentflowMessageTransforms.CreateFeedbackLoopAgentInput(
-            [staleReview, latestReview, humanReply]);
+        var result = AgentflowMessageTransforms.CreateFeedbackLoopAgentInput([staleReview, latestReview, humanReply]);
 
         Assert.Equal(3, result.Count);
         Assert.Equal(ChatRole.System, result[0].Role);
         Assert.Equal(AgentflowMessageTransforms.FeedbackLoopInstruction, result[0].Text);
-        Assert.Equal(
-            AgentRequestMessageSourceType.AIContextProvider,
-            result[0].GetAgentRequestMessageSourceType());
+        Assert.Equal(AgentRequestMessageSourceType.AIContextProvider, result[0].GetAgentRequestMessageSourceType());
         Assert.Equal(ChatRole.User, result[1].Role);
         Assert.Equal("latest review", result[1].Text);
         Assert.Equal("Code Review", result[1].AdditionalProperties!["nodeName"]);
@@ -124,7 +105,12 @@ public class AgentflowWorkflowCompilerTests
         var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "observable-flow" };
         var nodes = new[]
         {
-            new AgentflowNode { NodeId = "agent-node", Kind = AgentflowNodeKind.Agent, Name = "Node Alias" },
+            new AgentflowNode
+            {
+                NodeId = "agent-node",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Node Alias",
+            },
             new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
         };
         var edges = new[] { Edge("agent-output", "agent-node", "output") };
@@ -133,35 +119,43 @@ public class AgentflowWorkflowCompilerTests
             .AsBuilder()
             .Use(
                 runFunc: loggingMiddleware.LogRunMiddleware,
-                runStreamingFunc: loggingMiddleware.LogStreamingMiddleware)
+                runStreamingFunc: loggingMiddleware.LogStreamingMiddleware
+            )
             .Build();
 
         var workflow = _compiler.Compile(
             agentflow,
             nodes,
             edges,
-            new Dictionary<string, AIAgent> { ["agent-node"] = agent });
+            new Dictionary<string, AIAgent> { ["agent-node"] = agent }
+        );
 
         Assert.NotNull(workflow);
-        await using (var run = await InProcessExecution.RunStreamingAsync(
-                         workflow!,
-                         new List<ChatMessage> { new(ChatRole.User, "sensitive input") },
-                         cancellationToken: TestContext.Current.CancellationToken))
+        await using (
+            var run = await InProcessExecution.RunStreamingAsync(
+                workflow!,
+                new List<ChatMessage> { new(ChatRole.User, "sensitive input") },
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        )
         {
             await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
-            await foreach (var _ in run.WatchStreamAsync(TestContext.Current.CancellationToken))
-            {
-            }
+            await foreach (var _ in run.WatchStreamAsync(TestContext.Current.CancellationToken)) { }
         }
 
         Assert.Contains(activities, activity => activity.OperationName == "workflow.build");
         Assert.Contains(activities, activity => activity.OperationName == "workflow.session");
         Assert.Contains(activities, activity => activity.OperationName == "workflow_invoke");
-        Assert.Contains(activities, activity => activity.OperationName.StartsWith("executor.process", StringComparison.Ordinal));
+        Assert.Contains(
+            activities,
+            activity => activity.OperationName.StartsWith("executor.process", StringComparison.Ordinal)
+        );
         Assert.Contains(activities, activity => activity.OperationName == "edge_group.process");
         Assert.Contains(activities, activity => activity.OperationName == "message.send");
-        Assert.DoesNotContain(activities.SelectMany(activity => activity.TagObjects), tag =>
-            tag.Key is "executor.input" or "executor.output" or "message.content");
+        Assert.DoesNotContain(
+            activities.SelectMany(activity => activity.TagObjects),
+            tag => tag.Key is "executor.input" or "executor.output" or "message.content"
+        );
     }
 
     [Fact]
@@ -170,7 +164,8 @@ public class AgentflowWorkflowCompilerTests
         var store = new CapturingExecutionTraceStore();
         using var collector = new AgentflowNodeExecutionTraceCollector(
             store,
-            NullLogger<AgentflowNodeExecutionTraceCollector>.Instance);
+            NullLogger<AgentflowNodeExecutionTraceCollector>.Instance
+        );
         await collector.StartAsync(TestContext.Current.CancellationToken);
 
         var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "persisted-flow" };
@@ -192,23 +187,22 @@ public class AgentflowWorkflowCompilerTests
             agentflow,
             nodes,
             [Edge("agent-output", "agent-node", "output")],
-            new Dictionary<string, AIAgent>
-            {
-                ["agent-node"] = CreateAgent("agent-id", "persisted-agent"),
-            },
+            new Dictionary<string, AIAgent> { ["agent-node"] = CreateAgent("agent-id", "persisted-agent") },
             sessionScope: null,
-            execution);
+            execution
+        );
 
         Assert.NotNull(workflow);
-        await using (var run = await InProcessExecution.RunStreamingAsync(
-                         workflow!,
-                         new List<ChatMessage> { new(ChatRole.User, "workflow input") },
-                         cancellationToken: TestContext.Current.CancellationToken))
+        await using (
+            var run = await InProcessExecution.RunStreamingAsync(
+                workflow!,
+                new List<ChatMessage> { new(ChatRole.User, "workflow input") },
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        )
         {
             await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
-            await foreach (var _ in run.WatchStreamAsync(TestContext.Current.CancellationToken))
-            {
-            }
+            await foreach (var _ in run.WatchStreamAsync(TestContext.Current.CancellationToken)) { }
         }
 
         var trace = await store.WaitForTraceAsync();
@@ -231,7 +225,12 @@ public class AgentflowWorkflowCompilerTests
         var agentId = "agent-a";
         var nodes = new[]
         {
-            new AgentflowNode { NodeId = agentId, Kind = AgentflowNodeKind.Agent, Name = "Reviewer" },
+            new AgentflowNode
+            {
+                NodeId = agentId,
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Reviewer",
+            },
             new AgentflowNode
             {
                 NodeId = "adapter",
@@ -254,7 +253,8 @@ public class AgentflowWorkflowCompilerTests
             agentflow,
             nodes,
             edges,
-            new Dictionary<string, AIAgent> { [agentId] = CreateAgent(agentId, "Reviewer") });
+            new Dictionary<string, AIAgent> { [agentId] = CreateAgent(agentId, "Reviewer") }
+        );
 
         Assert.NotNull(workflow);
         var mermaid = WorkflowVisualizer.ToMermaidString(workflow!);
@@ -311,14 +311,16 @@ public class AgentflowWorkflowCompilerTests
                 "second",
                 AgentflowEdgeKind.SwitchCase,
                 """{"contains":"approved"}""",
-                """{"switchCaseOrder":1}"""),
+                """{"switchCaseOrder":1}"""
+            ),
             Edge(
                 "ordered-first",
                 "input",
                 "first",
                 AgentflowEdgeKind.SwitchCase,
                 """{"contains":"approved"}""",
-                """{"switchCaseOrder":0}"""),
+                """{"switchCaseOrder":0}"""
+            ),
             Edge("default", "input", "fallback", AgentflowEdgeKind.SwitchDefault),
         };
         var workflow = _compiler.Compile(agentflow, nodes, edges, new Dictionary<string, AIAgent>());
@@ -352,12 +354,7 @@ public class AgentflowWorkflowCompilerTests
         var edges = new[]
         {
             Edge("always", "input", "always"),
-            Edge(
-                "approved",
-                "input",
-                "approved",
-                AgentflowEdgeKind.Direct,
-                """{"contains":"approved"}"""),
+            Edge("approved", "input", "approved", AgentflowEdgeKind.Direct, """{"contains":"approved"}"""),
         };
         var workflow = _compiler.Compile(agentflow, nodes, edges, new Dictionary<string, AIAgent>());
 
@@ -391,7 +388,8 @@ public class AgentflowWorkflowCompilerTests
                 "approved",
                 AgentflowEdgeKind.SwitchCase,
                 """{"contains":"approved"}""",
-                """{"switchCaseOrder":0}"""),
+                """{"switchCaseOrder":0}"""
+            ),
         };
         var workflow = _compiler.Compile(agentflow, nodes, edges, new Dictionary<string, AIAgent>());
 
@@ -406,9 +404,7 @@ public class AgentflowWorkflowCompilerTests
     [InlineData("none", 0)]
     [InlineData("alpha", 1)]
     [InlineData("alpha beta", 2)]
-    public async Task Compile_ConditionalFanOut_SelectsEveryMatchingTarget(
-        string input,
-        int expectedConditionalTargets)
+    public async Task Compile_ConditionalFanOut_SelectsEveryMatchingTarget(string input, int expectedConditionalTargets)
     {
         var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "selection-flow" };
         var nodes = new[]
@@ -421,18 +417,8 @@ public class AgentflowWorkflowCompilerTests
         var edges = new[]
         {
             Edge("always", "input", "always", AgentflowEdgeKind.FanOut),
-            Edge(
-                "alpha",
-                "input",
-                "alpha",
-                AgentflowEdgeKind.FanOut,
-                """{"contains":"alpha"}"""),
-            Edge(
-                "beta",
-                "input",
-                "beta",
-                AgentflowEdgeKind.FanOut,
-                """{"contains":"beta"}"""),
+            Edge("alpha", "input", "alpha", AgentflowEdgeKind.FanOut, """{"contains":"alpha"}"""),
+            Edge("beta", "input", "beta", AgentflowEdgeKind.FanOut, """{"contains":"beta"}"""),
         };
         var workflow = _compiler.Compile(agentflow, nodes, edges, new Dictionary<string, AIAgent>());
 
@@ -441,11 +427,11 @@ public class AgentflowWorkflowCompilerTests
         var events = await ExecuteAsync(workflow!, input);
         Assert.Contains(events, evt => HasChatInput(evt, "always"));
         Assert.Single(events, evt => HasTurnTokenInput(evt, "always"));
-        var conditionalTargets = events.Count(evt =>
-            HasChatInput(evt, "alpha") || HasChatInput(evt, "beta"));
+        var conditionalTargets = events.Count(evt => HasChatInput(evt, "alpha") || HasChatInput(evt, "beta"));
         Assert.Equal(expectedConditionalTargets, conditionalTargets);
         var conditionalTargetTurns = events.Count(evt =>
-            HasTurnTokenInput(evt, "alpha") || HasTurnTokenInput(evt, "beta"));
+            HasTurnTokenInput(evt, "alpha") || HasTurnTokenInput(evt, "beta")
+        );
         Assert.Equal(expectedConditionalTargets, conditionalTargetTurns);
     }
 
@@ -474,11 +460,13 @@ public class AgentflowWorkflowCompilerTests
         var events = await ExecuteAsync(workflow!, "start");
         Assert.Equal(2, events.Count(evt => HasChatInput(evt, "b")));
         Assert.Single(events, evt => HasTurnTokenInput(evt, "b"));
-        var cInput = Assert.Single(events
-            .OfType<ExecutorInvokedEvent>()
-            .Where(evt => evt.ExecutorId == "c")
-            .Select(evt => evt.Data)
-            .OfType<List<ChatMessage>>());
+        var cInput = Assert.Single(
+            events
+                .OfType<ExecutorInvokedEvent>()
+                .Where(evt => evt.ExecutorId == "c")
+                .Select(evt => evt.Data)
+                .OfType<List<ChatMessage>>()
+        );
         Assert.NotEmpty(cInput);
         var aIndex = events.ToList().FindIndex(evt => HasChatInput(evt, "a"));
         var cIndex = events.ToList().FindIndex(evt => HasChatInput(evt, "c"));
@@ -497,7 +485,8 @@ public class AgentflowWorkflowCompilerTests
         await using var run = await InProcessExecution.RunStreamingAsync(
             workflow!,
             new List<ChatMessage> { new(ChatRole.User, "original input") },
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         var events = new List<WorkflowEvent>();
@@ -512,13 +501,15 @@ public class AgentflowWorkflowCompilerTests
                 if (requestCount == 2)
                 {
                     Assert.True(request.Request.TryGetDataAs<List<ChatMessage>>(out var requestMessages));
-                    Assert.Contains(requestMessages, message =>
-                        message.AuthorName == "human" && message.Text == "retry");
+                    Assert.Contains(
+                        requestMessages,
+                        message => message.AuthorName == "human" && message.Text == "retry"
+                    );
                 }
 
-                await run.SendResponseAsync(CreateHumanGateResponse(
-                    request.Request,
-                    requestCount == 1 ? "retry" : "done"));
+                await run.SendResponseAsync(
+                    CreateHumanGateResponse(request.Request, requestCount == 1 ? "retry" : "done")
+                );
             }
         }
 
@@ -538,10 +529,20 @@ public class AgentflowWorkflowCompilerTests
         var nodes = new[]
         {
             new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
-            new AgentflowNode { NodeId = "coding", Kind = AgentflowNodeKind.Agent, Name = "Coding" },
+            new AgentflowNode
+            {
+                NodeId = "coding",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Coding",
+            },
             new AgentflowNode { NodeId = "checkpoint", Kind = AgentflowNodeKind.CheckpointMarker },
             new AgentflowNode { NodeId = "clear", Kind = AgentflowNodeKind.ClearMessages },
-            new AgentflowNode { NodeId = "review", Kind = AgentflowNodeKind.Agent, Name = "Code Review" },
+            new AgentflowNode
+            {
+                NodeId = "review",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Code Review",
+            },
             new AgentflowNode { NodeId = "human", Kind = AgentflowNodeKind.HumanGate },
             new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
         };
@@ -559,18 +560,21 @@ public class AgentflowWorkflowCompilerTests
                 "coding",
                 AgentflowEdgeKind.SwitchCase,
                 """{"contains":"retry"}""",
-                """{"switchCaseOrder":0}"""),
+                """{"switchCaseOrder":0}"""
+            ),
             Edge("done", "human", "output", AgentflowEdgeKind.SwitchDefault),
         };
-        Workflow? CompileWorkflow() => _compiler.Compile(
-            agentflow,
-            nodes,
-            edges,
-            new Dictionary<string, AIAgent>
-            {
-                ["coding"] = CreateAgent("coding", "Coding", codingClient),
-                ["review"] = CreateAgent("review", "Code Review", reviewClient),
-            });
+        Workflow? CompileWorkflow() =>
+            _compiler.Compile(
+                agentflow,
+                nodes,
+                edges,
+                new Dictionary<string, AIAgent>
+                {
+                    ["coding"] = CreateAgent("coding", "Coding", codingClient),
+                    ["review"] = CreateAgent("review", "Code Review", reviewClient),
+                }
+            );
 
         var workflow = CompileWorkflow();
 
@@ -582,7 +586,8 @@ public class AgentflowWorkflowCompilerTests
             new List<ChatMessage> { new(ChatRole.User, "original request") },
             checkpointManager,
             $"checkpoint-test-{Guid.CreateVersion7():N}",
-            cancellationToken);
+            cancellationToken
+        );
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         var events = new List<WorkflowEvent>();
@@ -593,32 +598,33 @@ public class AgentflowWorkflowCompilerTests
         await foreach (var evt in run.WatchStreamAsync(cancellationToken))
         {
             events.Add(evt);
-            if (evt is RequestInfoEvent request
-                && request.Request.PortInfo.PortId ==
-                AgentflowWorkflowCompiler.GetCheckpointRequestPortId("checkpoint"))
+            if (
+                evt is RequestInfoEvent request
+                && request.Request.PortInfo.PortId == AgentflowWorkflowCompiler.GetCheckpointRequestPortId("checkpoint")
+            )
             {
                 checkpointRequestCount++;
                 checkpointRequest = request;
             }
 
-            if (evt is SuperStepCompletedEvent
-                {
-                    CompletionInfo.Checkpoint: not null,
-                } completed && checkpointRequest != null)
+            if (
+                evt is SuperStepCompletedEvent { CompletionInfo.Checkpoint: not null } completed
+                && checkpointRequest != null
+            )
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(50), cancellationToken);
                 Assert.Equal(0, reviewClient.TotalCalls);
                 markerCheckpoint = completed.CompletionInfo.Checkpoint;
-                Assert.True(checkpointRequest.Request.TryGetDataAs<List<ChatMessage>>(
-                    out var checkpointMessages));
-                await run.SendResponseAsync(
-                    checkpointRequest.Request.CreateResponse(checkpointMessages!));
+                Assert.True(checkpointRequest.Request.TryGetDataAs<List<ChatMessage>>(out var checkpointMessages));
+                await run.SendResponseAsync(checkpointRequest.Request.CreateResponse(checkpointMessages!));
                 checkpointRequest = null;
             }
 
-            if (evt is RequestInfoEvent humanRequest
-                && humanRequest.Request.PortInfo.PortId !=
-                AgentflowWorkflowCompiler.GetCheckpointRequestPortId("checkpoint"))
+            if (
+                evt is RequestInfoEvent humanRequest
+                && humanRequest.Request.PortInfo.PortId
+                    != AgentflowWorkflowCompiler.GetCheckpointRequestPortId("checkpoint")
+            )
             {
                 requestCount++;
                 await run.SendResponseAsync(CreateHumanGateResponse(humanRequest.Request, "done"));
@@ -643,25 +649,24 @@ public class AgentflowWorkflowCompilerTests
             resumedWorkflow!,
             markerCheckpoint,
             checkpointManager,
-            cancellationToken);
+            cancellationToken
+        );
         await foreach (var evt in resumedRun.WatchStreamAsync(cancellationToken))
         {
             events.Add(evt);
-            if (evt is RequestInfoEvent request
-                && request.Request.PortInfo.PortId ==
-                AgentflowWorkflowCompiler.GetCheckpointRequestPortId("checkpoint"))
+            if (
+                evt is RequestInfoEvent request
+                && request.Request.PortInfo.PortId == AgentflowWorkflowCompiler.GetCheckpointRequestPortId("checkpoint")
+            )
             {
                 checkpointRequestCount++;
-                Assert.True(request.Request.TryGetDataAs<List<ChatMessage>>(
-                    out var checkpointMessages));
-                await resumedRun.SendResponseAsync(
-                    request.Request.CreateResponse(checkpointMessages!));
+                Assert.True(request.Request.TryGetDataAs<List<ChatMessage>>(out var checkpointMessages));
+                await resumedRun.SendResponseAsync(request.Request.CreateResponse(checkpointMessages!));
             }
             else if (evt is RequestInfoEvent humanRequest)
             {
                 requestCount++;
-                await resumedRun.SendResponseAsync(
-                    CreateHumanGateResponse(humanRequest.Request, "done"));
+                await resumedRun.SendResponseAsync(CreateHumanGateResponse(humanRequest.Request, "done"));
             }
         }
 
@@ -680,7 +685,12 @@ public class AgentflowWorkflowCompilerTests
         var nodes = new[]
         {
             new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
-            new AgentflowNode { NodeId = "coding", Kind = AgentflowNodeKind.Agent, Name = "Coding" },
+            new AgentflowNode
+            {
+                NodeId = "coding",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Coding",
+            },
             new AgentflowNode { NodeId = "checkpoint", Kind = AgentflowNodeKind.CheckpointMarker },
             new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
         };
@@ -697,22 +707,25 @@ public class AgentflowWorkflowCompilerTests
             new Dictionary<string, AIAgent>
             {
                 ["coding"] = CreateAgent("coding", "Coding", new ToolTranscriptChatClient()),
-            });
+            }
+        );
 
         Assert.NotNull(workflow);
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var run = await InProcessExecution.RunStreamingAsync(
             workflow!,
             new List<ChatMessage> { new(ChatRole.User, "implement") },
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         var checkpointRequestCount = 0;
         await foreach (var evt in run.WatchStreamAsync(cancellationToken))
         {
-            if (evt is not RequestInfoEvent request
-                || request.Request.PortInfo.PortId !=
-                AgentflowWorkflowCompiler.GetCheckpointRequestPortId("checkpoint"))
+            if (
+                evt is not RequestInfoEvent request
+                || request.Request.PortInfo.PortId != AgentflowWorkflowCompiler.GetCheckpointRequestPortId("checkpoint")
+            )
             {
                 continue;
             }
@@ -732,25 +745,29 @@ public class AgentflowWorkflowCompilerTests
         var worker = new ApprovalRequestAgent();
         var nodes = new[]
         {
-            new AgentflowNode { NodeId = "worker", Kind = AgentflowNodeKind.Agent, Name = "Worker" },
+            new AgentflowNode
+            {
+                NodeId = "worker",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Worker",
+            },
             new AgentflowNode { NodeId = "checkpoint", Kind = AgentflowNodeKind.CheckpointMarker },
             new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
         };
         var workflow = _compiler.Compile(
             agentflow,
             nodes,
-            [
-                Edge("worker-checkpoint", "worker", "checkpoint"),
-                Edge("checkpoint-output", "checkpoint", "output"),
-            ],
-            new Dictionary<string, AIAgent> { ["worker"] = worker });
+            [Edge("worker-checkpoint", "worker", "checkpoint"), Edge("checkpoint-output", "checkpoint", "output")],
+            new Dictionary<string, AIAgent> { ["worker"] = worker }
+        );
 
         Assert.NotNull(workflow);
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var run = await InProcessExecution.RunStreamingAsync(
             workflow!,
             new List<ChatMessage> { new(ChatRole.User, "change the code") },
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         var checkpointRequestCount = 0;
@@ -763,13 +780,13 @@ public class AgentflowWorkflowCompilerTests
 
             if (request.Request.TryGetDataAs<ToolApprovalRequestContent>(out var approvalRequest))
             {
-                await run.SendResponseAsync(request.Request.CreateResponse(
-                    approvalRequest.CreateResponse(approved: true)));
+                await run.SendResponseAsync(
+                    request.Request.CreateResponse(approvalRequest.CreateResponse(approved: true))
+                );
                 continue;
             }
 
-            if (request.Request.PortInfo.PortId ==
-                AgentflowWorkflowCompiler.GetCheckpointRequestPortId("checkpoint"))
+            if (request.Request.PortInfo.PortId == AgentflowWorkflowCompiler.GetCheckpointRequestPortId("checkpoint"))
             {
                 checkpointRequestCount++;
                 Assert.True(request.Request.TryGetDataAs<List<ChatMessage>>(out var messages));
@@ -789,29 +806,30 @@ public class AgentflowWorkflowCompilerTests
         var sessionId = $"durable-{Guid.CreateVersion7():N}";
         var firstStore = new DurableAgentflowCheckpointStore();
         var firstManager = CheckpointManager.CreateJson(firstStore);
-        var firstWorkflow = _compiler.Compile(
-            agentflow,
-            nodes,
-            edges,
-            new Dictionary<string, AIAgent>());
+        var firstWorkflow = _compiler.Compile(agentflow, nodes, edges, new Dictionary<string, AIAgent>());
 
         Assert.NotNull(firstWorkflow);
 
-        await using (var firstRun = await InProcessExecution.RunStreamingAsync(
-                         firstWorkflow!,
-                         new List<ChatMessage> { new(ChatRole.User, "original input") },
-                         firstManager,
-                         sessionId,
-                         cancellationToken))
+        await using (
+            var firstRun = await InProcessExecution.RunStreamingAsync(
+                firstWorkflow!,
+                new List<ChatMessage> { new(ChatRole.User, "original input") },
+                firstManager,
+                sessionId,
+                cancellationToken
+            )
+        )
         {
             await firstRun.TrySendMessageAsync(new TurnToken(emitEvents: true));
             await foreach (var evt in firstRun.WatchStreamAsync(cancellationToken))
             {
-                if (evt is SuperStepCompletedEvent
+                if (
+                    evt is SuperStepCompletedEvent
                     {
                         CompletionInfo.HasPendingRequests: true,
                         CompletionInfo.Checkpoint: not null,
-                    })
+                    }
+                )
                 {
                     await firstRun.CancelRunAsync();
                     break;
@@ -824,11 +842,7 @@ public class AgentflowWorkflowCompilerTests
         var restoredStore = new DurableAgentflowCheckpointStore(firstStore.Latest);
         var restoredManager = CheckpointManager.CreateJson(restoredStore);
         var checkpoint = await restoredManager.GetLatestCheckpointAsync(sessionId, cancellationToken);
-        var restoredWorkflow = _compiler.Compile(
-            agentflow,
-            nodes,
-            edges,
-            new Dictionary<string, AIAgent>());
+        var restoredWorkflow = _compiler.Compile(agentflow, nodes, edges, new Dictionary<string, AIAgent>());
 
         Assert.NotNull(checkpoint);
         Assert.NotNull(restoredWorkflow);
@@ -837,7 +851,8 @@ public class AgentflowWorkflowCompilerTests
             restoredWorkflow!,
             checkpoint!,
             restoredManager,
-            cancellationToken);
+            cancellationToken
+        );
         await restoredRun.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         var events = new List<WorkflowEvent>();
@@ -849,16 +864,14 @@ public class AgentflowWorkflowCompilerTests
             {
                 requestCount++;
                 Assert.True(requestCount <= 2, "The restored workflow did not exit after the latest human reply.");
-                await restoredRun.SendResponseAsync(CreateHumanGateResponse(
-                    request.Request,
-                    requestCount == 1 ? "retry" : "done"));
+                await restoredRun.SendResponseAsync(
+                    CreateHumanGateResponse(request.Request, requestCount == 1 ? "retry" : "done")
+                );
             }
         }
 
         Assert.Equal(2, requestCount);
-        Assert.DoesNotContain(
-            events,
-            evt => HasChatInput(evt, "input-lower.__agw_loop_barrier_source"));
+        Assert.DoesNotContain(events, evt => HasChatInput(evt, "input-lower.__agw_loop_barrier_source"));
         Assert.Single(events, evt => HasChatInput(evt, "lower"));
         Assert.Single(events, evt => HasChatInput(evt, "output"));
         Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
@@ -874,8 +887,18 @@ public class AgentflowWorkflowCompilerTests
         var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "block-flow" };
         var nodes = new[]
         {
-            new AgentflowNode { NodeId = "agent-a", Kind = AgentflowNodeKind.Agent, Name = "Agent A" },
-            new AgentflowNode { NodeId = "agent-b", Kind = AgentflowNodeKind.Agent, Name = "Agent B" },
+            new AgentflowNode
+            {
+                NodeId = "agent-a",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Agent A",
+            },
+            new AgentflowNode
+            {
+                NodeId = "agent-b",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Agent B",
+            },
             new AgentflowNode
             {
                 NodeId = "group",
@@ -885,10 +908,7 @@ public class AgentflowWorkflowCompilerTests
             },
             new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
         };
-        var edges = new[]
-        {
-            Edge("group-to-output", "group", "output"),
-        };
+        var edges = new[] { Edge("group-to-output", "group", "output") };
         var agents = new Dictionary<string, AIAgent>
         {
             ["agent-a"] = CreateAgent("agent-a", "Agent A"),
@@ -907,7 +927,8 @@ public class AgentflowWorkflowCompilerTests
         var store = new CollectingExecutionTraceStore();
         using var collector = new AgentflowNodeExecutionTraceCollector(
             store,
-            NullLogger<AgentflowNodeExecutionTraceCollector>.Instance);
+            NullLogger<AgentflowNodeExecutionTraceCollector>.Instance
+        );
         await collector.StartAsync(TestContext.Current.CancellationToken);
         var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "parallel-trace-flow" };
         var agentAId = Guid.CreateVersion7();
@@ -947,30 +968,32 @@ public class AgentflowWorkflowCompilerTests
                 ["agent-b"] = CreateAgent("agent-b", "persisted-agent-b"),
             },
             sessionScope: null,
-            new AgentflowExecutionTraceContext(Guid.CreateVersion7(), "context-parallel", Guid.CreateVersion7()));
+            new AgentflowExecutionTraceContext(Guid.CreateVersion7(), "context-parallel", Guid.CreateVersion7())
+        );
 
         Assert.NotNull(workflow);
-        await using (var run = await InProcessExecution.RunStreamingAsync(
-                         workflow!,
-                         new List<ChatMessage> { new(ChatRole.User, "parallel input") },
-                         cancellationToken: TestContext.Current.CancellationToken))
+        await using (
+            var run = await InProcessExecution.RunStreamingAsync(
+                workflow!,
+                new List<ChatMessage> { new(ChatRole.User, "parallel input") },
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        )
         {
             await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
-            await foreach (var _ in run.WatchStreamAsync(TestContext.Current.CancellationToken))
-            {
-            }
+            await foreach (var _ in run.WatchStreamAsync(TestContext.Current.CancellationToken)) { }
         }
 
         var traces = await store.WaitForCountAsync(2);
         Assert.Equal(2, traces.Count);
-        Assert.Contains(traces, trace =>
-            trace.NodeId == "agent-a" &&
-            trace.AgentId == agentAId &&
-            trace.AgentName == "persisted-agent-a");
-        Assert.Contains(traces, trace =>
-            trace.NodeId == "agent-b" &&
-            trace.AgentId == agentBId &&
-            trace.AgentName == "persisted-agent-b");
+        Assert.Contains(
+            traces,
+            trace => trace.NodeId == "agent-a" && trace.AgentId == agentAId && trace.AgentName == "persisted-agent-a"
+        );
+        Assert.Contains(
+            traces,
+            trace => trace.NodeId == "agent-b" && trace.AgentId == agentBId && trace.AgentName == "persisted-agent-b"
+        );
         Assert.DoesNotContain(traces, trace => trace.NodeId == "parallel");
 
         await collector.StopAsync(TestContext.Current.CancellationToken);
@@ -982,9 +1005,14 @@ public class AgentflowWorkflowCompilerTests
         var store = new CollectingExecutionTraceStore();
         using var collector = new AgentflowNodeExecutionTraceCollector(
             store,
-            NullLogger<AgentflowNodeExecutionTraceCollector>.Instance);
+            NullLogger<AgentflowNodeExecutionTraceCollector>.Instance
+        );
         await collector.StartAsync(TestContext.Current.CancellationToken);
-        var execution = new AgentflowExecutionTraceContext(Guid.CreateVersion7(), "context-nested", Guid.CreateVersion7());
+        var execution = new AgentflowExecutionTraceContext(
+            Guid.CreateVersion7(),
+            "context-nested",
+            Guid.CreateVersion7()
+        );
         var nestedAgentId = Guid.CreateVersion7();
         var nestedAgentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "nested-flow" };
         var nestedWorkflow = _compiler.Compile(
@@ -1005,7 +1033,8 @@ public class AgentflowWorkflowCompilerTests
                 ["nested-agent"] = CreateAgent("nested-agent", "persisted-nested-agent"),
             },
             sessionScope: null,
-            execution);
+            execution
+        );
         Assert.NotNull(nestedWorkflow);
 
         var outerAgentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "outer-flow" };
@@ -1029,23 +1058,22 @@ public class AgentflowWorkflowCompilerTests
                 new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
             ],
             [Edge("parallel-output", "parallel", "output")],
-            new Dictionary<string, AIAgent>
-            {
-                ["nested-participant"] = nestedWorkflow!.AsAIAgent(),
-            },
+            new Dictionary<string, AIAgent> { ["nested-participant"] = nestedWorkflow!.AsAIAgent() },
             sessionScope: null,
-            execution);
+            execution
+        );
         Assert.NotNull(outerWorkflow);
 
-        await using (var run = await InProcessExecution.RunStreamingAsync(
-                         outerWorkflow!,
-                         new List<ChatMessage> { new(ChatRole.User, "nested input") },
-                         cancellationToken: TestContext.Current.CancellationToken))
+        await using (
+            var run = await InProcessExecution.RunStreamingAsync(
+                outerWorkflow!,
+                new List<ChatMessage> { new(ChatRole.User, "nested input") },
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        )
         {
             await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
-            await foreach (var _ in run.WatchStreamAsync(TestContext.Current.CancellationToken))
-            {
-            }
+            await foreach (var _ in run.WatchStreamAsync(TestContext.Current.CancellationToken)) { }
         }
 
         await collector.StopAsync(TestContext.Current.CancellationToken);
@@ -1063,7 +1091,12 @@ public class AgentflowWorkflowCompilerTests
         var nodes = new[]
         {
             new AgentflowNode { NodeId = "human", Kind = AgentflowNodeKind.HumanGate },
-            new AgentflowNode { NodeId = "translator", Kind = AgentflowNodeKind.Agent, Name = "Translator" },
+            new AgentflowNode
+            {
+                NodeId = "translator",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Translator",
+            },
             new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
         };
         var edges = new[]
@@ -1076,7 +1109,8 @@ public class AgentflowWorkflowCompilerTests
             agentflow,
             nodes,
             edges,
-            new Dictionary<string, AIAgent> { ["translator"] = CreateAgent("translator", "Translator") });
+            new Dictionary<string, AIAgent> { ["translator"] = CreateAgent("translator", "Translator") }
+        );
 
         Assert.NotNull(workflow);
 
@@ -1085,7 +1119,8 @@ public class AgentflowWorkflowCompilerTests
         await using var run = await InProcessExecution.RunStreamingAsync(
             workflow!,
             input,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         var events = new List<WorkflowEvent>();
@@ -1099,9 +1134,12 @@ public class AgentflowWorkflowCompilerTests
         }
 
         Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
-        Assert.Contains(events, evt =>
-            evt is ExecutorCompletedEvent completed &&
-            completed.ExecutorId.Contains("Translator", StringComparison.Ordinal));
+        Assert.Contains(
+            events,
+            evt =>
+                evt is ExecutorCompletedEvent completed
+                && completed.ExecutorId.Contains("Translator", StringComparison.Ordinal)
+        );
     }
 
     [Fact]
@@ -1113,8 +1151,18 @@ public class AgentflowWorkflowCompilerTests
         var nodes = new[]
         {
             new AgentflowNode { NodeId = "human", Kind = AgentflowNodeKind.HumanGate },
-            new AgentflowNode { NodeId = "agent-a", Kind = AgentflowNodeKind.Agent, Name = "Agent A" },
-            new AgentflowNode { NodeId = "agent-b", Kind = AgentflowNodeKind.Agent, Name = "Agent B" },
+            new AgentflowNode
+            {
+                NodeId = "agent-a",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Agent A",
+            },
+            new AgentflowNode
+            {
+                NodeId = "agent-b",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Agent B",
+            },
             new AgentflowNode
             {
                 NodeId = "parallel",
@@ -1138,7 +1186,8 @@ public class AgentflowWorkflowCompilerTests
             {
                 ["agent-a"] = CreateAgent("agent-a", "Agent A", agentAClient),
                 ["agent-b"] = CreateAgent("agent-b", "Agent B", agentBClient),
-            });
+            }
+        );
 
         Assert.NotNull(workflow);
 
@@ -1147,7 +1196,8 @@ public class AgentflowWorkflowCompilerTests
         await using var run = await InProcessExecution.RunStreamingAsync(
             workflow!,
             input,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         var events = new List<WorkflowEvent>();
@@ -1163,12 +1213,15 @@ public class AgentflowWorkflowCompilerTests
         Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
         Assert.True(agentAClient.TotalCalls > 0);
         Assert.True(agentBClient.TotalCalls > 0);
-        Assert.Contains(events, evt =>
-            evt is WorkflowOutputEvent output &&
-            output.Data is List<ChatMessage> messages &&
-            messages.Count >= 2 &&
-            messages.Any(message => message.Text == "agent a output") &&
-            messages.Any(message => message.Text == "agent b output"));
+        Assert.Contains(
+            events,
+            evt =>
+                evt is WorkflowOutputEvent output
+                && output.Data is List<ChatMessage> messages
+                && messages.Count >= 2
+                && messages.Any(message => message.Text == "agent a output")
+                && messages.Any(message => message.Text == "agent b output")
+        );
     }
 
     [Fact]
@@ -1179,8 +1232,18 @@ public class AgentflowWorkflowCompilerTests
         var participantClient = new CapturingChatClient("translated output");
         var nodes = new[]
         {
-            new AgentflowNode { NodeId = "upstream", Kind = AgentflowNodeKind.Agent, Name = "Upstream" },
-            new AgentflowNode { NodeId = "participant", Kind = AgentflowNodeKind.Agent, Name = "Participant" },
+            new AgentflowNode
+            {
+                NodeId = "upstream",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Upstream",
+            },
+            new AgentflowNode
+            {
+                NodeId = "participant",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Participant",
+            },
             new AgentflowNode
             {
                 NodeId = "parallel",
@@ -1204,18 +1267,18 @@ public class AgentflowWorkflowCompilerTests
             {
                 ["upstream"] = CreateAgent("upstream", "Upstream", upstreamClient),
                 ["participant"] = CreateAgent("participant", "Participant", participantClient),
-            });
+            }
+        );
 
         Assert.NotNull(workflow);
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var run = await InProcessExecution.RunStreamingAsync(
             workflow!,
             new List<ChatMessage> { new(ChatRole.User, "initial input") },
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
-        await foreach (var _ in run.WatchStreamAsync(cancellationToken))
-        {
-        }
+        await foreach (var _ in run.WatchStreamAsync(cancellationToken)) { }
 
         var participantInput = Assert.Single(participantClient.Messages);
         Assert.Equal(ChatRole.User, participantInput.Role);
@@ -1229,8 +1292,18 @@ public class AgentflowWorkflowCompilerTests
         var chatClient = new CapturingChatClient("agent output");
         var nodes = new[]
         {
-            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input, Name = "Input" },
-            new AgentflowNode { NodeId = "agent", Kind = AgentflowNodeKind.Agent, Name = "Agent" },
+            new AgentflowNode
+            {
+                NodeId = "input",
+                Kind = AgentflowNodeKind.Input,
+                Name = "Input",
+            },
+            new AgentflowNode
+            {
+                NodeId = "agent",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Agent",
+            },
             new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
         };
         var edges = new[]
@@ -1243,7 +1316,8 @@ public class AgentflowWorkflowCompilerTests
             agentflow,
             nodes,
             edges,
-            new Dictionary<string, AIAgent> { ["agent"] = CreateAgent("agent", "Agent", chatClient) });
+            new Dictionary<string, AIAgent> { ["agent"] = CreateAgent("agent", "Agent", chatClient) }
+        );
 
         Assert.NotNull(workflow);
 
@@ -1251,7 +1325,8 @@ public class AgentflowWorkflowCompilerTests
         await using var run = await InProcessExecution.RunStreamingAsync(
             workflow!,
             input,
-            cancellationToken: TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken
+        );
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
         var events = new List<WorkflowEvent>();
         await foreach (var _ in run.WatchStreamAsync(TestContext.Current.CancellationToken))
@@ -1260,9 +1335,12 @@ public class AgentflowWorkflowCompilerTests
         }
 
         Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
-        Assert.Contains(events, evt =>
-            evt is ExecutorCompletedEvent completed &&
-            completed.ExecutorId.Contains("Agent", StringComparison.Ordinal));
+        Assert.Contains(
+            events,
+            evt =>
+                evt is ExecutorCompletedEvent completed
+                && completed.ExecutorId.Contains("Agent", StringComparison.Ordinal)
+        );
         Assert.Contains(chatClient.Messages, message => message.Text == "Hello from Input");
     }
 
@@ -1273,14 +1351,24 @@ public class AgentflowWorkflowCompilerTests
         var chatClient = new CapturingChatClient("agent output");
         var nodes = new[]
         {
-            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input, Name = "Input" },
+            new AgentflowNode
+            {
+                NodeId = "input",
+                Kind = AgentflowNodeKind.Input,
+                Name = "Input",
+            },
             new AgentflowNode
             {
                 NodeId = "adapter",
                 Kind = AgentflowNodeKind.PromptAdapter,
                 Instructions = "Extract the URL before continuing.",
             },
-            new AgentflowNode { NodeId = "agent", Kind = AgentflowNodeKind.Agent, Name = "Agent" },
+            new AgentflowNode
+            {
+                NodeId = "agent",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Agent",
+            },
             new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
         };
         var edges = new[]
@@ -1294,14 +1382,16 @@ public class AgentflowWorkflowCompilerTests
             agentflow,
             nodes,
             edges,
-            new Dictionary<string, AIAgent> { ["agent"] = CreateAgent("agent", "Agent", chatClient) });
+            new Dictionary<string, AIAgent> { ["agent"] = CreateAgent("agent", "Agent", chatClient) }
+        );
 
         Assert.NotNull(workflow);
 
         await using var run = await InProcessExecution.RunStreamingAsync(
             workflow!,
             new List<ChatMessage> { new(ChatRole.User, "Visit https://example.com") },
-            cancellationToken: TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken
+        );
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
         var events = new List<WorkflowEvent>();
         await foreach (var evt in run.WatchStreamAsync(TestContext.Current.CancellationToken))
@@ -1321,7 +1411,12 @@ public class AgentflowWorkflowCompilerTests
         var chatClient = new CapturingChatClient("agent output");
         var nodes = new[]
         {
-            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input, Name = "Input" },
+            new AgentflowNode
+            {
+                NodeId = "input",
+                Kind = AgentflowNodeKind.Input,
+                Name = "Input",
+            },
             new AgentflowNode
             {
                 NodeId = "adapter",
@@ -1329,7 +1424,12 @@ public class AgentflowWorkflowCompilerTests
                 Instructions = "Add a second upstream message.",
             },
             new AgentflowNode { NodeId = "clear", Kind = AgentflowNodeKind.ClearMessages },
-            new AgentflowNode { NodeId = "agent", Kind = AgentflowNodeKind.Agent, Name = "Agent" },
+            new AgentflowNode
+            {
+                NodeId = "agent",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Agent",
+            },
             new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
         };
         var edges = new[]
@@ -1344,14 +1444,16 @@ public class AgentflowWorkflowCompilerTests
             agentflow,
             nodes,
             edges,
-            new Dictionary<string, AIAgent> { ["agent"] = CreateAgent("agent", "Agent", chatClient) });
+            new Dictionary<string, AIAgent> { ["agent"] = CreateAgent("agent", "Agent", chatClient) }
+        );
 
         Assert.NotNull(workflow);
 
         await using var run = await InProcessExecution.RunStreamingAsync(
             workflow!,
             new List<ChatMessage> { new(ChatRole.User, "Original input") },
-            cancellationToken: TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken
+        );
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
         var events = new List<WorkflowEvent>();
         await foreach (var evt in run.WatchStreamAsync(TestContext.Current.CancellationToken))
@@ -1372,8 +1474,18 @@ public class AgentflowWorkflowCompilerTests
         var secondChatClient = new CapturingChatClient("second agent output");
         var nodes = new[]
         {
-            new AgentflowNode { NodeId = "agent-a", Kind = AgentflowNodeKind.Agent, Name = "Agent A" },
-            new AgentflowNode { NodeId = "agent-b", Kind = AgentflowNodeKind.Agent, Name = "Agent B" },
+            new AgentflowNode
+            {
+                NodeId = "agent-a",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Agent A",
+            },
+            new AgentflowNode
+            {
+                NodeId = "agent-b",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Agent B",
+            },
             new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
         };
         var edges = new[]
@@ -1390,7 +1502,8 @@ public class AgentflowWorkflowCompilerTests
             {
                 ["agent-a"] = CreateAgent("agent-a", "Agent A", firstChatClient),
                 ["agent-b"] = CreateAgent("agent-b", "Agent B", secondChatClient),
-            });
+            }
+        );
 
         Assert.NotNull(workflow);
 
@@ -1398,7 +1511,8 @@ public class AgentflowWorkflowCompilerTests
         await using var run = await InProcessExecution.RunStreamingAsync(
             workflow!,
             new List<ChatMessage> { new(ChatRole.User, "initial user input") },
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         var events = new List<WorkflowEvent>();
@@ -1420,8 +1534,18 @@ public class AgentflowWorkflowCompilerTests
         var secondChatClient = new CapturingChatClient("second agent output");
         var nodes = new[]
         {
-            new AgentflowNode { NodeId = "agent-a", Kind = AgentflowNodeKind.Agent, Name = "Agent A" },
-            new AgentflowNode { NodeId = "agent-b", Kind = AgentflowNodeKind.Agent, Name = "Agent B" },
+            new AgentflowNode
+            {
+                NodeId = "agent-a",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Agent A",
+            },
+            new AgentflowNode
+            {
+                NodeId = "agent-b",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Agent B",
+            },
             new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
         };
         var edges = new[]
@@ -1438,7 +1562,8 @@ public class AgentflowWorkflowCompilerTests
             {
                 ["agent-a"] = CreateAgent("agent-a", "Agent A", new ToolTranscriptChatClient()),
                 ["agent-b"] = CreateAgent("agent-b", "Agent B", secondChatClient),
-            });
+            }
+        );
 
         Assert.NotNull(workflow);
 
@@ -1446,7 +1571,8 @@ public class AgentflowWorkflowCompilerTests
         await using var run = await InProcessExecution.RunStreamingAsync(
             workflow!,
             new List<ChatMessage> { new(ChatRole.User, "initial user input") },
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
         var events = new List<WorkflowEvent>();
         await foreach (var evt in run.WatchStreamAsync(cancellationToken))
@@ -1458,8 +1584,7 @@ public class AgentflowWorkflowCompilerTests
         var handoff = Assert.Single(secondChatClient.Messages);
         Assert.Equal(ChatRole.User, handoff.Role);
         Assert.Equal("portable result", handoff.Text);
-        Assert.All(handoff.Contents, content =>
-            Assert.True(content is TextContent or DataContent or UriContent));
+        Assert.All(handoff.Contents, content => Assert.True(content is TextContent or DataContent or UriContent));
     }
 
     [Fact]
@@ -1469,17 +1594,20 @@ public class AgentflowWorkflowCompilerTests
         var agent = new ExternalFunctionCallAgent();
         var nodes = new[]
         {
-            new AgentflowNode { NodeId = "agent", Kind = AgentflowNodeKind.Agent, Name = "Agent" },
+            new AgentflowNode
+            {
+                NodeId = "agent",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Agent",
+            },
             new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
         };
         var workflow = _compiler.Compile(
             agentflow,
             nodes,
             [Edge("agent-to-output", "agent", "output")],
-            new Dictionary<string, AIAgent>
-            {
-                ["agent"] = agent,
-            });
+            new Dictionary<string, AIAgent> { ["agent"] = agent }
+        );
 
         Assert.NotNull(workflow);
 
@@ -1487,7 +1615,8 @@ public class AgentflowWorkflowCompilerTests
         await using var run = await InProcessExecution.RunStreamingAsync(
             workflow!,
             new List<ChatMessage> { new(ChatRole.User, "use external tool") },
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         var events = new List<WorkflowEvent>();
@@ -1495,12 +1624,15 @@ public class AgentflowWorkflowCompilerTests
         await foreach (var evt in run.WatchStreamAsync(cancellationToken))
         {
             events.Add(evt);
-            if (evt is RequestInfoEvent request &&
-                request.Request.TryGetDataAs<FunctionCallContent>(out var functionCall))
+            if (
+                evt is RequestInfoEvent request
+                && request.Request.TryGetDataAs<FunctionCallContent>(out var functionCall)
+            )
             {
                 responded = true;
-                await run.SendResponseAsync(request.Request.CreateResponse(
-                    new FunctionResultContent(functionCall.CallId, "external result")));
+                await run.SendResponseAsync(
+                    request.Request.CreateResponse(new FunctionResultContent(functionCall.CallId, "external result"))
+                );
             }
         }
 
@@ -1517,7 +1649,12 @@ public class AgentflowWorkflowCompilerTests
         var reviewClient = new RecordingChatClient("review feedback: rename the variable");
         var nodes = new[]
         {
-            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input, Name = "Input" },
+            new AgentflowNode
+            {
+                NodeId = "input",
+                Kind = AgentflowNodeKind.Input,
+                Name = "Input",
+            },
             new AgentflowNode
             {
                 NodeId = "coding",
@@ -1548,21 +1685,24 @@ public class AgentflowWorkflowCompilerTests
                     "coding",
                     AgentflowEdgeKind.SwitchCase,
                     """{"contains":"yes"}""",
-                    """{"switchCaseOrder":0}"""),
+                    """{"switchCaseOrder":0}"""
+                ),
                 Edge("done", "human", "output", AgentflowEdgeKind.SwitchDefault),
             ],
             new Dictionary<string, AIAgent>
             {
                 ["coding"] = CreateAgent("coding", "Coding", codingClient),
                 ["review"] = CreateAgent("review", "Code Review", reviewClient),
-            });
+            }
+        );
 
         Assert.NotNull(workflow);
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var run = await InProcessExecution.RunStreamingAsync(
             workflow!,
             new List<ChatMessage> { new(ChatRole.User, "initial request") },
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         var events = new List<WorkflowEvent>();
@@ -1573,9 +1713,9 @@ public class AgentflowWorkflowCompilerTests
             if (evt is RequestInfoEvent request)
             {
                 requestCount++;
-                await run.SendResponseAsync(CreateHumanGateResponse(
-                    request.Request,
-                    requestCount == 1 ? "yes" : "done"));
+                await run.SendResponseAsync(
+                    CreateHumanGateResponse(request.Request, requestCount == 1 ? "yes" : "done")
+                );
             }
         }
 
@@ -1583,16 +1723,19 @@ public class AgentflowWorkflowCompilerTests
         Assert.Equal(2, codingClient.TotalCalls);
         Assert.Equal(2, reviewClient.TotalCalls);
         var secondCodingCall = codingClient.Calls[1];
-        Assert.Contains(secondCodingCall, message =>
-            message.Role == ChatRole.System &&
-            message.Text == AgentflowMessageTransforms.FeedbackLoopInstruction);
-        Assert.Contains(secondCodingCall, message =>
-            message.Role == ChatRole.User &&
-            message.Text == "review feedback: rename the variable");
-        Assert.Contains(secondCodingCall, message =>
-            message.Role == ChatRole.User &&
-            message.AuthorName == "human" &&
-            message.Text == "yes");
+        Assert.Contains(
+            secondCodingCall,
+            message =>
+                message.Role == ChatRole.System && message.Text == AgentflowMessageTransforms.FeedbackLoopInstruction
+        );
+        Assert.Contains(
+            secondCodingCall,
+            message => message.Role == ChatRole.User && message.Text == "review feedback: rename the variable"
+        );
+        Assert.Contains(
+            secondCodingCall,
+            message => message.Role == ChatRole.User && message.AuthorName == "human" && message.Text == "yes"
+        );
         Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
     }
 
@@ -1604,22 +1747,30 @@ public class AgentflowWorkflowCompilerTests
         var reviewerClient = new CapturingChatClient("reviewed");
         var nodes = new[]
         {
-            new AgentflowNode { NodeId = "worker", Kind = AgentflowNodeKind.Agent, Name = "Worker" },
-            new AgentflowNode { NodeId = "reviewer", Kind = AgentflowNodeKind.Agent, Name = "Reviewer" },
+            new AgentflowNode
+            {
+                NodeId = "worker",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Worker",
+            },
+            new AgentflowNode
+            {
+                NodeId = "reviewer",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Reviewer",
+            },
             new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
         };
         var workflow = _compiler.Compile(
             agentflow,
             nodes,
-            [
-                Edge("worker-to-reviewer", "worker", "reviewer"),
-                Edge("reviewer-to-output", "reviewer", "output"),
-            ],
+            [Edge("worker-to-reviewer", "worker", "reviewer"), Edge("reviewer-to-output", "reviewer", "output")],
             new Dictionary<string, AIAgent>
             {
                 ["worker"] = worker,
                 ["reviewer"] = CreateAgent("reviewer", "Reviewer", reviewerClient),
-            });
+            }
+        );
 
         Assert.NotNull(workflow);
 
@@ -1627,7 +1778,8 @@ public class AgentflowWorkflowCompilerTests
         await using var run = await InProcessExecution.RunStreamingAsync(
             workflow!,
             new List<ChatMessage> { new(ChatRole.User, "change the code") },
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         var events = new List<WorkflowEvent>();
@@ -1635,13 +1787,16 @@ public class AgentflowWorkflowCompilerTests
         await foreach (var evt in run.WatchStreamAsync(cancellationToken))
         {
             events.Add(evt);
-            if (evt is RequestInfoEvent request &&
-                request.Request.TryGetDataAs<ToolApprovalRequestContent>(out var approvalRequest))
+            if (
+                evt is RequestInfoEvent request
+                && request.Request.TryGetDataAs<ToolApprovalRequestContent>(out var approvalRequest)
+            )
             {
                 Assert.Equal(0, reviewerClient.TotalCalls);
                 responded = true;
-                await run.SendResponseAsync(request.Request.CreateResponse(
-                    approvalRequest.CreateResponse(approved: true)));
+                await run.SendResponseAsync(
+                    request.Request.CreateResponse(approvalRequest.CreateResponse(approved: true))
+                );
             }
         }
 
@@ -1652,7 +1807,8 @@ public class AgentflowWorkflowCompilerTests
         Assert.Equal("worker completed", reviewerInput.Text);
         Assert.DoesNotContain(
             reviewerInput.Contents,
-            content => content is ToolApprovalRequestContent or ToolApprovalResponseContent);
+            content => content is ToolApprovalRequestContent or ToolApprovalResponseContent
+        );
         Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
     }
 
@@ -1672,26 +1828,28 @@ public class AgentflowWorkflowCompilerTests
             agentflowId,
             new AgentflowNode { NodeId = "group", Kind = AgentflowNodeKind.GroupChatBlock },
             new Dictionary<string, AgentflowNode> { [participantNode.NodeId] = participantNode },
-            new Dictionary<string, AIAgent>
-            {
-                [participantNode.NodeId] = CreateAgent("participant", "Participant"),
-            },
+            new Dictionary<string, AIAgent> { [participantNode.NodeId] = CreateAgent("participant", "Participant") },
             new AgentflowAgentSessionScope(providerSessionState, projectId, "context-1", null),
             executionTraceContext: null,
-            new AIAgentHostOptions());
+            new AIAgentHostOptions()
+        );
         var participant = AgentflowBlockBuildSupport.CreateParticipant(
             context,
             participantNode.NodeId,
-            "group.participant");
+            "group.participant"
+        );
 
         Assert.NotNull(participant);
 
         await participant!.RunAsync(
             [new ChatMessage(ChatRole.User, "hello")],
-            cancellationToken: TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
-        Assert.Contains(providerSessionState.Calls, call =>
-            call.HistoryScope == $"agentflow:{agentflowId:N}:node:participant");
+        Assert.Contains(
+            providerSessionState.Calls,
+            call => call.HistoryScope == $"agentflow:{agentflowId:N}:node:participant"
+        );
     }
 
     [Fact]
@@ -1701,43 +1859,44 @@ public class AgentflowWorkflowCompilerTests
         var projectId = Guid.CreateVersion7();
         var taskId = Guid.CreateVersion7();
         var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "scoped-flow" };
-        var sessionScope = new AgentflowAgentSessionScope(
-            providerSessionState,
-            projectId,
-            "context-1",
-            taskId);
+        var sessionScope = new AgentflowAgentSessionScope(providerSessionState, projectId, "context-1", taskId);
         var nodes = new[]
         {
-            new AgentflowNode { NodeId = "agent", Kind = AgentflowNodeKind.Agent, Name = "Scoped Agent" },
+            new AgentflowNode
+            {
+                NodeId = "agent",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Scoped Agent",
+            },
             new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
         };
-        var edges = new[]
-        {
-            Edge("agent-to-output", "agent", "output"),
-        };
+        var edges = new[] { Edge("agent-to-output", "agent", "output") };
 
         var workflow = _compiler.Compile(
             agentflow,
             nodes,
             edges,
             new Dictionary<string, AIAgent> { ["agent"] = CreateAgent("agent", "Scoped Agent") },
-            sessionScope);
+            sessionScope
+        );
 
         Assert.NotNull(workflow);
 
         await using var run = await InProcessExecution.RunStreamingAsync(
             workflow!,
             new List<ChatMessage> { new(ChatRole.User, "hello") },
-            cancellationToken: TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken
+        );
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
-        await foreach (var _ in run.WatchStreamAsync(TestContext.Current.CancellationToken))
-        {
-        }
+        await foreach (var _ in run.WatchStreamAsync(TestContext.Current.CancellationToken)) { }
 
-        Assert.Contains(providerSessionState.Calls, call =>
-            call.ProjectId == projectId &&
-            call.ContextId == "context-1" &&
-            call.HistoryScope == $"agentflow:{agentflow.Id:N}:node:agent");
+        Assert.Contains(
+            providerSessionState.Calls,
+            call =>
+                call.ProjectId == projectId
+                && call.ContextId == "context-1"
+                && call.HistoryScope == $"agentflow:{agentflow.Id:N}:node:agent"
+        );
     }
 
     [Fact]
@@ -1754,7 +1913,12 @@ public class AgentflowWorkflowCompilerTests
         };
         var nodes = new[]
         {
-            new AgentflowNode { NodeId = "agent", Kind = AgentflowNodeKind.Agent, Name = "Agent" },
+            new AgentflowNode
+            {
+                NodeId = "agent",
+                Kind = AgentflowNodeKind.Agent,
+                Name = "Agent",
+            },
             new AgentflowNode
             {
                 NodeId = "output",
@@ -1767,24 +1931,19 @@ public class AgentflowWorkflowCompilerTests
             agentflow,
             nodes,
             [Edge("agent-output", "agent", "output")],
-            new Dictionary<string, AIAgent>
-            {
-                ["agent"] = CreateAgent("agent", "Agent", new StubChatClient()),
-            },
+            new Dictionary<string, AIAgent> { ["agent"] = CreateAgent("agent", "Agent", new StubChatClient()) },
             sessionScope: null,
             executionTraceContext: null,
-            new AgentflowSummaryContext(
-                summaryService,
-                modelProviderId,
-                projectId,
-                "context-1"));
+            new AgentflowSummaryContext(summaryService, modelProviderId, projectId, "context-1")
+        );
 
         Assert.NotNull(workflow);
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var run = await InProcessExecution.RunStreamingAsync(
             workflow!,
             new List<ChatMessage> { new(ChatRole.User, "workflow input") },
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
         List<ChatMessage>? output = null;
@@ -1837,27 +1996,22 @@ public class AgentflowWorkflowCompilerTests
             new Dictionary<string, AIAgent> { ["agent"] = CreateAgent("agent", "Agent") },
             sessionScope: null,
             executionTraceContext: null,
-            new AgentflowSummaryContext(
-                summaryService,
-                modelProviderId,
-                Guid.CreateVersion7(),
-                "context-1"));
+            new AgentflowSummaryContext(summaryService, modelProviderId, Guid.CreateVersion7(), "context-1")
+        );
 
         Assert.NotNull(workflow);
         await using var run = await InProcessExecution.RunStreamingAsync(
             workflow!,
             new List<ChatMessage> { new(ChatRole.User, "input") },
-            cancellationToken: TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken
+        );
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
-        await foreach (var _ in run.WatchStreamAsync(TestContext.Current.CancellationToken))
-        {
-        }
+        await foreach (var _ in run.WatchStreamAsync(TestContext.Current.CancellationToken)) { }
 
         Assert.Empty(summaryService.Calls);
     }
 
-    private static (Agentflow Agentflow, AgentflowNode[] Nodes, AgentflowEdge[] Edges)
-        CreateCyclicBarrierFlow()
+    private static (Agentflow Agentflow, AgentflowNode[] Nodes, AgentflowEdge[] Edges) CreateCyclicBarrierFlow()
     {
         return (
             new Agentflow { Id = Guid.CreateVersion7(), Name = "revision-flow" },
@@ -1879,21 +2033,18 @@ public class AgentflowWorkflowCompilerTests
                     "upper",
                     AgentflowEdgeKind.SwitchCase,
                     """{"contains":"retry"}""",
-                    """{"switchCaseOrder":0}"""),
+                    """{"switchCaseOrder":0}"""
+                ),
                 Edge("done", "human", "output", AgentflowEdgeKind.SwitchDefault),
-            ]);
+            ]
+        );
     }
 
-    private static ExternalResponse CreateHumanGateResponse(
-        ExternalRequest request,
-        string responseText)
+    private static ExternalResponse CreateHumanGateResponse(ExternalRequest request, string responseText)
     {
         Assert.True(request.TryGetDataAs<List<ChatMessage>>(out var requestMessages));
         var responseMessages = requestMessages.ToList();
-        responseMessages.Add(new ChatMessage(ChatRole.User, responseText)
-        {
-            AuthorName = "human",
-        });
+        responseMessages.Add(new ChatMessage(ChatRole.User, responseText) { AuthorName = "human" });
         return request.CreateResponse(responseMessages);
     }
 
@@ -1903,7 +2054,8 @@ public class AgentflowWorkflowCompilerTests
         string target,
         AgentflowEdgeKind kind = AgentflowEdgeKind.Direct,
         string? conditionJson = null,
-        string? configJson = null)
+        string? configJson = null
+    )
     {
         return new AgentflowEdge
         {
@@ -1916,14 +2068,13 @@ public class AgentflowWorkflowCompilerTests
         };
     }
 
-    private static async Task<IReadOnlyList<WorkflowEvent>> ExecuteAsync(
-        Workflow workflow,
-        string input)
+    private static async Task<IReadOnlyList<WorkflowEvent>> ExecuteAsync(Workflow workflow, string input)
     {
         await using var run = await InProcessExecution.RunStreamingAsync(
             workflow,
             new List<ChatMessage> { new(ChatRole.User, input) },
-            cancellationToken: TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken
+        );
         await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
         var events = new List<WorkflowEvent>();
         await foreach (var evt in run.WatchStreamAsync(TestContext.Current.CancellationToken))
@@ -1936,20 +2087,14 @@ public class AgentflowWorkflowCompilerTests
 
     private static bool HasChatInput(WorkflowEvent evt, string executorId)
     {
-        return evt is ExecutorInvokedEvent
-        {
-            ExecutorId: var invokedExecutorId,
-            Data: List<ChatMessage>,
-        } && invokedExecutorId == executorId;
+        return evt is ExecutorInvokedEvent { ExecutorId: var invokedExecutorId, Data: List<ChatMessage> }
+            && invokedExecutorId == executorId;
     }
 
     private static bool HasTurnTokenInput(WorkflowEvent evt, string executorId)
     {
-        return evt is ExecutorInvokedEvent
-        {
-            ExecutorId: var invokedExecutorId,
-            Data: TurnToken,
-        } && invokedExecutorId == executorId;
+        return evt is ExecutorInvokedEvent { ExecutorId: var invokedExecutorId, Data: TurnToken }
+            && invokedExecutorId == executorId;
     }
 
     private static AIAgent CreateAgent(string id, string name, IChatClient? chatClient = null)
@@ -1961,14 +2106,13 @@ public class AgentflowWorkflowCompilerTests
                 Id = id,
                 Name = name,
                 ChatOptions = new ChatOptions { Instructions = "Test agent." },
-            });
+            }
+        );
     }
 
     private sealed class StubChatClient : IChatClient
     {
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
 
         public object? GetService(Type serviceType, object? serviceKey = null)
         {
@@ -1978,7 +2122,8 @@ public class AgentflowWorkflowCompilerTests
         public Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             return Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, "ok")]));
         }
@@ -1986,7 +2131,8 @@ public class AgentflowWorkflowCompilerTests
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
+        )
         {
             await Task.Yield();
             yield return new ChatResponseUpdate(ChatRole.Assistant, "ok");
@@ -1999,9 +2145,7 @@ public class AgentflowWorkflowCompilerTests
 
         public int TotalCalls => _totalCalls;
 
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
 
         public object? GetService(Type serviceType, object? serviceKey = null)
         {
@@ -2011,7 +2155,8 @@ public class AgentflowWorkflowCompilerTests
         public Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Interlocked.Increment(ref _totalCalls);
             return Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, responseText)]));
@@ -2020,7 +2165,8 @@ public class AgentflowWorkflowCompilerTests
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
+        )
         {
             Interlocked.Increment(ref _totalCalls);
             await Task.Yield();
@@ -2036,9 +2182,7 @@ public class AgentflowWorkflowCompilerTests
 
         public List<ChatMessage> Messages { get; } = [];
 
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
 
         public object? GetService(Type serviceType, object? serviceKey = null)
         {
@@ -2048,7 +2192,8 @@ public class AgentflowWorkflowCompilerTests
         public Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Interlocked.Increment(ref _totalCalls);
             Messages.AddRange(messages);
@@ -2058,7 +2203,8 @@ public class AgentflowWorkflowCompilerTests
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
+        )
         {
             Interlocked.Increment(ref _totalCalls);
             Messages.AddRange(messages);
@@ -2075,9 +2221,7 @@ public class AgentflowWorkflowCompilerTests
 
         public List<List<ChatMessage>> Calls { get; } = [];
 
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
 
         public object? GetService(Type serviceType, object? serviceKey = null)
         {
@@ -2087,7 +2231,8 @@ public class AgentflowWorkflowCompilerTests
         public Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Record(messages);
             return Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, responseText)]));
@@ -2096,7 +2241,8 @@ public class AgentflowWorkflowCompilerTests
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
+        )
         {
             Record(messages);
             await Task.Yield();
@@ -2112,9 +2258,7 @@ public class AgentflowWorkflowCompilerTests
 
     private sealed class ToolTranscriptChatClient : IChatClient
     {
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
 
         public object? GetService(Type serviceType, object? serviceKey = null) =>
             serviceType.IsInstanceOfType(this) ? this : null;
@@ -2122,41 +2266,36 @@ public class AgentflowWorkflowCompilerTests
         public Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new ChatResponse(CreateMessages()));
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(new ChatResponse(CreateMessages()));
 
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
+        )
         {
             await Task.Yield();
             foreach (var message in CreateMessages())
             {
-                yield return new ChatResponseUpdate
-                {
-                    Role = message.Role,
-                    Contents = message.Contents,
-                };
+                yield return new ChatResponseUpdate { Role = message.Role, Contents = message.Contents };
             }
         }
 
         private static List<ChatMessage> CreateMessages() =>
-        [
-            new ChatMessage(
-                ChatRole.Assistant,
-                [
-                    new FunctionCallContent(
-                        "call-1",
-                        "read_file",
-                        new Dictionary<string, object?>())
-                    {
-                        InformationalOnly = true,
-                    },
-                ]),
-            new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call-1", "tool result")]),
-            new ChatMessage(ChatRole.Assistant, "portable result"),
-        ];
+            [
+                new ChatMessage(
+                    ChatRole.Assistant,
+                    [
+                        new FunctionCallContent("call-1", "read_file", new Dictionary<string, object?>())
+                        {
+                            InformationalOnly = true,
+                        },
+                    ]
+                ),
+                new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call-1", "tool result")]),
+                new ChatMessage(ChatRole.Assistant, "portable result"),
+            ];
     }
 
     private sealed class ExternalFunctionCallAgent : AIAgent
@@ -2175,27 +2314,28 @@ public class AgentflowWorkflowCompilerTests
         protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
             AgentSession session,
             JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
 
         protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
             JsonElement sessionState,
             JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult<AgentSession>(new ExternalFunctionCallSession());
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult<AgentSession>(new ExternalFunctionCallSession());
 
         protected override Task<AgentResponse> RunCoreAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
-            CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            CancellationToken cancellationToken
+        ) => throw new NotSupportedException();
 
         protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
+        )
         {
             await Task.Yield();
             if (Interlocked.Increment(ref _callCount) == 1)
@@ -2205,10 +2345,7 @@ public class AgentflowWorkflowCompilerTests
                     Role = ChatRole.Assistant,
                     Contents =
                     [
-                        new FunctionCallContent(
-                            "external-call",
-                            "external_tool",
-                            new Dictionary<string, object?>()),
+                        new FunctionCallContent("external-call", "external_tool", new Dictionary<string, object?>()),
                     ],
                 };
                 yield break;
@@ -2245,27 +2382,28 @@ public class AgentflowWorkflowCompilerTests
         protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
             AgentSession session,
             JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
 
         protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
             JsonElement sessionState,
             JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult<AgentSession>(new ApprovalRequestSession());
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult<AgentSession>(new ApprovalRequestSession());
 
         protected override Task<AgentResponse> RunCoreAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
-            CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            CancellationToken cancellationToken
+        ) => throw new NotSupportedException();
 
         protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
+        )
         {
             await Task.Yield();
             Interlocked.Increment(ref _totalCalls);
@@ -2286,10 +2424,8 @@ public class AgentflowWorkflowCompilerTests
                 [
                     new ToolApprovalRequestContent(
                         "approval-1",
-                        new FunctionCallContent(
-                            "call-1",
-                            "write_file",
-                            new Dictionary<string, object?>())),
+                        new FunctionCallContent("call-1", "write_file", new Dictionary<string, object?>())
+                    ),
                 ],
             };
         }
@@ -2301,19 +2437,12 @@ public class AgentflowWorkflowCompilerTests
     {
         public List<(Guid ProjectId, string ContextId, string? HistoryScope)> Calls { get; } = [];
 
-        public void InitializeSessionState(
-            AgentSession session,
-            string contextId,
-            Guid projectId)
+        public void InitializeSessionState(AgentSession session, string contextId, Guid projectId)
         {
             Calls.Add((projectId, contextId, null));
         }
 
-        public void InitializeSessionState(
-            AgentSession session,
-            string contextId,
-            Guid projectId,
-            string historyScope)
+        public void InitializeSessionState(AgentSession session, string contextId, Guid projectId, string historyScope)
         {
             Calls.Add((projectId, contextId, historyScope));
         }
@@ -2329,8 +2458,9 @@ public class AgentflowWorkflowCompilerTests
 
     private sealed class CapturingExecutionTraceStore : IAgentflowNodeExecutionTraceStore
     {
-        private readonly TaskCompletionSource<AgentflowTrace> _trace =
-            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource<AgentflowTrace> _trace = new(
+            TaskCreationOptions.RunContinuationsAsynchronously
+        );
 
         public Task SaveAsync(AgentflowTrace trace, CancellationToken cancellationToken)
         {
@@ -2338,8 +2468,7 @@ public class AgentflowWorkflowCompilerTests
             return Task.CompletedTask;
         }
 
-        public Task<AgentflowTrace> WaitForTraceAsync() =>
-            _trace.Task.WaitAsync(TestContext.Current.CancellationToken);
+        public Task<AgentflowTrace> WaitForTraceAsync() => _trace.Task.WaitAsync(TestContext.Current.CancellationToken);
     }
 
     private sealed class CollectingExecutionTraceStore : IAgentflowNodeExecutionTraceStore
@@ -2360,19 +2489,22 @@ public class AgentflowWorkflowCompilerTests
 
         public Task<IReadOnlyList<AgentflowTrace>> WaitForCountAsync(int count)
         {
-            return Task.Run<IReadOnlyList<AgentflowTrace>>(() =>
-            {
-                var timeout = TimeProvider.System.GetUtcNow().AddSeconds(2);
-                lock (_lock)
+            return Task.Run<IReadOnlyList<AgentflowTrace>>(
+                () =>
                 {
-                    while (_traces.Count < count && TimeProvider.System.GetUtcNow() < timeout)
+                    var timeout = TimeProvider.System.GetUtcNow().AddSeconds(2);
+                    lock (_lock)
                     {
-                        Monitor.Wait(_lock, TimeSpan.FromMilliseconds(20));
-                    }
+                        while (_traces.Count < count && TimeProvider.System.GetUtcNow() < timeout)
+                        {
+                            Monitor.Wait(_lock, TimeSpan.FromMilliseconds(20));
+                        }
 
-                    return _traces.ToList();
-                }
-            }, TestContext.Current.CancellationToken);
+                        return _traces.ToList();
+                    }
+                },
+                TestContext.Current.CancellationToken
+            );
         }
 
         public IReadOnlyList<AgentflowTrace> GetTraces()
@@ -2394,14 +2526,10 @@ public class AgentflowWorkflowCompilerTests
             Guid projectId,
             string contextId,
             string? customInstructions,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
-            Calls.Add(new SummaryCall(
-                modelProviderId,
-                sourceMessages,
-                projectId,
-                contextId,
-                customInstructions));
+            Calls.Add(new SummaryCall(modelProviderId, sourceMessages, projectId, contextId, customInstructions));
             return Task.FromResult(AgentTurnSummaryService.CreateResultMessage("summary"));
         }
     }
@@ -2411,5 +2539,6 @@ public class AgentflowWorkflowCompilerTests
         IReadOnlyList<ChatMessage> Messages,
         Guid ProjectId,
         string ContextId,
-        string? CustomInstructions);
+        string? CustomInstructions
+    );
 }

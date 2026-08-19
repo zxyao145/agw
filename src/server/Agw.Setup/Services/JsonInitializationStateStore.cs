@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;
 using Agw.Setup.Contracts;
@@ -9,10 +8,10 @@ using Agw.Shared.Runtime;
 
 namespace Agw.Setup.Services;
 
-public sealed class JsonInitializationStateStore :
-    IInitializationStateStore,
-    IAuthenticationStateStore,
-    IServerInitializationState
+public sealed class JsonInitializationStateStore
+    : IInitializationStateStore,
+        IAuthenticationStateStore,
+        IServerInitializationState
 {
     private readonly AgwDataPaths _paths;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
@@ -28,9 +27,7 @@ public sealed class JsonInitializationStateStore :
     public AuthenticationSnapshot GetAuthenticationSnapshot()
     {
         var state = _state;
-        return new AuthenticationSnapshot(
-            state.PasswordHash,
-            state.SessionVersion);
+        return new AuthenticationSnapshot(state.PasswordHash, state.SessionVersion);
     }
 
     public bool IsInitialized => _state.IsInitialized;
@@ -41,7 +38,8 @@ public sealed class JsonInitializationStateStore :
     public async Task PersistAsync(
         SetupConfiguration configuration,
         string passwordHash,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         await _writeLock.WaitAsync(cancellationToken);
         try
@@ -53,23 +51,18 @@ public sealed class JsonInitializationStateStore :
                 Database = new ServerDatabaseState
                 {
                     Provider = configuration.Provider,
-                    ConnectionString = configuration.ConnectionString
+                    ConnectionString = configuration.ConnectionString,
                 },
                 Execution = new ServerExecutionState
                 {
-                    Provider = configuration.DeploymentMode == DeploymentMode.Cluster
-                        ? "distributed"
-                        : "inProcess"
+                    Provider = configuration.DeploymentMode == DeploymentMode.Cluster ? "distributed" : "inProcess",
                 },
-                DistributedLock = configuration.DeploymentMode == DeploymentMode.Cluster
-                    ? new ServerDistributedLockState
-                    {
-                        Provider = "postgres",
-                        ConnectionString = string.Empty
-                    }
-                    : null,
+                DistributedLock =
+                    configuration.DeploymentMode == DeploymentMode.Cluster
+                        ? new ServerDistributedLockState { Provider = "postgres", ConnectionString = string.Empty }
+                        : null,
                 PasswordHash = passwordHash,
-                SessionVersion = 1
+                SessionVersion = 1,
             };
             await WriteAsync(nextState, cancellationToken);
             _state = nextState;
@@ -82,24 +75,25 @@ public sealed class JsonInitializationStateStore :
 
     public IReadOnlyList<LegacyApiTokenState> GetLegacyApiTokens()
     {
-        return _state.Tokens?
-            .Select(token => new LegacyApiTokenState(
-                token.Id,
-                token.Name,
-                token.Prefix,
-                token.SecretHash,
-                token.CreatedAt))
-            .ToArray()
+        return _state
+                .Tokens?.Select(token => new LegacyApiTokenState(
+                    token.Id,
+                    token.Name,
+                    token.Prefix,
+                    token.SecretHash,
+                    token.CreatedAt
+                ))
+                .ToArray()
             ?? [];
     }
 
-    public async Task ClearLegacyApiTokensAsync(
-        CancellationToken cancellationToken = default)
+    public async Task ClearLegacyApiTokensAsync(CancellationToken cancellationToken = default)
     {
         await _writeLock.WaitAsync(cancellationToken);
         try
         {
-            if (_state.Tokens == null) return;
+            if (_state.Tokens == null)
+                return;
 
             var nextState = Copy(_state);
             nextState.Tokens = null;
@@ -139,7 +133,7 @@ public sealed class JsonInitializationStateStore :
             Access = FileAccess.Write,
             Share = FileShare.None,
             BufferSize = 4096,
-            Options = FileOptions.WriteThrough
+            Options = FileOptions.WriteThrough,
         };
         if (!OperatingSystem.IsWindows())
         {
@@ -169,13 +163,15 @@ public sealed class JsonInitializationStateStore :
         }
         finally
         {
-            if (File.Exists(tempPath)) File.Delete(tempPath);
+            if (File.Exists(tempPath))
+                File.Delete(tempPath);
         }
     }
 
     private ServerState Load(string path)
     {
-        if (!File.Exists(path)) return new ServerState();
+        if (!File.Exists(path))
+            return new ServerState();
         return JsonSerializer.Deserialize<ServerState>(File.ReadAllText(path), _serializerOptions) ?? new ServerState();
     }
 
@@ -186,49 +182,54 @@ public sealed class JsonInitializationStateStore :
         return options;
     }
 
-    private static ServerState Copy(ServerState state) => new()
-    {
-        SchemaVersion = state.SchemaVersion,
-        IsInitialized = state.IsInitialized,
-        Database = new ServerDatabaseState
+    private static ServerState Copy(ServerState state) =>
+        new()
         {
-            Provider = state.Database.Provider,
-            ConnectionString = state.Database.ConnectionString
-        },
-        Execution = state.Execution == null
-            ? null
-            : new ServerExecutionState { Provider = state.Execution.Provider },
-        DistributedLock = state.DistributedLock == null
-            ? null
-            : new ServerDistributedLockState
+            SchemaVersion = state.SchemaVersion,
+            IsInitialized = state.IsInitialized,
+            Database = new ServerDatabaseState
             {
-                Provider = state.DistributedLock.Provider,
-                ConnectionString = state.DistributedLock.ConnectionString
+                Provider = state.Database.Provider,
+                ConnectionString = state.Database.ConnectionString,
             },
-        PasswordHash = state.PasswordHash,
-        SessionVersion = state.SessionVersion,
-        Tokens = state.Tokens?.Select(token => new ApiTokenRecord
-        {
-            Id = token.Id,
-            Name = token.Name,
-            Prefix = token.Prefix,
-            SecretHash = token.SecretHash,
-            CreatedAt = token.CreatedAt
-        })
-            .ToList()
-    };
+            Execution =
+                state.Execution == null ? null : new ServerExecutionState { Provider = state.Execution.Provider },
+            DistributedLock =
+                state.DistributedLock == null
+                    ? null
+                    : new ServerDistributedLockState
+                    {
+                        Provider = state.DistributedLock.Provider,
+                        ConnectionString = state.DistributedLock.ConnectionString,
+                    },
+            PasswordHash = state.PasswordHash,
+            SessionVersion = state.SessionVersion,
+            Tokens = state
+                .Tokens?.Select(token => new ApiTokenRecord
+                {
+                    Id = token.Id,
+                    Name = token.Name,
+                    Prefix = token.Prefix,
+                    SecretHash = token.SecretHash,
+                    CreatedAt = token.CreatedAt,
+                })
+                .ToList(),
+        };
 
     private sealed class ServerState
     {
         public int SchemaVersion { get; set; } = 1;
         public bool IsInitialized { get; set; }
         public ServerDatabaseState Database { get; set; } = new();
+
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public ServerExecutionState? Execution { get; set; }
+
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public ServerDistributedLockState? DistributedLock { get; set; }
         public string? PasswordHash { get; set; }
         public int SessionVersion { get; set; }
+
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<ApiTokenRecord>? Tokens { get; set; }
     }
@@ -265,4 +266,5 @@ public sealed record LegacyApiTokenState(
     string Name,
     string Prefix,
     string SecretHash,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt
+);

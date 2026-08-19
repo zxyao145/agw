@@ -1,9 +1,7 @@
 using System.Linq.Expressions;
-
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data;
 using Agw.Shared.Exceptions;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Shared.Pagination;
@@ -17,7 +15,8 @@ public static class UpdatedTimePagination
         Expression<Func<TEntity, Guid>> idSelector,
         int pageIndex,
         int pageSize,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
         where TEntity : BaseEntity
     {
         ValidatePaging(pageIndex, pageSize);
@@ -44,10 +43,7 @@ public static class UpdatedTimePagination
                 .OrderByDescending(entity => entity.UpdateTime ?? entity.CreateTime)
                 .ThenByDescending(getId)
                 .ToList();
-            var items = ordered
-                .Skip((pageIndex - 1) * pageSize)
-                .Take(pageSize)
-                .ToList();
+            var items = ordered.Skip((pageIndex - 1) * pageSize).Take(pageSize).ToList();
 
             return CreateResult(items, ordered.Count, pageIndex, pageSize);
         }
@@ -57,7 +53,8 @@ public static class UpdatedTimePagination
         IReadOnlyList<TEntity> items,
         long total,
         int pageIndex,
-        int pageSize)
+        int pageSize
+    )
     {
         return new PagedResult<TEntity>
         {
@@ -86,6 +83,7 @@ public static class UpdatedTimePagination
         return exception is NotSupportedException
             && exception.Message.Contains(
                 "SQLite does not support expressions of type 'DateTimeOffset'",
-                StringComparison.Ordinal);
+                StringComparison.Ordinal
+            );
     }
 }

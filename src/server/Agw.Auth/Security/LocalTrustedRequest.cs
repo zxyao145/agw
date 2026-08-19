@@ -1,5 +1,4 @@
 using System.Net;
-
 using Microsoft.AspNetCore.Http;
 
 namespace Agw.Auth.Security;
@@ -13,8 +12,13 @@ public static class LocalTrustedRequest
 
     private static readonly string[] ForwardingHeaders =
     [
-        "Forwarded", "X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto",
-        "X-Original-For", "X-Original-Host", "X-Original-Proto"
+        "Forwarded",
+        "X-Forwarded-For",
+        "X-Forwarded-Host",
+        "X-Forwarded-Proto",
+        "X-Original-For",
+        "X-Original-Host",
+        "X-Original-Proto",
     ];
 
     /// <summary>
@@ -25,8 +29,10 @@ public static class LocalTrustedRequest
     public static bool IsLocalTrusted(HttpContext context)
     {
         var remoteAddress = context.Connection.RemoteIpAddress;
-        if (remoteAddress == null || !IPAddress.IsLoopback(remoteAddress)) return false;
-        if (ForwardingHeaders.Any(context.Request.Headers.ContainsKey)) return false;
+        if (remoteAddress == null || !IPAddress.IsLoopback(remoteAddress))
+            return false;
+        if (ForwardingHeaders.Any(context.Request.Headers.ContainsKey))
+            return false;
 
         var host = context.Request.Host.Host;
         return string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase)
@@ -41,7 +47,8 @@ public static class LocalTrustedRequest
     public static bool IsSameOrigin(HttpContext context)
     {
         var origin = context.Request.Headers.Origin.ToString();
-        if (!Uri.TryCreate(origin, UriKind.Absolute, out var originUri)) return false;
+        if (!Uri.TryCreate(origin, UriKind.Absolute, out var originUri))
+            return false;
         return string.Equals(originUri.Scheme, context.Request.Scheme, StringComparison.OrdinalIgnoreCase)
             && string.Equals(originUri.Authority, context.Request.Host.Value, StringComparison.OrdinalIgnoreCase);
     }
@@ -54,13 +61,16 @@ public static class LocalTrustedRequest
     /// <returns>Origin 属于受信任的 Desktop 来源时返回 <see langword="true"/>。</returns>
     public static bool IsDesktopOrigin(string origin, bool allowDevelopmentOrigin = false)
     {
-        if (allowDevelopmentOrigin
-            && string.Equals(origin, DevelopmentDesktopOrigin, StringComparison.OrdinalIgnoreCase))
+        if (
+            allowDevelopmentOrigin
+            && string.Equals(origin, DevelopmentDesktopOrigin, StringComparison.OrdinalIgnoreCase)
+        )
         {
             return true;
         }
 
-        if (!Uri.TryCreate(origin, UriKind.Absolute, out var originUri)) return false;
+        if (!Uri.TryCreate(origin, UriKind.Absolute, out var originUri))
+            return false;
         return string.Equals(originUri.Scheme, "agw", StringComparison.OrdinalIgnoreCase)
             && string.Equals(originUri.Host, "app", StringComparison.OrdinalIgnoreCase)
             && string.IsNullOrEmpty(originUri.UserInfo)

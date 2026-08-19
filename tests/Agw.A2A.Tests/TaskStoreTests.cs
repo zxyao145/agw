@@ -1,11 +1,8 @@
 using System.Text.Json;
-
 using A2A;
-
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Shared.Data.Entities.Projects;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -37,7 +34,8 @@ public class TaskStoreTests
             state: TaskState.Working,
             timestamp: new DateTimeOffset(2026, 4, 6, 0, 0, 0, TimeSpan.Zero),
             historyTexts: ["hello", "world"],
-            artifactTexts: ["artifact-1"]);
+            artifactTexts: ["artifact-1"]
+        );
 
         await store.SaveTaskAsync(taskId, task, cancellationToken);
 
@@ -57,7 +55,10 @@ public class TaskStoreTests
         var persistedContext = await dbContext.ProjectConversations.SingleAsync(cancellationToken);
         Assert.Equal(A2AProjectId, persistedContext.ProjectId);
         Assert.Equal("ctx-roundtrip", persistedContext.ContextId);
-        var persistedRecord = await dbContext.ProjectConversationChatHistories.SingleAsync(x => x.TaskId == Guid.Parse(taskId), cancellationToken);
+        var persistedRecord = await dbContext.ProjectConversationChatHistories.SingleAsync(
+            x => x.TaskId == Guid.Parse(taskId),
+            cancellationToken
+        );
         Assert.Equal(persistedContext.Id, persistedRecord.ConversationId);
         Assert.Equal(TaskExecutionStatus.Running, persistedRecord.Status);
     }
@@ -89,8 +90,10 @@ public class TaskStoreTests
                 state: TaskState.Working,
                 timestamp: new DateTimeOffset(2026, 4, 6, 0, 1, 0, TimeSpan.Zero),
                 historyTexts: ["one-a", "one-b"],
-                artifactTexts: ["artifact-a"]),
-            cancellationToken);
+                artifactTexts: ["artifact-a"]
+            ),
+            cancellationToken
+        );
 
         await store.SaveTaskAsync(
             secondTaskId,
@@ -100,8 +103,10 @@ public class TaskStoreTests
                 state: TaskState.Working,
                 timestamp: new DateTimeOffset(2026, 4, 6, 0, 2, 0, TimeSpan.Zero),
                 historyTexts: ["two-a", "two-b", "two-c"],
-                artifactTexts: ["artifact-b"]),
-            cancellationToken);
+                artifactTexts: ["artifact-b"]
+            ),
+            cancellationToken
+        );
 
         await store.SaveTaskAsync(
             thirdTaskId,
@@ -111,8 +116,10 @@ public class TaskStoreTests
                 state: TaskState.Completed,
                 timestamp: new DateTimeOffset(2026, 4, 6, 0, 3, 0, TimeSpan.Zero),
                 historyTexts: ["three-a"],
-                artifactTexts: ["artifact-c"]),
-            cancellationToken);
+                artifactTexts: ["artifact-c"]
+            ),
+            cancellationToken
+        );
 
         var firstPage = await store.ListTasksAsync(
             new ListTasksRequest
@@ -120,9 +127,10 @@ public class TaskStoreTests
                 Status = TaskState.Working,
                 PageSize = 1,
                 HistoryLength = 1,
-                IncludeArtifacts = false
+                IncludeArtifacts = false,
             },
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.Equal(2, firstPage.TotalSize);
         Assert.Equal(1, firstPage.PageSize);
@@ -140,9 +148,10 @@ public class TaskStoreTests
                 PageSize = 1,
                 PageToken = firstPage.NextPageToken,
                 HistoryLength = 1,
-                IncludeArtifacts = false
+                IncludeArtifacts = false,
             },
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.Equal(2, secondPage.TotalSize);
         Assert.Equal(1, secondPage.PageSize);
@@ -151,11 +160,9 @@ public class TaskStoreTests
         Assert.True(string.IsNullOrEmpty(secondPage.NextPageToken));
 
         var contextFiltered = await store.ListTasksAsync(
-            new ListTasksRequest
-            {
-                ContextId = "ctx-list-2"
-            },
-            cancellationToken);
+            new ListTasksRequest { ContextId = "ctx-list-2" },
+            cancellationToken
+        );
 
         Assert.Single(contextFiltered.Tasks);
         Assert.Equal(secondTaskId, contextFiltered.Tasks[0].Id);
@@ -171,14 +178,12 @@ public class TaskStoreTests
     }
 
     private static DbContextOptions<AgwDbContext> CreateOptions(SqliteConnection connection) =>
-        new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(connection)
-            .UseSnakeCaseNamingConvention()
-            .Options;
+        new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).UseSnakeCaseNamingConvention().Options;
 
     private static async Task EnsureCreatedAsync(
         DbContextOptions<AgwDbContext> options,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await using var setupContext = new AgwDbContext(options);
         await setupContext.Database.EnsureCreatedAsync(cancellationToken);
@@ -186,17 +191,20 @@ public class TaskStoreTests
 
     private static async Task SeedA2AProjectAsync(
         DbContextOptions<AgwDbContext> options,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await using var seedContext = new AgwDbContext(options);
-        seedContext.Projects.Add(new Project
-        {
-            Id = A2AProjectId,
-            Name = "a2a",
-            Type = ProjectType.UserDefined,
-            CreateBy = "tester",
-            CreateTime = TimeProvider.System.GetUtcNow()
-        });
+        seedContext.Projects.Add(
+            new Project
+            {
+                Id = A2AProjectId,
+                Name = "a2a",
+                Type = ProjectType.UserDefined,
+                CreateBy = "tester",
+                CreateTime = TimeProvider.System.GetUtcNow(),
+            }
+        );
 
         await seedContext.SaveChangesAsync(cancellationToken);
     }
@@ -206,7 +214,8 @@ public class TaskStoreTests
             new EfRepository<ProjectConversation>(dbContext),
             new EfRepository<ProjectConversationChatHistory>(dbContext),
             dbContext,
-            TimeProvider.System);
+            TimeProvider.System
+        );
 
     private static AgentTask CreateTask(
         string taskId,
@@ -214,27 +223,29 @@ public class TaskStoreTests
         TaskState state,
         DateTimeOffset timestamp,
         IReadOnlyList<string> historyTexts,
-        IReadOnlyList<string> artifactTexts)
+        IReadOnlyList<string> artifactTexts
+    )
     {
         var history = historyTexts
             .Select(
-                (text, index) => new Message
-                {
-                    Role = index == 0 ? Role.User : Role.Agent,
-                    MessageId = Guid.CreateVersion7().ToString("N"),
-                    ContextId = contextId,
-                    TaskId = taskId,
-                    Parts = [Part.FromText(text)]
-                })
+                (text, index) =>
+                    new Message
+                    {
+                        Role = index == 0 ? Role.User : Role.Agent,
+                        MessageId = Guid.CreateVersion7().ToString("N"),
+                        ContextId = contextId,
+                        TaskId = taskId,
+                        Parts = [Part.FromText(text)],
+                    }
+            )
             .ToList();
 
         var artifacts = artifactTexts
-            .Select(
-                text => new Artifact
-                {
-                    ArtifactId = Guid.CreateVersion7().ToString("N"),
-                    Parts = [Part.FromText(text)]
-                })
+            .Select(text => new Artifact
+            {
+                ArtifactId = Guid.CreateVersion7().ToString("N"),
+                Parts = [Part.FromText(text)],
+            })
             .ToList();
 
         return new AgentTask
@@ -251,15 +262,15 @@ public class TaskStoreTests
                     MessageId = Guid.CreateVersion7().ToString("N"),
                     ContextId = contextId,
                     TaskId = taskId,
-                    Parts = [Part.FromText($"status-{state}")]
-                }
+                    Parts = [Part.FromText($"status-{state}")],
+                },
             },
             History = history,
             Artifacts = artifacts,
             Metadata = new Dictionary<string, JsonElement>
             {
-                ["traceId"] = JsonDocument.Parse("\"trace-1\"").RootElement.Clone()
-            }
+                ["traceId"] = JsonDocument.Parse("\"trace-1\"").RootElement.Clone(),
+            },
         };
     }
 }

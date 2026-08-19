@@ -27,7 +27,8 @@ public class JobSchedulerWakeSignalTests
     public async Task NotifyCreated_NonUrgentJob_DoesNotReleaseWaiter(
         TriggerType triggerType,
         bool isEnabled,
-        JobStatus status)
+        JobStatus status
+    )
     {
         var signal = new JobSchedulerWakeSignal(new TestTimeProvider(UtcNow));
         using var cancellation = new CancellationTokenSource();
@@ -47,11 +48,9 @@ public class JobSchedulerWakeSignalTests
         using var cancellation = new CancellationTokenSource();
         var wait = signal.WaitAsync(cancellation.Token);
 
-        signal.NotifyCreated(CreateJob(
-            TriggerType.Once,
-            UtcNow.Add(JobSchedulingDefaults.PrefetchInterval),
-            true,
-            JobStatus.Pending));
+        signal.NotifyCreated(
+            CreateJob(TriggerType.Once, UtcNow.Add(JobSchedulingDefaults.PrefetchInterval), true, JobStatus.Pending)
+        );
 
         Assert.False(wait.IsCompleted);
         await cancellation.CancelAsync();
@@ -69,18 +68,14 @@ public class JobSchedulerWakeSignalTests
         await wait.WaitAsync(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
     }
 
-    private static Job CreateJob(
-        TriggerType triggerType,
-        DateTimeOffset nextRunTime,
-        bool isEnabled,
-        JobStatus status)
+    private static Job CreateJob(TriggerType triggerType, DateTimeOffset nextRunTime, bool isEnabled, JobStatus status)
     {
         return new Job
         {
             TriggerType = triggerType,
             NextRunTime = nextRunTime,
             IsEnabled = isEnabled,
-            Status = status
+            Status = status,
         };
     }
 }

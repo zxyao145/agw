@@ -1,8 +1,6 @@
 using System.Runtime.CompilerServices;
-
 using Agw.Agents.Execution.Agents.Tools;
 using Agw.Shared.Contracts.Agents;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -12,8 +10,7 @@ internal sealed class ToolInvocationWarningMiddleware
 {
     private readonly IReadOnlyDictionary<string, string> _warnings;
 
-    public ToolInvocationWarningMiddleware(
-        IReadOnlyDictionary<string, string> warnings)
+    public ToolInvocationWarningMiddleware(IReadOnlyDictionary<string, string> warnings)
     {
         _warnings = warnings;
     }
@@ -23,11 +20,10 @@ internal sealed class ToolInvocationWarningMiddleware
         AgentSession? session,
         AgentRunOptions? options,
         AIAgent innerAgent,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var response = await innerAgent
-            .RunAsync(messages, session, options, cancellationToken)
-            .ConfigureAwait(false);
+        var response = await innerAgent.RunAsync(messages, session, options, cancellationToken).ConfigureAwait(false);
         var rewrittenMessages = AddInvocationWarnings(response.Messages);
         if (rewrittenMessages.Count != response.Messages.Count)
         {
@@ -46,20 +42,20 @@ internal sealed class ToolInvocationWarningMiddleware
         AgentSession? session,
         AgentRunOptions? options,
         AIAgent innerAgent,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken
+    )
     {
         var callNames = new Dictionary<string, string>(StringComparer.Ordinal);
         var warnedCallIds = new HashSet<string>(StringComparer.Ordinal);
 
-        await foreach (var update in innerAgent
-                           .RunStreamingAsync(messages, session, options, cancellationToken)
-                           .ConfigureAwait(false))
+        await foreach (
+            var update in innerAgent
+                .RunStreamingAsync(messages, session, options, cancellationToken)
+                .ConfigureAwait(false)
+        )
         {
             RegisterFunctionCalls(update.Contents, callNames);
-            foreach (var warning in CreateWarnings(
-                         update.Contents,
-                         callNames,
-                         warnedCallIds))
+            foreach (var warning in CreateWarnings(update.Contents, callNames, warnedCallIds))
             {
                 yield return ToolStateSnapshots.ToUpdate(warning);
             }
@@ -68,8 +64,7 @@ internal sealed class ToolInvocationWarningMiddleware
         }
     }
 
-    private List<ChatMessage> AddInvocationWarnings(
-        IEnumerable<ChatMessage> messages)
+    private List<ChatMessage> AddInvocationWarnings(IEnumerable<ChatMessage> messages)
     {
         var callNames = new Dictionary<string, string>(StringComparer.Ordinal);
         var warnedCallIds = new HashSet<string>(StringComparer.Ordinal);
@@ -77,24 +72,18 @@ internal sealed class ToolInvocationWarningMiddleware
         foreach (var message in messages)
         {
             RegisterFunctionCalls(message.Contents, callNames);
-            result.AddRange(CreateWarnings(
-                message.Contents,
-                callNames,
-                warnedCallIds));
+            result.AddRange(CreateWarnings(message.Contents, callNames, warnedCallIds));
             result.Add(message);
         }
 
         return result;
     }
 
-    private static void RegisterFunctionCalls(
-        IEnumerable<AIContent> contents,
-        IDictionary<string, string> callNames)
+    private static void RegisterFunctionCalls(IEnumerable<AIContent> contents, IDictionary<string, string> callNames)
     {
         foreach (var call in contents.OfType<FunctionCallContent>())
         {
-            if (!string.IsNullOrWhiteSpace(call.CallId) &&
-                !string.IsNullOrWhiteSpace(call.Name))
+            if (!string.IsNullOrWhiteSpace(call.CallId) && !string.IsNullOrWhiteSpace(call.Name))
             {
                 callNames[call.CallId] = call.Name;
             }
@@ -104,20 +93,21 @@ internal sealed class ToolInvocationWarningMiddleware
     private IEnumerable<ChatMessage> CreateWarnings(
         IEnumerable<AIContent> contents,
         IReadOnlyDictionary<string, string> callNames,
-        ISet<string> warnedCallIds)
+        ISet<string> warnedCallIds
+    )
     {
         foreach (var result in contents.OfType<FunctionResultContent>())
         {
-            if (!warnedCallIds.Add(result.CallId) ||
-                !callNames.TryGetValue(result.CallId, out var toolName) ||
-                !_warnings.TryGetValue(toolName, out var warning))
+            if (
+                !warnedCallIds.Add(result.CallId)
+                || !callNames.TryGetValue(result.CallId, out var toolName)
+                || !_warnings.TryGetValue(toolName, out var warning)
+            )
             {
                 continue;
             }
 
-            yield return new ChatMessage(
-                ChatRole.System,
-                [new TextContent(warning)])
+            yield return new ChatMessage(ChatRole.System, [new TextContent(warning)])
             {
                 MessageId = Guid.CreateVersion7().ToString("N"),
                 AuthorName = "tools",
@@ -126,8 +116,8 @@ internal sealed class ToolInvocationWarningMiddleware
                     ["type"] = ToolMessageTypes.Warning,
                     ["toolName"] = toolName,
                     ["callId"] = result.CallId,
-                    ["persistSeparately"] = true
-                }
+                    ["persistSeparately"] = true,
+                },
             };
         }
     }

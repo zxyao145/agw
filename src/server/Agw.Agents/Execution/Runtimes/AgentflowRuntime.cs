@@ -19,7 +19,8 @@ public sealed class AgentflowRuntime : RuntimeBase
         Guid agentflowId,
         TaskProjection task,
         SettingCommand settings,
-        AgentflowRuntimeService runtimeService)
+        AgentflowRuntimeService runtimeService
+    )
     {
         _agentflowId = agentflowId;
         _task = task;
@@ -30,18 +31,21 @@ public sealed class AgentflowRuntime : RuntimeBase
     internal IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         ExecCommand command,
         IHumanGateApprovalHandler humanGateApprovalHandler,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken
+    ) =>
         ExecuteStreamingAsync(
             command,
             humanGateApprovalHandler,
             new PermissionModeState(_settings.PermissionMode),
-            cancellationToken);
+            cancellationToken
+        );
 
     internal IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         ExecCommand command,
         IHumanGateApprovalHandler humanGateApprovalHandler,
         PermissionModeState permissionState,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken
+    ) =>
         _runtimeService.ExecuteStreamingWithPermissionStateAsync(
             _agentflowId,
             command.Input,
@@ -55,17 +59,15 @@ public sealed class AgentflowRuntime : RuntimeBase
             permissionState,
             command.ExecutionId,
             _checkpointState,
-            command.ResumeCheckpoint);
+            command.ResumeCheckpoint
+        );
 
     internal IReadOnlySet<Guid> CheckpointOccurrenceIds => _checkpointState.OccurrenceIds;
 
-    internal bool TryGetCheckpoint(
-        Guid occurrenceId,
-        out AgentflowCheckpointSnapshot? checkpoint) =>
+    internal bool TryGetCheckpoint(Guid occurrenceId, out AgentflowCheckpointSnapshot? checkpoint) =>
         _checkpointState.TryGet(occurrenceId, out checkpoint);
 
-    internal void RemoveCheckpointsAfter(long boundarySequence) =>
-        _checkpointState.RemoveAfter(boundarySequence);
+    internal void RemoveCheckpointsAfter(long boundarySequence) => _checkpointState.RemoveAfter(boundarySequence);
 
     internal void SetPermissionMode(PermissionMode permissionMode)
     {

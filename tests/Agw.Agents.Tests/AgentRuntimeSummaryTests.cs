@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-
 using Agw.Agents.Execution;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Runtimes;
@@ -8,7 +7,6 @@ using Agw.Agents.Execution.Summaries;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Projects;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -34,7 +32,8 @@ public class AgentRuntimeSummaryTests
             sessionStateScope: null,
             enableSummary: true,
             summaryModelProviderId: modelProviderId,
-            summaryService: summaryService);
+            summaryService: summaryService
+        );
 
         var messages = await runtime.ExecuteAsync(
             new AgwUserInput
@@ -42,10 +41,11 @@ public class AgentRuntimeSummaryTests
                 Contents =
                 [
                     new AgwTextContent { Content = "user request" },
-                    new AgwUriContent(new Uri("https://example.com"), "text/html")
-                ]
+                    new AgwUriContent(new Uri("https://example.com"), "text/html"),
+                ],
             },
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(2, messages.Count);
         Assert.Equal("assistant response", Assert.IsType<AgwTextContent>(Assert.Single(messages[0].Contents)).Content);
@@ -75,12 +75,16 @@ public class AgentRuntimeSummaryTests
             sessionStateScope: null,
             enableSummary: true,
             summaryModelProviderId: Guid.CreateVersion7(),
-            summaryService: summaryService);
+            summaryService: summaryService
+        );
         var messages = new List<AgwMessage>();
 
-        await foreach (var message in runtime.ExecuteStreamingAsync(
-            new AgwUserInput { Contents = [new AgwTextContent { Content = "user request" }] },
-            TestContext.Current.CancellationToken))
+        await foreach (
+            var message in runtime.ExecuteStreamingAsync(
+                new AgwUserInput { Contents = [new AgwTextContent { Content = "user request" }] },
+                TestContext.Current.CancellationToken
+            )
+        )
         {
             messages.Add(message);
         }
@@ -106,13 +110,15 @@ public class AgentRuntimeSummaryTests
             sessionStateScope: null,
             enableSummary: true,
             summaryModelProviderId: Guid.CreateVersion7(),
-            summaryService: summaryService);
+            summaryService: summaryService
+        );
 
-        await foreach (var _ in runtime.ExecuteStreamingAsync(
-            new AgwUserInput { Contents = [new AgwTextContent { Content = "user request" }] },
-            TestContext.Current.CancellationToken))
-        {
-        }
+        await foreach (
+            var _ in runtime.ExecuteStreamingAsync(
+                new AgwUserInput { Contents = [new AgwTextContent { Content = "user request" }] },
+                TestContext.Current.CancellationToken
+            )
+        ) { }
 
         var call = Assert.Single(summaryService.Calls);
         Assert.Equal("assistant response", call.Messages.Single(message => message.Role == ChatRole.Assistant).Text);
@@ -133,11 +139,13 @@ public class AgentRuntimeSummaryTests
             sessionStateScope: null,
             enableSummary: false,
             summaryModelProviderId: Guid.CreateVersion7(),
-            summaryService: summaryService);
+            summaryService: summaryService
+        );
 
         var messages = await runtime.ExecuteAsync(
             new AgwUserInput { Contents = [new AgwTextContent { Content = "user request" }] },
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Single(messages);
         Assert.Empty(summaryService.Calls);
@@ -155,20 +163,16 @@ public class AgentRuntimeSummaryTests
             session,
             Guid.CreateVersion7(),
             "context-1",
-            sessionStateScope: null);
-        var summaryInput = new AgwUserInput
-        {
-            Contents = [new AgwTextContent { Content = "current input" }]
-        };
+            sessionStateScope: null
+        );
+        var summaryInput = new AgwUserInput { Contents = [new AgwTextContent { Content = "current input" }] };
 
         await runtime.ExecuteAsync(
-            [
-                new ChatMessage(ChatRole.Assistant, "previous plan"),
-                AgwMessageUtil.CreateUserChatMessage(summaryInput)
-            ],
+            [new ChatMessage(ChatRole.Assistant, "previous plan"), AgwMessageUtil.CreateUserChatMessage(summaryInput)],
             summaryInput,
             approvalHandler: null,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         var request = Assert.Single(chatClient.Requests);
         Assert.Equal(["previous plan", "current input"], request.Select(message => message.Text));
@@ -188,19 +192,24 @@ public class AgentRuntimeSummaryTests
             projectId,
             "context-1",
             sessionStateScope: null,
-            conversationHistoryWriter: historyWriter);
+            conversationHistoryWriter: historyWriter
+        );
 
         var messages = new List<AgwMessage>();
-        await foreach (var message in runtime.ExecuteStreamingAsync(
-            new AgwUserInput { Contents = [new AgwTextContent { Content = "user request" }] },
-            TestContext.Current.CancellationToken))
+        await foreach (
+            var message in runtime.ExecuteStreamingAsync(
+                new AgwUserInput { Contents = [new AgwTextContent { Content = "user request" }] },
+                TestContext.Current.CancellationToken
+            )
+        )
         {
             messages.Add(message);
         }
 
         Assert.DoesNotContain(
             messages,
-            message => IsMessageType(message.AdditionalProperties, ToolMessageTypes.TodoSnapshot));
+            message => IsMessageType(message.AdditionalProperties, ToolMessageTypes.TodoSnapshot)
+        );
         Assert.Empty(historyWriter.Calls);
     }
 
@@ -217,23 +226,22 @@ public class AgentRuntimeSummaryTests
             Guid.CreateVersion7(),
             "context-1",
             sessionStateScope: null,
-            conversationHistoryWriter: historyWriter);
+            conversationHistoryWriter: historyWriter
+        );
 
-        await foreach (var _ in runtime.ExecuteStreamingAsync(
-                           new AgwUserInput
-                           {
-                               Contents = [new AgwTextContent { Content = "user request" }]
-                           },
-                           TestContext.Current.CancellationToken))
+        await foreach (
+            var _ in runtime.ExecuteStreamingAsync(
+                new AgwUserInput { Contents = [new AgwTextContent { Content = "user request" }] },
+                TestContext.Current.CancellationToken
+            )
+        )
         {
             break;
         }
 
         var call = Assert.Single(historyWriter.Calls);
         var warning = Assert.Single(call.Messages);
-        Assert.Equal(
-            ToolMessageTypes.Warning,
-            warning.AdditionalProperties!["type"]?.ToString());
+        Assert.Equal(ToolMessageTypes.Warning, warning.AdditionalProperties!["type"]?.ToString());
     }
 
     [Theory]
@@ -249,28 +257,20 @@ public class AgentRuntimeSummaryTests
             session,
             Guid.CreateVersion7(),
             "context-1",
-            sessionStateScope: null);
+            sessionStateScope: null
+        );
         var approvalHandler = new RecordingApprovalHandler();
-        var input = new AgwUserInput
-        {
-            Contents = [new AgwTextContent { Content = "run both tools" }]
-        };
+        var input = new AgwUserInput { Contents = [new AgwTextContent { Content = "run both tools" }] };
 
         if (streaming)
         {
-            await foreach (var _ in runtime.ExecuteStreamingAsync(
-                               input,
-                               approvalHandler,
-                               TestContext.Current.CancellationToken))
-            {
-            }
+            await foreach (
+                var _ in runtime.ExecuteStreamingAsync(input, approvalHandler, TestContext.Current.CancellationToken)
+            ) { }
         }
         else
         {
-            await runtime.ExecuteAsync(
-                input,
-                approvalHandler,
-                TestContext.Current.CancellationToken);
+            await runtime.ExecuteAsync(input, approvalHandler, TestContext.Current.CancellationToken);
         }
 
         Assert.Equal(["approval-1", "approval-2"], approvalHandler.RequestIds);
@@ -281,14 +281,11 @@ public class AgentRuntimeSummaryTests
         new ChatClientAgent(chatClient, new ChatClientAgentOptions { Name = "test-agent" });
 
     private static AIAgent CreateTodoAgent(IChatClient chatClient) =>
-        new TodoAgent(
-            new ChatClientAgent(chatClient, new ChatClientAgentOptions { Name = "test-agent" }));
+        new TodoAgent(new ChatClientAgent(chatClient, new ChatClientAgentOptions { Name = "test-agent" }));
 
-    private static bool IsMessageType(
-        AdditionalPropertiesDictionary? properties,
-        string expectedType) =>
-        properties?.TryGetValue("type", out var type) == true &&
-        string.Equals(type?.ToString(), expectedType, StringComparison.Ordinal);
+    private static bool IsMessageType(AdditionalPropertiesDictionary? properties, string expectedType) =>
+        properties?.TryGetValue("type", out var type) == true
+        && string.Equals(type?.ToString(), expectedType, StringComparison.Ordinal);
 
     private sealed class RecordingSummaryService : IAgentTurnSummaryService
     {
@@ -300,14 +297,10 @@ public class AgentRuntimeSummaryTests
             Guid projectId,
             string contextId,
             string? customInstructions,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
-            Calls.Add(new Call(
-                modelProviderId,
-                sourceMessages,
-                projectId,
-                contextId,
-                customInstructions));
+            Calls.Add(new Call(modelProviderId, sourceMessages, projectId, contextId, customInstructions));
             return Task.FromResult(AgentTurnSummaryService.CreateResultMessage("turn summary"));
         }
     }
@@ -317,7 +310,8 @@ public class AgentRuntimeSummaryTests
         IReadOnlyList<ChatMessage> Messages,
         Guid ProjectId,
         string ContextId,
-        string? CustomInstructions);
+        string? CustomInstructions
+    );
 
     private sealed class RecordingConversationHistoryWriter : IConversationHistoryWriter
     {
@@ -327,62 +321,57 @@ public class AgentRuntimeSummaryTests
             Guid projectId,
             string contextId,
             IReadOnlyList<ChatMessage> messages,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Calls.Add(new HistoryCall(projectId, contextId, messages.ToList()));
             return Task.CompletedTask;
         }
     }
 
-    private sealed record HistoryCall(
-        Guid ProjectId,
-        string ContextId,
-        IReadOnlyList<ChatMessage> Messages);
+    private sealed record HistoryCall(Guid ProjectId, string ContextId, IReadOnlyList<ChatMessage> Messages);
 
     private sealed class TodoAgent : DelegatingAIAgent
     {
         private readonly TodoProvider _todoProvider = new();
 
         public TodoAgent(AIAgent innerAgent)
-            : base(innerAgent)
-        {
-        }
+            : base(innerAgent) { }
 
         public override object? GetService(Type serviceType, object? serviceKey = null) =>
-            base.GetService(serviceType, serviceKey) ??
-            _todoProvider.GetService(serviceType, serviceKey);
+            base.GetService(serviceType, serviceKey) ?? _todoProvider.GetService(serviceType, serviceKey);
     }
 
     private sealed class ToolMessageAgent : AIAgent
     {
-        protected override ValueTask<AgentSession> CreateSessionCoreAsync(
-            CancellationToken cancellationToken) =>
+        protected override ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken) =>
             ValueTask.FromResult<AgentSession>(new ToolMessageSession());
 
         protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
             AgentSession session,
             JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }));
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }));
 
         protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
             JsonElement sessionState,
             JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult<AgentSession>(new ToolMessageSession());
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult<AgentSession>(new ToolMessageSession());
 
         protected override Task<AgentResponse> RunCoreAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
-            CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            CancellationToken cancellationToken
+        ) => throw new NotSupportedException();
 
         protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
-            [EnumeratorCancellation] CancellationToken cancellationToken)
+            [EnumeratorCancellation] CancellationToken cancellationToken
+        )
         {
             yield return new AgentResponseUpdate(ChatRole.System, [new TextContent(string.Empty)])
             {
@@ -390,8 +379,8 @@ public class AgentRuntimeSummaryTests
                 AdditionalProperties = new AdditionalPropertiesDictionary
                 {
                     ["type"] = ToolMessageTypes.Warning,
-                    ["persistSeparately"] = true
-                }
+                    ["persistSeparately"] = true,
+                },
             };
             yield return new AgentResponseUpdate(ChatRole.Assistant, "not consumed");
             await Task.CompletedTask;
@@ -406,13 +395,13 @@ public class AgentRuntimeSummaryTests
 
         public ValueTask<HumanGateApprovalDecision> WaitForApprovalAsync(
             HumanGateApprovalRequest request,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             RequestIds.Add(request.RequestId);
-            return ValueTask.FromResult(new HumanGateApprovalDecision(
-                request.RequestId,
-                Approved: true,
-                ResponseText: null));
+            return ValueTask.FromResult(
+                new HumanGateApprovalDecision(request.RequestId, Approved: true, ResponseText: null)
+            );
         }
     }
 
@@ -420,27 +409,27 @@ public class AgentRuntimeSummaryTests
     {
         public int ReceivedApprovalResponses { get; private set; }
 
-        protected override ValueTask<AgentSession> CreateSessionCoreAsync(
-            CancellationToken cancellationToken) =>
+        protected override ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken) =>
             ValueTask.FromResult<AgentSession>(new MultipleApprovalSession());
 
         protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
             AgentSession session,
             JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }));
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }));
 
         protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
             JsonElement sessionState,
             JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult<AgentSession>(new MultipleApprovalSession());
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult<AgentSession>(new MultipleApprovalSession());
 
         protected override Task<AgentResponse> RunCoreAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             var contents = CreateResponseContents(messages);
             return Task.FromResult(new AgentResponse([new ChatMessage(ChatRole.Assistant, contents)]));
@@ -450,7 +439,8 @@ public class AgentRuntimeSummaryTests
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
-            [EnumeratorCancellation] CancellationToken cancellationToken)
+            [EnumeratorCancellation] CancellationToken cancellationToken
+        )
         {
             await Task.Yield();
             yield return new AgentResponseUpdate(ChatRole.Assistant, CreateResponseContents(messages));
@@ -464,20 +454,11 @@ public class AgentRuntimeSummaryTests
                 .Count();
             return ReceivedApprovalResponses > 0
                 ? [new TextContent("done")]
-                :
-                [
-                    CreateApproval("approval-1", "call-1"),
-                    CreateApproval("approval-2", "call-2")
-                ];
+                : [CreateApproval("approval-1", "call-1"), CreateApproval("approval-2", "call-2")];
         }
 
         private static ToolApprovalRequestContent CreateApproval(string requestId, string callId) =>
-            new(
-                requestId,
-                new FunctionCallContent(
-                    callId,
-                    "run_shell",
-                    new Dictionary<string, object?>()));
+            new(requestId, new FunctionCallContent(callId, "run_shell", new Dictionary<string, object?>()));
 
         private sealed class MultipleApprovalSession : AgentSession;
     }
@@ -486,9 +467,7 @@ public class AgentRuntimeSummaryTests
     {
         public List<List<ChatMessage>> Requests { get; } = [];
 
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
 
         public object? GetService(Type serviceType, object? serviceKey = null) =>
             serviceType.IsInstanceOfType(this) ? this : null;
@@ -496,7 +475,8 @@ public class AgentRuntimeSummaryTests
         public Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Requests.Add(messages.ToList());
             return Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, responseText)]));
@@ -505,7 +485,8 @@ public class AgentRuntimeSummaryTests
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+            [EnumeratorCancellation] CancellationToken cancellationToken = default
+        )
         {
             Requests.Add(messages.ToList());
             await Task.Yield();

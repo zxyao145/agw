@@ -8,9 +8,7 @@ using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
-
 using Medallion.Threading;
-
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -39,8 +37,10 @@ public class InfrastructureRegistrationTests
         var descriptor = services.Last(x => x.ServiceType == typeof(IProjectExecutionLock));
         Assert.Equal(typeof(ProjectExecutionLockRouter), descriptor.ImplementationType);
         Assert.Contains(services, x => x.ServiceType == typeof(InMemoryProjectExecutionLock));
-        Assert.Contains(services, x =>
-            x.ServiceType == typeof(Func<DistributedLockProvider, string, IDistributedLockProvider>));
+        Assert.Contains(
+            services,
+            x => x.ServiceType == typeof(Func<DistributedLockProvider, string, IDistributedLockProvider>)
+        );
         Assert.Contains(services, x => x.ServiceType == typeof(IConfigureOptions<DistributedLockSettings>));
     }
 
@@ -54,18 +54,28 @@ public class InfrastructureRegistrationTests
 
         services.AddInfrastructure(configuration);
 
-        Assert.Contains(services, descriptor =>
-            descriptor.ServiceType == typeof(EntityCreatorInterceptor)
-            && descriptor.Lifetime == ServiceLifetime.Scoped);
-        Assert.Contains(services, descriptor =>
-            descriptor.ServiceType == typeof(EntityModifierInterceptor)
-            && descriptor.Lifetime == ServiceLifetime.Scoped);
-        Assert.Contains(services, descriptor =>
-            descriptor.ServiceType == typeof(EntitySoftDeleteInterceptor)
-            && descriptor.Lifetime == ServiceLifetime.Scoped);
-        Assert.Contains(services, descriptor =>
-            descriptor.ServiceType == typeof(IUnitOfWork)
-            && descriptor.ImplementationFactory is not null);
+        Assert.Contains(
+            services,
+            descriptor =>
+                descriptor.ServiceType == typeof(EntityCreatorInterceptor)
+                && descriptor.Lifetime == ServiceLifetime.Scoped
+        );
+        Assert.Contains(
+            services,
+            descriptor =>
+                descriptor.ServiceType == typeof(EntityModifierInterceptor)
+                && descriptor.Lifetime == ServiceLifetime.Scoped
+        );
+        Assert.Contains(
+            services,
+            descriptor =>
+                descriptor.ServiceType == typeof(EntitySoftDeleteInterceptor)
+                && descriptor.Lifetime == ServiceLifetime.Scoped
+        );
+        Assert.Contains(
+            services,
+            descriptor => descriptor.ServiceType == typeof(IUnitOfWork) && descriptor.ImplementationFactory is not null
+        );
     }
 
     [Fact]
@@ -94,11 +104,13 @@ public class InfrastructureRegistrationTests
     public void AddInfrastructure_BindsDatabaseSettings()
     {
         var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Database:Provider"] = "postgres",
-                ["Database:ConnectionString"] = "Host=database"
-            })
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["Database:Provider"] = "postgres",
+                    ["Database:ConnectionString"] = "Host=database",
+                }
+            )
             .Build();
         var services = new ServiceCollection();
 
@@ -118,12 +130,14 @@ public class InfrastructureRegistrationTests
     public void AddInfrastructure_BindsDistributedLockSettings()
     {
         var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Database:Provider"] = "sqlite",
-                ["DistributedLock:Provider"] = "postgres",
-                ["DistributedLock:ConnectionString"] = "Host=locks"
-            })
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["Database:Provider"] = "sqlite",
+                    ["DistributedLock:Provider"] = "postgres",
+                    ["DistributedLock:ConnectionString"] = "Host=locks",
+                }
+            )
             .Build();
         var services = new ServiceCollection();
 
@@ -142,10 +156,7 @@ public class InfrastructureRegistrationTests
     public void AddInfrastructure_WhenDatabaseProviderIsUnsupported_ThrowsAgwException(string provider)
     {
         var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Database:Provider"] = provider
-            })
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Database:Provider"] = provider })
             .Build();
         var services = new ServiceCollection();
 
@@ -161,12 +172,14 @@ public class InfrastructureRegistrationTests
     public void AddInfrastructure_WhenDistributedLockProviderIsUnsupported_ThrowsAgwException(string provider)
     {
         var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Database:Provider"] = "postgres",
-                ["Database:ConnectionString"] = "Host=database",
-                ["DistributedLock:Provider"] = provider
-            })
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["Database:Provider"] = "postgres",
+                    ["Database:ConnectionString"] = "Host=database",
+                    ["DistributedLock:Provider"] = provider,
+                }
+            )
             .Build();
         var services = new ServiceCollection();
 

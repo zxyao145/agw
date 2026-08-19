@@ -1,10 +1,8 @@
 using System.IO.Compression;
 using System.Text;
 using System.Text.RegularExpressions;
-
 using Agw.Shared.Exceptions;
 using Agw.Skills.Application.Remote;
-
 using Microsoft.Agents.AI;
 
 namespace Agw.Skills.Infrastructure.Remote;
@@ -18,15 +16,18 @@ public sealed class RemoteSkillHttpClient : IRemoteSkillClient
     private const int MaxUrlLength = 2048;
     private static readonly UTF8Encoding StrictUtf8 = new(
         encoderShouldEmitUTF8Identifier: false,
-        throwOnInvalidBytes: true);
+        throwOnInvalidBytes: true
+    );
     private static readonly Regex FrontmatterRegex = new(
         "\\A\\uFEFF?^---\\s*$(.+?)^---\\s*$",
         RegexOptions.Multiline | RegexOptions.Singleline | RegexOptions.CultureInvariant,
-        TimeSpan.FromSeconds(5));
+        TimeSpan.FromSeconds(5)
+    );
     private static readonly Regex YamlKeyValueRegex = new(
         "^([\\w-]+)\\s*:\\s*(?:[\"'](.+?)[\"']|(.+?))\\s*$",
         RegexOptions.Multiline | RegexOptions.CultureInvariant,
-        TimeSpan.FromSeconds(5));
+        TimeSpan.FromSeconds(5)
+    );
     private readonly IHttpClientFactory _httpClientFactory;
 
     public RemoteSkillHttpClient(IHttpClientFactory httpClientFactory)
@@ -41,8 +42,10 @@ public sealed class RemoteSkillHttpClient : IRemoteSkillClient
             throw new AgwException(ErrorCodes.RemoteSkillUrlRequired);
         }
 
-        if (!Uri.TryCreate(remoteUrl.Trim(), UriKind.Absolute, out var uri) ||
-            (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        if (
+            !Uri.TryCreate(remoteUrl.Trim(), UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+        )
         {
             throw new AgwException(ErrorCodes.RemoteSkillUrlInvalid);
         }
@@ -56,9 +59,7 @@ public sealed class RemoteSkillHttpClient : IRemoteSkillClient
         return normalizedUrl;
     }
 
-    public async Task<RemoteSkillDefinition> FetchAsync(
-        string remoteUrl,
-        CancellationToken cancellationToken = default)
+    public async Task<RemoteSkillDefinition> FetchAsync(string remoteUrl, CancellationToken cancellationToken = default)
     {
         var normalizedUrl = NormalizeUrl(remoteUrl);
         try
@@ -68,20 +69,23 @@ public sealed class RemoteSkillHttpClient : IRemoteSkillClient
             using var response = await client.SendAsync(
                 request,
                 HttpCompletionOption.ResponseHeadersRead,
-                cancellationToken);
+                cancellationToken
+            );
 
             if (!response.IsSuccessStatusCode)
             {
                 throw new AgwException(
                     ErrorCodes.RemoteSkillFetchFailed,
-                    $"Remote skill request returned HTTP {(int)response.StatusCode}.");
+                    $"Remote skill request returned HTTP {(int)response.StatusCode}."
+                );
             }
 
             if (response.Content.Headers.ContentLength > MaxResponseBytes)
             {
                 throw new AgwException(
                     ErrorCodes.RemoteSkillResponseInvalid,
-                    $"Remote skill response exceeds {MaxResponseBytes} bytes.");
+                    $"Remote skill response exceeds {MaxResponseBytes} bytes."
+                );
             }
 
             var payload = await ReadResponseAsync(response.Content, cancellationToken);
@@ -99,19 +103,19 @@ public sealed class RemoteSkillHttpClient : IRemoteSkillClient
         {
             throw new AgwException(
                 ErrorCodes.RemoteSkillFetchFailed,
-                $"Remote skill request failed: {exception.Message}");
+                $"Remote skill request failed: {exception.Message}"
+            );
         }
         catch (IOException exception)
         {
             throw new AgwException(
                 ErrorCodes.RemoteSkillFetchFailed,
-                $"Remote skill response could not be read: {exception.Message}");
+                $"Remote skill response could not be read: {exception.Message}"
+            );
         }
     }
 
-    private static async Task<byte[]> ReadResponseAsync(
-        HttpContent content,
-        CancellationToken cancellationToken)
+    private static async Task<byte[]> ReadResponseAsync(HttpContent content, CancellationToken cancellationToken)
     {
         await using var stream = await content.ReadAsStreamAsync(cancellationToken);
         using var buffer = new MemoryStream();
@@ -128,40 +132,36 @@ public sealed class RemoteSkillHttpClient : IRemoteSkillClient
             {
                 throw new AgwException(
                     ErrorCodes.RemoteSkillResponseInvalid,
-                    $"Remote skill response exceeds {MaxResponseBytes} bytes.");
+                    $"Remote skill response exceeds {MaxResponseBytes} bytes."
+                );
             }
 
             buffer.Write(chunk, 0, count);
         }
     }
 
-    private static RemoteSkillDefinition ParseArchive(
-        byte[] payload,
-        CancellationToken cancellationToken)
+    private static RemoteSkillDefinition ParseArchive(byte[] payload, CancellationToken cancellationToken)
     {
         try
         {
             using var stream = new MemoryStream(payload, writable: false);
             using var archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
-            var skillEntries = archive.Entries
-                .Where(entry => TryNormalizeArchivePath(entry.FullName, out var path) &&
-                    !path.EndsWith('/') &&
-                    string.Equals(
-                        path[(path.LastIndexOf('/') + 1)..],
-                        "SKILL.md",
-                        StringComparison.Ordinal))
+            var skillEntries = archive
+                .Entries.Where(entry =>
+                    TryNormalizeArchivePath(entry.FullName, out var path)
+                    && !path.EndsWith('/')
+                    && string.Equals(path[(path.LastIndexOf('/') + 1)..], "SKILL.md", StringComparison.Ordinal)
+                )
                 .ToList();
             if (skillEntries.Count != 1)
             {
-                throw InvalidResponse(
-                    "Remote skill archive must contain exactly one SKILL.md file.");
+                throw InvalidResponse("Remote skill archive must contain exactly one SKILL.md file.");
             }
 
             var skillEntry = skillEntries[0];
             if (skillEntry.Length > MaxSkillMarkdownBytes)
             {
-                throw InvalidResponse(
-                    $"Remote SKILL.md exceeds {MaxSkillMarkdownBytes} bytes.");
+                throw InvalidResponse($"Remote SKILL.md exceeds {MaxSkillMarkdownBytes} bytes.");
             }
 
             using var entryStream = skillEntry.Open();
@@ -178,8 +178,7 @@ public sealed class RemoteSkillHttpClient : IRemoteSkillClient
 
                 if (contentStream.Length + count > MaxSkillMarkdownBytes)
                 {
-                    throw InvalidResponse(
-                        $"Remote SKILL.md exceeds {MaxSkillMarkdownBytes} bytes.");
+                    throw InvalidResponse($"Remote SKILL.md exceeds {MaxSkillMarkdownBytes} bytes.");
                 }
 
                 contentStream.Write(buffer, 0, count);
@@ -191,9 +190,8 @@ public sealed class RemoteSkillHttpClient : IRemoteSkillClient
         {
             throw;
         }
-        catch (Exception exception) when (exception is InvalidDataException
-            or DecoderFallbackException
-            or ArgumentException)
+        catch (Exception exception)
+            when (exception is InvalidDataException or DecoderFallbackException or ArgumentException)
         {
             throw InvalidResponse($"Remote skill archive is invalid: {exception.Message}");
         }
@@ -201,14 +199,11 @@ public sealed class RemoteSkillHttpClient : IRemoteSkillClient
 
     private static RemoteSkillDefinition ParseSkillMarkdown(string content)
     {
-        var normalized = content
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Replace('\r', '\n');
+        var normalized = content.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
         var frontmatterMatch = FrontmatterRegex.Match(normalized);
         if (!frontmatterMatch.Success)
         {
-            throw InvalidResponse(
-                "Remote SKILL.md must start with YAML frontmatter delimited by '---'.");
+            throw InvalidResponse("Remote SKILL.md must start with YAML frontmatter delimited by '---'.");
         }
 
         string? name = null;
@@ -231,12 +226,13 @@ public sealed class RemoteSkillHttpClient : IRemoteSkillClient
         }
 
         var instructions = normalized[(frontmatterMatch.Index + frontmatterMatch.Length)..].Trim();
-        if (string.IsNullOrWhiteSpace(name) ||
-            string.IsNullOrWhiteSpace(description) ||
-            string.IsNullOrWhiteSpace(instructions))
+        if (
+            string.IsNullOrWhiteSpace(name)
+            || string.IsNullOrWhiteSpace(description)
+            || string.IsNullOrWhiteSpace(instructions)
+        )
         {
-            throw InvalidResponse(
-                "Remote SKILL.md must contain name, description, and instruction content.");
+            throw InvalidResponse("Remote SKILL.md must contain name, description, and instruction content.");
         }
 
         try
@@ -245,15 +241,10 @@ public sealed class RemoteSkillHttpClient : IRemoteSkillClient
         }
         catch (ArgumentException exception)
         {
-            throw InvalidResponse(
-                $"Remote skill metadata is invalid: {exception.Message}");
+            throw InvalidResponse($"Remote skill metadata is invalid: {exception.Message}");
         }
 
-        return new RemoteSkillDefinition(
-            name.Trim(),
-            description.Trim(),
-            instructions,
-            []);
+        return new RemoteSkillDefinition(name.Trim(), description.Trim(), instructions, []);
     }
 
     private static string ParseYamlScalarValue(string yamlContent, Match fieldMatch)
@@ -298,28 +289,25 @@ public sealed class RemoteSkillHttpClient : IRemoteSkillClient
             .Where(line => line.Length > 0)
             .Min(line => line.TakeWhile(character => character is ' ' or '\t').Count());
         var unindented = lines
-            .Select(line => line.Length == 0
-                ? string.Empty
-                : line[Math.Min(commonIndent, line.Length)..])
+            .Select(line => line.Length == 0 ? string.Empty : line[Math.Min(commonIndent, line.Length)..])
             .ToArray();
-        var parsed = value[0] == '|'
-            ? string.Join("\n", unindented)
-            : string.Join(" ", unindented.Where(line => line.Length > 0));
+        var parsed =
+            value[0] == '|'
+                ? string.Join("\n", unindented)
+                : string.Join(" ", unindented.Where(line => line.Length > 0));
         return preserveTrailingNewline ? $"{parsed}\n" : parsed;
     }
 
     private static bool TryNormalizeArchivePath(string entryName, out string path)
     {
         path = entryName.Replace('\\', '/');
-        if (string.IsNullOrWhiteSpace(path) ||
-            path.StartsWith("__MACOSX/", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(path) || path.StartsWith("__MACOSX/", StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
 
         var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        if (path.StartsWith('/') ||
-            segments.Any(segment => segment is "." or ".."))
+        if (path.StartsWith('/') || segments.Any(segment => segment is "." or ".."))
         {
             throw InvalidResponse("Remote skill archive contains an invalid path.");
         }

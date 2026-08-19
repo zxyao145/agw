@@ -1,6 +1,5 @@
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -18,7 +17,8 @@ internal sealed class AgwWorkspaceProvider : AIContextProvider
         Agent agent,
         Project project,
         IEnumerable<IAgentInstructionsSource> sources,
-        ILogger? logger = null)
+        ILogger? logger = null
+    )
     {
         _agent = agent;
         _project = project;
@@ -38,15 +38,14 @@ internal sealed class AgwWorkspaceProvider : AIContextProvider
     /// <returns></returns>
     protected override async ValueTask<AIContext> ProvideAIContextAsync(
         InvokingContext context,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var instructions = new List<string>(_sources.Count);
         var sourceContext = new AgwInstructionsSourceContext(_agent, _project, context);
         foreach (var source in _sources)
         {
-            var value = await source
-                .GetInstructionsAsync(sourceContext, cancellationToken)
-                .ConfigureAwait(false);
+            var value = await source.GetInstructionsAsync(sourceContext, cancellationToken).ConfigureAwait(false);
             if (!string.IsNullOrWhiteSpace(value))
             {
                 instructions.Add(value.Trim());
@@ -57,10 +56,7 @@ internal sealed class AgwWorkspaceProvider : AIContextProvider
 
         return new AIContext
         {
-            Instructions = instructions.Count == 0
-                ? null
-                : string.Join(Environment.NewLine, instructions),
+            Instructions = instructions.Count == 0 ? null : string.Join(Environment.NewLine, instructions),
         };
     }
-
 }

@@ -133,6 +133,7 @@ Install the .NET 10 SDK, Node.js 24, and pnpm 11.7.0. Docker with Buildx is need
 ```bash
 git config core.hooksPath .githooks
 dotnet restore Agw.slnx
+dotnet tool restore
 
 cd src/clients
 pnpm install

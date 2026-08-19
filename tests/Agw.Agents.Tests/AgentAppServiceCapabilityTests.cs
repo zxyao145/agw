@@ -1,5 +1,4 @@
 using System.Linq.Expressions;
-
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Shared.Data.Entities.Agents;
@@ -15,10 +14,7 @@ public class AgentAppServiceCapabilityTests
     [Fact]
     public void CreateAiAgentRequest_DefaultMode_IsExecute()
     {
-        var request = new CreateAiAgentRequest
-        {
-            Agent = new Agent()
-        };
+        var request = new CreateAiAgentRequest { Agent = new Agent() };
 
         Assert.Equal("execute", request.DefaultMode);
     }
@@ -32,22 +28,35 @@ public class AgentAppServiceCapabilityTests
         var service = CreateService(
             mcpServers:
             [
-                new McpServer { Id = agentServerId, Name = "agent", Enabled = true },
-                new McpServer { Id = projectServerId, Name = "project", Enabled = true },
-                new McpServer { Id = disabledServerId, Name = "disabled", Enabled = false },
-            ]);
+                new McpServer
+                {
+                    Id = agentServerId,
+                    Name = "agent",
+                    Enabled = true,
+                },
+                new McpServer
+                {
+                    Id = projectServerId,
+                    Name = "project",
+                    Enabled = true,
+                },
+                new McpServer
+                {
+                    Id = disabledServerId,
+                    Name = "disabled",
+                    Enabled = false,
+                },
+            ]
+        );
 
-        var servers = await service.ListEnabledMcpToolServersAsync(new[]
-        {
-            agentServerId,
-            projectServerId,
-            agentServerId,
-            disabledServerId,
-        });
+        var servers = await service.ListEnabledMcpToolServersAsync(
+            new[] { agentServerId, projectServerId, agentServerId, disabledServerId }
+        );
 
         Assert.Equal(
             new[] { agentServerId, projectServerId }.OrderBy(id => id).ToArray(),
-            servers.Select(server => server.Id).OrderBy(id => id).ToArray());
+            servers.Select(server => server.Id).OrderBy(id => id).ToArray()
+        );
     }
 
     [Fact]
@@ -60,31 +69,31 @@ public class AgentAppServiceCapabilityTests
             [
                 new Skill { Id = agentSkillId, Name = "agent" },
                 new Skill { Id = projectSkillId, Name = "project" },
-            ]);
+            ]
+        );
 
-        var skills = await service.ListSkillsAsync(new[]
-        {
-            agentSkillId,
-            projectSkillId,
-            agentSkillId,
-        });
+        var skills = await service.ListSkillsAsync(new[] { agentSkillId, projectSkillId, agentSkillId });
 
         Assert.Equal(
             new[] { agentSkillId, projectSkillId }.OrderBy(id => id).ToArray(),
-            skills.Select(skill => skill.Id).OrderBy(id => id).ToArray());
+            skills.Select(skill => skill.Id).OrderBy(id => id).ToArray()
+        );
     }
 
     [Fact]
     public async Task ListEnabledMcpToolServersByAgentAsync_AgentCompatibilityWrapper_UsesAgentRelations()
     {
         var agentId = Guid.CreateVersion7();
-        var server = new McpServer { Id = Guid.CreateVersion7(), Name = "agent-mcp", Enabled = true };
+        var server = new McpServer
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "agent-mcp",
+            Enabled = true,
+        };
         var service = CreateService(
             mcpServers: [server],
-            agentMcpRelations:
-            [
-                new AgentMcpServerRelation { AgentId = agentId, McpToolServerId = server.Id },
-            ]);
+            agentMcpRelations: [new AgentMcpServerRelation { AgentId = agentId, McpToolServerId = server.Id }]
+        );
 
         var servers = await service.ListEnabledMcpToolServersByAgentAsync(agentId);
 
@@ -98,10 +107,8 @@ public class AgentAppServiceCapabilityTests
         var skill = new Skill { Id = Guid.CreateVersion7(), Name = "agent-skill" };
         var service = CreateService(
             skills: [skill],
-            agentSkillRelations:
-            [
-                new AgentSkillRelation { AgentId = agentId, SkillId = skill.Id },
-            ]);
+            agentSkillRelations: [new AgentSkillRelation { AgentId = agentId, SkillId = skill.Id }]
+        );
 
         var skills = await service.ListSkillsByAgentAsync(agentId);
 
@@ -112,7 +119,8 @@ public class AgentAppServiceCapabilityTests
         IEnumerable<McpServer>? mcpServers = null,
         IEnumerable<Skill>? skills = null,
         IEnumerable<AgentMcpServerRelation>? agentMcpRelations = null,
-        IEnumerable<AgentSkillRelation>? agentSkillRelations = null)
+        IEnumerable<AgentSkillRelation>? agentSkillRelations = null
+    )
     {
         return new AgentAppService(
             new TestRepository<Agent>(),
@@ -126,10 +134,12 @@ public class AgentAppServiceCapabilityTests
             new TestRepository<Skill>(skills),
             new TestRepository<AgentSkillRelation>(agentSkillRelations),
             new TestUnitOfWork(),
-            new AgentDomainService(TimeProvider.System));
+            new AgentDomainService(TimeProvider.System)
+        );
     }
 
-    private sealed class TestRepository<TEntity> : IRepository<TEntity> where TEntity : class
+    private sealed class TestRepository<TEntity> : IRepository<TEntity>
+        where TEntity : class
     {
         private readonly List<TEntity> _items;
 
@@ -144,12 +154,13 @@ public class AgentAppServiceCapabilityTests
 
         public Task<TEntity?> SingleOrDefaultAsync(
             Expression<Func<TEntity, bool>> predicate,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(_items.AsQueryable().SingleOrDefault(predicate));
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(_items.AsQueryable().SingleOrDefault(predicate));
 
         public Task<IReadOnlyList<TEntity>> ListAsync(
             Expression<Func<TEntity, bool>>? predicate = null,
-            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null)
+            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
+        )
         {
             IQueryable<TEntity> query = _items.AsQueryable();
             if (predicate != null)
@@ -168,8 +179,8 @@ public class AgentAppServiceCapabilityTests
         public Task<IReadOnlyList<TEntity>> ListAsync(
             Expression<Func<TEntity, bool>>? predicate,
             Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy,
-            params Expression<Func<TEntity, object>>[] includes) =>
-            ListAsync(predicate, orderBy);
+            params Expression<Func<TEntity, object>>[] includes
+        ) => ListAsync(predicate, orderBy);
 
         public Task AddAsync(TEntity entity)
         {
@@ -177,9 +188,7 @@ public class AgentAppServiceCapabilityTests
             return Task.CompletedTask;
         }
 
-        public void Update(TEntity entity)
-        {
-        }
+        public void Update(TEntity entity) { }
 
         public void Remove(TEntity entity) => _items.Remove(entity);
 
@@ -190,12 +199,8 @@ public class AgentAppServiceCapabilityTests
     {
         public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(0);
 
-        public Task<bool> SaveEntitiesAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
+        public Task<bool> SaveEntitiesAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
 
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
     }
-
 }

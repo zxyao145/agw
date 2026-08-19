@@ -43,7 +43,7 @@ public class ProjectContractTests
             typeof(IEnumerable<Guid>),
             typeof(IEnumerable<Guid>),
             typeof(IEnumerable<Guid>),
-            typeof(string)
+            typeof(string),
         };
         var updateParameterTypes = new[]
         {
@@ -52,7 +52,7 @@ public class ProjectContractTests
             typeof(IEnumerable<Guid>),
             typeof(IEnumerable<Guid>),
             typeof(IEnumerable<Guid>),
-            typeof(string)
+            typeof(string),
         };
 
         Assert.NotNull(typeof(ProjectAppService).GetMethod("CreateAsync", createParameterTypes));
@@ -76,10 +76,7 @@ public class ProjectContractTests
             Description = "Description",
             Workspace = "~/project-a",
             ExtraSetting = "{}",
-            Tools =
-            [
-                new ToolValue { Definition = new WebFetchToolDefinition() }
-            ],
+            Tools = [new ToolValue { Definition = new WebFetchToolDefinition() }],
             EnvironmentVariables = new Dictionary<string, string> { ["API_KEY"] = "secret" },
             CreateBy = "tester",
             CreateTime = new DateTimeOffset(2026, 7, 13, 1, 0, 0, TimeSpan.Zero),
@@ -87,16 +84,13 @@ public class ProjectContractTests
             UpdateTime = new DateTimeOffset(2026, 7, 13, 2, 0, 0, TimeSpan.Zero),
             ProjectMcpToolServers =
             [
-                new ProjectMcpServerRelation { ProjectId = projectId, McpToolServerId = mcpToolServerId }
+                new ProjectMcpServerRelation { ProjectId = projectId, McpToolServerId = mcpToolServerId },
             ],
-            ProjectSkillRelations =
-            [
-                new ProjectSkillRelation { ProjectId = projectId, SkillId = skillId }
-            ],
+            ProjectSkillRelations = [new ProjectSkillRelation { ProjectId = projectId, SkillId = skillId }],
             ProjectConnectionRelations =
             [
-                new ProjectConnectionRelation { ProjectId = projectId, ConnectionId = connectionId }
-            ]
+                new ProjectConnectionRelation { ProjectId = projectId, ConnectionId = connectionId },
+            ],
         };
 
         var response = ProjectResponse.FromDomain(project);

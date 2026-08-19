@@ -1,12 +1,11 @@
 using System.Linq.Expressions;
-
 using Agw.Shared.Data.Repositories;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Infrastructure.Repositories;
 
-public class EfRepository<TEntity> : IRepository<TEntity> where TEntity : class
+public class EfRepository<TEntity> : IRepository<TEntity>
+    where TEntity : class
 {
     protected readonly DbContext _dbContext;
     protected readonly DbSet<TEntity> _dbSet;
@@ -29,7 +28,10 @@ public class EfRepository<TEntity> : IRepository<TEntity> where TEntity : class
         return _dbSet.FindAsync(id).AsTask();
     }
 
-    public Task<TEntity?> SingleOrDefaultAsync(Expression<Func<TEntity, bool>> predicate, CancellationToken cancellationToken = default(CancellationToken))
+    public Task<TEntity?> SingleOrDefaultAsync(
+        Expression<Func<TEntity, bool>> predicate,
+        CancellationToken cancellationToken = default(CancellationToken)
+    )
     {
         return _dbSet.SingleOrDefaultAsync(predicate);
     }
@@ -37,7 +39,7 @@ public class EfRepository<TEntity> : IRepository<TEntity> where TEntity : class
     public async Task<IReadOnlyList<TEntity>> ListAsync(
         Expression<Func<TEntity, bool>>? predicate = null,
         Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
-        )
+    )
     {
         var query = BuildQuery(predicate, orderBy);
         return await query.AsNoTracking().ToListAsync();
@@ -47,7 +49,7 @@ public class EfRepository<TEntity> : IRepository<TEntity> where TEntity : class
         Expression<Func<TEntity, bool>>? predicate = null,
         Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
         params Expression<Func<TEntity, object>>[] includes
-        )
+    )
     {
         IQueryable<TEntity> query = _dbSet;
 
@@ -83,7 +85,8 @@ public class EfRepository<TEntity> : IRepository<TEntity> where TEntity : class
 
     private IQueryable<TEntity> BuildQuery(
         Expression<Func<TEntity, bool>>? predicate,
-        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy)
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy
+    )
     {
         return BuildQuery(_dbSet, predicate, orderBy);
     }
@@ -91,7 +94,8 @@ public class EfRepository<TEntity> : IRepository<TEntity> where TEntity : class
     private static IQueryable<TEntity> BuildQuery(
         IQueryable<TEntity> query,
         Expression<Func<TEntity, bool>>? predicate,
-        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy)
+        Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy
+    )
     {
         if (predicate != null)
         {

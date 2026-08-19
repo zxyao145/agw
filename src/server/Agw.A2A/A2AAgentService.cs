@@ -1,5 +1,4 @@
 using A2A;
-
 using Agw.Shared.Data.Entities.Agents;
 
 namespace Agw.A2A;
@@ -19,17 +18,14 @@ public class A2AAgentService
     public async Task<List<AgentCard>> ListAgentCardsAsync()
     {
         var agents = await _agentRepository.ListAsync();
-        var agentCards = agents
-            .Select(ConvertAgentToCard)
-            .ToList();
+        var agentCards = agents.Select(ConvertAgentToCard).ToList();
         return agentCards;
     }
 
     public async Task<AgentCard?> GetAgentCardAsync(string agentName)
     {
         // Try to parse as GUID first
-        Agent? agent = await _agentRepository
-                .SingleOrDefaultAsync(a => a.Name == agentName);
+        Agent? agent = await _agentRepository.SingleOrDefaultAsync(a => a.Name == agentName);
         if (agent == null)
         {
             return null;
@@ -45,16 +41,12 @@ public class A2AAgentService
         var card = new AgentCard
         {
             Name = agent.Name,
-            Description = string.IsNullOrWhiteSpace(agent.SystemPrompt)
-                        ? "An AI agent"
-                        : agent.SystemPrompt.Length > 200
-                            ? agent.SystemPrompt.Substring(0, 200) + "..."
-                            : agent.SystemPrompt,
+            Description =
+                string.IsNullOrWhiteSpace(agent.SystemPrompt) ? "An AI agent"
+                : agent.SystemPrompt.Length > 200 ? agent.SystemPrompt.Substring(0, 200) + "..."
+                : agent.SystemPrompt,
             Version = "1.0",
-            Capabilities = new AgentCapabilities
-            {
-                Streaming = true
-            }
+            Capabilities = new AgentCapabilities { Streaming = true },
         };
         return card;
     }

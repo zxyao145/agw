@@ -78,11 +78,12 @@ Run backend commands from the repository root:
 
 ```bash
 dotnet restore Agw.slnx
+dotnet tool restore
 dotnet build Agw.slnx
 dotnet run --project src/server/Agw.Host
 dotnet watch --project src/server/Agw.Host
 dotnet test Agw.slnx
-dotnet format Agw.slnx
+dotnet csharpier format
 ```
 
 The development backend listens on `http://localhost:30816` by default through `src/server/Agw.Host/Properties/launchSettings.json`.

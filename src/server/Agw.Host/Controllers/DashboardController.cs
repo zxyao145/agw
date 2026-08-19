@@ -4,9 +4,7 @@ using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Results;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -31,7 +29,8 @@ public class DashboardController : ControllerBase
         IRepository<AgentUsage> agentUsageRepository,
         IRepository<ProjectConversationChatHistory> chatHistoryRepository,
         IRepository<Agent> agentRepository,
-        IRepository<Agentflow> agentflowRepository)
+        IRepository<Agentflow> agentflowRepository
+    )
     {
         _jobRepository = jobRepository;
         _projectRepository = projectRepository;
@@ -55,7 +54,8 @@ public class DashboardController : ControllerBase
             await _agentflowRepository.Queryable.CountAsync(),
             await _agentUsageRepository.Queryable.SumAsync(usage => usage.InputTokenCount),
             await _agentUsageRepository.Queryable.SumAsync(usage => usage.OutputTokenCount),
-            await _agentUsageRepository.Queryable.SumAsync(usage => usage.TotalTokenCount));
+            await _agentUsageRepository.Queryable.SumAsync(usage => usage.TotalTokenCount)
+        );
 
         return ApiResult.Ok(stats);
     }
@@ -70,4 +70,5 @@ public record DashboardStatsResponse(
     int AgentflowCount,
     long UsageInputTokenCount,
     long UsageOutputTokenCount,
-    long UsageTotalTokenCount);
+    long UsageTotalTokenCount
+);

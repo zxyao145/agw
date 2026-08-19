@@ -1,9 +1,7 @@
 using System.Text.Json;
-
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Extensions;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -20,8 +18,9 @@ public sealed class AgentRunResponseUpdateExtensionsTests
                 new TextContent(" "),
                 new TextReasoningContent(string.Empty),
                 new TextReasoningContent("kept reasoning"),
-                new FunctionCallContent("call-1", "read_file", new Dictionary<string, object?>())
-            ]);
+                new FunctionCallContent("call-1", "read_file", new Dictionary<string, object?>()),
+            ]
+        );
 
         var result = message.ToAiMessage();
 
@@ -29,7 +28,9 @@ public sealed class AgentRunResponseUpdateExtensionsTests
         Assert.Collection(
             result.Contents,
             content => Assert.Equal("kept reasoning", Assert.IsType<AgwTextReasoningContent>(content).Content),
-            content => Assert.Equal("call-1", Assert.IsType<AgwFunctionCallContent>(content).AdditionalProperties!["callId"]));
+            content =>
+                Assert.Equal("call-1", Assert.IsType<AgwFunctionCallContent>(content).AdditionalProperties!["callId"])
+        );
     }
 
     [Fact]
@@ -40,8 +41,9 @@ public sealed class AgentRunResponseUpdateExtensionsTests
             [
                 new TextContent(string.Empty),
                 new TextReasoningContent(string.Empty),
-                new FunctionCallContent("call-1", "read_file", new Dictionary<string, object?>())
-            ]);
+                new FunctionCallContent("call-1", "read_file", new Dictionary<string, object?>()),
+            ]
+        );
 
         var result = update.ToAiMessage();
 
@@ -54,12 +56,8 @@ public sealed class AgentRunResponseUpdateExtensionsTests
     {
         var update = new AgentResponseUpdate(
             ChatRole.Assistant,
-            [
-                new TextContent("\n"),
-                new TextContent("  "),
-                new TextContent("\t"),
-                new TextReasoningContent("\n\t")
-            ]);
+            [new TextContent("\n"), new TextContent("  "), new TextContent("\t"), new TextReasoningContent("\n\t")]
+        );
 
         var result = update.ToAiMessage();
 
@@ -69,7 +67,8 @@ public sealed class AgentRunResponseUpdateExtensionsTests
             content => Assert.Equal("\n", Assert.IsType<AgwTextContent>(content).Content),
             content => Assert.Equal("  ", Assert.IsType<AgwTextContent>(content).Content),
             content => Assert.Equal("\t", Assert.IsType<AgwTextContent>(content).Content),
-            content => Assert.Equal("\n\t", Assert.IsType<AgwTextReasoningContent>(content).Content));
+            content => Assert.Equal("\n\t", Assert.IsType<AgwTextReasoningContent>(content).Content)
+        );
     }
 
     [Fact]
@@ -77,10 +76,7 @@ public sealed class AgentRunResponseUpdateExtensionsTests
     {
         var message = new ChatMessage(ChatRole.System, [new TextContent(string.Empty)])
         {
-            AdditionalProperties = new AdditionalPropertiesDictionary
-            {
-                ["type"] = ToolMessageTypes.TodoSnapshot
-            }
+            AdditionalProperties = new AdditionalPropertiesDictionary { ["type"] = ToolMessageTypes.TodoSnapshot },
         };
 
         var result = message.ToAiMessage();
@@ -94,7 +90,8 @@ public sealed class AgentRunResponseUpdateExtensionsTests
     {
         var message = new ChatMessage(
             ChatRole.Tool,
-            [new FunctionResultContent("call-1", "Mode changed to \"execute\".")]);
+            [new FunctionResultContent("call-1", "Mode changed to \"execute\".")]
+        );
 
         var result = message.ToAiMessage();
 
@@ -107,9 +104,8 @@ public sealed class AgentRunResponseUpdateExtensionsTests
     {
         var message = new ChatMessage(
             ChatRole.Tool,
-            [new FunctionResultContent(
-                "call-1",
-                JsonSerializer.SerializeToElement("Mode changed to \"plan\"."))]);
+            [new FunctionResultContent("call-1", JsonSerializer.SerializeToElement("Mode changed to \"plan\"."))]
+        );
 
         var result = message.ToAiMessage();
 
@@ -120,9 +116,7 @@ public sealed class AgentRunResponseUpdateExtensionsTests
     [Fact]
     public void ToAiMessage_StructuredFunctionResult_SerializesJson()
     {
-        var message = new ChatMessage(
-            ChatRole.Tool,
-            [new FunctionResultContent("call-1", new { mode = "execute" })]);
+        var message = new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call-1", new { mode = "execute" })]);
 
         var result = message.ToAiMessage();
 

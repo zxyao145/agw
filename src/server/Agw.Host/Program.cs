@@ -1,6 +1,5 @@
 using System.Net;
 using System.Reflection;
-
 using Agw.A2A;
 using Agw.A2A.Extensions;
 using Agw.Agents;
@@ -39,9 +38,7 @@ using Agw.Shared.Utils;
 using Agw.Skills;
 using Agw.Skills.Controllers;
 using Agw.Tools;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
@@ -50,14 +47,11 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
-
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
-
 using Scalar.AspNetCore;
-
 using Serilog;
 using Serilog.Enrichers.OpenTelemetry;
 
@@ -75,41 +69,54 @@ if (await Agw.Host.ServerCommand.TryRunAsync(args, dataPaths))
     return;
 }
 
-if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS"))
-    && !string.Equals(Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"), "true", StringComparison.OrdinalIgnoreCase))
+if (
+    string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS"))
+    && !string.Equals(
+        Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER"),
+        "true",
+        StringComparison.OrdinalIgnoreCase
+    )
+)
 {
     Environment.SetEnvironmentVariable("ASPNETCORE_URLS", LocalServerEndpointResolver.ResolveDefaultUrl());
 }
 
 // Configure Serilog early in the pipeline
 Log.Logger = new LoggerConfiguration()
-    .ReadFrom.Configuration(new ConfigurationBuilder()
-        .SetBasePath(contentRootPath)
-        .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-        .AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production"}.json", optional: true, reloadOnChange: true)
-        .Build())
+    .ReadFrom.Configuration(
+        new ConfigurationBuilder()
+            .SetBasePath(contentRootPath)
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+            .AddJsonFile(
+                $"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production"}.json",
+                optional: true,
+                reloadOnChange: true
+            )
+            .Build()
+    )
     .Enrich.FromLogContext()
     .Enrich.WithMachineName()
     .Enrich.WithThreadId()
     .Enrich.WithOpenTelemetryTraceId()
     .Enrich.WithOpenTelemetrySpanId()
-    .WriteTo.Async(sink => sink.File(
-        Path.Combine(dataPaths.LogsDirectory, "application-.log"),
-        rollingInterval: RollingInterval.Hour,
-        retainedFileCountLimit: 30,
-        shared: true,
-        flushToDiskInterval: TimeSpan.FromSeconds(1)))
+    .WriteTo.Async(sink =>
+        sink.File(
+            Path.Combine(dataPaths.LogsDirectory, "application-.log"),
+            rollingInterval: RollingInterval.Hour,
+            retainedFileCountLimit: 30,
+            shared: true,
+            flushToDiskInterval: TimeSpan.FromSeconds(1)
+        )
+    )
     .CreateLogger();
 
 try
 {
     Log.Information("Starting Agw Host");
 
-    var builder = WebApplication.CreateBuilder(new WebApplicationOptions
-    {
-        Args = args,
-        ContentRootPath = contentRootPath,
-    });
+    var builder = WebApplication.CreateBuilder(
+        new WebApplicationOptions { Args = args, ContentRootPath = contentRootPath }
+    );
 
     var configuredSetup = File.Exists(dataPaths.StateFile)
         ? ConfiguredSetupBootstrap.None
@@ -121,8 +128,8 @@ try
     builder.Configuration.AddJsonFile(dataPaths.StateFile, optional: true, reloadOnChange: true);
     builder.Services.AddSingleton(dataPaths);
     builder.Services.AddSingleton(TimeProvider.System);
-    builder.Services
-        .AddDataProtection()
+    builder
+        .Services.AddDataProtection()
         .ConfigureAgwApplication()
         .PersistKeysToFileSystem(new DirectoryInfo(dataPaths.KeysDirectory));
 
@@ -133,37 +140,41 @@ try
     var serviceName = builder.Configuration.GetValue<string>("OpenTelemetry:ServiceName") ?? "Agw";
     var serviceVersion = builder.Configuration.GetValue<string>("OpenTelemetry:ServiceVersion") ?? "1.0.0";
     var configuredOtlpEndpoint = builder.Configuration.GetValue<string>("OpenTelemetry:OtlpEndpoint");
-    var otlpEndpoint = new Uri(string.IsNullOrWhiteSpace(configuredOtlpEndpoint)
-        ? "http://localhost:4317"
-        : configuredOtlpEndpoint);
+    var otlpEndpoint = new Uri(
+        string.IsNullOrWhiteSpace(configuredOtlpEndpoint) ? "http://localhost:4317" : configuredOtlpEndpoint
+    );
 
-    builder.Services.AddOpenTelemetry()
-        .ConfigureResource(resource => resource
-            .AddService(serviceName: serviceName, serviceVersion: serviceVersion))
-        .WithTracing(tracing => tracing
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation()
-            .AddEntityFrameworkCoreInstrumentation(options =>
-            {
-                options.EnrichWithIDbCommand = (activity, command) =>
+    builder
+        .Services.AddOpenTelemetry()
+        .ConfigureResource(resource => resource.AddService(serviceName: serviceName, serviceVersion: serviceVersion))
+        .WithTracing(tracing =>
+            tracing
+                .AddAspNetCoreInstrumentation()
+                .AddHttpClientInstrumentation()
+                .AddEntityFrameworkCoreInstrumentation(options =>
                 {
-                    activity.SetTag("db.command.text", command.CommandText);
-                };
-            })
-            .AddSource("Agw.*")
-            .AddSource("Microsoft.Agents.AI.Workflows")
-            .AddOtlpExporter(options =>
-            {
-                options.Endpoint = otlpEndpoint;
-            }))
-        .WithMetrics(metrics => metrics
-            .AddAspNetCoreInstrumentation()
-            .AddHttpClientInstrumentation()
-            .AddMeter("Agw.*")
-            .AddOtlpExporter(options =>
-            {
-                options.Endpoint = otlpEndpoint;
-            }));
+                    options.EnrichWithIDbCommand = (activity, command) =>
+                    {
+                        activity.SetTag("db.command.text", command.CommandText);
+                    };
+                })
+                .AddSource("Agw.*")
+                .AddSource("Microsoft.Agents.AI.Workflows")
+                .AddOtlpExporter(options =>
+                {
+                    options.Endpoint = otlpEndpoint;
+                })
+        )
+        .WithMetrics(metrics =>
+            metrics
+                .AddAspNetCoreInstrumentation()
+                .AddHttpClientInstrumentation()
+                .AddMeter("Agw.*")
+                .AddOtlpExporter(options =>
+                {
+                    options.Endpoint = otlpEndpoint;
+                })
+        );
 
     builder.Logging.AddOpenTelemetry(logging =>
     {
@@ -175,11 +186,16 @@ try
         });
     });
 
-    builder.Services
-        .AddControllersWithViews()
+    builder
+        .Services.AddControllersWithViews()
         .AddJsonOptions(options =>
         {
-            options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+            options.JsonSerializerOptions.ReferenceHandler = System
+                .Text
+                .Json
+                .Serialization
+                .ReferenceHandler
+                .IgnoreCycles;
             options.JsonSerializerOptions.AllowOutOfOrderMetadataProperties = true;
         })
         .AddApplicationPart(typeof(AgentsController).Assembly)
@@ -189,86 +205,89 @@ try
         .AddApplicationPart(typeof(SetupController).Assembly)
         .AddApplicationPart(typeof(AuthController).Assembly)
         .AddApplicationPart(typeof(OAuthController).Assembly)
-        .AddApplicationPart(typeof(ToolsController).Assembly)
-        ;
+        .AddApplicationPart(typeof(ToolsController).Assembly);
     builder.Services.Configure<ApiBehaviorOptions>(options =>
     {
         options.InvalidModelStateResponseFactory = context =>
-            ApiResult.BadRequest(
-                context.ModelState,
-                code: ErrorCodes.InvalidParam.Code);
+            ApiResult.BadRequest(context.ModelState, code: ErrorCodes.InvalidParam.Code);
     });
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddOpenApi(options =>
     {
-        options.AddSchemaTransformer((schema, context, cancellationToken) =>
-        {
-            if (context.JsonTypeInfo.Type == typeof(int) ||
-                context.JsonTypeInfo.Type == typeof(int?))
+        options.AddSchemaTransformer(
+            (schema, context, cancellationToken) =>
             {
-                schema.Type = JsonSchemaType.Integer;
-                schema.Format = "int32";
-                schema.Pattern = null;
-            }
-
-            var type = context.JsonTypeInfo.Type;
-            if (type != typeof(ToolValueObject) &&
-                typeof(ToolValueObject).IsAssignableFrom(type))
-            {
-                schema.Required ??= new HashSet<string>();
-                schema.Required.Add("kind");
-            }
-
-            if ((type != typeof(ToolDefinition) &&
-                 typeof(ToolDefinition).IsAssignableFrom(type)) ||
-                (type != typeof(ToolBlockDefinition) &&
-                 typeof(ToolBlockDefinition).IsAssignableFrom(type)))
-            {
-                schema.Required ??= new HashSet<string>();
-                schema.Required.Add("name");
-            }
-
-            if (type == typeof(AgentUpdateRequest))
-            {
-                schema.Required?.Clear();
-                return Task.CompletedTask;
-            }
-
-            if (type.IsClass)
-            {
-                foreach (var property in context.JsonTypeInfo.Properties)
+                if (context.JsonTypeInfo.Type == typeof(int) || context.JsonTypeInfo.Type == typeof(int?))
                 {
-                    var propertyType = property.PropertyType;
+                    schema.Type = JsonSchemaType.Integer;
+                    schema.Format = "int32";
+                    schema.Pattern = null;
+                }
 
-                    // 非 nullable value type，例如 int、long、bool、DateTimeOffset
-                    if ((propertyType.IsValueType || propertyType == typeof(string)) &&
-                        Nullable.GetUnderlyingType(propertyType) is null)
+                var type = context.JsonTypeInfo.Type;
+                if (type != typeof(ToolValueObject) && typeof(ToolValueObject).IsAssignableFrom(type))
+                {
+                    schema.Required ??= new HashSet<string>();
+                    schema.Required.Add("kind");
+                }
+
+                if (
+                    (type != typeof(ToolDefinition) && typeof(ToolDefinition).IsAssignableFrom(type))
+                    || (type != typeof(ToolBlockDefinition) && typeof(ToolBlockDefinition).IsAssignableFrom(type))
+                )
+                {
+                    schema.Required ??= new HashSet<string>();
+                    schema.Required.Add("name");
+                }
+
+                if (type == typeof(AgentUpdateRequest))
+                {
+                    schema.Required?.Clear();
+                    return Task.CompletedTask;
+                }
+
+                if (type.IsClass)
+                {
+                    foreach (var property in context.JsonTypeInfo.Properties)
                     {
-                        var jsonName = property.Name;
+                        var propertyType = property.PropertyType;
 
-                        schema.Required ??= new HashSet<string>();
-                        schema.Required.Add(jsonName);
+                        // 非 nullable value type，例如 int、long、bool、DateTimeOffset
+                        if (
+                            (propertyType.IsValueType || propertyType == typeof(string))
+                            && Nullable.GetUnderlyingType(propertyType) is null
+                        )
+                        {
+                            var jsonName = property.Name;
+
+                            schema.Required ??= new HashSet<string>();
+                            schema.Required.Add(jsonName);
+                        }
                     }
                 }
+
+                return Task.CompletedTask;
             }
-
-
-            return Task.CompletedTask;
-        });
+        );
     });
     builder.Services.AddApiResult();
     builder.Services.AddHttpClient();
     builder.Services.AddSingleton<IocUtil>();
     builder.Services.AddCors(options =>
     {
-        options.AddPolicy("AgwDesktop", policy =>
-        {
-            policy.SetIsOriginAllowed(origin =>
-                LocalTrustedRequest.IsDesktopOrigin(origin, builder.Environment.IsDevelopment()))
-                .AllowAnyHeader()
-                .AllowAnyMethod()
-                .AllowCredentials();
-        });
+        options.AddPolicy(
+            "AgwDesktop",
+            policy =>
+            {
+                policy
+                    .SetIsOriginAllowed(origin =>
+                        LocalTrustedRequest.IsDesktopOrigin(origin, builder.Environment.IsDevelopment())
+                    )
+                    .AllowAnyHeader()
+                    .AllowAnyMethod()
+                    .AllowCredentials();
+            }
+        );
     });
     builder.Services.AddSignalR(options =>
     {
@@ -276,21 +295,21 @@ try
     });
     builder.Services.Configure<ForwardedHeadersOptions>(options =>
     {
-        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedHost | ForwardedHeaders.XForwardedProto;
+        options.ForwardedHeaders =
+            ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedHost | ForwardedHeaders.XForwardedProto;
         options.ForwardLimit = 1;
-        var configuredProxies = builder.Configuration
-            .GetSection("ReverseProxy:TrustedProxies")
-            .Get<string[]>() ?? [];
+        var configuredProxies = builder.Configuration.GetSection("ReverseProxy:TrustedProxies").Get<string[]>() ?? [];
         foreach (var configuredProxy in configuredProxies)
         {
-            if (IPAddress.TryParse(configuredProxy, out var address)) options.KnownProxies.Add(address);
+            if (IPAddress.TryParse(configuredProxy, out var address))
+                options.KnownProxies.Add(address);
         }
     });
     builder.Services.AddHealthChecks();
 
     // add module
-    builder.Services
-        .AddA2A(builder.Configuration)
+    builder
+        .Services.AddA2A(builder.Configuration)
         .AddTools(builder.Configuration)
         .AddAgents(builder.Configuration)
         .AddFiles(builder.Configuration)
@@ -301,12 +320,10 @@ try
         .AddProjects(builder.Configuration)
         .AddAuth()
         .AddSetup(builder.Configuration, configuredSetup)
-        .AddIntegrations(builder.Configuration)
-        ;
+        .AddIntegrations(builder.Configuration);
 
     // 数据库 AuditUserId 提供者
     builder.Services.AddScoped<IEntityAuditUserIdProvider, EntityAuditUserIdProvider>();
-
 
     builder.Services.AddHybridCache();
 
@@ -316,19 +333,19 @@ try
     var databaseConnectionString = DatabaseConnectionStringResolver.Resolve(
         databaseSettings.Provider,
         databaseSettings.ConnectionString,
-        dataPaths);
+        dataPaths
+    );
     Log.Debug(
         "Database connection string: {DatabaseConnectionString}",
-        DatabaseConnectionStringResolver.ToSafeLogValue(databaseConnectionString));
+        DatabaseConnectionStringResolver.ToSafeLogValue(databaseConnectionString)
+    );
     var iocUtil = app.Services.GetRequiredService<IocUtil>();
 
     // Apply configured first-run setup, or seed an already initialized database on startup.
     using (var scope = app.Services.CreateScope())
     {
-        var configuredSetupInitializer = scope.ServiceProvider
-            .GetRequiredService<ConfiguredSetupInitializer>();
-        var initializedFromConfiguration = await configuredSetupInitializer
-            .InitializeIfConfiguredAsync();
+        var configuredSetupInitializer = scope.ServiceProvider.GetRequiredService<ConfiguredSetupInitializer>();
+        var initializedFromConfiguration = await configuredSetupInitializer.InitializeIfConfiguredAsync();
         var initializationState = scope.ServiceProvider.GetRequiredService<IServerInitializationState>();
         if (initializationState.IsInitialized)
         {
@@ -338,8 +355,7 @@ try
                 await seeder.SeedAsync();
             }
 
-            var legacyApiTokenMigrator = scope.ServiceProvider
-                .GetRequiredService<LegacyApiTokenMigrator>();
+            var legacyApiTokenMigrator = scope.ServiceProvider.GetRequiredService<LegacyApiTokenMigrator>();
             await legacyApiTokenMigrator.MigrateAsync();
         }
     }
@@ -374,25 +390,32 @@ try
     app.UseMiddleware<AgwApiExceptionMiddleware>();
     app.UseMiddleware<FileEndpointExceptionMappingMiddleware>();
 
-    var a2AServerOptions = app.Services
-        .GetRequiredService<Microsoft.Extensions.Options.IOptions<AgwA2AServerOptions>>()
+    var a2AServerOptions = app
+        .Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<AgwA2AServerOptions>>()
         .Value;
     app.MapAgwA2A(a2AServerOptions.Prefix).RequireAuthorization();
     app.MapJobsApi();
     app.MapControllers();
-    app.MapHub<ExecutionHub>("/api/hubs/exec", options =>
-    {
-        options.Transports = HttpTransportType.WebSockets;
-    }).RequireAuthorization();
+    app.MapHub<ExecutionHub>(
+            "/api/hubs/exec",
+            options =>
+            {
+                options.Transports = HttpTransportType.WebSockets;
+            }
+        )
+        .RequireAuthorization();
     app.MapGet("/api/health/live", () => Results.Ok(new { status = "live" }));
-    app.MapGet("/api/health/ready", async (IServerInitializationState initializationState, AgwDbContext dbContext) =>
-    {
-        if (!initializationState.IsInitialized || !await dbContext.Database.CanConnectAsync())
+    app.MapGet(
+        "/api/health/ready",
+        async (IServerInitializationState initializationState, AgwDbContext dbContext) =>
         {
-            return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+            if (!initializationState.IsInitialized || !await dbContext.Database.CanConnectAsync())
+            {
+                return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+            }
+            return Results.Ok(new { status = "ready" });
         }
-        return Results.Ok(new { status = "ready" });
-    });
+    );
     app.MapFallbackToFile("404.html");
 
     var setupCodeService = app.Services.GetRequiredService<SetupCodeService>();
@@ -406,26 +429,29 @@ try
     await app.StartAsync();
     var server = app.Services.GetRequiredService<IServer>();
     var serverAddresses = server.Features.Get<IServerAddressesFeature>()?.Addresses ?? app.Urls;
-    var serverAddress = serverAddresses
-        .Select(address => Uri.TryCreate(address, UriKind.Absolute, out var uri) ? uri : null)
-        .FirstOrDefault(uri => uri is { Scheme: "http" or "https" })
+    var serverAddress =
+        serverAddresses
+            .Select(address => Uri.TryCreate(address, UriKind.Absolute, out var uri) ? uri : null)
+            .FirstOrDefault(uri => uri is { Scheme: "http" or "https" })
         ?? new Uri(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")!.Split(';')[0]);
-    var publicHost = serverAddress.Host is "0.0.0.0" or "[::]" or "::"
-        ? "127.0.0.1"
-        : serverAddress.Host;
+    var publicHost = serverAddress.Host is "0.0.0.0" or "[::]" or "::" ? "127.0.0.1" : serverAddress.Host;
     var publicUrl = new UriBuilder(serverAddress) { Host = publicHost }.Uri.GetLeftPart(UriPartial.Authority);
-    var serverVersion = Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
+    var serverVersion =
+        Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
         ?? Assembly.GetEntryAssembly()?.GetName().Version?.ToString()
         ?? "0.0.0-dev";
     var runtimeStore = new ServerRuntimeDescriptorStore(dataPaths);
-    await runtimeStore.WriteAsync(new ServerRuntimeDescriptor(
-        SchemaVersion: 1,
-        Pid: Environment.ProcessId,
-        BaseUrl: publicUrl,
-        Port: serverAddress.Port,
-        ServerVersion: serverVersion,
-        ApiMajorVersion: 1,
-        StartedAt: app.Services.GetRequiredService<TimeProvider>().GetUtcNow()));
+    await runtimeStore.WriteAsync(
+        new ServerRuntimeDescriptor(
+            SchemaVersion: 1,
+            Pid: Environment.ProcessId,
+            BaseUrl: publicUrl,
+            Port: serverAddress.Port,
+            ServerVersion: serverVersion,
+            ApiMajorVersion: 1,
+            StartedAt: app.Services.GetRequiredService<TimeProvider>().GetUtcNow()
+        )
+    );
 
     try
     {

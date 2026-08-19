@@ -10,5 +10,6 @@ public interface IAgentTurnSummaryService
         Guid projectId,
         string contextId,
         string? customInstructions,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default
+    );
 }

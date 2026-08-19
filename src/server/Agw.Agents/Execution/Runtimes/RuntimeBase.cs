@@ -32,7 +32,8 @@ public abstract class RuntimeBase : IAsyncDisposable
         Action interruptAction,
         Func<CancellationToken, Task> executeAsync,
         Func<HumanResponseCommand, CancellationToken, ValueTask<bool>>? submitHumanResponseAsync = null,
-        Func<PermissionMode, CancellationToken, ValueTask>? setPermissionModeAsync = null)
+        Func<PermissionMode, CancellationToken, ValueTask>? setPermissionModeAsync = null
+    )
     {
         var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var executionTask = RunAfterRegistrationAsync(
@@ -40,13 +41,15 @@ public abstract class RuntimeBase : IAsyncDisposable
             turnContext,
             turnContextAccessor,
             executeAsync,
-            executionCts.Token);
+            executionCts.Token
+        );
         var activeTurn = new ActiveTurn(
             executionTask,
             executionCts,
             interruptAction,
             submitHumanResponseAsync,
-            setPermissionModeAsync);
+            setPermissionModeAsync
+        );
         if (!TryStartTurn(activeTurn))
         {
             executionCts.Cancel();
@@ -89,9 +92,7 @@ public abstract class RuntimeBase : IAsyncDisposable
         }
     }
 
-    public bool TryScheduleAfterTurn(
-        string key,
-        Func<CancellationToken, Task> action)
+    public bool TryScheduleAfterTurn(string key, Func<CancellationToken, Task> action)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
         ArgumentNullException.ThrowIfNull(action);
@@ -115,18 +116,18 @@ public abstract class RuntimeBase : IAsyncDisposable
 
     public ValueTask<bool> TrySubmitHumanResponseAsync(
         HumanResponseCommand command,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        return ActiveTurn?.TrySubmitHumanResponseAsync(command, cancellationToken)
-            ?? ValueTask.FromResult(false);
+        return ActiveTurn?.TrySubmitHumanResponseAsync(command, cancellationToken) ?? ValueTask.FromResult(false);
     }
 
     public ValueTask<bool> TrySetActivePermissionModeAsync(
         PermissionMode permissionMode,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        return ActiveTurn?.TrySetPermissionModeAsync(permissionMode, cancellationToken)
-            ?? ValueTask.FromResult(false);
+        return ActiveTurn?.TrySetPermissionModeAsync(permissionMode, cancellationToken) ?? ValueTask.FromResult(false);
     }
 
     public virtual async ValueTask DisposeAsync()
@@ -153,9 +154,7 @@ public abstract class RuntimeBase : IAsyncDisposable
         {
             await turn.ExecutionTask;
         }
-        catch (Exception)
-        {
-        }
+        catch (Exception) { }
         finally
         {
             await turn.DisposeAsync();
@@ -189,9 +188,7 @@ public abstract class RuntimeBase : IAsyncDisposable
                     {
                         await action(CancellationToken.None);
                     }
-                    catch (Exception)
-                    {
-                    }
+                    catch (Exception) { }
                 }
             }
 
@@ -204,7 +201,8 @@ public abstract class RuntimeBase : IAsyncDisposable
         RuntimeTurnContext turnContext,
         RuntimeTurnContextAccessor turnContextAccessor,
         Func<CancellationToken, Task> executeAsync,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await registration;
         using var scope = turnContextAccessor.Push(turnContext);

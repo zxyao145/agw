@@ -18,5 +18,6 @@ public interface IConnectionCapabilityResolver
     Task<ConnectionCapabilityResolution> ResolveAsync(
         Guid projectId,
         IReadOnlyCollection<Guid> connectionIds,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken
+    );
 }

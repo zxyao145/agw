@@ -1,6 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
-
 using Agw.Agents.Execution.Commands.Abstracts;
 
 namespace Agw.Agents.Execution.Commands.Setting;
@@ -15,7 +14,8 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
         Guid projectId,
         Dictionary<string, string>? environmentVariables = null,
         string? contextId = null,
-        PermissionMode? permissionMode = null)
+        PermissionMode? permissionMode = null
+    )
     {
         ProjectId = projectId;
         ContextId = contextId;
@@ -51,9 +51,9 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
         }
 
         return left.ProjectId == right.ProjectId
-               && string.Equals(left.ContextId, right.ContextId, StringComparison.Ordinal)
-               && left.PermissionMode == right.PermissionMode
-               && EnvironmentVariablesEqual(left.EnvironmentVariables, right.EnvironmentVariables);
+            && string.Equals(left.ContextId, right.ContextId, StringComparison.Ordinal)
+            && left.PermissionMode == right.PermissionMode
+            && EnvironmentVariablesEqual(left.EnvironmentVariables, right.EnvironmentVariables);
     }
 
     public static bool operator !=(SettingCommand? left, SettingCommand? right) => !(left == right);
@@ -63,15 +63,12 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
     public override bool Equals(object? obj) => obj is SettingCommand other && Equals(other);
 
     public override int GetHashCode() =>
-        HashCode.Combine(
-            ProjectId,
-            ContextId,
-            PermissionMode,
-            GetEnvironmentVariablesHashCode(EnvironmentVariables));
+        HashCode.Combine(ProjectId, ContextId, PermissionMode, GetEnvironmentVariablesHashCode(EnvironmentVariables));
 
     private static bool EnvironmentVariablesEqual(
         IReadOnlyDictionary<string, string>? left,
-        IReadOnlyDictionary<string, string>? right)
+        IReadOnlyDictionary<string, string>? right
+    )
     {
         if (ReferenceEquals(left, right))
         {

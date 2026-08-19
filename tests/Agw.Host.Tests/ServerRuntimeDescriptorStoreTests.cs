@@ -1,8 +1,6 @@
 using System.Text.Json;
-
 using Agw.Host.Runtime;
 using Agw.Shared.Runtime;
-
 using Xunit;
 
 namespace Agw.Host.Tests;
@@ -28,12 +26,12 @@ public class ServerRuntimeDescriptorStoreTests
                     Port: 30815,
                     ServerVersion: "1.2.3",
                     ApiMajorVersion: 1,
-                    StartedAt: startedAt),
-                TestContext.Current.CancellationToken);
+                    StartedAt: startedAt
+                ),
+                TestContext.Current.CancellationToken
+            );
 
-            var json = await File.ReadAllTextAsync(
-                paths.ServerRuntimeFile,
-                TestContext.Current.CancellationToken);
+            var json = await File.ReadAllTextAsync(paths.ServerRuntimeFile, TestContext.Current.CancellationToken);
             using var document = JsonDocument.Parse(json);
             var rootElement = document.RootElement;
             Assert.Equal(1, rootElement.GetProperty("schemaVersion").GetInt32());
@@ -43,7 +41,8 @@ public class ServerRuntimeDescriptorStoreTests
         }
         finally
         {
-            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
         }
     }
 
@@ -58,8 +57,17 @@ public class ServerRuntimeDescriptorStoreTests
         try
         {
             await store.WriteAsync(
-                new ServerRuntimeDescriptor(1, 4321, "http://127.0.0.1:30815", 30815, "1.2.3", 1, new DateTimeOffset(2026, 7, 17, 1, 2, 3, TimeSpan.Zero)),
-                TestContext.Current.CancellationToken);
+                new ServerRuntimeDescriptor(
+                    1,
+                    4321,
+                    "http://127.0.0.1:30815",
+                    30815,
+                    "1.2.3",
+                    1,
+                    new DateTimeOffset(2026, 7, 17, 1, 2, 3, TimeSpan.Zero)
+                ),
+                TestContext.Current.CancellationToken
+            );
 
             await store.DeleteIfOwnedAsync(1234, TestContext.Current.CancellationToken);
 
@@ -67,7 +75,8 @@ public class ServerRuntimeDescriptorStoreTests
         }
         finally
         {
-            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
         }
     }
 
@@ -82,8 +91,17 @@ public class ServerRuntimeDescriptorStoreTests
         try
         {
             await store.WriteAsync(
-                new ServerRuntimeDescriptor(1, 1234, "http://127.0.0.1:30815", 30815, "1.2.3", 1, new DateTimeOffset(2026, 7, 17, 1, 2, 3, TimeSpan.Zero)),
-                TestContext.Current.CancellationToken);
+                new ServerRuntimeDescriptor(
+                    1,
+                    1234,
+                    "http://127.0.0.1:30815",
+                    30815,
+                    "1.2.3",
+                    1,
+                    new DateTimeOffset(2026, 7, 17, 1, 2, 3, TimeSpan.Zero)
+                ),
+                TestContext.Current.CancellationToken
+            );
 
             await store.DeleteIfOwnedAsync(1234, TestContext.Current.CancellationToken);
 
@@ -91,7 +109,8 @@ public class ServerRuntimeDescriptorStoreTests
         }
         finally
         {
-            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
         }
     }
 }

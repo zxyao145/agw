@@ -7,9 +7,7 @@ public sealed class McpToolMaterializer : IMcpToolMaterializer
     private readonly IMcpMaterializerFactory _factory;
 
     public McpToolMaterializer(IHttpClientFactory httpClientFactory)
-        : this(new DefaultMcpMaterializerFactory(httpClientFactory))
-    {
-    }
+        : this(new DefaultMcpMaterializerFactory(httpClientFactory)) { }
 
     internal McpToolMaterializer(IMcpMaterializerFactory factory)
     {
@@ -19,7 +17,8 @@ public sealed class McpToolMaterializer : IMcpToolMaterializer
     public async Task<ConnectionToolLease> MaterializeAsync(
         McpEndpointDescriptor descriptor,
         McpRuntimeOverrides? runtimeOverrides = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         if (descriptor == null)
         {
@@ -44,15 +43,14 @@ public sealed class McpToolMaterializer : IMcpToolMaterializer
         catch
         {
             await DisposePartialAsync(client, transport).ConfigureAwait(false);
-            throw new AgwException(
-                ErrorCodes.CannotCreateInstance,
-                "Failed to materialize MCP tools.");
+            throw new AgwException(ErrorCodes.CannotCreateInstance, "Failed to materialize MCP tools.");
         }
     }
 
     private static ResolvedMcpEndpoint ResolveEndpoint(
         McpEndpointDescriptor descriptor,
-        McpRuntimeOverrides? runtimeOverrides)
+        McpRuntimeOverrides? runtimeOverrides
+    )
     {
         return descriptor switch
         {
@@ -63,21 +61,24 @@ public sealed class McpToolMaterializer : IMcpToolMaterializer
                 http.Headers,
                 http.CredentialHeaders,
                 runtimeOverrides,
-                useSse: false),
+                useSse: false
+            ),
             McpSseEndpointDescriptor sse => ResolveHttpEndpoint(
                 sse.Name,
                 sse.Endpoint,
                 sse.Headers,
                 sse.CredentialHeaders,
                 runtimeOverrides,
-                useSse: true),
+                useSse: true
+            ),
             _ => throw new AgwException(ErrorCodes.UnsupportedTransportType),
         };
     }
 
     private static ResolvedMcpStdioEndpoint ResolveStdioEndpoint(
         McpStdioEndpointDescriptor descriptor,
-        McpRuntimeOverrides? runtimeOverrides)
+        McpRuntimeOverrides? runtimeOverrides
+    )
     {
         if (string.IsNullOrWhiteSpace(descriptor.Command))
         {
@@ -88,13 +89,15 @@ public sealed class McpToolMaterializer : IMcpToolMaterializer
             descriptor.EnvironmentVariables,
             runtimeOverrides?.EnvironmentVariables,
             descriptor.CredentialEnvironmentVariables,
-            StringComparer.OrdinalIgnoreCase);
+            StringComparer.OrdinalIgnoreCase
+        );
         return new ResolvedMcpStdioEndpoint(
             descriptor.Name,
             descriptor.Command,
             descriptor.Arguments,
             descriptor.WorkingDirectory,
-            environmentVariables);
+            environmentVariables
+        );
     }
 
     private static ResolvedMcpHttpEndpoint ResolveHttpEndpoint(
@@ -103,15 +106,15 @@ public sealed class McpToolMaterializer : IMcpToolMaterializer
         IReadOnlyDictionary<string, string> headers,
         IReadOnlyDictionary<string, string> credentialHeaders,
         McpRuntimeOverrides? runtimeOverrides,
-        bool useSse)
+        bool useSse
+    )
     {
         if (endpoint == null)
         {
             throw new AgwException(ErrorCodes.McpHttpUrlRequired);
         }
 
-        if (!endpoint.IsAbsoluteUri ||
-            (endpoint.Scheme != Uri.UriSchemeHttp && endpoint.Scheme != Uri.UriSchemeHttps))
+        if (!endpoint.IsAbsoluteUri || (endpoint.Scheme != Uri.UriSchemeHttp && endpoint.Scheme != Uri.UriSchemeHttps))
         {
             throw new AgwException(ErrorCodes.InvalidUrl);
         }
@@ -120,7 +123,8 @@ public sealed class McpToolMaterializer : IMcpToolMaterializer
             headers,
             runtimeOverrides?.Headers,
             credentialHeaders,
-            StringComparer.OrdinalIgnoreCase);
+            StringComparer.OrdinalIgnoreCase
+        );
         return new ResolvedMcpHttpEndpoint(name, endpoint, mergedHeaders, useSse);
     }
 
@@ -128,7 +132,8 @@ public sealed class McpToolMaterializer : IMcpToolMaterializer
         IReadOnlyDictionary<string, string> configuredValues,
         IReadOnlyDictionary<string, string>? runtimeValues,
         IReadOnlyDictionary<string, string> credentialValues,
-        StringComparer comparer)
+        StringComparer comparer
+    )
     {
         var merged = new Dictionary<string, string>(comparer);
         AddValues(merged, configuredValues);
@@ -140,7 +145,8 @@ public sealed class McpToolMaterializer : IMcpToolMaterializer
     private static void AddCredentialValues(
         IDictionary<string, string> destination,
         IReadOnlyDictionary<string, string> credentials,
-        StringComparer comparer)
+        StringComparer comparer
+    )
     {
         foreach (var (key, value) in credentials)
         {
@@ -154,9 +160,7 @@ public sealed class McpToolMaterializer : IMcpToolMaterializer
         }
     }
 
-    private static void AddValues(
-        IDictionary<string, string> destination,
-        IReadOnlyDictionary<string, string>? source)
+    private static void AddValues(IDictionary<string, string> destination, IReadOnlyDictionary<string, string>? source)
     {
         if (source == null)
         {
@@ -169,9 +173,7 @@ public sealed class McpToolMaterializer : IMcpToolMaterializer
         }
     }
 
-    private static async ValueTask DisposePartialAsync(
-        IMcpMaterializerClient? client,
-        IMcpInitialTransport? transport)
+    private static async ValueTask DisposePartialAsync(IMcpMaterializerClient? client, IMcpInitialTransport? transport)
     {
         if (client != null)
         {
@@ -179,9 +181,7 @@ public sealed class McpToolMaterializer : IMcpToolMaterializer
             {
                 await client.DisposeAsync().ConfigureAwait(false);
             }
-            catch
-            {
-            }
+            catch { }
         }
 
         if (transport != null)
@@ -190,9 +190,7 @@ public sealed class McpToolMaterializer : IMcpToolMaterializer
             {
                 await transport.DisposeAsync().ConfigureAwait(false);
             }
-            catch
-            {
-            }
+            catch { }
         }
     }
 }

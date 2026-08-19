@@ -74,9 +74,7 @@ public sealed class AgwDataPaths
     /// <returns>The canonical absolute paths for the Server data directories and files.</returns>
     public static AgwDataPaths Resolve(string? configuredRoot, string userHome)
     {
-        var root = string.IsNullOrWhiteSpace(configuredRoot)
-            ? Path.Combine(userHome, "agw")
-            : configuredRoot.Trim();
+        var root = string.IsNullOrWhiteSpace(configuredRoot) ? Path.Combine(userHome, "agw") : configuredRoot.Trim();
 
         return new AgwDataPaths(Path.GetFullPath(root));
     }
@@ -104,7 +102,7 @@ public sealed class AgwDataPaths
             LogsDirectory,
             TempDirectory,
             KeysDirectory,
-            RuntimeDirectory
+            RuntimeDirectory,
         };
         foreach (var directory in directories)
         {
@@ -113,7 +111,8 @@ public sealed class AgwDataPaths
             {
                 File.SetUnixFileMode(
                     directory,
-                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+                );
             }
         }
     }

@@ -1,11 +1,9 @@
 using System.Text.Json;
-
 using Agw.Files.Abstracts;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Tools;
 using Agw.Tools.ToolBlocks.Blocks.ProjectMemory;
-
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Tools.Tests;
@@ -19,23 +17,25 @@ public sealed class ProjectMemoryToolBlockTests
         var block = new ProjectMemoryToolBlock(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             TimeProvider.System,
-            new UnusedFileSystemResolver());
+            new UnusedFileSystemResolver()
+        );
 
         await using var contribution = await block.MaterializeAsync(
             new ProjectMemoryToolBlockDefinition(),
             CreateContext(Guid.Empty),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
-        var provider = Assert.IsType<ProjectMemoryProvider>(
-            Assert.Single(contribution.ContextProviders));
+        var provider = Assert.IsType<ProjectMemoryProvider>(Assert.Single(contribution.ContextProviders));
         Assert.Empty(provider.StateKeys);
         Assert.Equal(
             [
                 ProjectMemoryProvider.GrepToolName,
                 ProjectMemoryProvider.LsToolName,
-                ProjectMemoryProvider.ReadFileToolName
+                ProjectMemoryProvider.ReadFileToolName,
             ],
-            contribution.PlanModeAllowedToolNames.Order(StringComparer.Ordinal));
+            contribution.PlanModeAllowedToolNames.Order(StringComparer.Ordinal)
+        );
         Assert.Empty(contribution.Warnings);
     }
 
@@ -46,12 +46,14 @@ public sealed class ProjectMemoryToolBlockTests
         var block = new ProjectMemoryToolBlock(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
             TimeProvider.System,
-            new UnusedFileSystemResolver());
+            new UnusedFileSystemResolver()
+        );
 
         await using var contribution = await block.MaterializeAsync(
             new ProjectMemoryToolBlockDefinition(),
             CreateContext(Guid.CreateVersion7()),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Single(contribution.ContextProviders);
         Assert.Empty(contribution.Warnings);
@@ -60,25 +62,22 @@ public sealed class ProjectMemoryToolBlockTests
     [Fact]
     public void Deserialize_MissingOptions_Throws()
     {
-        Assert.Throws<JsonException>(() => ToolValueObjectJson.Deserialize(
-            """[{"kind":"toolBlock","definition":{"name":"project-memory"}}]"""));
+        Assert.Throws<JsonException>(() =>
+            ToolValueObjectJson.Deserialize("""[{"kind":"toolBlock","definition":{"name":"project-memory"}}]""")
+        );
     }
 
     [Fact]
     public void Serialize_FileSystemStorage_UsesStableJsonValue()
     {
-        var json = ToolValueObjectJson.Serialize(
-        [
+        var json = ToolValueObjectJson.Serialize([
             new ToolBlockValue
             {
                 Definition = new ProjectMemoryToolBlockDefinition
                 {
-                    Options = new ProjectMemoryToolBlockOptions
-                    {
-                        Storage = ProjectMemoryStorage.FileSystem
-                    }
-                }
-            }
+                    Options = new ProjectMemoryToolBlockOptions { Storage = ProjectMemoryStorage.FileSystem },
+                },
+            },
         ]);
         using var document = JsonDocument.Parse(json);
         var value = Assert.Single(document.RootElement.EnumerateArray());
@@ -86,9 +85,7 @@ public sealed class ProjectMemoryToolBlockTests
 
         Assert.Equal("toolBlock", value.GetProperty("kind").GetString());
         Assert.Equal("project-memory", definition.GetProperty("name").GetString());
-        Assert.Equal(
-            "filesystem",
-            definition.GetProperty("options").GetProperty("storage").GetString());
+        Assert.Equal("filesystem", definition.GetProperty("options").GetProperty("storage").GetString());
     }
 
     [Fact]
@@ -103,25 +100,19 @@ public sealed class ProjectMemoryToolBlockTests
         var first = CreateContext(Guid.CreateVersion7(), "/shared/workspace");
         var second = CreateContext(Guid.CreateVersion7(), "/shared/workspace");
 
-        var firstResource = ProjectMemoryToolBlock.GetMutationResourceName(
-            first,
-            ProjectMemoryStorage.FileSystem);
-        var secondResource = ProjectMemoryToolBlock.GetMutationResourceName(
-            second,
-            ProjectMemoryStorage.FileSystem);
+        var firstResource = ProjectMemoryToolBlock.GetMutationResourceName(first, ProjectMemoryStorage.FileSystem);
+        var secondResource = ProjectMemoryToolBlock.GetMutationResourceName(second, ProjectMemoryStorage.FileSystem);
 
         Assert.Equal(firstResource, secondResource);
     }
 
-    private static ToolMaterializationContext CreateContext(
-        Guid conversationId,
-        string workspace = "/workspace")
+    private static ToolMaterializationContext CreateContext(Guid conversationId, string workspace = "/workspace")
     {
         var project = new Project
         {
             Id = Guid.CreateVersion7(),
             Name = $"project-{Guid.CreateVersion7():N}",
-            Workspace = workspace
+            Workspace = workspace,
         };
         return new ToolMaterializationContext
         {
@@ -129,7 +120,7 @@ public sealed class ProjectMemoryToolBlockTests
             Project = project,
             ConversationId = conversationId,
             Workspace = project.Workspace,
-            DefaultMode = "plan"
+            DefaultMode = "plan",
         };
     }
 

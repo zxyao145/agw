@@ -25,13 +25,15 @@ public class BuiltInPluginCatalogTests
         Assert.NotEmpty(plugins);
         Assert.Equal(
             plugins.Count,
-            plugins.Select(plugin => plugin.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+            plugins.Select(plugin => plugin.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count()
+        );
 
         foreach (var plugin in plugins)
         {
             Assert.Equal(
                 plugin.Connectors.Count,
-                plugin.Connectors.Select(connector => connector.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+                plugin.Connectors.Select(connector => connector.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count()
+            );
         }
     }
 
@@ -43,7 +45,9 @@ public class BuiltInPluginCatalogTests
         var plugin = Assert.IsType<PluginDefinition>(catalog.Find("github"));
         var connector = Assert.Single(plugin.Connectors);
         var authScheme = Assert.Single(connector.AuthSchemes);
-        var capabilitySource = Assert.IsType<NativeCapabilitySourceDefinition>(Assert.Single(connector.CapabilitySources));
+        var capabilitySource = Assert.IsType<NativeCapabilitySourceDefinition>(
+            Assert.Single(connector.CapabilitySources)
+        );
 
         Assert.Equal("github", plugin.Id);
         Assert.Equal("github-cloud", connector.Id);
@@ -61,7 +65,10 @@ public class BuiltInPluginCatalogTests
         Assert.False(oauth.SupportsRefresh);
         Assert.Contains("repo", oauth.Scopes);
         Assert.Contains("client-secret", authScheme.InstallationFields.Select(field => field.Id));
-        Assert.Equal(FormFieldType.Secret, authScheme.InstallationFields.Single(field => field.Id == "client-secret").Type);
+        Assert.Equal(
+            FormFieldType.Secret,
+            authScheme.InstallationFields.Single(field => field.Id == "client-secret").Type
+        );
         Assert.Equal("github", capabilitySource.Provider);
     }
 
@@ -75,11 +82,7 @@ public class BuiltInPluginCatalogTests
             DisplayName = "Multi Service",
             Connectors =
             [
-                new ConnectorDefinition
-                {
-                    Id = "primary",
-                    DisplayName = "Primary",
-                },
+                new ConnectorDefinition { Id = "primary", DisplayName = "Primary" },
                 new ConnectorDefinition
                 {
                     Id = "secondary",
@@ -115,10 +118,7 @@ public class BuiltInPluginCatalogTests
                         new McpCapabilitySourceDefinition
                         {
                             Id = "remote-mcp",
-                            Transport = new HttpMcpTransportDefinition
-                            {
-                                Endpoint = "https://example.test/mcp",
-                            },
+                            Transport = new HttpMcpTransportDefinition { Endpoint = "https://example.test/mcp" },
                             CredentialBindings =
                             [
                                 new CredentialBindingDefinition
@@ -149,11 +149,7 @@ public class BuiltInPluginCatalogTests
         var source = new McpCapabilitySourceDefinition
         {
             Id = "local-mcp",
-            Transport = new StdioMcpTransportDefinition
-            {
-                Command = "mcp-server",
-                Arguments = ["--stdio"],
-            },
+            Transport = new StdioMcpTransportDefinition { Command = "mcp-server", Arguments = ["--stdio"] },
         };
 
         var transport = Assert.IsType<StdioMcpTransportDefinition>(source.Transport);
@@ -173,7 +169,10 @@ public class BuiltInPluginCatalogTests
         foreach (var skill in skills)
         {
             Assert.False(Path.IsPathRooted(skill.ContentPath));
-            Assert.DoesNotContain("..", skill.ContentPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            Assert.DoesNotContain(
+                "..",
+                skill.ContentPath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            );
 
             var fullPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, skill.ContentPath));
             Assert.StartsWith(Path.GetFullPath(AppContext.BaseDirectory), fullPath, StringComparison.Ordinal);

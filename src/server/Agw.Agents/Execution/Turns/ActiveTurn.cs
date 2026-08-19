@@ -19,11 +19,13 @@ public sealed class ActiveTurn : IAsyncDisposable
         CancellationTokenSource cancellationTokenSource,
         Action? interruptAction = null,
         Func<HumanResponseCommand, CancellationToken, ValueTask<bool>>? submitHumanResponseAsync = null,
-        Func<PermissionMode, CancellationToken, ValueTask>? setPermissionModeAsync = null)
+        Func<PermissionMode, CancellationToken, ValueTask>? setPermissionModeAsync = null
+    )
     {
-        ExecutionTask = executionTask
-            ?? throw new AgwException(ErrorCodes.InvalidParam, "executionTask cannot be null.");
-        _cancellationTokenSource = cancellationTokenSource
+        ExecutionTask =
+            executionTask ?? throw new AgwException(ErrorCodes.InvalidParam, "executionTask cannot be null.");
+        _cancellationTokenSource =
+            cancellationTokenSource
             ?? throw new AgwException(ErrorCodes.InvalidParam, "cancellationTokenSource cannot be null.");
         _interruptAction = interruptAction;
         _submitHumanResponseAsync = submitHumanResponseAsync;
@@ -49,14 +51,16 @@ public sealed class ActiveTurn : IAsyncDisposable
 
     public ValueTask<bool> TrySubmitHumanResponseAsync(
         HumanResponseCommand command,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         return _submitHumanResponseAsync?.Invoke(command, cancellationToken) ?? ValueTask.FromResult(false);
     }
 
     public async ValueTask<bool> TrySetPermissionModeAsync(
         PermissionMode permissionMode,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (_setPermissionModeAsync == null)
         {
@@ -74,9 +78,7 @@ public sealed class ActiveTurn : IAsyncDisposable
         {
             await ExecutionTask;
         }
-        catch (Exception)
-        {
-        }
+        catch (Exception) { }
 
         _cancellationTokenSource.Dispose();
     }

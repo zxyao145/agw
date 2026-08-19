@@ -136,6 +136,7 @@ Agw Desktop 在 `src/clients/desktop/` 下拥有独立的 Electron main/preload 
 ```bash
 git config core.hooksPath .githooks
 dotnet restore Agw.slnx
+dotnet tool restore
 
 cd src/clients
 pnpm install

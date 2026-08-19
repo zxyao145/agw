@@ -5,9 +5,7 @@ namespace Agw.Jobs.Scheduling.Attempts;
 /// </summary>
 public abstract record JobAttemptResult
 {
-    private JobAttemptResult()
-    {
-    }
+    private JobAttemptResult() { }
 
     /// <summary>
     /// Enqueues the supplied job snapshot for its next attempt.

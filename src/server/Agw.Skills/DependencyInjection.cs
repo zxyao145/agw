@@ -2,7 +2,6 @@ using Agw.Domain.Services.Skills;
 using Agw.Skills.Application;
 using Agw.Skills.Application.Remote;
 using Agw.Skills.Infrastructure.Remote;
-
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -18,7 +17,8 @@ public static class DependencyInjection
         services.AddSingleton<IRemoteSkillContentResolver, RemoteSkillContentResolver>();
         services.AddHttpClient(
             RemoteSkillHttpClient.HttpClientName,
-            client => client.Timeout = TimeSpan.FromSeconds(10));
+            client => client.Timeout = TimeSpan.FromSeconds(10)
+        );
 
         return services;
     }

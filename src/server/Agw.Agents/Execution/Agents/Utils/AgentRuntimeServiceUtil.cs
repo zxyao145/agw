@@ -3,7 +3,8 @@ namespace Agw.Agents.Execution.Agents.Utils;
 public static class AgentRuntimeServiceUtil
 {
     public static IReadOnlyDictionary<string, string> MergeEnvironmentVariables(
-        params IReadOnlyDictionary<string, string>?[] variableLayers)
+        params IReadOnlyDictionary<string, string>?[] variableLayers
+    )
     {
         var merged = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var variables in variableLayers)
@@ -31,5 +32,4 @@ public static class AgentRuntimeServiceUtil
 
         return systemPrompt;
     }
-
 }

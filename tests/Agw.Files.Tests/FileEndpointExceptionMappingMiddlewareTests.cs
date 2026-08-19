@@ -1,7 +1,5 @@
 using System.Text.Json;
-
 using Agw.Files.Api;
-
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -52,7 +50,8 @@ public class FileEndpointExceptionMappingMiddlewareTests
     {
         return new FileEndpointExceptionMappingMiddleware(
             next,
-            NullLogger<FileEndpointExceptionMappingMiddleware>.Instance);
+            NullLogger<FileEndpointExceptionMappingMiddleware>.Instance
+        );
     }
 
     private static DefaultHttpContext CreateHttpContext(string path, string? queryString)

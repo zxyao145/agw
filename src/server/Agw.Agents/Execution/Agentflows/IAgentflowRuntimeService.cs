@@ -1,6 +1,5 @@
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Shared.AgwMsgVm;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution.Agentflows;
@@ -17,7 +16,8 @@ public interface IAgentflowRuntimeService
         IHumanGateApprovalHandler? humanGateApprovalHandler = null,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         Guid? conversationId = null,
-        PermissionMode? permissionMode = null);
+        PermissionMode? permissionMode = null
+    );
 
     Task<AgentflowExecutionResult?> ExecuteAsync(
         Guid agentflowId,
@@ -25,7 +25,8 @@ public interface IAgentflowRuntimeService
         string input,
         CancellationToken cancellationToken = default,
         Guid? projectId = null,
-        string? contextId = null);
+        string? contextId = null
+    );
 
     Task<AgentflowExecutionResult?> ExecuteAsync(
         Guid agentflowId,
@@ -33,7 +34,8 @@ public interface IAgentflowRuntimeService
         List<ChatMessage> messages,
         CancellationToken cancellationToken = default,
         Guid? projectId = null,
-        string? contextId = null);
+        string? contextId = null
+    );
 
     Task<AgentflowWorkflowLease?> CreateAiWorkflow(Guid agentflowId, CancellationToken cancellationToken = default);
 

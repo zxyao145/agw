@@ -4,7 +4,6 @@ using Agw.Infrastructure.Data.Interceptors;
 using Agw.Setup.Contracts;
 using Agw.Shared.Runtime;
 using Agw.Skills.Contracts.Registration;
-
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -34,7 +33,8 @@ public class SetupInitializationService : ISetupInitializationService
         EntityCreatorInterceptor entityCreatorInterceptor,
         EntityModifierInterceptor entityModifierInterceptor,
         EntitySoftDeleteInterceptor entitySoftDeleteInterceptor,
-        IEnumerable<IAgentSkillRegistration> skillRegistrations)
+        IEnumerable<IAgentSkillRegistration> skillRegistrations
+    )
     {
         _stateStore = stateStore;
         _loggerFactory = loggerFactory;
@@ -54,15 +54,10 @@ public class SetupInitializationService : ISetupInitializationService
         var configuration = new SetupConfiguration(
             request.DeploymentMode,
             request.Provider,
-            SetupConnectionStringFactory.Create(request, _paths));
-        AgwDbContextOptionsConfigurator.Configure(
-            dbOptions,
-            configuration.Provider,
-            configuration.ConnectionString);
-        dbOptions.AddInterceptors(
-            _entityCreatorInterceptor,
-            _entityModifierInterceptor,
-            _entitySoftDeleteInterceptor);
+            SetupConnectionStringFactory.Create(request, _paths)
+        );
+        AgwDbContextOptionsConfigurator.Configure(dbOptions, configuration.Provider, configuration.ConnectionString);
+        dbOptions.AddInterceptors(_entityCreatorInterceptor, _entityModifierInterceptor, _entitySoftDeleteInterceptor);
 
         await using var context = new AgwDbContext(dbOptions.Options, _encryptedDataProtector);
         await context.Database.MigrateAsync(cancellationToken);
@@ -71,7 +66,8 @@ public class SetupInitializationService : ISetupInitializationService
             _loggerFactory.CreateLogger<DbSeeder>(),
             _timeProvider,
             _paths,
-            _skillRegistrations);
+            _skillRegistrations
+        );
         await seeder.SeedAsync();
 
         var passwordHash = _passwordHasher.HashPassword(new object(), request.AdminPassword);

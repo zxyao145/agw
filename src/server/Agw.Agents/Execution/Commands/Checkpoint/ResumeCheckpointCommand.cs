@@ -1,6 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
-
 using Agw.Agents.Execution.Commands.Abstracts;
 
 namespace Agw.Agents.Execution.Commands.Checkpoint;
@@ -12,10 +11,7 @@ public sealed class ResumeCheckpointCommand : AgentRunCommand
 {
     [JsonConstructor]
     [SetsRequiredMembers]
-    public ResumeCheckpointCommand(
-        Guid checkpointOccurrenceId,
-        Guid resumeExecutionId,
-        Guid agentflowId)
+    public ResumeCheckpointCommand(Guid checkpointOccurrenceId, Guid resumeExecutionId, Guid agentflowId)
     {
         CheckpointOccurrenceId = checkpointOccurrenceId;
         ResumeExecutionId = resumeExecutionId;

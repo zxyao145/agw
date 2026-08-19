@@ -15,7 +15,7 @@ public enum AgentUpdateField
     Extra,
     EnvironmentVariables,
     EnableSummary,
-    SummaryModelProviderId
+    SummaryModelProviderId,
 }
 
 public sealed class AgentUpdateCommand
@@ -35,7 +35,8 @@ public sealed class AgentUpdateCommand
         Dictionary<string, string>? environmentVariables,
         bool? enableSummary,
         Guid? summaryModelProviderId,
-        IEnumerable<AgentUpdateField> specifiedFields)
+        IEnumerable<AgentUpdateField> specifiedFields
+    )
     {
         DisplayName = displayName;
         Description = description;

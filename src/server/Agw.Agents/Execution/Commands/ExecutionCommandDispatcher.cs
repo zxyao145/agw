@@ -17,7 +17,8 @@ internal sealed class ExecutionCommandDispatcher
             {
                 throw new AgwException(
                     ErrorCodes.InvalidParam,
-                    $"Multiple execution handlers are registered for '{handler.CommandType.Name}'.");
+                    $"Multiple execution handlers are registered for '{handler.CommandType.Name}'."
+                );
             }
         }
 
@@ -27,7 +28,8 @@ internal sealed class ExecutionCommandDispatcher
     public Task DispatchAsync(
         AgentRunCommand command,
         ExecutionConnectionContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         ArgumentNullException.ThrowIfNull(command);
         if (!_handlers.TryGetValue(command.GetType(), out var handler))

@@ -1,11 +1,8 @@
 using System.Security.Claims;
-
 using Agw.Auth.Middleware;
 using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
-
 using Microsoft.AspNetCore.Http;
-
 using Xunit;
 
 namespace Agw.Auth.Tests;
@@ -67,9 +64,7 @@ public sealed class AgwAuthorizationGuardMiddlewareTests
         });
         var context = new DefaultHttpContext();
         context.Request.Path = "/api/projects";
-        context.User = new ClaimsPrincipal(new ClaimsIdentity(
-            [new Claim(ClaimTypes.Name, "admin")],
-            "Bearer"));
+        context.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, "admin")], "Bearer"));
 
         await middleware.InvokeAsync(context, new InitializationStateStub(true));
 

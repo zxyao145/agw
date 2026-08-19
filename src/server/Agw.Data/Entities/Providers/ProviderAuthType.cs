@@ -5,5 +5,5 @@ namespace Agw.Shared.Data.Entities.Providers;
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum ProviderAuthType
 {
-    ApiKey = 0
+    ApiKey = 0,
 }

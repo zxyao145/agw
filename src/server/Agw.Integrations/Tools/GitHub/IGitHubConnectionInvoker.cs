@@ -4,13 +4,9 @@ namespace Agw.Integrations.Tools.GitHub;
 
 public interface IGitHubConnectionInvoker
 {
-    Task<GitHubUserInfo> GetCurrentUserAsync(
-        Guid connectionId,
-        CancellationToken cancellationToken);
+    Task<GitHubUserInfo> GetCurrentUserAsync(Guid connectionId, CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<GitHubRepoInfo>> ListRepositoriesAsync(
-        Guid connectionId,
-        CancellationToken cancellationToken);
+    Task<IReadOnlyList<GitHubRepoInfo>> ListRepositoriesAsync(Guid connectionId, CancellationToken cancellationToken);
 
     Task<CloneResult> CloneRepositoryAsync(
         Guid connectionId,
@@ -18,7 +14,8 @@ public interface IGitHubConnectionInvoker
         string owner,
         string repository,
         string? relativePath,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken
+    );
 }
 
 public interface IProjectWorkspaceResolver

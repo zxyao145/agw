@@ -6,155 +6,667 @@ public static class ErrorCodes
 {
     public static readonly ErrorCode InvalidParam = new(400_0001, "Invalid params.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode TaskIdMismatch = new(400_0002, "Task id mismatch.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode A2ATaskIdMustBeGuid = new(400_0003, "A2A task id must be a GUID string.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode GitAddressRequired = new(400_0005, "gitAddress is required.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode UsernameRequired = new(400_0006, "username is required.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode A2ATaskIdMustBeGuid = new(
+        400_0003,
+        "A2A task id must be a GUID string.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode GitAddressRequired = new(
+        400_0005,
+        "gitAddress is required.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode UsernameRequired = new(
+        400_0006,
+        "username is required.",
+        HttpStatusCode.BadRequest
+    );
     public static readonly ErrorCode TokenRequired = new(400_0007, "token is required.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode HttpsGitAddressRequired = new(400_0008, "Only HTTPS git addresses are supported.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode FilePathRequired = new(400_0009, "File path is required.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode DirectoryRequired = new(400_0010, "Directory is required.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode CannotDivideByZero = new(400_0011, "Cannot divide by zero.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode SkillNameRequired = new(400_0012, "Skill name is required.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode SkillNameTooLong = new(400_0013, "Skill name is too long.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode SkillNameInvalidFormat = new(400_0014, "Skill name format is invalid.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode SkillDescriptionRequired = new(400_0015, "Skill description is required.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode SkillDescriptionTooLong = new(400_0016, "Skill description is too long.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode SkillArchiveCannotBeEmpty = new(400_0017, "Skill archive cannot be empty.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode SkillArchiveMustBeZip = new(400_0018, "Skill archive must be a .zip file.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode SkillArchiveMissingSkillMarkdown = new(400_0019, "Skill archive must contain SKILL.md.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode SkillArchiveContainsInvalidPaths = new(400_0020, "Skill archive contains invalid paths.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode SkillMarkdownMissingFrontmatter = new(400_0021, "SKILL.md must start with YAML frontmatter.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode SkillMarkdownIncompleteFrontmatter = new(400_0022, "SKILL.md frontmatter is incomplete.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode InvalidSkillDirectoryPath = new(400_0023, "Invalid skill directory path.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode MethodMustBeStatic = new(400_0024, "Method must be static.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode HttpsGitAddressRequired = new(
+        400_0008,
+        "Only HTTPS git addresses are supported.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode FilePathRequired = new(
+        400_0009,
+        "File path is required.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode DirectoryRequired = new(
+        400_0010,
+        "Directory is required.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode CannotDivideByZero = new(
+        400_0011,
+        "Cannot divide by zero.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode SkillNameRequired = new(
+        400_0012,
+        "Skill name is required.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode SkillNameTooLong = new(
+        400_0013,
+        "Skill name is too long.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode SkillNameInvalidFormat = new(
+        400_0014,
+        "Skill name format is invalid.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode SkillDescriptionRequired = new(
+        400_0015,
+        "Skill description is required.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode SkillDescriptionTooLong = new(
+        400_0016,
+        "Skill description is too long.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode SkillArchiveCannotBeEmpty = new(
+        400_0017,
+        "Skill archive cannot be empty.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode SkillArchiveMustBeZip = new(
+        400_0018,
+        "Skill archive must be a .zip file.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode SkillArchiveMissingSkillMarkdown = new(
+        400_0019,
+        "Skill archive must contain SKILL.md.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode SkillArchiveContainsInvalidPaths = new(
+        400_0020,
+        "Skill archive contains invalid paths.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode SkillMarkdownMissingFrontmatter = new(
+        400_0021,
+        "SKILL.md must start with YAML frontmatter.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode SkillMarkdownIncompleteFrontmatter = new(
+        400_0022,
+        "SKILL.md frontmatter is incomplete.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode InvalidSkillDirectoryPath = new(
+        400_0023,
+        "Invalid skill directory path.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode MethodMustBeStatic = new(
+        400_0024,
+        "Method must be static.",
+        HttpStatusCode.BadRequest
+    );
     public static readonly ErrorCode InvalidPageSize = new(400_0025, "Invalid page size.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode InvalidHistoryLength = new(400_0026, "Invalid history length.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode MessagePartsCannotBeEmpty = new(400_0027, "Message parts cannot be empty.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode InvalidDataUriFormat = new(400_0028, "Invalid data URI format.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode MediaTypeRequired = new(400_0029, "Media type is required.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode InvalidMediaType = new(400_0030, "Media type is invalid.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode UriMustBeDataUri = new(400_0031, "URI must be a data URI.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode InvalidOnceTriggerValue = new(400_0032, "Invalid once trigger value.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode InvalidIntervalTriggerValue = new(400_0033, "Invalid interval trigger value.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode MagenticRequiresAtLeastTwoAgents = new(400_0034, "Magentic pattern requires at least two agents.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode SystemAgentRequiresModelProvider = new(400_0035, "System agents must have a model provider.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode JobAgentTargetRequired = new(400_0036, "Job agent target is required.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode McpStdioCommandRequired = new(400_0037, "MCP stdio transport requires a command.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode McpHttpUrlRequired = new(400_0038, "MCP HTTP/SSE transport requires a URL.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode InvalidHistoryLength = new(
+        400_0026,
+        "Invalid history length.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode MessagePartsCannotBeEmpty = new(
+        400_0027,
+        "Message parts cannot be empty.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode InvalidDataUriFormat = new(
+        400_0028,
+        "Invalid data URI format.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode MediaTypeRequired = new(
+        400_0029,
+        "Media type is required.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode InvalidMediaType = new(
+        400_0030,
+        "Media type is invalid.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode UriMustBeDataUri = new(
+        400_0031,
+        "URI must be a data URI.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode InvalidOnceTriggerValue = new(
+        400_0032,
+        "Invalid once trigger value.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode InvalidIntervalTriggerValue = new(
+        400_0033,
+        "Invalid interval trigger value.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode MagenticRequiresAtLeastTwoAgents = new(
+        400_0034,
+        "Magentic pattern requires at least two agents.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode SystemAgentRequiresModelProvider = new(
+        400_0035,
+        "System agents must have a model provider.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode JobAgentTargetRequired = new(
+        400_0036,
+        "Job agent target is required.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode McpStdioCommandRequired = new(
+        400_0037,
+        "MCP stdio transport requires a command.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode McpHttpUrlRequired = new(
+        400_0038,
+        "MCP HTTP/SSE transport requires a URL.",
+        HttpStatusCode.BadRequest
+    );
     public static readonly ErrorCode NoChangesToMake = new(400_0039, "No changes to make.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode FileAlreadyExists = new(400_0040, "File already exists.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode MultipleMatches = new(400_0041, "Multiple matches found.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode FileAlreadyExists = new(
+        400_0040,
+        "File already exists.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode MultipleMatches = new(
+        400_0041,
+        "Multiple matches found.",
+        HttpStatusCode.BadRequest
+    );
     public static readonly ErrorCode CommandRequired = new(400_0042, "Command is required.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode CommandExecutionFailed = new(400_0043, "Command execution failed.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode CommandExecutionFailed = new(
+        400_0043,
+        "Command execution failed.",
+        HttpStatusCode.BadRequest
+    );
     public static readonly ErrorCode CommandTimeout = new(400_0044, "Command timed out.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode PatternRequired = new(400_0045, "Pattern is required.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode OffsetOutOfRange = new(400_0046, "Offset is out of range.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode OffsetOutOfRange = new(
+        400_0046,
+        "Offset is out of range.",
+        HttpStatusCode.BadRequest
+    );
     public static readonly ErrorCode InvalidPattern = new(400_0047, "Invalid pattern.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode UrlRequired = new(400_0048, "URL is required.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode InvalidUrl = new(400_0049, "Invalid URL.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode FetchFailed = new(400_0050, "Failed to fetch content.", HttpStatusCode.BadRequest);
     public static readonly ErrorCode QueryRequired = new(400_0051, "Query is required.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode InvalidParameters = new(400_0052, "Invalid parameters.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode UnsupportedDatabaseProvider = new(400_0053, "Database provider is not supported.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode UnsupportedDistributedLockProvider = new(400_0054, "Distributed lock provider is not supported.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode InvalidAgentExtraSettings = new(400_0055, "Agent extra settings must be a JSON object.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode InvalidAgentEnvironmentVariableName = new(400_0056, "Agent environment variable names must be unique after trimming, non-empty, and cannot contain '=' or null characters.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode InvalidProjectEnvironmentVariableName = new(400_0057, "Project environment variable names must be unique after trimming, non-empty, and cannot contain '=' or null characters.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode IntegrationDefinitionNotFound = new(400_0058, "The requested integration definition was not found.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode IntegrationConfigurationInvalid = new(400_0059, "Integration configuration is invalid.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode IntegrationSecretMutationInvalid = new(400_0060, "Integration secret update is invalid.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode IntegrationAliasInvalid = new(400_0061, "Connection alias must use lowercase kebab-case.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode OAuthReturnPathInvalid = new(400_0062, "OAuth return path must be a local absolute path.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode IntegrationToolNameInvalid = new(400_0063, "Integration capability tool name is invalid.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode GitHubRepositoryInvalid = new(400_0064, "The GitHub repository owner or name is invalid.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode GitHubClonePathInvalid = new(400_0065, "The clone destination must be a relative path inside the project workspace.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode ProviderModelDiscoveryApiKeyRequired = new(400_0066, "An API key is required to discover provider models.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode SkillKindInvalid = new(400_0067, "Skill kind is invalid.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode RemoteSkillUrlRequired = new(400_0068, "Remote skill URL is required.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode RemoteSkillUrlInvalid = new(400_0069, "Remote skill URL must be an absolute HTTP or HTTPS URL no longer than 2048 characters.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode RemoteSkillArchiveNotAllowed = new(400_0070, "Remote skills cannot include an archive.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode InvalidSetupConfiguration = new(400_0071, "Setup configuration is invalid.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode UserMemoryNameRequired = new(400_0072, "User memory name is required.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode UserMemoryNameTooLong = new(400_0073, "User memory name is too long.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode UserMemoryDescriptionTooLong = new(400_0074, "User memory description is too long.", HttpStatusCode.BadRequest);
-    public static readonly ErrorCode UserMemoryContentRequired = new(400_0075, "User memory content is required.", HttpStatusCode.BadRequest);
+    public static readonly ErrorCode InvalidParameters = new(
+        400_0052,
+        "Invalid parameters.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode UnsupportedDatabaseProvider = new(
+        400_0053,
+        "Database provider is not supported.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode UnsupportedDistributedLockProvider = new(
+        400_0054,
+        "Distributed lock provider is not supported.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode InvalidAgentExtraSettings = new(
+        400_0055,
+        "Agent extra settings must be a JSON object.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode InvalidAgentEnvironmentVariableName = new(
+        400_0056,
+        "Agent environment variable names must be unique after trimming, non-empty, and cannot contain '=' or null characters.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode InvalidProjectEnvironmentVariableName = new(
+        400_0057,
+        "Project environment variable names must be unique after trimming, non-empty, and cannot contain '=' or null characters.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode IntegrationDefinitionNotFound = new(
+        400_0058,
+        "The requested integration definition was not found.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode IntegrationConfigurationInvalid = new(
+        400_0059,
+        "Integration configuration is invalid.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode IntegrationSecretMutationInvalid = new(
+        400_0060,
+        "Integration secret update is invalid.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode IntegrationAliasInvalid = new(
+        400_0061,
+        "Connection alias must use lowercase kebab-case.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode OAuthReturnPathInvalid = new(
+        400_0062,
+        "OAuth return path must be a local absolute path.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode IntegrationToolNameInvalid = new(
+        400_0063,
+        "Integration capability tool name is invalid.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode GitHubRepositoryInvalid = new(
+        400_0064,
+        "The GitHub repository owner or name is invalid.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode GitHubClonePathInvalid = new(
+        400_0065,
+        "The clone destination must be a relative path inside the project workspace.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode ProviderModelDiscoveryApiKeyRequired = new(
+        400_0066,
+        "An API key is required to discover provider models.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode SkillKindInvalid = new(
+        400_0067,
+        "Skill kind is invalid.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode RemoteSkillUrlRequired = new(
+        400_0068,
+        "Remote skill URL is required.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode RemoteSkillUrlInvalid = new(
+        400_0069,
+        "Remote skill URL must be an absolute HTTP or HTTPS URL no longer than 2048 characters.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode RemoteSkillArchiveNotAllowed = new(
+        400_0070,
+        "Remote skills cannot include an archive.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode InvalidSetupConfiguration = new(
+        400_0071,
+        "Setup configuration is invalid.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode UserMemoryNameRequired = new(
+        400_0072,
+        "User memory name is required.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode UserMemoryNameTooLong = new(
+        400_0073,
+        "User memory name is too long.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode UserMemoryDescriptionTooLong = new(
+        400_0074,
+        "User memory description is too long.",
+        HttpStatusCode.BadRequest
+    );
+    public static readonly ErrorCode UserMemoryContentRequired = new(
+        400_0075,
+        "User memory content is required.",
+        HttpStatusCode.BadRequest
+    );
 
-    public static readonly ErrorCode GitHubOAuthTokenNotFound = new(401_0001, "GitHub OAuth token was not found.", HttpStatusCode.Unauthorized);
-    public static readonly ErrorCode AuthenticationRequired = new(401_0003, "Authentication is required.", HttpStatusCode.Unauthorized);
-    public static readonly ErrorCode InvalidAdminCredentials = new(401_0004, "Invalid administrator credentials.", HttpStatusCode.Unauthorized);
+    public static readonly ErrorCode GitHubOAuthTokenNotFound = new(
+        401_0001,
+        "GitHub OAuth token was not found.",
+        HttpStatusCode.Unauthorized
+    );
+    public static readonly ErrorCode AuthenticationRequired = new(
+        401_0003,
+        "Authentication is required.",
+        HttpStatusCode.Unauthorized
+    );
+    public static readonly ErrorCode InvalidAdminCredentials = new(
+        401_0004,
+        "Invalid administrator credentials.",
+        HttpStatusCode.Unauthorized
+    );
 
-    public static readonly ErrorCode InteractiveAdminRequired = new(403_0002, "An interactive administrator session is required.", HttpStatusCode.Forbidden);
-    public static readonly ErrorCode PlanModeToolNotAllowed = new(403_0003, "Tool is not available in plan mode.", HttpStatusCode.Forbidden);
+    public static readonly ErrorCode InteractiveAdminRequired = new(
+        403_0002,
+        "An interactive administrator session is required.",
+        HttpStatusCode.Forbidden
+    );
+    public static readonly ErrorCode PlanModeToolNotAllowed = new(
+        403_0003,
+        "Tool is not available in plan mode.",
+        HttpStatusCode.Forbidden
+    );
 
     public static readonly ErrorCode FileNotFound = new(404_0001, "File was not found.", HttpStatusCode.NotFound);
-    public static readonly ErrorCode DirectoryNotFound = new(404_0002, "Directory was not found.", HttpStatusCode.NotFound);
+    public static readonly ErrorCode DirectoryNotFound = new(
+        404_0002,
+        "Directory was not found.",
+        HttpStatusCode.NotFound
+    );
     public static readonly ErrorCode JobNotFound = new(404_0003, "Job was not found.", HttpStatusCode.NotFound);
-    public static readonly ErrorCode A2ATaskNotFound = new(404_0004, "A2A task was not found.", HttpStatusCode.NotFound);
-    public static readonly ErrorCode A2AExtendedAgentCardNotConfigured = new(404_0005, "Extended agent card is not configured.", HttpStatusCode.NotFound);
+    public static readonly ErrorCode A2ATaskNotFound = new(
+        404_0004,
+        "A2A task was not found.",
+        HttpStatusCode.NotFound
+    );
+    public static readonly ErrorCode A2AExtendedAgentCardNotConfigured = new(
+        404_0005,
+        "Extended agent card is not configured.",
+        HttpStatusCode.NotFound
+    );
     public static readonly ErrorCode AgentNotFound = new(404_0006, "Agent was not found.", HttpStatusCode.NotFound);
-    public static readonly ErrorCode ResourceNotFound = new(404_0007, "Resource was not found.", HttpStatusCode.NotFound);
-    public static readonly ErrorCode ApiTokenNotFound = new(404_0008, "API token was not found.", HttpStatusCode.NotFound);
-    public static readonly ErrorCode ConnectionNotFound = new(404_0009, "Connection was not found.", HttpStatusCode.NotFound);
-    public static readonly ErrorCode GitHubProjectWorkspaceNotFound = new(404_0010, "The project workspace was not found.", HttpStatusCode.NotFound);
-    public static readonly ErrorCode DurableExecutionNotFound = new(404_0011, "Durable execution was not found.", HttpStatusCode.NotFound);
-    public static readonly ErrorCode HumanInteractionNotFound = new(404_0012, "Human interaction request was not found.", HttpStatusCode.NotFound);
+    public static readonly ErrorCode ResourceNotFound = new(
+        404_0007,
+        "Resource was not found.",
+        HttpStatusCode.NotFound
+    );
+    public static readonly ErrorCode ApiTokenNotFound = new(
+        404_0008,
+        "API token was not found.",
+        HttpStatusCode.NotFound
+    );
+    public static readonly ErrorCode ConnectionNotFound = new(
+        404_0009,
+        "Connection was not found.",
+        HttpStatusCode.NotFound
+    );
+    public static readonly ErrorCode GitHubProjectWorkspaceNotFound = new(
+        404_0010,
+        "The project workspace was not found.",
+        HttpStatusCode.NotFound
+    );
+    public static readonly ErrorCode DurableExecutionNotFound = new(
+        404_0011,
+        "Durable execution was not found.",
+        HttpStatusCode.NotFound
+    );
+    public static readonly ErrorCode HumanInteractionNotFound = new(
+        404_0012,
+        "Human interaction request was not found.",
+        HttpStatusCode.NotFound
+    );
 
-    public static readonly ErrorCode SkillAlreadyExists = new(409_0001, "Skill already exists.", HttpStatusCode.Conflict);
-    public static readonly ErrorCode A2ATaskIdAlreadyUsed = new(409_0002, "Task id is already used by a non-A2A task.", HttpStatusCode.Conflict);
-    public static readonly ErrorCode SkillNameUpdateRequiresArchive = new(409_0003, "Updating skill name requires uploading a new archive.", HttpStatusCode.Conflict);
-    public static readonly ErrorCode A2ATaskNotCancelable = new(409_0004, "Task is not cancelable.", HttpStatusCode.Conflict);
-    public static readonly ErrorCode A2ATerminalTaskCannotAcceptMessages = new(409_0005, "Task is in a terminal state and cannot accept messages.", HttpStatusCode.Conflict);
-    public static readonly ErrorCode A2ATerminalTaskCannotBeSubscribed = new(409_0006, "Task is in a terminal state and cannot be subscribed to.", HttpStatusCode.Conflict);
-    public static readonly ErrorCode ApiTokenNameAlreadyExists = new(409_0007, "An API token with this name already exists.", HttpStatusCode.Conflict);
-    public static readonly ErrorCode ConnectionAliasAlreadyExists = new(409_0008, "Connection alias already exists.", HttpStatusCode.Conflict);
-    public static readonly ErrorCode ConnectionAliasImmutable = new(409_0009, "Connection alias cannot be changed.", HttpStatusCode.Conflict);
-    public static readonly ErrorCode IntegrationToolNameConflict = new(409_0010, "Integration capability tool name conflicts with another source.", HttpStatusCode.Conflict);
-    public static readonly ErrorCode ModelProviderInUse = new(409_0011, "The model provider is currently in use.", HttpStatusCode.Conflict);
-    public static readonly ErrorCode BuiltInSkillImmutable = new(409_0012, "Built-in skills cannot be updated or deleted.", HttpStatusCode.Conflict);
-    public static readonly ErrorCode RemoteSkillIdentityChanged = new(409_0013, "Remote skill name no longer matches the configured skill.", HttpStatusCode.Conflict);
-    public static readonly ErrorCode DurableExecutionConflict = new(409_0014, "Durable execution conflicts with an existing request.", HttpStatusCode.Conflict);
-    public static readonly ErrorCode LegacyApiTokenConflict = new(409_0015, "API token conflicts with its legacy server-state record.", HttpStatusCode.Conflict);
-    public static readonly ErrorCode UserMemoryNameAlreadyExists = new(409_0016, "A user memory with this name already exists.", HttpStatusCode.Conflict);
+    public static readonly ErrorCode SkillAlreadyExists = new(
+        409_0001,
+        "Skill already exists.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode A2ATaskIdAlreadyUsed = new(
+        409_0002,
+        "Task id is already used by a non-A2A task.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode SkillNameUpdateRequiresArchive = new(
+        409_0003,
+        "Updating skill name requires uploading a new archive.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode A2ATaskNotCancelable = new(
+        409_0004,
+        "Task is not cancelable.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode A2ATerminalTaskCannotAcceptMessages = new(
+        409_0005,
+        "Task is in a terminal state and cannot accept messages.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode A2ATerminalTaskCannotBeSubscribed = new(
+        409_0006,
+        "Task is in a terminal state and cannot be subscribed to.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode ApiTokenNameAlreadyExists = new(
+        409_0007,
+        "An API token with this name already exists.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode ConnectionAliasAlreadyExists = new(
+        409_0008,
+        "Connection alias already exists.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode ConnectionAliasImmutable = new(
+        409_0009,
+        "Connection alias cannot be changed.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode IntegrationToolNameConflict = new(
+        409_0010,
+        "Integration capability tool name conflicts with another source.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode ModelProviderInUse = new(
+        409_0011,
+        "The model provider is currently in use.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode BuiltInSkillImmutable = new(
+        409_0012,
+        "Built-in skills cannot be updated or deleted.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode RemoteSkillIdentityChanged = new(
+        409_0013,
+        "Remote skill name no longer matches the configured skill.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode DurableExecutionConflict = new(
+        409_0014,
+        "Durable execution conflicts with an existing request.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode LegacyApiTokenConflict = new(
+        409_0015,
+        "API token conflicts with its legacy server-state record.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode UserMemoryNameAlreadyExists = new(
+        409_0016,
+        "A user memory with this name already exists.",
+        HttpStatusCode.Conflict
+    );
 
-    public static readonly ErrorCode TooManyAuthenticationAttempts = new(429_0001, "Too many authentication attempts.", HttpStatusCode.TooManyRequests);
+    public static readonly ErrorCode TooManyAuthenticationAttempts = new(
+        429_0001,
+        "Too many authentication attempts.",
+        HttpStatusCode.TooManyRequests
+    );
 
-    public static readonly ErrorCode CannotCreateInstance = new(500_0001, "Cannot create instance.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode A2ATaskSnapshotCloneFailed = new(500_0002, "Failed to clone A2A task snapshot.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode LoggerFactoryNotSet = new(500_0003, "LoggerFactory is not set.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode ServiceProviderNotSet = new(500_0004, "ServiceProvider is not set.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode AiAgentCreationFailed = new(500_0005, "AI agent could not be created for execution.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode AgentReturnedNoResult = new(500_0006, "Agent returned no result.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode UnableToCreateAgentSession = new(500_0007, "Unable to create agent session.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode A2ANoSubscriberSet = new(500_0008, "A2A subscriber set was not found.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode A2AInvalidAgentResponse = new(500_0009, "Invalid agent response.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode TaskCreationFailed = new(500_0010, "Failed to create task.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode AgentExecutionFailed = new(500_0011, "Agent execution failed.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode TaskMarkSucceededFailed = new(500_0012, "Failed to mark task as succeeded.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode EnvironmentVariableNotSet = new(500_0013, "Required environment variable is not set.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode IntegrationCredentialUnavailable = new(500_0016, "Integration credential is unavailable.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode IntegrationDataInvalid = new(500_0017, "Stored integration data is invalid.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode IntegrationCapabilityResolutionFailed = new(500_0018, "Failed to resolve integration capabilities.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode IntegrationResourceDisposalFailed = new(500_0019, "Failed to release integration capability resources.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode IntegrationNativeProviderUnavailable = new(500_0020, "The integration native capability provider is unavailable.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode IntegrationMcpMaterializationFailed = new(500_0021, "Failed to materialize the integration MCP capability.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode GitHubCloneFailed = new(500_0022, "GitHub clone failed.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode EncryptedDataInvalid = new(500_0023, "Stored encrypted data is invalid.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode EncryptedModelInvalid = new(500_0024, "Encrypted entity model configuration is invalid.", HttpStatusCode.InternalServerError);
-    public static readonly ErrorCode RemoteSkillConfigurationInvalid = new(500_0025, "Stored remote skill configuration is invalid.", HttpStatusCode.InternalServerError);
+    public static readonly ErrorCode CannotCreateInstance = new(
+        500_0001,
+        "Cannot create instance.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode A2ATaskSnapshotCloneFailed = new(
+        500_0002,
+        "Failed to clone A2A task snapshot.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode LoggerFactoryNotSet = new(
+        500_0003,
+        "LoggerFactory is not set.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode ServiceProviderNotSet = new(
+        500_0004,
+        "ServiceProvider is not set.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode AiAgentCreationFailed = new(
+        500_0005,
+        "AI agent could not be created for execution.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode AgentReturnedNoResult = new(
+        500_0006,
+        "Agent returned no result.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode UnableToCreateAgentSession = new(
+        500_0007,
+        "Unable to create agent session.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode A2ANoSubscriberSet = new(
+        500_0008,
+        "A2A subscriber set was not found.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode A2AInvalidAgentResponse = new(
+        500_0009,
+        "Invalid agent response.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode TaskCreationFailed = new(
+        500_0010,
+        "Failed to create task.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode AgentExecutionFailed = new(
+        500_0011,
+        "Agent execution failed.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode TaskMarkSucceededFailed = new(
+        500_0012,
+        "Failed to mark task as succeeded.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode EnvironmentVariableNotSet = new(
+        500_0013,
+        "Required environment variable is not set.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode IntegrationCredentialUnavailable = new(
+        500_0016,
+        "Integration credential is unavailable.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode IntegrationDataInvalid = new(
+        500_0017,
+        "Stored integration data is invalid.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode IntegrationCapabilityResolutionFailed = new(
+        500_0018,
+        "Failed to resolve integration capabilities.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode IntegrationResourceDisposalFailed = new(
+        500_0019,
+        "Failed to release integration capability resources.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode IntegrationNativeProviderUnavailable = new(
+        500_0020,
+        "The integration native capability provider is unavailable.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode IntegrationMcpMaterializationFailed = new(
+        500_0021,
+        "Failed to materialize the integration MCP capability.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode GitHubCloneFailed = new(
+        500_0022,
+        "GitHub clone failed.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode EncryptedDataInvalid = new(
+        500_0023,
+        "Stored encrypted data is invalid.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode EncryptedModelInvalid = new(
+        500_0024,
+        "Encrypted entity model configuration is invalid.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode RemoteSkillConfigurationInvalid = new(
+        500_0025,
+        "Stored remote skill configuration is invalid.",
+        HttpStatusCode.InternalServerError
+    );
 
-    public static readonly ErrorCode UnsupportedTransportType = new(501_0001, "Transport type is not supported.", HttpStatusCode.NotImplemented);
-    public static readonly ErrorCode UnsupportedAgentType = new(501_0002, "Agent type is not supported.", HttpStatusCode.NotImplemented);
-    public static readonly ErrorCode UnsupportedTriggerType = new(501_0003, "Trigger type is not supported.", HttpStatusCode.NotImplemented);
-    public static readonly ErrorCode UnsupportedProviderType = new(501_0004, "Provider type is not supported.", HttpStatusCode.NotImplemented);
-    public static readonly ErrorCode MagenticNotSupported = new(501_0005, "Magentic is not supported.", HttpStatusCode.NotImplemented);
-    public static readonly ErrorCode A2APushNotificationNotSupported = new(501_0006, "Push notifications are not supported.", HttpStatusCode.NotImplemented);
-    public static readonly ErrorCode A2AUnsupportedOperation = new(501_0007, "A2A operation is not supported.", HttpStatusCode.NotImplemented);
+    public static readonly ErrorCode UnsupportedTransportType = new(
+        501_0001,
+        "Transport type is not supported.",
+        HttpStatusCode.NotImplemented
+    );
+    public static readonly ErrorCode UnsupportedAgentType = new(
+        501_0002,
+        "Agent type is not supported.",
+        HttpStatusCode.NotImplemented
+    );
+    public static readonly ErrorCode UnsupportedTriggerType = new(
+        501_0003,
+        "Trigger type is not supported.",
+        HttpStatusCode.NotImplemented
+    );
+    public static readonly ErrorCode UnsupportedProviderType = new(
+        501_0004,
+        "Provider type is not supported.",
+        HttpStatusCode.NotImplemented
+    );
+    public static readonly ErrorCode MagenticNotSupported = new(
+        501_0005,
+        "Magentic is not supported.",
+        HttpStatusCode.NotImplemented
+    );
+    public static readonly ErrorCode A2APushNotificationNotSupported = new(
+        501_0006,
+        "Push notifications are not supported.",
+        HttpStatusCode.NotImplemented
+    );
+    public static readonly ErrorCode A2AUnsupportedOperation = new(
+        501_0007,
+        "A2A operation is not supported.",
+        HttpStatusCode.NotImplemented
+    );
 
-    public static readonly ErrorCode GitHubBadResponseStatusCode = new(502_0001, "GitHub returned a bad response status code.", HttpStatusCode.BadGateway);
-    public static readonly ErrorCode OAuthProviderRequestFailed = new(502_0002, "OAuth provider request failed.", HttpStatusCode.BadGateway);
-    public static readonly ErrorCode ProviderModelDiscoveryFailed = new(502_0003, "Provider model discovery failed.", HttpStatusCode.BadGateway);
-    public static readonly ErrorCode RemoteSkillFetchFailed = new(502_0004, "Failed to fetch the remote skill.", HttpStatusCode.BadGateway);
-    public static readonly ErrorCode RemoteSkillResponseInvalid = new(502_0005, "The remote skill ZIP archive is invalid.", HttpStatusCode.BadGateway);
+    public static readonly ErrorCode GitHubBadResponseStatusCode = new(
+        502_0001,
+        "GitHub returned a bad response status code.",
+        HttpStatusCode.BadGateway
+    );
+    public static readonly ErrorCode OAuthProviderRequestFailed = new(
+        502_0002,
+        "OAuth provider request failed.",
+        HttpStatusCode.BadGateway
+    );
+    public static readonly ErrorCode ProviderModelDiscoveryFailed = new(
+        502_0003,
+        "Provider model discovery failed.",
+        HttpStatusCode.BadGateway
+    );
+    public static readonly ErrorCode RemoteSkillFetchFailed = new(
+        502_0004,
+        "Failed to fetch the remote skill.",
+        HttpStatusCode.BadGateway
+    );
+    public static readonly ErrorCode RemoteSkillResponseInvalid = new(
+        502_0005,
+        "The remote skill ZIP archive is invalid.",
+        HttpStatusCode.BadGateway
+    );
 
-    public static readonly ErrorCode DurableExecutionUnavailable = new(503_0001, "Durable execution is unavailable.", HttpStatusCode.ServiceUnavailable);
+    public static readonly ErrorCode DurableExecutionUnavailable = new(
+        503_0001,
+        "Durable execution is unavailable.",
+        HttpStatusCode.ServiceUnavailable
+    );
 }

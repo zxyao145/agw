@@ -5,7 +5,6 @@ using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
 using Agw.Testing;
-
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Jobs.Tests;
@@ -58,7 +57,8 @@ public class JobAttemptRunnerTests
 
         var result = await runner.RunAsync(
             CreateScheduledJob(TriggerType.Interval, "00:15:00"),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.IsType<JobAttemptResult.Drop>(result);
         Assert.Equal(0, executor.ExecuteCount);
@@ -70,11 +70,7 @@ public class JobAttemptRunnerTests
     {
         var store = new RecordingJobStore { MarkRunningResult = true };
         var runner = CreateRunner(store, new StubJobAgentExecutor(new InvalidOperationException("boom")));
-        var scheduledJob = CreateScheduledJob(
-            TriggerType.Interval,
-            "00:15:00",
-            retryCount: 0,
-            maxRetryCount: 3);
+        var scheduledJob = CreateScheduledJob(TriggerType.Interval, "00:15:00", retryCount: 0, maxRetryCount: 3);
 
         var result = await runner.RunAsync(scheduledJob, TestContext.Current.CancellationToken);
 
@@ -92,11 +88,7 @@ public class JobAttemptRunnerTests
     {
         var store = new RecordingJobStore { MarkRunningResult = true };
         var runner = CreateRunner(store, new StubJobAgentExecutor(new InvalidOperationException("boom")));
-        var scheduledJob = CreateScheduledJob(
-            TriggerType.Interval,
-            "00:15:00",
-            retryCount: 3,
-            maxRetryCount: 3);
+        var scheduledJob = CreateScheduledJob(TriggerType.Interval, "00:15:00", retryCount: 3, maxRetryCount: 3);
 
         var result = await runner.RunAsync(scheduledJob, TestContext.Current.CancellationToken);
 
@@ -109,16 +101,14 @@ public class JobAttemptRunnerTests
     [Fact]
     public async Task RunAsync_JobNoLongerExists_ReturnsDropWithoutBookkeeping()
     {
-        var store = new RecordingJobStore
-        {
-            MarkRunningException = new AgwException(ErrorCodes.JobNotFound)
-        };
+        var store = new RecordingJobStore { MarkRunningException = new AgwException(ErrorCodes.JobNotFound) };
         var executor = new StubJobAgentExecutor(Guid.CreateVersion7());
         var runner = CreateRunner(store, executor);
 
         var result = await runner.RunAsync(
             CreateScheduledJob(TriggerType.Interval, "00:15:00"),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.IsType<JobAttemptResult.Drop>(result);
         Assert.Equal(0, executor.ExecuteCount);
@@ -127,23 +117,23 @@ public class JobAttemptRunnerTests
         Assert.Null(store.LastLog);
     }
 
-    private static JobAttemptRunner CreateRunner(
-        RecordingJobStore store,
-        IJobAgentExecutor executor)
+    private static JobAttemptRunner CreateRunner(RecordingJobStore store, IJobAgentExecutor executor)
     {
         return new JobAttemptRunner(
             store,
             executor,
             new JobScheduleCalculator(),
             new TestTimeProvider(UtcNow),
-            NullLogger<JobAttemptRunner>.Instance);
+            NullLogger<JobAttemptRunner>.Instance
+        );
     }
 
     private static ScheduledJob CreateScheduledJob(
         TriggerType triggerType,
         string triggerValue,
         int retryCount = 0,
-        int maxRetryCount = 3)
+        int maxRetryCount = 3
+    )
     {
         return new ScheduledJob
         {
@@ -158,7 +148,7 @@ public class JobAttemptRunnerTests
             NextRunTime = UtcNow,
             RetryCount = retryCount,
             MaxRetryCount = maxRetryCount,
-            Version = 1
+            Version = 1,
         };
     }
 
@@ -204,7 +194,8 @@ public class JobAttemptRunnerTests
         public Task<IReadOnlyList<Job>> PrefetchAsync(
             DateTimeOffset now,
             DateTimeOffset horizon,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             return Task.FromResult<IReadOnlyList<Job>>([]);
         }
@@ -219,10 +210,7 @@ public class JobAttemptRunnerTests
             return Task.FromResult(MarkRunningResult);
         }
 
-        public Task MarkSucceededAsync(
-            Guid jobId,
-            DateTimeOffset? nextRunTime,
-            CancellationToken cancellationToken)
+        public Task MarkSucceededAsync(Guid jobId, DateTimeOffset? nextRunTime, CancellationToken cancellationToken)
         {
             MarkSucceededCalled = true;
             SucceededNextRunTime = nextRunTime;
@@ -234,7 +222,8 @@ public class JobAttemptRunnerTests
             DateTimeOffset nextRunTime,
             int retryCount,
             string errorMessage,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             Retry = (retryCount, nextRunTime, errorMessage);
             return Task.CompletedTask;
@@ -244,7 +233,8 @@ public class JobAttemptRunnerTests
             Guid jobId,
             int retryCount,
             string errorMessage,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             Failure = (retryCount, errorMessage);
             return Task.CompletedTask;
@@ -258,16 +248,13 @@ public class JobAttemptRunnerTests
             bool success,
             int attempt,
             string? errorMessage,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             LastLog = new ExecutionLogCall(taskId, success, attempt, errorMessage);
             return Task.CompletedTask;
         }
     }
 
-    private sealed record ExecutionLogCall(
-        Guid TaskId,
-        bool Success,
-        int Attempt,
-        string? ErrorMessage);
+    private sealed record ExecutionLogCall(Guid TaskId, bool Success, int Attempt, string? ErrorMessage);
 }

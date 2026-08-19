@@ -9,7 +9,8 @@ public partial class AgentRuntimeService
     public async Task SetPermissionModeAsync(
         AgentRuntime runtime,
         PermissionMode permissionMode,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         ArgumentNullException.ThrowIfNull(runtime);
         ToolApprovalPermissionState.Apply(runtime.Session, permissionMode);
@@ -20,7 +21,8 @@ public partial class AgentRuntimeService
                 runtime.SessionStateScope,
                 runtime.Agent,
                 runtime.Session,
-                cancellationToken);
+                cancellationToken
+            );
         }
     }
 }

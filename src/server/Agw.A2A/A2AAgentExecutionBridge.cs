@@ -1,14 +1,11 @@
 using A2A;
-
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
-
 using AgwTaskProjection = Agw.Shared.Contracts.Projects.TaskProjection;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
@@ -20,13 +17,15 @@ public interface IAgentExecutionBridge
         string agentName,
         RequestContext context,
         AgwUserInput input,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken
+    );
 
     IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         string agentName,
         RequestContext context,
         AgwUserInput input,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken
+    );
 }
 
 public sealed class A2AAgentExecutionBridge : IAgentExecutionBridge
@@ -44,7 +43,8 @@ public sealed class A2AAgentExecutionBridge : IAgentExecutionBridge
         string agentName,
         RequestContext context,
         AgwUserInput input,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         using var scope = _serviceScopeFactory.CreateScope();
         var agentRepository = scope.ServiceProvider.GetRequiredService<IRepository<Agent>>();
@@ -59,15 +59,16 @@ public sealed class A2AAgentExecutionBridge : IAgentExecutionBridge
         }
 
         return await agentRuntimeService
-            .ExecuteByIdAsync(new AgentExecuteByIdRequest
-            (
-                [CreateChatMessage(input)],
-                agent.Id,
-                ParseRequiredTaskId(context.TaskId),
-                ProjectDefaults.A2AId,
-                context.ContextId
-                )
-            , cancellationToken)
+            .ExecuteByIdAsync(
+                new AgentExecuteByIdRequest(
+                    [CreateChatMessage(input)],
+                    agent.Id,
+                    ParseRequiredTaskId(context.TaskId),
+                    ProjectDefaults.A2AId,
+                    context.ContextId
+                ),
+                cancellationToken
+            )
             .ConfigureAwait(false);
     }
 
@@ -75,7 +76,8 @@ public sealed class A2AAgentExecutionBridge : IAgentExecutionBridge
         string agentName,
         RequestContext context,
         AgwUserInput input,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken
+    )
     {
         using var scope = _serviceScopeFactory.CreateScope();
         var agentRepository = scope.ServiceProvider.GetRequiredService<IRepository<Agent>>();
@@ -96,11 +98,11 @@ public sealed class A2AAgentExecutionBridge : IAgentExecutionBridge
             ProjectId = ProjectDefaults.A2AId,
             ContextId = context.ContextId,
             Title = agent.Name,
-            CreateTime = _timeProvider.GetUtcNow()
+            CreateTime = _timeProvider.GetUtcNow(),
         };
         var settings = new SettingCommand(ProjectDefaults.A2AId, contextId: context.ContextId)
         {
-            Resume = context.IsContinuation
+            Resume = context.IsContinuation,
         };
 
         await using var session = await agentRuntimeService
@@ -108,12 +110,17 @@ public sealed class A2AAgentExecutionBridge : IAgentExecutionBridge
             .ConfigureAwait(false);
         if (session is null)
         {
-            throw new AgwException(ErrorCodes.UnableToCreateAgentSession, $"Unable to create session for agent '{agentName}'.");
+            throw new AgwException(
+                ErrorCodes.UnableToCreateAgentSession,
+                $"Unable to create session for agent '{agentName}'."
+            );
         }
 
-        await foreach (var message in agentRuntimeService
-                           .ExecuteStreamingAsync(session, input, cancellationToken)
-                           .ConfigureAwait(false))
+        await foreach (
+            var message in agentRuntimeService
+                .ExecuteStreamingAsync(session, input, cancellationToken)
+                .ConfigureAwait(false)
+        )
         {
             yield return message;
         }
@@ -134,7 +141,7 @@ public sealed class A2AAgentExecutionBridge : IAgentExecutionBridge
         var message = new ChatMessage(ChatRole.User, ConvertToAIContents(input.Contents))
         {
             MessageId = input.MessageId,
-            AuthorName = string.IsNullOrWhiteSpace(input.Author) ? Constants.DefaultInputAuthor : input.Author
+            AuthorName = string.IsNullOrWhiteSpace(input.Author) ? Constants.DefaultInputAuthor : input.Author,
         };
 
         return message;

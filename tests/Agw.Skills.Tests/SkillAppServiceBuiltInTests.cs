@@ -1,5 +1,4 @@
 using System.Linq.Expressions;
-
 using Agw.Domain.Services.Skills;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Skills;
@@ -9,7 +8,6 @@ using Agw.Shared.Runtime;
 using Agw.Skills.Application;
 using Agw.Skills.Application.Remote;
 using Agw.Skills.Contracts.Registration;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -17,15 +15,12 @@ namespace Agw.Skills.Tests;
 
 public class SkillAppServiceBuiltInTests
 {
-    private static readonly Guid BuiltInSkillId =
-        Guid.Parse("11111111-1111-1111-8888-000000000002");
+    private static readonly Guid BuiltInSkillId = Guid.Parse("11111111-1111-1111-8888-000000000002");
 
     [Fact]
     public async Task BuiltInSkill_IsReportedAndCannotBeUpdatedOrDeleted()
     {
-        var root = Path.Combine(
-            Path.GetTempPath(),
-            $"agw-built-in-skill-{Guid.CreateVersion7():N}");
+        var root = Path.Combine(Path.GetTempPath(), $"agw-built-in-skill-{Guid.CreateVersion7():N}");
         var dataPaths = AgwDataPaths.Resolve(root, "/unused");
         dataPaths.EnsureCreated();
         try
@@ -50,7 +45,8 @@ public class SkillAppServiceBuiltInTests
                 new TestRemoteSkillClient(),
                 new TestRemoteSkillRefreshLock(),
                 TimeProvider.System,
-                [new TestSkillRegistration()]);
+                [new TestSkillRegistration()]
+            );
 
             var details = Assert.Single(await service.ListAsync());
             Assert.Equal(BuiltInSkillId, details.Skill.Id);
@@ -63,13 +59,14 @@ public class SkillAppServiceBuiltInTests
                     "Changed",
                     archive: null,
                     "test-user",
-                    cancellationToken: TestContext.Current.CancellationToken));
+                    cancellationToken: TestContext.Current.CancellationToken
+                )
+            );
             Assert.Equal(ErrorCodes.BuiltInSkillImmutable.Code, updateException.Code);
 
             var deleteException = await Assert.ThrowsAsync<AgwException>(() =>
-                service.DeleteAsync(
-                    BuiltInSkillId,
-                    TestContext.Current.CancellationToken));
+                service.DeleteAsync(BuiltInSkillId, TestContext.Current.CancellationToken)
+            );
             Assert.Equal(ErrorCodes.BuiltInSkillImmutable.Code, deleteException.Code);
         }
         finally
@@ -95,29 +92,23 @@ public class SkillAppServiceBuiltInTests
 
         public Task<RemoteSkillDefinition> FetchAsync(
             string remoteUrl,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
     }
 
     private sealed class TestRemoteSkillRefreshLock : IRemoteSkillRefreshLock
     {
-        public Task<IAsyncDisposable> AcquireAsync(
-            Guid skillId,
-            CancellationToken cancellationToken) =>
+        public Task<IAsyncDisposable> AcquireAsync(Guid skillId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }
 
     private sealed class TestUnitOfWork : IUnitOfWork
     {
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
 
-        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(0);
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(0);
 
-        public Task<bool> SaveEntitiesAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
+        public Task<bool> SaveEntitiesAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
     }
 
     private sealed class TestRepository<TEntity> : IRepository<TEntity>
@@ -142,12 +133,13 @@ public class SkillAppServiceBuiltInTests
 
         public Task<TEntity?> SingleOrDefaultAsync(
             Expression<Func<TEntity, bool>> predicate,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(_items.AsQueryable().SingleOrDefault(predicate));
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(_items.AsQueryable().SingleOrDefault(predicate));
 
         public Task<IReadOnlyList<TEntity>> ListAsync(
             Expression<Func<TEntity, bool>>? predicate = null,
-            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null)
+            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
+        )
         {
             IQueryable<TEntity> query = _items.AsQueryable();
             if (predicate != null)
@@ -166,8 +158,8 @@ public class SkillAppServiceBuiltInTests
         public Task<IReadOnlyList<TEntity>> ListAsync(
             Expression<Func<TEntity, bool>>? predicate,
             Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy,
-            params Expression<Func<TEntity, object>>[] includes) =>
-            ListAsync(predicate, orderBy);
+            params Expression<Func<TEntity, object>>[] includes
+        ) => ListAsync(predicate, orderBy);
 
         public Task AddAsync(TEntity entity)
         {
@@ -175,16 +167,13 @@ public class SkillAppServiceBuiltInTests
             return Task.CompletedTask;
         }
 
-        public void Update(TEntity entity)
-        {
-        }
+        public void Update(TEntity entity) { }
 
         public void Remove(TEntity entity)
         {
             _items.Remove(entity);
         }
 
-        public Task SaveChangesAsync(CancellationToken cancellationToken) =>
-            Task.CompletedTask;
+        public Task SaveChangesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

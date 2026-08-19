@@ -4,9 +4,7 @@ using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 
@@ -21,7 +19,8 @@ public class McpToolServersController : ControllerBase
 
     public McpToolServersController(
         McpToolServerAppService mcpToolServerAppService,
-        ILogger<McpToolServersController> logger)
+        ILogger<McpToolServersController> logger
+    )
     {
         _mcpToolServerAppService = mcpToolServerAppService;
         _logger = logger;
@@ -40,12 +39,10 @@ public class McpToolServersController : ControllerBase
     public async Task<IActionResult> ListPagedAsync(
         [FromQuery] int pageIndex = 1,
         [FromQuery] int pageSize = 20,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
-        var page = await _mcpToolServerAppService.ListMcpToolServerPageAsync(
-            pageIndex,
-            pageSize,
-            cancellationToken);
+        var page = await _mcpToolServerAppService.ListMcpToolServerPageAsync(pageIndex, pageSize, cancellationToken);
         return ApiResult.Ok(page);
     }
 
@@ -73,7 +70,7 @@ public class McpToolServersController : ControllerBase
             EnvironmentVariables = request.EnvironmentVariables ?? new Dictionary<string, string>(),
             Url = request.Url,
             Headers = request.Headers ?? new Dictionary<string, string>(),
-            Enabled = request.Enabled
+            Enabled = request.Enabled,
         };
 
         var created = await _mcpToolServerAppService.CreateMcpToolServerAsync(server, request.AgentIds, user);
@@ -100,7 +97,8 @@ public class McpToolServersController : ControllerBase
                 server.Headers = request.Headers ?? new Dictionary<string, string>();
                 server.Enabled = request.Enabled;
             },
-            user);
+            user
+        );
 
         return updated == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(updated);
     }
@@ -117,7 +115,8 @@ public class McpToolServersController : ControllerBase
     [ProducesApiResult(typeof(McpToolServerConnectResponse))]
     public async Task<IActionResult> ConnectAsync(
         [FromBody] McpToolServerConnectRequest request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         try
         {

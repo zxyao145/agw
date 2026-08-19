@@ -1,6 +1,4 @@
-
 using Agw.Shared.Exceptions;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -26,8 +24,8 @@ public class IocUtil
         return LoggerFactory.CreateLogger<T>();
     }
 
-
-    public static T GetSingletonRequiredService<T>() where T : notnull
+    public static T GetSingletonRequiredService<T>()
+        where T : notnull
     {
         if (ServiceProvider == null)
         {

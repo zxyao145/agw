@@ -1,5 +1,4 @@
 using Agw.Shared.Data.Entities.Skills;
-
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -11,15 +10,13 @@ public class AgentSkillRelationConfiguration : IEntityTypeConfiguration<AgentSki
     {
         builder.HasKey(e => new { e.AgentId, e.SkillId });
 
-        builder.HasOne(e => e.Agent)
+        builder
+            .HasOne(e => e.Agent)
             .WithMany(a => a.AgentSkillRelations)
             .HasForeignKey(e => e.AgentId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasOne<Skill>()
-            .WithMany()
-            .HasForeignKey(e => e.SkillId)
-            .OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne<Skill>().WithMany().HasForeignKey(e => e.SkillId).OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(e => e.SkillId);
     }

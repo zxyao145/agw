@@ -1,15 +1,12 @@
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.Json;
-
 using A2A;
-
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -22,7 +19,13 @@ public class AgentHandlerFactoryTests
     public async Task CreateAsync_SameAgentName_ReturnsSameHandlerInstance()
     {
         var factory = CreateFactory(
-            new Agent { Id = Guid.CreateVersion7(), Name = "alpha", SystemPrompt = "Alpha prompt" });
+            new Agent
+            {
+                Id = Guid.CreateVersion7(),
+                Name = "alpha",
+                SystemPrompt = "Alpha prompt",
+            }
+        );
 
         var first = await factory.CreateAsync("alpha");
         var second = await factory.CreateAsync("alpha");
@@ -36,8 +39,19 @@ public class AgentHandlerFactoryTests
     public async Task CreateAsync_DifferentAgentNames_ReturnsDifferentHandlerInstances()
     {
         var factory = CreateFactory(
-            new Agent { Id = Guid.CreateVersion7(), Name = "alpha", SystemPrompt = "Alpha prompt" },
-            new Agent { Id = Guid.CreateVersion7(), Name = "beta", SystemPrompt = "Beta prompt" });
+            new Agent
+            {
+                Id = Guid.CreateVersion7(),
+                Name = "alpha",
+                SystemPrompt = "Alpha prompt",
+            },
+            new Agent
+            {
+                Id = Guid.CreateVersion7(),
+                Name = "beta",
+                SystemPrompt = "Beta prompt",
+            }
+        );
 
         var alpha = await factory.CreateAsync("alpha");
         var beta = await factory.CreateAsync("beta");
@@ -55,7 +69,14 @@ public class AgentHandlerFactoryTests
 
         var missing = await factory.CreateAsync("alpha");
 
-        await repository.AddAsync(new Agent { Id = Guid.CreateVersion7(), Name = "alpha", SystemPrompt = "Alpha prompt" });
+        await repository.AddAsync(
+            new Agent
+            {
+                Id = Guid.CreateVersion7(),
+                Name = "alpha",
+                SystemPrompt = "Alpha prompt",
+            }
+        );
         var created = await factory.CreateAsync("alpha");
 
         Assert.Null(missing);
@@ -66,9 +87,13 @@ public class AgentHandlerFactoryTests
     [Fact]
     public async Task CommonAgentHandlerCreateAsync_WhenAgentExists_ReturnsHandlerWithAgentCard()
     {
-        var repository = new InMemoryRepository<Agent>(
-        [
-            new Agent { Id = Guid.CreateVersion7(), Name = "alpha", SystemPrompt = "Alpha prompt" }
+        var repository = new InMemoryRepository<Agent>([
+            new Agent
+            {
+                Id = Guid.CreateVersion7(),
+                Name = "alpha",
+                SystemPrompt = "Alpha prompt",
+            },
         ]);
         var factory = CreateFactory(repository);
         var handler = await factory.CreateAsync("alpha");
@@ -82,7 +107,8 @@ public class AgentHandlerFactoryTests
     {
         var method = typeof(CommonAgentHandler).GetMethod(
             "GetAgentCardAsync",
-            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+        );
 
         Assert.NotNull(method);
         Assert.False(method!.IsStatic);
@@ -95,7 +121,8 @@ public class AgentHandlerFactoryTests
 
         Assert.DoesNotContain(
             constructors,
-            constructor => constructor.GetParameters().Any(parameter => parameter.ParameterType == typeof(AgentCard)));
+            constructor => constructor.GetParameters().Any(parameter => parameter.ParameterType == typeof(AgentCard))
+        );
         Assert.Contains(
             constructors,
             constructor =>
@@ -104,7 +131,8 @@ public class AgentHandlerFactoryTests
                 return parameters.Length >= 2
                     && parameters[0].ParameterType == typeof(string)
                     && parameters[1].ParameterType == typeof(IAgentExecutionBridge);
-            });
+            }
+        );
     }
 
     [Fact]
@@ -116,10 +144,9 @@ public class AgentHandlerFactoryTests
             ExecuteAsyncImpl = (_, context, input, _) =>
             {
                 return Task.FromResult<AgentExecutionResult?>(
-                    new AgentExecutionResult(
-                        context.TaskId,
-                        [CreateTextMessage("final answer")]));
-            }
+                    new AgentExecutionResult(context.TaskId, [CreateTextMessage("final answer")])
+                );
+            },
         };
         var handler = CreateHandler("alpha", bridge);
         var queue = new AgentEventQueue(capacity: 32);
@@ -132,10 +159,12 @@ public class AgentHandlerFactoryTests
                     Part.FromText("hello"),
                     Part.FromUrl("https://example.com/result", "text/html", "result.html"),
                     Part.FromData(data),
-                    Part.FromRaw([0x01, 0x02, 0x03], "application/octet-stream", "payload.bin")
-                ]),
+                    Part.FromRaw([0x01, 0x02, 0x03], "application/octet-stream", "payload.bin"),
+                ]
+            ),
             queue,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         queue.Complete(exception: null);
 
         var events = await DrainAsync(queue, TestContext.Current.CancellationToken);
@@ -148,8 +177,12 @@ public class AgentHandlerFactoryTests
             content => Assert.Equal("hello", Assert.IsType<AgwTextContent>(content).Content),
             content => Assert.Equal("https://example.com/result", Assert.IsType<AgwUriContent>(content).Uri.ToString()),
             content => Assert.Equal("""{"kind":"json"}""", Assert.IsType<AgwTextContent>(content).Content),
-            content => Assert.Equal("AQID", Assert.IsType<AgwTextContent>(content).Content));
-        Assert.Contains(events, response => response.ArtifactUpdate?.Artifact?.Parts?.Any(part => part.Text == "final answer") == true);
+            content => Assert.Equal("AQID", Assert.IsType<AgwTextContent>(content).Content)
+        );
+        Assert.Contains(
+            events,
+            response => response.ArtifactUpdate?.Artifact?.Parts?.Any(part => part.Text == "final answer") == true
+        );
         Assert.Contains(events, response => response.StatusUpdate?.Status?.State == TaskState.Completed);
     }
 
@@ -159,9 +192,7 @@ public class AgentHandlerFactoryTests
         var bridge = new FakeAgentExecutionBridge
         {
             ExecuteStreamingAsyncImpl = (_, _, _, _) =>
-                ToAsyncEnumerable(
-                    CreateTextMessage("chunk-1"),
-                    CreateTurnFinishedMessage())
+                ToAsyncEnumerable(CreateTextMessage("chunk-1"), CreateTurnFinishedMessage()),
         };
         var handler = CreateHandler("alpha", bridge);
         var queue = new AgentEventQueue(capacity: 32);
@@ -169,7 +200,8 @@ public class AgentHandlerFactoryTests
         await handler.ExecuteAsync(
             CreateRequestContext(streamingResponse: true, parts: [Part.FromText("hello")]),
             queue,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         queue.Complete(exception: null);
 
         var events = await DrainAsync(queue, TestContext.Current.CancellationToken);
@@ -177,8 +209,14 @@ public class AgentHandlerFactoryTests
         Assert.True(bridge.ExecuteStreamingCalled);
         Assert.False(bridge.ExecuteCalled);
         Assert.Contains(events, response => response.StatusUpdate?.Status?.State == TaskState.Working);
-        Assert.Contains(events, response => response.ArtifactUpdate?.Artifact?.Parts?.Any(part => part.Text == "chunk-1") == true);
-        Assert.DoesNotContain(events, response => response.ArtifactUpdate?.Artifact?.Parts?.Any(part => string.IsNullOrEmpty(part.Text)) == true);
+        Assert.Contains(
+            events,
+            response => response.ArtifactUpdate?.Artifact?.Parts?.Any(part => part.Text == "chunk-1") == true
+        );
+        Assert.DoesNotContain(
+            events,
+            response => response.ArtifactUpdate?.Artifact?.Parts?.Any(part => string.IsNullOrEmpty(part.Text)) == true
+        );
         Assert.Contains(events, response => response.StatusUpdate?.Status?.State == TaskState.Completed);
     }
 
@@ -187,7 +225,7 @@ public class AgentHandlerFactoryTests
     {
         var bridge = new FakeAgentExecutionBridge
         {
-            ExecuteAsyncImpl = (_, _, _, _) => throw new InvalidOperationException("boom")
+            ExecuteAsyncImpl = (_, _, _, _) => throw new InvalidOperationException("boom"),
         };
         var handler = CreateHandler("alpha", bridge);
         var queue = new AgentEventQueue(capacity: 32);
@@ -195,26 +233,31 @@ public class AgentHandlerFactoryTests
         await handler.ExecuteAsync(
             CreateRequestContext(streamingResponse: false, parts: [Part.FromText("hello")]),
             queue,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         queue.Complete(exception: null);
 
         var events = await DrainAsync(queue, TestContext.Current.CancellationToken);
 
         Assert.Contains(events, response => response.StatusUpdate?.Status?.State == TaskState.Failed);
-        Assert.Contains(events, response => response.StatusUpdate?.Status?.Message?.Parts?.Any(part => part.Text == "boom") == true);
+        Assert.Contains(
+            events,
+            response => response.StatusUpdate?.Status?.Message?.Parts?.Any(part => part.Text == "boom") == true
+        );
     }
 
     [Fact]
     public async Task ListTasksAsync_WhenAgentDoesNotExist_ThrowsAgwInvalidAgentResponse()
     {
-        var requestHandler = CreateRequestHandler(
-            CreateFactory(new InMemoryRepository<Agent>()));
+        var requestHandler = CreateRequestHandler(CreateFactory(new InMemoryRepository<Agent>()));
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
             requestHandler.ListTasksAsync(
                 "missing-agent",
                 new ListTasksRequest(),
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(ErrorCodes.A2AInvalidAgentResponse.Code, exception.Code);
     }
@@ -237,10 +280,16 @@ public class AgentHandlerFactoryTests
             agentName,
             executionBridge,
             CreateA2AAgentService(
-                new InMemoryRepository<Agent>(
-                [
-                    new Agent { Id = Guid.CreateVersion7(), Name = agentName, SystemPrompt = $"{agentName} prompt" }
-                ])));
+                new InMemoryRepository<Agent>([
+                    new Agent
+                    {
+                        Id = Guid.CreateVersion7(),
+                        Name = agentName,
+                        SystemPrompt = $"{agentName} prompt",
+                    },
+                ])
+            )
+        );
     }
 
     private static A2AAgentService CreateA2AAgentService(InMemoryRepository<Agent> repository)
@@ -250,66 +299,56 @@ public class AgentHandlerFactoryTests
 
     private static AgwA2ARequestHandler CreateRequestHandler(AgentHandlerFactory agentHandlerFactory)
     {
-        var services = new ServiceCollection()
-            .AddSingleton(agentHandlerFactory)
-            .BuildServiceProvider();
+        var services = new ServiceCollection().AddSingleton(agentHandlerFactory).BuildServiceProvider();
 
         return new AgwA2ARequestHandler(
             new FakeTaskStore(),
             new AgwChannelEventNotifier(),
             NullLogger<A2AServer>.Instance,
-            services.GetRequiredService<IServiceScopeFactory>());
+            services.GetRequiredService<IServiceScopeFactory>()
+        );
     }
 
-    private static AgentCard CreateAgentCard(string name) => new()
-    {
-        Name = name,
-        Description = $"{name} description",
-        Version = "1.0.0",
-        Capabilities = new AgentCapabilities
+    private static AgentCard CreateAgentCard(string name) =>
+        new()
         {
-            Streaming = true
-        }
-    };
+            Name = name,
+            Description = $"{name} description",
+            Version = "1.0.0",
+            Capabilities = new AgentCapabilities { Streaming = true },
+        };
 
-    private static RequestContext CreateRequestContext(bool streamingResponse, List<Part> parts) => new()
-    {
-        TaskId = Guid.CreateVersion7().ToString("D"),
-        ContextId = "ctx-a2a",
-        StreamingResponse = streamingResponse,
-        Message = new Message
+    private static RequestContext CreateRequestContext(bool streamingResponse, List<Part> parts) =>
+        new()
         {
-            Role = Role.User,
-            MessageId = "msg-user",
+            TaskId = Guid.CreateVersion7().ToString("D"),
             ContextId = "ctx-a2a",
-            Parts = parts
-        }
-    };
+            StreamingResponse = streamingResponse,
+            Message = new Message
+            {
+                Role = Role.User,
+                MessageId = "msg-user",
+                ContextId = "ctx-a2a",
+                Parts = parts,
+            },
+        };
 
     private static AgwMessage CreateTextMessage(string text) =>
-        new(
-            Guid.CreateVersion7().ToString("N"),
-            "$agent",
-            AiRole.System,
-            [new AgwTextContent { Content = text }]);
+        new(Guid.CreateVersion7().ToString("N"), "$agent", AiRole.System, [new AgwTextContent { Content = text }]);
 
     private static AgwMessage CreateTurnFinishedMessage() =>
         new(
             Guid.CreateVersion7().ToString("N"),
             "$agw",
             AiRole.System,
-            [
-                new AgwTextContent
-                {
-                    Content = string.Empty,
-                }
-            ],
-            new AdditionalPropertiesDictionary
-            {
-                ["type"] = "turn-finished",
-            });
+            [new AgwTextContent { Content = string.Empty }],
+            new AdditionalPropertiesDictionary { ["type"] = "turn-finished" }
+        );
 
-    private static async Task<List<StreamResponse>> DrainAsync(AgentEventQueue queue, CancellationToken cancellationToken)
+    private static async Task<List<StreamResponse>> DrainAsync(
+        AgentEventQueue queue,
+        CancellationToken cancellationToken
+    )
     {
         var responses = new List<StreamResponse>();
         await foreach (var response in queue.WithCancellation(cancellationToken))
@@ -329,8 +368,7 @@ public class AgentHandlerFactoryTests
         }
     }
 
-    private sealed class InMemoryRepository<TEntity>(IEnumerable<TEntity>? entities = null)
-        : IRepository<TEntity>
+    private sealed class InMemoryRepository<TEntity>(IEnumerable<TEntity>? entities = null) : IRepository<TEntity>
         where TEntity : class
     {
         private readonly List<TEntity> _entities = entities?.ToList() ?? [];
@@ -344,7 +382,8 @@ public class AgentHandlerFactoryTests
 
         public Task<TEntity?> SingleOrDefaultAsync(
             Expression<Func<TEntity, bool>> predicate,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             return Task.FromResult(_entities.AsQueryable().SingleOrDefault(predicate));
         }
@@ -354,15 +393,15 @@ public class AgentHandlerFactoryTests
             return Task.FromResult((IReadOnlyList<TEntity>)ApplyPredicate(predicate));
         }
 
-        public Task<IReadOnlyList<TEntity>> ListAsync(
-            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy)
+        public Task<IReadOnlyList<TEntity>> ListAsync(Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>> orderBy)
         {
             return Task.FromResult((IReadOnlyList<TEntity>)orderBy(ApplyQuery(predicate: null)).ToList());
         }
 
         public Task<IReadOnlyList<TEntity>> ListAsync(
             Expression<Func<TEntity, bool>>? predicate,
-            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy)
+            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy
+        )
         {
             var query = ApplyQuery(predicate);
             var results = orderBy is null ? query.ToList() : orderBy(query).ToList();
@@ -371,7 +410,8 @@ public class AgentHandlerFactoryTests
 
         public Task<IReadOnlyList<TEntity>> ListAsync(
             Expression<Func<TEntity, bool>>? predicate = null,
-            params Expression<Func<TEntity, object>>[] includes)
+            params Expression<Func<TEntity, object>>[] includes
+        )
         {
             return Task.FromResult((IReadOnlyList<TEntity>)ApplyPredicate(predicate));
         }
@@ -379,7 +419,8 @@ public class AgentHandlerFactoryTests
         public Task<IReadOnlyList<TEntity>> ListAsync(
             Expression<Func<TEntity, bool>>? predicate,
             Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy,
-            params Expression<Func<TEntity, object>>[] includes)
+            params Expression<Func<TEntity, object>>[] includes
+        )
         {
             var query = ApplyQuery(predicate);
             var results = orderBy is null ? query.ToList() : orderBy(query).ToList();
@@ -414,9 +455,7 @@ public class AgentHandlerFactoryTests
 
         private IQueryable<TEntity> ApplyQuery(Expression<Func<TEntity, bool>>? predicate)
         {
-            return predicate is null
-                ? _entities.AsQueryable()
-                : _entities.AsQueryable().Where(predicate);
+            return predicate is null ? _entities.AsQueryable() : _entities.AsQueryable().Where(predicate);
         }
     }
 
@@ -430,17 +469,29 @@ public class AgentHandlerFactoryTests
 
         public AgwUserInput? CapturedInput { get; set; }
 
-        public Func<string, RequestContext, AgwUserInput, CancellationToken, Task<AgentExecutionResult?>> ExecuteAsyncImpl { get; set; } =
+        public Func<
+            string,
+            RequestContext,
+            AgwUserInput,
+            CancellationToken,
+            Task<AgentExecutionResult?>
+        > ExecuteAsyncImpl { get; set; } =
             (_, context, _, _) => Task.FromResult<AgentExecutionResult?>(new AgentExecutionResult(context.TaskId, []));
 
-        public Func<string, RequestContext, AgwUserInput, CancellationToken, IAsyncEnumerable<AgwMessage>> ExecuteStreamingAsyncImpl { get; set; } =
-            (_, _, _, _) => ToAsyncEnumerable();
+        public Func<
+            string,
+            RequestContext,
+            AgwUserInput,
+            CancellationToken,
+            IAsyncEnumerable<AgwMessage>
+        > ExecuteStreamingAsyncImpl { get; set; } = (_, _, _, _) => ToAsyncEnumerable();
 
         public async Task<AgentExecutionResult?> ExecuteAsync(
             string agentName,
             RequestContext context,
             AgwUserInput input,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             ExecuteCalled = true;
             CapturedContext = context;
@@ -452,7 +503,8 @@ public class AgentHandlerFactoryTests
             string agentName,
             RequestContext context,
             AgwUserInput input,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             ExecuteStreamingCalled = true;
             CapturedContext = context;
@@ -473,7 +525,10 @@ public class AgentHandlerFactoryTests
             return Task.FromResult<AgentTask?>(null);
         }
 
-        public Task<ListTasksResponse> ListTasksAsync(ListTasksRequest request, CancellationToken cancellationToken = default)
+        public Task<ListTasksResponse> ListTasksAsync(
+            ListTasksRequest request,
+            CancellationToken cancellationToken = default
+        )
         {
             return Task.FromResult(new ListTasksResponse { Tasks = [] });
         }

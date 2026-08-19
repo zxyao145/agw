@@ -7,10 +7,8 @@ using System.Net.Http.Headers;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Serialization;
-
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Shared.AgwMsgVm;
@@ -88,10 +86,7 @@ public class AgwUriContent : AgwContent
 
     public Uri Uri
     {
-        get
-        {
-            return _uri;
-        }
+        get { return _uri; }
         set
         {
             ArgumentNullException.ThrowIfNull(value);
@@ -101,10 +96,7 @@ public class AgwUriContent : AgwContent
 
     public string MediaType
     {
-        get
-        {
-            return _mediaType;
-        }
+        get { return _mediaType; }
         set
         {
             ArgumentNullException.ThrowIfNull(value);
@@ -117,9 +109,7 @@ public class AgwUriContent : AgwContent
     }
 
     public AgwUriContent(string uri, string mediaType)
-        : this(new Uri(ThrowUtil.IfNull(uri, "uri")), mediaType)
-    {
-    }
+        : this(new Uri(ThrowUtil.IfNull(uri, "uri")), mediaType) { }
 
     [JsonConstructor]
     public AgwUriContent(Uri uri, string mediaType)
@@ -135,7 +125,10 @@ internal class AgwDataUriParser
 
     public const string DefaultMediaType = "text/plain;charset=US-ASCII";
 
-    public static string ThrowIfInvalidMediaType(string mediaType, [CallerArgumentExpression("mediaType")] string parameterName = "")
+    public static string ThrowIfInvalidMediaType(
+        string mediaType,
+        [CallerArgumentExpression("mediaType")] string parameterName = ""
+    )
     {
         ThrowUtil.IfNullOrWhitespace(mediaType, parameterName);
         if (!IsValidMediaType(mediaType))
@@ -197,9 +190,10 @@ internal class AgwDataUriParser
 
         public bool IsBase64 { get; } = isBase64;
 
-        public byte[] ToByteArray() => IsBase64 ?
-            Convert.FromBase64String(Data.ToString()) :
-            Encoding.UTF8.GetBytes(WebUtility.UrlDecode(Data.ToString()));
+        public byte[] ToByteArray() =>
+            IsBase64
+                ? Convert.FromBase64String(Data.ToString())
+                : Encoding.UTF8.GetBytes(WebUtility.UrlDecode(Data.ToString()));
     }
 
     public static AgwDataUri Parse(ReadOnlyMemory<char> dataUri)
@@ -207,7 +201,10 @@ internal class AgwDataUriParser
         // Validate, then trim off the "data:" scheme.
         if (!dataUri.Span.StartsWith(Scheme.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
-            throw new AgwException(ErrorCodes.InvalidDataUriFormat, "Invalid data URI format: the data URI must start with 'data:'.");
+            throw new AgwException(
+                ErrorCodes.InvalidDataUriFormat,
+                "Invalid data URI format: the data URI must start with 'data:'."
+            );
         }
 
         dataUri = dataUri.Slice(Scheme.Length);
@@ -216,7 +213,10 @@ internal class AgwDataUriParser
         int commaPos = dataUri.Span.IndexOf(',');
         if (commaPos < 0)
         {
-            throw new AgwException(ErrorCodes.InvalidDataUriFormat, "Invalid data URI format: the data URI must contain a comma separating the metadata and the data.");
+            throw new AgwException(
+                ErrorCodes.InvalidDataUriFormat,
+                "Invalid data URI format: the data URI must contain a comma separating the metadata and the data."
+            );
         }
 
         ReadOnlyMemory<char> metadata = dataUri.Slice(0, commaPos);
@@ -233,7 +233,10 @@ internal class AgwDataUriParser
             isBase64 = true;
             if (!IsValidBase64Data(data.Span))
             {
-                throw new AgwException(ErrorCodes.InvalidDataUriFormat, "Invalid data URI format: the data URI is base64-encoded, but the data is not a valid base64 string.");
+                throw new AgwException(
+                    ErrorCodes.InvalidDataUriFormat,
+                    "Invalid data URI format: the data URI is base64-encoded, but the data is not a valid base64 string."
+                );
             }
         }
 
@@ -247,7 +250,10 @@ internal class AgwDataUriParser
         }
         else if (!IsValidMediaType(span, ref mediaType))
         {
-            throw new AgwException(ErrorCodes.InvalidDataUriFormat, "Invalid data URI format: the media type is not a valid.");
+            throw new AgwException(
+                ErrorCodes.InvalidDataUriFormat,
+                "Invalid data URI format: the media type is not a valid."
+            );
         }
 
         return new AgwDataUri(data, isBase64, mediaType);
@@ -288,11 +294,17 @@ public class AgwDataContent : AgwContent
             if (_uri == null)
             {
                 ReadOnlyMemory<byte> valueOrDefault = _data.GetValueOrDefault();
-                char[] array = ArrayPool<char>.Shared.Rent("data:".Length + MediaType.Length + ";base64,".Length + Base64.GetMaxEncodedToUtf8Length(valueOrDefault.Length));
+                char[] array = ArrayPool<char>.Shared.Rent(
+                    "data:".Length
+                        + MediaType.Length
+                        + ";base64,".Length
+                        + Base64.GetMaxEncodedToUtf8Length(valueOrDefault.Length)
+                );
                 Span<char> span = array.AsSpan();
                 Span<char> destination = span;
                 bool shouldAppend;
-                MemoryExtensions.TryWriteInterpolatedStringHandler handler = new MemoryExtensions.TryWriteInterpolatedStringHandler(13, 1, span, out shouldAppend);
+                MemoryExtensions.TryWriteInterpolatedStringHandler handler =
+                    new MemoryExtensions.TryWriteInterpolatedStringHandler(13, 1, span, out shouldAppend);
                 if (shouldAppend && handler.AppendLiteral("data:") && handler.AppendFormatted(MediaType))
                 {
                     handler.AppendLiteral(";base64,");
@@ -300,7 +312,11 @@ public class AgwDataContent : AgwContent
                 else
                     _ = 0;
                 bool flag = destination.TryWrite(ref handler, out var charsWritten);
-                flag |= Convert.TryToBase64Chars(valueOrDefault.Span, array.AsSpan(charsWritten), out var charsWritten2);
+                flag |= Convert.TryToBase64Chars(
+                    valueOrDefault.Span,
+                    array.AsSpan(charsWritten),
+                    out var charsWritten2
+                );
                 _uri = array.AsSpan(0, charsWritten + charsWritten2).ToString();
                 ArrayPool<char>.Shared.Return(array);
             }
@@ -330,9 +346,7 @@ public class AgwDataContent : AgwContent
     }
 
     public AgwDataContent(Uri uri, string? mediaType = null)
-        : this(ThrowUtil.IfNull(uri, "uri").ToString(), mediaType)
-    {
-    }
+        : this(ThrowUtil.IfNull(uri, "uri").ToString(), mediaType) { }
 
     [JsonConstructor]
     public AgwDataContent([StringSyntax("Uri")] string uri, string? mediaType = null)
@@ -351,7 +365,10 @@ public class AgwDataContent : AgwContent
 
         if (mediaType == null)
         {
-            ThrowUtil.ArgumentNullException("mediaType", "uri did not contain a media type, and mediaType was not provided.");
+            ThrowUtil.ArgumentNullException(
+                "mediaType",
+                "uri did not contain a media type, and mediaType was not provided."
+            );
         }
 
         MediaType = AgwDataUriParser.ThrowIfInvalidMediaType(mediaType, "mediaType");

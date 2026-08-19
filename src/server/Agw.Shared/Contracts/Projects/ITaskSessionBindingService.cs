@@ -9,7 +9,8 @@ public interface ITaskSessionBindingService
         string contextId,
         Guid agentId,
         string externalAgentName,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default
+    );
 
     Task<TaskSessionBinding> UpsertAsync(
         Guid projectId,
@@ -18,9 +19,8 @@ public interface ITaskSessionBindingService
         string externalAgentName,
         string providerSessionId,
         string user,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default
+    );
 
-    Task DeleteByContextAsync(
-        Guid projectConversationId,
-        CancellationToken cancellationToken = default);
+    Task DeleteByContextAsync(Guid projectConversationId, CancellationToken cancellationToken = default);
 }

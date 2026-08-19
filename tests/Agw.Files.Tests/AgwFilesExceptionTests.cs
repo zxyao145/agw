@@ -1,5 +1,4 @@
 using System.Net;
-
 using Agw.Files.Exceptions;
 
 namespace Agw.Files.Tests;
@@ -12,7 +11,8 @@ public class AgwFilesExceptionTests
     public void Constructor_UsesStableCodeAndHttpStatus(
         FilesErrorCode errorCode,
         int expectedCode,
-        HttpStatusCode expectedStatusCode)
+        HttpStatusCode expectedStatusCode
+    )
     {
         var exception = new AgwFilesException(errorCode, "Failure");
 

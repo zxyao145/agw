@@ -1,9 +1,7 @@
 using System.Security.Claims;
-
 using Agw.Agents.Execution.Agentflows;
 using Agw.Auth.Application;
 using Agw.Shared.Data;
-
 using Microsoft.Extensions.Logging;
 
 namespace Agw.Agents.Execution.Durable;
@@ -27,7 +25,8 @@ internal sealed class DurableExecutionSegmentExecutor
         DurableAgentSegmentRunner agentRunner,
         AgentflowRuntimeService agentflowRuntimeService,
         IExecutionEventStream eventStream,
-        ILogger<DurableExecutionSegmentExecutor> logger)
+        ILogger<DurableExecutionSegmentExecutor> logger
+    )
     {
         _store = store;
         _agentRunner = agentRunner;
@@ -41,42 +40,31 @@ internal sealed class DurableExecutionSegmentExecutor
     /// </summary>
     public async Task<DurableExecutionSegmentResult> RunAsync(
         DurableExecutionSegmentInput input,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         ArgumentNullException.ThrowIfNull(input);
-        var sink = new ExecutionStreamMessageSink(
-            _eventStream,
-            input.ExecutionId,
-            input.SegmentIndex,
-            _logger);
-        var manifest = (await _store.GetAsync(input.ExecutionId, cancellationToken)
-                .ConfigureAwait(false))
-            .Manifest;
+        var sink = new ExecutionStreamMessageSink(_eventStream, input.ExecutionId, input.SegmentIndex, _logger);
+        var manifest = (await _store.GetAsync(input.ExecutionId, cancellationToken).ConfigureAwait(false)).Manifest;
         var previousUser = UserInfoUtil.Current;
         UserInfoUtil.Current = CreateUserPrincipal(manifest.ResolveUserId());
         try
         {
             return manifest.AgentType switch
             {
-                AgentRuntimeType.Agent => await _agentRunner.RunAsync(
-                        manifest,
-                        input,
-                        sink,
-                        cancellationToken)
+                AgentRuntimeType.Agent => await _agentRunner
+                    .RunAsync(manifest, input, sink, cancellationToken)
                     .ConfigureAwait(false),
-                AgentRuntimeType.Agentflow => await _agentflowRuntimeService.ExecuteDurableSegmentAsync(
-                        manifest,
-                        input,
-                        sink,
-                        cancellationToken)
+                AgentRuntimeType.Agentflow => await _agentflowRuntimeService
+                    .ExecuteDurableSegmentAsync(manifest, input, sink, cancellationToken)
                     .ConfigureAwait(false),
                 _ => new DurableExecutionSegmentResult
                 {
                     ExecutionId = input.ExecutionId,
                     SegmentIndex = input.SegmentIndex,
                     Status = DurableExecutionSegmentStatus.Failed,
-                    ErrorMessage = $"Agent runtime type '{manifest.AgentType}' is not supported."
-                }
+                    ErrorMessage = $"Agent runtime type '{manifest.AgentType}' is not supported.",
+                },
             };
         }
         finally
@@ -86,7 +74,5 @@ internal sealed class DurableExecutionSegmentExecutor
     }
 
     private static ClaimsPrincipal CreateUserPrincipal(string userId) =>
-        new(new ClaimsIdentity(
-            [new Claim(ClaimTypes.NameIdentifier, userId)],
-            "DurableExecution"));
+        new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], "DurableExecution"));
 }

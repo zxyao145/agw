@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Text;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -15,9 +14,7 @@ internal sealed class FunctionLoopMessageIsolationChatClient : DelegatingChatCli
 {
     private readonly FunctionLoopContextTracker _contextTracker;
 
-    public FunctionLoopMessageIsolationChatClient(
-        IChatClient innerClient,
-        FunctionLoopContextTracker contextTracker)
+    public FunctionLoopMessageIsolationChatClient(IChatClient innerClient, FunctionLoopContextTracker contextTracker)
         : base(innerClient)
     {
         _contextTracker = contextTracker;
@@ -26,22 +23,24 @@ internal sealed class FunctionLoopMessageIsolationChatClient : DelegatingChatCli
     public override Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,
-        CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken = default
+    ) =>
         base.GetResponseAsync(
-            _contextTracker.FilterRepeatedContextMessages(
-                ChatMessageSourceIsolation.CloneMessages(messages)),
+            _contextTracker.FilterRepeatedContextMessages(ChatMessageSourceIsolation.CloneMessages(messages)),
             options,
-            cancellationToken);
+            cancellationToken
+        );
 
     public override IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions? options = null,
-        CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken = default
+    ) =>
         base.GetStreamingResponseAsync(
-            _contextTracker.FilterRepeatedContextMessages(
-                ChatMessageSourceIsolation.CloneMessages(messages)),
+            _contextTracker.FilterRepeatedContextMessages(ChatMessageSourceIsolation.CloneMessages(messages)),
             options,
-            cancellationToken);
+            cancellationToken
+        );
 }
 
 /// <summary>
@@ -52,9 +51,7 @@ internal sealed class FunctionLoopContextScopeAgent : DelegatingAIAgent
 {
     private readonly FunctionLoopContextTracker _contextTracker;
 
-    public FunctionLoopContextScopeAgent(
-        AIAgent innerAgent,
-        FunctionLoopContextTracker contextTracker)
+    public FunctionLoopContextScopeAgent(AIAgent innerAgent, FunctionLoopContextTracker contextTracker)
         : base(innerAgent)
     {
         _contextTracker = contextTracker;
@@ -64,27 +61,28 @@ internal sealed class FunctionLoopContextScopeAgent : DelegatingAIAgent
         IEnumerable<ChatMessage> messages,
         AgentSession? session = null,
         AgentRunOptions? options = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         session ??= await InnerAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
         using var scope = _contextTracker.BeginRun(session);
-        return await InnerAgent.RunAsync(messages, session, options, cancellationToken)
-            .ConfigureAwait(false);
+        return await InnerAgent.RunAsync(messages, session, options, cancellationToken).ConfigureAwait(false);
     }
 
     protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
         IEnumerable<ChatMessage> messages,
         AgentSession? session = null,
         AgentRunOptions? options = null,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default
+    )
     {
         session ??= await InnerAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
         using var scope = _contextTracker.BeginRun(session);
-        await foreach (var update in InnerAgent.RunStreamingAsync(
-                           messages,
-                           session,
-                           options,
-                           cancellationToken).ConfigureAwait(false))
+        await foreach (
+            var update in InnerAgent
+                .RunStreamingAsync(messages, session, options, cancellationToken)
+                .ConfigureAwait(false)
+        )
         {
             yield return update;
         }
@@ -93,8 +91,7 @@ internal sealed class FunctionLoopContextScopeAgent : DelegatingAIAgent
 
 internal sealed class FunctionLoopContextTracker
 {
-    private readonly ConcurrentDictionary<AgentSession, RunState> _runs =
-        new(ReferenceEqualityComparer.Instance);
+    private readonly ConcurrentDictionary<AgentSession, RunState> _runs = new(ReferenceEqualityComparer.Instance);
 
     public IDisposable BeginRun(AgentSession session)
     {
@@ -115,9 +112,10 @@ internal sealed class FunctionLoopContextTracker
         var sourceOrdinals = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var message in messages)
         {
-            if (message.GetAgentRequestMessageSourceType() !=
-                AgentRequestMessageSourceType.AIContextProvider ||
-                !TryCreateSignature(message, out var signature))
+            if (
+                message.GetAgentRequestMessageSourceType() != AgentRequestMessageSourceType.AIContextProvider
+                || !TryCreateSignature(message, out var signature)
+            )
             {
                 filtered.Add(message);
                 continue;
@@ -127,8 +125,7 @@ internal sealed class FunctionLoopContextTracker
             sourceOrdinals.TryGetValue(sourceId, out var ordinal);
             sourceOrdinals[sourceId] = ordinal + 1;
             var key = new ContextMessageKey(sourceId, ordinal);
-            if (run.ContextMessages.TryGetValue(key, out var previous) &&
-                previous == signature)
+            if (run.ContextMessages.TryGetValue(key, out var previous) && previous == signature)
             {
                 continue;
             }
@@ -140,9 +137,7 @@ internal sealed class FunctionLoopContextTracker
         return filtered;
     }
 
-    private static bool TryCreateSignature(
-        ChatMessage message,
-        out ContextMessageSignature signature)
+    private static bool TryCreateSignature(ChatMessage message, out ContextMessageSignature signature)
     {
         var content = new StringBuilder();
         foreach (var item in message.Contents)
@@ -161,10 +156,7 @@ internal sealed class FunctionLoopContextTracker
             }
         }
 
-        signature = new ContextMessageSignature(
-            message.Role.Value,
-            message.AuthorName,
-            content.ToString());
+        signature = new ContextMessageSignature(message.Role.Value, message.AuthorName, content.ToString());
         return true;
     }
 
@@ -190,10 +182,7 @@ internal sealed class FunctionLoopContextTracker
         private readonly RunState _run;
         private int _disposed;
 
-        public RunScope(
-            FunctionLoopContextTracker owner,
-            AgentSession session,
-            RunState run)
+        public RunScope(FunctionLoopContextTracker owner, AgentSession session, RunState run)
         {
             _owner = owner;
             _session = session;
@@ -204,18 +193,14 @@ internal sealed class FunctionLoopContextTracker
         {
             if (Interlocked.Exchange(ref _disposed, 1) == 0)
             {
-                _owner._runs.TryRemove(
-                    new KeyValuePair<AgentSession, RunState>(_session, _run));
+                _owner._runs.TryRemove(new KeyValuePair<AgentSession, RunState>(_session, _run));
             }
         }
     }
 
     private readonly record struct ContextMessageKey(string SourceId, int Ordinal);
 
-    private readonly record struct ContextMessageSignature(
-        string Role,
-        string? AuthorName,
-        string Content);
+    private readonly record struct ContextMessageSignature(string Role, string? AuthorName, string Content);
 }
 
 internal static class ChatMessageSourceIsolation
@@ -223,15 +208,16 @@ internal static class ChatMessageSourceIsolation
     // ChatMessage.Clone is shallow. Copy the dictionary as well because CompactionProvider
     // replaces source attribution entries while maintaining its incremental message index.
     public static List<ChatMessage> CloneMessages(IEnumerable<ChatMessage> messages) =>
-        messages.Select(static message =>
-        {
-            var clone = message.Clone();
-            if (message.AdditionalProperties != null)
+        messages
+            .Select(static message =>
             {
-                clone.AdditionalProperties = new AdditionalPropertiesDictionary(
-                    message.AdditionalProperties);
-            }
+                var clone = message.Clone();
+                if (message.AdditionalProperties != null)
+                {
+                    clone.AdditionalProperties = new AdditionalPropertiesDictionary(message.AdditionalProperties);
+                }
 
-            return clone;
-        }).ToList();
+                return clone;
+            })
+            .ToList();
 }

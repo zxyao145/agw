@@ -1,5 +1,4 @@
 using Agw.Shared.Exceptions;
-
 using Microsoft.Extensions.Options;
 
 namespace Agw.Integrations.Application.OAuth;
@@ -41,9 +40,7 @@ public sealed class OAuthRedirectUriResolver
 
     private static string Combine(string? configuredBaseUrl, string fallbackBaseUri, string path)
     {
-        var baseUrl = string.IsNullOrWhiteSpace(configuredBaseUrl)
-            ? fallbackBaseUri
-            : configuredBaseUrl;
+        var baseUrl = string.IsNullOrWhiteSpace(configuredBaseUrl) ? fallbackBaseUri : configuredBaseUrl;
         if (!TryValidateBaseUrl(baseUrl, out var baseUri))
         {
             throw new AgwException(ErrorCodes.IntegrationConfigurationInvalid);
@@ -54,12 +51,14 @@ public sealed class OAuthRedirectUriResolver
 
     private static bool TryValidateBaseUrl(string value, out Uri uri)
     {
-        if (!Uri.TryCreate(EnsureTrailingSlash(value.Trim()), UriKind.Absolute, out uri!)
+        if (
+            !Uri.TryCreate(EnsureTrailingSlash(value.Trim()), UriKind.Absolute, out uri!)
             || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)
             || string.IsNullOrWhiteSpace(uri.Host)
             || !string.IsNullOrEmpty(uri.UserInfo)
             || !string.IsNullOrEmpty(uri.Query)
-            || !string.IsNullOrEmpty(uri.Fragment))
+            || !string.IsNullOrEmpty(uri.Fragment)
+        )
         {
             uri = null!;
             return false;

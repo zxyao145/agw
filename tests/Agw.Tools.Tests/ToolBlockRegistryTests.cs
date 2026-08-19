@@ -13,11 +13,10 @@ public sealed class ToolBlockRegistryTests
         var blocks = new[]
         {
             new RecordingToolBlock("duplicate", ToolBlockScope.Agent),
-            new RecordingToolBlock("duplicate", ToolBlockScope.Agent)
+            new RecordingToolBlock("duplicate", ToolBlockScope.Agent),
         };
 
-        var exception = Assert.Throws<AgwException>(
-            () => new ToolBlockRegistry(blocks));
+        var exception = Assert.Throws<AgwException>(() => new ToolBlockRegistry(blocks));
 
         Assert.Contains("registered more than once", exception.Message);
     }
@@ -32,7 +31,8 @@ public sealed class ToolBlockRegistryTests
             [],
             ToolBlockScope.Agent,
             CreateContext(),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(0, block.MaterializationCount);
         Assert.Empty(contribution.Tools);
@@ -47,11 +47,10 @@ public sealed class ToolBlockRegistryTests
         var blocks = new[]
         {
             new RecordingToolBlock("first", ToolBlockScope.Agent, ["shared"]),
-            new RecordingToolBlock("second", ToolBlockScope.Agent, ["shared"])
+            new RecordingToolBlock("second", ToolBlockScope.Agent, ["shared"]),
         };
 
-        var exception = Assert.Throws<AgwException>(
-            () => new ToolBlockRegistry(blocks));
+        var exception = Assert.Throws<AgwException>(() => new ToolBlockRegistry(blocks));
 
         Assert.Contains("belongs to more than one Tool Block", exception.Message);
     }
@@ -61,12 +60,14 @@ public sealed class ToolBlockRegistryTests
     {
         var registry = new ToolBlockRegistry([]);
 
-        var exception = await Assert.ThrowsAsync<AgwException>(
-            async () => await registry.MaterializeAsync(
+        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+            await registry.MaterializeAsync(
                 [new TestToolBlockDefinition("unknown")],
                 ToolBlockScope.Agent,
                 CreateContext(),
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Contains("Unknown Tool Block", exception.Message);
     }
@@ -77,12 +78,14 @@ public sealed class ToolBlockRegistryTests
         var block = new RecordingToolBlock("agent-only", ToolBlockScope.Agent);
         var registry = new ToolBlockRegistry([block]);
 
-        var exception = await Assert.ThrowsAsync<AgwException>(
-            async () => await registry.MaterializeAsync(
+        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+            await registry.MaterializeAsync(
                 [new TestToolBlockDefinition("agent-only")],
                 ToolBlockScope.Project,
                 CreateContext(),
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Contains("not supported for scope", exception.Message);
         Assert.Equal(0, block.MaterializationCount);
@@ -97,12 +100,14 @@ public sealed class ToolBlockRegistryTests
         var originalNames = new HashSet<string>(["existing"], StringComparer.OrdinalIgnoreCase);
         context.EnabledToolBlockNames = originalNames;
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await registry.MaterializeAsync(
+        await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await registry.MaterializeAsync(
                 [new TestToolBlockDefinition("failing")],
                 ToolBlockScope.Agent,
                 context,
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Same(originalNames, context.EnabledToolBlockNames);
     }
@@ -111,13 +116,9 @@ public sealed class ToolBlockRegistryTests
         new()
         {
             Agent = new Agent { Id = Guid.CreateVersion7() },
-            Project = new Project
-            {
-                Id = Guid.CreateVersion7(),
-                Workspace = "/workspace"
-            },
+            Project = new Project { Id = Guid.CreateVersion7(), Workspace = "/workspace" },
             Workspace = "/workspace",
-            DefaultMode = "plan"
+            DefaultMode = "plan",
         };
 
     private sealed class RecordingToolBlock : IToolBlock
@@ -126,15 +127,11 @@ public sealed class ToolBlockRegistryTests
             string id,
             ToolBlockScope scopes,
             IReadOnlyList<string>? memberToolNames = null,
-            bool throwOnMaterialize = false)
+            bool throwOnMaterialize = false
+        )
         {
             _throwOnMaterialize = throwOnMaterialize;
-            Descriptor = new ToolBlockDescriptor(
-                id,
-                id,
-                id,
-                scopes,
-                memberToolNames ?? []);
+            Descriptor = new ToolBlockDescriptor(id, id, id, scopes, memberToolNames ?? []);
         }
 
         public ToolBlockDescriptor Descriptor { get; }
@@ -146,7 +143,8 @@ public sealed class ToolBlockRegistryTests
         public ValueTask<ToolContribution> MaterializeAsync(
             ToolBlockDefinition definition,
             ToolMaterializationContext context,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             MaterializationCount++;
             if (_throwOnMaterialize)

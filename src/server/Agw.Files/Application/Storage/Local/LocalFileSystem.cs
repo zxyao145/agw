@@ -1,10 +1,8 @@
 using System.IO.Enumeration;
 using System.Text.RegularExpressions;
-
 using Agw.Files.Abstracts;
 using Agw.Files.Abstracts.Dtos;
 using Agw.Files.Exceptions;
-
 using Microsoft.Extensions.FileSystemGlobbing;
 
 namespace Agw.Files.Application.Storage.Local;
@@ -13,10 +11,9 @@ public sealed class LocalFileSystem : IAgwFileSystem
 {
     private static readonly TimeSpan SearchRegexTimeout = TimeSpan.FromSeconds(1);
 
-    private static readonly StringComparison PathComparison =
-        OperatingSystem.IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
+    private static readonly StringComparison PathComparison = OperatingSystem.IsWindows()
+        ? StringComparison.OrdinalIgnoreCase
+        : StringComparison.Ordinal;
 
     private readonly string _rootPath;
     private readonly string _normalizedRoot;
@@ -24,7 +21,9 @@ public sealed class LocalFileSystem : IAgwFileSystem
     public LocalFileSystem(string rootPath)
     {
         _rootPath = rootPath;
-        _normalizedRoot = Path.GetFullPath(rootPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        _normalizedRoot =
+            Path.GetFullPath(rootPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
     }
 
     public string NormalizedRoot => _normalizedRoot;
@@ -42,7 +41,8 @@ public sealed class LocalFileSystem : IAgwFileSystem
         {
             throw new AgwFilesException(
                 FilesErrorCode.PathOutsideRoot,
-                $"Path '{path}' must be relative to the file system root.");
+                $"Path '{path}' must be relative to the file system root."
+            );
         }
 
         var fullPath = Path.GetFullPath(Path.Combine(_rootPath, normalized));
@@ -51,7 +51,8 @@ public sealed class LocalFileSystem : IAgwFileSystem
         {
             throw new AgwFilesException(
                 FilesErrorCode.PathOutsideRoot,
-                $"Path '{path}' is outside the allowed root directory.");
+                $"Path '{path}' is outside the allowed root directory."
+            );
         }
 
         return fullPath;
@@ -96,21 +97,27 @@ public sealed class LocalFileSystem : IAgwFileSystem
         if (File.Exists(fullPath))
         {
             var info = new FileInfo(fullPath);
-            return Task.FromResult<FileEntry?>(new FileEntry(
-                Path: ToRelativePath(fullPath),
-                IsDirectory: false,
-                Size: info.Length,
-                LastModifiedUtc: info.LastWriteTimeUtc));
+            return Task.FromResult<FileEntry?>(
+                new FileEntry(
+                    Path: ToRelativePath(fullPath),
+                    IsDirectory: false,
+                    Size: info.Length,
+                    LastModifiedUtc: info.LastWriteTimeUtc
+                )
+            );
         }
 
         if (Directory.Exists(fullPath))
         {
             var info = new DirectoryInfo(fullPath);
-            return Task.FromResult<FileEntry?>(new FileEntry(
-                Path: ToRelativePath(fullPath),
-                IsDirectory: true,
-                Size: 0,
-                LastModifiedUtc: info.LastWriteTimeUtc));
+            return Task.FromResult<FileEntry?>(
+                new FileEntry(
+                    Path: ToRelativePath(fullPath),
+                    IsDirectory: true,
+                    Size: 0,
+                    LastModifiedUtc: info.LastWriteTimeUtc
+                )
+            );
         }
 
         return Task.FromResult<FileEntry?>(null);
@@ -166,7 +173,8 @@ public sealed class LocalFileSystem : IAgwFileSystem
         string path,
         string searchPattern,
         bool recursive,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct
+    )
     {
         var fullPath = ResolvePath(path);
         if (!Directory.Exists(fullPath))
@@ -179,13 +187,12 @@ public sealed class LocalFileSystem : IAgwFileSystem
             searchPattern,
             new EnumerationOptions
             {
-                AttributesToSkip = recursive
-                    ? FileAttributes.ReparsePoint
-                    : (FileAttributes)0,
+                AttributesToSkip = recursive ? FileAttributes.ReparsePoint : (FileAttributes)0,
                 IgnoreInaccessible = true,
                 RecurseSubdirectories = recursive,
-                ReturnSpecialDirectories = false
-            });
+                ReturnSpecialDirectories = false,
+            }
+        );
 
         foreach (var entry in entries)
         {
@@ -201,7 +208,8 @@ public sealed class LocalFileSystem : IAgwFileSystem
                     Path: relativePath,
                     IsDirectory: true,
                     Size: 0,
-                    LastModifiedUtc: dirInfo.LastWriteTimeUtc);
+                    LastModifiedUtc: dirInfo.LastWriteTimeUtc
+                );
             }
             else
             {
@@ -210,7 +218,8 @@ public sealed class LocalFileSystem : IAgwFileSystem
                     Path: relativePath,
                     IsDirectory: false,
                     Size: fileInfo.Length,
-                    LastModifiedUtc: fileInfo.LastWriteTimeUtc);
+                    LastModifiedUtc: fileInfo.LastWriteTimeUtc
+                );
             }
         }
     }
@@ -218,7 +227,8 @@ public sealed class LocalFileSystem : IAgwFileSystem
     public async IAsyncEnumerable<SearchHit> SearchAsync(
         string rootPath,
         SearchOptions options,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct
+    )
     {
         var fullPath = ResolvePath(rootPath);
         if (!Directory.Exists(fullPath))
@@ -246,10 +256,12 @@ public sealed class LocalFileSystem : IAgwFileSystem
             yield break;
         }
 
-        if (options.MaxHits is <= 0 ||
-            options.MaxFiles is <= 0 ||
-            options.MaxFileSizeBytes is <= 0 ||
-            options.MaxTotalBytes is <= 0)
+        if (
+            options.MaxHits is <= 0
+            || options.MaxFiles is <= 0
+            || options.MaxFileSizeBytes is <= 0
+            || options.MaxTotalBytes is <= 0
+        )
         {
             yield break;
         }
@@ -266,18 +278,15 @@ public sealed class LocalFileSystem : IAgwFileSystem
         {
             excludedDirectoryNames = new HashSet<string>(
                 options.ExcludedDirectoryNames,
-                StringComparer.OrdinalIgnoreCase);
+                StringComparer.OrdinalIgnoreCase
+            );
         }
 
         var hitCount = 0;
         var fileCount = 0;
         long totalBytes = 0;
 
-        foreach (var file in EnumerateSearchFiles(
-                     fullPath,
-                     options.Recursive,
-                     excludedDirectoryNames,
-                     ct))
+        foreach (var file in EnumerateSearchFiles(fullPath, options.Recursive, excludedDirectoryNames, ct))
         {
             ct.ThrowIfCancellationRequested();
 
@@ -300,8 +309,7 @@ public sealed class LocalFileSystem : IAgwFileSystem
                 }
             }
 
-            var searchRelativePath = Path.GetRelativePath(fullPath, file)
-                .Replace(Path.DirectorySeparatorChar, '/');
+            var searchRelativePath = Path.GetRelativePath(fullPath, file).Replace(Path.DirectorySeparatorChar, '/');
             if (matcher?.Match(searchRelativePath).HasMatches == false)
             {
                 continue;
@@ -321,14 +329,12 @@ public sealed class LocalFileSystem : IAgwFileSystem
                 continue;
             }
 
-            if (options.MaxFileSizeBytes.HasValue &&
-                fileSize > options.MaxFileSizeBytes.Value)
+            if (options.MaxFileSizeBytes.HasValue && fileSize > options.MaxFileSizeBytes.Value)
             {
                 continue;
             }
 
-            if (options.MaxTotalBytes.HasValue &&
-                (fileSize > options.MaxTotalBytes.Value - totalBytes))
+            if (options.MaxTotalBytes.HasValue && (fileSize > options.MaxTotalBytes.Value - totalBytes))
             {
                 yield break;
             }
@@ -340,9 +346,7 @@ public sealed class LocalFileSystem : IAgwFileSystem
             StreamReader reader;
             try
             {
-                reader = new StreamReader(
-                    file,
-                    detectEncodingFromByteOrderMarks: true);
+                reader = new StreamReader(file, detectEncodingFromByteOrderMarks: true);
             }
             catch (IOException)
             {
@@ -414,7 +418,8 @@ public sealed class LocalFileSystem : IAgwFileSystem
         string rootPath,
         bool recursive,
         HashSet<string>? excludedDirectoryNames,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var files = new FileSystemEnumerable<string>(
             rootPath,
@@ -424,17 +429,17 @@ public sealed class LocalFileSystem : IAgwFileSystem
                 AttributesToSkip = FileAttributes.ReparsePoint,
                 IgnoreInaccessible = true,
                 RecurseSubdirectories = recursive,
-                ReturnSpecialDirectories = false
-            })
+                ReturnSpecialDirectories = false,
+            }
+        )
         {
-            ShouldIncludePredicate = static (ref FileSystemEntry entry) => !entry.IsDirectory
+            ShouldIncludePredicate = static (ref FileSystemEntry entry) => !entry.IsDirectory,
         };
 
         if (excludedDirectoryNames != null)
         {
-            files.ShouldRecursePredicate =
-                (ref FileSystemEntry entry) =>
-                    !excludedDirectoryNames.Contains(entry.FileName.ToString());
+            files.ShouldRecursePredicate = (ref FileSystemEntry entry) =>
+                !excludedDirectoryNames.Contains(entry.FileName.ToString());
         }
 
         foreach (var file in files)

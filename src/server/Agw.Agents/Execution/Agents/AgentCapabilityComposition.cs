@@ -1,5 +1,4 @@
 using Agw.Integrations.Application.Capabilities;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -36,7 +35,8 @@ public sealed class AgentCapabilityComposition : IAsyncDisposable
         IReadOnlySet<string> planModeAllowedToolNames,
         IReadOnlyList<string> toolWarnings,
         IReadOnlyDictionary<string, string> toolInvocationWarnings,
-        AgentResourceLease lease)
+        AgentResourceLease lease
+    )
     {
         Tools = tools;
         PluginSkills = pluginSkills;
@@ -44,9 +44,7 @@ public sealed class AgentCapabilityComposition : IAsyncDisposable
         _contextProviders = contextProviders.ToList();
         LoopEvaluators = loopEvaluators;
         _autoApprovalRules = autoApprovalRules.ToList();
-        _planModeAllowedToolNames = new HashSet<string>(
-            planModeAllowedToolNames,
-            StringComparer.OrdinalIgnoreCase);
+        _planModeAllowedToolNames = new HashSet<string>(planModeAllowedToolNames, StringComparer.OrdinalIgnoreCase);
         ToolWarnings = toolWarnings;
         ToolInvocationWarnings = toolInvocationWarnings;
         _lease = lease;
@@ -62,8 +60,7 @@ public sealed class AgentCapabilityComposition : IAsyncDisposable
 
     public IReadOnlyList<LoopEvaluator> LoopEvaluators { get; }
 
-    public IReadOnlyList<Func<ToolAutoApprovalRuleContext, ValueTask<bool>>> AutoApprovalRules =>
-        _autoApprovalRules;
+    public IReadOnlyList<Func<ToolAutoApprovalRuleContext, ValueTask<bool>>> AutoApprovalRules => _autoApprovalRules;
 
     public IReadOnlySet<string> PlanModeAllowedToolNames => _planModeAllowedToolNames;
 

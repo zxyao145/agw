@@ -13,11 +13,7 @@ public class SkillDomainServiceTests
     [Fact]
     public void PrepareForCreate_AssignsMetadataAndContentPath()
     {
-        var skill = new Skill
-        {
-            Name = "expense-report",
-            Description = "Validate expense submissions.",
-        };
+        var skill = new Skill { Name = "expense-report", Description = "Validate expense submissions." };
 
         _service.PrepareForCreate(skill, "tester");
 
@@ -54,8 +50,7 @@ public class SkillDomainServiceTests
             Kind = SkillKind.BuiltIn,
         };
 
-        var exception = Assert.Throws<AgwException>(() =>
-            _service.PrepareForCreate(skill, "tester"));
+        var exception = Assert.Throws<AgwException>(() => _service.PrepareForCreate(skill, "tester"));
 
         Assert.Equal(ErrorCodes.SkillKindInvalid.Code, exception.Code);
     }

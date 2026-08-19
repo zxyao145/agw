@@ -17,15 +17,11 @@ internal sealed class ScopedConnectionMcpToolInvoker : IConnectionMcpToolInvoker
         string sourceId,
         string operationName,
         AIFunctionArguments arguments,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var session = scope.ServiceProvider.GetRequiredService<IConnectionMcpInvocationSession>();
-        return await session.InvokeMcpToolAsync(
-            connectionId,
-            sourceId,
-            operationName,
-            arguments,
-            cancellationToken);
+        return await session.InvokeMcpToolAsync(connectionId, sourceId, operationName, arguments, cancellationToken);
     }
 }

@@ -1,5 +1,4 @@
 using System.Text.Json;
-
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 
@@ -38,13 +37,7 @@ public sealed class CredentialSerializationTests
             {
                 Id = Guid.CreateVersion7(),
                 Alias = "private",
-                Credentials =
-                [
-                    new ConnectionCredential
-                    {
-                        Value = "relation-secret-sentinel",
-                    },
-                ],
+                Credentials = [new ConnectionCredential { Value = "relation-secret-sentinel" }],
             },
         };
 

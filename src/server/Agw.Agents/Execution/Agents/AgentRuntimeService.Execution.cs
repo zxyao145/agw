@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
-
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Store;
@@ -14,10 +13,8 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
-
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace Agw.Agents.Execution.Agents;
@@ -27,13 +24,10 @@ public partial class AgentRuntimeService
     public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         AgentRuntime session,
         AgwUserInput input,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default
+    )
     {
-        await foreach (var message in ExecuteStreamingAsync(
-                           session,
-                           input,
-                           approvalHandler: null,
-                           cancellationToken))
+        await foreach (var message in ExecuteStreamingAsync(session, input, approvalHandler: null, cancellationToken))
         {
             yield return message;
         }
@@ -43,25 +37,21 @@ public partial class AgentRuntimeService
         AgentRuntime session,
         AgwUserInput input,
         IHumanGateApprovalHandler? approvalHandler,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default
+    )
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(input);
 
         try
         {
-            var requestMessages = await CreateExecutionInputMessagesAsync(
-                    session,
-                    input,
-                    cancellationToken)
+            var requestMessages = await CreateExecutionInputMessagesAsync(session, input, cancellationToken)
                 .ConfigureAwait(false);
-            await foreach (var message in session
-                               .ExecuteStreamingAsync(
-                                   requestMessages,
-                                   input,
-                                   approvalHandler,
-                                   cancellationToken)
-                               .ConfigureAwait(false))
+            await foreach (
+                var message in session
+                    .ExecuteStreamingAsync(requestMessages, input, approvalHandler, cancellationToken)
+                    .ConfigureAwait(false)
+            )
             {
                 yield return AgwMessageUtil.PostAgwMessage(session, message);
             }
@@ -77,7 +67,8 @@ public partial class AgentRuntimeService
                     session.SessionStateScope,
                     session.Agent,
                     session.Session,
-                    CancellationToken.None);
+                    CancellationToken.None
+                );
             }
         }
     }
@@ -85,7 +76,8 @@ public partial class AgentRuntimeService
     public async Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
         AgentRuntime session,
         AgwUserInput input,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         return await ExecuteAsync(session, input, approvalHandler: null, cancellationToken);
     }
@@ -98,7 +90,8 @@ public partial class AgentRuntimeService
         ChatMessage message,
         AgwUserInput summaryInput,
         IHumanGateApprovalHandler approvalHandler,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default
+    )
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(message);
@@ -107,13 +100,11 @@ public partial class AgentRuntimeService
 
         try
         {
-            await foreach (var output in session
-                               .ExecuteStreamingSegmentAsync(
-                                   message,
-                                   summaryInput,
-                                   approvalHandler,
-                                   cancellationToken)
-                               .ConfigureAwait(false))
+            await foreach (
+                var output in session
+                    .ExecuteStreamingSegmentAsync(message, summaryInput, approvalHandler, cancellationToken)
+                    .ConfigureAwait(false)
+            )
             {
                 yield return AgwMessageUtil.PostAgwMessage(session, output);
             }
@@ -127,7 +118,8 @@ public partial class AgentRuntimeService
                     session.SessionStateScope,
                     session.Agent,
                     session.Session,
-                    CancellationToken.None);
+                    CancellationToken.None
+                );
             }
         }
     }
@@ -136,23 +128,18 @@ public partial class AgentRuntimeService
         AgentRuntime session,
         AgwUserInput input,
         IHumanGateApprovalHandler? approvalHandler,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(input);
 
         try
         {
-            var requestMessages = await CreateExecutionInputMessagesAsync(
-                    session,
-                    input,
-                    cancellationToken)
+            var requestMessages = await CreateExecutionInputMessagesAsync(session, input, cancellationToken)
                 .ConfigureAwait(false);
-            var messages = await session.ExecuteAsync(
-                    requestMessages,
-                    input,
-                    approvalHandler,
-                    cancellationToken)
+            var messages = await session
+                .ExecuteAsync(requestMessages, input, approvalHandler, cancellationToken)
                 .ConfigureAwait(false);
             return messages.Select(message => AgwMessageUtil.PostAgwMessage(session, message)).ToArray();
         }
@@ -165,7 +152,8 @@ public partial class AgentRuntimeService
                     session.SessionStateScope,
                     session.Agent,
                     session.Session,
-                    CancellationToken.None);
+                    CancellationToken.None
+                );
             }
         }
     }
@@ -173,7 +161,8 @@ public partial class AgentRuntimeService
     private async Task<List<ChatMessage>> CreateExecutionInputMessagesAsync(
         AgentRuntime session,
         AgwUserInput input,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var sessionScope = session.SessionStateScope;
         if (sessionScope == null)
@@ -181,24 +170,29 @@ public partial class AgentRuntimeService
             return [AgwMessageUtil.CreateUserChatMessage(input)];
         }
 
-        var handoff = _conversationHandoffProvider == null
-            ? ConversationHandoff.Empty
-            : await _conversationHandoffProvider.CreateAsync(
-                    sessionScope.ProjectConversationId,
-                    AgentRuntimeType.Agent,
-                    sessionScope.AgentId,
-                    cancellationToken)
-                .ConfigureAwait(false);
+        var handoff =
+            _conversationHandoffProvider == null
+                ? ConversationHandoff.Empty
+                : await _conversationHandoffProvider
+                    .CreateAsync(
+                        sessionScope.ProjectConversationId,
+                        AgentRuntimeType.Agent,
+                        sessionScope.AgentId,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
         return AgwMessageUtil.CreateExecutionInputMessages(
             input,
             AgentRuntimeType.Agent,
             sessionScope.AgentId,
-            handoff);
+            handoff
+        );
     }
 
     public async Task<AgentExecutionResult?> ExecuteByIdAsync(
         AgentExecuteByIdRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         ArgumentNullException.ThrowIfNull(request);
 
@@ -224,7 +218,8 @@ public partial class AgentRuntimeService
     /// </summary>
     private async Task<AgentExecutionResult?> ExecuteAsync(
         AgentExecuteRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         Guid? taskId = request.TaskId;
         List<ChatMessage> chatMsg = request.Input;
@@ -237,12 +232,15 @@ public partial class AgentRuntimeService
         var conversationId = await _sessionStateStore
             .ResolveProjectConversationIdAsync(projectId.Value, resolvedContextId, cancellationToken)
             .ConfigureAwait(false);
-        var aiAgent = await CreateAiAgentAsync(new CreateAiAgentRequest
-        {
-            Agent = agent,
-            ProjectId = projectId,
-            ConversationId = conversationId ?? Guid.Empty
-        }, cancellationToken);
+        var aiAgent = await CreateAiAgentAsync(
+            new CreateAiAgentRequest
+            {
+                Agent = agent,
+                ProjectId = projectId,
+                ConversationId = conversationId ?? Guid.Empty,
+            },
+            cancellationToken
+        );
         if (aiAgent == null)
         {
             throw new AgwException(ErrorCodes.AiAgentCreationFailed);
@@ -260,41 +258,39 @@ public partial class AgentRuntimeService
                 conversationId ?? Guid.Empty,
                 projectId.Value,
                 resolvedContextId,
-                agent.Id);
-            session = await _sessionStateStore.GetOrCreateAsync(
-                    agent,
-                    aiAgent,
-                    sessionScope,
-                    cancellationToken)
+                agent.Id
+            );
+            session = await _sessionStateStore
+                .GetOrCreateAsync(agent, aiAgent, sessionScope, cancellationToken)
                 .ConfigureAwait(false);
 
             _providerSessionState.InitializeSessionState(
                 session,
                 resolvedContextId,
-                ProjectDefaults.GetDefaultProjectIdentifier(projectId));
+                ProjectDefaults.GetDefaultProjectIdentifier(projectId)
+            );
 
             turnPersistence = new ToolTurnPersistence(
                 aiAgent,
                 session,
-                (messages, token) => PersistToolBlockMessagesAsync(
-                    projectId.Value,
-                    resolvedContextId,
-                    messages,
-                    token));
+                (messages, token) => PersistToolBlockMessagesAsync(projectId.Value, resolvedContextId, messages, token)
+            );
             var messages = await CollectStreamingMessagesAsync(
                     aiAgent,
                     chatMsg,
                     session,
                     turnPersistence,
-                    cancellationToken)
+                    cancellationToken
+                )
                 .ConfigureAwait(false);
             messages = await AppendDefinitionSummaryAsync(
-                agent,
-                chatMsg,
-                messages,
-                projectId.Value,
-                resolvedContextId,
-                cancellationToken)
+                    agent,
+                    chatMsg,
+                    messages,
+                    projectId.Value,
+                    resolvedContextId,
+                    cancellationToken
+                )
                 .ConfigureAwait(false);
 
             return new AgentExecutionResult(taskIdValue, resolvedContextId, messages);
@@ -311,9 +307,7 @@ public partial class AgentRuntimeService
             {
                 try
                 {
-                    await turnPersistence
-                        .CompleteAsync(CancellationToken.None)
-                        .ConfigureAwait(false);
+                    await turnPersistence.CompleteAsync(CancellationToken.None).ConfigureAwait(false);
                 }
                 catch (Exception exception)
                 {
@@ -330,7 +324,8 @@ public partial class AgentRuntimeService
                         sessionScope,
                         aiAgent,
                         session,
-                        CancellationToken.None);
+                        CancellationToken.None
+                    );
                 }
                 catch (Exception exception)
                 {
@@ -342,7 +337,8 @@ public partial class AgentRuntimeService
                     {
                         _logger.LogError(
                             exception,
-                            "A secondary failure occurred while saving an unattended Agent session.");
+                            "A secondary failure occurred while saving an unattended Agent session."
+                        );
                     }
                 }
             }
@@ -366,9 +362,7 @@ public partial class AgentRuntimeService
                 }
                 else
                 {
-                    _logger.LogError(
-                        exception,
-                        "A secondary failure occurred while disposing an unattended Agent.");
+                    _logger.LogError(exception, "A secondary failure occurred while disposing an unattended Agent.");
                 }
             }
 
@@ -378,7 +372,8 @@ public partial class AgentRuntimeService
                 {
                     _logger.LogError(
                         cleanupFailure,
-                        "Cleanup failed while preserving an unattended Agent execution failure.");
+                        "Cleanup failed while preserving an unattended Agent execution failure."
+                    );
                 }
                 else
                 {
@@ -394,11 +389,11 @@ public partial class AgentRuntimeService
         IReadOnlyList<AgwMessage> outputMessages,
         Guid projectId,
         string contextId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var summaryModelProviderId = ResolveSummaryModelProviderId(agent);
-        if (!agent.EnableSummary ||
-            !summaryModelProviderId.HasValue)
+        if (!agent.EnableSummary || !summaryModelProviderId.HasValue)
         {
             return outputMessages.ToList();
         }
@@ -409,7 +404,8 @@ public partial class AgentRuntimeService
                     .Where(message => message.Role == Microsoft.Extensions.AI.ChatRole.User)
                     .SelectMany(message => message.Contents)
                     .OfType<Microsoft.Extensions.AI.TextContent>()
-                    .Select(content => content.Text))
+                    .Select(content => content.Text)
+            )
             .Trim();
         if (!string.IsNullOrWhiteSpace(userText))
         {
@@ -420,20 +416,23 @@ public partial class AgentRuntimeService
                 outputMessages
                     .SelectMany(message => message.Contents)
                     .OfType<AgwTextContent>()
-                    .Select(content => content.Content))
+                    .Select(content => content.Content)
+            )
             .Trim();
         if (!string.IsNullOrWhiteSpace(assistantText))
         {
             sourceMessages.Add(new ChatMessage(Microsoft.Extensions.AI.ChatRole.Assistant, assistantText));
         }
 
-        var result = await _summaryService.CreateResultAsync(
-            summaryModelProviderId.Value,
-            sourceMessages,
-            projectId,
-            contextId,
-            customInstructions: null,
-            cancellationToken)
+        var result = await _summaryService
+            .CreateResultAsync(
+                summaryModelProviderId.Value,
+                sourceMessages,
+                projectId,
+                contextId,
+                customInstructions: null,
+                cancellationToken
+            )
             .ConfigureAwait(false);
         var messages = outputMessages.ToList();
         var resultMessage = result.ToAiMessage();
@@ -446,15 +445,15 @@ public partial class AgentRuntimeService
     }
 
     private static Guid? ResolveSummaryModelProviderId(Agent agent) =>
-        agent.SummaryModelProviderId ??
-        (agent.Type == AgentType.System ? agent.ModelProviderId : null);
+        agent.SummaryModelProviderId ?? (agent.Type == AgentType.System ? agent.ModelProviderId : null);
 
     internal static async Task<List<AgwMessage>> CollectStreamingMessagesAsync(
         AIAgent aiAgent,
         IReadOnlyList<ChatMessage> chatMessages,
         AgentSession session,
         ToolTurnPersistence turnPersistence,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var stream = aiAgent.RunStreamingAsync(chatMessages, session, cancellationToken: cancellationToken);
         var messages = new List<AgwMessage>();
@@ -465,7 +464,8 @@ public partial class AgentRuntimeService
             {
                 throw new AgwException(
                     ErrorCodes.AgentExecutionFailed,
-                    "Tool approval cannot be requested during unattended Agent execution.");
+                    "Tool approval cannot be requested during unattended Agent execution."
+                );
             }
 
             var msg = update.ToAiMessage();
@@ -475,13 +475,8 @@ public partial class AgentRuntimeService
             }
         }
 
-        var stateSnapshots = await turnPersistence
-            .CompleteAsync(CancellationToken.None)
-            .ConfigureAwait(false);
-        messages.AddRange(
-            stateSnapshots
-                .Select(static message => message.ToAiMessage())
-                .OfType<AgwMessage>());
+        var stateSnapshots = await turnPersistence.CompleteAsync(CancellationToken.None).ConfigureAwait(false);
+        messages.AddRange(stateSnapshots.Select(static message => message.ToAiMessage()).OfType<AgwMessage>());
 
         return messages;
     }
@@ -490,14 +485,11 @@ public partial class AgentRuntimeService
         Guid projectId,
         string contextId,
         IReadOnlyList<ChatMessage> messages,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         return _conversationHistoryWriter == null || messages.Count == 0
             ? Task.CompletedTask
-            : _conversationHistoryWriter.AppendAsync(
-                projectId,
-                contextId,
-                messages,
-                cancellationToken);
+            : _conversationHistoryWriter.AppendAsync(projectId, contextId, messages, cancellationToken);
     }
 }

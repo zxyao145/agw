@@ -2,7 +2,6 @@ using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Tools.ToolBlocks.Storage;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,9 +16,7 @@ public sealed class EfProjectMemoryStoreTests
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
-        var options = new DbContextOptionsBuilder<TestDbContext>()
-            .UseSqlite(connection)
-            .Options;
+        var options = new DbContextOptionsBuilder<TestDbContext>().UseSqlite(connection).Options;
         await using (var database = new TestDbContext(options))
         {
             await database.Database.EnsureCreatedAsync(cancellationToken);
@@ -30,24 +27,14 @@ public sealed class EfProjectMemoryStoreTests
         await using var serviceProvider = services.BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var projectId = Guid.CreateVersion7();
-        var firstStore = new EfProjectMemoryStore(
-            scopeFactory,
-            TimeProvider.System,
-            projectId);
-        var secondStore = new EfProjectMemoryStore(
-            scopeFactory,
-            TimeProvider.System,
-            projectId);
+        var firstStore = new EfProjectMemoryStore(scopeFactory, TimeProvider.System, projectId);
+        var secondStore = new EfProjectMemoryStore(scopeFactory, TimeProvider.System, projectId);
 
         await firstStore.WriteAsync("notes.md", "shared content", cancellationToken);
 
-        Assert.Equal(
-            "shared content",
-            await secondStore.ReadAsync("notes.md", cancellationToken));
+        Assert.Equal("shared content", await secondStore.ReadAsync("notes.md", cancellationToken));
         await using var verification = new TestDbContext(options);
-        var entry = await verification.ProjectMemories
-            .AsNoTracking()
-            .SingleAsync(cancellationToken);
+        var entry = await verification.ProjectMemories.AsNoTracking().SingleAsync(cancellationToken);
         Assert.Equal(projectId, entry.ProjectId);
         Assert.Equal("shared content", entry.Content);
     }
@@ -58,9 +45,7 @@ public sealed class EfProjectMemoryStoreTests
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
-        var options = new DbContextOptionsBuilder<TestDbContext>()
-            .UseSqlite(connection)
-            .Options;
+        var options = new DbContextOptionsBuilder<TestDbContext>().UseSqlite(connection).Options;
         await using (var database = new TestDbContext(options))
         {
             await database.Database.EnsureCreatedAsync(cancellationToken);
@@ -70,14 +55,8 @@ public sealed class EfProjectMemoryStoreTests
         services.AddScoped<DbContext>(_ => new TestDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        var firstStore = new EfProjectMemoryStore(
-            scopeFactory,
-            TimeProvider.System,
-            Guid.CreateVersion7());
-        var secondStore = new EfProjectMemoryStore(
-            scopeFactory,
-            TimeProvider.System,
-            Guid.CreateVersion7());
+        var firstStore = new EfProjectMemoryStore(scopeFactory, TimeProvider.System, Guid.CreateVersion7());
+        var secondStore = new EfProjectMemoryStore(scopeFactory, TimeProvider.System, Guid.CreateVersion7());
 
         await firstStore.WriteAsync("notes.md", "first project", cancellationToken);
         await secondStore.WriteAsync("notes.md", "second project", cancellationToken);
@@ -92,9 +71,7 @@ public sealed class EfProjectMemoryStoreTests
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
-        var options = new DbContextOptionsBuilder<TestDbContext>()
-            .UseSqlite(connection)
-            .Options;
+        var options = new DbContextOptionsBuilder<TestDbContext>().UseSqlite(connection).Options;
         await using (var database = new TestDbContext(options))
         {
             await database.Database.EnsureCreatedAsync(cancellationToken);
@@ -109,9 +86,11 @@ public sealed class EfProjectMemoryStoreTests
             scopeFactory,
             TimeProvider.System,
             new InMemoryApplicationLock(),
-            projectId);
+            projectId
+        );
         var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var writes = Enumerable.Range(0, 12)
+        var writes = Enumerable
+            .Range(0, 12)
             .Select(async index =>
             {
                 await start.Task;
@@ -133,9 +112,7 @@ public sealed class EfProjectMemoryStoreTests
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
-        var options = new DbContextOptionsBuilder<TestDbContext>()
-            .UseSqlite(connection)
-            .Options;
+        var options = new DbContextOptionsBuilder<TestDbContext>().UseSqlite(connection).Options;
         await using (var database = new TestDbContext(options))
         {
             await database.Database.EnsureCreatedAsync(cancellationToken);
@@ -147,34 +124,31 @@ public sealed class EfProjectMemoryStoreTests
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var applicationLock = new InMemoryApplicationLock();
         var projectId = Guid.CreateVersion7();
-        var fileFirstStore = new EfProjectMemoryStore(
-            scopeFactory,
-            TimeProvider.System,
-            applicationLock,
-            projectId);
+        var fileFirstStore = new EfProjectMemoryStore(scopeFactory, TimeProvider.System, applicationLock, projectId);
         await fileFirstStore.WriteAsync("foo", "file", cancellationToken);
 
         var descendantException = await Assert.ThrowsAsync<AgwException>(() =>
-            fileFirstStore.WriteAsync("foo/bar.txt", "child", cancellationToken));
+            fileFirstStore.WriteAsync("foo/bar.txt", "child", cancellationToken)
+        );
         Assert.Equal(ErrorCodes.InvalidParam.Code, descendantException.Code);
 
         var directoryFirstStore = new EfProjectMemoryStore(
             scopeFactory,
             TimeProvider.System,
             applicationLock,
-            Guid.CreateVersion7());
+            Guid.CreateVersion7()
+        );
         await directoryFirstStore.WriteAsync("foo/bar.txt", "child", cancellationToken);
         var ancestorException = await Assert.ThrowsAsync<AgwException>(() =>
-            directoryFirstStore.WriteAsync("foo", "file", cancellationToken));
+            directoryFirstStore.WriteAsync("foo", "file", cancellationToken)
+        );
         Assert.Equal(ErrorCodes.InvalidParam.Code, ancestorException.Code);
     }
 
     private sealed class TestDbContext : DbContext
     {
         public TestDbContext(DbContextOptions<TestDbContext> options)
-            : base(options)
-        {
-        }
+            : base(options) { }
 
         public DbSet<ProjectMemoryEntry> ProjectMemories => Set<ProjectMemoryEntry>();
 
@@ -184,11 +158,7 @@ public sealed class EfProjectMemoryStoreTests
             entity.HasKey(entry => entry.Id);
             entity.Property(entry => entry.Path).IsRequired();
             entity.Property(entry => entry.Content).IsRequired();
-            entity.HasIndex(entry => new
-            {
-                entry.ProjectId,
-                entry.Path
-            }).IsUnique();
+            entity.HasIndex(entry => new { entry.ProjectId, entry.Path }).IsUnique();
         }
     }
 }

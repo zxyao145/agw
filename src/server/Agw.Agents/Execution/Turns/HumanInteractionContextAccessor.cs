@@ -23,9 +23,7 @@ public sealed class HumanInteractionContextAccessor : IHumanInteractionContextAc
         private readonly IHumanInteractionChannel? _previous;
         private int _disposed;
 
-        public Scope(
-            HumanInteractionContextAccessor accessor,
-            IHumanInteractionChannel? previous)
+        public Scope(HumanInteractionContextAccessor accessor, IHumanInteractionChannel? previous)
         {
             _accessor = accessor;
             _previous = previous;

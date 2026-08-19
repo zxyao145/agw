@@ -1,9 +1,7 @@
 using System.Runtime.CompilerServices;
-
 using Agw.Agents.Execution.Agents.Tools;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Projects;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -23,7 +21,8 @@ internal sealed class ToolWarningMiddleware
         AgentSession? session,
         AgentRunOptions? options,
         AIAgent innerAgent,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var warningMessages = CreateMessages();
         ConversationHistoryPrelude.Set(session, warningMessages);
@@ -50,7 +49,8 @@ internal sealed class ToolWarningMiddleware
         AgentSession? session,
         AgentRunOptions? options,
         AIAgent innerAgent,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken
+    )
     {
         var warningMessages = CreateMessages();
         ConversationHistoryPrelude.Set(session, warningMessages);
@@ -61,9 +61,11 @@ internal sealed class ToolWarningMiddleware
                 yield return ToolStateSnapshots.ToUpdate(warningMessage);
             }
 
-            await foreach (var update in innerAgent
-                               .RunStreamingAsync(messages, session, options, cancellationToken)
-                               .ConfigureAwait(false))
+            await foreach (
+                var update in innerAgent
+                    .RunStreamingAsync(messages, session, options, cancellationToken)
+                    .ConfigureAwait(false)
+            )
             {
                 yield return update;
             }
@@ -74,17 +76,13 @@ internal sealed class ToolWarningMiddleware
         }
     }
 
-    private List<ChatMessage> CreateMessages() =>
-        _warnings.Select(CreateMessage).ToList();
+    private List<ChatMessage> CreateMessages() => _warnings.Select(CreateMessage).ToList();
 
     private static ChatMessage CreateMessage(string warning) =>
         new(ChatRole.System, [new TextContent(warning)])
         {
             MessageId = Guid.CreateVersion7().ToString("N"),
             AuthorName = "tools",
-            AdditionalProperties = new AdditionalPropertiesDictionary
-            {
-                ["type"] = ToolMessageTypes.Warning
-            }
+            AdditionalProperties = new AdditionalPropertiesDictionary { ["type"] = ToolMessageTypes.Warning },
         };
 }

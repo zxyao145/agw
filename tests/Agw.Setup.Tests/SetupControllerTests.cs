@@ -1,15 +1,12 @@
 using System.Net;
-
 using Agw.Auth.Application;
 using Agw.Setup.Contracts;
 using Agw.Setup.Controllers;
 using Agw.Setup.Services;
 using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
-
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-
 using Xunit;
 
 namespace Agw.Setup.Tests;
@@ -101,7 +98,8 @@ public sealed class SetupControllerTests
 
         var result = await controller.Index(
             CreateRequest(DeploymentMode.Standalone),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.IsType<ViewResult>(result);
         Assert.Null(initializationService.LastRequest);
@@ -111,7 +109,8 @@ public sealed class SetupControllerTests
     private static SetupController CreateController(
         bool isInitialized = true,
         StubSetupInitializationService? initializationService = null,
-        AgwDataPaths? paths = null)
+        AgwDataPaths? paths = null
+    )
     {
         var httpContext = new DefaultHttpContext();
         httpContext.Connection.RemoteIpAddress = IPAddress.Loopback;
@@ -122,9 +121,10 @@ public sealed class SetupControllerTests
             new SetupCodeService("TEST-CODE"),
             new AuthenticationAttemptLimiter(),
             TimeProvider.System,
-            paths ?? CreatePaths())
+            paths ?? CreatePaths()
+        )
         {
-            ControllerContext = new ControllerContext { HttpContext = httpContext }
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
     }
 
@@ -133,23 +133,19 @@ public sealed class SetupControllerTests
         return new SetupRequest
         {
             DeploymentMode = deploymentMode,
-            Provider = deploymentMode == DeploymentMode.Cluster
-                ? DatabaseProvider.Postgres
-                : DatabaseProvider.Sqlite,
+            Provider = deploymentMode == DeploymentMode.Cluster ? DatabaseProvider.Postgres : DatabaseProvider.Sqlite,
             SqlitePath = "/data/agw.db",
             PostgresHost = "db.internal",
             PostgresDatabase = "agw",
             PostgresUsername = "agw",
             PostgresPassword = "database-password",
-            AdminPassword = "administrator-password"
+            AdminPassword = "administrator-password",
         };
     }
 
     private static AgwDataPaths CreatePaths()
     {
-        return AgwDataPaths.Resolve(
-            Path.Combine(Path.GetTempPath(), "agw-controller-tests"),
-            "/unused");
+        return AgwDataPaths.Resolve(Path.Combine(Path.GetTempPath(), "agw-controller-tests"), "/unused");
     }
 
     private static void AssertApiResult(IActionResult result)
@@ -169,16 +165,15 @@ public sealed class SetupControllerTests
         public Task PersistAsync(
             SetupConfiguration configuration,
             string passwordHash,
-            CancellationToken cancellationToken = default) => Task.CompletedTask;
+            CancellationToken cancellationToken = default
+        ) => Task.CompletedTask;
     }
 
     private sealed class StubSetupInitializationService : ISetupInitializationService
     {
         public SetupRequest? LastRequest { get; private set; }
 
-        public Task InitializeAsync(
-            SetupRequest request,
-            CancellationToken cancellationToken = default)
+        public Task InitializeAsync(SetupRequest request, CancellationToken cancellationToken = default)
         {
             LastRequest = request;
             return Task.CompletedTask;

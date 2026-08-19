@@ -16,7 +16,8 @@ public record AgentCreateRequest(
     List<Guid>? ConnectionIds = null,
     Dictionary<string, string>? EnvironmentVariables = null,
     bool EnableSummary = false,
-    Guid? SummaryModelProviderId = null);
+    Guid? SummaryModelProviderId = null
+);
 
 /// <summary>
 /// Updates an agent. External agents support partial updates for displayName, description,
@@ -159,41 +160,37 @@ public sealed class AgentUpdateRequest
         }
     }
 
-    public AgentUpdateCommand ToCommand() => new(
-        DisplayName,
-        Description,
-        SystemPrompt,
-        ModelProviderId,
-        Tools,
-        McpToolServerIds,
-        SkillIds,
-        ConnectionIds,
-        Extra,
-        EnvironmentVariables,
-        EnableSummary,
-        SummaryModelProviderId,
-        _specifiedFields);
+    public AgentUpdateCommand ToCommand() =>
+        new(
+            DisplayName,
+            Description,
+            SystemPrompt,
+            ModelProviderId,
+            Tools,
+            McpToolServerIds,
+            SkillIds,
+            ConnectionIds,
+            Extra,
+            EnvironmentVariables,
+            EnableSummary,
+            SummaryModelProviderId,
+            _specifiedFields
+        );
 }
 
-public sealed record AgentMcpToolServerRelationResponse(
-    Guid AgentId,
-    Guid McpToolServerId)
+public sealed record AgentMcpToolServerRelationResponse(Guid AgentId, Guid McpToolServerId)
 {
     public static AgentMcpToolServerRelationResponse FromDomain(AgentMcpServerRelation relation) =>
         new(relation.AgentId, relation.McpToolServerId);
 }
 
-public sealed record AgentSkillRelationResponse(
-    Guid AgentId,
-    Guid SkillId)
+public sealed record AgentSkillRelationResponse(Guid AgentId, Guid SkillId)
 {
     public static AgentSkillRelationResponse FromDomain(AgentSkillRelation relation) =>
         new(relation.AgentId, relation.SkillId);
 }
 
-public sealed record AgentConnectionRelationResponse(
-    Guid AgentId,
-    Guid ConnectionId)
+public sealed record AgentConnectionRelationResponse(Guid AgentId, Guid ConnectionId)
 {
     public static AgentConnectionRelationResponse FromDomain(AgentConnectionRelation relation) =>
         new(relation.AgentId, relation.ConnectionId);
@@ -218,7 +215,8 @@ public sealed record AgentResponse(
     DateTimeOffset CreateTime,
     string? CreateBy,
     DateTimeOffset? UpdateTime,
-    string? UpdateBy)
+    string? UpdateBy
+)
 {
     public static AgentResponse FromDomain(Agent agent) =>
         new(
@@ -240,5 +238,6 @@ public sealed record AgentResponse(
             agent.CreateTime,
             agent.CreateBy,
             agent.UpdateTime,
-            agent.UpdateBy);
+            agent.UpdateBy
+        );
 }

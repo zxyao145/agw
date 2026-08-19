@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
-
 using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Agents.Execution.Commands.Checkpoint;
 using Agw.Agents.Execution.Commands.Exec;
@@ -11,7 +10,6 @@ using Agw.Agents.Execution.Commands.Permission;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Commands.Subscribe;
 using Agw.Shared.Exceptions;
-
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -30,30 +28,36 @@ public static class ExecutionCommandRegistrationExtensions
             .AddExecutionCommand<InterruptCommand, InterruptCommandHandler>(nameof(InterruptCommand))
             .AddExecutionCommand<SetModeCommand, SetModeCommandHandler>(nameof(SetModeCommand))
             .AddExecutionCommand<SetPermissionModeCommand, SetPermissionModeCommandHandler>(
-                nameof(SetPermissionModeCommand))
+                nameof(SetPermissionModeCommand)
+            )
             .AddExecutionCommand<SubscribeExecutionCommand, SubscribeExecutionCommandHandler>(
-                nameof(SubscribeExecutionCommand))
+                nameof(SubscribeExecutionCommand)
+            )
             .AddExecutionCommand<ResumeCheckpointCommand, ResumeCheckpointCommandHandler>(
-                nameof(ResumeCheckpointCommand))
+                nameof(ResumeCheckpointCommand)
+            )
             .AddExecutionCommand<HumanResponseCommand, HumanResponseCommandHandler>(nameof(HumanResponseCommand));
 
     public static IServiceCollection AddExecutionCommand<TCommand, THandler>(
         this IServiceCollection services,
-        string discriminator)
+        string discriminator
+    )
         where TCommand : AgentRunCommand
         where THandler : class, IExecutionCommandHandler<TCommand>
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(discriminator);
         services.AddOptions();
         services.AddScoped<IExecutionCommandHandler<TCommand>, THandler>();
-        services.AddScoped<IExecutionCommandHandler>(serviceProvider =>
-            new ExecutionCommandHandlerAdapter<TCommand>(
-                serviceProvider.GetRequiredService<IExecutionCommandHandler<TCommand>>()));
+        services.AddScoped<IExecutionCommandHandler>(serviceProvider => new ExecutionCommandHandlerAdapter<TCommand>(
+            serviceProvider.GetRequiredService<IExecutionCommandHandler<TCommand>>()
+        ));
         services.AddSingleton(new ExecutionCommandRegistration(typeof(TCommand), discriminator));
         services.TryAddEnumerable(
             ServiceDescriptor.Singleton<
                 IConfigureOptions<JsonHubProtocolOptions>,
-                ExecutionCommandJsonProtocolOptionsSetup>());
+                ExecutionCommandJsonProtocolOptionsSetup
+            >()
+        );
         return services;
     }
 }
@@ -62,8 +66,7 @@ internal sealed class ExecutionCommandJsonProtocolOptionsSetup : IConfigureOptio
 {
     private readonly IReadOnlyList<ExecutionCommandRegistration> _registrations;
 
-    public ExecutionCommandJsonProtocolOptionsSetup(
-        IEnumerable<ExecutionCommandRegistration> registrations)
+    public ExecutionCommandJsonProtocolOptionsSetup(IEnumerable<ExecutionCommandRegistration> registrations)
     {
         _registrations = registrations.ToArray();
     }
@@ -74,9 +77,7 @@ internal sealed class ExecutionCommandJsonProtocolOptionsSetup : IConfigureOptio
 
 internal static class ExecutionCommandJson
 {
-    public static void Configure(
-        JsonSerializerOptions options,
-        IEnumerable<ExecutionCommandRegistration> registrations)
+    public static void Configure(JsonSerializerOptions options, IEnumerable<ExecutionCommandRegistration> registrations)
     {
         var registrationsByType = new Dictionary<Type, ExecutionCommandRegistration>();
         var discriminators = new HashSet<string>(StringComparer.Ordinal);
@@ -86,14 +87,16 @@ internal static class ExecutionCommandJson
             {
                 throw new AgwException(
                     ErrorCodes.InvalidParam,
-                    $"Multiple execution commands are registered for '{registration.CommandType.Name}'.");
+                    $"Multiple execution commands are registered for '{registration.CommandType.Name}'."
+                );
             }
 
             if (!discriminators.Add(registration.Discriminator))
             {
                 throw new AgwException(
                     ErrorCodes.InvalidParam,
-                    $"Multiple execution commands use discriminator '{registration.Discriminator}'.");
+                    $"Multiple execution commands use discriminator '{registration.Discriminator}'."
+                );
             }
         }
 
@@ -105,14 +108,12 @@ internal static class ExecutionCommandJson
                 return;
             }
 
-            var polymorphism = new JsonPolymorphismOptions
-            {
-                TypeDiscriminatorPropertyName = "type",
-            };
+            var polymorphism = new JsonPolymorphismOptions { TypeDiscriminatorPropertyName = "type" };
             foreach (var registration in registrationsByType.Values)
             {
                 polymorphism.DerivedTypes.Add(
-                    new JsonDerivedType(registration.CommandType, registration.Discriminator));
+                    new JsonDerivedType(registration.CommandType, registration.Discriminator)
+                );
             }
 
             typeInfo.PolymorphismOptions = polymorphism;

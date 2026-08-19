@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Shared.Contracts.Projects;
 
@@ -14,7 +13,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         string? contextId,
         IReadOnlyDictionary<string, string> environmentVariables,
         PermissionMode? permissionMode,
-        bool resume)
+        bool resume
+    )
     {
         ProjectId = projectId;
         ContextId = contextId;
@@ -39,22 +39,17 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         return new ExecutionSettings(
             command.ProjectId,
             command.ContextId,
-            new ReadOnlyDictionary<string, string>(
-                new Dictionary<string, string>(command.EnvironmentVariables)),
+            new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(command.EnvironmentVariables)),
             command.PermissionMode,
-            command.Resume);
+            command.Resume
+        );
     }
 
     public static ExecutionSettings CreateDefault() =>
         FromCommand(new SettingCommand(ProjectDefaults.DefaultBuiltInId));
 
     public ExecutionSettings WithPermissionMode(PermissionMode permissionMode) =>
-        new(
-            ProjectId,
-            ContextId,
-            _environmentVariables,
-            permissionMode,
-            Resume);
+        new(ProjectId, ContextId, _environmentVariables, permissionMode, Resume);
 
     public bool Equals(ExecutionSettings? other)
     {
@@ -64,11 +59,11 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         }
 
         return other != null
-               && ProjectId == other.ProjectId
-               && string.Equals(ContextId, other.ContextId, StringComparison.Ordinal)
-               && PermissionMode == other.PermissionMode
-               && Resume == other.Resume
-               && EnvironmentVariablesEqual(_environmentVariables, other._environmentVariables);
+            && ProjectId == other.ProjectId
+            && string.Equals(ContextId, other.ContextId, StringComparison.Ordinal)
+            && PermissionMode == other.PermissionMode
+            && Resume == other.Resume
+            && EnvironmentVariablesEqual(_environmentVariables, other._environmentVariables);
     }
 
     public override bool Equals(object? obj) => obj is ExecutionSettings other && Equals(other);
@@ -90,18 +85,15 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
     }
 
     internal SettingCommand ToCommand() =>
-        new(
-            ProjectId,
-            new Dictionary<string, string>(_environmentVariables),
-            ContextId,
-            PermissionMode)
+        new(ProjectId, new Dictionary<string, string>(_environmentVariables), ContextId, PermissionMode)
         {
             Resume = Resume,
         };
 
     private static bool EnvironmentVariablesEqual(
         IReadOnlyDictionary<string, string> left,
-        IReadOnlyDictionary<string, string> right)
+        IReadOnlyDictionary<string, string> right
+    )
     {
         if (left.Count != right.Count)
         {
@@ -110,8 +102,10 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
 
         foreach (var (key, value) in left)
         {
-            if (!right.TryGetValue(key, out var rightValue)
-                || !string.Equals(value, rightValue, StringComparison.Ordinal))
+            if (
+                !right.TryGetValue(key, out var rightValue)
+                || !string.Equals(value, rightValue, StringComparison.Ordinal)
+            )
             {
                 return false;
             }

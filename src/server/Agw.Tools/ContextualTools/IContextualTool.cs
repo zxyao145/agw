@@ -12,5 +12,6 @@ public interface IContextualTool
     ValueTask<ToolContribution> MaterializeAsync(
         ToolDefinition definition,
         ToolMaterializationContext context,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken
+    );
 }

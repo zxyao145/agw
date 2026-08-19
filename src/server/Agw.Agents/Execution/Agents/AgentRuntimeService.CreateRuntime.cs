@@ -5,7 +5,6 @@ using Agw.Agents.Execution.Runtimes;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Utils;
-
 using Microsoft.Extensions.Logging;
 
 namespace Agw.Agents.Execution.Agents;
@@ -19,13 +18,8 @@ public partial class AgentRuntimeService
         Guid agentId,
         TaskProjection task,
         SettingCommand settings,
-        CancellationToken cancellationToken = default) =>
-        CreateRuntimeCoreAsync(
-            agentId,
-            task,
-            settings,
-            deferHumanInteractions: false,
-            cancellationToken);
+        CancellationToken cancellationToken = default
+    ) => CreateRuntimeCoreAsync(agentId, task, settings, deferHumanInteractions: false, cancellationToken);
 
     /// <summary>
     /// 创建会把人机交互 Tool 延迟为可 checkpoint approval 边界的 Agent runtime。
@@ -34,13 +28,8 @@ public partial class AgentRuntimeService
         Guid agentId,
         TaskProjection task,
         SettingCommand settings,
-        CancellationToken cancellationToken = default) =>
-        CreateRuntimeCoreAsync(
-            agentId,
-            task,
-            settings,
-            deferHumanInteractions: true,
-            cancellationToken);
+        CancellationToken cancellationToken = default
+    ) => CreateRuntimeCoreAsync(agentId, task, settings, deferHumanInteractions: true, cancellationToken);
 
     /// <summary>
     /// 复用普通和 durable runtime 的创建流程，并由 deferHumanInteractions 控制 Tool 包装策略。
@@ -50,7 +39,8 @@ public partial class AgentRuntimeService
         TaskProjection task,
         SettingCommand settings,
         bool deferHumanInteractions,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var agent = await _agentAppService.GetAgentAsync(agentId);
         if (agent == null)
@@ -60,21 +50,21 @@ public partial class AgentRuntimeService
 
         Guid projectId = task.ProjectId;
         var resolvedContextId = ContextIdUtil.ResolveContextId(task.ContextId);
-        var conversationId = task.ProjectConversationId != Guid.Empty
-            ? task.ProjectConversationId
-            : await _sessionStateStore
-                .ResolveProjectConversationIdAsync(projectId, resolvedContextId, cancellationToken)
-                .ConfigureAwait(false) ?? Guid.Empty;
-        var sessionScope = new AgentSessionStateScope(
-            conversationId,
+        var conversationId =
+            task.ProjectConversationId != Guid.Empty
+                ? task.ProjectConversationId
+                : await _sessionStateStore
+                    .ResolveProjectConversationIdAsync(projectId, resolvedContextId, cancellationToken)
+                    .ConfigureAwait(false)
+                    ?? Guid.Empty;
+        var sessionScope = new AgentSessionStateScope(conversationId, projectId, resolvedContextId, agent.Id);
+        var providerSessionId = await GetCodexProviderSessionIdAsync(
+            agent,
             projectId,
             resolvedContextId,
-            agent.Id);
-        var providerSessionId =
-            await GetCodexProviderSessionIdAsync(agent, projectId, resolvedContextId, cancellationToken);
-        var resume = IsCodexExternalAgent(agent)
-            ? providerSessionId.HasValue
-            : settings.Resume;
+            cancellationToken
+        );
+        var resume = IsCodexExternalAgent(agent) ? providerSessionId.HasValue : settings.Resume;
 
         var fs = await _fileSystemResolver.ResolveAsync(projectId, cancellationToken);
         var rootStat = await fs.StatAsync("", cancellationToken);
@@ -83,17 +73,20 @@ public partial class AgentRuntimeService
             await fs.CreateDirectoryAsync("", cancellationToken);
         }
 
-        var aiAgent = await CreateAiAgentAsync(new CreateAiAgentRequest
-        {
-            Agent = agent,
-            EnvironmentVariables = settings.EnvironmentVariables,
-            ProviderSessionId = providerSessionId,
-            ProjectId = projectId,
-            ConversationId = conversationId,
-            Resume = resume,
-            DeferHumanInteractions = deferHumanInteractions,
-            OnExternalSessionStartedAsync = CreateExternalSessionStartedCallback(agent, task, resolvedContextId),
-        }, cancellationToken);
+        var aiAgent = await CreateAiAgentAsync(
+            new CreateAiAgentRequest
+            {
+                Agent = agent,
+                EnvironmentVariables = settings.EnvironmentVariables,
+                ProviderSessionId = providerSessionId,
+                ProjectId = projectId,
+                ConversationId = conversationId,
+                Resume = resume,
+                DeferHumanInteractions = deferHumanInteractions,
+                OnExternalSessionStartedAsync = CreateExternalSessionStartedCallback(agent, task, resolvedContextId),
+            },
+            cancellationToken
+        );
         if (aiAgent == null)
         {
             return null;
@@ -107,7 +100,8 @@ public partial class AgentRuntimeService
             _providerSessionState.InitializeSessionState(
                 agentSession,
                 resolvedContextId,
-                ProjectDefaults.GetDefaultProjectIdentifier(projectId));
+                ProjectDefaults.GetDefaultProjectIdentifier(projectId)
+            );
             var summaryModelProviderId = ResolveSummaryModelProviderId(agent);
             return new AgentRuntime(
                 logger: _logger,
@@ -120,7 +114,8 @@ public partial class AgentRuntimeService
                 enableSummary: agent.EnableSummary && summaryModelProviderId.HasValue,
                 summaryModelProviderId: summaryModelProviderId,
                 summaryService: _summaryService,
-                conversationHistoryWriter: _conversationHistoryWriter);
+                conversationHistoryWriter: _conversationHistoryWriter
+            );
         }
         catch
         {
@@ -133,7 +128,8 @@ public partial class AgentRuntimeService
         Agent agent,
         Guid projectId,
         string contextId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (!IsCodexExternalAgent(agent))
         {
@@ -145,21 +141,21 @@ public partial class AgentRuntimeService
             contextId,
             agent.Id,
             agent.Name,
-            cancellationToken);
+            cancellationToken
+        );
         if (binding == null)
         {
             return null;
         }
 
-        return Guid.TryParse(binding.ProviderSessionId, out var providerSessionId)
-            ? providerSessionId
-            : null;
+        return Guid.TryParse(binding.ProviderSessionId, out var providerSessionId) ? providerSessionId : null;
     }
 
     private Func<string, CancellationToken, ValueTask>? CreateExternalSessionStartedCallback(
         Agent agent,
         TaskProjection task,
-        string contextId)
+        string contextId
+    )
     {
         if (!IsCodexExternalAgent(agent))
         {
@@ -177,7 +173,8 @@ public partial class AgentRuntimeService
                     agent.Name,
                     providerSessionId,
                     Constants.AdminUserName,
-                    CancellationToken.None);
+                    CancellationToken.None
+                );
             }
             catch (Exception ex)
             {
@@ -185,9 +182,9 @@ public partial class AgentRuntimeService
                     ex,
                     "Failed to save provider session binding for context {ContextId}, agent {AgentId}.",
                     contextId,
-                    agent.Id);
+                    agent.Id
+                );
             }
         };
     }
-
 }

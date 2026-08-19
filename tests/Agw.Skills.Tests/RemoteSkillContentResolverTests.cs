@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Shared.Data.Entities.Skills;
@@ -7,7 +6,6 @@ using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Skills.Application.Remote;
 using Agw.Testing;
-
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -16,8 +14,7 @@ namespace Agw.Skills.Tests;
 
 public class RemoteSkillContentResolverTests
 {
-    private static readonly DateTimeOffset UtcNow =
-        new(2026, 7, 26, 8, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset UtcNow = new(2026, 7, 26, 8, 0, 0, TimeSpan.Zero);
 
     [Fact]
     public async Task ResolveAsync_FreshSharedSnapshot_DoesNotFetchRemote()
@@ -33,15 +30,14 @@ public class RemoteSkillContentResolverTests
                 SourceUrl = skill.RemoteUrl!,
                 ContentJson = RemoteSkillDefinitionSerializer.Serialize(cached),
                 FetchedAt = UtcNow,
-            });
+            }
+        );
         var client = new TestRemoteSkillClient(CreateDefinition("remote instructions"));
         var timeProvider = new TestTimeProvider(UtcNow.AddMinutes(59));
         await using var node = database.CreateNode();
         var resolver = CreateResolver(node, client, new TestRefreshLock(), timeProvider);
 
-        var result = await resolver.ResolveAsync(
-            skill.Id,
-            TestContext.Current.CancellationToken);
+        var result = await resolver.ResolveAsync(skill.Id, TestContext.Current.CancellationToken);
 
         Assert.Equal("cached instructions", result.Instructions);
         Assert.Equal(0, client.FetchCount);
@@ -58,32 +54,30 @@ public class RemoteSkillContentResolverTests
             {
                 SkillId = skill.Id,
                 SourceUrl = skill.RemoteUrl!,
-                ContentJson = RemoteSkillDefinitionSerializer.Serialize(
-                    CreateDefinition("expired instructions")),
+                ContentJson = RemoteSkillDefinitionSerializer.Serialize(CreateDefinition("expired instructions")),
                 FetchedAt = UtcNow,
-            });
+            }
+        );
         var refreshed = CreateDefinition("refreshed instructions");
         var client = new TestRemoteSkillClient(refreshed);
         var timeProvider = new TestTimeProvider(UtcNow.AddHours(1));
         await using var node = database.CreateNode();
         var resolver = CreateResolver(node, client, new TestRefreshLock(), timeProvider);
 
-        var result = await resolver.ResolveAsync(
-            skill.Id,
-            TestContext.Current.CancellationToken);
+        var result = await resolver.ResolveAsync(skill.Id, TestContext.Current.CancellationToken);
 
         Assert.Equal("refreshed instructions", result.Instructions);
         Assert.Equal(1, client.FetchCount);
         await using var verificationScope = node.CreateAsyncScope();
-        var cache = await verificationScope.ServiceProvider
-            .GetRequiredService<AgwDbContext>()
-            .RemoteSkillCaches
-            .AsNoTracking()
+        var cache = await verificationScope
+            .ServiceProvider.GetRequiredService<AgwDbContext>()
+            .RemoteSkillCaches.AsNoTracking()
             .SingleAsync(TestContext.Current.CancellationToken);
         Assert.Equal(timeProvider.GetUtcNow(), cache.FetchedAt);
         Assert.Equal(
             "refreshed instructions",
-            RemoteSkillDefinitionSerializer.Deserialize(cache.ContentJson)?.Instructions);
+            RemoteSkillDefinitionSerializer.Deserialize(cache.ContentJson)?.Instructions
+        );
     }
 
     [Fact]
@@ -97,13 +91,14 @@ public class RemoteSkillContentResolverTests
             {
                 SkillId = skill.Id,
                 SourceUrl = skill.RemoteUrl!,
-                ContentJson = RemoteSkillDefinitionSerializer.Serialize(
-                    CreateDefinition("expired instructions")),
+                ContentJson = RemoteSkillDefinitionSerializer.Serialize(CreateDefinition("expired instructions")),
                 FetchedAt = UtcNow.AddHours(-2),
-            });
+            }
+        );
         var client = new TestRemoteSkillClient(
             CreateDefinition("shared refreshed instructions"),
-            TimeSpan.FromMilliseconds(50));
+            TimeSpan.FromMilliseconds(50)
+        );
         var refreshLock = new TestRefreshLock();
         var timeProvider = new TestTimeProvider(UtcNow);
         await using var firstNode = database.CreateNode();
@@ -113,11 +108,10 @@ public class RemoteSkillContentResolverTests
 
         var results = await Task.WhenAll(
             firstResolver.ResolveAsync(skill.Id, TestContext.Current.CancellationToken),
-            secondResolver.ResolveAsync(skill.Id, TestContext.Current.CancellationToken));
+            secondResolver.ResolveAsync(skill.Id, TestContext.Current.CancellationToken)
+        );
 
-        Assert.All(
-            results,
-            result => Assert.Equal("shared refreshed instructions", result.Instructions));
+        Assert.All(results, result => Assert.Equal("shared refreshed instructions", result.Instructions));
         Assert.Equal(1, client.FetchCount);
     }
 
@@ -133,28 +127,23 @@ public class RemoteSkillContentResolverTests
             {
                 SkillId = skill.Id,
                 SourceUrl = skill.RemoteUrl!,
-                ContentJson = RemoteSkillDefinitionSerializer.Serialize(
-                    CreateDefinition("expired instructions")),
+                ContentJson = RemoteSkillDefinitionSerializer.Serialize(CreateDefinition("expired instructions")),
                 FetchedAt = fetchedAt,
-            });
-        var client = new TestRemoteSkillClient(
-            new AgwException(ErrorCodes.RemoteSkillFetchFailed));
+            }
+        );
+        var client = new TestRemoteSkillClient(new AgwException(ErrorCodes.RemoteSkillFetchFailed));
         await using var node = database.CreateNode();
-        var resolver = CreateResolver(
-            node,
-            client,
-            new TestRefreshLock(),
-            new TestTimeProvider(UtcNow));
+        var resolver = CreateResolver(node, client, new TestRefreshLock(), new TestTimeProvider(UtcNow));
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            resolver.ResolveAsync(skill.Id, TestContext.Current.CancellationToken));
+            resolver.ResolveAsync(skill.Id, TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(ErrorCodes.RemoteSkillFetchFailed.Code, exception.Code);
         await using var verificationScope = node.CreateAsyncScope();
-        var cache = await verificationScope.ServiceProvider
-            .GetRequiredService<AgwDbContext>()
-            .RemoteSkillCaches
-            .AsNoTracking()
+        var cache = await verificationScope
+            .ServiceProvider.GetRequiredService<AgwDbContext>()
+            .RemoteSkillCaches.AsNoTracking()
             .SingleAsync(TestContext.Current.CancellationToken);
         Assert.Equal(fetchedAt, cache.FetchedAt);
     }
@@ -165,20 +154,18 @@ public class RemoteSkillContentResolverTests
         await using var database = await TestDatabase.CreateAsync();
         var skill = CreateRemoteSkill();
         await database.SeedAsync(skill);
-        var changed = new RemoteSkillDefinition(
-            "renamed-skill",
-            "Remote description",
-            "instructions",
-            []);
+        var changed = new RemoteSkillDefinition("renamed-skill", "Remote description", "instructions", []);
         await using var node = database.CreateNode();
         var resolver = CreateResolver(
             node,
             new TestRemoteSkillClient(changed),
             new TestRefreshLock(),
-            new TestTimeProvider(UtcNow));
+            new TestTimeProvider(UtcNow)
+        );
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            resolver.ResolveAsync(skill.Id, TestContext.Current.CancellationToken));
+            resolver.ResolveAsync(skill.Id, TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(ErrorCodes.RemoteSkillIdentityChanged.Code, exception.Code);
     }
@@ -187,14 +174,16 @@ public class RemoteSkillContentResolverTests
         ServiceProvider node,
         IRemoteSkillClient client,
         IRemoteSkillRefreshLock refreshLock,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider
+    )
     {
         return new RemoteSkillContentResolver(
             node.GetRequiredService<IServiceScopeFactory>(),
             client,
             refreshLock,
             timeProvider,
-            NullLogger<RemoteSkillContentResolver>.Instance);
+            NullLogger<RemoteSkillContentResolver>.Instance
+        );
     }
 
     private static Skill CreateRemoteSkill()
@@ -213,11 +202,7 @@ public class RemoteSkillContentResolverTests
 
     private static RemoteSkillDefinition CreateDefinition(string instructions)
     {
-        return new RemoteSkillDefinition(
-            "expense-report",
-            "Remote description",
-            instructions,
-            ["finance"]);
+        return new RemoteSkillDefinition("expense-report", "Remote description", instructions, ["finance"]);
     }
 
     private sealed class TestRemoteSkillClient : IRemoteSkillClient
@@ -227,9 +212,7 @@ public class RemoteSkillContentResolverTests
         private readonly TimeSpan _delay;
         private int _fetchCount;
 
-        public TestRemoteSkillClient(
-            RemoteSkillDefinition definition,
-            TimeSpan delay = default)
+        public TestRemoteSkillClient(RemoteSkillDefinition definition, TimeSpan delay = default)
         {
             _definition = definition;
             _delay = delay;
@@ -242,12 +225,12 @@ public class RemoteSkillContentResolverTests
 
         public int FetchCount => Volatile.Read(ref _fetchCount);
 
-        public string NormalizeUrl(string? remoteUrl) =>
-            remoteUrl ?? throw new InvalidOperationException();
+        public string NormalizeUrl(string? remoteUrl) => remoteUrl ?? throw new InvalidOperationException();
 
         public async Task<RemoteSkillDefinition> FetchAsync(
             string remoteUrl,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Interlocked.Increment(ref _fetchCount);
             if (_delay > TimeSpan.Zero)
@@ -268,9 +251,7 @@ public class RemoteSkillContentResolverTests
     {
         private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _locks = new();
 
-        public async Task<IAsyncDisposable> AcquireAsync(
-            Guid skillId,
-            CancellationToken cancellationToken)
+        public async Task<IAsyncDisposable> AcquireAsync(Guid skillId, CancellationToken cancellationToken)
         {
             var semaphore = _locks.GetOrAdd(skillId, static _ => new SemaphoreSlim(1, 1));
             await semaphore.WaitAsync(cancellationToken);
@@ -308,38 +289,28 @@ public class RemoteSkillContentResolverTests
 
         public static async Task<TestDatabase> CreateAsync()
         {
-            var root = Path.Combine(
-                Path.GetTempPath(),
-                $"agw-remote-skill-cache-{Guid.CreateVersion7():N}");
+            var root = Path.Combine(Path.GetTempPath(), $"agw-remote-skill-cache-{Guid.CreateVersion7():N}");
             Directory.CreateDirectory(root);
-            var database = new TestDatabase(
-                root,
-                $"Data Source={Path.Combine(root, "cache.db")};Default Timeout=5");
+            var database = new TestDatabase(root, $"Data Source={Path.Combine(root, "cache.db")};Default Timeout=5");
             await using var node = database.CreateNode();
             await using var scope = node.CreateAsyncScope();
-            await scope.ServiceProvider
-                .GetRequiredService<AgwDbContext>()
-                .Database
-                .EnsureCreatedAsync(TestContext.Current.CancellationToken);
+            await scope
+                .ServiceProvider.GetRequiredService<AgwDbContext>()
+                .Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
             return database;
         }
 
         public ServiceProvider CreateNode()
         {
             var services = new ServiceCollection();
-            services.AddDbContext<AgwDbContext>(
-                options => options.UseSqlite(ConnectionString));
-            services.AddScoped<DbContext>(
-                provider => provider.GetRequiredService<AgwDbContext>());
+            services.AddDbContext<AgwDbContext>(options => options.UseSqlite(ConnectionString));
+            services.AddScoped<DbContext>(provider => provider.GetRequiredService<AgwDbContext>());
             services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
-            services.AddScoped<IUnitOfWork>(
-                provider => provider.GetRequiredService<AgwDbContext>());
+            services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<AgwDbContext>());
             return services.BuildServiceProvider();
         }
 
-        public async Task SeedAsync(
-            Skill skill,
-            RemoteSkillCache? cache = null)
+        public async Task SeedAsync(Skill skill, RemoteSkillCache? cache = null)
         {
             await using var node = CreateNode();
             await using var scope = node.CreateAsyncScope();

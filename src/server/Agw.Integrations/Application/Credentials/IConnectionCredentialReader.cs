@@ -12,10 +12,7 @@ public interface IConnectionCredentialReader
     /// <param name="slot">用于标识凭据用途的 Slot。</param>
     /// <param name="cancellationToken">用于取消数据库读取操作的 Token。</param>
     /// <returns>解密后的凭据；指定 Slot 不存在时返回 <see langword="null"/>。</returns>
-    Task<ResolvedCredential?> ReadConnectionAsync(
-        Guid connectionId,
-        string slot,
-        CancellationToken cancellationToken);
+    Task<ResolvedCredential?> ReadConnectionAsync(Guid connectionId, string slot, CancellationToken cancellationToken);
 
     /// <summary>
     /// 读取指定 Plugin Installation 拥有的凭据。
@@ -27,7 +24,8 @@ public interface IConnectionCredentialReader
     Task<ResolvedCredential?> ReadPluginInstallationAsync(
         Guid pluginInstallationId,
         string slot,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken
+    );
 }
 
 public sealed class ResolvedCredential

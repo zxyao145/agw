@@ -12,4 +12,5 @@ public sealed record SearchOptions(
     IReadOnlyCollection<string>? ExcludedDirectoryNames = null,
     int? MaxFiles = null,
     long? MaxFileSizeBytes = null,
-    long? MaxTotalBytes = null);
+    long? MaxTotalBytes = null
+);

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 
-# 有格式问题 提交失败，开发者先手动执行：dotnet format
+# 有格式问题 提交失败，开发者先手动执行：dotnet csharpier format
 set -e
 
-echo "Running dotnet format Agw.slnx..."
-dotnet format Agw.slnx --verify-no-changes
+echo "Running csharpier check..."
+dotnet csharpier check .
 echo "Backend checks passed."
 
 

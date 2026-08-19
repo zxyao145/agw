@@ -1,7 +1,6 @@
 using System.Net;
 using System.Reflection;
 using System.Text.RegularExpressions;
-
 using Agw.Shared.Exceptions;
 
 namespace Agw.Shared.Tests;
@@ -68,16 +67,22 @@ public class AgwExceptionTests
         var throwPattern = new Regex(@"throw\s+new\s+(?<type>[A-Za-z0-9_.]+)", RegexOptions.Compiled);
         var violations = Directory
             .EnumerateFiles(backendRoot, "*.cs", SearchOption.AllDirectories)
-            .SelectMany(file => throwPattern
-                .Matches(File.ReadAllText(file))
-                .Select(match => new
-                {
-                    File = Path.GetRelativePath(repoRoot, file).Replace('\\', '/'),
-                    Type = match.Groups["type"].Value
-                }))
-            .Where(match => match.Type != "AgwException"
-                && !(match.File.StartsWith("src/server/Agw.Files/", StringComparison.Ordinal)
-                    && match.Type == "AgwFilesException"))
+            .SelectMany(file =>
+                throwPattern
+                    .Matches(File.ReadAllText(file))
+                    .Select(match => new
+                    {
+                        File = Path.GetRelativePath(repoRoot, file).Replace('\\', '/'),
+                        Type = match.Groups["type"].Value,
+                    })
+            )
+            .Where(match =>
+                match.Type != "AgwException"
+                && !(
+                    match.File.StartsWith("src/server/Agw.Files/", StringComparison.Ordinal)
+                    && match.Type == "AgwFilesException"
+                )
+            )
             .Select(match => $"{match.File}: {match.Type}")
             .Order()
             .ToList();

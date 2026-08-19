@@ -38,11 +38,7 @@ public class ProjectDomainServiceTests
     [Fact]
     public void TryPrepareForCreate_NameWithSpecialCharacters_NormalizesNameAndDefaultWorkspace()
     {
-        var project = new Project
-        {
-            Name = "  Demo Project: Alpha?  ",
-            Workspace = "  "
-        };
+        var project = new Project { Name = "  Demo Project: Alpha?  ", Workspace = "  " };
 
         var result = _service.TryPrepareForCreate(project, "tester");
 
@@ -54,11 +50,7 @@ public class ProjectDomainServiceTests
     [Fact]
     public void TryPrepareForCreate_CustomWorkspace_PreservesTrimmedWorkspace()
     {
-        var project = new Project
-        {
-            Name = "Project A",
-            Workspace = "  ~/custom/project-a  "
-        };
+        var project = new Project { Name = "Project A", Workspace = "  ~/custom/project-a  " };
 
         var result = _service.TryPrepareForCreate(project, "tester");
 
@@ -122,7 +114,7 @@ public class ProjectDomainServiceTests
         var project = new Project
         {
             Name = "Project A",
-            EnvironmentVariables = new Dictionary<string, string> { ["EMPTY"] = string.Empty }
+            EnvironmentVariables = new Dictionary<string, string> { ["EMPTY"] = string.Empty },
         };
 
         var result = _service.TryPrepareForCreate(project, "tester");
@@ -137,7 +129,7 @@ public class ProjectDomainServiceTests
         var project = new Project
         {
             Name = "Project A",
-            EnvironmentVariables = new Dictionary<string, string> { ["  API_KEY  "] = "secret" }
+            EnvironmentVariables = new Dictionary<string, string> { ["  API_KEY  "] = "secret" },
         };
 
         var result = _service.TryPrepareForCreate(project, "tester");
@@ -157,7 +149,7 @@ public class ProjectDomainServiceTests
         var project = new Project
         {
             Name = "Project A",
-            EnvironmentVariables = new Dictionary<string, string> { [name] = "value" }
+            EnvironmentVariables = new Dictionary<string, string> { [name] = "value" },
         };
 
         var exception = Assert.Throws<AgwException>(() => _service.TryPrepareForCreate(project, "tester"));
@@ -171,11 +163,7 @@ public class ProjectDomainServiceTests
         var project = new Project
         {
             Name = "Project A",
-            EnvironmentVariables = new Dictionary<string, string>
-            {
-                ["API_KEY"] = "first",
-                [" API_KEY "] = "second"
-            }
+            EnvironmentVariables = new Dictionary<string, string> { ["API_KEY"] = "first", [" API_KEY "] = "second" },
         };
 
         var exception = Assert.Throws<AgwException>(() => _service.TryPrepareForCreate(project, "tester"));
@@ -190,11 +178,9 @@ public class ProjectDomainServiceTests
 
         var result = _service.TryApplyUpdate(
             project,
-            current => current.EnvironmentVariables = new Dictionary<string, string>
-            {
-                ["  API_KEY  "] = "updated"
-            },
-            "tester");
+            current => current.EnvironmentVariables = new Dictionary<string, string> { ["  API_KEY  "] = "updated" },
+            "tester"
+        );
 
         Assert.True(result);
         Assert.Equal("updated", project.EnvironmentVariables["API_KEY"]);

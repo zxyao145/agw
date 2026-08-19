@@ -1,7 +1,5 @@
 using System.Collections;
-
 using Agw.Shared.Exceptions;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Integrations.Mcp;
@@ -12,9 +10,7 @@ public sealed class ConnectionToolLease : IReadOnlyList<AITool>, IAsyncDisposabl
     private readonly IReadOnlyList<IAsyncDisposable> _resources;
     private int _disposed;
 
-    internal ConnectionToolLease(
-        IReadOnlyList<AITool> tools,
-        IReadOnlyList<IAsyncDisposable> resources)
+    internal ConnectionToolLease(IReadOnlyList<AITool> tools, IReadOnlyList<IAsyncDisposable> resources)
     {
         _tools = tools.ToArray();
         _resources = resources.ToArray();
@@ -58,9 +54,7 @@ public sealed class ConnectionToolLease : IReadOnlyList<AITool>, IAsyncDisposabl
 
         if (failed)
         {
-            throw new AgwException(
-                ErrorCodes.CannotCreateInstance,
-                "Failed to release MCP connection resources.");
+            throw new AgwException(ErrorCodes.CannotCreateInstance, "Failed to release MCP connection resources.");
         }
     }
 }

@@ -9,7 +9,8 @@ public record AgentflowNodeRequest(
     string? Name,
     string? PositionJson,
     string? Instructions,
-    string? ConfigJson);
+    string? ConfigJson
+);
 
 public record AgentflowEdgeRequest(
     string EdgeId,
@@ -18,18 +19,21 @@ public record AgentflowEdgeRequest(
     AgentflowEdgeKind Kind,
     string? Label,
     string? ConditionJson,
-    string? ConfigJson);
+    string? ConfigJson
+);
 
 public record AgentflowCreateRequest(
     string Name,
     string? Description,
     IReadOnlyList<AgentflowNodeRequest> Nodes,
     IReadOnlyList<AgentflowEdgeRequest> Edges,
-    Guid? SummaryModelProviderId = null);
+    Guid? SummaryModelProviderId = null
+);
 
 public record AgentflowUpdateRequest(
     string Name,
     string? Description,
     IReadOnlyList<AgentflowNodeRequest> Nodes,
     IReadOnlyList<AgentflowEdgeRequest> Edges,
-    Guid? SummaryModelProviderId = null);
+    Guid? SummaryModelProviderId = null
+);

@@ -1,7 +1,5 @@
 using System.Diagnostics;
-
 using Agw.Agents.Execution.Agents.Middleware;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -23,20 +21,28 @@ public class ObservabilityMiddlewareTests
             session: null,
             options: null,
             agent,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal("response", response.Text);
-        Assert.Contains(logger.Entries, entry =>
-            entry.Level == LogLevel.Information &&
-            Equals(entry.GetProperty("AgentName"), "persisted-agent"));
-        Assert.Contains(logger.Entries, entry =>
-            entry.Level == LogLevel.Debug &&
-            entry.Message.Contains("input", StringComparison.OrdinalIgnoreCase) &&
-            Equals(entry.GetProperty("AgentName"), "persisted-agent"));
-        Assert.Contains(logger.Entries, entry =>
-            entry.Level == LogLevel.Debug &&
-            entry.Message.Contains("output", StringComparison.OrdinalIgnoreCase) &&
-            Equals(entry.GetProperty("AgentName"), "persisted-agent"));
+        Assert.Contains(
+            logger.Entries,
+            entry => entry.Level == LogLevel.Information && Equals(entry.GetProperty("AgentName"), "persisted-agent")
+        );
+        Assert.Contains(
+            logger.Entries,
+            entry =>
+                entry.Level == LogLevel.Debug
+                && entry.Message.Contains("input", StringComparison.OrdinalIgnoreCase)
+                && Equals(entry.GetProperty("AgentName"), "persisted-agent")
+        );
+        Assert.Contains(
+            logger.Entries,
+            entry =>
+                entry.Level == LogLevel.Debug
+                && entry.Message.Contains("output", StringComparison.OrdinalIgnoreCase)
+                && Equals(entry.GetProperty("AgentName"), "persisted-agent")
+        );
     }
 
     [Fact]
@@ -48,26 +54,34 @@ public class ObservabilityMiddlewareTests
         var input = new List<ChatMessage> { new(ChatRole.User, "hello") };
         var updates = new List<AgentResponseUpdate>();
 
-        await foreach (var update in middleware.LogStreamingMiddleware(
-                           input,
-                           session: null,
-                           options: null,
-                           agent,
-                           TestContext.Current.CancellationToken))
+        await foreach (
+            var update in middleware.LogStreamingMiddleware(
+                input,
+                session: null,
+                options: null,
+                agent,
+                TestContext.Current.CancellationToken
+            )
+        )
         {
             updates.Add(update);
         }
 
         Assert.Equal("response", updates.ToAgentResponse().Text);
-        Assert.Contains(logger.Entries, entry =>
-            entry.Level == LogLevel.Information &&
-            Equals(entry.GetProperty("AgentName"), "persisted-agent"));
-        Assert.Contains(logger.Entries, entry =>
-            entry.Level == LogLevel.Debug &&
-            entry.Message.Contains("input", StringComparison.OrdinalIgnoreCase));
-        Assert.Contains(logger.Entries, entry =>
-            entry.Level == LogLevel.Debug &&
-            entry.Message.Contains("output", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(
+            logger.Entries,
+            entry => entry.Level == LogLevel.Information && Equals(entry.GetProperty("AgentName"), "persisted-agent")
+        );
+        Assert.Contains(
+            logger.Entries,
+            entry =>
+                entry.Level == LogLevel.Debug && entry.Message.Contains("input", StringComparison.OrdinalIgnoreCase)
+        );
+        Assert.Contains(
+            logger.Entries,
+            entry =>
+                entry.Level == LogLevel.Debug && entry.Message.Contains("output", StringComparison.OrdinalIgnoreCase)
+        );
     }
 
     [Fact]
@@ -91,27 +105,20 @@ public class ObservabilityMiddlewareTests
             session: null,
             options: null,
             agent,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Null(activity.GetTagItem("gen_ai.agent.name"));
     }
 
     private static AIAgent CreateAgent(string name)
     {
-        return new ChatClientAgent(
-            new StubChatClient(),
-            new ChatClientAgentOptions
-            {
-                Id = "agent-id",
-                Name = name,
-            });
+        return new ChatClientAgent(new StubChatClient(), new ChatClientAgentOptions { Id = "agent-id", Name = name });
     }
 
     private sealed class StubChatClient : IChatClient
     {
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
 
         public object? GetService(Type serviceType, object? serviceKey = null)
         {
@@ -121,7 +128,8 @@ public class ObservabilityMiddlewareTests
         public Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             return Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, "response")]));
         }
@@ -129,7 +137,8 @@ public class ObservabilityMiddlewareTests
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
+        )
         {
             await Task.Yield();
             yield return new ChatResponseUpdate(ChatRole.Assistant, "response");
@@ -140,7 +149,8 @@ public class ObservabilityMiddlewareTests
     {
         public List<LogEntry> Entries { get; } = [];
 
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
 
         public bool IsEnabled(LogLevel logLevel) => true;
 
@@ -149,7 +159,8 @@ public class ObservabilityMiddlewareTests
             EventId eventId,
             TState state,
             Exception? exception,
-            Func<TState, Exception?, string> formatter)
+            Func<TState, Exception?, string> formatter
+        )
         {
             var properties = state as IEnumerable<KeyValuePair<string, object?>> ?? [];
             Entries.Add(new LogEntry(logLevel, formatter(state, exception), properties.ToList()));
@@ -159,12 +170,14 @@ public class ObservabilityMiddlewareTests
     private sealed record LogEntry(
         LogLevel Level,
         string Message,
-        IReadOnlyList<KeyValuePair<string, object?>> Properties)
+        IReadOnlyList<KeyValuePair<string, object?>> Properties
+    )
     {
         public object? GetProperty(string name)
         {
-            return Properties.FirstOrDefault(property =>
-                string.Equals(property.Key.TrimStart('@'), name, StringComparison.Ordinal)).Value;
+            return Properties
+                .FirstOrDefault(property => string.Equals(property.Key.TrimStart('@'), name, StringComparison.Ordinal))
+                .Value;
         }
     }
 }

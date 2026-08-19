@@ -1,9 +1,7 @@
 using System.Diagnostics;
 using System.Threading.Channels;
-
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Repositories;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -45,16 +43,19 @@ internal sealed class AgentflowNodeExecutionTraceCollector : BackgroundService
 
     public AgentflowNodeExecutionTraceCollector(
         IAgentflowNodeExecutionTraceStore store,
-        ILogger<AgentflowNodeExecutionTraceCollector> logger)
+        ILogger<AgentflowNodeExecutionTraceCollector> logger
+    )
     {
         _store = store;
         _logger = logger;
-        _channel = Channel.CreateBounded<AgentflowTrace>(new BoundedChannelOptions(QueueCapacity)
-        {
-            FullMode = BoundedChannelFullMode.Wait,
-            SingleReader = true,
-            SingleWriter = false,
-        });
+        _channel = Channel.CreateBounded<AgentflowTrace>(
+            new BoundedChannelOptions(QueueCapacity)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleReader = true,
+                SingleWriter = false,
+            }
+        );
         _listener = new ActivityListener
         {
             ShouldListenTo = source => source.Name == AgentflowNodeExecutionActivity.SourceName,
@@ -98,7 +99,8 @@ internal sealed class AgentflowNodeExecutionTraceCollector : BackgroundService
                     exception,
                     "Failed to persist agentflow node execution trace for {AgentflowId}/{NodeId}",
                     trace.AgentflowId,
-                    trace.NodeId);
+                    trace.NodeId
+                );
             }
         }
     }
@@ -115,7 +117,8 @@ internal sealed class AgentflowNodeExecutionTraceCollector : BackgroundService
             _logger.LogWarning(
                 "Agentflow node execution trace queue is full; dropping {AgentflowId}/{NodeId}",
                 trace.AgentflowId,
-                trace.NodeId);
+                trace.NodeId
+            );
         }
     }
 }

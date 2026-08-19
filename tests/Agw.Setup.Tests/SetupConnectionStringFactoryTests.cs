@@ -3,11 +3,8 @@ using Agw.Setup.Services;
 using Agw.Shared.Configuration;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
-
 using Microsoft.Data.Sqlite;
-
 using Npgsql;
-
 using Xunit;
 
 namespace Agw.Setup.Tests;
@@ -18,11 +15,7 @@ public class SetupConnectionStringFactoryTests
     public void Create_WithRelativeSqlitePath_ResolvesBelowServerDatabaseDirectory()
     {
         var paths = CreatePaths();
-        var request = new SetupRequest
-        {
-            Provider = DatabaseProvider.Sqlite,
-            SqlitePath = "custom.db"
-        };
+        var request = new SetupRequest { Provider = DatabaseProvider.Sqlite, SqlitePath = "custom.db" };
 
         var connectionString = SetupConnectionStringFactory.Create(request, paths);
         var builder = new SqliteConnectionStringBuilder(connectionString);
@@ -40,7 +33,7 @@ public class SetupConnectionStringFactoryTests
             PostgresPort = 5544,
             PostgresDatabase = " agent;gateway ",
             PostgresUsername = " agw-user ",
-            PostgresPassword = "p;ass=\"word"
+            PostgresPassword = "p;ass=\"word",
         };
 
         var connectionString = SetupConnectionStringFactory.Create(request, CreatePaths());
@@ -59,8 +52,7 @@ public class SetupConnectionStringFactoryTests
     {
         var request = new SetupRequest { Provider = (DatabaseProvider)99 };
 
-        var exception = Assert.Throws<AgwException>(() =>
-            SetupConnectionStringFactory.Create(request, CreatePaths()));
+        var exception = Assert.Throws<AgwException>(() => SetupConnectionStringFactory.Create(request, CreatePaths()));
 
         Assert.Equal(ErrorCodes.UnsupportedDatabaseProvider.Code, exception.Code);
     }
@@ -69,6 +61,7 @@ public class SetupConnectionStringFactoryTests
     {
         return AgwDataPaths.Resolve(
             Path.Combine(Path.GetTempPath(), $"agw-connection-{Guid.CreateVersion7():N}"),
-            "/unused");
+            "/unused"
+        );
     }
 }

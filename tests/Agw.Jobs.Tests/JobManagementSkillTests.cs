@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Turns;
@@ -17,7 +16,6 @@ using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Testing;
-
 using Microsoft.Agents.AI;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -27,8 +25,7 @@ namespace Agw.Jobs.Tests;
 
 public class JobManagementSkillTests
 {
-    private static readonly DateTimeOffset UtcNow =
-        new(2026, 7, 26, 10, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset UtcNow = new(2026, 7, 26, 10, 0, 0, TimeSpan.Zero);
 
     [Fact]
     public async Task SkillMetadata_MafDiscoversFrontmatterResourceAndFiveScripts()
@@ -39,13 +36,9 @@ public class JobManagementSkillTests
         Assert.Equal("agw-job", skill.Frontmatter.Name);
         Assert.Contains("scheduled jobs", skill.Frontmatter.Description, StringComparison.OrdinalIgnoreCase);
 
-        var resource = await skill.GetResourceAsync(
-            "job-trigger-reference",
-            TestContext.Current.CancellationToken);
+        var resource = await skill.GetResourceAsync("job-trigger-reference", TestContext.Current.CancellationToken);
         Assert.NotNull(resource);
-        var resourceResult = await resource.ReadAsync(
-            serviceProvider: null,
-            TestContext.Current.CancellationToken);
+        var resourceResult = await resource.ReadAsync(serviceProvider: null, TestContext.Current.CancellationToken);
         var content = resourceResult is JsonElement resourceElement
             ? resourceElement.GetString()
             : Assert.IsType<string>(resourceResult);
@@ -53,18 +46,9 @@ public class JobManagementSkillTests
         Assert.Contains("RFC 3339", content, StringComparison.Ordinal);
         Assert.Contains("five-field cron", content, StringComparison.Ordinal);
 
-        foreach (var scriptName in new[]
-                 {
-                     "list-jobs",
-                     "get-job",
-                     "create-job",
-                     "update-job",
-                     "delete-job",
-                 })
+        foreach (var scriptName in new[] { "list-jobs", "get-job", "create-job", "update-job", "delete-job" })
         {
-            Assert.NotNull(await skill.GetScriptAsync(
-                scriptName,
-                TestContext.Current.CancellationToken));
+            Assert.NotNull(await skill.GetScriptAsync(scriptName, TestContext.Current.CancellationToken));
         }
     }
 
@@ -78,26 +62,18 @@ public class JobManagementSkillTests
         var otherJob = await fixture.SeedJobAsync(otherProjectId, "Other job");
         var skill = fixture.CreateSkill(projectId);
 
-        var jobs = await RunScriptAsync<JobSkillResponse[]>(
-            skill,
-            "list-jobs",
-            new { });
+        var jobs = await RunScriptAsync<JobSkillResponse[]>(skill, "list-jobs", new { });
 
         var listed = Assert.Single(jobs);
         Assert.Equal(projectJob.Id, listed.Id);
         Assert.Equal(projectId, listed.ProjectId);
 
-        var found = await RunScriptAsync<JobSkillResponse>(
-            skill,
-            "get-job",
-            new { jobId = projectJob.Id });
+        var found = await RunScriptAsync<JobSkillResponse>(skill, "get-job", new { jobId = projectJob.Id });
         Assert.Equal(projectJob.Id, found.Id);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            RunScriptAsync<JobSkillResponse>(
-                skill,
-                "get-job",
-                new { jobId = otherJob.Id }));
+            RunScriptAsync<JobSkillResponse>(skill, "get-job", new { jobId = otherJob.Id })
+        );
         Assert.Equal(ErrorCodes.JobNotFound.Code, exception.Code);
     }
 
@@ -123,14 +99,16 @@ public class JobManagementSkillTests
                 name = "Status check",
                 maxRetryCount = 5,
                 isEnabled = true,
-            });
+            }
+        );
 
         Assert.Equal(projectId, created.ProjectId);
         Assert.Equal(agentId, created.AgentId);
         Assert.Equal(UtcNow.AddMinutes(15), created.NextRunTime);
         Assert.DoesNotContain(
             created.GetType().GetProperties(),
-            property => string.Equals(property.Name, "RowVersion", StringComparison.Ordinal));
+            property => string.Equals(property.Name, "RowVersion", StringComparison.Ordinal)
+        );
 
         var persisted = await fixture.GetJobAsync(created.Id);
         Assert.Equal("skill-user", persisted.CreateBy);
@@ -155,7 +133,8 @@ public class JobManagementSkillTests
                 jobId = existing.Id,
                 clearPrompt = true,
                 isEnabled = false,
-            });
+            }
+        );
 
         Assert.Equal(existing.Name, updated.Name);
         Assert.Equal(existing.AgentType, updated.AgentType);
@@ -182,11 +161,8 @@ public class JobManagementSkillTests
         var updated = await RunScriptAsync<JobSkillResponse>(
             skill,
             "update-job",
-            new
-            {
-                jobId = existing.Id,
-                triggerValue = "01:00:00",
-            });
+            new { jobId = existing.Id, triggerValue = "01:00:00" }
+        );
 
         Assert.Equal(TriggerType.Interval, updated.TriggerType);
         Assert.Equal("01:00:00", updated.TriggerValue);
@@ -205,32 +181,22 @@ public class JobManagementSkillTests
         using var context = fixture.PushInteractiveContext(projectId, "patch-user");
 
         var emptyPatch = await Assert.ThrowsAsync<AgwException>(() =>
-            RunScriptAsync<JobSkillResponse>(
-                skill,
-                "update-job",
-                new { jobId = existing.Id }));
+            RunScriptAsync<JobSkillResponse>(skill, "update-job", new { jobId = existing.Id })
+        );
         Assert.Equal(ErrorCodes.NoChangesToMake.Code, emptyPatch.Code);
 
         var incompleteAgentTarget = await Assert.ThrowsAsync<AgwException>(() =>
             RunScriptAsync<JobSkillResponse>(
                 skill,
                 "update-job",
-                new
-                {
-                    jobId = existing.Id,
-                    agentType = AgentRuntimeType.Agentflow,
-                }));
+                new { jobId = existing.Id, agentType = AgentRuntimeType.Agentflow }
+            )
+        );
         Assert.Equal(ErrorCodes.InvalidParam.Code, incompleteAgentTarget.Code);
 
         var blankPrompt = await Assert.ThrowsAsync<AgwException>(() =>
-            RunScriptAsync<JobSkillResponse>(
-                skill,
-                "update-job",
-                new
-                {
-                    jobId = existing.Id,
-                    prompt = " ",
-                }));
+            RunScriptAsync<JobSkillResponse>(skill, "update-job", new { jobId = existing.Id, prompt = " " })
+        );
         Assert.Equal(ErrorCodes.InvalidParam.Code, blankPrompt.Code);
     }
 
@@ -253,28 +219,27 @@ public class JobManagementSkillTests
                     agentId = Guid.CreateVersion7(),
                     triggerType = TriggerType.Interval,
                     triggerValue = "00:05:00",
-                }));
+                }
+            )
+        );
         Assert.Equal(ErrorCodes.InteractiveAdminRequired.Code, createException.Code);
 
         using var wrongProjectConversation = fixture.PushInteractiveContext(
             Guid.CreateVersion7(),
-            "wrong-project-user");
+            "wrong-project-user"
+        );
         var updateException = await Assert.ThrowsAsync<AgwException>(() =>
-            RunScriptAsync<JobSkillResponse>(
-                skill,
-                "update-job",
-                new { jobId = existing.Id, isEnabled = false }));
+            RunScriptAsync<JobSkillResponse>(skill, "update-job", new { jobId = existing.Id, isEnabled = false })
+        );
         Assert.Equal(ErrorCodes.InteractiveAdminRequired.Code, updateException.Code);
 
         var deleteException = await Assert.ThrowsAsync<AgwException>(() =>
             RunScriptAsync<JobSkillResponse>(
                 skill,
                 "delete-job",
-                new
-                {
-                    jobId = existing.Id,
-                    confirmation = existing.Id.ToString(),
-                }));
+                new { jobId = existing.Id, confirmation = existing.Id.ToString() }
+            )
+        );
         Assert.Equal(ErrorCodes.InteractiveAdminRequired.Code, deleteException.Code);
     }
 
@@ -293,32 +258,25 @@ public class JobManagementSkillTests
             RunScriptAsync<JobSkillResponse>(
                 skill,
                 "delete-job",
-                new
-                {
-                    jobId = projectJob.Id,
-                    confirmation = Guid.CreateVersion7().ToString(),
-                }));
+                new { jobId = projectJob.Id, confirmation = Guid.CreateVersion7().ToString() }
+            )
+        );
         Assert.Equal(ErrorCodes.InvalidParam.Code, confirmationException.Code);
 
         var scopedException = await Assert.ThrowsAsync<AgwException>(() =>
             RunScriptAsync<JobSkillResponse>(
                 skill,
                 "delete-job",
-                new
-                {
-                    jobId = otherJob.Id,
-                    confirmation = otherJob.Id.ToString(),
-                }));
+                new { jobId = otherJob.Id, confirmation = otherJob.Id.ToString() }
+            )
+        );
         Assert.Equal(ErrorCodes.JobNotFound.Code, scopedException.Code);
 
         var deleted = await RunScriptAsync<JobSkillResponse>(
             skill,
             "delete-job",
-            new
-            {
-                jobId = projectJob.Id,
-                confirmation = projectJob.Id.ToString(),
-            });
+            new { jobId = projectJob.Id, confirmation = projectJob.Id.ToString() }
+        );
         Assert.Equal(projectJob.Id, deleted.Id);
         Assert.Equal(projectId, deleted.ProjectId);
         Assert.Equal(projectJob.TriggerValue, deleted.TriggerValue);
@@ -326,10 +284,7 @@ public class JobManagementSkillTests
         Assert.NotNull(await fixture.GetJobOrDefaultAsync(otherJob.Id));
     }
 
-    private static async Task<T> RunScriptAsync<T>(
-        AgentSkill skill,
-        string scriptName,
-        object arguments)
+    private static async Task<T> RunScriptAsync<T>(AgentSkill skill, string scriptName, object arguments)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var script = await skill.GetScriptAsync(scriptName, cancellationToken);
@@ -338,24 +293,19 @@ public class JobManagementSkillTests
             skill,
             JsonSerializer.SerializeToElement(arguments),
             serviceProvider: null,
-            cancellationToken);
+            cancellationToken
+        );
 
         if (result is T typed)
         {
             return typed;
         }
 
-        var json = result is JsonElement element
-            ? element.GetRawText()
-            : JsonSerializer.Serialize(result);
-        var serializerOptions = new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-        };
+        var json = result is JsonElement element ? element.GetRawText() : JsonSerializer.Serialize(result);
+        var serializerOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         serializerOptions.Converters.Add(new JsonStringEnumConverter());
         return JsonSerializer.Deserialize<T>(json, serializerOptions)
-            ?? throw new Xunit.Sdk.XunitException(
-                $"Script '{scriptName}' returned no {typeof(T).Name} result.");
+            ?? throw new Xunit.Sdk.XunitException($"Script '{scriptName}' returned no {typeof(T).Name} result.");
     }
 
     private sealed class JobManagementSkillFixture : IAsyncDisposable
@@ -367,7 +317,8 @@ public class JobManagementSkillTests
             SqliteConnection connection,
             ServiceProvider serviceProvider,
             TestRuntimeTurnContextAccessor turnContextAccessor,
-            JobManagementSkillRegistration registration)
+            JobManagementSkillRegistration registration
+        )
         {
             _connection = connection;
             _serviceProvider = serviceProvider;
@@ -384,20 +335,23 @@ public class JobManagementSkillTests
         public IDisposable PushInteractiveContext(Guid projectId, string userName)
         {
             var contextId = Guid.CreateVersion7().ToString("D");
-            return TurnContextAccessor.Push(new RuntimeTurnContext(
-                ExecutionSettings.FromCommand(new SettingCommand(projectId)),
-                new TaskProjection
-                {
-                    TaskId = Guid.CreateVersion7(),
-                    ProjectConversationId = Guid.CreateVersion7(),
-                    ProjectId = projectId,
-                    ContextId = contextId,
-                    CreateTime = TimeProvider.System.GetUtcNow(),
-                },
-                new ExecutionTarget(Guid.CreateVersion7(), AgentRuntimeType.Agent),
-                userName,
-                workspace: string.Empty,
-                messageSink: null!));
+            return TurnContextAccessor.Push(
+                new RuntimeTurnContext(
+                    ExecutionSettings.FromCommand(new SettingCommand(projectId)),
+                    new TaskProjection
+                    {
+                        TaskId = Guid.CreateVersion7(),
+                        ProjectConversationId = Guid.CreateVersion7(),
+                        ProjectId = projectId,
+                        ContextId = contextId,
+                        CreateTime = TimeProvider.System.GetUtcNow(),
+                    },
+                    new ExecutionTarget(Guid.CreateVersion7(), AgentRuntimeType.Agent),
+                    userName,
+                    workspace: string.Empty,
+                    messageSink: null!
+                )
+            );
         }
 
         public static async Task<JobManagementSkillFixture> CreateAsync()
@@ -417,16 +371,17 @@ public class JobManagementSkillTests
             services.AddSingleton<JobScheduleCalculator>();
             services.AddSingleton<JobSchedulerWakeSignal>();
             services.AddScoped(_ => new AgwDbContext(options));
-            services.AddScoped<DbContext>(
-                serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
-            services.AddScoped<IUnitOfWork>(
-                serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
-            services.AddScoped<IRepository<Job>>(serviceProvider =>
-                new JobRepo(
-                    serviceProvider.GetRequiredService<DbContext>(),
-                    serviceProvider.GetRequiredService<TimeProvider>()));
+            services.AddScoped<DbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
+            services.AddScoped<IUnitOfWork>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
+            services.AddScoped<IRepository<Job>>(serviceProvider => new JobRepo(
+                serviceProvider.GetRequiredService<DbContext>(),
+                serviceProvider.GetRequiredService<TimeProvider>()
+            ));
             services.AddScoped<IRepository<JobLog>, EfRepository<JobLog>>();
-            services.AddScoped<IRepository<ProjectConversationChatHistory>, EfRepository<ProjectConversationChatHistory>>();
+            services.AddScoped<
+                IRepository<ProjectConversationChatHistory>,
+                EfRepository<ProjectConversationChatHistory>
+            >();
             services.AddScoped<IRepository<ProjectConversation>, EfRepository<ProjectConversation>>();
             services.AddScoped<JobAppService>();
             var serviceProvider = services.BuildServiceProvider();
@@ -439,18 +394,12 @@ public class JobManagementSkillTests
 
             var registration = new JobManagementSkillRegistration(
                 serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-                turnContextAccessor);
-            return new JobManagementSkillFixture(
-                connection,
-                serviceProvider,
-                turnContextAccessor,
-                registration);
+                turnContextAccessor
+            );
+            return new JobManagementSkillFixture(connection, serviceProvider, turnContextAccessor, registration);
         }
 
-        public async Task<Job> SeedJobAsync(
-            Guid projectId,
-            string name,
-            string? prompt = "Prompt")
+        public async Task<Job> SeedJobAsync(Guid projectId, string name, string? prompt = "Prompt")
         {
             await using var scope = _serviceProvider.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
@@ -479,18 +428,15 @@ public class JobManagementSkillTests
         }
 
         public async Task<Job> GetJobAsync(Guid id) =>
-            await GetJobOrDefaultAsync(id)
-            ?? throw new Xunit.Sdk.XunitException($"Job {id} was not found.");
+            await GetJobOrDefaultAsync(id) ?? throw new Xunit.Sdk.XunitException($"Job {id} was not found.");
 
         public async Task<Job?> GetJobOrDefaultAsync(Guid id)
         {
             await using var scope = _serviceProvider.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
-            return await dbContext.Jobs
-                .AsNoTracking()
-                .SingleOrDefaultAsync(
-                    job => job.Id == id,
-                    TestContext.Current.CancellationToken);
+            return await dbContext
+                .Jobs.AsNoTracking()
+                .SingleOrDefaultAsync(job => job.Id == id, TestContext.Current.CancellationToken);
         }
 
         public async ValueTask DisposeAsync()
@@ -515,9 +461,7 @@ public class JobManagementSkillTests
                 private readonly TestRuntimeTurnContextAccessor _accessor;
                 private readonly RuntimeTurnContext? _previous;
 
-                public PopScope(
-                    TestRuntimeTurnContextAccessor accessor,
-                    RuntimeTurnContext? previous)
+                public PopScope(TestRuntimeTurnContextAccessor accessor, RuntimeTurnContext? previous)
                 {
                     _accessor = accessor;
                     _previous = previous;

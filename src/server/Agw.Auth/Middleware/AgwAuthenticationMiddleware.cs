@@ -1,9 +1,7 @@
 using System.Security.Claims;
-
 using Agw.Auth.Application;
 using Agw.Auth.Security;
 using Agw.Shared;
-
 using Microsoft.AspNetCore.Http;
 
 namespace Agw.Auth.Middleware;
@@ -36,22 +34,19 @@ public sealed class AgwAuthenticationMiddleware
     /// <param name="context">当前 HTTP 上下文。</param>
     /// <param name="stateStore">保存管理员密码和会话版本的状态存储。</param>
     /// <param name="tokenStore">保存并验证 API Token 的数据库存储。</param>
-    public async Task InvokeAsync(
-        HttpContext context,
-        IAuthenticationStateStore stateStore,
-        IApiTokenStore tokenStore)
+    public async Task InvokeAsync(HttpContext context, IAuthenticationStateStore stateStore, IApiTokenStore tokenStore)
     {
         if (context.User.Identity?.IsAuthenticated != true)
         {
             var bearerToken = ResolveBearerToken(context);
-            if (bearerToken != null
-                && await tokenStore.ValidateTokenAsync(bearerToken, context.RequestAborted))
+            if (bearerToken != null && await tokenStore.ValidateTokenAsync(bearerToken, context.RequestAborted))
             {
                 context.User = CreatePrincipal(
                     Constants.AdminUserId,
                     Constants.AdminUserName,
                     AgwAuthDefaults.BearerScheme,
-                    stateStore.GetAuthenticationSnapshot().SessionVersion);
+                    stateStore.GetAuthenticationSnapshot().SessionVersion
+                );
             }
             else if (LocalTrustedRequest.IsLocalTrusted(context))
             {
@@ -59,17 +54,21 @@ public sealed class AgwAuthenticationMiddleware
                     Constants.AdminUserId,
                     Constants.AdminUserName,
                     AgwAuthDefaults.LocalTrustedScheme,
-                    stateStore.GetAuthenticationSnapshot().SessionVersion);
+                    stateStore.GetAuthenticationSnapshot().SessionVersion
+                );
             }
         }
 
         var origin = context.Request.Headers.Origin.ToString();
-        var isAuthenticatedDesktop = context.User.Identity?.AuthenticationType == AgwAuthDefaults.BearerScheme
-                                     && LocalTrustedRequest.IsDesktopOrigin(origin, _allowDevelopmentDesktopOrigin);
-        if (context.WebSockets.IsWebSocketRequest
+        var isAuthenticatedDesktop =
+            context.User.Identity?.AuthenticationType == AgwAuthDefaults.BearerScheme
+            && LocalTrustedRequest.IsDesktopOrigin(origin, _allowDevelopmentDesktopOrigin);
+        if (
+            context.WebSockets.IsWebSocketRequest
             && context.Request.Headers.ContainsKey("Origin")
             && !LocalTrustedRequest.IsSameOrigin(context)
-            && !isAuthenticatedDesktop)
+            && !isAuthenticatedDesktop
+        )
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             return;
@@ -92,16 +91,16 @@ public sealed class AgwAuthenticationMiddleware
             return authorization["Bearer ".Length..].Trim();
         }
 
-        if (!context.WebSockets.IsWebSocketRequest
-            || !context.Request.Path.Equals(ExecutionHubPath, StringComparison.OrdinalIgnoreCase))
+        if (
+            !context.WebSockets.IsWebSocketRequest
+            || !context.Request.Path.Equals(ExecutionHubPath, StringComparison.OrdinalIgnoreCase)
+        )
         {
             return null;
         }
 
         var queryTokens = context.Request.Query[SignalRAccessTokenQueryParameter];
-        return queryTokens.Count == 1 && !string.IsNullOrWhiteSpace(queryTokens[0])
-            ? queryTokens[0]!.Trim()
-            : null;
+        return queryTokens.Count == 1 && !string.IsNullOrWhiteSpace(queryTokens[0]) ? queryTokens[0]!.Trim() : null;
     }
 
     /// <summary>
@@ -112,8 +111,12 @@ public sealed class AgwAuthenticationMiddleware
     /// <param name="authenticationType">建立身份所使用的认证方式。</param>
     /// <param name="sessionVersion">当前认证会话版本。</param>
     /// <returns>包含管理员身份声明的认证主体。</returns>
-    private static ClaimsPrincipal CreatePrincipal(string userId, string userName, string authenticationType,
-        int sessionVersion)
+    private static ClaimsPrincipal CreatePrincipal(
+        string userId,
+        string userName,
+        string authenticationType,
+        int sessionVersion
+    )
     {
         var identity = new ClaimsIdentity(
             [
@@ -121,9 +124,10 @@ public sealed class AgwAuthenticationMiddleware
                 new Claim(ClaimTypes.NameIdentifier, userId),
                 // 用户名
                 new Claim(ClaimTypes.Name, userName),
-                new Claim(AgwAuthDefaults.SessionVersionClaimType, sessionVersion.ToString())
+                new Claim(AgwAuthDefaults.SessionVersionClaimType, sessionVersion.ToString()),
             ],
-            authenticationType);
+            authenticationType
+        );
         return new ClaimsPrincipal(identity);
     }
 }

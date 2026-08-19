@@ -3,9 +3,7 @@ using Agw.Setup.Contracts;
 using Agw.Shared.Configuration;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
-
 using Microsoft.Data.Sqlite;
-
 using Npgsql;
 
 namespace Agw.Setup.Services;
@@ -18,20 +16,14 @@ public static class SetupConnectionStringFactory
         {
             DatabaseProvider.Sqlite => CreateSqlite(request, paths),
             DatabaseProvider.Postgres => CreatePostgres(request),
-            _ => throw new AgwException(ErrorCodes.UnsupportedDatabaseProvider)
+            _ => throw new AgwException(ErrorCodes.UnsupportedDatabaseProvider),
         };
     }
 
     private static string CreateSqlite(SetupRequest request, AgwDataPaths paths)
     {
-        var builder = new SqliteConnectionStringBuilder
-        {
-            DataSource = request.SqlitePath.Trim()
-        };
-        return DatabaseConnectionStringResolver.Resolve(
-            DatabaseProvider.Sqlite,
-            builder.ConnectionString,
-            paths);
+        var builder = new SqliteConnectionStringBuilder { DataSource = request.SqlitePath.Trim() };
+        return DatabaseConnectionStringResolver.Resolve(DatabaseProvider.Sqlite, builder.ConnectionString, paths);
     }
 
     private static string CreatePostgres(SetupRequest request)
@@ -43,7 +35,7 @@ public static class SetupConnectionStringFactory
             Database = request.PostgresDatabase.Trim(),
             Username = request.PostgresUsername.Trim(),
             Password = request.PostgresPassword,
-            ApplicationName = "agw-server"
+            ApplicationName = "agw-server",
         };
         return builder.ConnectionString;
     }

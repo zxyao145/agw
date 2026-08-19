@@ -1,5 +1,4 @@
 using Agw.Auth.Application;
-
 using Microsoft.AspNetCore.Http;
 
 namespace Agw.Auth.Middleware;
@@ -18,9 +17,7 @@ public sealed class UserInfoContextMiddleware
         var previous = userInfoService.Current;
         try
         {
-            userInfoService.Current = context.User.Identity?.IsAuthenticated == true
-                ? context.User
-                : null;
+            userInfoService.Current = context.User.Identity?.IsAuthenticated == true ? context.User : null;
             await _next(context);
         }
         finally

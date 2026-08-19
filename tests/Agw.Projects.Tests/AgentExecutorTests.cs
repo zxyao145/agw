@@ -1,5 +1,4 @@
 using System.Reflection;
-
 using Agw.Jobs.Execution;
 using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Jobs;
@@ -16,7 +15,8 @@ public class AgentExecutorTests
         string name,
         string prompt,
         string expectedPrompt,
-        string expectedTitle)
+        string expectedTitle
+    )
     {
         var job = new Job
         {
@@ -25,7 +25,7 @@ public class AgentExecutorTests
             AgentType = AgentRuntimeType.Agent,
             AgentId = Guid.CreateVersion7(),
             Name = name,
-            Prompt = prompt
+            Prompt = prompt,
         };
 
         var result = InvokeBuildPromptAndTitle(job);
@@ -38,7 +38,8 @@ public class AgentExecutorTests
     {
         var method = typeof(JobAgentExecutor).GetMethod(
             "BuildPromptAndTitle",
-            BindingFlags.NonPublic | BindingFlags.Static);
+            BindingFlags.NonPublic | BindingFlags.Static
+        );
 
         Assert.NotNull(method);
 
@@ -48,8 +49,6 @@ public class AgentExecutorTests
         var promptField = result!.GetType().GetField("Item1");
         var titleField = result.GetType().GetField("Item2");
 
-        return (
-            (string)promptField!.GetValue(result)!,
-            (string)titleField!.GetValue(result)!);
+        return ((string)promptField!.GetValue(result)!, (string)titleField!.GetValue(result)!);
     }
 }

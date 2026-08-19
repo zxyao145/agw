@@ -1,7 +1,6 @@
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Utils;
-
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -12,9 +11,7 @@ public sealed class AgentUsageRecorder : IAgentUsageRecorder
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly TimeProvider _timeProvider;
 
-    public AgentUsageRecorder(
-        IServiceScopeFactory serviceScopeFactory,
-        TimeProvider timeProvider)
+    public AgentUsageRecorder(IServiceScopeFactory serviceScopeFactory, TimeProvider timeProvider)
     {
         _serviceScopeFactory = serviceScopeFactory;
         _timeProvider = timeProvider;
@@ -25,24 +22,30 @@ public sealed class AgentUsageRecorder : IAgentUsageRecorder
         string contextId,
         string agentName,
         ProjectContextUsage usage,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
 
-        await dbContext.Set<AgentUsage>().AddAsync(new AgentUsage
-        {
-            Id = Guid.CreateVersion7(),
-            ProjectId = projectId,
-            ContextId = ContextIdUtil.NormalizeContextId(contextId),
-            AgentName = agentName,
-            RecordedAt = _timeProvider.GetUtcNow(),
-            InputTokenCount = usage.InputTokenCount,
-            OutputTokenCount = usage.OutputTokenCount,
-            TotalTokenCount = usage.TotalTokenCount,
-            CachedInputTokenCount = usage.CachedInputTokenCount,
-            ReasoningTokenCount = usage.ReasoningTokenCount
-        }, cancellationToken);
+        await dbContext
+            .Set<AgentUsage>()
+            .AddAsync(
+                new AgentUsage
+                {
+                    Id = Guid.CreateVersion7(),
+                    ProjectId = projectId,
+                    ContextId = ContextIdUtil.NormalizeContextId(contextId),
+                    AgentName = agentName,
+                    RecordedAt = _timeProvider.GetUtcNow(),
+                    InputTokenCount = usage.InputTokenCount,
+                    OutputTokenCount = usage.OutputTokenCount,
+                    TotalTokenCount = usage.TotalTokenCount,
+                    CachedInputTokenCount = usage.CachedInputTokenCount,
+                    ReasoningTokenCount = usage.ReasoningTokenCount,
+                },
+                cancellationToken
+            );
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 }

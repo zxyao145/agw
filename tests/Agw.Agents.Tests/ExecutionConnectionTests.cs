@@ -1,5 +1,4 @@
 using System.Linq.Expressions;
-
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Commands.Exec;
@@ -11,7 +10,6 @@ using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Projects;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -24,9 +22,7 @@ public class ExecutionConnectionTests
     {
         var fixture = CreateFixture(holdTurnOpen: false);
         await using var connection = fixture.Connection;
-        await fixture.Context.StartTurnAsync(
-            CreateExecCommand(),
-            TestContext.Current.CancellationToken);
+        await fixture.Context.StartTurnAsync(CreateExecCommand(), TestContext.Current.CancellationToken);
         var removed = false;
 
         await connection.DetachAsync(() => removed = true);
@@ -40,9 +36,7 @@ public class ExecutionConnectionTests
     {
         var fixture = CreateFixture(holdTurnOpen: true);
         await using var connection = fixture.Connection;
-        await fixture.Context.StartTurnAsync(
-            CreateExecCommand(),
-            TestContext.Current.CancellationToken);
+        await fixture.Context.StartTurnAsync(CreateExecCommand(), TestContext.Current.CancellationToken);
         var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         await connection.DetachAsync(() => removed.TrySetResult());
@@ -59,11 +53,10 @@ public class ExecutionConnectionTests
     {
         var fixture = CreateFixture(holdTurnOpen: true);
         await using var connection = fixture.Connection;
-        await fixture.Context.StartTurnAsync(
-            CreateExecCommand(),
-            TestContext.Current.CancellationToken);
+        await fixture.Context.StartTurnAsync(CreateExecCommand(), TestContext.Current.CancellationToken);
         fixture.RuntimeFactory.StartRequest!.TurnContext.PendingHumanGateChanged!(
-            new HumanGateApprovalRequest("request", "node", null, "approval", "approve?", []));
+            new HumanGateApprovalRequest("request", "node", null, "approval", "approve?", [])
+        );
         var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         await connection.DetachAsync(() => removed.TrySetResult());
@@ -91,27 +84,27 @@ public class ExecutionConnectionTests
             CancellationToken.None,
             runtimeFactory,
             new FakeTaskAppService(task),
-            new FakeProjectAppService());
+            new FakeProjectAppService()
+        );
         var connection = new ExecutionConnection(
             "connection",
             "user",
             provider.CreateAsyncScope(),
             new ExecutionCommandDispatcher([]),
             context,
-            NullLogger.Instance);
+            NullLogger.Instance
+        );
         return new ConnectionFixture(connection, context, runtimeFactory);
     }
 
     private static ExecCommand CreateExecCommand() =>
-        new(AgentRuntimeType.Agent, new AgwUserInput { Contents = [] })
-        {
-            AgentId = Guid.CreateVersion7(),
-        };
+        new(AgentRuntimeType.Agent, new AgwUserInput { Contents = [] }) { AgentId = Guid.CreateVersion7() };
 
     private sealed record ConnectionFixture(
         ExecutionConnection Connection,
         ExecutionConnectionContext Context,
-        FakeRuntimeFactory RuntimeFactory);
+        FakeRuntimeFactory RuntimeFactory
+    );
 
     private sealed class FakeRuntimeFactory : IRuntimeFactory
     {
@@ -129,16 +122,14 @@ public class ExecutionConnectionTests
 
         public RuntimeStartRequest? StartRequest { get; private set; }
 
-        public Task<RuntimeStartResult> StartAsync(
-            RuntimeStartRequest request,
-            CancellationToken cancellationToken)
+        public Task<RuntimeStartResult> StartAsync(RuntimeStartRequest request, CancellationToken cancellationToken)
         {
             StartRequest = request;
             if (!_holdTurnOpen)
             {
-                return Task.FromResult(new RuntimeStartResult(
-                    Runtime,
-                    new ActiveTurn(Task.CompletedTask, new CancellationTokenSource())));
+                return Task.FromResult(
+                    new RuntimeStartResult(Runtime, new ActiveTurn(Task.CompletedTask, new CancellationTokenSource()))
+                );
             }
 
             _completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -162,8 +153,8 @@ public class ExecutionConnectionTests
 
         public Task<ExecutionTaskResolutionResult> ResolveTaskAsync(
             ExecutionTaskRequest request,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(new ExecutionTaskResolutionResult(_task, null));
+            CancellationToken cancellationToken
+        ) => Task.FromResult(new ExecutionTaskResolutionResult(_task, null));
 
         public Task<TaskProjection?> GetTaskAsync(Guid value) => throw new NotSupportedException();
 
@@ -173,14 +164,14 @@ public class ExecutionConnectionTests
             string input,
             string user,
             string? contextId = null,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
 
         public Task<bool> HasTaskAsync(
             Guid taskId,
             Guid? projectId = null,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
     }
 
     private sealed class FakeProjectAppService : IProjectAppService
@@ -191,14 +182,11 @@ public class ExecutionConnectionTests
         public Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null) =>
             throw new NotSupportedException();
 
-        public Task<string?> GetProjectExtraSettingAsync(Guid? projectId) =>
-            throw new NotSupportedException();
+        public Task<string?> GetProjectExtraSettingAsync(Guid? projectId) => throw new NotSupportedException();
 
-        public Task<Guid?> ResolveProjectIdAsync(Guid? projectId) =>
-            throw new NotSupportedException();
+        public Task<Guid?> ResolveProjectIdAsync(Guid? projectId) => throw new NotSupportedException();
 
-        public Task<Project?> CreateAsync(Project project, string user) =>
-            throw new NotSupportedException();
+        public Task<Project?> CreateAsync(Project project, string user) => throw new NotSupportedException();
 
         public Task<bool> DeleteAsync(Guid id) => throw new NotSupportedException();
 
@@ -219,7 +207,6 @@ public class ExecutionConnectionTests
 
     private sealed class NullSink : IExecutionMessageSink
     {
-        public ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken) =>
-            ValueTask.CompletedTask;
+        public ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken) => ValueTask.CompletedTask;
     }
 }

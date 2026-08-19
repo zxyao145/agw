@@ -1,7 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
-
 using Agw.Shared.Data.Encryption;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Shared.Data.Entities.Executions;
@@ -44,7 +42,7 @@ public enum DurableExecutionStatus
     /// <summary>
     /// 执行已被用户中断。
     /// </summary>
-    Interrupted = 6
+    Interrupted = 6,
 }
 
 /// <summary>

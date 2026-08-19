@@ -10,14 +10,12 @@ public class DistributedLockSettingsResolverTests
     [InlineData(DatabaseProvider.Postgres, DistributedLockProvider.Postgres)]
     public void Resolve_WhenProviderIsMissing_InfersProviderFromDatabase(
         DatabaseProvider databaseProvider,
-        DistributedLockProvider expectedProvider)
+        DistributedLockProvider expectedProvider
+    )
     {
         var settings = new DistributedLockSettings();
 
-        var result = DistributedLockSettingsResolver.Resolve(
-            settings,
-            databaseProvider,
-            "Host=database");
+        var result = DistributedLockSettingsResolver.Resolve(settings, databaseProvider, "Host=database");
 
         Assert.Equal(expectedProvider, result.Provider);
     }
@@ -30,7 +28,8 @@ public class DistributedLockSettingsResolverTests
         var result = DistributedLockSettingsResolver.Resolve(
             new DistributedLockSettings { Provider = provider },
             DatabaseProvider.Sqlite,
-            "Host=database");
+            "Host=database"
+        );
 
         Assert.Equal(provider, result.Provider);
     }
@@ -41,7 +40,8 @@ public class DistributedLockSettingsResolverTests
         var result = DistributedLockSettingsResolver.Resolve(
             new DistributedLockSettings { Provider = DistributedLockProvider.Postgres, ConnectionString = " " },
             DatabaseProvider.Sqlite,
-            "Host=database");
+            "Host=database"
+        );
 
         Assert.Equal("Host=database", result.ConnectionString);
     }
@@ -50,9 +50,14 @@ public class DistributedLockSettingsResolverTests
     public void Resolve_WhenPostgresConnectionStringIsConfigured_UsesConfiguredConnectionString()
     {
         var result = DistributedLockSettingsResolver.Resolve(
-            new DistributedLockSettings { Provider = DistributedLockProvider.Postgres, ConnectionString = "Host=locks" },
+            new DistributedLockSettings
+            {
+                Provider = DistributedLockProvider.Postgres,
+                ConnectionString = "Host=locks",
+            },
             DatabaseProvider.Postgres,
-            "Host=database");
+            "Host=database"
+        );
 
         Assert.Equal("Host=locks", result.ConnectionString);
     }
@@ -63,7 +68,8 @@ public class DistributedLockSettingsResolverTests
         var result = DistributedLockSettingsResolver.Resolve(
             new DistributedLockSettings { Provider = DistributedLockProvider.InMemory, ConnectionString = "unused" },
             DatabaseProvider.Postgres,
-            "Host=database");
+            "Host=database"
+        );
 
         Assert.Equal(string.Empty, result.ConnectionString);
     }

@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using System.Text.Json;
-
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
@@ -16,7 +15,6 @@ using Agw.Shared.Coordination;
 using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -46,7 +44,8 @@ public sealed class DurableExecutionStoreTests
             input,
             task,
             settings,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         var second = await store.RegisterAsync(
             executionId,
             "user",
@@ -55,16 +54,14 @@ public sealed class DurableExecutionStoreTests
             input,
             task,
             settings,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(executionId, first.Manifest.ExecutionId);
         Assert.Equal(executionId, second.Manifest.ExecutionId);
         Assert.Equal(DurableExecutionStatus.Queued, first.Status);
         Assert.Equal(DurableExecutionStatus.Queued, second.Status);
-        Assert.Equal(
-            1,
-            await database.Context.DurableExecutions.CountAsync(
-                TestContext.Current.CancellationToken));
+        Assert.Equal(1, await database.Context.DurableExecutions.CountAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -82,7 +79,8 @@ public sealed class DurableExecutionStoreTests
             CreateInput("hello"),
             task,
             CreateSettings(task.ProjectId, task.ContextId),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal("stable-user-id", snapshot.Manifest.ResolveUserId());
         Assert.Equal(Constants.AdminUserId, CreateManifest().ResolveUserId());
@@ -102,35 +100,32 @@ public sealed class DurableExecutionStoreTests
             new RecordingExecutionEventStream(),
             TimeProvider.System,
             Options.Create(new ExecutionRuntimeOptions()),
-            NullLogger<DurableExecutionCoordinator>.Instance);
+            NullLogger<DurableExecutionCoordinator>.Instance
+        );
         var executionId = Guid.CreateVersion7();
         var task = CreateTask();
         var previous = UserInfoUtil.Current;
-        UserInfoUtil.Current = new ClaimsPrincipal(new ClaimsIdentity(
-            [new Claim(ClaimTypes.NameIdentifier, "ambient-user-id")],
-            "test"));
+        UserInfoUtil.Current = new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "ambient-user-id")], "test")
+        );
 
         try
         {
             await coordinator.StartAsync(
                 executionId,
                 "display-name",
-                new ExecCommand(AgentRuntimeType.Agent, CreateInput("hello"))
-                {
-                    AgentId = Guid.CreateVersion7()
-                },
+                new ExecCommand(AgentRuntimeType.Agent, CreateInput("hello")) { AgentId = Guid.CreateVersion7() },
                 task,
                 CreateSettings(task.ProjectId, task.ContextId),
-                TestContext.Current.CancellationToken);
+                TestContext.Current.CancellationToken
+            );
         }
         finally
         {
             UserInfoUtil.Current = previous;
         }
 
-        var snapshot = await store.GetAsync(
-            executionId,
-            TestContext.Current.CancellationToken);
+        var snapshot = await store.GetAsync(executionId, TestContext.Current.CancellationToken);
         Assert.Equal("ambient-user-id", snapshot.Manifest.ResolveUserId());
     }
 
@@ -152,17 +147,21 @@ public sealed class DurableExecutionStoreTests
             CreateInput("first"),
             task,
             settings,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
-        var exception = await Assert.ThrowsAsync<AgwException>(() => store.RegisterAsync(
-            executionId,
-            "user",
-            agentId,
-            AgentRuntimeType.Agent,
-            CreateInput("different"),
-            task,
-            settings,
-            TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            store.RegisterAsync(
+                executionId,
+                "user",
+                agentId,
+                AgentRuntimeType.Agent,
+                CreateInput("different"),
+                task,
+                settings,
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(ErrorCodes.DurableExecutionConflict.Code, exception.Code);
     }
@@ -175,10 +174,8 @@ public sealed class DurableExecutionStoreTests
         var executionId = await RegisterExecutionAsync(store);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            store.GetAuthorizedAsync(
-                executionId,
-                "another-user",
-                TestContext.Current.CancellationToken));
+            store.GetAuthorizedAsync(executionId, "another-user", TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(ErrorCodes.DurableExecutionNotFound.Code, exception.Code);
     }
@@ -192,13 +189,14 @@ public sealed class DurableExecutionStoreTests
         var running = await store.TryBeginSegmentAsync(
             executionId,
             TimeProvider.System.GetUtcNow(),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         Assert.NotNull(running);
         var checkpoint = new DurableAgentflowCheckpoint
         {
             SessionId = "workflow-session",
             CheckpointId = "checkpoint-1",
-            Payload = JsonSerializer.SerializeToElement(new { step = 1 })
+            Payload = JsonSerializer.SerializeToElement(new { step = 1 }),
         };
 
         var waiting = await store.SaveSegmentResultAsync(
@@ -208,9 +206,10 @@ public sealed class DurableExecutionStoreTests
                 SegmentIndex = 0,
                 Status = DurableExecutionSegmentStatus.WaitingForHuman,
                 PendingInteractions = [CreateInteraction("request-1")],
-                Checkpoint = checkpoint
+                Checkpoint = checkpoint,
             },
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(DurableExecutionStatus.WaitingForHuman, waiting.Status);
         Assert.Equal(1, waiting.SegmentIndex);
@@ -221,9 +220,11 @@ public sealed class DurableExecutionStoreTests
                 executionId,
                 "request-1",
                 Approved: true,
-                ResponseData: JsonSerializer.SerializeToElement(new { answer = "blue" })),
+                ResponseData: JsonSerializer.SerializeToElement(new { answer = "blue" })
+            ),
             "user",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(DurableExecutionStatus.Resuming, resuming.Status);
         Assert.Empty(resuming.GetUnansweredInteractions());
@@ -231,7 +232,8 @@ public sealed class DurableExecutionStoreTests
         var resumed = await store.TryBeginSegmentAsync(
             executionId,
             TimeProvider.System.GetUtcNow(),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         Assert.NotNull(resumed);
         var input = resumed.CreateSegmentInput();
         Assert.Equal(1, input.SegmentIndex);
@@ -248,11 +250,13 @@ public sealed class DurableExecutionStoreTests
         var firstStore = new DurableAgentflowCheckpointStore();
         var first = await firstStore.CreateCheckpointAsync(
             sessionId,
-            JsonSerializer.SerializeToElement(new { step = 1 }));
+            JsonSerializer.SerializeToElement(new { step = 1 })
+        );
         var second = await firstStore.CreateCheckpointAsync(
             sessionId,
             JsonSerializer.SerializeToElement(new { step = 2 }),
-            first);
+            first
+        );
 
         var restoredStore = new DurableAgentflowCheckpointStore(firstStore.Latest);
         var index = (await restoredStore.RetrieveIndexAsync(sessionId)).ToArray();
@@ -273,30 +277,28 @@ public sealed class DurableExecutionStoreTests
         var running = await store.TryBeginSegmentAsync(
             executionId,
             TimeProvider.System.GetUtcNow(),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         Assert.NotNull(running);
 
-        var interrupted = await store.RequestInterruptAsync(
-            executionId,
-            "user",
-            TestContext.Current.CancellationToken);
+        var interrupted = await store.RequestInterruptAsync(executionId, "user", TestContext.Current.CancellationToken);
         var persisted = await store.SaveSegmentResultAsync(
             new DurableExecutionSegmentResult
             {
                 ExecutionId = executionId,
                 SegmentIndex = 0,
-                Status = DurableExecutionSegmentStatus.Completed
+                Status = DurableExecutionSegmentStatus.Completed,
             },
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.True(interrupted);
         Assert.Equal(DurableExecutionStatus.Interrupted, persisted.Status);
-        Assert.Equal(
-            DurableExecutionStatus.Interrupted,
-            DurableExecutionCoordinator.ToStatus(persisted).Status);
+        Assert.Equal(DurableExecutionStatus.Interrupted, DurableExecutionCoordinator.ToStatus(persisted).Status);
         Assert.Equal(
             persisted.Manifest.Input.MessageId,
-            DurableExecutionCoordinator.ToStatus(persisted).StreamingScopeId);
+            DurableExecutionCoordinator.ToStatus(persisted).StreamingScopeId
+        );
     }
 
     [Fact]
@@ -308,30 +310,27 @@ public sealed class DurableExecutionStoreTests
         await store.TryBeginSegmentAsync(
             executionId,
             TimeProvider.System.GetUtcNow(),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         await store.SaveSegmentResultAsync(
             new DurableExecutionSegmentResult
             {
                 ExecutionId = executionId,
                 SegmentIndex = 0,
                 Status = DurableExecutionSegmentStatus.WaitingForHuman,
-                PendingInteractions = [CreateInteraction("request-1")]
+                PendingInteractions = [CreateInteraction("request-1")],
             },
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         var request = new SubmitDurableHumanResponseRequest(
             executionId,
             "request-1",
             Approved: true,
-            ResponseData: JsonSerializer.SerializeToElement(new { answer = "blue" }));
+            ResponseData: JsonSerializer.SerializeToElement(new { answer = "blue" })
+        );
 
-        var first = await store.SubmitHumanResponseAsync(
-            request,
-            "user",
-            TestContext.Current.CancellationToken);
-        var second = await store.SubmitHumanResponseAsync(
-            request,
-            "user",
-            TestContext.Current.CancellationToken);
+        var first = await store.SubmitHumanResponseAsync(request, "user", TestContext.Current.CancellationToken);
+        var second = await store.SubmitHumanResponseAsync(request, "user", TestContext.Current.CancellationToken);
 
         Assert.Equal(DurableExecutionStatus.Resuming, first.Status);
         Assert.Equal(DurableExecutionStatus.Resuming, second.Status);
@@ -348,7 +347,8 @@ public sealed class DurableExecutionStoreTests
         var candidates = await store.GetRunnableExecutionIdsAsync(
             TimeProvider.System.GetUtcNow(),
             limit: 10,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Contains(executionId, candidates);
     }
@@ -362,21 +362,24 @@ public sealed class DurableExecutionStoreTests
         await store.TryBeginSegmentAsync(
             executionId,
             TimeProvider.System.GetUtcNow(),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         await store.SaveSegmentResultAsync(
             new DurableExecutionSegmentResult
             {
                 ExecutionId = executionId,
                 SegmentIndex = 0,
                 Status = DurableExecutionSegmentStatus.WaitingForHuman,
-                PendingInteractions = [CreateInteraction("request-1")]
+                PendingInteractions = [CreateInteraction("request-1")],
             },
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         var candidates = await store.GetRunnableExecutionIdsAsync(
             TimeProvider.System.GetUtcNow(),
             limit: 10,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.DoesNotContain(executionId, candidates);
     }
@@ -390,13 +393,15 @@ public sealed class DurableExecutionStoreTests
         var running = await store.TryBeginSegmentAsync(
             executionId,
             TimeProvider.System.GetUtcNow(),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         Assert.NotNull(running);
 
         var candidates = await store.GetRunnableExecutionIdsAsync(
             TimeProvider.System.GetUtcNow().AddMinutes(1),
             limit: 10,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Contains(executionId, candidates);
     }
@@ -410,20 +415,19 @@ public sealed class DurableExecutionStoreTests
         await store.TryBeginSegmentAsync(
             executionId,
             TimeProvider.System.GetUtcNow(),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         await store.SaveSegmentResultAsync(
             new DurableExecutionSegmentResult
             {
                 ExecutionId = executionId,
                 SegmentIndex = 0,
-                Status = DurableExecutionSegmentStatus.Completed
+                Status = DurableExecutionSegmentStatus.Completed,
             },
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
-        var interrupted = await store.RequestInterruptAsync(
-            executionId,
-            "user",
-            TestContext.Current.CancellationToken);
+        var interrupted = await store.RequestInterruptAsync(executionId, "user", TestContext.Current.CancellationToken);
 
         Assert.False(interrupted);
     }
@@ -436,7 +440,7 @@ public sealed class DurableExecutionStoreTests
             Manifest = CreateManifest(),
             Status = DurableExecutionStatus.Resuming,
             SegmentIndex = 1,
-            PendingInteractions = [CreateInteraction("request-1")]
+            PendingInteractions = [CreateInteraction("request-1")],
         };
 
         var exception = Assert.Throws<AgwException>(snapshot.CreateSegmentInput);
@@ -449,11 +453,11 @@ public sealed class DurableExecutionStoreTests
     [InlineData(false, true)]
     public async Task ResolvedHumanInteractionChannel_RequestAsync_ReplaysMatchedResponse(
         bool approved,
-        bool expectedCancelled)
+        bool expectedCancelled
+    )
     {
         var responseData = JsonSerializer.SerializeToElement(new { answer = "blue" });
-        var channel = new ResolvedHumanInteractionChannel(
-        [
+        var channel = new ResolvedHumanInteractionChannel([
             new DurableResolvedInteraction(
                 CreateInteraction("request-1"),
                 new DurableHumanResponseEnvelope
@@ -461,22 +465,22 @@ public sealed class DurableExecutionStoreTests
                     ExecutionId = Guid.CreateVersion7(),
                     RequestId = "request-1",
                     Approved = approved,
-                    ResponseData = responseData
-                })
+                    ResponseData = responseData,
+                }
+            ),
         ]);
         var request = new HumanInteractionRequest(
             "runtime-request",
             "ask_user_question",
             "Choose a color",
-            JsonSerializer.SerializeToElement(new { question = "Color?" }))
+            JsonSerializer.SerializeToElement(new { question = "Color?" })
+        )
         {
             ToolName = "ask_user_question",
-            CallId = "call-request-1"
+            CallId = "call-request-1",
         };
 
-        var response = await channel.RequestAsync(
-            request,
-            TestContext.Current.CancellationToken);
+        var response = await channel.RequestAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal("runtime-request", response.RequestId);
         Assert.Equal(expectedCancelled, response.Cancelled);
@@ -489,7 +493,8 @@ public sealed class DurableExecutionStoreTests
         var message = DurableHumanInteractionMapper.ToMessage(
             CreateInteraction("request-1"),
             Guid.CreateVersion7(),
-            "message-1");
+            "message-1"
+        );
 
         Assert.Equal("human-interaction-request", message.AdditionalProperties?["type"]);
         Assert.Equal("request-1", message.AdditionalProperties?["requestId"]);
@@ -515,9 +520,7 @@ public sealed class DurableExecutionStoreTests
     public void RedisExecutionEventStream_CreateStreamId_ReservesTerminalAfterRetryOutput()
     {
         Assert.Equal("2-3", RedisExecutionEventStream.CreateStreamId(1, 3, terminal: false));
-        Assert.Equal(
-            "2-18446744073709551615",
-            RedisExecutionEventStream.CreateStreamId(1, 0, terminal: true));
+        Assert.Equal("2-18446744073709551615", RedisExecutionEventStream.CreateStreamId(1, 0, terminal: true));
     }
 
     [Fact]
@@ -527,18 +530,21 @@ public sealed class DurableExecutionStoreTests
         using var serviceProvider = database.CreateServiceProvider();
         var stream = new PostgresExecutionEventStream(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-            Options.Create(new ExecutionRuntimeOptions
-            {
-                Provider = ExecutionProvider.Distributed,
-                Distributed = new DistributedExecutionOptions
+            Options.Create(
+                new ExecutionRuntimeOptions
                 {
-                    EventStream = new ExecutionEventStreamOptions
+                    Provider = ExecutionProvider.Distributed,
+                    Distributed = new DistributedExecutionOptions
                     {
-                        Provider = ExecutionEventStreamProvider.Postgres,
-                        ReadBatchSize = 2
-                    }
+                        EventStream = new ExecutionEventStreamOptions
+                        {
+                            Provider = ExecutionEventStreamProvider.Postgres,
+                            ReadBatchSize = 2,
+                        },
+                    },
                 }
-            }));
+            )
+        );
         var executionId = Guid.CreateVersion7();
         var firstMessage = TurnMessageFactory.CreateStarted(executionId);
         var secondMessage = TurnMessageFactory.CreateFinished("failed", executionId);
@@ -549,46 +555,47 @@ public sealed class DurableExecutionStoreTests
             segmentIndex: 0,
             sequence: 0,
             firstMessage,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         await stream.AppendAsync(
             executionId,
             segmentIndex: 0,
             sequence: 1,
             secondMessage,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         await stream.AppendAsync(
             executionId,
             segmentIndex: 1,
             sequence: 0,
             thirdMessage,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         await stream.AppendAsync(
             executionId,
             segmentIndex: 0,
             sequence: 0,
             firstMessage,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
-        var firstBatch = await stream.ReadAsync(
-            executionId,
-            afterCursor: null,
-            TestContext.Current.CancellationToken);
+        var firstBatch = await stream.ReadAsync(executionId, afterCursor: null, TestContext.Current.CancellationToken);
         var secondBatch = await stream.ReadAsync(
             executionId,
             firstBatch[^1].Cursor,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(["1-0", "1-1"], firstBatch.Select(item => item.Cursor));
         Assert.Equal("2-0", Assert.Single(secondBatch).Cursor);
         Assert.All(
             firstBatch.Concat(secondBatch),
-            item => Assert.Equal(
-                executionId.ToString("D"),
-                item.Message.AdditionalProperties?["executionId"]));
+            item => Assert.Equal(executionId.ToString("D"), item.Message.AdditionalProperties?["executionId"])
+        );
         Assert.Equal(
             3,
-            await database.Context.DurableExecutionEvents.CountAsync(
-                TestContext.Current.CancellationToken));
+            await database.Context.DurableExecutionEvents.CountAsync(TestContext.Current.CancellationToken)
+        );
     }
 
     [Fact]
@@ -598,7 +605,8 @@ public sealed class DurableExecutionStoreTests
         using var serviceProvider = database.CreateServiceProvider();
         var stream = new PostgresExecutionEventStream(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
-            Options.Create(new ExecutionRuntimeOptions()));
+            Options.Create(new ExecutionRuntimeOptions())
+        );
         var executionId = Guid.CreateVersion7();
 
         await stream.AppendAsync(
@@ -606,17 +614,18 @@ public sealed class DurableExecutionStoreTests
             segmentIndex: 0,
             sequence: 0,
             TurnMessageFactory.CreateStarted(executionId),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         await stream.AppendAsync(
             executionId,
             segmentIndex: 0,
             sequence: 0,
             TurnMessageFactory.CreateFinished("completed", executionId),
-            TestContext.Current.CancellationToken);
-        var entry = Assert.Single(await stream.ReadAsync(
-            executionId,
-            afterCursor: null,
-            TestContext.Current.CancellationToken));
+            TestContext.Current.CancellationToken
+        );
+        var entry = Assert.Single(
+            await stream.ReadAsync(executionId, afterCursor: null, TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal("turn-start", entry.Message.AdditionalProperties?["type"]?.ToString());
     }
@@ -626,17 +635,11 @@ public sealed class DurableExecutionStoreTests
     {
         var stream = new RecordingExecutionEventStream();
         var executionId = Guid.CreateVersion7();
-        var sink = new ExecutionStreamMessageSink(
-            stream,
-            executionId,
-            segmentIndex: 2,
-            NullLogger.Instance);
+        var sink = new ExecutionStreamMessageSink(stream, executionId, segmentIndex: 2, NullLogger.Instance);
         var interaction = DurableHumanInteractionMapper.ToMessage(CreateInteraction("request-1"));
 
         await sink.WriteAsync(interaction, TestContext.Current.CancellationToken);
-        await sink.WriteAsync(
-            TurnMessageFactory.CreateFinished(),
-            TestContext.Current.CancellationToken);
+        await sink.WriteAsync(TurnMessageFactory.CreateFinished(), TestContext.Current.CancellationToken);
 
         Assert.Empty(stream.Appends);
 
@@ -659,7 +662,8 @@ public sealed class DurableExecutionStoreTests
             CreateInput("hello"),
             task,
             CreateSettings(task.ProjectId, task.ContextId),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         return executionId;
     }
 
@@ -673,8 +677,7 @@ public sealed class DurableExecutionStoreTests
             AgentType = AgentRuntimeType.Agent,
             Input = CreateInput("hello"),
             Task = DurableProjectTaskSnapshot.FromProjection(task),
-            Settings = DurableExecutionSettings.FromSettings(
-                CreateSettings(task.ProjectId, task.ContextId))
+            Settings = DurableExecutionSettings.FromSettings(CreateSettings(task.ProjectId, task.ContextId)),
         };
     }
 
@@ -688,18 +691,11 @@ public sealed class DurableExecutionStoreTests
             ToolName = "ask_user_question",
             CallId = $"call-{requestId}",
             Prompt = "Choose a color",
-            Payload = JsonSerializer.SerializeToElement(new
-            {
-                questions = new[] { new { question = "Color?" } }
-            })
+            Payload = JsonSerializer.SerializeToElement(new { questions = new[] { new { question = "Color?" } } }),
         };
 
     private static AgwUserInput CreateInput(string content) =>
-        new()
-        {
-            MessageId = "message-1",
-            Contents = [new AgwTextContent { Content = content }]
-        };
+        new() { MessageId = "message-1", Contents = [new AgwTextContent { Content = content }] };
 
     private static TaskProjection CreateTask() =>
         new()
@@ -709,7 +705,7 @@ public sealed class DurableExecutionStoreTests
             ProjectId = Guid.CreateVersion7(),
             ContextId = "context-1",
             Title = "Durable test",
-            CreateTime = TimeProvider.System.GetUtcNow()
+            CreateTime = TimeProvider.System.GetUtcNow(),
         };
 
     private static ExecutionSettings CreateSettings(Guid projectId, string contextId) =>
@@ -720,10 +716,7 @@ public sealed class DurableExecutionStoreTests
         private readonly SqliteConnection _connection;
         private readonly DbContextOptions<AgwDbContext> _options;
 
-        private TestDatabase(
-            SqliteConnection connection,
-            DbContextOptions<AgwDbContext> options,
-            AgwDbContext context)
+        private TestDatabase(SqliteConnection connection, DbContextOptions<AgwDbContext> options, AgwDbContext context)
         {
             _connection = connection;
             _options = options;
@@ -763,15 +756,15 @@ public sealed class DurableExecutionStoreTests
 
     private sealed class RecordingExecutionEventStream : IExecutionEventStream
     {
-        public List<(Guid ExecutionId, int SegmentIndex, int Sequence, AgwMessage Message)> Appends
-        { get; } = [];
+        public List<(Guid ExecutionId, int SegmentIndex, int Sequence, AgwMessage Message)> Appends { get; } = [];
 
         public ValueTask AppendAsync(
             Guid executionId,
             int segmentIndex,
             int sequence,
             AgwMessage message,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             cancellationToken.ThrowIfCancellationRequested();
             Appends.Add((executionId, segmentIndex, sequence, message));
@@ -781,7 +774,8 @@ public sealed class DurableExecutionStoreTests
         public Task<IReadOnlyList<ExecutionStreamEntry>> ReadAsync(
             Guid executionId,
             string? afterCursor,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             cancellationToken.ThrowIfCancellationRequested();
             return Task.FromResult<IReadOnlyList<ExecutionStreamEntry>>([]);

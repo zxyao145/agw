@@ -3,14 +3,16 @@ using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Projects.Application;
 
 public static class TaskExecutionMapper
 {
-    public static TaskProjection ToTask(ProjectConversation context, IReadOnlyList<ProjectConversationChatHistory> records)
+    public static TaskProjection ToTask(
+        ProjectConversation context,
+        IReadOnlyList<ProjectConversationChatHistory> records
+    )
     {
         var orderedRecords = records
             .OrderBy(record => record.CreateTime)
@@ -36,7 +38,7 @@ public static class TaskExecutionMapper
             ErrorMessage = latestRecord.TaskErrorMessage ?? latestRecord.Error,
             FinishedTime = latestRecord.FinishedTime,
             CreateTime = orderedRecords.Min(record => record.CreateTime),
-            UpdateTime = orderedRecords.Max(record => record.UpdateTime ?? record.CreateTime)
+            UpdateTime = orderedRecords.Max(record => record.UpdateTime ?? record.CreateTime),
         };
     }
 
@@ -52,12 +54,14 @@ public static class TaskExecutionMapper
             task.CreateTime,
             task.UpdateTime,
             task.FinishedTime,
-            GetStartedTime(task));
+            GetStartedTime(task)
+        );
 
     public static TaskExecutionSnapshot ToSnapshot(
         TaskProjection task,
         IReadOnlyList<ProjectConversationChatHistory> records,
-        IReadOnlyList<AgwMessage>? messages)
+        IReadOnlyList<AgwMessage>? messages
+    )
     {
         return new TaskExecutionSnapshot(
             task.TaskId,
@@ -73,7 +77,8 @@ public static class TaskExecutionMapper
             GetStartedTime(task),
             task.FinishedTime,
             CountMessages(records),
-            messages);
+            messages
+        );
     }
 
     public static IEnumerable<AgwMessage> ToAiMessages(ProjectConversationChatHistory record)
@@ -85,11 +90,9 @@ public static class TaskExecutionMapper
         }
     }
 
-    public static int CountMessages(IEnumerable<ProjectConversationChatHistory> records) =>
-        records.Sum(CountMessages);
+    public static int CountMessages(IEnumerable<ProjectConversationChatHistory> records) => records.Sum(CountMessages);
 
-    private static int CountMessages(ProjectConversationChatHistory record) =>
-        record.ToChatMessage() == null ? 0 : 1;
+    private static int CountMessages(ProjectConversationChatHistory record) => record.ToChatMessage() == null ? 0 : 1;
 
     private static DateTimeOffset? GetStartedTime(TaskProjection task) =>
         task.Status == TaskExecutionStatus.Pending ? null : task.CreateTime;

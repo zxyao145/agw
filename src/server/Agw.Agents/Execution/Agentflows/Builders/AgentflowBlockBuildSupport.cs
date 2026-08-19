@@ -1,7 +1,5 @@
 using System.Text.Json;
-
 using Agw.Shared.Data.Entities.Agentflows;
-
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 
@@ -23,8 +21,8 @@ internal static class AgentflowBlockBuildSupport
 
         try
         {
-            return JsonSerializer.Deserialize<AgentflowBlockConfig>(node.ConfigJson, JsonOptions) ??
-                   new AgentflowBlockConfig();
+            return JsonSerializer.Deserialize<AgentflowBlockConfig>(node.ConfigJson, JsonOptions)
+                ?? new AgentflowBlockConfig();
         }
         catch (JsonException)
         {
@@ -36,13 +34,16 @@ internal static class AgentflowBlockBuildSupport
     /// 按配置顺序解析并包装 Block 参与者；任一参与者无效时返回空结果。
     /// </summary>
     internal static IReadOnlyList<(string NodeId, AIAgent Agent)>? ResolveParticipants(
-        AgentflowBlockBuildContext context)
+        AgentflowBlockBuildContext context
+    )
     {
         var config = ReadConfig(context.BlockNode);
-        var participantNodeIds = config.ParticipantNodeIds?
-            .Where(nodeId => !string.IsNullOrWhiteSpace(nodeId))
-            .Distinct(StringComparer.Ordinal)
-            .ToList() ?? [];
+        var participantNodeIds =
+            config
+                .ParticipantNodeIds?.Where(nodeId => !string.IsNullOrWhiteSpace(nodeId))
+                .Distinct(StringComparer.Ordinal)
+                .ToList()
+            ?? [];
         if (participantNodeIds.Count == 0)
         {
             return null;
@@ -54,7 +55,8 @@ internal static class AgentflowBlockBuildSupport
             var participant = CreateParticipant(
                 context,
                 participantNodeId,
-                $"{context.BlockNode.NodeId}.{participantNodeId}");
+                $"{context.BlockNode.NodeId}.{participantNodeId}"
+            );
             if (participant == null)
             {
                 return null;
@@ -72,10 +74,13 @@ internal static class AgentflowBlockBuildSupport
     internal static AIAgent? CreateParticipant(
         AgentflowBlockBuildContext context,
         string participantNodeId,
-        string runtimeNodeId)
+        string runtimeNodeId
+    )
     {
-        if (!context.NodeMap.TryGetValue(participantNodeId, out var participantNode) ||
-            !context.NodeIdToAgent.TryGetValue(participantNodeId, out var participantAgent))
+        if (
+            !context.NodeMap.TryGetValue(participantNodeId, out var participantNode)
+            || !context.NodeIdToAgent.TryGetValue(participantNodeId, out var participantAgent)
+        )
         {
             return null;
         }
@@ -91,30 +96,30 @@ internal static class AgentflowBlockBuildSupport
             context.AgentflowId,
             shouldTrace ? participantNode.NodeId : null,
             shouldTrace ? participantNode.RelateId : null,
-            historyNodeId: participantNode.NodeId);
+            historyNodeId: participantNode.NodeId
+        );
     }
 
     /// <summary>
     /// 将内部 Workflow 包装为 Block Agent，并绑定为使用统一宿主选项的执行器。
     /// </summary>
-    internal static ExecutorBinding BindWorkflow(
-        AgentflowBlockBuildContext context,
-        Workflow workflow)
+    internal static ExecutorBinding BindWorkflow(AgentflowBlockBuildContext context, Workflow workflow)
     {
         var blockNode = context.BlockNode;
         var blockAgent = workflow.AsAIAgent(
             id: blockNode.NodeId,
             name: blockNode.Name ?? blockNode.NodeId,
             description: string.Empty,
-            includeWorkflowOutputsInResponse: true);
+            includeWorkflowOutputsInResponse: true
+        );
 
         return new AgentflowNodeScopedAgent(
-                blockAgent,
-                blockNode.NodeId,
-                blockNode.Name,
-                blockNode.Instructions,
-                context.SessionScope,
-                agentflowId: context.AgentflowId)
-            .BindAsExecutor(context.AgentHostOptions);
+            blockAgent,
+            blockNode.NodeId,
+            blockNode.Name,
+            blockNode.Instructions,
+            context.SessionScope,
+            agentflowId: context.AgentflowId
+        ).BindAsExecutor(context.AgentHostOptions);
     }
 }

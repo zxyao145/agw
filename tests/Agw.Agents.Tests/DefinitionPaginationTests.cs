@@ -11,7 +11,6 @@ using Agw.Shared.Runtime;
 using Agw.Skills.Application;
 using Agw.Skills.Application.Remote;
 using Agw.Skills.Controllers;
-
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -31,9 +30,11 @@ public class DefinitionPaginationTests
         var method = controllerType
             .GetMethods()
             .SingleOrDefault(candidate =>
-                candidate.GetCustomAttributes(typeof(HttpGetAttribute), inherit: true)
+                candidate
+                    .GetCustomAttributes(typeof(HttpGetAttribute), inherit: true)
                     .Cast<HttpGetAttribute>()
-                    .Any(attribute => attribute.Template == "paged"));
+                    .Any(attribute => attribute.Template == "paged")
+            );
 
         Assert.NotNull(method);
         var parameters = method.GetParameters();
@@ -87,7 +88,8 @@ public class DefinitionPaginationTests
         database.Context.AddRange(
             new AgentMcpServerRelation { AgentId = agent.Id, McpToolServerId = mcpServer.Id },
             new AgentSkillRelation { AgentId = agent.Id, SkillId = skill.Id },
-            new AgentConnectionRelation { AgentId = agent.Id, ConnectionId = connection.Id });
+            new AgentConnectionRelation { AgentId = agent.Id, ConnectionId = connection.Id }
+        );
         await database.Context.SaveChangesAsync(cancellationToken);
 
         var service = CreateAgentAppService(database.Context);
@@ -123,11 +125,7 @@ public class DefinitionPaginationTests
         };
 
         database.Context.AddRange(agent, skill);
-        database.Context.AgentSkillRelations.Add(new AgentSkillRelation
-        {
-            AgentId = agent.Id,
-            SkillId = skill.Id,
-        });
+        database.Context.AgentSkillRelations.Add(new AgentSkillRelation { AgentId = agent.Id, SkillId = skill.Id });
         await database.Context.SaveChangesAsync(cancellationToken);
 
         var service = new SkillAppService(
@@ -141,7 +139,8 @@ public class DefinitionPaginationTests
             NullLogger<SkillAppService>.Instance,
             new TestRemoteSkillClient(),
             new TestRemoteSkillRefreshLock(),
-            TimeProvider.System);
+            TimeProvider.System
+        );
 
         var result = await service.ListPageAsync(1, 10, cancellationToken);
         var listed = Assert.Single(result.Items);
@@ -163,7 +162,8 @@ public class DefinitionPaginationTests
             new EfRepository<Skill>(dbContext),
             new EfRepository<AgentSkillRelation>(dbContext),
             dbContext,
-            new AgentDomainService(TimeProvider.System));
+            new AgentDomainService(TimeProvider.System)
+        );
     }
 
     private sealed class TestRemoteSkillClient : IRemoteSkillClient
@@ -172,15 +172,13 @@ public class DefinitionPaginationTests
 
         public Task<RemoteSkillDefinition> FetchAsync(
             string remoteUrl,
-            CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
     }
 
     private sealed class TestRemoteSkillRefreshLock : IRemoteSkillRefreshLock
     {
-        public Task<IAsyncDisposable> AcquireAsync(
-            Guid skillId,
-            CancellationToken cancellationToken) =>
+        public Task<IAsyncDisposable> AcquireAsync(Guid skillId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
     }
 
@@ -200,9 +198,7 @@ public class DefinitionPaginationTests
         {
             var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
             await connection.OpenAsync(cancellationToken);
-            var options = new DbContextOptionsBuilder<AgwDbContext>()
-                .UseSqlite(connection)
-                .Options;
+            var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options;
             var context = new AgwDbContext(options);
             await context.Database.EnsureCreatedAsync(cancellationToken);
             return new TestDatabase(connection, context);

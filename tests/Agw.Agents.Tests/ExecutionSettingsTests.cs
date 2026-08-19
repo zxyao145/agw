@@ -1,5 +1,4 @@
 using System.Text.Json;
-
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
 
@@ -12,7 +11,8 @@ public class ExecutionSettingsTests
     {
         var command = new SettingCommand(
             Guid.CreateVersion7(),
-            new Dictionary<string, string> { ["TOKEN"] = "original" });
+            new Dictionary<string, string> { ["TOKEN"] = "original" }
+        );
 
         var settings = ExecutionSettings.FromCommand(command);
         command.EnvironmentVariables["TOKEN"] = "changed";
@@ -24,10 +24,8 @@ public class ExecutionSettingsTests
     public void Equals_WhenResumeDiffers_ReturnsFalse()
     {
         var projectId = Guid.CreateVersion7();
-        var left = ExecutionSettings.FromCommand(
-            new SettingCommand(projectId) { Resume = false });
-        var right = ExecutionSettings.FromCommand(
-            new SettingCommand(projectId) { Resume = true });
+        var left = ExecutionSettings.FromCommand(new SettingCommand(projectId) { Resume = false });
+        var right = ExecutionSettings.FromCommand(new SettingCommand(projectId) { Resume = true });
 
         Assert.NotEqual(left, right);
     }
@@ -36,10 +34,7 @@ public class ExecutionSettingsTests
     public void PermissionMode_RoundTripsAndParticipatesInEquality()
     {
         var projectId = Guid.CreateVersion7();
-        var command = new SettingCommand(
-            projectId,
-            contextId: "context",
-            permissionMode: PermissionMode.FullAccess);
+        var command = new SettingCommand(projectId, contextId: "context", permissionMode: PermissionMode.FullAccess);
 
         var settings = ExecutionSettings.FromCommand(command);
         var roundTripped = settings.ToCommand();
@@ -48,10 +43,10 @@ public class ExecutionSettingsTests
         Assert.Equal(PermissionMode.FullAccess, roundTripped.PermissionMode);
         Assert.NotEqual(
             settings,
-            ExecutionSettings.FromCommand(new SettingCommand(
-                projectId,
-                contextId: "context",
-                permissionMode: PermissionMode.AlwaysAsk)));
+            ExecutionSettings.FromCommand(
+                new SettingCommand(projectId, contextId: "context", permissionMode: PermissionMode.AlwaysAsk)
+            )
+        );
         Assert.Equal("\"fullAccess\"", JsonSerializer.Serialize(PermissionMode.FullAccess));
     }
 }

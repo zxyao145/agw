@@ -1,7 +1,6 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-
 using Agw.Integrations.Application.Credentials;
 using Agw.Integrations.Tools.GitHub;
 using Agw.Shared.Exceptions;
@@ -21,7 +20,8 @@ public class GitHubConnectionInvokerTests
             credentials,
             new FixedHttpClientFactory(handler),
             new FixedWorkspaceResolver(Path.GetTempPath()),
-            new RecordingGitRunner());
+            new RecordingGitRunner()
+        );
 
         credentials.Token = "token-v1";
         await invoker.GetCurrentUserAsync(connectionId, cancellationToken);
@@ -44,13 +44,15 @@ public class GitHubConnectionInvokerTests
                 Result = new GitHubGitProcessResult(
                     1,
                     "stdout clone-secret-value",
-                    "stderr Authorization: Basic eC1hY2Nlc3MtdG9rZW46Y2xvbmUtc2VjcmV0LXZhbHVl")
+                    "stderr Authorization: Basic eC1hY2Nlc3MtdG9rZW46Y2xvbmUtc2VjcmV0LXZhbHVl"
+                ),
             };
             var invoker = new GitHubConnectionInvoker(
                 credentials,
                 new FixedHttpClientFactory(new RecordingHttpHandler()),
                 new FixedWorkspaceResolver(workspace),
-                runner);
+                runner
+            );
 
             var result = await invoker.CloneRepositoryAsync(
                 Guid.CreateVersion7(),
@@ -58,15 +60,26 @@ public class GitHubConnectionInvokerTests
                 "openai",
                 "codex",
                 "sources/codex",
-                cancellationToken);
+                cancellationToken
+            );
 
             var request = Assert.Single(runner.Requests);
             Assert.Equal(Path.GetFullPath(workspace), request.WorkingDirectory);
             Assert.Equal(Path.Combine(Path.GetFullPath(workspace), "sources", "codex"), request.Arguments[^1]);
             Assert.Contains("https://github.com/openai/codex.git", request.Arguments);
-            Assert.Contains(request.Arguments, argument => argument.StartsWith("--config-env=http.https://github.com/.extraHeader=", StringComparison.Ordinal));
-            Assert.DoesNotContain(request.Arguments, argument => argument.Contains("clone-secret-value", StringComparison.Ordinal));
-            Assert.DoesNotContain(request.Arguments, argument => argument.Contains("Authorization:", StringComparison.Ordinal));
+            Assert.Contains(
+                request.Arguments,
+                argument =>
+                    argument.StartsWith("--config-env=http.https://github.com/.extraHeader=", StringComparison.Ordinal)
+            );
+            Assert.DoesNotContain(
+                request.Arguments,
+                argument => argument.Contains("clone-secret-value", StringComparison.Ordinal)
+            );
+            Assert.DoesNotContain(
+                request.Arguments,
+                argument => argument.Contains("Authorization:", StringComparison.Ordinal)
+            );
             Assert.Equal("0", request.EnvironmentVariables["GIT_TERMINAL_PROMPT"]);
             Assert.Equal("Never", request.EnvironmentVariables["GCM_INTERACTIVE"]);
             Assert.DoesNotContain("clone-secret-value", result.Stdout, StringComparison.Ordinal);
@@ -84,8 +97,7 @@ public class GitHubConnectionInvokerTests
     [InlineData("/tmp/escape")]
     [InlineData("../escape")]
     [InlineData("child/../../escape")]
-    public async Task CloneRepository_AbsoluteOrTraversalTarget_IsRejectedBeforeCredentialOrProcess(
-        string relativePath)
+    public async Task CloneRepository_AbsoluteOrTraversalTarget_IsRejectedBeforeCredentialOrProcess(string relativePath)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var credentials = new MutableCredentialReader { Token = "must-not-be-read" };
@@ -94,15 +106,19 @@ public class GitHubConnectionInvokerTests
             credentials,
             new FixedHttpClientFactory(new RecordingHttpHandler()),
             new FixedWorkspaceResolver(Path.GetTempPath()),
-            runner);
+            runner
+        );
 
-        var error = await Assert.ThrowsAsync<AgwException>(() => invoker.CloneRepositoryAsync(
-            Guid.CreateVersion7(),
-            Guid.CreateVersion7(),
-            "openai",
-            "codex",
-            relativePath,
-            cancellationToken));
+        var error = await Assert.ThrowsAsync<AgwException>(() =>
+            invoker.CloneRepositoryAsync(
+                Guid.CreateVersion7(),
+                Guid.CreateVersion7(),
+                "openai",
+                "codex",
+                relativePath,
+                cancellationToken
+            )
+        );
 
         Assert.Equal(ErrorCodes.GitHubClonePathInvalid.Code, error.Code);
         Assert.Equal(0, credentials.ReadCount);
@@ -125,15 +141,19 @@ public class GitHubConnectionInvokerTests
                 credentials,
                 new FixedHttpClientFactory(new RecordingHttpHandler()),
                 new FixedWorkspaceResolver(workspace),
-                runner);
+                runner
+            );
 
-            var error = await Assert.ThrowsAsync<AgwException>(() => invoker.CloneRepositoryAsync(
-                Guid.CreateVersion7(),
-                Guid.CreateVersion7(),
-                "openai",
-                "codex",
-                "linked/codex",
-                cancellationToken));
+            var error = await Assert.ThrowsAsync<AgwException>(() =>
+                invoker.CloneRepositoryAsync(
+                    Guid.CreateVersion7(),
+                    Guid.CreateVersion7(),
+                    "openai",
+                    "codex",
+                    "linked/codex",
+                    cancellationToken
+                )
+            );
 
             Assert.Equal(ErrorCodes.GitHubClonePathInvalid.Code, error.Code);
             Assert.Equal(0, credentials.ReadCount);
@@ -154,16 +174,18 @@ public class GitHubConnectionInvokerTests
         var handler = new RecordingHttpHandler
         {
             StatusCode = HttpStatusCode.InternalServerError,
-            Body = "server echoed api-secret"
+            Body = "server echoed api-secret",
         };
         var invoker = new GitHubConnectionInvoker(
             credentials,
             new FixedHttpClientFactory(handler),
             new FixedWorkspaceResolver(Path.GetTempPath()),
-            new RecordingGitRunner());
+            new RecordingGitRunner()
+        );
 
         var error = await Assert.ThrowsAsync<AgwException>(() =>
-            invoker.GetCurrentUserAsync(Guid.CreateVersion7(), cancellationToken));
+            invoker.GetCurrentUserAsync(Guid.CreateVersion7(), cancellationToken)
+        );
 
         Assert.Equal(ErrorCodes.GitHubBadResponseStatusCode.Code, error.Code);
         Assert.DoesNotContain("api-secret", error.ToString(), StringComparison.Ordinal);
@@ -181,7 +203,7 @@ public class GitHubConnectionInvokerTests
             ["GIT_CONFIG_PARAMETERS"] = "'credential.helper'='malicious'",
             ["GIT_TRACE_CURL"] = "1",
             ["GIT_SSH_COMMAND"] = "malicious-command",
-            ["PATH"] = "/usr/bin"
+            ["PATH"] = "/usr/bin",
         };
 
         GitHubGitProcessRunner.HardenGitEnvironment(environment);
@@ -197,23 +219,26 @@ public class GitHubConnectionInvokerTests
         var credentials = new MutableCredentialReader { Token = "transport-secret" };
         var handler = new RecordingHttpHandler
         {
-            Exception = new HttpRequestException("transport echoed transport-secret")
+            Exception = new HttpRequestException("transport echoed transport-secret"),
         };
         var invoker = new GitHubConnectionInvoker(
             credentials,
             new FixedHttpClientFactory(handler),
             new FixedWorkspaceResolver(Path.GetTempPath()),
-            new RecordingGitRunner());
+            new RecordingGitRunner()
+        );
 
         var error = await Assert.ThrowsAsync<AgwException>(() =>
-            invoker.GetCurrentUserAsync(Guid.CreateVersion7(), cancellationToken));
+            invoker.GetCurrentUserAsync(Guid.CreateVersion7(), cancellationToken)
+        );
 
         Assert.Equal(ErrorCodes.GitHubBadResponseStatusCode.Code, error.Code);
         Assert.DoesNotContain("transport-secret", error.ToString(), StringComparison.Ordinal);
 
         handler.Exception = new OperationCanceledException(cancellationToken);
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            invoker.GetCurrentUserAsync(Guid.CreateVersion7(), cancellationToken));
+            invoker.GetCurrentUserAsync(Guid.CreateVersion7(), cancellationToken)
+        );
     }
 
     private sealed class MutableCredentialReader : IConnectionCredentialReader
@@ -221,13 +246,21 @@ public class GitHubConnectionInvokerTests
         public string? Token { get; set; }
         public int ReadCount { get; private set; }
 
-        public Task<ResolvedCredential?> ReadConnectionAsync(Guid connectionId, string slot, CancellationToken cancellationToken)
+        public Task<ResolvedCredential?> ReadConnectionAsync(
+            Guid connectionId,
+            string slot,
+            CancellationToken cancellationToken
+        )
         {
             ReadCount++;
             return Task.FromResult(Token == null ? null : new ResolvedCredential { Value = Token });
         }
 
-        public Task<ResolvedCredential?> ReadPluginInstallationAsync(Guid pluginInstallationId, string slot, CancellationToken cancellationToken)
+        public Task<ResolvedCredential?> ReadPluginInstallationAsync(
+            Guid pluginInstallationId,
+            string slot,
+            CancellationToken cancellationToken
+        )
         {
             return Task.FromResult<ResolvedCredential?>(null);
         }
@@ -256,7 +289,8 @@ public class GitHubConnectionInvokerTests
 
         public Task<GitHubGitProcessResult> RunCloneAsync(
             GitHubGitProcessRequest request,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             Requests.Add(request);
             return Task.FromResult(Result);
@@ -290,7 +324,8 @@ public class GitHubConnectionInvokerTests
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             AuthorizationValues.Add(request.Headers.Authorization?.ToString() ?? string.Empty);
             if (Exception != null)
@@ -298,10 +333,12 @@ public class GitHubConnectionInvokerTests
                 return Task.FromException<HttpResponseMessage>(Exception);
             }
 
-            return Task.FromResult(new HttpResponseMessage(StatusCode)
-            {
-                Content = new StringContent(Body, Encoding.UTF8, "application/json")
-            });
+            return Task.FromResult(
+                new HttpResponseMessage(StatusCode)
+                {
+                    Content = new StringContent(Body, Encoding.UTF8, "application/json"),
+                }
+            );
         }
     }
 }

@@ -11,17 +11,13 @@ public sealed class PluginSkillMetadataReaderTests
         var reader = new PluginSkillMetadataReader(new AppContextPluginContentRootProvider());
 
         var result = reader.TryRead(
-            new PluginSkillDefinition
-            {
-                ContentPath = "Plugins/github/skills/github/SKILL.md"
-            },
-            out var metadata);
+            new PluginSkillDefinition { ContentPath = "Plugins/github/skills/github/SKILL.md" },
+            out var metadata
+        );
 
         Assert.True(result);
         Assert.Equal("github", metadata.Id);
-        Assert.Equal(
-            "Use connected GitHub tools to inspect and work with repositories.",
-            metadata.Description);
+        Assert.Equal("Use connected GitHub tools to inspect and work with repositories.", metadata.Description);
         Assert.EndsWith("SKILL.md", metadata.SkillFilePath, StringComparison.Ordinal);
     }
 
@@ -41,7 +37,8 @@ public sealed class PluginSkillMetadataReaderTests
 
             var result = reader.TryRead(
                 new PluginSkillDefinition { ContentPath = "skills/test/SKILL.md" },
-                out var metadata);
+                out var metadata
+            );
 
             Assert.Equal(expected, result);
             if (expected)

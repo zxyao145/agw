@@ -1,10 +1,8 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Tools;
 using Agw.Shared.Contracts.Agents;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -15,23 +13,22 @@ public sealed class ModeStateSnapshotMiddlewareTests
     [Fact]
     public async Task RunStreamingAsync_ModeSetCompleted_EmitsCurrentModeAfterResult()
     {
-        var modeProvider = new AgentModeProvider(
-            new AgentModeProviderOptions { DefaultMode = "plan" });
+        var modeProvider = new AgentModeProvider(new AgentModeProviderOptions { DefaultMode = "plan" });
         using var providerResource = modeProvider;
         var session = new TestAgentSession();
-        await modeProvider.SetModeAsync(
-            session,
-            "execute",
-            TestContext.Current.CancellationToken);
+        await modeProvider.SetModeAsync(session, "execute", TestContext.Current.CancellationToken);
         var middleware = new ModeStateSnapshotMiddleware(modeProvider);
         var updates = new List<AgentResponseUpdate>();
 
-        await foreach (var update in middleware.RunStreamingAsync(
-                           [new ChatMessage(ChatRole.User, "switch mode")],
-                           session,
-                           options: null,
-                           new FunctionTranscriptAgent("Mode changed to \"execute\"."),
-                           TestContext.Current.CancellationToken))
+        await foreach (
+            var update in middleware.RunStreamingAsync(
+                [new ChatMessage(ChatRole.User, "switch mode")],
+                session,
+                options: null,
+                new FunctionTranscriptAgent("Mode changed to \"execute\"."),
+                TestContext.Current.CancellationToken
+            )
+        )
         {
             updates.Add(update);
         }
@@ -44,8 +41,7 @@ public sealed class ModeStateSnapshotMiddlewareTests
     [Fact]
     public async Task RunAsync_ModeSetCancelled_EmitsUnchangedModeAfterResult()
     {
-        var modeProvider = new AgentModeProvider(
-            new AgentModeProviderOptions { DefaultMode = "plan" });
+        var modeProvider = new AgentModeProvider(new AgentModeProviderOptions { DefaultMode = "plan" });
         using var providerResource = modeProvider;
         var session = new TestAgentSession();
         var middleware = new ModeStateSnapshotMiddleware(modeProvider);
@@ -55,7 +51,8 @@ public sealed class ModeStateSnapshotMiddlewareTests
             session,
             options: null,
             new FunctionTranscriptAgent("Mode change was cancelled by the user."),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(3, response.Messages.Count);
         Assert.IsType<FunctionResultContent>(Assert.Single(response.Messages[1].Contents));
@@ -65,19 +62,21 @@ public sealed class ModeStateSnapshotMiddlewareTests
     [Fact]
     public async Task RunStreamingAsync_ModeGetCompleted_DoesNotEmitSnapshot()
     {
-        var modeProvider = new AgentModeProvider(
-            new AgentModeProviderOptions { DefaultMode = "plan" });
+        var modeProvider = new AgentModeProvider(new AgentModeProviderOptions { DefaultMode = "plan" });
         using var providerResource = modeProvider;
         var session = new TestAgentSession();
         var middleware = new ModeStateSnapshotMiddleware(modeProvider);
         var updates = new List<AgentResponseUpdate>();
 
-        await foreach (var update in middleware.RunStreamingAsync(
-                           [new ChatMessage(ChatRole.User, "get mode")],
-                           session,
-                           options: null,
-                           new FunctionTranscriptAgent("Current mode is plan.", "mode_get"),
-                           TestContext.Current.CancellationToken))
+        await foreach (
+            var update in middleware.RunStreamingAsync(
+                [new ChatMessage(ChatRole.User, "get mode")],
+                session,
+                options: null,
+                new FunctionTranscriptAgent("Current mode is plan.", "mode_get"),
+                TestContext.Current.CancellationToken
+            )
+        )
         {
             updates.Add(update);
         }
@@ -90,8 +89,7 @@ public sealed class ModeStateSnapshotMiddlewareTests
     [Fact]
     public async Task RunAsync_ModeGetCompleted_DoesNotEmitSnapshot()
     {
-        var modeProvider = new AgentModeProvider(
-            new AgentModeProviderOptions { DefaultMode = "plan" });
+        var modeProvider = new AgentModeProvider(new AgentModeProviderOptions { DefaultMode = "plan" });
         using var providerResource = modeProvider;
         var session = new TestAgentSession();
         var middleware = new ModeStateSnapshotMiddleware(modeProvider);
@@ -101,7 +99,8 @@ public sealed class ModeStateSnapshotMiddlewareTests
             session,
             options: null,
             new FunctionTranscriptAgent("Current mode is plan.", "mode_get"),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(2, response.Messages.Count);
         Assert.IsType<FunctionCallContent>(Assert.Single(response.Messages[0].Contents));
@@ -114,13 +113,15 @@ public sealed class ModeStateSnapshotMiddlewareTests
         var agent = new FunctionTranscriptAgent("Mode changed to \"execute\".");
         var response = await agent.RunAsync(
             [new ChatMessage(ChatRole.User, "switch mode")],
-            cancellationToken: TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
         var snapshots = await ToolStateSnapshots.CreateAsync(
             agent,
             new TestAgentSession(),
             response.Messages,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Empty(snapshots);
     }
@@ -149,36 +150,35 @@ public sealed class ModeStateSnapshotMiddlewareTests
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
-            CancellationToken cancellationToken) =>
-            Task.FromResult(new AgentResponse(
-                [CreateFunctionCallMessage(), CreateFunctionResultMessage()]));
+            CancellationToken cancellationToken
+        ) => Task.FromResult(new AgentResponse([CreateFunctionCallMessage(), CreateFunctionResultMessage()]));
 
         protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
-            [EnumeratorCancellation] CancellationToken cancellationToken)
+            [EnumeratorCancellation] CancellationToken cancellationToken
+        )
         {
             await Task.Yield();
             yield return ToolStateSnapshots.ToUpdate(CreateFunctionCallMessage());
             yield return ToolStateSnapshots.ToUpdate(CreateFunctionResultMessage());
         }
 
-        protected override ValueTask<AgentSession> CreateSessionCoreAsync(
-            CancellationToken cancellationToken) =>
+        protected override ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken) =>
             ValueTask.FromResult<AgentSession>(new TestAgentSession());
 
         protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
             AgentSession session,
             JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
 
         protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
             JsonElement sessionState,
             JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult<AgentSession>(new TestAgentSession());
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult<AgentSession>(new TestAgentSession());
 
         private ChatMessage CreateFunctionCallMessage() =>
             new(
@@ -187,13 +187,13 @@ public sealed class ModeStateSnapshotMiddlewareTests
                     new FunctionCallContent(
                         "mode-call-1",
                         _toolName,
-                        new Dictionary<string, object?> { ["mode"] = "execute" })
-                ]);
+                        new Dictionary<string, object?> { ["mode"] = "execute" }
+                    ),
+                ]
+            );
 
         private ChatMessage CreateFunctionResultMessage() =>
-            new(
-                ChatRole.Tool,
-                [new FunctionResultContent("mode-call-1", _result)]);
+            new(ChatRole.Tool, [new FunctionResultContent("mode-call-1", _result)]);
     }
 
     private sealed class TestAgentSession : AgentSession;

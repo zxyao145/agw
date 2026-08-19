@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Shared.AgwMsgVm;
@@ -60,16 +59,13 @@ public readonly struct AiRole : IEquatable<AiRole>
     }
 
     /// <inheritdoc/>
-    public override bool Equals([NotNullWhen(true)] object? obj)
-        => obj is AiRole otherRole && Equals(otherRole);
+    public override bool Equals([NotNullWhen(true)] object? obj) => obj is AiRole otherRole && Equals(otherRole);
 
     /// <inheritdoc/>
-    public bool Equals(AiRole other)
-        => string.Equals(Value, other.Value, StringComparison.OrdinalIgnoreCase);
+    public bool Equals(AiRole other) => string.Equals(Value, other.Value, StringComparison.OrdinalIgnoreCase);
 
     /// <inheritdoc/>
-    public override int GetHashCode()
-        => StringComparer.OrdinalIgnoreCase.GetHashCode(Value);
+    public override int GetHashCode() => StringComparer.OrdinalIgnoreCase.GetHashCode(Value);
 
     /// <inheritdoc/>
     public override string ToString() => Value;

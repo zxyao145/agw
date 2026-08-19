@@ -1,7 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Shared.Data.Entities.Projects;
@@ -42,5 +41,6 @@ public class ProjectConversationChatHistory
     public DateTimeOffset CreateTime { get; set; }
     public DateTimeOffset? UpdateTime { get; set; }
 
-    [JsonIgnore] public virtual ProjectConversation? ProjectConversation { get; set; }
+    [JsonIgnore]
+    public virtual ProjectConversation? ProjectConversation { get; set; }
 }

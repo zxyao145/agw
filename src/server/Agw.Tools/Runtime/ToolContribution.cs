@@ -31,8 +31,7 @@ public sealed class ToolContribution : IAsyncDisposable
     /// <summary>
     /// Gets the trusted Tool names that may be exposed while the Agent is in Plan mode.
     /// </summary>
-    public HashSet<string> PlanModeAllowedToolNames { get; } =
-        new(StringComparer.OrdinalIgnoreCase);
+    public HashSet<string> PlanModeAllowedToolNames { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Gets the providers that contribute invocation-specific instructions, messages, tools, or state.
@@ -57,8 +56,7 @@ public sealed class ToolContribution : IAsyncDisposable
     /// <summary>
     /// Gets warnings keyed by Tool name that should be surfaced only after that Tool is invoked.
     /// </summary>
-    public Dictionary<string, string> InvocationWarnings { get; } =
-        new(StringComparer.OrdinalIgnoreCase);
+    public Dictionary<string, string> InvocationWarnings { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Transfers ownership of a runtime resource to this contribution.

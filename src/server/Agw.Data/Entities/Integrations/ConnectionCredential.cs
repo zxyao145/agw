@@ -1,8 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
-
 using Agw.Shared.Data.Encryption;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Shared.Data.Entities.Integrations;
@@ -17,13 +15,16 @@ public class ConnectionCredential : BaseEntity
     public Guid Id { get; set; }
     public Guid ConnectionId { get; set; }
     public string Slot { get; set; } = string.Empty;
+
     [JsonIgnore]
     [Encrypted]
     public string Value { get; set; } = string.Empty;
     public DateTimeOffset? ExpiresAtUtc { get; set; }
+
     [JsonIgnore]
     public string? MetadataJson { get; set; }
     public int FormatVersion { get; set; } = 1;
+
     [JsonIgnore]
     public Connection Connection { get; set; } = null!;
 }
