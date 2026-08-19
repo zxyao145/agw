@@ -7,7 +7,7 @@ namespace Agw.Agents.Execution.Agents.Middleware;
 
 internal sealed class LocalHistoryCompactionScopeChatClient : DelegatingChatClient
 {
-    private const string CompactionIndexVersion = "function-loop-context-v1";
+    private const string CompactionIndexVersion = "function-loop-context-v2";
 
     private readonly string? _compactionStateKey;
     private readonly string? _compactionVersionStateKey;

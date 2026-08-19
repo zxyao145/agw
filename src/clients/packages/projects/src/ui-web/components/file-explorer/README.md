@@ -71,6 +71,7 @@ Shared file-explorer types live in [`types.ts`](./types.ts).
 interface LineComment {
   id: string;
   side: CommentSide;
+  diffScope?: GitDiffScope;
   filePath: string;
   lineNumber: number;
   content: string;
@@ -93,6 +94,9 @@ Use `side` to describe where the comment was created:
 - `CommentSide.Current`: comment on normal file content
 - `CommentSide.Original`: comment on the original side of a diff
 - `CommentSide.Modified`: comment on the modified side of a diff
+
+`diffScope` records whether a diff comment was created in the `staged` or
+`unstaged` view. Comments created in the normal current-file view omit it.
 
 ### Internal constants
 

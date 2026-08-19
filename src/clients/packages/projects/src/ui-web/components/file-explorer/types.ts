@@ -53,6 +53,7 @@ export const GitStatusBadgeLabel: Record<GitStatus, string> = {
 export interface LineComment {
   id: string;
   side: CommentSide;
+  diffScope?: GitDiffScope;
   filePath: string;
   lineNumber: number;
   content: string;
@@ -94,6 +95,7 @@ export interface CodeViewerProps {
   setComments: React.Dispatch<React.SetStateAction<LineComment[]>>;
   isDiffView?: boolean;
   commentSide?: CommentSide;
+  diffScope?: GitDiffScope;
 }
 
 export interface DiffViewerProps {
@@ -108,6 +110,7 @@ export interface DiffViewerProps {
 export interface UnChangedFileProps {
   diffContentData: GitDiffResponse;
   selectedFile: string;
+  diffScope?: GitDiffScope;
   comments: LineComment[];
   setComments: React.Dispatch<React.SetStateAction<LineComment[]>>;
 }

@@ -327,9 +327,9 @@ Agent 执行结束时，`AgentRuntimeService` 会在 `finally` 中保存 SDK ses
 - 达到 80% 时，截断较旧的消息；
 - Tool call 与对应 result 始终作为原子消息组处理。
 
-`CompactionProvider` 位于函数调用循环内部，并在逐次历史持久化层之后执行，所以同一轮中的每次模型请求都会重新评估上下文。`LocalHistoryCompactionScopeChatClient` 仅在本地历史 sentinel 存在时为该 provider 暴露共享 `StateBag` 的本地 session 视图，避免后续 Tool iteration 被误判为远程服务托管历史。压缩结果只传给当前模型请求；`EfCoreChatHistoryProvider` 仍保存未压缩的原始消息，不会把合成或裁剪后的请求历史写回数据库。
+`CompactionProvider` 位于函数调用循环内部，并在逐次历史持久化层之后执行，所以同一轮中的每次模型请求都会重新评估上下文。`FunctionLoopMessageIsolationChatClient` 会为每次实际注入的动态上下文消息副本补充唯一 `MessageId`，同时继续移除同一函数循环中的未变化副本；这避免压缩索引按内容匹配到上一轮相同上下文并跳过其间的新消息。`LocalHistoryCompactionScopeChatClient` 仅在本地历史 sentinel 存在时为该 provider 暴露共享 `StateBag` 的本地 session 视图，避免后续 Tool iteration 被误判为远程服务托管历史。压缩结果只传给当前模型请求；`EfCoreChatHistoryProvider` 仍保存未压缩的原始消息，不会把合成或裁剪后的请求历史写回数据库。
 
-Provider 状态保存在现有 `AgentSession.StateBag`，并随 `AgentSessionStateStore` 序列化和恢复。state key 使用 `agw.compaction.{agentId}`，避免同一会话中的多个 Definition Agent 相互覆盖状态。
+Provider 状态保存在现有 `AgentSession.StateBag`，并随 `AgentSessionStateStore` 序列化和恢复。state key 使用 `agw.compaction.{agentId}`，避免同一会话中的多个 Definition Agent 相互覆盖状态。Agw 另存内部索引版本；版本变化时会丢弃旧压缩索引，并在下一轮从完整聊天历史自动重建。
 
 ### Result Summary
 

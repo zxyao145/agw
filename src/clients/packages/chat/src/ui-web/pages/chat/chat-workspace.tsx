@@ -429,6 +429,13 @@ export function ChatWorkspace({
     setComments([]);
   }, []);
 
+  const handlePendingFileCommentsRemove = React.useCallback((commentIds: readonly string[]) => {
+    if (commentIds.length === 0) return;
+
+    const commentIdSet = new Set(commentIds);
+    setComments((current) => current.filter((comment) => !commentIdSet.has(comment.id)));
+  }, []);
+
   const getProjectSettingsDraft = React.useCallback(
     (projectId: string | null): ChatSettingsDraft => {
       const storedSettings = projectId ? chatSettingsStorage.get(projectId) : {};
@@ -1098,6 +1105,8 @@ export function ChatWorkspace({
                     environmentVariables={environmentVariables}
                     onContextIdChange={handleChatContextIdChange}
                     onConversationChange={refreshConversationList}
+                    pendingFileComments={comments}
+                    onPendingFileCommentsRemove={handlePendingFileCommentsRemove}
                     onReconnectStateChange={setExecutionReconnectState}
                   />
                 </div>

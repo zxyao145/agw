@@ -112,25 +112,29 @@ internal sealed class FunctionLoopContextTracker
         var sourceOrdinals = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var message in messages)
         {
-            if (
-                message.GetAgentRequestMessageSourceType() != AgentRequestMessageSourceType.AIContextProvider
-                || !TryCreateSignature(message, out var signature)
-            )
+            if (message.GetAgentRequestMessageSourceType() != AgentRequestMessageSourceType.AIContextProvider)
             {
                 filtered.Add(message);
                 continue;
             }
 
-            var sourceId = message.GetAgentRequestMessageSourceId() ?? string.Empty;
-            sourceOrdinals.TryGetValue(sourceId, out var ordinal);
-            sourceOrdinals[sourceId] = ordinal + 1;
-            var key = new ContextMessageKey(sourceId, ordinal);
-            if (run.ContextMessages.TryGetValue(key, out var previous) && previous == signature)
+            if (TryCreateSignature(message, out var signature))
             {
-                continue;
+                var sourceId = message.GetAgentRequestMessageSourceId() ?? string.Empty;
+                sourceOrdinals.TryGetValue(sourceId, out var ordinal);
+                sourceOrdinals[sourceId] = ordinal + 1;
+                var key = new ContextMessageKey(sourceId, ordinal);
+                if (run.ContextMessages.TryGetValue(key, out var previous) && previous == signature)
+                {
+                    continue;
+                }
+
+                run.ContextMessages[key] = signature;
             }
 
-            run.ContextMessages[key] = signature;
+            // Compaction falls back to content equality when MessageId is null. Give each
+            // emitted context copy an identity so a later turn cannot match an older cursor.
+            message.MessageId ??= Guid.CreateVersion7().ToString("N");
             filtered.Add(message);
         }
 

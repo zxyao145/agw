@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ArrowUp, Eraser, RotateCcw, Square } from "lucide-react";
+import { ArrowUp, CornerDownRight, Eraser, RotateCcw, Square, X } from "lucide-react";
 
 import { QuickTextDialog } from "@agw/projects";
 import { Button } from "@agw/components";
@@ -30,6 +30,8 @@ interface ChatInputProps {
   agentMode: AgentMode;
   onPermissionModeChange: (mode: PermissionMode) => void;
   onAgentModeChange: (mode: AgentMode) => void;
+  pendingFileCommentCount: number;
+  onClearPendingFileComments: () => void;
   placeholder?: string;
   userInputRef?: React.RefObject<UserInputRef | null>;
 }
@@ -51,6 +53,8 @@ export function ChatInput({
   agentMode,
   onPermissionModeChange,
   onAgentModeChange,
+  pendingFileCommentCount,
+  onClearPendingFileComments,
   placeholder,
   userInputRef: externalUserInputRef,
 }: ChatInputProps) {
@@ -82,11 +86,37 @@ export function ChatInput({
     <UserInput
       ref={userInputRef}
       isExecuting={isBusy}
+      hasAdditionalInput={pendingFileCommentCount > 0}
       onExecute={onExecute}
       onStop={isTransitioning ? undefined : onInterrupt}
       onSuggestion={handleSuggestion}
       placeholder={placeholder}
     >
+      {pendingFileCommentCount > 0 ? (
+        <UserInput.Context>
+          <div className="flex min-h-10 items-center justify-between gap-3 rounded-lg bg-muted px-3 py-2">
+            <div className="flex min-w-0 items-center gap-2 text-sm font-medium text-primary">
+              <CornerDownRight className="size-4 shrink-0" />
+              <span>
+                {pendingFileCommentCount} code comment
+                {pendingFileCommentCount === 1 ? "" : "s"}
+              </span>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="size-7 shrink-0 rounded-full text-muted-foreground hover:text-foreground"
+              onClick={onClearPendingFileComments}
+              disabled={isBusy}
+              aria-label="Clear pending code comments"
+              title="Clear pending code comments"
+            >
+              <X className="size-4" />
+            </Button>
+          </div>
+        </UserInput.Context>
+      ) : null}
       <UserInput.BottomLeft>
         <ChatInputToolbar
           commandSource={commandSource}

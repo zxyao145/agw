@@ -66,52 +66,63 @@ export function DiffViewer({
     [modifiedLines, originalLines],
   );
 
-  // Filter comments for each side
+  const isOriginalComment = React.useCallback(
+    (comment: LineComment) =>
+      comment.filePath === filePath &&
+      comment.side === CommentSide.Original &&
+      comment.diffScope === scope,
+    [filePath, scope],
+  );
+
+  const isModifiedComment = React.useCallback(
+    (comment: LineComment) =>
+      comment.filePath === filePath &&
+      comment.side === CommentSide.Modified &&
+      comment.diffScope === scope,
+    [filePath, scope],
+  );
+
   const originalComments = React.useMemo(
-    () => comments.filter((c) => c.side === CommentSide.Original),
-    [comments],
+    () => comments.filter(isOriginalComment),
+    [comments, isOriginalComment],
   );
 
   const modifiedComments = React.useMemo(
-    () => comments.filter((c) => c.side === CommentSide.Modified),
-    [comments],
+    () => comments.filter(isModifiedComment),
+    [comments, isModifiedComment],
   );
 
   // FileViewer updates one side at a time, so merge the edited slice back into the full list.
   const handleSetOriginalComments = React.useCallback(
     (setter: React.SetStateAction<LineComment[]>) => {
       if (!setComments) return;
-      // FileViewer will call this with a setter that operates on the filtered comments
-      // We need to translate that to operate on the full comments array
       setComments((prev) => {
-        const currentOriginalComments = prev.filter((c) => c.side === CommentSide.Original);
-        const otherComments = prev.filter((c) => c.side !== CommentSide.Original);
+        const currentOriginalComments = prev.filter(isOriginalComment);
+        const otherComments = prev.filter((comment) => !isOriginalComment(comment));
 
         const newOriginalComments =
           typeof setter === "function" ? setter(currentOriginalComments) : setter;
 
-        // Merge back with other side's comments
         return [...otherComments, ...newOriginalComments];
       });
     },
-    [setComments],
+    [isOriginalComment, setComments],
   );
 
   const handleSetModifiedComments = React.useCallback(
     (setter: React.SetStateAction<LineComment[]>) => {
       if (!setComments) return;
       setComments((prev) => {
-        const currentModifiedComments = prev.filter((c) => c.side === CommentSide.Modified);
-        const otherComments = prev.filter((c) => c.side !== CommentSide.Modified);
+        const currentModifiedComments = prev.filter(isModifiedComment);
+        const otherComments = prev.filter((comment) => !isModifiedComment(comment));
 
         const newModifiedComments =
           typeof setter === "function" ? setter(currentModifiedComments) : setter;
 
-        // Merge back with other side's comments
         return [...otherComments, ...newModifiedComments];
       });
     },
-    [setComments],
+    [isModifiedComment, setComments],
   );
 
   const updateSplitPosition = React.useCallback((clientX: number) => {
@@ -281,6 +292,7 @@ export function DiffViewer({
           setComments={handleSetOriginalComments}
           isDiffView={true}
           commentSide={CommentSide.Original}
+          diffScope={scope}
         />
       </div>
 
@@ -297,6 +309,7 @@ export function DiffViewer({
           setComments={handleSetModifiedComments}
           isDiffView={true}
           commentSide={CommentSide.Modified}
+          diffScope={scope}
         />
       </div>
     </div>

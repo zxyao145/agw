@@ -98,6 +98,52 @@ public sealed class AgwAgentExtensionsTests
     }
 
     [Fact]
+    public async Task AsAgwAgent_RepeatedContextAcrossSerializedTurns_PreservesLatestMessagesAndAssignsIdentity()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var client = new RecordingResponseChatClient();
+        var contextProvider = new StaticTextContextProvider("memory context");
+        var agent = client.AsAgwAgent(
+            CreateDefinition(
+                new InMemoryChatHistoryProvider(),
+                new CompactionProvider(new CountingCompactionStrategy(), stateKey: "repeated-context-compaction")
+            ),
+            CreateCapabilities(contextProviders: [contextProvider]),
+            NullLoggerFactory.Instance,
+            new ServiceCollection().BuildServiceProvider()
+        );
+        var session = await agent.CreateSessionAsync(cancellationToken);
+
+        await agent.RunAsync(
+            [new ChatMessage(ChatRole.User, "original user request")],
+            session,
+            cancellationToken: cancellationToken
+        );
+        var serializedSession = await agent.SerializeSessionAsync(session, cancellationToken: cancellationToken);
+        session = await agent.DeserializeSessionAsync(serializedSession, cancellationToken: cancellationToken);
+
+        await agent.RunAsync(
+            [new ChatMessage(ChatRole.User, "new user request")],
+            session,
+            cancellationToken: cancellationToken
+        );
+
+        Assert.Equal(2, client.Requests.Count);
+        Assert.Contains(client.Requests[1], message => message.Text == "done");
+        Assert.Contains(client.Requests[1], message => message.Text == "new user request");
+        var firstContext = Assert.Single(client.Requests[0], message => message.Text == "memory context");
+        var secondTurnContexts = client.Requests[1].Where(message => message.Text == "memory context").ToList();
+        Assert.Equal(2, secondTurnContexts.Count);
+        Assert.Contains(secondTurnContexts, message => message.MessageId == firstContext.MessageId);
+        var secondContext = Assert.Single(secondTurnContexts, message => message.MessageId != firstContext.MessageId);
+        Assert.False(string.IsNullOrWhiteSpace(firstContext.MessageId));
+        Assert.False(string.IsNullOrWhiteSpace(secondContext.MessageId));
+        Assert.NotEqual(firstContext.MessageId, secondContext.MessageId);
+        Assert.Equal(2, contextProvider.ProvidedMessages.Count);
+        Assert.All(contextProvider.ProvidedMessages, message => Assert.Null(message.MessageId));
+    }
+
+    [Fact]
     public async Task AsAgwAgent_StreamingCompaction_PreservesFunctionLoopContextWithoutDuplication()
     {
         var function = AIFunctionFactory.Create(
@@ -119,6 +165,7 @@ public sealed class AgwAgentExtensionsTests
             AgentRequestMessageSourceType.AIContextProvider,
             "test-context-provider"
         );
+        requestMessage.MessageId = "provider-message-id";
 
         await foreach (
             var _ in agent.RunStreamingAsync(
@@ -132,8 +179,10 @@ public sealed class AgwAgentExtensionsTests
             AgentRequestMessageSourceType.AIContextProvider,
             requestMessage.GetAgentRequestMessageSourceType()
         );
+        Assert.Equal("provider-message-id", requestMessage.MessageId);
         Assert.Equal(2, client.Requests.Count);
-        Assert.Contains(client.Requests[0], message => message.Text == "search");
+        var firstContext = Assert.Single(client.Requests[0], message => message.Text == "search");
+        Assert.Equal("provider-message-id", firstContext.MessageId);
         Assert.Single(client.Requests[1], message => message.Text == "search");
     }
 
@@ -350,7 +399,7 @@ public sealed class AgwAgentExtensionsTests
             session,
             cancellationToken: cancellationToken
         );
-        Assert.True(session.StateBag.TryRemoveValue("stalled-compaction.agw-index-version"));
+        session.StateBag.SetValue("stalled-compaction.agw-index-version", "function-loop-context-v1");
 
         historyProvider.Messages =
         [
@@ -368,6 +417,10 @@ public sealed class AgwAgentExtensionsTests
         Assert.Contains(client.Requests[1], message => message.Text == "new user request");
         Assert.Single(client.Requests[1], message => message.Text == "memory context");
         Assert.True(session.StateBag.Serialize().TryGetProperty("stalled-compaction", out _));
+        Assert.True(
+            session.StateBag.TryGetValue<string>("stalled-compaction.agw-index-version", out var compactionIndexVersion)
+        );
+        Assert.Equal("function-loop-context-v2", compactionIndexVersion);
     }
 
     [Fact]
@@ -1054,12 +1107,19 @@ public sealed class AgwAgentExtensionsTests
             _text = text;
         }
 
+        public List<ChatMessage> ProvidedMessages { get; } = [];
+
         public override IReadOnlyList<string> StateKeys => [];
 
         protected override ValueTask<AIContext> ProvideAIContextAsync(
             InvokingContext context,
             CancellationToken cancellationToken = default
-        ) => ValueTask.FromResult(new AIContext { Messages = [new ChatMessage(ChatRole.User, _text)] });
+        )
+        {
+            var message = new ChatMessage(ChatRole.User, _text);
+            ProvidedMessages.Add(message);
+            return ValueTask.FromResult(new AIContext { Messages = [message] });
+        }
     }
 
     private sealed class StubChatClient : IChatClient
