@@ -26,10 +26,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@agw/components";
-import { Eye, MessagesSquare, Pencil, Trash2 } from "lucide-react";
+import { Copy, Eye, MessagesSquare, Pencil, Trash2 } from "lucide-react";
 import { formatLocalDateTime } from "@agw/components";
 
 import { CreateProjectDialog } from "./components/create-project-dialog";
+import { createProjectCopyRequest } from "./copy-requests";
 import { EditProjectDialog } from "./components/edit-project-dialog";
 import type {
   ProjectCreateRequest,
@@ -121,6 +122,29 @@ export default function ProjectsPage() {
       toast.error(`Create failed: ${getApiErrorMessage(error)}`);
     },
   });
+
+  const copyProjectMutation = useMutation({
+    mutationFn: async (project: ProjectResponse) => {
+      return await apiPost("/api/projects", {
+        body: createProjectCopyRequest(project, crypto.randomUUID()),
+      } as never);
+    },
+    onSuccess: async (_data, project) => {
+      toast.success(`Project "${project.name}" copied`);
+      await queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+    onError: (error) => {
+      toast.error(`Copy failed: ${getApiErrorMessage(error)}`);
+    },
+  });
+
+  const handleCopyProject = (project: ProjectResponse) => {
+    if (project.type !== 0 || copyProjectMutation.isPending) {
+      return;
+    }
+
+    copyProjectMutation.mutate(project);
+  };
 
   const [editOpen, setEditOpen] = React.useState(false);
   const [editingProject, setEditingProject] = React.useState<ProjectResponse | null>(null);
@@ -357,6 +381,21 @@ export default function ProjectsPage() {
                           }
                         >
                           <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="cursor-pointer"
+                          onClick={() => handleCopyProject(project)}
+                          disabled={project.type !== 0 || copyProjectMutation.isPending}
+                          title={
+                            project.type !== 0
+                              ? "Built-in projects cannot be copied"
+                              : "Copy project"
+                          }
+                          aria-label="Copy project"
+                        >
+                          <Copy className="w-4 h-4" />
                         </Button>
                         <Button
                           variant="ghost"
