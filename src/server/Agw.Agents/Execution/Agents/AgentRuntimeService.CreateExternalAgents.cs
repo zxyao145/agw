@@ -52,29 +52,34 @@ public partial class AgentRuntimeService
 
         if (aiAgent != null)
         {
-            var agentBuilder = new ExternalAgentChatHistoryAgent(aiAgent, _chatHistoryProvider, _timeProvider, _logger)
-                .AsBuilder()
-                .Use(
-                    runFunc: _observabilityMiddleware.LogRunMiddleware,
-                    runStreamingFunc: _observabilityMiddleware.LogStreamingMiddleware
-                )
-                .Use(
-                    runFunc: _usageTrackingMiddleware.TrackRunMiddleware,
-                    runStreamingFunc: _usageTrackingMiddleware.TrackStreamingMiddleware
-                );
-            if (isBackground)
-            {
-                var approvalMiddleware = new BackgroundAgentApprovalMiddleware(_humanInteractionContextAccessor);
-                agentBuilder.Use(
-                    runFunc: approvalMiddleware.RejectNewApprovalAsync,
-                    runStreamingFunc: approvalMiddleware.RejectNewApprovalStreamingAsync
-                );
-            }
-
-            aiAgent = agentBuilder.Build();
+            aiAgent = WrapExternalAgent(aiAgent, isBackground);
         }
 
         return aiAgent != null;
+    }
+
+    internal AIAgent WrapExternalAgent(AIAgent aiAgent, bool isBackground)
+    {
+        var agentBuilder = new ExternalAgentChatHistoryAgent(aiAgent, _chatHistoryProvider, _timeProvider, _logger)
+            .AsBuilder()
+            .Use(
+                runFunc: _observabilityMiddleware.LogRunMiddleware,
+                runStreamingFunc: _observabilityMiddleware.LogStreamingMiddleware
+            )
+            .Use(
+                runFunc: _usageTrackingMiddleware.TrackRunMiddleware,
+                runStreamingFunc: _usageTrackingMiddleware.TrackStreamingMiddleware
+            );
+        if (isBackground)
+        {
+            var approvalMiddleware = new BackgroundAgentApprovalMiddleware(_humanInteractionContextAccessor);
+            agentBuilder.Use(
+                runFunc: approvalMiddleware.RejectNewApprovalAsync,
+                runStreamingFunc: approvalMiddleware.RejectNewApprovalStreamingAsync
+            );
+        }
+
+        return agentBuilder.Build();
     }
 
     private AIAgent? CreateClaudeCodeAgent(
@@ -99,11 +104,12 @@ public partial class AgentRuntimeService
             return null;
         }
 
-        options = options with
-        {
-            WorkingDirectory = PathUtil.ExpandTilde(project.Workspace),
-            ChatHistoryProvider = null,
-        };
+        options = DisableExternalSdkChatHistoryPersistence(
+            options with
+            {
+                WorkingDirectory = PathUtil.ExpandTilde(project.Workspace),
+            }
+        );
 
         if (contextId != null)
         {
@@ -152,9 +158,19 @@ public partial class AgentRuntimeService
             return null;
         }
 
-        options = options with { ChatHistoryProvider = null };
+        options = DisableExternalSdkChatHistoryPersistence(options);
         return new CodexAIAgent(options, _logger);
     }
+
+    internal static ClaudeCodeAIAgentOptions DisableExternalSdkChatHistoryPersistence(
+        ClaudeCodeAIAgentOptions options
+    ) => options with { ChatHistoryProvider = null };
+
+    internal static CodexAIAgentOptions DisableExternalSdkChatHistoryPersistence(CodexAIAgentOptions options) =>
+        options with
+        {
+            ChatHistoryProvider = null,
+        };
 
     #region CodexAgentOptions
 
