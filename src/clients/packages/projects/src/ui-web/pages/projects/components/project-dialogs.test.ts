@@ -117,3 +117,19 @@ test("Built-in Projects cannot open or submit the edit dialog", async () => {
   assert.match(pageSource, /disabled=\{project\.type !== 0\}/);
   assert.match(editSource, /editingProject\.type !== 0/);
 });
+
+test("Projects page wires immediate copy creation and disables copy for built-in projects", async () => {
+  const source = await readSource(PAGE_URL, "Projects page");
+
+  assert.match(source, /const copyProjectMutation = useMutation\(/);
+  assert.match(source, /createProjectCopyRequest\(project, crypto\.randomUUID\(\)\)/);
+  assert.match(source, /apiPost\("\/api\/projects", \{/);
+  assert.match(source, /invalidateQueries\(\{ queryKey: \["projects"\] \}\)/);
+  assert.match(source, /if \(project\.type !== 0 \|\| copyProjectMutation\.isPending\)/);
+  assert.match(source, /onClick=\{\(\) => handleCopyProject\(project\)\}/);
+  assert.match(
+    source,
+    /disabled=\{project\.type !== 0 \|\| copyProjectMutation\.isPending\}[\s\S]*?aria-label="Copy project"/,
+  );
+  assert.match(source, /<Pencil[\s\S]*?<Copy[\s\S]*?<Trash2/);
+});
