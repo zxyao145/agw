@@ -24,6 +24,8 @@ COPY src/server/Agw.Host/Agw.Host.csproj ./src/server/Agw.Host/
 COPY src/server/Agw.Infrastructure/Agw.Infrastructure.csproj ./src/server/Agw.Infrastructure/
 COPY src/server/Agw.Integrations/Agw.Integrations.csproj ./src/server/Agw.Integrations/
 COPY src/server/Agw.Jobs/Agw.Jobs.csproj ./src/server/Agw.Jobs/
+COPY src/server/Agw.Migrations.Postgres/Agw.Migrations.Postgres.csproj ./src/server/Agw.Migrations.Postgres/
+COPY src/server/Agw.Migrations.Sqlite/Agw.Migrations.Sqlite.csproj ./src/server/Agw.Migrations.Sqlite/
 COPY src/server/Agw.Projects/Agw.Projects.csproj ./src/server/Agw.Projects/
 COPY src/server/Agw.Providers/Agw.Providers.csproj ./src/server/Agw.Providers/
 COPY src/server/Agw.Setup/Agw.Setup.csproj ./src/server/Agw.Setup/
