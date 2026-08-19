@@ -82,6 +82,40 @@ test("Agentflow agent nodes default to the agent name and keep it editable", asy
   assert.match(source, /name: node\.data\.title \|\| null/);
 });
 
+test("Agentflow Agent inspectors can switch runtime agents with smart name syncing", async () => {
+  const source = await readFile(BUILDER_URL, "utf8");
+  const inspectorStart = source.indexOf("function NodeInspector");
+  const inspectorEnd = source.indexOf("function OutputSummaryConfigInspector");
+
+  assert.notEqual(inspectorStart, -1);
+  assert.notEqual(inspectorEnd, -1);
+
+  const inspectorSource = source.slice(inspectorStart, inspectorEnd);
+  assert.match(
+    inspectorSource,
+    /\{node\.data\.kind === AgentflowNodeKind\.Agent \? \(\s*<SearchableSelect/,
+  );
+  assert.match(inspectorSource, /label="Agent"/);
+  assert.match(inspectorSource, /value=\{node\.data\.relateId \?\? ""\}/);
+  assert.match(inspectorSource, /clearable=\{false\}/);
+  assert.match(
+    inspectorSource,
+    /const currentAgent = agents\.find\(\(agent\) => agent\.id === node\.data\.relateId\);/,
+  );
+  assert.match(
+    inspectorSource,
+    /!node\.data\.title\.trim\(\) \|\| node\.data\.title === currentAgent\?\.name/,
+  );
+  assert.match(
+    inspectorSource,
+    /onChange\(node\.id, \{[\s\S]*?relateId: nextAgent\.id,[\s\S]*?shouldSyncTitle \? \{ title: nextAgent\.name \} : \{\}/,
+  );
+  assert.match(source, /const inspectorNode = selectedNode \?\?/);
+  assert.match(source, /<NodeInspector[\s\S]*?node=\{inspectorNode\}/);
+  assert.match(source, /relateId: node\.data\.relateId/);
+  assert.match(source, /relateId: node\.relateId/);
+});
+
 test("Agentflow Clear Messages and Checkpoint hide advanced JSON", async () => {
   const source = await readFile(BUILDER_URL, "utf8");
 

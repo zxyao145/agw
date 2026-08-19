@@ -1678,6 +1678,32 @@ function NodeInspector({
         </div>
         <p className="mt-1 text-xs text-muted-foreground">{meta.body}</p>
       </div>
+
+      {node.data.kind === AgentflowNodeKind.Agent ? (
+        <SearchableSelect
+          id={`agentflow-node-${node.id}-agent-select`}
+          label="Agent"
+          ariaLabel="Select agent for node"
+          value={node.data.relateId ?? ""}
+          onValueChange={(value) => {
+            const nextAgent = agents.find((agent) => agent.id === value);
+            if (!nextAgent) return;
+
+            const currentAgent = agents.find((agent) => agent.id === node.data.relateId);
+            const shouldSyncTitle =
+              !node.data.title.trim() || node.data.title === currentAgent?.name;
+            onChange(node.id, {
+              relateId: nextAgent.id,
+              ...(shouldSyncTitle ? { title: nextAgent.name } : {}),
+            });
+          }}
+          options={agentSelectOptions}
+          placeholder="Select agent"
+          searchPlaceholder="Search agents..."
+          clearable={false}
+        />
+      ) : null}
+
       <div className="space-y-2">
         <Label>Name</Label>
         <Input
