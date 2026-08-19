@@ -2,7 +2,7 @@ import { UseQueryResult } from "@agw/components/query";
 import { Button } from "@agw/components";
 import { ButtonGroup } from "@agw/components";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@agw/components";
-import { Pencil, Trash2, Play } from "lucide-react";
+import { Copy, Pencil, Trash2, Play } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@agw/components";
 import type { AgentDto } from "./types";
 import { getApiErrorMessage } from "@agw/api";
@@ -15,16 +15,20 @@ interface AgentsTableProps {
   embedded?: boolean;
   agentsQuery: UseQueryResult<PagedResult<AgentDto>, Error>;
   onEdit: (agent: AgentDto) => void;
+  onCopy: (agent: AgentDto) => void;
   onDelete: (agent: AgentDto) => void;
   onExecute: (agent: AgentDto) => void;
+  isCopying: boolean;
 }
 
 export function AgentsTable({
   embedded = false,
   agentsQuery,
   onEdit,
+  onCopy,
   onDelete,
   onExecute,
+  isCopying,
 }: AgentsTableProps) {
   const agents = agentsQuery.data?.items ?? [];
 
@@ -62,6 +66,8 @@ export function AgentsTable({
       <TableBody>
         {agents.map((agent) => {
           const toolNames = agent.tools.map((value) => value.definition.name);
+          const isExternalAgent = agent.type === 1;
+          const isCopyDisabled = isCopying || isExternalAgent;
 
           return (
             <TableRow key={agent.id}>
@@ -133,6 +139,28 @@ export function AgentsTable({
                     >
                       <Pencil className="w-4 h-4" />
                     </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span
+                          className={`inline-flex [&>button]:rounded-none ${isCopyDisabled ? "cursor-not-allowed" : ""}`}
+                          tabIndex={isExternalAgent ? 0 : undefined}
+                        >
+                          <Button
+                            variant="ghost"
+                            className={isCopyDisabled ? undefined : "cursor-pointer"}
+                            size="sm"
+                            onClick={() => onCopy(agent)}
+                            disabled={isCopyDisabled}
+                            aria-label="Copy agent"
+                          >
+                            <Copy className="w-4 h-4" />
+                          </Button>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {isExternalAgent ? "External agents cannot be copied." : "Copy agent"}
+                      </TooltipContent>
+                    </Tooltip>
                     <Button
                       variant="ghost"
                       size="sm"

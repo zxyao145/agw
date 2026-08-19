@@ -30,6 +30,7 @@ import { DeleteAgentDialog } from "./components/delete-agent-dialog";
 import { ExecuteAgentDrawer } from "./components/execute-agent-drawer";
 import { AgentsTable } from "./components/agents-table";
 import { parseToolValues, type ToolValueObject } from "@agw/tools";
+import { createAgentCopyRequest } from "../copy-requests";
 
 export default function AgentsPage() {
   const queryClient = useQueryClient();
@@ -164,6 +165,21 @@ export default function AgentsPage() {
     },
   });
 
+  const copyAgentMutation = useMutation({
+    mutationFn: async (agent: AgentDto) => {
+      const body = createAgentCopyRequest(agent, crypto.randomUUID());
+      return await apiPost("/api/agents", { body });
+    },
+    onSuccess: async (_data, agent) => {
+      toast.success(`Agent "${agent.displayName}" copied`);
+      setPageIndex(1);
+      await queryClient.invalidateQueries({ queryKey: ["agents"] });
+    },
+    onError: (error) => {
+      toast.error(`Copy failed: ${getApiErrorMessage(error)}`);
+    },
+  });
+
   const updateAgentMutation = useMutation({
     mutationFn: async ({ id, body }: { id: string; body: AgentUpdateRequest }) => {
       return await apiPut("/api/agents/{id}", {
@@ -228,6 +244,14 @@ export default function AgentsPage() {
     );
     setEditSelectedMcpToolServerIds(agent.agentMcpToolServers?.map((x) => x.mcpToolServerId) ?? []);
     setEditOpen(true);
+  };
+
+  const handleCopy = (agent: AgentDto) => {
+    if (agent.type !== 0 || copyAgentMutation.isPending) {
+      return;
+    }
+
+    copyAgentMutation.mutate(agent);
   };
 
   const handleDelete = (agent: AgentDto) => {
@@ -359,8 +383,10 @@ export default function AgentsPage() {
           embedded
           agentsQuery={agentsQuery}
           onEdit={handleEdit}
+          onCopy={handleCopy}
           onDelete={handleDelete}
           onExecute={handleExecute}
+          isCopying={copyAgentMutation.isPending}
         />
       </PaginatedTable>
 
