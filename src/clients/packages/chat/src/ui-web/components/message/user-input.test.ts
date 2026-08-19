@@ -8,6 +8,15 @@ test("suggestion kind badge keeps its content height inside the flex row", () =>
   assert.match(source, /<Badge className="[^"]*\bh-fit\b[^"]*\bself-start\b[^"]*">/);
 });
 
+test("suggestions render above the composer without covering the textarea", () => {
+  assert.match(source, /className="[^"]*\bbottom-full\b[^"]*"/);
+  assert.doesNotMatch(source, /\bbottom-18\b/);
+  assert.match(
+    source,
+    /\{\/\* Input area with textarea and action button \*\/\}\s*<div className="relative">\s*\{suggestions\}/,
+  );
+});
+
 test("composer defaults to one text line with a floating circular action", () => {
   assert.match(source, /rows = 1/);
   assert.match(source, /maxHeight = "max-h-60"/);
@@ -29,6 +38,17 @@ test("insertText preserves the draft and inserts at the current selection", () =
     source,
     /input\.slice\(0, selectionStart\) \+ insertedText \+ input\.slice\(selectionEnd\)/,
   );
+});
+
+test("suggestions use the current caret and restore it after selection", () => {
+  assert.match(
+    source,
+    /onChange=\{\(e\) => onInputChange\(e\.target\.value, e\.target\.selectionStart\)\}/,
+  );
+  assert.match(source, /suggestionCaretRef\.current = caretIndex/);
+  assert.match(source, /onSuggestion\(value, caretIndex\)/);
+  assert.match(source, /replaceSuggestion\(input, suggestion\.text, suggestionCaretRef\.current\)/);
+  assert.match(source, /setSelectionRange\(replacement\.caretIndex, replacement\.caretIndex\)/);
 });
 
 test("suggestion descriptions use phrasing elements inside ItemDescription", () => {

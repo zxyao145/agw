@@ -10,7 +10,7 @@ import { searchCommand, type CommandSource } from "../../../lib/chat/search-comm
 import { searchFile } from "../../../lib/chat/search-file";
 import type { AgentMode, PermissionMode } from "../../../services/execution-hub";
 import { ChatInputToolbar } from "./chat-input-toolbar";
-import { getTrailingSuggestionTrigger } from "./suggestion-trigger";
+import { getSuggestionTrigger } from "./suggestion-trigger";
 import { UserInput, type UserInputRef } from "./user-input";
 
 interface ChatInputProps {
@@ -63,8 +63,8 @@ export function ChatInput({
   };
 
   const handleSuggestion = React.useCallback(
-    (input: string) => {
-      const trigger = getTrailingSuggestionTrigger(input);
+    (input: string, caretIndex: number) => {
+      const trigger = getSuggestionTrigger(input, caretIndex);
       if (!trigger) {
         return [];
       }

@@ -7,7 +7,7 @@ import { KeyboardEvent, ReactNode, useRef, useImperativeHandle, forwardRef } fro
 import React from "react";
 import { Item, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@agw/components";
 import { Badge } from "@agw/components";
-import { replaceTrailingSuggestion } from "./suggestion-trigger";
+import { replaceSuggestion } from "./suggestion-trigger";
 
 export interface SuggestionItem {
   text: string;
@@ -17,7 +17,10 @@ export interface SuggestionItem {
 
 // Main UserInput component
 export interface UserInputProps {
-  onSuggestion?: (value: string) => SuggestionItem[] | Promise<SuggestionItem[]>;
+  onSuggestion?: (
+    value: string,
+    caretIndex: number,
+  ) => SuggestionItem[] | Promise<SuggestionItem[]>;
   // Execution state
   isExecuting?: boolean;
 
@@ -50,7 +53,7 @@ interface UserInputRootProps {
   input: string;
   suggestions?: ReactNode;
   slots: UserInputSlots;
-  onInputChange: (value: string) => void;
+  onInputChange: (value: string, caretIndex: number) => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   onSend: () => void;
   onStop?: () => void;
@@ -84,8 +87,6 @@ function UserInputRoot({
 
   return (
     <div className="relative">
-      {suggestions}
-
       {/* Top bar with tools and actions */}
       <div className="flex mb-2 gap-2 pointer-events-auto">
         <div
@@ -102,11 +103,13 @@ function UserInputRoot({
       </div>
       {/* Input area with textarea and action button */}
       <div className="relative">
+        {suggestions}
+
         <div className="pointer-events-auto relative px-2 pt-2 pb-11 rounded-xl border bg-background shadow-sm">
           <Textarea
             ref={textareaRef}
             value={input}
-            onChange={(e) => onInputChange(e.target.value)}
+            onChange={(e) => onInputChange(e.target.value, e.target.selectionStart)}
             onKeyDown={onKeyDown}
             placeholder={placeholder}
             rows={rows}
@@ -196,7 +199,7 @@ function UserInputSuggestions({ suggestions, onSelect }: UserInputSuggestionsPro
   }
 
   return (
-    <div className="absolute z-99 bottom-18 left-0 right-0 pointer-events-auto mb-3 py-2 px-1 rounded-md border bg-background/95 shadow-sm backdrop-blur-sm">
+    <div className="absolute z-99 bottom-full left-0 right-0 pointer-events-auto mb-0 py-2 px-1 rounded-xl border bg-background/95 shadow-sm backdrop-blur-sm">
       <div className="flex items-center justify-between px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         Suggestions
       </div>
@@ -256,6 +259,7 @@ function UserInputContainer({
   const slots = getUserInputSlots(children);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const suggestionRequestRef = useRef(0);
+  const suggestionCaretRef = useRef(0);
 
   useImperativeHandle(
     inputRef,
@@ -291,24 +295,25 @@ function UserInputContainer({
   );
 
   const handleSuggestionClick = (suggestion: SuggestionItem) => {
-    const nextValue = replaceTrailingSuggestion(input, suggestion.text);
+    const replacement = replaceSuggestion(input, suggestion.text, suggestionCaretRef.current);
     suggestionRequestRef.current += 1;
-    setInput(nextValue);
+    setInput(replacement.value);
     setSuggestions([]);
 
-    // Focus textarea and move cursor to end
+    // Focus textarea and move cursor after the selected suggestion
     setTimeout(() => {
       const textarea = textareaRef.current;
       if (textarea) {
         textarea.focus();
-        textarea.setSelectionRange(nextValue.length, nextValue.length);
+        textarea.setSelectionRange(replacement.caretIndex, replacement.caretIndex);
       }
     }, 0);
   };
 
-  const handleInputChange = (value: string) => {
+  const handleInputChange = (value: string, caretIndex: number) => {
     const requestId = suggestionRequestRef.current + 1;
     suggestionRequestRef.current = requestId;
+    suggestionCaretRef.current = caretIndex;
     setInput(value);
     if (!onSuggestion) {
       if (suggestions.length > 0) {
@@ -317,7 +322,7 @@ function UserInputContainer({
       return;
     }
 
-    const result = onSuggestion(value);
+    const result = onSuggestion(value, caretIndex);
     if (result instanceof Promise) {
       // Async suggestion - clear current suggestions while loading
       setSuggestions([]);
