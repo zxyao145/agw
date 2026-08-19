@@ -5,7 +5,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@agw/co
 import mermaid from "mermaid";
 import { toast } from "sonner";
 
-import { apiDelete, apiGet } from "@agw/api";
+import { apiDelete, apiGet, apiPost, getApiErrorMessage } from "@agw/api";
 import { PaginatedTable } from "@agw/components";
 import { Button } from "@agw/components";
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from "@agw/components";
@@ -26,6 +26,7 @@ import {
   zoomViewport,
   type MermaidViewportTransform,
 } from "./components/mermaid-viewport";
+import { createAgentflowCopyRequest } from "../copy-requests";
 
 export default function AgentflowsPage() {
   const queryClient = useQueryClient();
@@ -179,6 +180,22 @@ export default function AgentflowsPage() {
     };
   }, [isMermaidLoading, mermaidOpen, normalizedMermaidText]);
 
+  const copyAgentflowMutation = useMutation({
+    mutationFn: async (agentflow: AgentflowDto) => {
+      const details = await fetchAgentflowDetails(agentflow.id);
+      const body = createAgentflowCopyRequest(agentflow, details);
+      return await apiPost("/api/agentflows", { body });
+    },
+    onSuccess: async (_data, agentflow) => {
+      toast.success(`Agentflow "${agentflow.name}" copied`);
+      setPageIndex(1);
+      await queryClient.invalidateQueries({ queryKey: ["agentflows"] });
+    },
+    onError: (error) => {
+      toast.error(`Copy failed: ${getApiErrorMessage(error)}`);
+    },
+  });
+
   const deleteAgentflowMutation = useMutation({
     mutationFn: async (id: string) => {
       return await apiDelete("/api/agentflows/{id}", {
@@ -202,6 +219,15 @@ export default function AgentflowsPage() {
       }
     },
     [deleteAgentflowMutation],
+  );
+
+  const handleCopyAgentflow = React.useCallback(
+    (agentflow: AgentflowDto) => {
+      if (!copyAgentflowMutation.isPending) {
+        copyAgentflowMutation.mutate(agentflow);
+      }
+    },
+    [copyAgentflowMutation],
   );
 
   const handleEdit = React.useCallback(async (agentflow: AgentflowDto) => {
@@ -432,9 +458,11 @@ export default function AgentflowsPage() {
           error={agentflowsQuery.error}
           deleteMutation={deleteAgentflowMutation}
           onEdit={handleEdit}
+          onCopy={handleCopyAgentflow}
           onDelete={handleDelete}
           onExecute={handleExecute}
           onViewMermaid={handleViewMermaid}
+          isCopying={copyAgentflowMutation.isPending}
         />
       </PaginatedTable>
 

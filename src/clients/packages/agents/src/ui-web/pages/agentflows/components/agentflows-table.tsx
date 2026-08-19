@@ -3,7 +3,7 @@ import { UseMutationResult } from "@agw/components/query";
 import { Button } from "@agw/components";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@agw/components";
 import { ButtonGroup } from "@agw/components";
-import { Pencil, Trash2, Play, Waypoints } from "lucide-react";
+import { Copy, Pencil, Trash2, Play, Waypoints } from "lucide-react";
 import type { AgentflowDto } from "../../../../types/agentflow";
 import { getApiErrorMessage } from "@agw/api";
 import { formatLocalDateTime } from "@agw/components";
@@ -16,9 +16,11 @@ interface AgentflowsTableProps {
   error: unknown;
   deleteMutation: UseMutationResult<unknown, Error, string>;
   onEdit: (agentflow: AgentflowDto) => void;
+  onCopy: (agentflow: AgentflowDto) => void;
   onDelete: (agentflow: AgentflowDto) => void;
   onExecute: (agentflow: AgentflowDto) => void;
   onViewMermaid: (agentflow: AgentflowDto) => void;
+  isCopying: boolean;
 }
 
 export function AgentflowsTable({
@@ -29,9 +31,11 @@ export function AgentflowsTable({
   error,
   deleteMutation,
   onEdit,
+  onCopy,
   onDelete,
   onExecute,
   onViewMermaid,
+  isCopying,
 }: AgentflowsTableProps) {
   if (isLoading) {
     return <div className="text-sm text-muted-foreground">Loading...</div>;
@@ -97,6 +101,17 @@ export function AgentflowsTable({
                       title="Edit agentflow"
                     >
                       <Pencil className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="cursor-pointer"
+                      size="icon-sm"
+                      onClick={() => onCopy(agentflow)}
+                      disabled={isCopying}
+                      title="Copy agentflow"
+                      aria-label="Copy agentflow"
+                    >
+                      <Copy className="w-4 h-4" />
                     </Button>
                     <Button
                       variant="ghost"
