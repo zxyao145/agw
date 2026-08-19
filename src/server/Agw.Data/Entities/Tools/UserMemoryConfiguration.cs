@@ -13,10 +13,6 @@ public sealed class UserMemoryConfiguration : IEntityTypeConfiguration<UserMemor
         builder.Property(memory => memory.NormalizedName).IsRequired().HasMaxLength(64);
         builder.Property(memory => memory.Description).HasMaxLength(300);
         builder.Property(memory => memory.Content).IsRequired();
-        builder.HasIndex(memory => new
-        {
-            memory.UserId,
-            memory.NormalizedName
-        }).IsUnique();
+        builder.HasIndex(memory => new { memory.UserId, memory.NormalizedName }).IsUnique();
     }
 }

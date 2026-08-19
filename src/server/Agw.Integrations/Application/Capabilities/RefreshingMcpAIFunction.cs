@@ -1,6 +1,5 @@
 using System.Reflection;
 using System.Text.Json;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Integrations.Application.Capabilities;
@@ -23,7 +22,8 @@ internal sealed class RefreshingMcpAIFunction : AIFunction
         Guid connectionId,
         string sourceId,
         AIFunction sourceFunction,
-        IConnectionMcpToolInvoker invoker)
+        IConnectionMcpToolInvoker invoker
+    )
     {
         _name = name;
         _connectionId = connectionId;
@@ -51,13 +51,9 @@ internal sealed class RefreshingMcpAIFunction : AIFunction
 
     protected override ValueTask<object?> InvokeCoreAsync(
         AIFunctionArguments arguments,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        return _invoker.InvokeAsync(
-            _connectionId,
-            _sourceId,
-            _operationName,
-            arguments,
-            cancellationToken);
+        return _invoker.InvokeAsync(_connectionId, _sourceId, _operationName, arguments, cancellationToken);
     }
 }

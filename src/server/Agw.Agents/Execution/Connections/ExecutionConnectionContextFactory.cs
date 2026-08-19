@@ -4,7 +4,6 @@ using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -30,7 +29,8 @@ internal sealed class ExecutionConnectionContextFactory
         ITaskAppService taskAppService,
         IProjectAppService projectAppService,
         IOptions<ExecutionRuntimeOptions> executionOptions,
-        IServiceProvider serviceProvider)
+        IServiceProvider serviceProvider
+    )
     {
         _runtimeFactory = runtimeFactory;
         _taskAppService = taskAppService;
@@ -46,18 +46,22 @@ internal sealed class ExecutionConnectionContextFactory
     public ExecutionConnectionContext Create(
         string userName,
         IExecutionMessageSink messageSink,
-        CancellationToken hostToken)
+        CancellationToken hostToken
+    )
     {
-        var durableSession = _executionProvider == ExecutionProvider.Distributed
-            ? new DurableExecutionSession(
-                userName,
-                messageSink,
-                hostToken,
-                _durableCoordinator
-                ?? throw new AgwException(
-                    ErrorCodes.DurableExecutionUnavailable,
-                    "Durable execution services are not configured."))
-            : null;
+        var durableSession =
+            _executionProvider == ExecutionProvider.Distributed
+                ? new DurableExecutionSession(
+                    userName,
+                    messageSink,
+                    hostToken,
+                    _durableCoordinator
+                        ?? throw new AgwException(
+                            ErrorCodes.DurableExecutionUnavailable,
+                            "Durable execution services are not configured."
+                        )
+                )
+                : null;
         return new ExecutionConnectionContext(
             userName,
             messageSink,
@@ -66,6 +70,7 @@ internal sealed class ExecutionConnectionContextFactory
             _taskAppService,
             _projectAppService,
             durableSession,
-            _checkpointStore);
+            _checkpointStore
+        );
     }
 }

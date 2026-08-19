@@ -1,5 +1,4 @@
 using Agw.Shared.Data.Abstractions;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Shared.Tests;

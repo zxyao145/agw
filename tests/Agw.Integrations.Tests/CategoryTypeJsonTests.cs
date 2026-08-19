@@ -1,5 +1,4 @@
 using System.Text.Json;
-
 using Agw.Shared.Data.Entities.Integrations;
 
 namespace Agw.Integrations.Tests;

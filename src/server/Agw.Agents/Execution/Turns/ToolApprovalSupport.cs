@@ -1,9 +1,7 @@
 using System.Text.Json;
-
 using Agw.Agents.Execution.Agentflows;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Utils;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -14,8 +12,7 @@ namespace Agw.Agents.Execution.Turns;
 /// </summary>
 internal static class ToolApprovalSupport
 {
-    private const string WorkflowApprovalScopeProperty =
-        "Agw.ToolApproval.WorkflowApprovalScope";
+    private const string WorkflowApprovalScopeProperty = "Agw.ToolApproval.WorkflowApprovalScope";
 
     /// <summary>
     /// 从 MAF Tool approval 创建统一 HumanGate 请求。
@@ -23,7 +20,8 @@ internal static class ToolApprovalSupport
     public static HumanGateApprovalRequest CreateRequest(
         ToolApprovalRequestContent request,
         string nodeId,
-        string? nodeName = null)
+        string? nodeName = null
+    )
     {
         var toolName = GetToolName(request);
         var message = new ChatMessage(ChatRole.Assistant, [request]);
@@ -33,19 +31,16 @@ internal static class ToolApprovalSupport
             nodeId,
             nodeName,
             isInteraction ? "interaction" : "tool-approval",
-            isInteraction
-                ? "The agent needs your input to continue."
-                : $"Allow tool '{toolName}' to run?",
+            isInteraction ? "The agent needs your input to continue." : $"Allow tool '{toolName}' to run?",
             [message],
-            request);
+            request
+        );
     }
 
     /// <summary>
     /// 根据人工决策创建一次性或持久范围的 MAF approval 响应。
     /// </summary>
-    public static AIContent CreateResponse(
-        ToolApprovalRequestContent request,
-        HumanGateApprovalDecision decision)
+    public static AIContent CreateResponse(ToolApprovalRequestContent request, HumanGateApprovalDecision decision)
     {
         if (!decision.Approved)
         {
@@ -56,7 +51,7 @@ internal static class ToolApprovalSupport
         {
             "always-tool" => request.CreateAlwaysApproveToolResponse(),
             "always-arguments" => request.CreateAlwaysApproveToolWithArgumentsResponse(),
-            _ => request.CreateResponse(approved: true)
+            _ => request.CreateResponse(approved: true),
         };
     }
 
@@ -65,7 +60,8 @@ internal static class ToolApprovalSupport
     /// </summary>
     public static ToolApprovalResponseContent CreateWorkflowResponse(
         ToolApprovalRequestContent request,
-        HumanGateApprovalDecision decision)
+        HumanGateApprovalDecision decision
+    )
     {
         var response = CreateResponse(request, decision);
         if (response is ToolApprovalResponseContent singleApproval)
@@ -83,15 +79,14 @@ internal static class ToolApprovalSupport
     /// <summary>
     /// 在节点 Agent 边界恢复 Agentflow 端口传输时展开的持久授权响应。
     /// </summary>
-    public static List<ChatMessage> RestoreWorkflowResponses(
-        IReadOnlyList<ChatMessage> messages)
+    public static List<ChatMessage> RestoreWorkflowResponses(IReadOnlyList<ChatMessage> messages)
     {
         return messages
             .Select(message =>
             {
                 var restoredAny = false;
-                var contents = message.Contents
-                    .Select(content =>
+                var contents = message
+                    .Contents.Select(content =>
                     {
                         var restored = RestoreWorkflowResponse(content);
                         restoredAny |= !ReferenceEquals(restored, content);
@@ -123,7 +118,7 @@ internal static class ToolApprovalSupport
             { "nodeId", request.NodeId },
             { "mode", request.Mode },
             { "prompt", request.Prompt },
-            { "toolName", GetToolName(toolRequest) }
+            { "toolName", GetToolName(toolRequest) },
         };
 
         if (!string.IsNullOrWhiteSpace(request.NodeName))
@@ -131,8 +126,7 @@ internal static class ToolApprovalSupport
             properties["nodeName"] = request.NodeName;
         }
 
-        if (toolRequest.ToolCall is FunctionCallContent functionCall &&
-            functionCall.Arguments != null)
+        if (toolRequest.ToolCall is FunctionCallContent functionCall && functionCall.Arguments != null)
         {
             properties["arguments"] = JsonUtil.Serialize(functionCall.Arguments);
         }
@@ -142,7 +136,8 @@ internal static class ToolApprovalSupport
             Constants.DefaultAgentAuthor,
             AiRole.System,
             [new AgwTextContent { Content = request.Prompt }],
-            properties);
+            properties
+        );
     }
 
     /// <summary>
@@ -152,7 +147,7 @@ internal static class ToolApprovalSupport
         request.ToolCall switch
         {
             FunctionCallContent functionCall => functionCall.Name,
-            _ => request.ToolCall?.CallId ?? "unknown"
+            _ => request.ToolCall?.CallId ?? "unknown",
         };
 
     /// <summary>
@@ -172,25 +167,24 @@ internal static class ToolApprovalSupport
     /// <summary>
     /// 识别 ask_user_question，并只提取 questions 与 metadata，排除模型提供的 answers。
     /// </summary>
-    internal static bool TryCreateInteractionPayload(
-        ToolApprovalRequestContent request,
-        out JsonElement payload)
+    internal static bool TryCreateInteractionPayload(ToolApprovalRequestContent request, out JsonElement payload)
     {
         payload = default;
-        if (!string.Equals(GetToolName(request), "ask_user_question", StringComparison.Ordinal)
+        if (
+            !string.Equals(GetToolName(request), "ask_user_question", StringComparison.Ordinal)
             || GetArguments(request) is not { } arguments
             || arguments.ValueKind != JsonValueKind.Object
-            || !arguments.TryGetProperty("questions", out var questions))
+            || !arguments.TryGetProperty("questions", out var questions)
+        )
         {
             return false;
         }
 
-        var values = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
-        {
-            ["questions"] = questions.Clone()
-        };
-        if (arguments.TryGetProperty("metadata", out var metadata)
-            && metadata.ValueKind is not JsonValueKind.Null and not JsonValueKind.Undefined)
+        var values = new Dictionary<string, JsonElement>(StringComparer.Ordinal) { ["questions"] = questions.Clone() };
+        if (
+            arguments.TryGetProperty("metadata", out var metadata)
+            && metadata.ValueKind is not JsonValueKind.Null and not JsonValueKind.Undefined
+        )
         {
             values["metadata"] = metadata.Clone();
         }
@@ -203,10 +197,10 @@ internal static class ToolApprovalSupport
 
     private static AIContent RestoreWorkflowResponse(AIContent content)
     {
-        if (content is not ToolApprovalResponseContent response ||
-            response.AdditionalProperties?.TryGetValue(
-                WorkflowApprovalScopeProperty,
-                out var scopeValue) != true)
+        if (
+            content is not ToolApprovalResponseContent response
+            || response.AdditionalProperties?.TryGetValue(WorkflowApprovalScopeProperty, out var scopeValue) != true
+        )
         {
             return content;
         }
@@ -215,9 +209,8 @@ internal static class ToolApprovalSupport
         return scopeValue?.ToString() switch
         {
             "always-tool" => request.CreateAlwaysApproveToolResponse(response.Reason),
-            "always-arguments" =>
-                request.CreateAlwaysApproveToolWithArgumentsResponse(response.Reason),
-            _ => content
+            "always-arguments" => request.CreateAlwaysApproveToolWithArgumentsResponse(response.Reason),
+            _ => content,
         };
     }
 }

@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-
 using Agw.Shared.Configuration;
 
 namespace Agw.Setup.Contracts;
@@ -46,33 +45,25 @@ public class SetupRequest : IValidatableObject
     {
         if (!Enum.IsDefined(DeploymentMode))
         {
-            yield return new ValidationResult(
-                "Deployment mode is not supported.",
-                [nameof(DeploymentMode)]);
+            yield return new ValidationResult("Deployment mode is not supported.", [nameof(DeploymentMode)]);
         }
 
         if (!Enum.IsDefined(Provider))
         {
-            yield return new ValidationResult(
-                "Database provider is not supported.",
-                [nameof(Provider)]);
+            yield return new ValidationResult("Database provider is not supported.", [nameof(Provider)]);
             yield break;
         }
 
         if (DeploymentMode == DeploymentMode.Cluster && Provider != DatabaseProvider.Postgres)
         {
-            yield return new ValidationResult(
-                "Cluster deployments require PostgreSQL.",
-                [nameof(Provider)]);
+            yield return new ValidationResult("Cluster deployments require PostgreSQL.", [nameof(Provider)]);
         }
 
         if (Provider == DatabaseProvider.Sqlite)
         {
             if (string.IsNullOrWhiteSpace(SqlitePath))
             {
-                yield return new ValidationResult(
-                    "SQLite database path is required.",
-                    [nameof(SqlitePath)]);
+                yield return new ValidationResult("SQLite database path is required.", [nameof(SqlitePath)]);
             }
 
             yield break;
@@ -80,37 +71,27 @@ public class SetupRequest : IValidatableObject
 
         if (string.IsNullOrWhiteSpace(PostgresHost))
         {
-            yield return new ValidationResult(
-                "PostgreSQL host is required.",
-                [nameof(PostgresHost)]);
+            yield return new ValidationResult("PostgreSQL host is required.", [nameof(PostgresHost)]);
         }
 
         if (PostgresPort is < 1 or > 65535)
         {
-            yield return new ValidationResult(
-                "PostgreSQL port must be between 1 and 65535.",
-                [nameof(PostgresPort)]);
+            yield return new ValidationResult("PostgreSQL port must be between 1 and 65535.", [nameof(PostgresPort)]);
         }
 
         if (string.IsNullOrWhiteSpace(PostgresDatabase))
         {
-            yield return new ValidationResult(
-                "PostgreSQL database is required.",
-                [nameof(PostgresDatabase)]);
+            yield return new ValidationResult("PostgreSQL database is required.", [nameof(PostgresDatabase)]);
         }
 
         if (string.IsNullOrWhiteSpace(PostgresUsername))
         {
-            yield return new ValidationResult(
-                "PostgreSQL username is required.",
-                [nameof(PostgresUsername)]);
+            yield return new ValidationResult("PostgreSQL username is required.", [nameof(PostgresUsername)]);
         }
 
         if (string.IsNullOrEmpty(PostgresPassword))
         {
-            yield return new ValidationResult(
-                "PostgreSQL password is required.",
-                [nameof(PostgresPassword)]);
+            yield return new ValidationResult("PostgreSQL password is required.", [nameof(PostgresPassword)]);
         }
     }
 }

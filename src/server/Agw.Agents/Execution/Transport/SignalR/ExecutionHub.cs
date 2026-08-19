@@ -3,7 +3,6 @@ using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Agents.Execution.Durable;
 using Agw.Files.Exceptions;
 using Agw.Shared.Exceptions;
-
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
@@ -19,9 +18,7 @@ public sealed class ExecutionHub : Hub<IExecutionHubClient>
     /// <summary>
     /// 初始化执行 Hub，并缓存当前服务端启用的执行提供程序。
     /// </summary>
-    public ExecutionHub(
-        ExecutionConnectionRegistry registry,
-        IOptions<ExecutionRuntimeOptions> executionOptions)
+    public ExecutionHub(ExecutionConnectionRegistry registry, IOptions<ExecutionRuntimeOptions> executionOptions)
     {
         _registry = registry;
         _executionProvider = executionOptions.Value.Provider;
@@ -41,26 +38,25 @@ public sealed class ExecutionHub : Hub<IExecutionHubClient>
 
     public Task DispatchCommand(AgentRunCommand command)
     {
-        return InvokeAsync(() => _registry.DispatchAsync(
-            Context.ConnectionId,
-            CurrentUser,
-            command,
-            Context.ConnectionAborted));
+        return InvokeAsync(() =>
+            _registry.DispatchAsync(Context.ConnectionId, CurrentUser, command, Context.ConnectionAborted)
+        );
     }
 
     /// <summary>
     /// 返回客户端恢复策略所需的执行提供程序能力标识。
     /// </summary>
-    public Task<string> GetExecutionProvider() =>
-        Task.FromResult(_executionProvider.ToString());
+    public Task<string> GetExecutionProvider() => Task.FromResult(_executionProvider.ToString());
 
-    public Task<IReadOnlyList<AgentflowCheckpointAvailability>> GetAgentflowCheckpoints(
-        Guid agentflowId) =>
-        InvokeResultAsync(() => _registry.GetAgentflowCheckpointsAsync(
-            Context.ConnectionId,
-            CurrentUser,
-            agentflowId,
-            Context.ConnectionAborted));
+    public Task<IReadOnlyList<AgentflowCheckpointAvailability>> GetAgentflowCheckpoints(Guid agentflowId) =>
+        InvokeResultAsync(() =>
+            _registry.GetAgentflowCheckpointsAsync(
+                Context.ConnectionId,
+                CurrentUser,
+                agentflowId,
+                Context.ConnectionAborted
+            )
+        );
 
     private string CurrentUser => Context.User?.Identity?.Name ?? Constants.AdminUserName;
 

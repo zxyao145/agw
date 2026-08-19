@@ -28,5 +28,5 @@ public enum AgentflowOrchestrationPattern
     /// <summary>
     /// Inspired by MagenticOne - a generalist multi-agent collaboration pattern.
     /// </summary>
-    Magentic = 4
+    Magentic = 4,
 }

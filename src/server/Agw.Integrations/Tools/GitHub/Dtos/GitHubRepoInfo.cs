@@ -46,7 +46,6 @@ public class GitHubRepoInfo
     public string CloneUrl { get; set; } = "";
 }
 
-
 public class GitHubOwner
 {
     /// <summary>
@@ -57,7 +56,6 @@ public class GitHubOwner
 
     [JsonPropertyName("avatar_url")]
     public string AvatarUrl { get; set; } = "";
-
 
     [Description("URL for obtaining detailed information about the user.")]
     [JsonPropertyName("url")]

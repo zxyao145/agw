@@ -3,7 +3,6 @@ using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.Contracts.Agents;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -18,9 +17,7 @@ public class PermissionAwareApprovalHandlerTests
         var handler = new PermissionAwareApprovalHandler(inner, PermissionMode.FullAccess);
         var request = CreateToolRequest();
 
-        var decision = await handler.WaitForApprovalAsync(
-            request,
-            TestContext.Current.CancellationToken);
+        var decision = await handler.WaitForApprovalAsync(request, TestContext.Current.CancellationToken);
 
         Assert.False(handler.RequiresHumanResponse(request));
         Assert.True(decision.Approved);
@@ -31,17 +28,13 @@ public class PermissionAwareApprovalHandlerTests
     [Theory]
     [InlineData(PermissionMode.AlwaysAsk, "once")]
     [InlineData(PermissionMode.AllowSameArguments, "always-arguments")]
-    public async Task ManualPolicy_NormalizesApprovedScope(
-        PermissionMode permissionMode,
-        string expectedScope)
+    public async Task ManualPolicy_NormalizesApprovedScope(PermissionMode permissionMode, string expectedScope)
     {
         var inner = new RecordingHandler();
         var handler = new PermissionAwareApprovalHandler(inner, permissionMode);
         var request = CreateToolRequest();
 
-        var decision = await handler.WaitForApprovalAsync(
-            request,
-            TestContext.Current.CancellationToken);
+        var decision = await handler.WaitForApprovalAsync(request, TestContext.Current.CancellationToken);
 
         Assert.True(handler.RequiresHumanResponse(request));
         Assert.Equal(expectedScope, decision.ApprovalScope);
@@ -54,9 +47,7 @@ public class PermissionAwareApprovalHandlerTests
         var coordinator = new HumanGateApprovalCoordinator();
         var handler = new PermissionAwareApprovalHandler(coordinator, PermissionMode.AlwaysAsk);
         var request = CreateToolRequest();
-        var pendingDecision = handler.WaitForApprovalAsync(
-            request,
-            TestContext.Current.CancellationToken).AsTask();
+        var pendingDecision = handler.WaitForApprovalAsync(request, TestContext.Current.CancellationToken).AsTask();
 
         handler.SetPermissionMode(PermissionMode.FullAccess);
 
@@ -76,9 +67,7 @@ public class PermissionAwareApprovalHandlerTests
 
         state.Set(PermissionMode.AlwaysAsk);
 
-        Assert.False(session.StateBag.TryGetValue<string>(
-            ToolApprovalPermissionState.ToolApprovalStateKey,
-            out _));
+        Assert.False(session.StateBag.TryGetValue<string>(ToolApprovalPermissionState.ToolApprovalStateKey, out _));
         Assert.Equal(PermissionMode.AlwaysAsk, state.Current);
     }
 
@@ -90,23 +79,15 @@ public class PermissionAwareApprovalHandlerTests
         session.StateBag.SetValue(ToolApprovalPermissionState.ToolApprovalStateKey, "standing-rule");
 
         ToolApprovalPermissionState.Apply(session, PermissionMode.FullAccess);
-        Assert.True(session.StateBag.TryGetValue<string>(
-            ToolApprovalPermissionState.ToolApprovalStateKey,
-            out _));
+        Assert.True(session.StateBag.TryGetValue<string>(ToolApprovalPermissionState.ToolApprovalStateKey, out _));
 
         ToolApprovalPermissionState.Apply(session, PermissionMode.AlwaysAsk);
-        Assert.False(session.StateBag.TryGetValue<string>(
-            ToolApprovalPermissionState.ToolApprovalStateKey,
-            out _));
+        Assert.False(session.StateBag.TryGetValue<string>(ToolApprovalPermissionState.ToolApprovalStateKey, out _));
 
         session.StateBag.SetValue(ToolApprovalPermissionState.ToolApprovalStateKey, "managed-rule");
         ToolApprovalPermissionState.Apply(session, permissionMode: null);
-        Assert.False(session.StateBag.TryGetValue<string>(
-            ToolApprovalPermissionState.ToolApprovalStateKey,
-            out _));
-        Assert.False(session.StateBag.TryGetValue<string>(
-            ToolApprovalPermissionState.PermissionModeStateKey,
-            out _));
+        Assert.False(session.StateBag.TryGetValue<string>(ToolApprovalPermissionState.ToolApprovalStateKey, out _));
+        Assert.False(session.StateBag.TryGetValue<string>(ToolApprovalPermissionState.PermissionModeStateKey, out _));
     }
 
     [Fact]
@@ -123,10 +104,8 @@ public class PermissionAwareApprovalHandlerTests
     {
         var approval = new ToolApprovalRequestContent(
             "approval-1",
-            new FunctionCallContent(
-                "call-1",
-                "run_shell",
-                new Dictionary<string, object?>()));
+            new FunctionCallContent("call-1", "run_shell", new Dictionary<string, object?>())
+        );
         return ToolApprovalSupport.CreateRequest(approval, "standalone");
     }
 
@@ -136,14 +115,18 @@ public class PermissionAwareApprovalHandlerTests
 
         public ValueTask<HumanGateApprovalDecision> WaitForApprovalAsync(
             HumanGateApprovalRequest request,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             CallCount++;
-            return ValueTask.FromResult(new HumanGateApprovalDecision(
-                request.RequestId,
-                Approved: true,
-                ResponseText: null,
-                ApprovalScope: "always-tool"));
+            return ValueTask.FromResult(
+                new HumanGateApprovalDecision(
+                    request.RequestId,
+                    Approved: true,
+                    ResponseText: null,
+                    ApprovalScope: "always-tool"
+                )
+            );
         }
     }
 

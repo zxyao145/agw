@@ -1,5 +1,4 @@
 using Agw.Shared.Data.Abstractions;
-
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace Agw.Infrastructure.Data.Interceptors;
@@ -30,23 +29,25 @@ internal static class EntityAuditStamping
     {
         if (entry.Entity is IEntityModifier entity)
         {
-            if (!IsExplicitlyModified(entry, nameof(IEntityModifier.UpdateBy))
-                || string.IsNullOrWhiteSpace(entity.UpdateBy))
+            if (
+                !IsExplicitlyModified(entry, nameof(IEntityModifier.UpdateBy))
+                || string.IsNullOrWhiteSpace(entity.UpdateBy)
+            )
             {
                 entity.UpdateBy = userId;
                 MarkModified(entry, nameof(IEntityModifier.UpdateBy));
             }
 
-            if (!IsExplicitlyModified(entry, nameof(IEntityModifier.UpdateTime))
-                || !entity.UpdateTime.HasValue)
+            if (!IsExplicitlyModified(entry, nameof(IEntityModifier.UpdateTime)) || !entity.UpdateTime.HasValue)
             {
                 entity.UpdateTime = now;
                 MarkModified(entry, nameof(IEntityModifier.UpdateTime));
             }
         }
-        else if (entry.Entity is IEntityModifyTime entity2
-                 && (!IsExplicitlyModified(entry, nameof(IEntityModifyTime.UpdateTime))
-                     || !entity2.UpdateTime.HasValue))
+        else if (
+            entry.Entity is IEntityModifyTime entity2
+            && (!IsExplicitlyModified(entry, nameof(IEntityModifyTime.UpdateTime)) || !entity2.UpdateTime.HasValue)
+        )
         {
             entity2.UpdateTime = now;
             MarkModified(entry, nameof(IEntityModifyTime.UpdateTime));
@@ -71,8 +72,7 @@ internal static class EntityAuditStamping
 
     private static bool IsExplicitlyModified(EntityEntry entry, string propertyName)
     {
-        return entry.Metadata.FindProperty(propertyName) is not null
-            && entry.Property(propertyName).IsModified;
+        return entry.Metadata.FindProperty(propertyName) is not null && entry.Property(propertyName).IsModified;
     }
 
     private static void MarkModified(EntityEntry entry, string propertyName)

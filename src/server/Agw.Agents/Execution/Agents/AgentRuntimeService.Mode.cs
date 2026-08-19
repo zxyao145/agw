@@ -1,7 +1,6 @@
 using Agw.Agents.Execution.Runtimes;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -9,16 +8,15 @@ namespace Agw.Agents.Execution.Agents;
 
 public partial class AgentRuntimeService
 {
-    public async Task SetModeAsync(
-        AgentRuntime runtime,
-        string mode,
-        CancellationToken cancellationToken = default)
+    public async Task SetModeAsync(AgentRuntime runtime, string mode, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(runtime);
-        var modeProvider = runtime.Agent.GetService<AgentModeProvider>()
+        var modeProvider =
+            runtime.Agent.GetService<AgentModeProvider>()
             ?? throw new AgwException(
                 ErrorCodes.InvalidParam,
-                $"Agent '{runtime.Agent.Name}' does not support mode changes.");
+                $"Agent '{runtime.Agent.Name}' does not support mode changes."
+            );
 
         await modeProvider.SetModeAsync(runtime.Session, mode, cancellationToken);
         if (runtime.SessionStateScope != null)
@@ -28,7 +26,8 @@ public partial class AgentRuntimeService
                 runtime.SessionStateScope,
                 runtime.Agent,
                 runtime.Session,
-                cancellationToken);
+                cancellationToken
+            );
         }
 
         if (_conversationHistoryWriter != null)
@@ -37,7 +36,8 @@ public partial class AgentRuntimeService
                 runtime._projectId,
                 runtime._contextId,
                 [CreateModeStatusMessage(mode)],
-                cancellationToken);
+                cancellationToken
+            );
         }
     }
 

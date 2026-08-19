@@ -13,7 +13,8 @@ public sealed class ConfiguredSetupInitializer
         IInitializationStateStore stateStore,
         ISetupInitializationService setupInitializationService,
         ConfiguredSetupBootstrap bootstrap,
-        ILogger<ConfiguredSetupInitializer> logger)
+        ILogger<ConfiguredSetupInitializer> logger
+    )
     {
         _stateStore = stateStore;
         _setupInitializationService = setupInitializationService;
@@ -21,18 +22,17 @@ public sealed class ConfiguredSetupInitializer
         _logger = logger;
     }
 
-    public async Task<bool> InitializeIfConfiguredAsync(
-        CancellationToken cancellationToken = default)
+    public async Task<bool> InitializeIfConfiguredAsync(CancellationToken cancellationToken = default)
     {
-        if (_stateStore.IsInitialized || !_bootstrap.IsConfigured) return false;
+        if (_stateStore.IsInitialized || !_bootstrap.IsConfigured)
+            return false;
 
         _logger.LogInformation(
             "Initializing Agw from the Setup configuration using {DeploymentMode} deployment and {DatabaseProvider}",
             _bootstrap.Request.DeploymentMode,
-            _bootstrap.Request.Provider);
-        await _setupInitializationService.InitializeAsync(
-            _bootstrap.Request,
-            cancellationToken);
+            _bootstrap.Request.Provider
+        );
+        await _setupInitializationService.InitializeAsync(_bootstrap.Request, cancellationToken);
         _logger.LogInformation("Agw initialization from configuration completed");
         return true;
     }

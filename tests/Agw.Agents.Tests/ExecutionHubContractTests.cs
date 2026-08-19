@@ -1,10 +1,8 @@
 using System.Reflection;
-
 using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Agents.Execution.Transport.SignalR;
 using Agw.Files.Exceptions;
 using Agw.Shared.AgwMsgVm;
-
 using Microsoft.AspNetCore.SignalR;
 
 namespace Agw.Agents.Tests;
@@ -30,8 +28,7 @@ public class ExecutionHubContractTests
     [Fact]
     public void GetExecutionProvider_ReturnsAStringCapability()
     {
-        var method = typeof(ExecutionHub)
-            .GetMethod(nameof(ExecutionHub.GetExecutionProvider));
+        var method = typeof(ExecutionHub).GetMethod(nameof(ExecutionHub.GetExecutionProvider));
 
         Assert.NotNull(method);
         Assert.Equal(typeof(Task<string>), method.ReturnType);
@@ -41,10 +38,7 @@ public class ExecutionHubContractTests
     [Fact]
     public void DispatchCommand_AcceptsPolymorphicAgentRunCommand()
     {
-        var parameter = typeof(ExecutionHub)
-            .GetMethod(nameof(ExecutionHub.DispatchCommand))!
-            .GetParameters()
-            .Single();
+        var parameter = typeof(ExecutionHub).GetMethod(nameof(ExecutionHub.DispatchCommand))!.GetParameters().Single();
 
         Assert.Equal(typeof(AgentRunCommand), parameter.ParameterType);
     }
@@ -63,14 +57,13 @@ public class ExecutionHubContractTests
     [Fact]
     public async Task DispatchBoundary_AgwFilesException_UsesStableHubError()
     {
-        var invokeAsync = typeof(ExecutionHub).GetMethod(
-            "InvokeAsync",
-            BindingFlags.NonPublic | BindingFlags.Static);
+        var invokeAsync = typeof(ExecutionHub).GetMethod("InvokeAsync", BindingFlags.NonPublic | BindingFlags.Static);
         Assert.NotNull(invokeAsync);
-        var action = new Func<Task>(() => Task.FromException(
-            new AgwFilesException(
-                FilesErrorCode.PathOutsideRoot,
-                "Path is outside the project workspace.")));
+        var action = new Func<Task>(() =>
+            Task.FromException(
+                new AgwFilesException(FilesErrorCode.PathOutsideRoot, "Path is outside the project workspace.")
+            )
+        );
         var invocation = Assert.IsAssignableFrom<Task>(invokeAsync.Invoke(null, [action]));
 
         var exception = await Assert.ThrowsAsync<HubException>(() => invocation);

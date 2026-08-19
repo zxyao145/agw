@@ -6,8 +6,7 @@ namespace Agw.Shared.Data.Entities.Executions;
 /// <summary>
 /// 配置 durable_execution 单行状态机的主键、并发版本、索引和字段约束。
 /// </summary>
-public sealed class DurableExecutionRecordConfiguration :
-    IEntityTypeConfiguration<DurableExecutionRecord>
+public sealed class DurableExecutionRecordConfiguration : IEntityTypeConfiguration<DurableExecutionRecord>
 {
     /// <summary>
     /// 应用 durable execution 登记实体的 EF Core 映射。

@@ -4,7 +4,6 @@ using Agw.Files.Api.Dtos;
 using Agw.Files.Application.Files;
 using Agw.Files.Application.Storage.Local;
 using Agw.Files.Services;
-
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -17,8 +16,7 @@ public class FilesControllerSearchTests
     [Theory]
     [InlineData("a")]
     [InlineData("abc/")]
-    public async Task SearchAsync_Recursive_WhenFlattenedPathMatches_ReturnsDirectoryAndDescendants(
-        string keyword)
+    public async Task SearchAsync_Recursive_WhenFlattenedPathMatches_ReturnsDirectoryAndDescendants(string keyword)
     {
         var rootPath = CreateTempDirectory();
         try
@@ -28,29 +26,29 @@ public class FilesControllerSearchTests
             await File.WriteAllTextAsync(
                 Path.Combine(matchingDirectory, "d.txt"),
                 "content",
-                TestContext.Current.CancellationToken);
+                TestContext.Current.CancellationToken
+            );
             await File.WriteAllTextAsync(
                 Path.Combine(matchingDirectory, "e.log"),
                 "content",
-                TestContext.Current.CancellationToken);
+                TestContext.Current.CancellationToken
+            );
             await File.WriteAllTextAsync(
                 Path.Combine(rootPath, "demo", "x.txt"),
                 "content",
-                TestContext.Current.CancellationToken);
+                TestContext.Current.CancellationToken
+            );
             var controller = CreateController(rootPath);
 
-            var result = await controller.SearchAsync(
-                ProjectId,
-                "",
-                keyword,
-                recursive: true);
+            var result = await controller.SearchAsync(ProjectId, "", keyword, recursive: true);
 
             var response = GetResponse(result);
             Assert.Collection(
                 response.Results,
                 item => AssertResult(item, "demo/abc/", "directory"),
                 item => AssertResult(item, "demo/abc/d.txt", "file"),
-                item => AssertResult(item, "demo/abc/e.log", "file"));
+                item => AssertResult(item, "demo/abc/e.log", "file")
+            );
         }
         finally
         {
@@ -68,11 +66,7 @@ public class FilesControllerSearchTests
             Directory.CreateDirectory(Path.Combine(rootPath, "parent", "nested-target"));
             var controller = CreateController(rootPath);
 
-            var result = await controller.SearchAsync(
-                ProjectId,
-                "",
-                "target",
-                recursive: false);
+            var result = await controller.SearchAsync(ProjectId, "", "target", recursive: false);
 
             var response = GetResponse(result);
             var directory = Assert.Single(response.Results);
@@ -89,7 +83,8 @@ public class FilesControllerSearchTests
         var fileAppService = new FileAppService(
             new FakeFileSystemResolver(new LocalFileSystem(rootPath)),
             new FakeGitCommandService(),
-            NullLogger<FileAppService>.Instance);
+            NullLogger<FileAppService>.Instance
+        );
         return new FilesController(fileAppService);
     }
 
@@ -132,7 +127,8 @@ public class FilesControllerSearchTests
     {
         public Task<GitChangedFiles?> GetChangedFilesAsync(
             string directory,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             return Task.FromResult<GitChangedFiles?>(null);
         }
@@ -140,14 +136,13 @@ public class FilesControllerSearchTests
         public Task<GitDiffResult> GetDiffAsync(
             string filePath,
             CancellationToken cancellationToken = default,
-            GitDiffScope scope = GitDiffScope.All)
+            GitDiffScope scope = GitDiffScope.All
+        )
         {
             return Task.FromResult(new GitDiffResult(false, "", false, null, null));
         }
 
-        public Task<GitResetResult> ResetFileAsync(
-            string filePath,
-            CancellationToken cancellationToken = default)
+        public Task<GitResetResult> ResetFileAsync(string filePath, CancellationToken cancellationToken = default)
         {
             return Task.FromResult(new GitResetResult(false, "Not implemented by test fake.", null, false));
         }
@@ -155,7 +150,8 @@ public class FilesControllerSearchTests
         public Task<GitIndexResult> SetStagedAsync(
             string path,
             bool staged,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             return Task.FromResult(new GitIndexResult(false, "Not implemented by test fake.", null, false));
         }
@@ -163,7 +159,8 @@ public class FilesControllerSearchTests
         public Task<GitCloneResult> CloneRepositoryAsync(
             string gitAddress,
             string workingDirectory,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             return Task.FromResult(new GitCloneResult(false, "Not implemented by test fake.", null, null));
         }

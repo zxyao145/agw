@@ -1,18 +1,14 @@
 using System.Security.Claims;
-
 using Agw.Auth.Api;
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;
 using Agw.Shared.Exceptions;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
-
 using Xunit;
 
 namespace Agw.Auth.Tests;
@@ -25,14 +21,16 @@ public sealed class AuthControllerTests
     [InlineData(257, false)]
     public async Task ChangePassword_NewPasswordLength_EnforcesEightToTwoHundredFiftySixCharacters(
         int passwordLength,
-        bool shouldUpdatePassword)
+        bool shouldUpdatePassword
+    )
     {
         var stateStore = new StateStoreStub();
         var controller = CreateController(stateStore, AgwAuthDefaults.LocalTrustedScheme);
 
         await controller.ChangePassword(
             new ChangePasswordRequest(null, new string('a', passwordLength)),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(shouldUpdatePassword, stateStore.PasswordWasUpdated);
     }
@@ -44,7 +42,7 @@ public sealed class AuthControllerTests
         var stateStore = new StateStoreStub
         {
             PasswordHash = passwordHasher.HashPassword(new object(), "correct-password"),
-            SessionVersion = 7
+            SessionVersion = 7,
         };
         var authentication = new AuthenticationServiceStub();
         var controller = CreateController(stateStore, null, authentication, passwordHasher);
@@ -62,7 +60,7 @@ public sealed class AuthControllerTests
         var passwordHasher = new PasswordHasher<object>();
         var stateStore = new StateStoreStub
         {
-            PasswordHash = passwordHasher.HashPassword(new object(), "correct-password")
+            PasswordHash = passwordHasher.HashPassword(new object(), "correct-password"),
         };
         var authentication = new AuthenticationServiceStub();
         var controller = CreateController(stateStore, null, authentication, passwordHasher);
@@ -79,18 +77,20 @@ public sealed class AuthControllerTests
         var passwordHasher = new PasswordHasher<object>();
         var stateStore = new StateStoreStub
         {
-            PasswordHash = passwordHasher.HashPassword(new object(), "correct-password")
+            PasswordHash = passwordHasher.HashPassword(new object(), "correct-password"),
         };
         var authentication = new AuthenticationServiceStub();
         var attemptLimiter = new AuthenticationAttemptLimiter();
-        for (var i = 0; i < 5; i++) attemptLimiter.RecordFailure("unknown", now);
+        for (var i = 0; i < 5; i++)
+            attemptLimiter.RecordFailure("unknown", now);
         var controller = CreateController(
             stateStore,
             null,
             authentication,
             passwordHasher,
             attemptLimiter,
-            new FixedTimeProvider(now));
+            new FixedTimeProvider(now)
+        );
 
         var result = await controller.Login(new LoginRequest("correct-password"));
 
@@ -106,9 +106,7 @@ public sealed class AuthControllerTests
         var stateStore = new StateStoreStub();
         var controller = CreateController(stateStore, AgwAuthDefaults.LocalTrustedScheme);
 
-        await controller.CreateToken(
-            new CreateTokenRequest("Desktop"),
-            TestContext.Current.CancellationToken);
+        await controller.CreateToken(new CreateTokenRequest("Desktop"), TestContext.Current.CancellationToken);
 
         Assert.Equal("Desktop", stateStore.CreatedTokenName);
     }
@@ -119,9 +117,7 @@ public sealed class AuthControllerTests
         var stateStore = new StateStoreStub();
         var controller = CreateController(stateStore, AgwAuthDefaults.BearerScheme);
 
-        await controller.CreateToken(
-            new CreateTokenRequest("Desktop"),
-            TestContext.Current.CancellationToken);
+        await controller.CreateToken(new CreateTokenRequest("Desktop"), TestContext.Current.CancellationToken);
 
         Assert.Null(stateStore.CreatedTokenName);
     }
@@ -132,20 +128,15 @@ public sealed class AuthControllerTests
         AuthenticationServiceStub? authenticationService = null,
         IPasswordHasher<object>? passwordHasher = null,
         AuthenticationAttemptLimiter? attemptLimiter = null,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null
+    )
     {
         var authentication = authenticationService ?? new AuthenticationServiceStub();
         var services = new ServiceCollection()
             .AddSingleton<IAuthenticationService>(authentication)
             .BuildServiceProvider();
-        var identity = authenticationType == null
-            ? new ClaimsIdentity()
-            : new ClaimsIdentity([], authenticationType);
-        var httpContext = new DefaultHttpContext
-        {
-            RequestServices = services,
-            User = new ClaimsPrincipal(identity)
-        };
+        var identity = authenticationType == null ? new ClaimsIdentity() : new ClaimsIdentity([], authenticationType);
+        var httpContext = new DefaultHttpContext { RequestServices = services, User = new ClaimsPrincipal(identity) };
 
         return new AuthController(
             stateStore,
@@ -153,9 +144,10 @@ public sealed class AuthControllerTests
             passwordHasher ?? new PasswordHasher<object>(),
             null!,
             attemptLimiter ?? new AuthenticationAttemptLimiter(),
-            timeProvider ?? TimeProvider.System)
+            timeProvider ?? TimeProvider.System
+        )
         {
-            ControllerContext = new ControllerContext { HttpContext = httpContext }
+            ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
     }
 
@@ -178,37 +170,26 @@ public sealed class AuthControllerTests
         public bool PasswordWasUpdated { get; private set; }
         public string? CreatedTokenName { get; private set; }
 
-        public AuthenticationSnapshot GetAuthenticationSnapshot() =>
-            new(PasswordHash, SessionVersion);
+        public AuthenticationSnapshot GetAuthenticationSnapshot() => new(PasswordHash, SessionVersion);
 
-        public Task<IReadOnlyList<ApiTokenSummary>> ListTokensAsync(
-            CancellationToken cancellationToken = default) =>
+        public Task<IReadOnlyList<ApiTokenSummary>> ListTokensAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult<IReadOnlyList<ApiTokenSummary>>([]);
 
-        public Task<CreatedApiToken> CreateTokenAsync(
-            string name,
-            CancellationToken cancellationToken = default)
+        public Task<CreatedApiToken> CreateTokenAsync(string name, CancellationToken cancellationToken = default)
         {
             CreatedTokenName = name;
-            return Task.FromResult(new CreatedApiToken(
-                Guid.CreateVersion7(),
-                name,
-                "agw_prefix",
-                DateTimeOffset.UtcNow,
-                "agw_token"));
+            return Task.FromResult(
+                new CreatedApiToken(Guid.CreateVersion7(), name, "agw_prefix", DateTimeOffset.UtcNow, "agw_token")
+            );
         }
 
-        public Task<bool> RevokeTokenAsync(
-            Guid id,
-            CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<bool> RevokeTokenAsync(Guid id, CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
 
-        public Task<bool> ValidateTokenAsync(
-            string token,
-            CancellationToken cancellationToken = default) => Task.FromResult(false);
+        public Task<bool> ValidateTokenAsync(string token, CancellationToken cancellationToken = default) =>
+            Task.FromResult(false);
 
-        public Task UpdatePasswordAsync(
-            string passwordHash,
-            CancellationToken cancellationToken = default)
+        public Task UpdatePasswordAsync(string passwordHash, CancellationToken cancellationToken = default)
         {
             PasswordWasUpdated = true;
             return Task.CompletedTask;
@@ -222,29 +203,24 @@ public sealed class AuthControllerTests
         public Task<AuthenticateResult> AuthenticateAsync(HttpContext context, string? scheme) =>
             Task.FromResult(AuthenticateResult.NoResult());
 
-        public Task ChallengeAsync(
-            HttpContext context,
-            string? scheme,
-            AuthenticationProperties? properties) => Task.CompletedTask;
+        public Task ChallengeAsync(HttpContext context, string? scheme, AuthenticationProperties? properties) =>
+            Task.CompletedTask;
 
-        public Task ForbidAsync(
-            HttpContext context,
-            string? scheme,
-            AuthenticationProperties? properties) => Task.CompletedTask;
+        public Task ForbidAsync(HttpContext context, string? scheme, AuthenticationProperties? properties) =>
+            Task.CompletedTask;
 
         public Task SignInAsync(
             HttpContext context,
             string? scheme,
             ClaimsPrincipal principal,
-            AuthenticationProperties? properties)
+            AuthenticationProperties? properties
+        )
         {
             SignedInPrincipal = principal;
             return Task.CompletedTask;
         }
 
-        public Task SignOutAsync(
-            HttpContext context,
-            string? scheme,
-            AuthenticationProperties? properties) => Task.CompletedTask;
+        public Task SignOutAsync(HttpContext context, string? scheme, AuthenticationProperties? properties) =>
+            Task.CompletedTask;
     }
 }

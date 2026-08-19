@@ -2,7 +2,6 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Projects.Application;
 using Agw.Shared.Data.Entities.Projects;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -33,23 +32,27 @@ public class TaskSessionBindingServiceTests
         var agentId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
-            seedContext.Projects.Add(new Project
-            {
-                Id = projectId,
-                Name = "Binding Project",
-                Type = ProjectType.UserDefined,
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
-            seedContext.ProjectConversations.Add(new ProjectConversation
-            {
-                Id = projectConversationId,
-                ProjectId = projectId,
-                ContextId = "context-1",
-                Title = "Binding Context",
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
+            seedContext.Projects.Add(
+                new Project
+                {
+                    Id = projectId,
+                    Name = "Binding Project",
+                    Type = ProjectType.UserDefined,
+                    CreateBy = "tester",
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                }
+            );
+            seedContext.ProjectConversations.Add(
+                new ProjectConversation
+                {
+                    Id = projectConversationId,
+                    ProjectId = projectId,
+                    ContextId = "context-1",
+                    Title = "Binding Context",
+                    CreateBy = "tester",
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                }
+            );
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -58,7 +61,8 @@ public class TaskSessionBindingServiceTests
             new EfRepository<TaskSessionBinding>(dbContext),
             new EfRepository<ProjectConversation>(dbContext),
             dbContext,
-            TimeProvider.System);
+            TimeProvider.System
+        );
 
         await service.UpsertAsync(
             projectId,
@@ -67,7 +71,8 @@ public class TaskSessionBindingServiceTests
             "codex",
             "11111111-1111-1111-1111-111111111111",
             "tester",
-            cancellationToken);
+            cancellationToken
+        );
         await service.UpsertAsync(
             projectId,
             "context-1",
@@ -75,9 +80,11 @@ public class TaskSessionBindingServiceTests
             "codex",
             "22222222-2222-2222-2222-222222222222",
             "tester",
-            cancellationToken);
+            cancellationToken
+        );
 
-        var bindings = await dbContext.Set<TaskSessionBinding>()
+        var bindings = await dbContext
+            .Set<TaskSessionBinding>()
             .Where(binding => binding.ProjectConversationId == projectConversationId)
             .ToListAsync(cancellationToken);
         var binding = Assert.Single(bindings);
@@ -110,23 +117,27 @@ public class TaskSessionBindingServiceTests
         var agentId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
-            seedContext.Projects.Add(new Project
-            {
-                Id = projectId,
-                Name = "Binding Project",
-                Type = ProjectType.UserDefined,
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
-            seedContext.ProjectConversations.Add(new ProjectConversation
-            {
-                Id = projectConversationId,
-                ProjectId = projectId,
-                ContextId = "context-1",
-                Title = "Binding Context",
-                CreateBy = "tester",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
+            seedContext.Projects.Add(
+                new Project
+                {
+                    Id = projectId,
+                    Name = "Binding Project",
+                    Type = ProjectType.UserDefined,
+                    CreateBy = "tester",
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                }
+            );
+            seedContext.ProjectConversations.Add(
+                new ProjectConversation
+                {
+                    Id = projectConversationId,
+                    ProjectId = projectId,
+                    ContextId = "context-1",
+                    Title = "Binding Context",
+                    CreateBy = "tester",
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                }
+            );
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -134,8 +145,9 @@ public class TaskSessionBindingServiceTests
         var service = new TaskSessionBindingService(
             new EfRepository<TaskSessionBinding>(dbContext),
             new EfRepository<ProjectConversation>(dbContext),
-                dbContext,
-            TimeProvider.System);
+            dbContext,
+            TimeProvider.System
+        );
 
         await service.UpsertAsync(
             projectId,
@@ -144,7 +156,8 @@ public class TaskSessionBindingServiceTests
             "codex",
             "11111111-1111-1111-1111-111111111111",
             "tester",
-            cancellationToken);
+            cancellationToken
+        );
 
         var binding = await service.GetAsync(projectId, "context-1", agentId, "CODEX", cancellationToken);
 
@@ -176,28 +189,33 @@ public class TaskSessionBindingServiceTests
             var agentId = Guid.CreateVersion7();
             await using (var seedContext = new AgwDbContext(options))
             {
-                seedContext.Projects.Add(new Project
-                {
-                    Id = projectId,
-                    Name = "Binding Project",
-                    Type = ProjectType.UserDefined,
-                    CreateBy = "tester",
-                    CreateTime = TimeProvider.System.GetUtcNow()
-                });
-                seedContext.ProjectConversations.Add(new ProjectConversation
-                {
-                    Id = projectConversationId,
-                    ProjectId = projectId,
-                    ContextId = "context-1",
-                    Title = "Binding Context",
-                    CreateBy = "tester",
-                    CreateTime = TimeProvider.System.GetUtcNow()
-                });
+                seedContext.Projects.Add(
+                    new Project
+                    {
+                        Id = projectId,
+                        Name = "Binding Project",
+                        Type = ProjectType.UserDefined,
+                        CreateBy = "tester",
+                        CreateTime = TimeProvider.System.GetUtcNow(),
+                    }
+                );
+                seedContext.ProjectConversations.Add(
+                    new ProjectConversation
+                    {
+                        Id = projectConversationId,
+                        ProjectId = projectId,
+                        ContextId = "context-1",
+                        Title = "Binding Context",
+                        CreateBy = "tester",
+                        CreateTime = TimeProvider.System.GetUtcNow(),
+                    }
+                );
                 await seedContext.SaveChangesAsync(cancellationToken);
             }
 
             var startGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            var upserts = Enumerable.Range(0, 12)
+            var upserts = Enumerable
+                .Range(0, 12)
                 .Select(async index =>
                 {
                     await startGate.Task.WaitAsync(cancellationToken);
@@ -205,8 +223,9 @@ public class TaskSessionBindingServiceTests
                     var service = new TaskSessionBindingService(
                         new EfRepository<TaskSessionBinding>(dbContext),
                         new EfRepository<ProjectConversation>(dbContext),
-            dbContext,
-                        TimeProvider.System);
+                        dbContext,
+                        TimeProvider.System
+                    );
 
                     return await service.UpsertAsync(
                         projectId,
@@ -215,7 +234,8 @@ public class TaskSessionBindingServiceTests
                         "codex",
                         Guid.CreateVersion7().ToString("D"),
                         $"tester-{index}",
-                        cancellationToken);
+                        cancellationToken
+                    );
                 })
                 .ToArray();
 
@@ -223,16 +243,16 @@ public class TaskSessionBindingServiceTests
             await Task.WhenAll(upserts);
 
             await using var verifyContext = new AgwDbContext(options);
-            var bindings = await verifyContext.TaskSessionBindings
-                .Where(binding => binding.ProjectConversationId == projectConversationId
+            var bindings = await verifyContext
+                .TaskSessionBindings.Where(binding =>
+                    binding.ProjectConversationId == projectConversationId
                     && binding.AgentId == agentId
-                    && binding.ExternalAgentName == "codex")
+                    && binding.ExternalAgentName == "codex"
+                )
                 .ToListAsync(cancellationToken);
 
             Assert.Single(bindings);
-            Assert.Contains(
-                bindings[0].ProviderSessionId,
-                upserts.Select(task => task.Result.ProviderSessionId));
+            Assert.Contains(bindings[0].ProviderSessionId, upserts.Select(task => task.Result.ProviderSessionId));
         }
         finally
         {

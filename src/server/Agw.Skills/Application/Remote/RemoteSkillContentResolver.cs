@@ -1,7 +1,6 @@
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
-
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -23,7 +22,8 @@ public sealed class RemoteSkillContentResolver : IRemoteSkillContentResolver
         IRemoteSkillClient remoteSkillClient,
         IRemoteSkillRefreshLock refreshLock,
         TimeProvider timeProvider,
-        ILogger<RemoteSkillContentResolver> logger)
+        ILogger<RemoteSkillContentResolver> logger
+    )
     {
         _scopeFactory = scopeFactory;
         _remoteSkillClient = remoteSkillClient;
@@ -32,9 +32,7 @@ public sealed class RemoteSkillContentResolver : IRemoteSkillContentResolver
         _logger = logger;
     }
 
-    public async Task<RemoteSkillDefinition> ResolveAsync(
-        Guid skillId,
-        CancellationToken cancellationToken = default)
+    public async Task<RemoteSkillDefinition> ResolveAsync(Guid skillId, CancellationToken cancellationToken = default)
     {
         var state = await ReadStateAsync(skillId, cancellationToken);
         if (TryUseCache(state, out var cached))
@@ -49,9 +47,7 @@ public sealed class RemoteSkillContentResolver : IRemoteSkillContentResolver
             return cached;
         }
 
-        var definition = await _remoteSkillClient.FetchAsync(
-            state.Skill.RemoteUrl!,
-            cancellationToken);
+        var definition = await _remoteSkillClient.FetchAsync(state.Skill.RemoteUrl!, cancellationToken);
         if (!string.Equals(definition.Name, state.Skill.Name, StringComparison.Ordinal))
         {
             throw new AgwException(ErrorCodes.RemoteSkillIdentityChanged);
@@ -61,19 +57,19 @@ public sealed class RemoteSkillContentResolver : IRemoteSkillContentResolver
         _logger.LogInformation(
             "Refreshed shared remote skill cache for {SkillId} from {RemoteUrl}",
             state.Skill.Id,
-            state.Skill.RemoteUrl);
+            state.Skill.RemoteUrl
+        );
         return definition;
     }
 
     private bool TryUseCache(RemoteSkillState state, out RemoteSkillDefinition definition)
     {
         definition = default!;
-        if (state.Cache == null ||
-            !string.Equals(
-                state.Cache.SourceUrl,
-                state.Skill.RemoteUrl,
-                StringComparison.Ordinal) ||
-            state.Cache.FetchedAt + CacheDuration <= _timeProvider.GetUtcNow())
+        if (
+            state.Cache == null
+            || !string.Equals(state.Cache.SourceUrl, state.Skill.RemoteUrl, StringComparison.Ordinal)
+            || state.Cache.FetchedAt + CacheDuration <= _timeProvider.GetUtcNow()
+        )
         {
             return false;
         }
@@ -93,15 +89,13 @@ public sealed class RemoteSkillContentResolver : IRemoteSkillContentResolver
         return true;
     }
 
-    private async Task<RemoteSkillState> ReadStateAsync(
-        Guid skillId,
-        CancellationToken cancellationToken)
+    private async Task<RemoteSkillState> ReadStateAsync(Guid skillId, CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
         var skillRepository = scope.ServiceProvider.GetRequiredService<IRepository<Skill>>();
         var cacheRepository = scope.ServiceProvider.GetRequiredService<IRepository<RemoteSkillCache>>();
-        var skill = await skillRepository.Queryable
-            .AsNoTracking()
+        var skill = await skillRepository
+            .Queryable.AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == skillId, cancellationToken);
         if (skill == null)
         {
@@ -109,8 +103,8 @@ public sealed class RemoteSkillContentResolver : IRemoteSkillContentResolver
         }
 
         EnsureRemoteSkill(skill);
-        var cache = await cacheRepository.Queryable
-            .AsNoTracking()
+        var cache = await cacheRepository
+            .Queryable.AsNoTracking()
             .SingleOrDefaultAsync(item => item.SkillId == skillId, cancellationToken);
         return new RemoteSkillState(skill, cache);
     }
@@ -118,14 +112,15 @@ public sealed class RemoteSkillContentResolver : IRemoteSkillContentResolver
     private async Task SaveCacheAsync(
         Skill expectedSkill,
         RemoteSkillDefinition definition,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         using var scope = _scopeFactory.CreateScope();
         var skillRepository = scope.ServiceProvider.GetRequiredService<IRepository<Skill>>();
         var cacheRepository = scope.ServiceProvider.GetRequiredService<IRepository<RemoteSkillCache>>();
         var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-        var skill = await skillRepository.Queryable
-            .AsNoTracking()
+        var skill = await skillRepository
+            .Queryable.AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == expectedSkill.Id, cancellationToken);
         if (skill == null)
         {
@@ -133,8 +128,10 @@ public sealed class RemoteSkillContentResolver : IRemoteSkillContentResolver
         }
 
         EnsureRemoteSkill(skill);
-        if (!string.Equals(skill.RemoteUrl, expectedSkill.RemoteUrl, StringComparison.Ordinal) ||
-            !string.Equals(skill.Name, expectedSkill.Name, StringComparison.Ordinal))
+        if (
+            !string.Equals(skill.RemoteUrl, expectedSkill.RemoteUrl, StringComparison.Ordinal)
+            || !string.Equals(skill.Name, expectedSkill.Name, StringComparison.Ordinal)
+        )
         {
             throw new AgwException(ErrorCodes.RemoteSkillConfigurationInvalid);
         }

@@ -17,7 +17,8 @@ public class ProjectConversationConfiguration : IEntityTypeConfiguration<Project
         builder.HasIndex(e => e.JobId);
         builder.HasIndex(e => e.UpdateTime);
 
-        builder.HasOne(e => e.Project)
+        builder
+            .HasOne(e => e.Project)
             .WithMany(project => project.Conversations)
             .HasForeignKey(e => e.ProjectId)
             .OnDelete(DeleteBehavior.Cascade);

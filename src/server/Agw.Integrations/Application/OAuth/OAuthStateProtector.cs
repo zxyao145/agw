@@ -1,9 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
-
 using Agw.Integrations.Contracts.OAuth;
 using Agw.Shared.Exceptions;
-
 using Microsoft.AspNetCore.DataProtection;
 
 namespace Agw.Integrations.Application.OAuth;
@@ -27,12 +25,15 @@ public sealed class OAuthStateProtector
         string? pkceVerifier,
         string returnPath,
         string callbackUri,
-        OAuthCompletionTarget completionTarget)
+        OAuthCompletionTarget completionTarget
+    )
     {
         ValidateReturnPath(returnPath);
-        if (string.IsNullOrWhiteSpace(callbackUri)
+        if (
+            string.IsNullOrWhiteSpace(callbackUri)
             || !OAuthRedirectUriResolver.IsValidOptionalBaseUrl(callbackUri)
-            || !Enum.IsDefined(completionTarget))
+            || !Enum.IsDefined(completionTarget)
+        )
         {
             throw new AgwException(ErrorCodes.IntegrationConfigurationInvalid);
         }
@@ -44,7 +45,7 @@ public sealed class OAuthStateProtector
             ReturnPath = returnPath,
             CallbackUri = callbackUri,
             CompletionTarget = completionTarget,
-            ExpiresAtUtc = _timeProvider.GetUtcNow().Add(StateLifetime)
+            ExpiresAtUtc = _timeProvider.GetUtcNow().Add(StateLifetime),
         };
         var payload = JsonSerializer.Serialize(state);
         return _protector.Protect(payload, StateLifetime);
@@ -62,13 +63,15 @@ public sealed class OAuthStateProtector
         {
             var payload = _protector.Unprotect(protectedState);
             var candidate = JsonSerializer.Deserialize<OAuthCallbackState>(payload);
-            if (candidate == null
+            if (
+                candidate == null
                 || candidate.ConnectionId == Guid.Empty
                 || candidate.ExpiresAtUtc <= _timeProvider.GetUtcNow()
                 || !IsSafeReturnPath(candidate.ReturnPath)
                 || string.IsNullOrWhiteSpace(candidate.CallbackUri)
                 || !OAuthRedirectUriResolver.IsValidOptionalBaseUrl(candidate.CallbackUri)
-                || !Enum.IsDefined(candidate.CompletionTarget))
+                || !Enum.IsDefined(candidate.CompletionTarget)
+            )
             {
                 return false;
             }
@@ -92,12 +95,14 @@ public sealed class OAuthStateProtector
 
     private static bool IsSafeReturnPath(string? returnPath)
     {
-        if (string.IsNullOrWhiteSpace(returnPath)
+        if (
+            string.IsNullOrWhiteSpace(returnPath)
             || returnPath[0] != '/'
             || (returnPath.Length > 1 && (returnPath[1] == '/' || returnPath[1] == '\\'))
             || returnPath.Contains('\\')
             || returnPath.Any(char.IsControl)
-            || !Uri.TryCreate(returnPath, UriKind.Relative, out _))
+            || !Uri.TryCreate(returnPath, UriKind.Relative, out _)
+        )
         {
             return false;
         }
@@ -114,11 +119,13 @@ public sealed class OAuthStateProtector
                 return false;
             }
 
-            if (decoded.Length == 0
+            if (
+                decoded.Length == 0
                 || decoded[0] != '/'
                 || (decoded.Length > 1 && (decoded[1] == '/' || decoded[1] == '\\'))
                 || decoded.Contains('\\')
-                || decoded.Any(char.IsControl))
+                || decoded.Any(char.IsControl)
+            )
             {
                 return false;
             }

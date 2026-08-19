@@ -5,7 +5,7 @@ public enum ToolBlockScope
 {
     None = 0,
     Agent = 1,
-    Project = 2
+    Project = 2,
 }
 
 public sealed record ToolBlockDescriptor
@@ -17,7 +17,8 @@ public sealed record ToolBlockDescriptor
         ToolBlockScope scopes,
         IReadOnlyList<string> memberToolNames,
         bool requiresWorkspace = false,
-        bool mayRequireApproval = false)
+        bool mayRequireApproval = false
+    )
     {
         Name = name;
         DisplayName = displayName;

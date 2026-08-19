@@ -11,14 +11,10 @@ public class AgwException : Exception
     public HttpStatusCode StatusCode { get; }
 
     public AgwException(string message)
-        : this(DEFAULT_CODE, message, HttpStatusCode.BadRequest)
-    {
-    }
+        : this(DEFAULT_CODE, message, HttpStatusCode.BadRequest) { }
 
     public AgwException(int code, string message)
-        : this(code, message, HttpStatusCode.BadRequest)
-    {
-    }
+        : this(code, message, HttpStatusCode.BadRequest) { }
 
     public AgwException(int code, string message, HttpStatusCode statusCode)
         : base(message)
@@ -35,17 +31,11 @@ public class AgwException : Exception
     }
 
     public AgwException(ErrorCode errorCode)
-        : this(errorCode.Code, errorCode.Message, errorCode.StatusCode)
-    {
-    }
+        : this(errorCode.Code, errorCode.Message, errorCode.StatusCode) { }
 
     public AgwException(ErrorCode errorCode, string message)
-        : this(errorCode.Code, message, errorCode.StatusCode)
-    {
-    }
+        : this(errorCode.Code, message, errorCode.StatusCode) { }
 
     public AgwException(ErrorCode errorCode, string message, Exception innerException)
-        : this(errorCode.Code, message, errorCode.StatusCode, innerException)
-    {
-    }
+        : this(errorCode.Code, message, errorCode.StatusCode, innerException) { }
 }

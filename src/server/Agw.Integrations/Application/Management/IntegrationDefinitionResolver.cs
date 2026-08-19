@@ -10,7 +10,8 @@ internal static class IntegrationDefinitionResolver
         IPluginCatalog catalog,
         string pluginId,
         string connectorId,
-        string authSchemeId)
+        string authSchemeId
+    )
     {
         if (TryResolve(catalog, pluginId, connectorId, authSchemeId, out var resolved))
         {
@@ -25,16 +26,19 @@ internal static class IntegrationDefinitionResolver
         string pluginId,
         string connectorId,
         string authSchemeId,
-        out ResolvedIntegrationDefinition? resolved)
+        out ResolvedIntegrationDefinition? resolved
+    )
     {
         var normalizedPluginId = NormalizeId(pluginId);
         var normalizedConnectorId = NormalizeId(connectorId);
         var normalizedAuthSchemeId = NormalizeId(authSchemeId);
         var plugin = catalog.Find(normalizedPluginId);
         var connector = plugin?.Connectors.FirstOrDefault(item =>
-            string.Equals(item.Id, normalizedConnectorId, StringComparison.OrdinalIgnoreCase));
+            string.Equals(item.Id, normalizedConnectorId, StringComparison.OrdinalIgnoreCase)
+        );
         var authScheme = connector?.AuthSchemes.FirstOrDefault(item =>
-            string.Equals(item.Id, normalizedAuthSchemeId, StringComparison.OrdinalIgnoreCase));
+            string.Equals(item.Id, normalizedAuthSchemeId, StringComparison.OrdinalIgnoreCase)
+        );
         if (plugin == null || connector == null || authScheme == null)
         {
             resolved = null;
@@ -53,7 +57,8 @@ internal sealed class ResolvedIntegrationDefinition
     public ResolvedIntegrationDefinition(
         PluginDefinition plugin,
         ConnectorDefinition connector,
-        AuthSchemeDefinition authScheme)
+        AuthSchemeDefinition authScheme
+    )
     {
         Plugin = plugin;
         Connector = connector;

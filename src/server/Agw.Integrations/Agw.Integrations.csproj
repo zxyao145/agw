@@ -1,16 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="ModelContextProtocol" />
+    <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
+  </ItemGroup>
 
-
-    <ItemGroup>
-        <FrameworkReference Include="Microsoft.AspNetCore.App" />
-        <PackageReference Include="ModelContextProtocol" />
-        <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <None Update="Plugins\**\*">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-            <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-        </None>
-    </ItemGroup>
+  <ItemGroup>
+    <None Update="Plugins\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
 </Project>

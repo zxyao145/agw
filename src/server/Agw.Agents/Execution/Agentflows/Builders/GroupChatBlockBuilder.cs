@@ -22,8 +22,8 @@ internal static class GroupChatBlockBuilder
             {
                 var manager = new RoundRobinGroupChatManager(
                     agents,
-                    (roundRobinManager, _, _) =>
-                        new ValueTask<bool>(roundRobinManager.IterationCount >= maxRounds));
+                    (roundRobinManager, _, _) => new ValueTask<bool>(roundRobinManager.IterationCount >= maxRounds)
+                );
                 manager.MaximumIterationCount = maxRounds;
                 return manager;
             })

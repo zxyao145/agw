@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-
 using Agw.Shared.Contracts.Coordination;
 
 namespace Agw.Shared.Coordination;
@@ -8,12 +7,9 @@ public sealed class InMemoryApplicationLock : IApplicationLock
 {
     public static InMemoryApplicationLock Shared { get; } = new();
 
-    private readonly ConcurrentDictionary<string, Entry> _locks =
-        new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, Entry> _locks = new(StringComparer.Ordinal);
 
-    public async Task<IAsyncDisposable> AcquireAsync(
-        string resourceName,
-        CancellationToken cancellationToken)
+    public async Task<IAsyncDisposable> AcquireAsync(string resourceName, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(resourceName);
 
@@ -61,8 +57,7 @@ public sealed class InMemoryApplicationLock : IApplicationLock
             }
 
             entry.Retired = true;
-            _locks.TryRemove(
-                new KeyValuePair<string, Entry>(resourceName, entry));
+            _locks.TryRemove(new KeyValuePair<string, Entry>(resourceName, entry));
             entry.Semaphore.Dispose();
         }
     }
@@ -84,10 +79,7 @@ public sealed class InMemoryApplicationLock : IApplicationLock
         private readonly string _resourceName;
         private Entry? _entry;
 
-        public Lease(
-            InMemoryApplicationLock owner,
-            string resourceName,
-            Entry entry)
+        public Lease(InMemoryApplicationLock owner, string resourceName, Entry entry)
         {
             _owner = owner;
             _resourceName = resourceName;

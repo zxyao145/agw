@@ -1,6 +1,5 @@
 namespace Agw.Tools.Impl.Basic;
 
-
 public class CloneResult
 {
     public CloneResult(bool success, string? error, string? stdout, string? stderr)
@@ -24,8 +23,6 @@ public class CloneResult
     public string? Stderr { get; set; }
 }
 
-
-
 /// <summary>
 /// Provides basic utility tools for agents.
 /// </summary>
@@ -34,12 +31,11 @@ public static class GitTools
 {
     [AiTool("git_clone")]
     [Description("clone a git repository")]
-    public static async Task<CloneResult> Clone
-        (
-       [NotNull, Description("remote git repository address")] string gitAddress,
-       [NotNull, Description("local workspace path")] string workspace,
+    public static async Task<CloneResult> Clone(
+        [NotNull, Description("remote git repository address")] string gitAddress,
+        [NotNull, Description("local workspace path")] string workspace,
         CancellationToken cancellationToken = default
-        )
+    )
     {
         var gitCommand = IocUtil.GetSingletonRequiredService<IGitCommandService>();
         var result = await gitCommand.CloneRepositoryAsync(gitAddress, workspace, cancellationToken);
@@ -50,6 +46,5 @@ public static class GitTools
             stdout: result.Stdout,
             stderr: result.Stderr
         );
-
     }
 }

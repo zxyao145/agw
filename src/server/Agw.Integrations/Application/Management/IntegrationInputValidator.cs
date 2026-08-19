@@ -1,5 +1,4 @@
 using System.Text.RegularExpressions;
-
 using Agw.Integrations.Contracts.Management;
 using Agw.Integrations.Domain.Plugins;
 using Agw.Shared.Exceptions;
@@ -15,7 +14,8 @@ internal static partial class IntegrationInputValidator
         IReadOnlyCollection<string> existingCredentialSlots,
         Func<string, string> slotFactory,
         bool allowClearingExistingRequiredSecrets = false,
-        bool allowMissingRequiredFields = false)
+        bool allowMissingRequiredFields = false
+    )
     {
         configuration ??= new Dictionary<string, string?>();
         secretUpdates ??= new Dictionary<string, SecretFieldUpdateRequest>();
@@ -38,12 +38,17 @@ internal static partial class IntegrationInputValidator
         }
 
         var normalizedConfiguration = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        var normalizedSecretUpdates = new Dictionary<string, SecretFieldUpdateRequest>(StringComparer.OrdinalIgnoreCase);
+        var normalizedSecretUpdates = new Dictionary<string, SecretFieldUpdateRequest>(
+            StringComparer.OrdinalIgnoreCase
+        );
         foreach (var field in fields)
         {
             if (field.Type == FormFieldType.Secret)
             {
-                var hasExisting = existingCredentialSlots.Contains(slotFactory(field.Id), StringComparer.OrdinalIgnoreCase);
+                var hasExisting = existingCredentialSlots.Contains(
+                    slotFactory(field.Id),
+                    StringComparer.OrdinalIgnoreCase
+                );
                 var update = secretUpdates.TryGetValue(field.Id, out var requested)
                     ? requested
                     : new SecretFieldUpdateRequest { Action = SecretUpdateAction.Keep };
@@ -52,15 +57,11 @@ internal static partial class IntegrationInputValidator
                 {
                     SecretUpdateAction.Set => true,
                     SecretUpdateAction.Clear => false,
-                    _ => hasExisting
+                    _ => hasExisting,
                 };
-                var explicitlyClearingExisting = allowClearingExistingRequiredSecrets
-                    && hasExisting
-                    && update.Action == SecretUpdateAction.Clear;
-                if (field.IsRequired
-                    && !configured
-                    && !explicitlyClearingExisting
-                    && !allowMissingRequiredFields)
+                var explicitlyClearingExisting =
+                    allowClearingExistingRequiredSecrets && hasExisting && update.Action == SecretUpdateAction.Clear;
+                if (field.IsRequired && !configured && !explicitlyClearingExisting && !allowMissingRequiredFields)
                 {
                     throw new AgwException(ErrorCodes.IntegrationConfigurationInvalid);
                 }
@@ -76,9 +77,14 @@ internal static partial class IntegrationInputValidator
                 throw new AgwException(ErrorCodes.IntegrationConfigurationInvalid);
             }
 
-            if (value != null && field.Type == FormFieldType.Url
-                && (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
-                    || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)))
+            if (
+                value != null
+                && field.Type == FormFieldType.Url
+                && (
+                    !Uri.TryCreate(value, UriKind.Absolute, out var uri)
+                    || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+                )
+            )
             {
                 throw new AgwException(ErrorCodes.IntegrationConfigurationInvalid);
             }
@@ -141,7 +147,8 @@ internal sealed class ValidatedIntegrationInput
 {
     public ValidatedIntegrationInput(
         IReadOnlyDictionary<string, string?> configuration,
-        IReadOnlyDictionary<string, SecretFieldUpdateRequest> secretUpdates)
+        IReadOnlyDictionary<string, SecretFieldUpdateRequest> secretUpdates
+    )
     {
         Configuration = configuration;
         SecretUpdates = secretUpdates;

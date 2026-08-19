@@ -1,6 +1,5 @@
 using Agw.Integrations.Application.Capabilities;
 using Agw.Integrations.Tools.GitHub.Dtos;
-
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -19,10 +18,7 @@ public sealed class GitHubConnectionNativeCapabilityProvider : IConnectionNative
 
     public IReadOnlyList<AITool> CreateTools(ConnectionNativeCapabilityContext context)
     {
-        var target = new GitHubConnectionToolTarget(
-            _serviceScopeFactory,
-            context.ConnectionId,
-            context.ProjectId);
+        var target = new GitHubConnectionToolTarget(_serviceScopeFactory, context.ConnectionId, context.ProjectId);
         return
         [
             AIFunctionFactory.Create(
@@ -30,22 +26,25 @@ public sealed class GitHubConnectionNativeCapabilityProvider : IConnectionNative
                 new AIFunctionFactoryOptions
                 {
                     Name = $"{context.Alias}__current_user",
-                    Description = "Get the current GitHub account profile for this connection."
-                }),
+                    Description = "Get the current GitHub account profile for this connection.",
+                }
+            ),
             AIFunctionFactory.Create(
                 (Func<CancellationToken, Task<IReadOnlyList<GitHubRepoInfo>>>)target.ListRepositoriesAsync,
                 new AIFunctionFactoryOptions
                 {
                     Name = $"{context.Alias}__list_repositories",
-                    Description = "List repositories visible to this GitHub connection."
-                }),
+                    Description = "List repositories visible to this GitHub connection.",
+                }
+            ),
             AIFunctionFactory.Create(
                 (Func<string, string, string?, CancellationToken, Task<CloneResult>>)target.CloneRepositoryAsync,
                 new AIFunctionFactoryOptions
                 {
                     Name = $"{context.Alias}__clone_repository",
-                    Description = "Clone a GitHub repository into the current project workspace."
-                })
+                    Description = "Clone a GitHub repository into the current project workspace.",
+                }
+            ),
         ];
     }
 
@@ -55,10 +54,7 @@ public sealed class GitHubConnectionNativeCapabilityProvider : IConnectionNative
         private readonly Guid _connectionId;
         private readonly Guid _projectId;
 
-        public GitHubConnectionToolTarget(
-            IServiceScopeFactory serviceScopeFactory,
-            Guid connectionId,
-            Guid projectId)
+        public GitHubConnectionToolTarget(IServiceScopeFactory serviceScopeFactory, Guid connectionId, Guid projectId)
         {
             _serviceScopeFactory = serviceScopeFactory;
             _connectionId = connectionId;
@@ -83,7 +79,8 @@ public sealed class GitHubConnectionNativeCapabilityProvider : IConnectionNative
             [Description("Repository owner.")] string owner,
             [Description("Repository name, without a URL.")] string repository,
             [Description("Optional relative destination below the project workspace.")] string? relativePath,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             await using var scope = _serviceScopeFactory.CreateAsyncScope();
             var invoker = scope.ServiceProvider.GetRequiredService<IGitHubConnectionInvoker>();
@@ -93,7 +90,8 @@ public sealed class GitHubConnectionNativeCapabilityProvider : IConnectionNative
                 owner,
                 repository,
                 relativePath,
-                cancellationToken);
+                cancellationToken
+            );
         }
     }
 }

@@ -1,8 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
-
 using Agw.Shared.Data.Entities.Agentflows;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution.Agentflows.Observability;
@@ -21,17 +19,10 @@ internal static class AgentflowNodeExecutionActivity
         string? nodeName,
         Guid? agentId,
         string? agentName,
-        IReadOnlyList<ChatMessage> input)
+        IReadOnlyList<ChatMessage> input
+    )
     {
-        return Start(
-            execution,
-            agentflowId,
-            nodeId,
-            nodeName,
-            AgentflowNodeKind.Agent,
-            agentId,
-            agentName,
-            input);
+        return Start(execution, agentflowId, nodeId, nodeName, AgentflowNodeKind.Agent, agentId, agentName, input);
     }
 
     public static AgentflowNodeExecutionActivityScope StartHumanGate(
@@ -39,17 +30,10 @@ internal static class AgentflowNodeExecutionActivity
         Guid agentflowId,
         string nodeId,
         string? nodeName,
-        IReadOnlyList<ChatMessage> input)
+        IReadOnlyList<ChatMessage> input
+    )
     {
-        return Start(
-            execution,
-            agentflowId,
-            nodeId,
-            nodeName,
-            AgentflowNodeKind.HumanGate,
-            null,
-            null,
-            input);
+        return Start(execution, agentflowId, nodeId, nodeName, AgentflowNodeKind.HumanGate, null, null, input);
     }
 
     internal static bool TryCreateTrace(Activity activity, out AgentflowTrace? trace)
@@ -89,7 +73,8 @@ internal static class AgentflowNodeExecutionActivity
         AgentflowNodeKind nodeKind,
         Guid? agentId,
         string? agentName,
-        IReadOnlyList<ChatMessage> input)
+        IReadOnlyList<ChatMessage> input
+    )
     {
         var activity = Source.StartActivity($"agentflow.node {nodeId}", ActivityKind.Internal);
         if (activity == null)
@@ -105,7 +90,8 @@ internal static class AgentflowNodeExecutionActivity
             nodeKind,
             agentId,
             agentName,
-            SerializeInput(input));
+            SerializeInput(input)
+        );
         activity.SetCustomProperty(CapturePropertyName, capture);
         return new AgentflowNodeExecutionActivityScope(activity, capture);
     }
@@ -120,8 +106,10 @@ internal static class AgentflowNodeExecutionActivity
                 message.MessageId,
                 message.AuthorName,
                 message.CreatedAt,
-                contents = message.Contents
-                    .Select(content => JsonSerializer.SerializeToElement(content, content.GetType(), JsonOptions))
+                contents = message
+                    .Contents.Select(content =>
+                        JsonSerializer.SerializeToElement(content, content.GetType(), JsonOptions)
+                    )
                     .ToArray(),
                 message.AdditionalProperties,
             });
@@ -143,7 +131,8 @@ internal static class AgentflowNodeExecutionActivity
             AgentflowNodeKind nodeKind,
             Guid? agentId,
             string? agentName,
-            string input)
+            string input
+        )
         {
             Execution = execution;
             AgentflowId = agentflowId;
@@ -175,7 +164,8 @@ internal sealed class AgentflowNodeExecutionActivityScope : IDisposable
 
     public AgentflowNodeExecutionActivityScope(
         Activity? activity,
-        AgentflowNodeExecutionActivity.AgentflowNodeExecutionCapture? capture)
+        AgentflowNodeExecutionActivity.AgentflowNodeExecutionCapture? capture
+    )
     {
         Activity = activity;
         _capture = capture;

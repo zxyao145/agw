@@ -9,7 +9,8 @@ public static class TurnPipeline
         IAsyncEnumerable<AgwMessage> messages,
         bool stream,
         IExecutionMessageSink sink,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await sink.WriteAsync(TurnMessageFactory.CreateStarted(), CancellationToken.None);
         var bufferedMessages = new List<AgwMessage>();
@@ -79,26 +80,25 @@ public static class TurnPipeline
     }
 
     private static bool IsControlMessage(string? messageType) =>
-        messageType?.StartsWith("human-gate-", StringComparison.Ordinal) == true ||
-        messageType?.StartsWith("tool-approval-", StringComparison.Ordinal) == true ||
-        string.Equals(messageType, "agentflow-checkpoint", StringComparison.Ordinal);
+        messageType?.StartsWith("human-gate-", StringComparison.Ordinal) == true
+        || messageType?.StartsWith("tool-approval-", StringComparison.Ordinal) == true
+        || string.Equals(messageType, "agentflow-checkpoint", StringComparison.Ordinal);
 
     private static bool IsFatalError(AgwMessage message) =>
-        message.Contents
-            .OfType<AgwErrorContent>()
+        message
+            .Contents.OfType<AgwErrorContent>()
             .Any(content =>
-                content.AdditionalProperties?.TryGetValue("isFatalError", out var value) == true &&
-                value is true);
+                content.AdditionalProperties?.TryGetValue("isFatalError", out var value) == true && value is true
+            );
 
     private static string? GetMessageType(AgwMessage message) =>
-        message.AdditionalProperties?.TryGetValue("type", out var value) == true
-            ? value as string
-            : null;
+        message.AdditionalProperties?.TryGetValue("type", out var value) == true ? value as string : null;
 
     private static AgwMessage CreateErrorMessage(string message) =>
         new(
             Guid.CreateVersion7().ToString("D"),
             Constants.DefaultAgentAuthor,
             AiRole.System,
-            [new AgwErrorContent { Content = message }]);
+            [new AgwErrorContent { Content = message }]
+        );
 }

@@ -1,12 +1,9 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
-
 using A2A;
-
 using Agw.Shared.Exceptions;
 
 namespace Agw.A2A;
-
 
 /// <summary>
 /// copy from A2A ChannelEventNotifier
@@ -25,17 +22,24 @@ public sealed class AgwChannelEventNotifier
     /// <param name="streamEvent">The stream response event.</param>
     public void Notify(string taskId, StreamResponse streamEvent)
     {
-        if (!_subscribers.TryGetValue(taskId, out var set)) return;
+        if (!_subscribers.TryGetValue(taskId, out var set))
+            return;
 
         List<Channel<StreamResponse>> channels;
-        lock (set) { channels = [.. set.Channels]; }
+        lock (set)
+        {
+            channels = [.. set.Channels];
+        }
 
         foreach (var ch in channels)
             ch.Writer.TryWrite(streamEvent);
 
         if (IsTerminalEvent(streamEvent))
         {
-            lock (set) { channels = [.. set.Channels]; }
+            lock (set)
+            {
+                channels = [.. set.Channels];
+            }
             foreach (var ch in channels)
                 ch.Writer.TryComplete();
         }
@@ -46,10 +50,14 @@ public sealed class AgwChannelEventNotifier
     internal Channel<StreamResponse> CreateChannel(string taskId)
     {
         var channel = Channel.CreateUnbounded<StreamResponse>(
-            new UnboundedChannelOptions { SingleWriter = false, SingleReader = true });
+            new UnboundedChannelOptions { SingleWriter = false, SingleReader = true }
+        );
 
         var set = _subscribers.GetOrAdd(taskId, _ => new SubscriberSet());
-        lock (set) { set.Channels.Add(channel); }
+        lock (set)
+        {
+            set.Channels.Add(channel);
+        }
         return channel;
     }
 
@@ -62,9 +70,10 @@ public sealed class AgwChannelEventNotifier
         {
             throw new AgwException(
                 ErrorCodes.A2ANoSubscriberSet,
-                $"No subscriber set found for task '{taskId}'. " +
-                "This indicates a bug: RemoveChannel was called without a matching CreateChannel, " +
-                "or the subscriber set was evicted by a concurrent call.");
+                $"No subscriber set found for task '{taskId}'. "
+                    + "This indicates a bug: RemoveChannel was called without a matching CreateChannel, "
+                    + "or the subscriber set was evicted by a concurrent call."
+            );
         }
 
         lock (set)
@@ -84,8 +93,7 @@ public sealed class AgwChannelEventNotifier
     /// </summary>
     /// <param name="taskId">The task to acquire the lock for.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    public async Task<IDisposable> AcquireTaskLockAsync(
-        string taskId, CancellationToken cancellationToken = default)
+    public async Task<IDisposable> AcquireTaskLockAsync(string taskId, CancellationToken cancellationToken = default)
     {
         // Retry loop handles the race where RemoveChannel evicts the
         // semaphore between GetOrAdd and WaitAsync completion.
@@ -114,6 +122,7 @@ public sealed class AgwChannelEventNotifier
     private sealed class TaskLockRelease(SemaphoreSlim semaphore) : IDisposable
     {
         private int _disposed;
+
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) == 0)

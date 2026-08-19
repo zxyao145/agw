@@ -11,12 +11,12 @@ public abstract class McpEndpointDescriptor
 
     public string Name { get; }
 
-    internal static IReadOnlyDictionary<string, string> CopyValues(
-        IReadOnlyDictionary<string, string>? values)
+    internal static IReadOnlyDictionary<string, string> CopyValues(IReadOnlyDictionary<string, string>? values)
     {
-        var copy = values == null
-            ? new Dictionary<string, string>()
-            : new Dictionary<string, string>(values, StringComparer.Ordinal);
+        var copy =
+            values == null
+                ? new Dictionary<string, string>()
+                : new Dictionary<string, string>(values, StringComparer.Ordinal);
         return new ReadOnlyDictionary<string, string>(copy);
     }
 }
@@ -29,7 +29,8 @@ public sealed class McpStdioEndpointDescriptor : McpEndpointDescriptor
         IReadOnlyList<string>? arguments = null,
         string? workingDirectory = null,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
-        IReadOnlyDictionary<string, string>? credentialEnvironmentVariables = null)
+        IReadOnlyDictionary<string, string>? credentialEnvironmentVariables = null
+    )
         : base(name)
     {
         Command = command;
@@ -56,7 +57,8 @@ public sealed class McpHttpEndpointDescriptor : McpEndpointDescriptor
         string name,
         Uri? endpoint,
         IReadOnlyDictionary<string, string>? headers = null,
-        IReadOnlyDictionary<string, string>? credentialHeaders = null)
+        IReadOnlyDictionary<string, string>? credentialHeaders = null
+    )
         : base(name)
     {
         Endpoint = endpoint;
@@ -77,7 +79,8 @@ public sealed class McpSseEndpointDescriptor : McpEndpointDescriptor
         string name,
         Uri? endpoint,
         IReadOnlyDictionary<string, string>? headers = null,
-        IReadOnlyDictionary<string, string>? credentialHeaders = null)
+        IReadOnlyDictionary<string, string>? credentialHeaders = null
+    )
         : base(name)
     {
         Endpoint = endpoint;
@@ -96,7 +99,8 @@ public sealed class McpRuntimeOverrides
 {
     public McpRuntimeOverrides(
         IReadOnlyDictionary<string, string>? environmentVariables = null,
-        IReadOnlyDictionary<string, string>? headers = null)
+        IReadOnlyDictionary<string, string>? headers = null
+    )
     {
         EnvironmentVariables = McpEndpointDescriptor.CopyValues(environmentVariables);
         Headers = McpEndpointDescriptor.CopyValues(headers);

@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
-
 using Agw.Providers.Application;
 using Agw.Providers.Contracts.Manager;
 using Agw.Shared.Data.Entities.Providers;
@@ -14,8 +13,7 @@ public class ProviderModelDiscoveryServiceTests
     [Theory]
     [InlineData(ProviderType.OpenAIChatCompletions)]
     [InlineData(ProviderType.OpenAIResponses)]
-    public async Task DiscoverAsync_SupportedProvider_RequestsModelsWithBearerToken(
-        ProviderType providerType)
+    public async Task DiscoverAsync_SupportedProvider_RequestsModelsWithBearerToken(ProviderType providerType)
     {
         HttpRequestMessage? capturedRequest = null;
         var service = CreateService(request =>
@@ -26,13 +24,15 @@ public class ProviderModelDiscoveryServiceTests
                 Content = new StringContent(
                     "{\"data\":[{\"id\":\" gpt-4o \"},{\"id\":\"gpt-4o\"},{\"id\":\"\"},{\"id\":\"GPT-4O\"}]}",
                     Encoding.UTF8,
-                    "application/json")
+                    "application/json"
+                ),
             };
         });
 
         var result = await service.DiscoverAsync(
             new ProviderModelDiscoveryRequest(providerType, "https://example.test/v1/", "secret"),
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(["gpt-4o", "GPT-4O"], result.ModelNames);
         Assert.NotNull(capturedRequest);
@@ -50,9 +50,12 @@ public class ProviderModelDiscoveryServiceTests
             return new HttpResponseMessage(HttpStatusCode.OK);
         });
 
-        var exception = await Assert.ThrowsAsync<AgwException>(() => service.DiscoverAsync(
-            new ProviderModelDiscoveryRequest(ProviderType.Anthropic, "https://example.test/v1", "secret"),
-            TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            service.DiscoverAsync(
+                new ProviderModelDiscoveryRequest(ProviderType.Anthropic, "https://example.test/v1", "secret"),
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(ErrorCodes.UnsupportedProviderType.Code, exception.Code);
         Assert.False(requestSent);
@@ -68,12 +71,12 @@ public class ProviderModelDiscoveryServiceTests
             return new HttpResponseMessage(HttpStatusCode.OK);
         });
 
-        var exception = await Assert.ThrowsAsync<AgwException>(() => service.DiscoverAsync(
-            new ProviderModelDiscoveryRequest(
-                ProviderType.OpenAIChatCompletions,
-                "https://example.test/v1",
-                "  "),
-            TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            service.DiscoverAsync(
+                new ProviderModelDiscoveryRequest(ProviderType.OpenAIChatCompletions, "https://example.test/v1", "  "),
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(ErrorCodes.ProviderModelDiscoveryApiKeyRequired.Code, exception.Code);
         Assert.False(requestSent);
@@ -89,12 +92,12 @@ public class ProviderModelDiscoveryServiceTests
             return new HttpResponseMessage(HttpStatusCode.OK);
         });
 
-        var exception = await Assert.ThrowsAsync<AgwException>(() => service.DiscoverAsync(
-            new ProviderModelDiscoveryRequest(
-                ProviderType.OpenAIChatCompletions,
-                "not-a-url",
-                "secret"),
-            TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            service.DiscoverAsync(
+                new ProviderModelDiscoveryRequest(ProviderType.OpenAIChatCompletions, "not-a-url", "secret"),
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(ErrorCodes.InvalidUrl.Code, exception.Code);
         Assert.False(requestSent);
@@ -105,12 +108,16 @@ public class ProviderModelDiscoveryServiceTests
     {
         var service = CreateService(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized));
 
-        var exception = await Assert.ThrowsAsync<AgwException>(() => service.DiscoverAsync(
-            new ProviderModelDiscoveryRequest(
-                ProviderType.OpenAIChatCompletions,
-                "https://example.test/v1",
-                "secret"),
-            TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            service.DiscoverAsync(
+                new ProviderModelDiscoveryRequest(
+                    ProviderType.OpenAIChatCompletions,
+                    "https://example.test/v1",
+                    "secret"
+                ),
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(ErrorCodes.ProviderModelDiscoveryFailed.Code, exception.Code);
     }
@@ -120,15 +127,19 @@ public class ProviderModelDiscoveryServiceTests
     {
         var service = CreateService(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent("{\"object\":\"list\"}", Encoding.UTF8, "application/json")
+            Content = new StringContent("{\"object\":\"list\"}", Encoding.UTF8, "application/json"),
         });
 
-        var exception = await Assert.ThrowsAsync<AgwException>(() => service.DiscoverAsync(
-            new ProviderModelDiscoveryRequest(
-                ProviderType.OpenAIChatCompletions,
-                "https://example.test/v1",
-                "secret"),
-            TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            service.DiscoverAsync(
+                new ProviderModelDiscoveryRequest(
+                    ProviderType.OpenAIChatCompletions,
+                    "https://example.test/v1",
+                    "secret"
+                ),
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(ErrorCodes.ProviderModelDiscoveryFailed.Code, exception.Code);
     }
@@ -140,24 +151,26 @@ public class ProviderModelDiscoveryServiceTests
     {
         var service = CreateService(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new StringContent(responseBody, Encoding.UTF8, "application/json")
+            Content = new StringContent(responseBody, Encoding.UTF8, "application/json"),
         });
 
-        var exception = await Assert.ThrowsAsync<AgwException>(() => service.DiscoverAsync(
-            new ProviderModelDiscoveryRequest(
-                ProviderType.OpenAIChatCompletions,
-                "https://example.test/v1",
-                "secret"),
-            TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            service.DiscoverAsync(
+                new ProviderModelDiscoveryRequest(
+                    ProviderType.OpenAIChatCompletions,
+                    "https://example.test/v1",
+                    "secret"
+                ),
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(ErrorCodes.ProviderModelDiscoveryFailed.Code, exception.Code);
     }
 
-    private static ProviderModelDiscoveryService CreateService(
-        Func<HttpRequestMessage, HttpResponseMessage> handler)
+    private static ProviderModelDiscoveryService CreateService(Func<HttpRequestMessage, HttpResponseMessage> handler)
     {
-        return new ProviderModelDiscoveryService(
-            new StubHttpClientFactory(new StubHttpMessageHandler(handler)));
+        return new ProviderModelDiscoveryService(new StubHttpClientFactory(new StubHttpMessageHandler(handler)));
     }
 
     private sealed class StubHttpClientFactory : IHttpClientFactory
@@ -183,7 +196,8 @@ public class ProviderModelDiscoveryServiceTests
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             return Task.FromResult(_handler(request));
         }

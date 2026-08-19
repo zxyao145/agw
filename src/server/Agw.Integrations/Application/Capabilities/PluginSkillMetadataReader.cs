@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-
 using Agw.Integrations.Domain.Plugins;
 
 namespace Agw.Integrations.Application.Capabilities;
@@ -39,14 +38,12 @@ public sealed partial class PluginSkillMetadataReader
             {
                 Id = name,
                 Description = description,
-                SkillFilePath = skillFilePath
+                SkillFilePath = skillFilePath,
             };
             return true;
         }
-        catch (Exception exception) when (exception is IOException
-            or UnauthorizedAccessException
-            or ArgumentException
-            or NotSupportedException)
+        catch (Exception exception)
+            when (exception is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
             return false;
         }
@@ -63,11 +60,13 @@ public sealed partial class PluginSkillMetadataReader
         var root = Path.GetFullPath(_contentRootProvider.ContentRoot);
         var path = Path.GetFullPath(Path.Combine(root, contentPath));
         var relative = Path.GetRelativePath(root, path);
-        if (Path.IsPathRooted(relative)
+        if (
+            Path.IsPathRooted(relative)
             || relative == ".."
             || relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
             || !string.Equals(Path.GetFileName(path), "SKILL.md", StringComparison.OrdinalIgnoreCase)
-            || !File.Exists(path))
+            || !File.Exists(path)
+        )
         {
             return false;
         }
@@ -87,7 +86,10 @@ public sealed partial class PluginSkillMetadataReader
     {
         name = string.Empty;
         description = string.Empty;
-        var normalized = content.TrimStart('\uFEFF').Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+        var normalized = content
+            .TrimStart('\uFEFF')
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Replace('\r', '\n');
         var lines = normalized.Split('\n');
         if (lines.Length < 3 || !string.Equals(lines[0].Trim(), "---", StringComparison.Ordinal))
         {
@@ -97,7 +99,8 @@ public sealed partial class PluginSkillMetadataReader
         var closingDelimiter = Array.FindIndex(
             lines,
             1,
-            line => string.Equals(line.Trim(), "---", StringComparison.Ordinal));
+            line => string.Equals(line.Trim(), "---", StringComparison.Ordinal)
+        );
         if (closingDelimiter < 0)
         {
             return false;
@@ -195,9 +198,7 @@ public sealed partial class PluginSkillMetadataReader
         for (var index = 0; index < segments.Count; index++)
         {
             var candidate = Path.Combine(current, segments[index]);
-            FileSystemInfo info = index == segments.Count - 1
-                ? new FileInfo(candidate)
-                : new DirectoryInfo(candidate);
+            FileSystemInfo info = index == segments.Count - 1 ? new FileInfo(candidate) : new DirectoryInfo(candidate);
             var target = info.LinkTarget == null ? null : info.ResolveLinkTarget(returnFinalTarget: true);
             current = Path.GetFullPath(target?.FullName ?? candidate);
         }
@@ -207,13 +208,12 @@ public sealed partial class PluginSkillMetadataReader
 
     private static bool IsWithinDirectory(string root, string path)
     {
-        var comparison = OperatingSystem.IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         return string.Equals(root, path, comparison)
             || path.StartsWith(
                 string.Concat(root.TrimEnd(Path.DirectorySeparatorChar), Path.DirectorySeparatorChar),
-                comparison);
+                comparison
+            );
     }
 
     [GeneratedRegex("^[a-z0-9]+(?:-[a-z0-9]+)*$", RegexOptions.CultureInvariant)]

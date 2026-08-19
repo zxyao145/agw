@@ -1,6 +1,5 @@
 using Agw.Agents.Execution.Messaging;
 using Agw.Shared.AgwMsgVm;
-
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 
@@ -10,7 +9,8 @@ internal sealed class SignalRExecutionMessageSink(
     string connectionId,
     IHubContext<ExecutionHub, IExecutionHubClient> hubContext,
     Func<bool> isAttached,
-    ILogger logger) : IExecutionMessageSink
+    ILogger logger
+) : IExecutionMessageSink
 {
     public async ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken)
     {

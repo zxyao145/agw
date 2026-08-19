@@ -9,5 +9,5 @@ public enum ConnectionStatus
     Expired,
     Invalid,
     Disabled,
-    DefinitionUnavailable
+    DefinitionUnavailable,
 }

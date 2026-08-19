@@ -6,11 +6,9 @@ using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Runtime;
 using Agw.Skills.Contracts.Registration;
-
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
-
 using Xunit;
 
 namespace Agw.Setup.Tests;
@@ -42,7 +40,8 @@ public class DbSeederTests
                 NullLogger<DbSeeder>.Instance,
                 TimeProvider.System,
                 paths,
-                [new TestSkillRegistration()]);
+                [new TestSkillRegistration()]
+            );
 
             await seeder.SeedAsync();
             await seeder.SeedAsync();
@@ -53,23 +52,25 @@ public class DbSeederTests
             Assert.DoesNotContain(projects, project => project.Name == "codex");
             Assert.Equal(5, await context.Agents.CountAsync(TestContext.Current.CancellationToken));
 
-            var model = await context.Models
-                .Include(x => x.Providers)
+            var model = await context
+                .Models.Include(x => x.Providers)
                 .SingleAsync(x => x.Name == "deepseek-v4-pro", TestContext.Current.CancellationToken);
             Assert.Equal(AgwAiModel.DefaultMaxContextWindowTokens, model.MaxContextWindowTokens);
             Assert.Equal(AgwAiModel.DefaultMaxOutputTokens, model.MaxOutputTokens);
             Assert.Equal(2, model.Providers.Count);
             Assert.All(model.Providers, relation => Assert.Equal(60, relation.RpsLimit));
 
-            var providerTypes = await context.Providers
-                .OrderBy(x => x.ProviderType)
+            var providerTypes = await context
+                .Providers.OrderBy(x => x.ProviderType)
                 .Select(x => x.ProviderType)
                 .ToListAsync(TestContext.Current.CancellationToken);
             Assert.Equal([ProviderType.OpenAIChatCompletions, ProviderType.Anthropic], providerTypes);
             Assert.Empty(await context.ProviderAuthConfigs.ToListAsync(TestContext.Current.CancellationToken));
 
-            var agents = await context.Agents
-                .Where(x => x.Id == AmapPoiSearchAgentId || x.Name == "general-agent" || x.Name == "location-extractor")
+            var agents = await context
+                .Agents.Where(x =>
+                    x.Id == AmapPoiSearchAgentId || x.Name == "general-agent" || x.Name == "location-extractor"
+                )
                 .ToListAsync(TestContext.Current.CancellationToken);
             Assert.Equal(3, agents.Count);
             Assert.Equal(GeneralAgentId, agents.Single(x => x.Name == "general-agent").Id);
@@ -81,28 +82,34 @@ public class DbSeederTests
                 value => Assert.IsType<DiffToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
                 value => Assert.IsType<GitCloneToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
                 value => Assert.IsType<BashToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
-                value => Assert.IsType<FileAccessToolBlockDefinition>(
-                    Assert.IsType<ToolBlockValue>(value).Definition));
+                value => Assert.IsType<FileAccessToolBlockDefinition>(Assert.IsType<ToolBlockValue>(value).Definition)
+            );
             Assert.Collection(
                 agents.Single(x => x.Name == "location-extractor").Tools,
                 value => Assert.IsType<WebFetchToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
                 value => Assert.IsType<WebSearchToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
-                value => Assert.IsType<TodoToolBlockDefinition>(
-                    Assert.IsType<ToolBlockValue>(value).Definition));
+                value => Assert.IsType<TodoToolBlockDefinition>(Assert.IsType<ToolBlockValue>(value).Definition)
+            );
 
-            var skill = await context.Skills
-                .SingleAsync(x => x.Name == "xhs-explore", TestContext.Current.CancellationToken);
+            var skill = await context.Skills.SingleAsync(
+                x => x.Name == "xhs-explore",
+                TestContext.Current.CancellationToken
+            );
             Assert.Equal(SkillId, skill.Id);
             Assert.Equal(SkillKind.Local, skill.Kind);
             Assert.Equal("skills/xhs-explore", skill.ContentPath);
             Assert.Null(skill.RemoteUrl);
-            Assert.True(await context.AgentSkillRelations.AnyAsync(
-                x => x.AgentId == AmapPoiSearchAgentId && x.SkillId == skill.Id,
-                TestContext.Current.CancellationToken));
+            Assert.True(
+                await context.AgentSkillRelations.AnyAsync(
+                    x => x.AgentId == AmapPoiSearchAgentId && x.SkillId == skill.Id,
+                    TestContext.Current.CancellationToken
+                )
+            );
 
             var builtInSkill = await context.Skills.SingleAsync(
                 x => x.Id == JobManagementSkillId,
-                TestContext.Current.CancellationToken);
+                TestContext.Current.CancellationToken
+            );
             Assert.Equal("agw-job", builtInSkill.Name);
             Assert.Equal(SkillKind.BuiltIn, builtInSkill.Kind);
             Assert.Equal(string.Empty, builtInSkill.ContentPath);
@@ -111,16 +118,19 @@ public class DbSeederTests
                 1,
                 await context.Skills.CountAsync(
                     x => x.Id == JobManagementSkillId,
-                    TestContext.Current.CancellationToken));
+                    TestContext.Current.CancellationToken
+                )
+            );
 
             var skillMarkdown = Path.Combine(paths.SkillsDirectory, "xhs-explore", "SKILL.md");
             Assert.True(File.Exists(skillMarkdown));
             Assert.Contains(
                 "name: xhs-explore",
-                await File.ReadAllTextAsync(skillMarkdown, TestContext.Current.CancellationToken));
+                await File.ReadAllTextAsync(skillMarkdown, TestContext.Current.CancellationToken)
+            );
 
-            var agentflow = await context.Agentflows
-                .Include(x => x.Nodes)
+            var agentflow = await context
+                .Agentflows.Include(x => x.Nodes)
                 .Include(x => x.Edges)
                 .SingleAsync(x => x.Id == AgentflowId, TestContext.Current.CancellationToken);
             Assert.Equal("Xiaohongshu Address Extraction", agentflow.Name);
@@ -149,33 +159,37 @@ public class DbSeederTests
                 .Options;
             await using var context = new AgwDbContext(options);
             await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
-            context.Skills.Add(new Skill
-            {
-                Id = JobManagementSkillId,
-                Name = "job-management",
-                Description = "Legacy job skill",
-                Kind = SkillKind.BuiltIn,
-                ContentPath = string.Empty,
-            });
+            context.Skills.Add(
+                new Skill
+                {
+                    Id = JobManagementSkillId,
+                    Name = "job-management",
+                    Description = "Legacy job skill",
+                    Kind = SkillKind.BuiltIn,
+                    ContentPath = string.Empty,
+                }
+            );
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
             var seeder = new DbSeeder(
                 context,
                 NullLogger<DbSeeder>.Instance,
                 TimeProvider.System,
                 paths,
-                [new TestSkillRegistration()]);
+                [new TestSkillRegistration()]
+            );
 
             await seeder.SeedAsync();
 
             var skill = await context.Skills.SingleAsync(
                 x => x.Id == JobManagementSkillId,
-                TestContext.Current.CancellationToken);
+                TestContext.Current.CancellationToken
+            );
             Assert.Equal("agw-job", skill.Name);
             Assert.Equal("Manage jobs.", skill.Description);
             Assert.Equal(SkillKind.BuiltIn, skill.Kind);
-            Assert.False(await context.Skills.AnyAsync(
-                x => x.Name == "job-management",
-                TestContext.Current.CancellationToken));
+            Assert.False(
+                await context.Skills.AnyAsync(x => x.Name == "job-management", TestContext.Current.CancellationToken)
+            );
         }
         finally
         {
@@ -196,33 +210,37 @@ public class DbSeederTests
             await using var context = new AgwDbContext(options);
             await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
             var userSkillId = Guid.CreateVersion7();
-            context.Skills.Add(new Skill
-            {
-                Id = userSkillId,
-                Name = "agw-job",
-                Description = "User-owned skill",
-                Kind = SkillKind.Local,
-                ContentPath = "skills/agw-job",
-            });
+            context.Skills.Add(
+                new Skill
+                {
+                    Id = userSkillId,
+                    Name = "agw-job",
+                    Description = "User-owned skill",
+                    Kind = SkillKind.Local,
+                    ContentPath = "skills/agw-job",
+                }
+            );
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
             var seeder = new DbSeeder(
                 context,
                 NullLogger<DbSeeder>.Instance,
                 TimeProvider.System,
                 paths,
-                [new TestSkillRegistration()]);
+                [new TestSkillRegistration()]
+            );
 
             await seeder.SeedAsync();
 
             var skill = await context.Skills.SingleAsync(
                 x => x.Name == "agw-job",
-                TestContext.Current.CancellationToken);
+                TestContext.Current.CancellationToken
+            );
             Assert.Equal(userSkillId, skill.Id);
             Assert.Equal("User-owned skill", skill.Description);
             Assert.Equal(SkillKind.Local, skill.Kind);
-            Assert.False(await context.Skills.AnyAsync(
-                x => x.Id == JobManagementSkillId,
-                TestContext.Current.CancellationToken));
+            Assert.False(
+                await context.Skills.AnyAsync(x => x.Id == JobManagementSkillId, TestContext.Current.CancellationToken)
+            );
         }
         finally
         {
@@ -253,8 +271,8 @@ public class DbSeederTests
                     [
                         new ToolValue { Definition = new DiffToolDefinition() },
                         new ToolValue { Definition = new GitCloneToolDefinition() },
-                        new ToolValue { Definition = new BashToolDefinition() }
-                    ]
+                        new ToolValue { Definition = new BashToolDefinition() },
+                    ],
                 },
                 new Agent
                 {
@@ -265,31 +283,35 @@ public class DbSeederTests
                     Tools =
                     [
                         new ToolValue { Definition = new WebFetchToolDefinition() },
-                        new ToolValue { Definition = new BashToolDefinition() }
-                    ]
-                });
+                        new ToolValue { Definition = new BashToolDefinition() },
+                    ],
+                }
+            );
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
             var seeder = new DbSeeder(
                 context,
                 NullLogger<DbSeeder>.Instance,
                 TimeProvider.System,
                 paths,
-                [new TestSkillRegistration()]);
+                [new TestSkillRegistration()]
+            );
 
             await seeder.SeedAsync();
 
             var general = await context.Agents.SingleAsync(
                 agent => agent.Id == GeneralAgentId,
-                TestContext.Current.CancellationToken);
-            Assert.IsType<FileAccessToolBlockDefinition>(
-                Assert.IsType<ToolBlockValue>(general.Tools[3]).Definition);
+                TestContext.Current.CancellationToken
+            );
+            Assert.IsType<FileAccessToolBlockDefinition>(Assert.IsType<ToolBlockValue>(general.Tools[3]).Definition);
             var location = await context.Agents.SingleAsync(
                 agent => agent.Id == LocationExtractorAgentId,
-                TestContext.Current.CancellationToken);
+                TestContext.Current.CancellationToken
+            );
             Assert.Collection(
                 location.Tools,
                 value => Assert.IsType<WebFetchToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
-                value => Assert.IsType<BashToolDefinition>(Assert.IsType<ToolValue>(value).Definition));
+                value => Assert.IsType<BashToolDefinition>(Assert.IsType<ToolValue>(value).Definition)
+            );
         }
         finally
         {

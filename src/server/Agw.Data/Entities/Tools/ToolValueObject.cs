@@ -28,17 +28,7 @@ public static class ToolDefinitionNames
     public const string WebSearch = "web_search";
 
     public static IReadOnlyList<string> All { get; } =
-    [
-        AskUserQuestion,
-        Bash,
-        Diff,
-        GenerateGuid,
-        GitClone,
-        PowerShell,
-        RunShell,
-        WebFetch,
-        WebSearch
-    ];
+    [AskUserQuestion, Bash, Diff, GenerateGuid, GitClone, PowerShell, RunShell, WebFetch, WebSearch];
 }
 
 /// <summary>
@@ -54,14 +44,7 @@ public static class ToolBlockDefinitionNames
     public const string BackgroundAgents = "background-agents";
 
     public static IReadOnlyList<string> All { get; } =
-    [
-        Todo,
-        Mode,
-        ProjectMemory,
-        UserMemory,
-        FileAccess,
-        BackgroundAgents
-    ];
+    [Todo, Mode, ProjectMemory, UserMemory, FileAccess, BackgroundAgents];
 }
 
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]
@@ -216,7 +199,7 @@ public enum ProjectMemoryStorage
     Database,
 
     [JsonStringEnumMemberName("filesystem")]
-    FileSystem
+    FileSystem,
 }
 
 public sealed record FileAccessToolBlockDefinition : ToolBlockDefinition<EmptyToolOptions>
@@ -224,8 +207,7 @@ public sealed record FileAccessToolBlockDefinition : ToolBlockDefinition<EmptyTo
     public override string GetDefinitionName() => ToolBlockDefinitionNames.FileAccess;
 }
 
-public sealed record BackgroundAgentsToolBlockDefinition
-    : ToolBlockDefinition<BackgroundAgentsToolBlockOptions>
+public sealed record BackgroundAgentsToolBlockDefinition : ToolBlockDefinition<BackgroundAgentsToolBlockOptions>
 {
     public override string GetDefinitionName() => ToolBlockDefinitionNames.BackgroundAgents;
 }
@@ -246,7 +228,7 @@ public static class ToolValueObjectValidation
             {
                 ToolValue { Definition: not null } => true,
                 ToolBlockValue { Definition: not null } => true,
-                _ => false
+                _ => false,
             };
             if (!hasDefinition)
             {
@@ -257,7 +239,7 @@ public static class ToolValueObjectValidation
             {
                 ToolValue tool => tool.Definition.GetOptions(),
                 ToolBlockValue toolBlock => toolBlock.Definition.GetOptions(),
-                _ => null
+                _ => null,
             };
             if (options == null)
             {

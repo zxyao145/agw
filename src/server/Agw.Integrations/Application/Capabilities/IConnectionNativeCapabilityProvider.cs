@@ -1,5 +1,4 @@
 using Agw.Integrations.Domain.Plugins;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Integrations.Application.Capabilities;

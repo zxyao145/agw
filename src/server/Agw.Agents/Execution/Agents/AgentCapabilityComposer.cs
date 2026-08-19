@@ -1,5 +1,4 @@
 using System.Diagnostics;
-
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents.AIContextProviders.AgwWorkspace;
 using Agw.Domain.Services;
@@ -11,7 +10,6 @@ using Agw.Shared.Exceptions;
 using Agw.Tools;
 using Agw.Tools.Runtime;
 using Agw.Tools.ToolBlocks;
-
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -48,7 +46,8 @@ public sealed class AgentCapabilityComposer
         IMcpToolMaterializer mcpToolMaterializer,
         ToolBlockRegistry toolBlockRegistry,
         ILogger<AgentCapabilityComposer> logger,
-        IEnumerable<IAgentInstructionsSource>? instructionSources = null)
+        IEnumerable<IAgentInstructionsSource>? instructionSources = null
+    )
     {
         _agentAppService = agentAppService;
         _toolRegistry = toolRegistry;
@@ -66,10 +65,14 @@ public sealed class AgentCapabilityComposer
         CancellationToken cancellationToken,
         bool supportsHostedWebSearch = false,
         string defaultMode = "execute",
-        Func<IReadOnlyList<Guid>, CancellationToken, ValueTask<IReadOnlyList<Microsoft.Agents.AI.AIAgent>>>?
-            backgroundAgentFactory = null,
+        Func<
+            IReadOnlyList<Guid>,
+            CancellationToken,
+            ValueTask<IReadOnlyList<Microsoft.Agents.AI.AIAgent>>
+        >? backgroundAgentFactory = null,
         Guid conversationId = default,
-        bool deferHumanInteractions = false)
+        bool deferHumanInteractions = false
+    )
     {
         var lease = new AgentResourceLease();
         var tools = new List<AITool>();
@@ -78,12 +81,10 @@ public sealed class AgentCapabilityComposer
         var warnings = new List<ConnectionCapabilityWarning>();
         var contextProviders = new List<Microsoft.Agents.AI.AIContextProvider>();
         var loopEvaluators = new List<Microsoft.Agents.AI.LoopEvaluator>();
-        var autoApprovalRules =
-            new List<Func<Microsoft.Agents.AI.ToolAutoApprovalRuleContext, ValueTask<bool>>>();
+        var autoApprovalRules = new List<Func<Microsoft.Agents.AI.ToolAutoApprovalRuleContext, ValueTask<bool>>>();
         var planModeAllowedToolNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var toolWarnings = new List<string>();
-        var toolInvocationWarnings = new Dictionary<string, string>(
-            StringComparer.OrdinalIgnoreCase);
+        var toolInvocationWarnings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         try
         {
@@ -99,23 +100,22 @@ public sealed class AgentCapabilityComposer
                     planModeAllowedToolNames,
                     toolWarnings,
                     toolInvocationWarnings,
-                    lease);
+                    lease
+                );
             }
 
-            contextProviders.Add(new AgwWorkspaceProvider(
-                agent,
-                project,
-                _instructionSources,
-                _logger));
+            contextProviders.Add(new AgwWorkspaceProvider(agent, project, _instructionSources, _logger));
 
             var resolvedToolValues = ToolValueResolution.Resolve(agent.Tools, project.Tools);
-            var toolBlockDefinitions = resolvedToolValues.ToolBlocks
-                .Where(definition =>
-                    backgroundAgentFactory != null ||
-                    !string.Equals(
+            var toolBlockDefinitions = resolvedToolValues
+                .ToolBlocks.Where(definition =>
+                    backgroundAgentFactory != null
+                    || !string.Equals(
                         definition.GetDefinitionName(),
                         ToolBlockNames.BackgroundAgents,
-                        StringComparison.OrdinalIgnoreCase))
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
                 .ToArray();
 
             var materializationContext = new ToolMaterializationContext
@@ -128,14 +128,11 @@ public sealed class AgentCapabilityComposer
                 EnvironmentVariables = environmentVariables,
                 BackgroundAgentFactory = backgroundAgentFactory,
                 SupportsHostedWebSearch = supportsHostedWebSearch,
-                DeferHumanInteractions = deferHumanInteractions
+                DeferHumanInteractions = deferHumanInteractions,
             };
 
             var toolContribution = await _toolRegistry
-                .MaterializeAsync(
-                    resolvedToolValues.Tools,
-                    materializationContext,
-                    cancellationToken)
+                .MaterializeAsync(resolvedToolValues.Tools, materializationContext, cancellationToken)
                 .ConfigureAwait(false);
             AddContribution(
                 toolContribution,
@@ -148,10 +145,11 @@ public sealed class AgentCapabilityComposer
                 planModeAllowedToolNames,
                 toolWarnings,
                 toolInvocationWarnings,
-                lease);
+                lease
+            );
 
-            var connectionIds = agent.AgentConnectionRelations
-                .Select(relation => relation.ConnectionId)
+            var connectionIds = agent
+                .AgentConnectionRelations.Select(relation => relation.ConnectionId)
                 .Concat(project.ProjectConnectionRelations.Select(relation => relation.ConnectionId))
                 .Where(static id => id != Guid.Empty)
                 .Distinct()
@@ -170,14 +168,18 @@ public sealed class AgentCapabilityComposer
                     _logger.LogWarning(
                         "Connection capability warning {WarningCode} for connection {ConnectionId}",
                         warning.Code,
-                        warning.ConnectionId);
-                    Activity.Current?.AddEvent(new ActivityEvent(
-                        "agw.integration.warning",
-                        tags: new ActivityTagsCollection
-                        {
-                            { "agw.integration.warning.code", warning.Code },
-                            { "agw.integration.connection.id", warning.ConnectionId.ToString() },
-                        }));
+                        warning.ConnectionId
+                    );
+                    Activity.Current?.AddEvent(
+                        new ActivityEvent(
+                            "agw.integration.warning",
+                            tags: new ActivityTagsCollection
+                            {
+                                { "agw.integration.warning.code", warning.Code },
+                                { "agw.integration.connection.id", warning.ConnectionId.ToString() },
+                            }
+                        )
+                    );
                 }
             }
 
@@ -188,14 +190,17 @@ public sealed class AgentCapabilityComposer
                     tools,
                     registeredToolNames,
                     lease,
-                    cancellationToken)
+                    cancellationToken
+                )
                 .ConfigureAwait(false);
 
-            var contribution = await _toolBlockRegistry.MaterializeAsync(
+            var contribution = await _toolBlockRegistry
+                .MaterializeAsync(
                     toolBlockDefinitions,
                     ToolBlockScope.Agent | ToolBlockScope.Project,
                     materializationContext,
-                    cancellationToken)
+                    cancellationToken
+                )
                 .ConfigureAwait(false);
             AddContribution(
                 contribution,
@@ -208,13 +213,11 @@ public sealed class AgentCapabilityComposer
                 planModeAllowedToolNames,
                 toolWarnings,
                 toolInvocationWarnings,
-                lease);
+                lease
+            );
             foreach (var warning in contribution.Warnings)
             {
-                _logger.LogWarning(
-                    "Tool Block warning for agent {AgentId}: {Warning}",
-                    agent.Id,
-                    warning);
+                _logger.LogWarning("Tool Block warning for agent {AgentId}: {Warning}", agent.Id, warning);
             }
 
             return new AgentCapabilityComposition(
@@ -227,7 +230,8 @@ public sealed class AgentCapabilityComposer
                 planModeAllowedToolNames,
                 toolWarnings,
                 toolInvocationWarnings,
-                lease);
+                lease
+            );
         }
         catch
         {
@@ -243,10 +247,11 @@ public sealed class AgentCapabilityComposer
         ICollection<AITool> tools,
         ISet<string> registeredToolNames,
         AgentResourceLease lease,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var serverIds = agent.AgentMcpToolServers
-            .Select(relation => relation.McpToolServerId)
+        var serverIds = agent
+            .AgentMcpToolServers.Select(relation => relation.McpToolServerId)
             .Concat(project.ProjectMcpToolServers.Select(relation => relation.McpToolServerId));
         var servers = await _agentAppService.ListEnabledMcpToolServersAsync(serverIds).ConfigureAwait(false);
         foreach (var server in servers)
@@ -255,10 +260,7 @@ public sealed class AgentCapabilityComposer
             {
                 var descriptor = CreateDescriptor(server);
                 var materialized = await _mcpToolMaterializer
-                    .MaterializeAsync(
-                        descriptor,
-                        new McpRuntimeOverrides(environmentVariables),
-                        cancellationToken)
+                    .MaterializeAsync(descriptor, new McpRuntimeOverrides(environmentVariables), cancellationToken)
                     .ConfigureAwait(false);
                 lease.Add(materialized);
                 AddTools(tools, registeredToolNames, materialized.Tools, $"mcp:{server.Id}");
@@ -267,18 +269,16 @@ public sealed class AgentCapabilityComposer
             {
                 throw;
             }
-            catch (AgwException exception) when (
-                exception.Code == ErrorCodes.IntegrationToolNameInvalid.Code ||
-                exception.Code == ErrorCodes.IntegrationToolNameConflict.Code)
+            catch (AgwException exception)
+                when (exception.Code == ErrorCodes.IntegrationToolNameInvalid.Code
+                    || exception.Code == ErrorCodes.IntegrationToolNameConflict.Code
+                )
             {
                 throw;
             }
             catch (Exception exception)
             {
-                _logger.LogWarning(
-                    exception,
-                    "Failed to materialize independent MCP server {ServerId}",
-                    server.Id);
+                _logger.LogWarning(exception, "Failed to materialize independent MCP server {ServerId}", server.Id);
             }
         }
     }
@@ -292,15 +292,10 @@ public sealed class AgentCapabilityComposer
                 server.Command,
                 server.Arguments,
                 server.WorkingDirectory,
-                server.EnvironmentVariables),
-            "http" => new McpHttpEndpointDescriptor(
-                server.Name,
-                CreateEndpoint(server.Url),
-                server.Headers),
-            "sse" => new McpSseEndpointDescriptor(
-                server.Name,
-                CreateEndpoint(server.Url),
-                server.Headers),
+                server.EnvironmentVariables
+            ),
+            "http" => new McpHttpEndpointDescriptor(server.Name, CreateEndpoint(server.Url), server.Headers),
+            "sse" => new McpSseEndpointDescriptor(server.Name, CreateEndpoint(server.Url), server.Headers),
             _ => throw new AgwException(ErrorCodes.UnsupportedTransportType),
         };
     }
@@ -314,7 +309,8 @@ public sealed class AgentCapabilityComposer
         ICollection<AITool> destination,
         ISet<string> registeredToolNames,
         IEnumerable<AITool> tools,
-        string source)
+        string source
+    )
     {
         foreach (var tool in tools)
         {
@@ -322,14 +318,16 @@ public sealed class AgentCapabilityComposer
             {
                 throw new AgwException(
                     ErrorCodes.IntegrationToolNameInvalid,
-                    $"Capability source '{source}' produced a tool without a name.");
+                    $"Capability source '{source}' produced a tool without a name."
+                );
             }
 
             if (!registeredToolNames.Add(tool.Name))
             {
                 throw new AgwException(
                     ErrorCodes.IntegrationToolNameConflict,
-                    $"Tool name '{tool.Name}' conflicts with another agent capability source.");
+                    $"Tool name '{tool.Name}' conflicts with another agent capability source."
+                );
             }
 
             destination.Add(tool);
@@ -343,12 +341,12 @@ public sealed class AgentCapabilityComposer
         ISet<string> registeredToolNames,
         ICollection<Microsoft.Agents.AI.AIContextProvider> contextProviders,
         ICollection<Microsoft.Agents.AI.LoopEvaluator> loopEvaluators,
-        ICollection<Func<Microsoft.Agents.AI.ToolAutoApprovalRuleContext, ValueTask<bool>>>
-            autoApprovalRules,
+        ICollection<Func<Microsoft.Agents.AI.ToolAutoApprovalRuleContext, ValueTask<bool>>> autoApprovalRules,
         ISet<string> planModeAllowedToolNames,
         ICollection<string> warnings,
         IDictionary<string, string> invocationWarnings,
-        AgentResourceLease lease)
+        AgentResourceLease lease
+    )
     {
         lease.Add(contribution);
         AddTools(tools, registeredToolNames, contribution.Tools, source);
@@ -385,8 +383,6 @@ public sealed class AgentCapabilityComposer
         {
             await resource.DisposeAsync().ConfigureAwait(false);
         }
-        catch
-        {
-        }
+        catch { }
     }
 }

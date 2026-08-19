@@ -11,9 +11,7 @@ public sealed class AiToolAttribute : Attribute
     /// <summary>
     /// Initializes a new instance of the <see cref="AiToolAttribute"/> class.
     /// </summary>
-    public AiToolAttribute()
-    {
-    }
+    public AiToolAttribute() { }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AiToolAttribute"/> class with a name.

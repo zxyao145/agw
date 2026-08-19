@@ -18,7 +18,5 @@ internal static class DurableExecutionJson
     /// </summary>
     public static T DeserializeRequired<T>(string json, string description) =>
         JsonUtil.Deserialize<T>(json)
-        ?? throw new AgwException(
-            ErrorCodes.DurableExecutionConflict,
-            $"Stored {description} is invalid.");
+        ?? throw new AgwException(ErrorCodes.DurableExecutionConflict, $"Stored {description} is invalid.");
 }

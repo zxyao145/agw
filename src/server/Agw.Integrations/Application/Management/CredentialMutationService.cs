@@ -14,7 +14,8 @@ public sealed class CredentialMutationService
     public CredentialMutationService(
         IRepository<PluginInstallationCredential> installationCredentialRepository,
         IRepository<ConnectionCredential> connectionCredentialRepository,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider
+    )
     {
         _installationCredentialRepository = installationCredentialRepository;
         _connectionCredentialRepository = connectionCredentialRepository;
@@ -26,13 +27,15 @@ public sealed class CredentialMutationService
         IReadOnlyDictionary<string, SecretFieldUpdateRequest> updates,
         string connectorId,
         string authSchemeId,
-        string user)
+        string user
+    )
     {
         foreach (var item in updates)
         {
             var slot = IntegrationCredentialSlots.InstallationField(connectorId, authSchemeId, item.Key);
             var existing = installation.Credentials.FirstOrDefault(credential =>
-                string.Equals(credential.Slot, slot, StringComparison.OrdinalIgnoreCase));
+                string.Equals(credential.Slot, slot, StringComparison.OrdinalIgnoreCase)
+            );
             switch (item.Value.Action)
             {
                 case SecretUpdateAction.Keep:
@@ -54,7 +57,7 @@ public sealed class CredentialMutationService
                             PluginInstallation = installation,
                             Slot = slot,
                             CreateBy = user,
-                            CreateTime = _timeProvider.GetUtcNow()
+                            CreateTime = _timeProvider.GetUtcNow(),
                         };
                         await _installationCredentialRepository.AddAsync(existing);
                     }
@@ -74,13 +77,15 @@ public sealed class CredentialMutationService
     public async Task ApplyConnectionAsync(
         Connection connection,
         IReadOnlyDictionary<string, SecretFieldUpdateRequest> updates,
-        string user)
+        string user
+    )
     {
         foreach (var item in updates)
         {
             var slot = IntegrationCredentialSlots.ConnectionField(item.Key);
             var existing = connection.Credentials.FirstOrDefault(credential =>
-                string.Equals(credential.Slot, slot, StringComparison.OrdinalIgnoreCase));
+                string.Equals(credential.Slot, slot, StringComparison.OrdinalIgnoreCase)
+            );
             switch (item.Value.Action)
             {
                 case SecretUpdateAction.Keep:
@@ -102,7 +107,7 @@ public sealed class CredentialMutationService
                             Connection = connection,
                             Slot = slot,
                             CreateBy = user,
-                            CreateTime = _timeProvider.GetUtcNow()
+                            CreateTime = _timeProvider.GetUtcNow(),
                         };
                         await _connectionCredentialRepository.AddAsync(existing);
                     }

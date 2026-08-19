@@ -1,8 +1,6 @@
 using System.ComponentModel.DataAnnotations;
-
 using Agw.Setup.Contracts;
 using Agw.Shared.Configuration;
-
 using Xunit;
 
 namespace Agw.Setup.Tests;
@@ -30,7 +28,8 @@ public class SetupRequestTests
     public void Validate_DeploymentAndProviderCombination_ReturnsExpectedResult(
         DeploymentMode deploymentMode,
         DatabaseProvider provider,
-        bool expected)
+        bool expected
+    )
     {
         var request = CreateValidRequest(deploymentMode, provider);
 
@@ -101,7 +100,7 @@ public class SetupRequestTests
             PostgresDatabase = "agw",
             PostgresUsername = "agw",
             PostgresPassword = "database-password",
-            AdminPassword = "administrator-password"
+            AdminPassword = "administrator-password",
         };
     }
 
@@ -112,6 +111,7 @@ public class SetupRequestTests
             request,
             new ValidationContext(request),
             results,
-            validateAllProperties: true);
+            validateAllProperties: true
+        );
     }
 }

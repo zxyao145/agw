@@ -1,5 +1,4 @@
 using System.Text.Json;
-
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Agents.Execution.Commands.Exec;
@@ -9,7 +8,6 @@ using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Commands.Subscribe;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data;
-
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -24,16 +22,14 @@ public class ExecutionRequestsTests
         var projectId = Guid.CreateVersion7();
         var contextId = Guid.CreateVersion7().ToString("D");
         const string json = """
-                            {
-                              "type": "SettingCommand",
-                              "settingContent": "{\"workingDirectory\":\"D:/source/repos/agw\",\"maxTurns\":3}",
-                              "projectId": "__PROJECT_ID__",
-                              "contextId": "__CONTEXT_ID__"
-                            }
-                            """;
-        var payload = json
-            .Replace("__PROJECT_ID__", projectId.ToString())
-            .Replace("__CONTEXT_ID__", contextId);
+            {
+              "type": "SettingCommand",
+              "settingContent": "{\"workingDirectory\":\"D:/source/repos/agw\",\"maxTurns\":3}",
+              "projectId": "__PROJECT_ID__",
+              "contextId": "__CONTEXT_ID__"
+            }
+            """;
+        var payload = json.Replace("__PROJECT_ID__", projectId.ToString()).Replace("__CONTEXT_ID__", contextId);
 
         var request = Deserialize(payload);
 
@@ -48,20 +44,18 @@ public class ExecutionRequestsTests
         var projectId = Guid.CreateVersion7();
         var contextId = Guid.CreateVersion7().ToString("D");
         const string json = """
-                            {
-                              "type": "SettingCommand",
-                              "settingContent": "{}",
-                              "environmentVariables": {
-                                "AGW_TOKEN": "secret",
-                                "EMPTY_VALUE": ""
-                              },
-                              "projectId": "__PROJECT_ID__",
-                              "contextId": "__CONTEXT_ID__"
-                            }
-                            """;
-        var payload = json
-            .Replace("__PROJECT_ID__", projectId.ToString())
-            .Replace("__CONTEXT_ID__", contextId);
+            {
+              "type": "SettingCommand",
+              "settingContent": "{}",
+              "environmentVariables": {
+                "AGW_TOKEN": "secret",
+                "EMPTY_VALUE": ""
+              },
+              "projectId": "__PROJECT_ID__",
+              "contextId": "__CONTEXT_ID__"
+            }
+            """;
+        var payload = json.Replace("__PROJECT_ID__", projectId.ToString()).Replace("__CONTEXT_ID__", contextId);
 
         var request = Deserialize(payload);
 
@@ -75,12 +69,12 @@ public class ExecutionRequestsTests
     {
         var projectId = Guid.CreateVersion7();
         var payload = $$"""
-                        {
-                          "type": "SettingCommand",
-                          "projectId": "{{projectId}}",
-                          "resume": true
-                        }
-                        """;
+            {
+              "type": "SettingCommand",
+              "projectId": "{{projectId}}",
+              "resume": true
+            }
+            """;
 
         var request = Deserialize(payload);
 
@@ -105,14 +99,12 @@ public class ExecutionRequestsTests
         var projectId = Guid.CreateVersion7();
         var contextId = Guid.CreateVersion7().ToString("D");
 
-        var left = CreateSettingCommand(projectId, contextId, new Dictionary<string, string>
-        {
-            ["AGW_TOKEN"] = "one"
-        });
-        var right = CreateSettingCommand(projectId, contextId, new Dictionary<string, string>
-        {
-            ["AGW_TOKEN"] = "two"
-        });
+        var left = CreateSettingCommand(projectId, contextId, new Dictionary<string, string> { ["AGW_TOKEN"] = "one" });
+        var right = CreateSettingCommand(
+            projectId,
+            contextId,
+            new Dictionary<string, string> { ["AGW_TOKEN"] = "two" }
+        );
 
         Assert.NotEqual(left, right);
     }
@@ -122,26 +114,25 @@ public class ExecutionRequestsTests
     {
         var agentId = Guid.CreateVersion7();
         const string json = """
-                            {
-                              "type": "ExecCommand",
-                              "agentId": "__AGENT_ID__",
-                              "agentType": 0,
-                              "stream": false,
-                              "input": {
-                                "messageId": "msg-1",
-                                "author": "$agw",
-                                "contents": [
-                                  {
-                                    "type": "TextContent",
-                                    "content": "hello"
-                                  }
-                                ]
-                              }
-                            }
-                            """;
+            {
+              "type": "ExecCommand",
+              "agentId": "__AGENT_ID__",
+              "agentType": 0,
+              "stream": false,
+              "input": {
+                "messageId": "msg-1",
+                "author": "$agw",
+                "contents": [
+                  {
+                    "type": "TextContent",
+                    "content": "hello"
+                  }
+                ]
+              }
+            }
+            """;
 
-        var request = Deserialize(
-            json.Replace("__AGENT_ID__", agentId.ToString("D")));
+        var request = Deserialize(json.Replace("__AGENT_ID__", agentId.ToString("D")));
 
         var executionRequest = Assert.IsType<ExecCommand>(request);
         Assert.Equal(agentId, executionRequest.AgentId);
@@ -155,21 +146,21 @@ public class ExecutionRequestsTests
     public void Deserialize_LegacyExecCommand_DefaultsToStreamingWithoutAgentId()
     {
         const string json = """
-                            {
-                              "type": "ExecCommand",
-                              "agentType": 0,
-                              "input": {
-                                "messageId": "msg-1",
-                                "author": "$agw",
-                                "contents": [
-                                  {
-                                    "type": "TextContent",
-                                    "content": "hello"
-                                  }
-                                ]
-                              }
-                            }
-                            """;
+            {
+              "type": "ExecCommand",
+              "agentType": 0,
+              "input": {
+                "messageId": "msg-1",
+                "author": "$agw",
+                "contents": [
+                  {
+                    "type": "TextContent",
+                    "content": "hello"
+                  }
+                ]
+              }
+            }
+            """;
 
         var request = Deserialize(json);
 
@@ -183,16 +174,16 @@ public class ExecutionRequestsTests
     {
         var executionId = Guid.CreateVersion7();
         var payload = $$"""
-                        {
-                          "type": "ExecCommand",
-                          "executionId": "{{executionId}}",
-                          "agentType": 0,
-                          "input": {
-                            "messageId": "msg-1",
-                            "contents": []
-                          }
-                        }
-                        """;
+            {
+              "type": "ExecCommand",
+              "executionId": "{{executionId}}",
+              "agentType": 0,
+              "input": {
+                "messageId": "msg-1",
+                "contents": []
+              }
+            }
+            """;
 
         var request = Assert.IsType<ExecCommand>(Deserialize(payload));
 
@@ -204,12 +195,12 @@ public class ExecutionRequestsTests
     {
         var executionId = Guid.CreateVersion7();
         var payload = $$"""
-                        {
-                          "type": "SubscribeExecutionCommand",
-                          "executionId": "{{executionId}}",
-                          "cursor": "4-7"
-                        }
-                        """;
+            {
+              "type": "SubscribeExecutionCommand",
+              "executionId": "{{executionId}}",
+              "cursor": "4-7"
+            }
+            """;
 
         var request = Assert.IsType<SubscribeExecutionCommand>(Deserialize(payload));
 
@@ -221,10 +212,10 @@ public class ExecutionRequestsTests
     public void Deserialize_InterruptCommand_WithoutReason_ReturnsInterruptCommand()
     {
         const string json = """
-                            {
-                              "type": "InterruptCommand"
-                            }
-                            """;
+            {
+              "type": "InterruptCommand"
+            }
+            """;
 
         var request = Deserialize(json);
 
@@ -236,18 +227,18 @@ public class ExecutionRequestsTests
     public void Deserialize_HumanResponseCommand_ReturnsHumanResponseCommand()
     {
         const string json = """
-                            {
-                              "type": "HumanResponseCommand",
-                              "requestId": "human-approval-1",
-                              "approved": true,
-                              "responseText": "Approved for translation.",
-                              "responseData": {
-                                "answers": {
-                                  "Language?": "Chinese"
-                                }
-                              }
-                            }
-                            """;
+            {
+              "type": "HumanResponseCommand",
+              "requestId": "human-approval-1",
+              "approved": true,
+              "responseText": "Approved for translation.",
+              "responseData": {
+                "answers": {
+                  "Language?": "Chinese"
+                }
+              }
+            }
+            """;
 
         var request = Deserialize(json);
 
@@ -257,23 +248,21 @@ public class ExecutionRequestsTests
         Assert.Equal("Approved for translation.", humanResponse.ResponseText);
         Assert.Equal(
             "Chinese",
-            humanResponse.ResponseData!.Value
-                .GetProperty("answers")
-                .GetProperty("Language?")
-                .GetString());
+            humanResponse.ResponseData!.Value.GetProperty("answers").GetProperty("Language?").GetString()
+        );
     }
 
     [Fact]
     public void Deserialize_HumanResponseCommand_WithNullApprovalScope_DefaultsToOnce()
     {
         const string json = """
-                            {
-                              "type": "HumanResponseCommand",
-                              "requestId": "human-approval-1",
-                              "approved": true,
-                              "approvalScope": null
-                            }
-                            """;
+            {
+              "type": "HumanResponseCommand",
+              "requestId": "human-approval-1",
+              "approved": true,
+              "approvalScope": null
+            }
+            """;
 
         var request = Deserialize(json);
 
@@ -284,12 +273,14 @@ public class ExecutionRequestsTests
     private static SettingCommand CreateSettingCommand(
         Guid projectId,
         string contextId,
-        IReadOnlyDictionary<string, string> environmentVariables)
+        IReadOnlyDictionary<string, string> environmentVariables
+    )
     {
         return new SettingCommand(
             projectId,
             environmentVariables: new Dictionary<string, string>(environmentVariables),
-            contextId: contextId);
+            contextId: contextId
+        );
     }
 
     private static AgentRunCommand? Deserialize(string json)
@@ -299,8 +290,7 @@ public class ExecutionRequestsTests
         using var serviceProvider = services.BuildServiceProvider();
         var options = serviceProvider
             .GetRequiredService<IOptions<JsonHubProtocolOptions>>()
-            .Value
-            .PayloadSerializerOptions;
+            .Value.PayloadSerializerOptions;
         return JsonSerializer.Deserialize<AgentRunCommand>(json, options);
     }
 }

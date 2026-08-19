@@ -91,11 +91,7 @@ public class AgentDomainServiceTests
     [Fact]
     public void PrepareForCreate_SystemAgentWithoutModelProvider_ThrowsAgwException()
     {
-        var agent = new Agent
-        {
-            Type = AgentType.System,
-            ModelProviderId = null,
-        };
+        var agent = new Agent { Type = AgentType.System, ModelProviderId = null };
 
         var exception = Assert.Throws<AgwException>(() => _service.PrepareForCreate(agent, "tester"));
         Assert.Equal(ErrorCodes.SystemAgentRequiresModelProvider.Code, exception.Code);
@@ -164,7 +160,8 @@ public class AgentDomainServiceTests
         };
 
         var exception = Assert.Throws<AgwException>(() =>
-            _service.ApplyUpdate(agent, current => current.ModelProviderId = null, "tester"));
+            _service.ApplyUpdate(agent, current => current.ModelProviderId = null, "tester")
+        );
 
         Assert.Equal(ErrorCodes.SystemAgentRequiresModelProvider.Code, exception.Code);
     }
@@ -179,10 +176,7 @@ public class AgentDomainServiceTests
             Id = originalId,
             Name = "original-name",
             SystemPrompt = "original-prompt",
-            Tools =
-            [
-                new ToolValue { Definition = new WebSearchToolDefinition() }
-            ],
+            Tools = [new ToolValue { Definition = new WebSearchToolDefinition() }],
             EnableSummary = false,
             Type = AgentType.External,
             DisplayName = "Before",
@@ -200,17 +194,15 @@ public class AgentDomainServiceTests
                 current.Id = Guid.CreateVersion7();
                 current.Name = "updated-name";
                 current.SystemPrompt = "updated-prompt";
-                current.Tools =
-                [
-                    new ToolValue { Definition = new WebFetchToolDefinition() }
-                ];
+                current.Tools = [new ToolValue { Definition = new WebFetchToolDefinition() }];
                 current.EnableSummary = true;
                 current.Type = AgentType.System;
                 current.DisplayName = "After";
                 current.ModelProviderId = updatedModelProviderId;
                 current.SummaryModelProviderId = updatedSummaryModelProviderId;
             },
-            "updater");
+            "updater"
+        );
 
         Assert.Equal(originalId, agent.Id);
         Assert.Equal("original-name", agent.Name);
@@ -236,10 +228,7 @@ public class AgentDomainServiceTests
             Extra = "{\"before\":true}",
         };
 
-        _service.ApplyUpdate(
-            agent,
-            current => current.Extra = "  {\"sandbox\":false}  ",
-            "updater");
+        _service.ApplyUpdate(agent, current => current.Extra = "  {\"sandbox\":false}  ", "updater");
 
         Assert.Equal("{\"sandbox\":false}", agent.Extra);
     }
@@ -277,7 +266,8 @@ public class AgentDomainServiceTests
         };
 
         var exception = Assert.Throws<AgwException>(() =>
-            _service.ApplyUpdate(agent, current => current.Extra = extra, "updater"));
+            _service.ApplyUpdate(agent, current => current.Extra = extra, "updater")
+        );
 
         Assert.Equal(ErrorCodes.InvalidAgentExtraSettings.Code, exception.Code);
     }
@@ -294,10 +284,7 @@ public class AgentDomainServiceTests
             Extra = "{\"managed\":true}",
         };
 
-        _service.ApplyUpdate(
-            agent,
-            current => current.Extra = "{\"managed\":false}",
-            "updater");
+        _service.ApplyUpdate(agent, current => current.Extra = "{\"managed\":false}", "updater");
 
         Assert.Equal("{\"managed\":true}", agent.Extra);
     }
@@ -316,11 +303,9 @@ public class AgentDomainServiceTests
 
         _service.ApplyUpdate(
             agent,
-            current => current.EnvironmentVariables = new Dictionary<string, string>
-            {
-                ["AFTER"] = "",
-            },
-            "updater");
+            current => current.EnvironmentVariables = new Dictionary<string, string> { ["AFTER"] = "" },
+            "updater"
+        );
 
         Assert.Single(agent.EnvironmentVariables);
         Assert.Equal("", agent.EnvironmentVariables["AFTER"]);

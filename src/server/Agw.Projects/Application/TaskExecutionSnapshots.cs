@@ -14,7 +14,8 @@ public record TaskExecutionSummary(
     DateTimeOffset CreateTime,
     DateTimeOffset? UpdateTime,
     DateTimeOffset? FinishedTime,
-    DateTimeOffset? StartedTime);
+    DateTimeOffset? StartedTime
+);
 
 public record TaskExecutionSnapshot(
     Guid TaskId,
@@ -30,4 +31,5 @@ public record TaskExecutionSnapshot(
     DateTimeOffset? StartedTime,
     DateTimeOffset? FinishedTime,
     int MessageCount,
-    IReadOnlyList<AgwMessage>? Messages);
+    IReadOnlyList<AgwMessage>? Messages
+);

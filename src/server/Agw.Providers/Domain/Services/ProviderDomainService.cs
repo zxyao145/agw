@@ -35,7 +35,8 @@ public class ProviderDomainService
         ICollection<ProviderAuthConfig>? authConfigs,
         Guid providerId,
         string user,
-        DateTimeOffset now)
+        DateTimeOffset now
+    )
     {
         if (authConfigs == null)
         {

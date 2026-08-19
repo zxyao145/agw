@@ -3,7 +3,6 @@ using Agw.Files.Api;
 using Agw.Files.Application.Files;
 using Agw.Files.Application.Storage.Local;
 using Agw.Files.Services;
-
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -56,10 +55,7 @@ public class FilesControllerProjectFileSystemTests
     {
         var controller = CreateController();
 
-        var result = await controller.DiffAsync(
-            Guid.CreateVersion7(),
-            "file.txt",
-            "invalid");
+        var result = await controller.DiffAsync(Guid.CreateVersion7(), "file.txt", "invalid");
 
         AssertApiResult(result, "Scope must be 'staged' or 'unstaged'");
     }
@@ -76,7 +72,8 @@ public class FilesControllerProjectFileSystemTests
         var fileAppService = new FileAppService(
             new FakeFileSystemResolver(new LocalFileSystem(Path.GetTempPath())),
             new FakeGitCommandService(),
-            NullLogger<FileAppService>.Instance);
+            NullLogger<FileAppService>.Instance
+        );
         return new FilesController(fileAppService);
     }
 
@@ -97,7 +94,10 @@ public class FilesControllerProjectFileSystemTests
 
     private sealed class FakeGitCommandService : IGitCommandService
     {
-        public Task<GitChangedFiles?> GetChangedFilesAsync(string directory, CancellationToken cancellationToken = default)
+        public Task<GitChangedFiles?> GetChangedFilesAsync(
+            string directory,
+            CancellationToken cancellationToken = default
+        )
         {
             return Task.FromResult<GitChangedFiles?>(null);
         }
@@ -105,7 +105,8 @@ public class FilesControllerProjectFileSystemTests
         public Task<GitDiffResult> GetDiffAsync(
             string filePath,
             CancellationToken cancellationToken = default,
-            GitDiffScope scope = GitDiffScope.All)
+            GitDiffScope scope = GitDiffScope.All
+        )
         {
             return Task.FromResult(new GitDiffResult(false, "", false, null, null));
         }
@@ -118,12 +119,17 @@ public class FilesControllerProjectFileSystemTests
         public Task<GitIndexResult> SetStagedAsync(
             string path,
             bool staged,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             return Task.FromResult(new GitIndexResult(false, "Not implemented by test fake.", null, false));
         }
 
-        public Task<GitCloneResult> CloneRepositoryAsync(string gitAddress, string workingDirectory, CancellationToken cancellationToken = default)
+        public Task<GitCloneResult> CloneRepositoryAsync(
+            string gitAddress,
+            string workingDirectory,
+            CancellationToken cancellationToken = default
+        )
         {
             return Task.FromResult(new GitCloneResult(false, "Not implemented by test fake.", null, null));
         }

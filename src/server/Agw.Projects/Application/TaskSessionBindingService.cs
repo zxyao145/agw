@@ -4,7 +4,6 @@ using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Projects.Application;
@@ -20,7 +19,8 @@ public class TaskSessionBindingService : ITaskSessionBindingService
         IRepository<TaskSessionBinding> bindingRepository,
         IRepository<ProjectConversation> contextRepository,
         IUnitOfWork unitOfWork,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider
+    )
     {
         _bindingRepository = bindingRepository;
         _contextRepository = contextRepository;
@@ -33,7 +33,8 @@ public class TaskSessionBindingService : ITaskSessionBindingService
         string contextId,
         Guid agentId,
         string externalAgentName,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var normalizedAgentName = NormalizeExternalAgentName(externalAgentName);
         var normalizedContextId = NormalizeContextId(contextId);
@@ -42,24 +43,27 @@ public class TaskSessionBindingService : ITaskSessionBindingService
             return null;
         }
 
-        var projectConversation = await _contextRepository.Queryable
-            .AsNoTracking()
+        var projectConversation = await _contextRepository
+            .Queryable.AsNoTracking()
             .SingleOrDefaultAsync(
                 context => context.ProjectId == projectId && context.ContextId == normalizedContextId,
-                cancellationToken);
+                cancellationToken
+            );
 
         if (projectConversation == null)
         {
             return null;
         }
 
-        return await _bindingRepository.Queryable
-            .AsNoTracking()
+        return await _bindingRepository
+            .Queryable.AsNoTracking()
             .SingleOrDefaultAsync(
-                binding => binding.ProjectConversationId == projectConversation.Id
+                binding =>
+                    binding.ProjectConversationId == projectConversation.Id
                     && binding.AgentId == agentId
                     && binding.ExternalAgentName == normalizedAgentName,
-                cancellationToken);
+                cancellationToken
+            );
     }
 
     public async Task<TaskSessionBinding> UpsertAsync(
@@ -69,7 +73,8 @@ public class TaskSessionBindingService : ITaskSessionBindingService
         string externalAgentName,
         string providerSessionId,
         string user,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var normalizedAgentName = NormalizeExternalAgentName(externalAgentName);
         var normalizedContextId = NormalizeContextId(contextId);
@@ -87,22 +92,23 @@ public class TaskSessionBindingService : ITaskSessionBindingService
             throw new AgwException(ErrorCodes.InvalidParam, "Context id is required.");
         }
 
-        var projectConversation = await _contextRepository.Queryable
-            .SingleOrDefaultAsync(
-                context => context.ProjectId == projectId && context.ContextId == normalizedContextId,
-                cancellationToken);
+        var projectConversation = await _contextRepository.Queryable.SingleOrDefaultAsync(
+            context => context.ProjectId == projectId && context.ContextId == normalizedContextId,
+            cancellationToken
+        );
 
         if (projectConversation == null)
         {
             throw new AgwException(ErrorCodes.ResourceNotFound, "Project context not found.");
         }
 
-        var binding = await _bindingRepository.Queryable
-            .SingleOrDefaultAsync(
-                existing => existing.ProjectConversationId == projectConversation.Id
-                    && existing.AgentId == agentId
-                    && existing.ExternalAgentName == normalizedAgentName,
-                cancellationToken);
+        var binding = await _bindingRepository.Queryable.SingleOrDefaultAsync(
+            existing =>
+                existing.ProjectConversationId == projectConversation.Id
+                && existing.AgentId == agentId
+                && existing.ExternalAgentName == normalizedAgentName,
+            cancellationToken
+        );
 
         if (binding == null)
         {
@@ -114,7 +120,7 @@ public class TaskSessionBindingService : ITaskSessionBindingService
                 ExternalAgentName = normalizedAgentName,
                 ProviderSessionId = normalizedProviderSessionId,
                 CreateBy = normalizedUser,
-                CreateTime = now
+                CreateTime = now,
             };
             await _bindingRepository.AddAsync(binding);
             try
@@ -125,12 +131,13 @@ public class TaskSessionBindingService : ITaskSessionBindingService
             catch (DbUpdateException)
             {
                 _bindingRepository.Remove(binding);
-                binding = await _bindingRepository.Queryable
-                    .SingleOrDefaultAsync(
-                        existing => existing.ProjectConversationId == projectConversation.Id
-                            && existing.AgentId == agentId
-                            && existing.ExternalAgentName == normalizedAgentName,
-                        cancellationToken);
+                binding = await _bindingRepository.Queryable.SingleOrDefaultAsync(
+                    existing =>
+                        existing.ProjectConversationId == projectConversation.Id
+                        && existing.AgentId == agentId
+                        && existing.ExternalAgentName == normalizedAgentName,
+                    cancellationToken
+                );
                 if (binding == null)
                 {
                     throw;
@@ -150,12 +157,10 @@ public class TaskSessionBindingService : ITaskSessionBindingService
         return binding;
     }
 
-    public async Task DeleteByContextAsync(
-        Guid projectConversationId,
-        CancellationToken cancellationToken = default)
+    public async Task DeleteByContextAsync(Guid projectConversationId, CancellationToken cancellationToken = default)
     {
-        await _bindingRepository.Queryable
-            .Where(binding => binding.ProjectConversationId == projectConversationId)
+        await _bindingRepository
+            .Queryable.Where(binding => binding.ProjectConversationId == projectConversationId)
             .ExecuteDeleteAsync(cancellationToken);
 
         await _unitOfWork.SaveChangesAsync();

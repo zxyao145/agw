@@ -13,9 +13,18 @@ public class TemporalTypePolicyTests
     {
         AssertPropertyType<BaseEntity>(nameof(BaseEntity.CreateTime), typeof(DateTimeOffset));
         AssertPropertyType<BaseEntity>(nameof(BaseEntity.UpdateTime), typeof(DateTimeOffset?));
-        AssertPropertyType<ProjectConversationChatHistory>(nameof(ProjectConversationChatHistory.CreateTime), typeof(DateTimeOffset));
-        AssertPropertyType<ProjectConversationChatHistory>(nameof(ProjectConversationChatHistory.UpdateTime), typeof(DateTimeOffset?));
-        AssertPropertyType<ProjectConversationChatHistory>(nameof(ProjectConversationChatHistory.FinishedTime), typeof(DateTimeOffset?));
+        AssertPropertyType<ProjectConversationChatHistory>(
+            nameof(ProjectConversationChatHistory.CreateTime),
+            typeof(DateTimeOffset)
+        );
+        AssertPropertyType<ProjectConversationChatHistory>(
+            nameof(ProjectConversationChatHistory.UpdateTime),
+            typeof(DateTimeOffset?)
+        );
+        AssertPropertyType<ProjectConversationChatHistory>(
+            nameof(ProjectConversationChatHistory.FinishedTime),
+            typeof(DateTimeOffset?)
+        );
         AssertPropertyType<AgentflowTrace>(nameof(AgentflowTrace.StartTimeUtc), typeof(DateTimeOffset));
         AssertPropertyType<TaskProjection>(nameof(TaskProjection.CreateTime), typeof(DateTimeOffset));
         AssertPropertyType<TaskProjection>(nameof(TaskProjection.UpdateTime), typeof(DateTimeOffset?));

@@ -1,5 +1,4 @@
 using System.Diagnostics;
-
 using Microsoft.Extensions.Primitives;
 
 namespace Agw.Host.Middleware;
@@ -18,12 +17,15 @@ public sealed class TraceIdResponseHeaderMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        context.Response.OnStarting(static state =>
-        {
-            var httpContext = (HttpContext)state;
-            httpContext.Response.Headers[TraceIdHeaderName] = GetTraceId(httpContext);
-            return Task.CompletedTask;
-        }, context);
+        context.Response.OnStarting(
+            static state =>
+            {
+                var httpContext = (HttpContext)state;
+                httpContext.Response.Headers[TraceIdHeaderName] = GetTraceId(httpContext);
+                return Task.CompletedTask;
+            },
+            context
+        );
 
         await _next(context);
     }
@@ -36,9 +38,11 @@ public sealed class TraceIdResponseHeaderMiddleware
             return traceId;
         }
 
-        if (context.Request.Headers.TryGetValue(TraceParentHeaderName, out StringValues traceParent) &&
-            traceParent.Count > 0 &&
-            ActivityContext.TryParse(traceParent[0], null, out var activityContext))
+        if (
+            context.Request.Headers.TryGetValue(TraceParentHeaderName, out StringValues traceParent)
+            && traceParent.Count > 0
+            && ActivityContext.TryParse(traceParent[0], null, out var activityContext)
+        )
         {
             return activityContext.TraceId.ToString();
         }

@@ -4,12 +4,10 @@ public enum ApplicationResultType
 {
     Success,
     NotFound,
-    Invalid
+    Invalid,
 }
 
-public sealed record ApplicationResult(
-    ApplicationResultType Type,
-    string? Error = null)
+public sealed record ApplicationResult(ApplicationResultType Type, string? Error = null)
 {
     public static ApplicationResult Success() => new(ApplicationResultType.Success);
 
@@ -18,10 +16,7 @@ public sealed record ApplicationResult(
     public static ApplicationResult Invalid(string error) => new(ApplicationResultType.Invalid, error);
 }
 
-public sealed record ApplicationResult<T>(
-    ApplicationResultType Type,
-    T? Value = default,
-    string? Error = null)
+public sealed record ApplicationResult<T>(ApplicationResultType Type, T? Value = default, string? Error = null)
 {
     public static ApplicationResult<T> Success(T value) => new(ApplicationResultType.Success, value);
 

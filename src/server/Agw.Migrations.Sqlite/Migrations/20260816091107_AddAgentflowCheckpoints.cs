@@ -30,29 +30,31 @@ namespace Agw.Migrations.Sqlite.Migrations
                     create_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: false),
                     create_by = table.Column<string>(type: "TEXT", nullable: true),
                     update_time = table.Column<DateTimeOffset>(type: "TEXT", nullable: true),
-                    update_by = table.Column<string>(type: "TEXT", nullable: true)
+                    update_by = table.Column<string>(type: "TEXT", nullable: true),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_agentflow_checkpoint", x => x.id);
-                });
+                }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_agentflow_checkpoint_project_conversation_id_agentflow_id_boundary_sequence",
                 table: "agentflow_checkpoint",
-                columns: new[] { "project_conversation_id", "agentflow_id", "boundary_sequence" });
+                columns: new[] { "project_conversation_id", "agentflow_id", "boundary_sequence" }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "ix_agentflow_checkpoint_source_execution_id",
                 table: "agentflow_checkpoint",
-                column: "source_execution_id");
+                column: "source_execution_id"
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "agentflow_checkpoint");
+            migrationBuilder.DropTable(name: "agentflow_checkpoint");
         }
     }
 }

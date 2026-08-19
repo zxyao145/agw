@@ -7,7 +7,6 @@ public abstract class CapabilitySourceDefinition
     /// MCP 工具调用时通过 SourceId 重新找到对应 MCP Source。
     /// </summary>
     public required string Id { get; init; }
-
 }
 
 /// <summary>
@@ -28,9 +27,7 @@ public sealed class McpCapabilitySourceDefinition : CapabilitySourceDefinition
     public IReadOnlyList<CredentialBindingDefinition> CredentialBindings { get; init; } = [];
 }
 
-public abstract class McpTransportDefinition
-{
-}
+public abstract class McpTransportDefinition { }
 
 public sealed class StdioMcpTransportDefinition : McpTransportDefinition
 {
@@ -44,13 +41,9 @@ public abstract class EndpointMcpTransportDefinition : McpTransportDefinition
     public required string Endpoint { get; init; }
 }
 
-public sealed class HttpMcpTransportDefinition : EndpointMcpTransportDefinition
-{
-}
+public sealed class HttpMcpTransportDefinition : EndpointMcpTransportDefinition { }
 
-public sealed class SseMcpTransportDefinition : EndpointMcpTransportDefinition
-{
-}
+public sealed class SseMcpTransportDefinition : EndpointMcpTransportDefinition { }
 
 public sealed class CredentialBindingDefinition
 {
@@ -78,9 +71,7 @@ public sealed class InstallationFieldCredentialValueSourceDefinition : Credentia
     public required string FieldId { get; init; }
 }
 
-public sealed class OAuthAccessTokenCredentialValueSourceDefinition : CredentialValueSourceDefinition
-{
-}
+public sealed class OAuthAccessTokenCredentialValueSourceDefinition : CredentialValueSourceDefinition { }
 
 public enum CredentialBindingTarget
 {

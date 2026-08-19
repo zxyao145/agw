@@ -3,7 +3,6 @@ using Agw.Agents.Execution.Summaries;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Shared.Data.Entities.Providers;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -40,8 +39,8 @@ public class SummaryChatClientFactoryTests
                     AuthType = ProviderAuthType.ApiKey,
                     ApiKey = "test-key",
                     Enable = true,
-                }
-            ]
+                },
+            ],
         };
         var model = new AgwAiModel { Id = Guid.CreateVersion7(), Name = "test-model" };
         var modelProvider = new ModelProviderRelation
@@ -65,10 +64,9 @@ public class SummaryChatClientFactoryTests
             null!,
             null!,
             null!,
-            null!);
-        var factory = new SummaryChatClientFactory(
-            appService,
-            NullLogger<SummaryChatClientFactory>.Instance);
+            null!
+        );
+        var factory = new SummaryChatClientFactory(appService, NullLogger<SummaryChatClientFactory>.Instance);
 
         using var client = await factory.CreateAsync(modelProvider.Id, cancellationToken);
 

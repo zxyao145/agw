@@ -1,5 +1,4 @@
 using Agw.Agents.Execution.Transport.SignalR;
-
 using Microsoft.AspNetCore.Mvc.Routing;
 
 namespace Agw.Agents.Tests;
@@ -9,8 +8,8 @@ public class LegacyExecutionEndpointRemovalTests
     [Fact]
     public void AgentsAssembly_DoesNotExposeLegacyExecutionRoutes()
     {
-        var routeTemplates = typeof(ExecutionHub).Assembly
-            .GetTypes()
+        var routeTemplates = typeof(ExecutionHub)
+            .Assembly.GetTypes()
             .SelectMany(type => type.GetMethods())
             .SelectMany(method => method.GetCustomAttributes(typeof(HttpMethodAttribute), inherit: true))
             .Cast<HttpMethodAttribute>()

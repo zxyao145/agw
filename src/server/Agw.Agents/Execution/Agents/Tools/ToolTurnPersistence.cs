@@ -15,7 +15,8 @@ internal sealed class ToolTurnPersistence
     public ToolTurnPersistence(
         AIAgent agent,
         AgentSession session,
-        Func<IReadOnlyList<ChatMessage>, CancellationToken, Task> persistAsync)
+        Func<IReadOnlyList<ChatMessage>, CancellationToken, Task> persistAsync
+    )
     {
         _agent = agent;
         _session = session;
@@ -38,8 +39,7 @@ internal sealed class ToolTurnPersistence
         _responseMessages.AddRange(messages);
     }
 
-    public async Task<IReadOnlyList<ChatMessage>> CompleteAsync(
-        CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ChatMessage>> CompleteAsync(CancellationToken cancellationToken)
     {
         if (Interlocked.Exchange(ref _completionAttempted, 1) != 0)
         {

@@ -1,25 +1,24 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
 
-	<PropertyGroup>
-		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
-	</PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Bens.Results" />
+    <PackageReference Include="Microsoft.Agents.AI" />
+    <PackageReference Include="Microsoft.Agents.AI.OpenAI" />
+    <PackageReference Include="Microsoft.Agents.AI.Workflows" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+  </ItemGroup>
 
-	<ItemGroup>
-        <FrameworkReference Include="Microsoft.AspNetCore.App" />
-        <PackageReference Include="Bens.Results" />
-		<PackageReference Include="Microsoft.Agents.AI" />
-		<PackageReference Include="Microsoft.Agents.AI.OpenAI" />
-		<PackageReference Include="Microsoft.Agents.AI.Workflows" />
-		<PackageReference Include="Microsoft.EntityFrameworkCore" />
-	</ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Agw.Data\Agw.Data.csproj" />
+  </ItemGroup>
 
-	<ItemGroup>
-	  <ProjectReference Include="..\Agw.Data\Agw.Data.csproj" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <Folder Include="Contracts\Integrations\" />
-	</ItemGroup>
+  <ItemGroup>
+    <Folder Include="Contracts\Integrations\" />
+  </ItemGroup>
 </Project>

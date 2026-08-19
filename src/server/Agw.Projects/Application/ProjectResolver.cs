@@ -1,7 +1,6 @@
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Projects.Application;
@@ -34,7 +33,9 @@ public class ProjectResolver
             return null;
         }
 
-        return await _projectRepository.Queryable
-                .FirstOrDefaultAsync(project => project.Id == projectId.Value, cancellationToken);
+        return await _projectRepository.Queryable.FirstOrDefaultAsync(
+            project => project.Id == projectId.Value,
+            cancellationToken
+        );
     }
 }

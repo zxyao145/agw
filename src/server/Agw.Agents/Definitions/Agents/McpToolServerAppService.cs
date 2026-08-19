@@ -2,7 +2,6 @@ using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Pagination;
-
 using ModelContextProtocol.Client;
 
 namespace Agw.Agents.Definitions.Agents;
@@ -20,7 +19,8 @@ public class McpToolServerAppService
         IRepository<McpServer> mcpToolServerRepository,
         IRepository<AgentMcpServerRelation> agentMcpToolServerRepository,
         IUnitOfWork unitOfWork,
-        McpToolServerDomainService mcpToolServerDomainService)
+        McpToolServerDomainService mcpToolServerDomainService
+    )
     {
         _agentRepository = agentRepository;
         _mcpToolServerRepository = mcpToolServerRepository;
@@ -34,13 +34,15 @@ public class McpToolServerAppService
     public Task<PagedResult<McpServer>> ListMcpToolServerPageAsync(
         int pageIndex,
         int pageSize,
-        CancellationToken cancellationToken = default) =>
+        CancellationToken cancellationToken = default
+    ) =>
         UpdatedTimePagination.ToPagedResultAsync(
             _mcpToolServerRepository.Queryable,
             server => server.Id,
             pageIndex,
             pageSize,
-            cancellationToken);
+            cancellationToken
+        );
 
     public Task<McpServer?> GetMcpToolServerAsync(Guid id) => _mcpToolServerRepository.GetByIdAsync(id);
 
@@ -80,7 +82,10 @@ public class McpToolServerAppService
         return true;
     }
 
-    public async Task<IReadOnlyList<McpClientTool>> ListMcpToolsAsync(Guid mcpToolServerId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<McpClientTool>> ListMcpToolsAsync(
+        Guid mcpToolServerId,
+        CancellationToken cancellationToken = default
+    )
     {
         var server = await _mcpToolServerRepository.GetByIdAsync(mcpToolServerId);
         if (server == null || !server.Enabled)
@@ -108,11 +113,9 @@ public class McpToolServerAppService
         var existingAgents = await _agentRepository.ListAsync(x => requestedIds.Contains(x.Id));
         foreach (var agentId in existingAgents.Select(x => x.Id))
         {
-            await _agentMcpToolServerRepository.AddAsync(new AgentMcpServerRelation
-            {
-                AgentId = agentId,
-                McpToolServerId = mcpToolServerId
-            });
+            await _agentMcpToolServerRepository.AddAsync(
+                new AgentMcpServerRelation { AgentId = agentId, McpToolServerId = mcpToolServerId }
+            );
         }
     }
 }

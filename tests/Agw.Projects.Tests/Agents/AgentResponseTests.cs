@@ -23,28 +23,16 @@ public class AgentResponseTests
             SystemPrompt = "Write clearly",
             ModelProviderId = Guid.CreateVersion7(),
             EnableSummary = true,
-            Tools =
-            [
-                new ToolValue { Definition = new WebFetchToolDefinition() }
-            ],
+            Tools = [new ToolValue { Definition = new WebFetchToolDefinition() }],
             Type = AgentType.System,
             Extra = """{"mode":"draft"}""",
             CreateBy = "tester",
             CreateTime = new DateTimeOffset(2026, 4, 11, 0, 0, 0, TimeSpan.Zero),
             UpdateBy = "updater",
             UpdateTime = new DateTimeOffset(2026, 4, 11, 1, 0, 0, TimeSpan.Zero),
-            AgentMcpToolServers =
-            [
-                new AgentMcpServerRelation { AgentId = agentId, McpToolServerId = mcpToolServerId }
-            ],
-            AgentSkillRelations =
-            [
-                new AgentSkillRelation { AgentId = agentId, SkillId = skillId }
-            ],
-            AgentConnectionRelations =
-            [
-                new AgentConnectionRelation { AgentId = agentId, ConnectionId = connectionId }
-            ]
+            AgentMcpToolServers = [new AgentMcpServerRelation { AgentId = agentId, McpToolServerId = mcpToolServerId }],
+            AgentSkillRelations = [new AgentSkillRelation { AgentId = agentId, SkillId = skillId }],
+            AgentConnectionRelations = [new AgentConnectionRelation { AgentId = agentId, ConnectionId = connectionId }],
         };
 
         var response = AgentResponse.FromDomain(agent);

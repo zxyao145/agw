@@ -24,7 +24,8 @@ internal static class MagenticBlockBuilder
             var configuredManager = AgentflowBlockBuildSupport.CreateParticipant(
                 context,
                 config.ManagerNodeId,
-                $"{context.BlockNode.NodeId}.{config.ManagerNodeId}.manager");
+                $"{context.BlockNode.NodeId}.{config.ManagerNodeId}.manager"
+            );
             if (configuredManager == null)
             {
                 return null;
@@ -33,14 +34,12 @@ internal static class MagenticBlockBuilder
             manager = configuredManager;
             managerNodeId = config.ManagerNodeId;
             team = participants
-                .Where(participant =>
-                    !string.Equals(participant.NodeId, managerNodeId, StringComparison.Ordinal))
+                .Where(participant => !string.Equals(participant.NodeId, managerNodeId, StringComparison.Ordinal))
                 .Select(participant => participant.Agent)
                 .ToList();
         }
 
-        var builder = AgentWorkflowBuilder.CreateMagenticBuilderWith(manager)
-            .AddParticipants(team);
+        var builder = AgentWorkflowBuilder.CreateMagenticBuilderWith(manager).AddParticipants(team);
         if (config.MaxRounds.HasValue)
         {
             builder = builder.WithMaxRounds(config.MaxRounds);

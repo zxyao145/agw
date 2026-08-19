@@ -1,8 +1,6 @@
 using System.Runtime.CompilerServices;
-
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -12,8 +10,7 @@ internal sealed class BackgroundAgentApprovalMiddleware
 {
     private readonly HumanInteractionContextAccessor? _humanInteractionContextAccessor;
 
-    public BackgroundAgentApprovalMiddleware(
-        HumanInteractionContextAccessor? humanInteractionContextAccessor)
+    public BackgroundAgentApprovalMiddleware(HumanInteractionContextAccessor? humanInteractionContextAccessor)
     {
         _humanInteractionContextAccessor = humanInteractionContextAccessor;
     }
@@ -23,12 +20,11 @@ internal sealed class BackgroundAgentApprovalMiddleware
         AgentSession? session,
         AgentRunOptions? options,
         AIAgent innerAgent,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         using var interactionScope = _humanInteractionContextAccessor?.Suppress();
-        var response = await innerAgent
-            .RunAsync(messages, session, options, cancellationToken)
-            .ConfigureAwait(false);
+        var response = await innerAgent.RunAsync(messages, session, options, cancellationToken).ConfigureAwait(false);
         ThrowIfApprovalRequested(response.Messages.SelectMany(static message => message.Contents));
         return response;
     }
@@ -38,12 +34,15 @@ internal sealed class BackgroundAgentApprovalMiddleware
         AgentSession? session,
         AgentRunOptions? options,
         AIAgent innerAgent,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken
+    )
     {
         using var interactionScope = _humanInteractionContextAccessor?.Suppress();
-        await foreach (var update in innerAgent
-                           .RunStreamingAsync(messages, session, options, cancellationToken)
-                           .ConfigureAwait(false))
+        await foreach (
+            var update in innerAgent
+                .RunStreamingAsync(messages, session, options, cancellationToken)
+                .ConfigureAwait(false)
+        )
         {
             ThrowIfApprovalRequested(update.Contents);
             yield return update;
@@ -56,7 +55,8 @@ internal sealed class BackgroundAgentApprovalMiddleware
         {
             throw new AgwException(
                 ErrorCodes.AgentExecutionFailed,
-                "A background agent requested a new tool approval. Background tasks cannot pause for approval.");
+                "A background agent requested a new tool approval. Background tasks cannot pause for approval."
+            );
         }
     }
 }

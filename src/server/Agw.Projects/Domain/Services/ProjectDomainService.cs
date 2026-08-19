@@ -29,7 +29,7 @@ public class ProjectDomainService
         "LPT6",
         "LPT7",
         "LPT8",
-        "LPT9"
+        "LPT9",
     ];
 
     private readonly TimeProvider _timeProvider;
@@ -80,10 +80,12 @@ public class ProjectDomainService
         foreach (var (name, value) in project.EnvironmentVariables ?? [])
         {
             var normalizedName = name.Trim();
-            if (string.IsNullOrEmpty(normalizedName)
+            if (
+                string.IsNullOrEmpty(normalizedName)
                 || normalizedName.Contains('=')
                 || normalizedName.Contains('\0')
-                || !normalized.TryAdd(normalizedName, value ?? string.Empty))
+                || !normalized.TryAdd(normalizedName, value ?? string.Empty)
+            )
             {
                 throw new AgwException(ErrorCodes.InvalidProjectEnvironmentVariableName);
             }
@@ -101,9 +103,7 @@ public class ProjectDomainService
             return false;
         }
 
-        var chars = value.Trim()
-            .Select(c => char.IsLetterOrDigit(c) || c is '.' or '_' or '-' ? c : '_')
-            .ToArray();
+        var chars = value.Trim().Select(c => char.IsLetterOrDigit(c) || c is '.' or '_' or '-' ? c : '_').ToArray();
         folderName = new string(chars);
 
         while (folderName.Contains("__", StringComparison.Ordinal))

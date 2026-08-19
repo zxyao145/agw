@@ -1,13 +1,10 @@
 using System.Diagnostics;
 using System.Net;
-
 using Agw.Host.Middleware;
-
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
-
 using Xunit;
 
 namespace Agw.Host.Tests;
@@ -20,15 +17,17 @@ public class TraceIdResponseHeaderMiddlewareTests
         string? traceId = null;
         await using var app = await CreateAppAsync(webApp =>
         {
-            webApp.MapGet("/probe", () =>
-            {
-                traceId = Activity.Current?.TraceId.ToString();
-                return Results.NoContent();
-            });
+            webApp.MapGet(
+                "/probe",
+                () =>
+                {
+                    traceId = Activity.Current?.TraceId.ToString();
+                    return Results.NoContent();
+                }
+            );
         });
 
-        var response = await app.GetTestClient()
-            .GetAsync("/probe", TestContext.Current.CancellationToken);
+        var response = await app.GetTestClient().GetAsync("/probe", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Assert.NotNull(traceId);
@@ -50,8 +49,7 @@ public class TraceIdResponseHeaderMiddlewareTests
             });
         });
 
-        var response = await app.GetTestClient()
-            .GetAsync("/probe", TestContext.Current.CancellationToken);
+        var response = await app.GetTestClient().GetAsync("/probe", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var traceId = Assert.Single(response.Headers.GetValues("x-trace-id"));
@@ -63,15 +61,11 @@ public class TraceIdResponseHeaderMiddlewareTests
     public async Task RequestWithTraceParent_ResponseUsesIncomingTraceId()
     {
         const string traceId = "11111111111111111111111111111111";
-        await using var app = await CreateAppAsync(webApp =>
-            webApp.MapGet("/probe", Results.NoContent));
+        await using var app = await CreateAppAsync(webApp => webApp.MapGet("/probe", Results.NoContent));
         using var request = new HttpRequestMessage(HttpMethod.Get, "/probe");
-        request.Headers.TryAddWithoutValidation(
-            "traceparent",
-            $"00-{traceId}-2222222222222222-01");
+        request.Headers.TryAddWithoutValidation("traceparent", $"00-{traceId}-2222222222222222-01");
 
-        var response = await app.GetTestClient()
-            .SendAsync(request, TestContext.Current.CancellationToken);
+        var response = await app.GetTestClient().SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(traceId, Assert.Single(response.Headers.GetValues("x-trace-id")));
         Assert.False(response.Headers.Contains("traceparent"));

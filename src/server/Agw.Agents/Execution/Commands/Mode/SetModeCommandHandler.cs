@@ -9,7 +9,8 @@ public sealed class SetModeCommandHandler : IExecutionCommandHandler<SetModeComm
     public Task HandleAsync(
         SetModeCommand command,
         ExecutionConnectionContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (command.AgentId == Guid.Empty)
         {
@@ -19,9 +20,7 @@ public sealed class SetModeCommandHandler : IExecutionCommandHandler<SetModeComm
         var mode = command.Mode.Trim().ToLowerInvariant();
         if (mode is not ("plan" or "execute"))
         {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                "SetModeCommand.mode must be either 'plan' or 'execute'.");
+            throw new AgwException(ErrorCodes.InvalidParam, "SetModeCommand.mode must be either 'plan' or 'execute'.");
         }
 
         return context.SetModeAsync(command.AgentId, mode, cancellationToken);

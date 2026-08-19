@@ -16,7 +16,18 @@ public class AgentflowTraceConfiguration : IEntityTypeConfiguration<AgentflowTra
         builder.Property(e => e.Input).IsRequired().HasColumnType("text");
         builder.Property(e => e.Status).HasConversion<int>();
         builder.Property(e => e.Error).HasColumnType("text");
-        builder.HasIndex(e => new { e.ProjectId, e.ContextId, e.TaskId, e.StartTimeUtc });
-        builder.HasIndex(e => new { e.AgentflowId, e.NodeId, e.StartTimeUtc });
+        builder.HasIndex(e => new
+        {
+            e.ProjectId,
+            e.ContextId,
+            e.TaskId,
+            e.StartTimeUtc,
+        });
+        builder.HasIndex(e => new
+        {
+            e.AgentflowId,
+            e.NodeId,
+            e.StartTimeUtc,
+        });
     }
 }

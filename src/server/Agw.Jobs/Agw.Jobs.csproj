@@ -1,11 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-    <ItemGroup>
-        <FrameworkReference Include="Microsoft.AspNetCore.App" />
-        <PackageReference Include="Cronos" />
-        <PackageReference Include="Microsoft.Agents.AI" />
-        <ProjectReference Include="..\Agw.Agents\Agw.Agents.csproj" />
-        <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
-        <ProjectReference Include="..\Agw.Projects\Agw.Projects.csproj" />
-        <ProjectReference Include="..\Agw.Skills\Agw.Skills.csproj" />
-    </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Cronos" />
+    <PackageReference Include="Microsoft.Agents.AI" />
+    <ProjectReference Include="..\Agw.Agents\Agw.Agents.csproj" />
+    <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
+    <ProjectReference Include="..\Agw.Projects\Agw.Projects.csproj" />
+    <ProjectReference Include="..\Agw.Skills\Agw.Skills.csproj" />
+  </ItemGroup>
 </Project>

@@ -7,11 +7,13 @@ public record ModelProviderCreateRequest(
     decimal OutputPrice,
     decimal CacheRead,
     decimal CacheWrite,
-    int RpsLimit);
+    int RpsLimit
+);
 
 public record ModelProviderUpdateRequest(
     decimal InputPrice,
     decimal OutputPrice,
     decimal CacheRead,
     decimal CacheWrite,
-    int RpsLimit);
+    int RpsLimit
+);

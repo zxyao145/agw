@@ -2,9 +2,7 @@ using Agw.Domain.Services;
 using Agw.Shared.Contracts.Tools;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Manager.Api.Controllers;

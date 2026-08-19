@@ -8,5 +8,6 @@ public interface IConversationHistoryWriter
         Guid projectId,
         string contextId,
         IReadOnlyList<ChatMessage> messages,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default
+    );
 }

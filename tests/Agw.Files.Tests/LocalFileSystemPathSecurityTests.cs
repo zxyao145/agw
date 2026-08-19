@@ -11,16 +11,15 @@ public class LocalFileSystemPathSecurityTests
         using var scope = TempDirectoryScope.Create();
         var fileSystem = new LocalFileSystem(scope.Path);
 
-        await fileSystem.WriteAllTextAsync(
-            "src/file.txt",
-            "content",
-            TestContext.Current.CancellationToken);
+        await fileSystem.WriteAllTextAsync("src/file.txt", "content", TestContext.Current.CancellationToken);
 
         Assert.Equal(
             "content",
             await File.ReadAllTextAsync(
                 Path.Combine(scope.Path, "src", "file.txt"),
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken
+            )
+        );
     }
 
     [Theory]
@@ -31,8 +30,9 @@ public class LocalFileSystemPathSecurityTests
         using var scope = TempDirectoryScope.Create();
         var fileSystem = new LocalFileSystem(scope.Path);
 
-        var exception = await Assert.ThrowsAsync<AgwFilesException>(
-            () => fileSystem.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<AgwFilesException>(() =>
+            fileSystem.ReadAllTextAsync(path, TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(FilesErrorCode.PathOutsideRoot, exception.ErrorCode);
     }
@@ -43,10 +43,12 @@ public class LocalFileSystemPathSecurityTests
         using var scope = TempDirectoryScope.Create();
         var fileSystem = new LocalFileSystem(scope.Path);
 
-        var exception = await Assert.ThrowsAsync<AgwFilesException>(
-            () => fileSystem.ReadAllTextAsync(
+        var exception = await Assert.ThrowsAsync<AgwFilesException>(() =>
+            fileSystem.ReadAllTextAsync(
                 Path.Combine(Path.GetPathRoot(scope.Path)!, "outside.txt"),
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(FilesErrorCode.PathOutsideRoot, exception.ErrorCode);
     }
@@ -63,10 +65,13 @@ public class LocalFileSystemPathSecurityTests
 
         public static TempDirectoryScope Create()
         {
-            return new TempDirectoryScope(System.IO.Path.Combine(
-                System.IO.Path.GetTempPath(),
-                "agw-local-filesystem-tests",
-                Guid.CreateVersion7().ToString("N")));
+            return new TempDirectoryScope(
+                System.IO.Path.Combine(
+                    System.IO.Path.GetTempPath(),
+                    "agw-local-filesystem-tests",
+                    Guid.CreateVersion7().ToString("N")
+                )
+            );
         }
 
         public void Dispose()

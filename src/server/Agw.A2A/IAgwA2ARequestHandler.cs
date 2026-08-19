@@ -12,14 +12,22 @@ public interface IAgwA2ARequestHandler
     /// <param name="request">The send message request.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The send message response.</returns>
-    Task<SendMessageResponse> SendMessageAsync(string agentName, SendMessageRequest request, CancellationToken cancellationToken = default);
+    Task<SendMessageResponse> SendMessageAsync(
+        string agentName,
+        SendMessageRequest request,
+        CancellationToken cancellationToken = default
+    );
 
     /// <summary>Handles a streaming send message request.</summary>
     /// <param name="agentName"></param>
     /// <param name="request">The send message request.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>An asynchronous enumerable of streaming responses.</returns>
-    IAsyncEnumerable<StreamResponse> SendStreamingMessageAsync(string agentName, SendMessageRequest request, CancellationToken cancellationToken = default);
+    IAsyncEnumerable<StreamResponse> SendStreamingMessageAsync(
+        string agentName,
+        SendMessageRequest request,
+        CancellationToken cancellationToken = default
+    );
 
     /// <summary>Gets a task by ID.</summary>
     /// <param name="request">The get task request.</param>
@@ -32,48 +40,74 @@ public interface IAgwA2ARequestHandler
     /// <param name="request">The list tasks request.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The list tasks response.</returns>
-    Task<ListTasksResponse> ListTasksAsync(string agentName, ListTasksRequest request, CancellationToken cancellationToken = default);
+    Task<ListTasksResponse> ListTasksAsync(
+        string agentName,
+        ListTasksRequest request,
+        CancellationToken cancellationToken = default
+    );
 
     /// <summary>Cancels a task.</summary>
     /// <param name="agentName"></param>
     /// <param name="request">The cancel task request.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The canceled agent task.</returns>
-    Task<AgentTask> CancelTaskAsync(string agentName, CancelTaskRequest request, CancellationToken cancellationToken = default);
+    Task<AgentTask> CancelTaskAsync(
+        string agentName,
+        CancelTaskRequest request,
+        CancellationToken cancellationToken = default
+    );
 
     /// <summary>Subscribes to task updates.</summary>
     /// <param name="request">The subscribe to task request.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>An asynchronous enumerable of streaming responses.</returns>
-    IAsyncEnumerable<StreamResponse> SubscribeToTaskAsync(SubscribeToTaskRequest request, CancellationToken cancellationToken = default);
+    IAsyncEnumerable<StreamResponse> SubscribeToTaskAsync(
+        SubscribeToTaskRequest request,
+        CancellationToken cancellationToken = default
+    );
 
     /// <summary>Creates a push notification configuration.</summary>
     /// <param name="request">The create push notification config request.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The created push notification configuration.</returns>
-    Task<TaskPushNotificationConfig> CreateTaskPushNotificationConfigAsync(CreateTaskPushNotificationConfigRequest request, CancellationToken cancellationToken = default);
+    Task<TaskPushNotificationConfig> CreateTaskPushNotificationConfigAsync(
+        CreateTaskPushNotificationConfigRequest request,
+        CancellationToken cancellationToken = default
+    );
 
     /// <summary>Gets a push notification configuration.</summary>
     /// <param name="request">The get push notification config request.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The push notification configuration.</returns>
-    Task<TaskPushNotificationConfig> GetTaskPushNotificationConfigAsync(GetTaskPushNotificationConfigRequest request, CancellationToken cancellationToken = default);
+    Task<TaskPushNotificationConfig> GetTaskPushNotificationConfigAsync(
+        GetTaskPushNotificationConfigRequest request,
+        CancellationToken cancellationToken = default
+    );
 
     /// <summary>Lists push notification configurations.</summary>
     /// <param name="request">The list push notification configs request.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The list push notification config response.</returns>
-    Task<ListTaskPushNotificationConfigResponse> ListTaskPushNotificationConfigAsync(ListTaskPushNotificationConfigRequest request, CancellationToken cancellationToken = default);
+    Task<ListTaskPushNotificationConfigResponse> ListTaskPushNotificationConfigAsync(
+        ListTaskPushNotificationConfigRequest request,
+        CancellationToken cancellationToken = default
+    );
 
     /// <summary>Deletes a push notification configuration.</summary>
     /// <param name="request">The delete push notification config request.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    Task DeleteTaskPushNotificationConfigAsync(DeleteTaskPushNotificationConfigRequest request, CancellationToken cancellationToken = default);
+    Task DeleteTaskPushNotificationConfigAsync(
+        DeleteTaskPushNotificationConfigRequest request,
+        CancellationToken cancellationToken = default
+    );
 
     /// <summary>Gets the extended agent card.</summary>
     /// <param name="request">The get extended agent card request.</param>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>The extended agent card.</returns>
-    Task<AgentCard> GetExtendedAgentCardAsync(GetExtendedAgentCardRequest request, CancellationToken cancellationToken = default);
+    Task<AgentCard> GetExtendedAgentCardAsync(
+        GetExtendedAgentCardRequest request,
+        CancellationToken cancellationToken = default
+    );
 }

@@ -1,27 +1,22 @@
 using System.Security.Cryptography;
 using System.Text;
-
 using Agw.Infrastructure.Data;
 using Agw.Setup.Services;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Auth;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
-
 using Xunit;
 
 namespace Agw.Setup.Tests;
 
 public sealed class LegacyApiTokenMigratorTests
 {
-    private static readonly Guid LegacyTokenId =
-        Guid.Parse("0198b7b8-a50c-7f6e-a50d-b46e722a6622");
-    private static readonly DateTimeOffset LegacyCreatedAt =
-        new(2026, 7, 13, 10, 0, 0, TimeSpan.Zero);
+    private static readonly Guid LegacyTokenId = Guid.Parse("0198b7b8-a50c-7f6e-a50d-b46e722a6622");
+    private static readonly DateTimeOffset LegacyCreatedAt = new(2026, 7, 13, 10, 0, 0, TimeSpan.Zero);
 
     [Fact]
     public async Task MigrateAsync_ImportsLegacyHashAndMetadataThenRemovesStateTokens()
@@ -40,18 +35,12 @@ public sealed class LegacyApiTokenMigratorTests
             await using var context = new AgwDbContext(options);
             await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
             var stateStore = new JsonInitializationStateStore(paths);
-            var migrator = new LegacyApiTokenMigrator(
-                stateStore,
-                context,
-                NullLogger<LegacyApiTokenMigrator>.Instance);
+            var migrator = new LegacyApiTokenMigrator(stateStore, context, NullLogger<LegacyApiTokenMigrator>.Instance);
 
-            var migratedCount = await migrator.MigrateAsync(
-                TestContext.Current.CancellationToken);
+            var migratedCount = await migrator.MigrateAsync(TestContext.Current.CancellationToken);
             context.ChangeTracker.Clear();
 
-            var persisted = await context.ApiTokens
-                .AsNoTracking()
-                .SingleAsync(TestContext.Current.CancellationToken);
+            var persisted = await context.ApiTokens.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken);
             Assert.Equal(1, migratedCount);
             Assert.Equal(LegacyTokenId, persisted.Id);
             Assert.Equal("Legacy desktop", persisted.Name);
@@ -61,9 +50,8 @@ public sealed class LegacyApiTokenMigratorTests
             Assert.Empty(stateStore.GetLegacyApiTokens());
             Assert.DoesNotContain(
                 "\"tokens\"",
-                await File.ReadAllTextAsync(
-                    paths.StateFile,
-                    TestContext.Current.CancellationToken));
+                await File.ReadAllTextAsync(paths.StateFile, TestContext.Current.CancellationToken)
+            );
         }
         finally
         {
@@ -87,30 +75,27 @@ public sealed class LegacyApiTokenMigratorTests
                 .Options;
             await using var context = new AgwDbContext(options);
             await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
-            context.ApiTokens.Add(new ApiToken
-            {
-                Id = LegacyTokenId,
-                Name = "Legacy desktop",
-                NormalizedName = "LEGACY DESKTOP",
-                Prefix = token[..12],
-                SecretHash = Hash(token),
-                CreateBy = Constants.AdminUserId,
-                CreateTime = LegacyCreatedAt
-            });
+            context.ApiTokens.Add(
+                new ApiToken
+                {
+                    Id = LegacyTokenId,
+                    Name = "Legacy desktop",
+                    NormalizedName = "LEGACY DESKTOP",
+                    Prefix = token[..12],
+                    SecretHash = Hash(token),
+                    CreateBy = Constants.AdminUserId,
+                    CreateTime = LegacyCreatedAt,
+                }
+            );
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
             var stateStore = new JsonInitializationStateStore(paths);
-            var migrator = new LegacyApiTokenMigrator(
-                stateStore,
-                context,
-                NullLogger<LegacyApiTokenMigrator>.Instance);
+            var migrator = new LegacyApiTokenMigrator(stateStore, context, NullLogger<LegacyApiTokenMigrator>.Instance);
 
-            var migratedCount = await migrator.MigrateAsync(
-                TestContext.Current.CancellationToken);
+            var migratedCount = await migrator.MigrateAsync(TestContext.Current.CancellationToken);
 
             Assert.Equal(1, migratedCount);
             Assert.Empty(stateStore.GetLegacyApiTokens());
-            Assert.Equal(1, await context.ApiTokens.CountAsync(
-                TestContext.Current.CancellationToken));
+            Assert.Equal(1, await context.ApiTokens.CountAsync(TestContext.Current.CancellationToken));
         }
         finally
         {
@@ -134,25 +119,25 @@ public sealed class LegacyApiTokenMigratorTests
                 .Options;
             await using var context = new AgwDbContext(options);
             await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
-            context.ApiTokens.Add(new ApiToken
-            {
-                Id = LegacyTokenId,
-                Name = "Conflicting token",
-                NormalizedName = "CONFLICTING TOKEN",
-                Prefix = token[..12],
-                SecretHash = Hash(token),
-                CreateBy = Constants.AdminUserId,
-                CreateTime = LegacyCreatedAt
-            });
+            context.ApiTokens.Add(
+                new ApiToken
+                {
+                    Id = LegacyTokenId,
+                    Name = "Conflicting token",
+                    NormalizedName = "CONFLICTING TOKEN",
+                    Prefix = token[..12],
+                    SecretHash = Hash(token),
+                    CreateBy = Constants.AdminUserId,
+                    CreateTime = LegacyCreatedAt,
+                }
+            );
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
             var stateStore = new JsonInitializationStateStore(paths);
-            var migrator = new LegacyApiTokenMigrator(
-                stateStore,
-                context,
-                NullLogger<LegacyApiTokenMigrator>.Instance);
+            var migrator = new LegacyApiTokenMigrator(stateStore, context, NullLogger<LegacyApiTokenMigrator>.Instance);
 
             var exception = await Assert.ThrowsAsync<AgwException>(() =>
-                migrator.MigrateAsync(TestContext.Current.CancellationToken));
+                migrator.MigrateAsync(TestContext.Current.CancellationToken)
+            );
 
             Assert.Equal(ErrorCodes.LegacyApiTokenConflict.Code, exception.Code);
             Assert.NotEmpty(stateStore.GetLegacyApiTokens());
@@ -188,19 +173,17 @@ public sealed class LegacyApiTokenMigratorTests
               ]
             }
             """,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
     }
 
     private static AgwDataPaths CreatePaths()
     {
-        var root = Path.Combine(
-            Path.GetTempPath(),
-            $"agw-legacy-token-{Guid.CreateVersion7():N}");
+        var root = Path.Combine(Path.GetTempPath(), $"agw-legacy-token-{Guid.CreateVersion7():N}");
         var paths = AgwDataPaths.Resolve(root, "/unused");
         paths.EnsureCreated();
         return paths;
     }
 
-    private static string Hash(string value) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+    private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 }

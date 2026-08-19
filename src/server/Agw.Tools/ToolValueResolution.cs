@@ -4,9 +4,7 @@ namespace Agw.Tools;
 
 public sealed class ToolValueResolutionResult
 {
-    public ToolValueResolutionResult(
-        IReadOnlyList<ToolDefinition> tools,
-        IReadOnlyList<ToolBlockDefinition> toolBlocks)
+    public ToolValueResolutionResult(IReadOnlyList<ToolDefinition> tools, IReadOnlyList<ToolBlockDefinition> toolBlocks)
     {
         Tools = tools;
         ToolBlocks = toolBlocks;
@@ -21,16 +19,17 @@ public static class ToolValueResolution
 {
     public static ToolValueResolutionResult Resolve(
         IReadOnlyList<ToolValueObject>? agentValues,
-        IReadOnlyList<ToolValueObject>? projectValues)
+        IReadOnlyList<ToolValueObject>? projectValues
+    )
     {
         var agent = ValidateUnique(agentValues ?? [], "Agent");
         var project = ValidateUnique(projectValues ?? [], "Project");
-        if (project.Any(static value =>
-                value is ToolBlockValue { Definition: BackgroundAgentsToolBlockDefinition }))
+        if (project.Any(static value => value is ToolBlockValue { Definition: BackgroundAgentsToolBlockDefinition }))
         {
             throw new AgwException(
                 ErrorCodes.InvalidParam,
-                $"Tool Block '{ToolBlockDefinitionNames.BackgroundAgents}' is only supported by Agent definitions.");
+                $"Tool Block '{ToolBlockDefinitionNames.BackgroundAgents}' is only supported by Agent definitions."
+            );
         }
 
         var result = agent.ToList();
@@ -53,12 +52,11 @@ public static class ToolValueResolution
 
         return new ToolValueResolutionResult(
             result.OfType<ToolValue>().Select(static value => value.Definition).ToArray(),
-            result.OfType<ToolBlockValue>().Select(static value => value.Definition).ToArray());
+            result.OfType<ToolBlockValue>().Select(static value => value.Definition).ToArray()
+        );
     }
 
-    private static IReadOnlyList<ToolValueObject> ValidateUnique(
-        IReadOnlyList<ToolValueObject> values,
-        string owner)
+    private static IReadOnlyList<ToolValueObject> ValidateUnique(IReadOnlyList<ToolValueObject> values, string owner)
     {
         var validationError = ToolValueObjectValidation.GetError(values);
         if (validationError != null)

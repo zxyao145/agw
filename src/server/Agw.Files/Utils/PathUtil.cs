@@ -4,7 +4,8 @@ public static class PathUtil
 {
     public static string ExpandTilde(string? path)
     {
-        if (string.IsNullOrWhiteSpace(path)) return path ?? "";
+        if (string.IsNullOrWhiteSpace(path))
+            return path ?? "";
 
         if (path == "~")
         {

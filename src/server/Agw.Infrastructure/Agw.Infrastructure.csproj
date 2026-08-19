@@ -1,34 +1,35 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
 
-	<ItemGroup>
-		<FrameworkReference Include="Microsoft.AspNetCore.App" />
-	</ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Agw.Agents\Agw.Agents.csproj" />
+    <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
+    <ProjectReference Include="..\Agw.Integrations\Agw.Integrations.csproj" />
+    <ProjectReference Include="..\Agw.Providers\Agw.Providers.csproj" />
+    <ProjectReference Include="..\Agw.Projects\Agw.Projects.csproj" />
+    <ProjectReference Include="..\Agw.Skills\Agw.Skills.csproj" />
+    <ProjectReference Include="..\Agw.Jobs\Agw.Jobs.csproj" />
+  </ItemGroup>
 
-	<ItemGroup>
-		<ProjectReference Include="..\Agw.Agents\Agw.Agents.csproj" />
-		<ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
-		<ProjectReference Include="..\Agw.Integrations\Agw.Integrations.csproj" />
-		<ProjectReference Include="..\Agw.Providers\Agw.Providers.csproj" />
-		<ProjectReference Include="..\Agw.Projects\Agw.Projects.csproj" />
-		<ProjectReference Include="..\Agw.Skills\Agw.Skills.csproj" />
-		<ProjectReference Include="..\Agw.Jobs\Agw.Jobs.csproj" />
-	</ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="ClaudeCodeSdk.MAF" />
+    <PackageReference Include="DistributedLock.Postgres" />
+    <PackageReference Include="EFCore.NamingConventions" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
 
-	<ItemGroup>
-		<PackageReference Include="ClaudeCodeSdk.MAF" />
-		<PackageReference Include="DistributedLock.Postgres" />
-		<PackageReference Include="EFCore.NamingConventions" />
-		<PackageReference Include="Microsoft.EntityFrameworkCore" />
-		<PackageReference Include="Microsoft.EntityFrameworkCore.Design">
-			<PrivateAssets>all</PrivateAssets>
-			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-		</PackageReference>
-		<PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
-		<PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
-	</ItemGroup>
-
-	<ItemGroup>
-	  <EmbeddedResource Include="Data/SeedData/Skills/xhs-explore.zip"
-	                    LogicalName="Agw.Infrastructure.SeedData.xhs-explore.zip" />
-	</ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource
+      Include="Data/SeedData/Skills/xhs-explore.zip"
+      LogicalName="Agw.Infrastructure.SeedData.xhs-explore.zip"
+    />
+  </ItemGroup>
 </Project>

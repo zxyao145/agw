@@ -2,7 +2,6 @@ using System.Data.Common;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
-
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Jobs.Api;
@@ -12,9 +11,7 @@ using Agw.Jobs.Scheduling.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Repositories;
 using Agw.Testing;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
@@ -28,16 +25,14 @@ public class JobsApiTests
     [Fact]
     public async Task ListJobs_ReturnsBensResultsEnvelope()
     {
-        await using var fixture = await JobsApiFixture.CreateAsync(
-            TestContext.Current.CancellationToken);
+        await using var fixture = await JobsApiFixture.CreateAsync(TestContext.Current.CancellationToken);
 
-        var response = await fixture.Client.GetAsync(
-            "/api/jobs",
-            TestContext.Current.CancellationToken);
+        var response = await fixture.Client.GetAsync("/api/jobs", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(
-            TestContext.Current.CancellationToken));
+        using var body = JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)
+        );
         Assert.Equal(0, body.RootElement.GetProperty("code").GetInt32());
         Assert.Equal("OK", body.RootElement.GetProperty("title").GetString());
         Assert.Empty(body.RootElement.GetProperty("data").EnumerateArray());
@@ -66,14 +61,16 @@ public class JobsApiTests
                 CreateBy = "seed",
                 CreateTime = nextRunTime.AddHours(-1),
                 UpdateBy = "seed",
-                UpdateTime = nextRunTime.AddHours(-1)
+                UpdateTime = nextRunTime.AddHours(-1),
             },
-            cancellationToken);
+            cancellationToken
+        );
 
         var response = await fixture.Client.PutAsJsonAsync(
             "/api/jobs/enabled",
             new { jobId, isEnabled = false },
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
@@ -116,9 +113,7 @@ public class JobsApiTests
         {
             await using var scope = _app.Services.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
-            return await dbContext.Jobs
-                .AsNoTracking()
-                .SingleAsync(job => job.Id == jobId, cancellationToken);
+            return await dbContext.Jobs.AsNoTracking().SingleAsync(job => job.Id == jobId, cancellationToken);
         }
 
         public static async Task<JobsApiFixture> CreateAsync(CancellationToken cancellationToken)
@@ -130,17 +125,22 @@ public class JobsApiTests
             builder.WebHost.UseTestServer();
             builder.Services.AddApiResult();
             builder.Services.AddSingleton<TimeProvider>(
-                new TestTimeProvider(new DateTimeOffset(2026, 7, 15, 8, 0, 0, TimeSpan.Zero)));
+                new TestTimeProvider(new DateTimeOffset(2026, 7, 15, 8, 0, 0, TimeSpan.Zero))
+            );
             builder.Services.AddDbContext<AgwDbContext>(options =>
-                options.UseSqlite(connection).UseSnakeCaseNamingConvention());
+                options.UseSqlite(connection).UseSnakeCaseNamingConvention()
+            );
             builder.Services.AddScoped<DbContext>(serviceProvider =>
-                serviceProvider.GetRequiredService<AgwDbContext>());
+                serviceProvider.GetRequiredService<AgwDbContext>()
+            );
             builder.Services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
             builder.Services.AddScoped<JobRepo>();
             builder.Services.AddScoped<IRepository<Job>>(serviceProvider =>
-                serviceProvider.GetRequiredService<JobRepo>());
+                serviceProvider.GetRequiredService<JobRepo>()
+            );
             builder.Services.AddScoped<IUnitOfWork>(serviceProvider =>
-                serviceProvider.GetRequiredService<AgwDbContext>());
+                serviceProvider.GetRequiredService<AgwDbContext>()
+            );
             builder.Services.AddSingleton<JobScheduleCalculator>();
             builder.Services.AddSingleton<JobSchedulerWakeSignal>();
             builder.Services.AddScoped<JobAppService>();

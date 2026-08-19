@@ -1,6 +1,5 @@
 using System.Linq.Expressions;
 using System.Text.Json;
-
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Definitions.Controllers;
@@ -17,7 +16,6 @@ using Agw.Tools.ContextualTools.WebSearch;
 using Agw.Tools.ToolBlocks;
 using Agw.Tools.ToolBlocks.Blocks.Mode;
 using Agw.Tools.ToolBlocks.Blocks.Todo;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -34,11 +32,7 @@ public class AgentSuggestionAppServiceTests
             Name = "deploy",
             Description = "Deploy the application",
         };
-        var reviewSkill = new Skill
-        {
-            Id = Guid.CreateVersion7(),
-            Name = "review",
-        };
+        var reviewSkill = new Skill { Id = Guid.CreateVersion7(), Name = "review" };
         var agent = new Agent
         {
             Id = Guid.CreateVersion7(),
@@ -47,7 +41,7 @@ public class AgentSuggestionAppServiceTests
             Tools =
             [
                 new ToolValue { Definition = new BashToolDefinition() },
-                new ToolBlockValue { Definition = new TodoToolBlockDefinition() }
+                new ToolBlockValue { Definition = new TodoToolBlockDefinition() },
             ],
             AgentSkillRelations =
             [
@@ -61,17 +55,11 @@ public class AgentSuggestionAppServiceTests
             Tools =
             [
                 new ToolValue { Definition = new WebFetchToolDefinition() },
-                new ToolBlockValue { Definition = new ModeToolBlockDefinition() }
+                new ToolBlockValue { Definition = new ModeToolBlockDefinition() },
             ],
-            ProjectSkillRelations =
-            [
-                new ProjectSkillRelation { SkillId = deploySkill.Id },
-            ],
+            ProjectSkillRelations = [new ProjectSkillRelation { SkillId = deploySkill.Id }],
         };
-        var service = CreateService(
-            agents: [agent],
-            projects: [project],
-            skills: [deploySkill, reviewSkill]);
+        var service = CreateService(agents: [agent], projects: [project], skills: [deploySkill, reviewSkill]);
 
         var response = await service.GetSuggestionsAsync(project.Id, agent.Id);
 
@@ -88,27 +76,32 @@ public class AgentSuggestionAppServiceTests
                 "/todos_get_all",
                 "/todos_get_remaining",
                 "/todos_remove",
-                "/web_fetch"
+                "/web_fetch",
             ],
-            response.Suggestions.Select(static suggestion => suggestion.Text));
+            response.Suggestions.Select(static suggestion => suggestion.Text)
+        );
         Assert.Contains(
             response.Suggestions,
-            static suggestion => suggestion.Text == "/bash" && suggestion.Kind == AgentSuggestionKind.Tool);
+            static suggestion => suggestion.Text == "/bash" && suggestion.Kind == AgentSuggestionKind.Tool
+        );
         Assert.Contains(
             response.Suggestions,
-            static suggestion => suggestion.Text == "/deploy" && suggestion.Kind == AgentSuggestionKind.Skill);
-        Assert.Contains(
-            response.Suggestions,
-            static suggestion =>
-                suggestion.Text == "/mode_get" &&
-                suggestion.Description == "Tool · Mode · Allows the agent to switch between plan and execute modes." &&
-                suggestion.Kind == AgentSuggestionKind.Tool);
+            static suggestion => suggestion.Text == "/deploy" && suggestion.Kind == AgentSuggestionKind.Skill
+        );
         Assert.Contains(
             response.Suggestions,
             static suggestion =>
-                suggestion.Text == "/todos_add" &&
-                suggestion.Description == "Tool · Todo · Tracks multi-step work with a persistent todo list." &&
-                suggestion.Kind == AgentSuggestionKind.Tool);
+                suggestion.Text == "/mode_get"
+                && suggestion.Description == "Tool · Mode · Allows the agent to switch between plan and execute modes."
+                && suggestion.Kind == AgentSuggestionKind.Tool
+        );
+        Assert.Contains(
+            response.Suggestions,
+            static suggestion =>
+                suggestion.Text == "/todos_add"
+                && suggestion.Description == "Tool · Todo · Tracks multi-step work with a persistent todo list."
+                && suggestion.Kind == AgentSuggestionKind.Tool
+        );
     }
 
     [Fact]
@@ -119,22 +112,14 @@ public class AgentSuggestionAppServiceTests
             Id = Guid.CreateVersion7(),
             Name = "system-agent",
             Type = AgentType.System,
-            Tools =
-            [
-                new ToolValue { Definition = new WebFetchToolDefinition() }
-            ],
+            Tools = [new ToolValue { Definition = new WebFetchToolDefinition() }],
         };
         var project = new Project
         {
             Id = Guid.CreateVersion7(),
-            Tools =
-            [
-                new ToolValue { Definition = new WebFetchToolDefinition() }
-            ],
+            Tools = [new ToolValue { Definition = new WebFetchToolDefinition() }],
         };
-        var service = CreateService(
-            agents: [agent],
-            projects: [project]);
+        var service = CreateService(agents: [agent], projects: [project]);
 
         var response = await service.GetSuggestionsAsync(project.Id, agent.Id);
 
@@ -151,69 +136,52 @@ public class AgentSuggestionAppServiceTests
             Id = Guid.CreateVersion7(),
             Name = "system-agent",
             Type = AgentType.System,
-            Tools =
-            [
-                new ToolBlockValue { Definition = new TodoToolBlockDefinition() }
-            ],
+            Tools = [new ToolBlockValue { Definition = new TodoToolBlockDefinition() }],
         };
         var project = new Project
         {
             Id = Guid.CreateVersion7(),
-            Tools =
-            [
-                new ToolBlockValue { Definition = new TodoToolBlockDefinition() }
-            ],
+            Tools = [new ToolBlockValue { Definition = new TodoToolBlockDefinition() }],
         };
-        var service = CreateService(
-            agents: [agent],
-            projects: [project]);
+        var service = CreateService(agents: [agent], projects: [project]);
 
         var response = await service.GetSuggestionsAsync(project.Id, agent.Id);
 
         Assert.Equal(
             ["/todos_add", "/todos_complete", "/todos_get_all", "/todos_get_remaining", "/todos_remove"],
-            response.Suggestions.Select(static suggestion => suggestion.Text));
+            response.Suggestions.Select(static suggestion => suggestion.Text)
+        );
         Assert.All(
             response.Suggestions,
             static suggestion =>
             {
-                Assert.Equal("Tool · Todo · Tracks multi-step work with a persistent todo list.", suggestion.Description);
+                Assert.Equal(
+                    "Tool · Todo · Tracks multi-step work with a persistent todo list.",
+                    suggestion.Description
+                );
                 Assert.Equal(AgentSuggestionKind.Tool, suggestion.Kind);
-            });
+            }
+        );
     }
 
     [Fact]
     public async Task GetSuggestionsAsync_WithoutProject_UsesOnlyAgentCapabilities()
     {
-        var agentSkill = new Skill
-        {
-            Id = Guid.CreateVersion7(),
-            Name = "agent-skill",
-        };
+        var agentSkill = new Skill { Id = Guid.CreateVersion7(), Name = "agent-skill" };
         var agent = new Agent
         {
             Id = Guid.CreateVersion7(),
             Name = "system-agent",
             Type = AgentType.System,
-            Tools =
-            [
-                new ToolValue { Definition = new WebSearchToolDefinition() }
-            ],
-            AgentSkillRelations =
-            [
-                new AgentSkillRelation { SkillId = agentSkill.Id },
-            ],
+            Tools = [new ToolValue { Definition = new WebSearchToolDefinition() }],
+            AgentSkillRelations = [new AgentSkillRelation { SkillId = agentSkill.Id }],
         };
-        var service = CreateService(
-            agents: [agent],
-            skills: [agentSkill]);
+        var service = CreateService(agents: [agent], skills: [agentSkill]);
 
         var response = await service.GetSuggestionsAsync(default, agent.Id);
 
         Assert.Equal(AgentSuggestionMode.System, response.Mode);
-        Assert.Equal(
-            ["/agent-skill", "/web_search"],
-            response.Suggestions.Select(item => item.Text).ToArray());
+        Assert.Equal(["/agent-skill", "/web_search"], response.Suggestions.Select(item => item.Text).ToArray());
     }
 
     [Theory]
@@ -222,7 +190,8 @@ public class AgentSuggestionAppServiceTests
     [InlineData("OtherExternal", AgentSuggestionMode.Unsupported)]
     public async Task GetSuggestionsAsync_ExternalAgent_ReturnsExpectedMode(
         string agentName,
-        AgentSuggestionMode expectedMode)
+        AgentSuggestionMode expectedMode
+    )
     {
         var agent = new Agent
         {
@@ -245,7 +214,8 @@ public class AgentSuggestionAppServiceTests
         var service = CreateService(projects: [new Project { Id = Guid.CreateVersion7() }]);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.GetSuggestionsAsync(Guid.CreateVersion7(), Guid.CreateVersion7()));
+            service.GetSuggestionsAsync(Guid.CreateVersion7(), Guid.CreateVersion7())
+        );
 
         Assert.Equal(ErrorCodes.AgentNotFound.Code, exception.Code);
     }
@@ -257,8 +227,7 @@ public class AgentSuggestionAppServiceTests
         var projectId = Guid.CreateVersion7();
         var service = CreateService(agents: [agent]);
 
-        var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.GetSuggestionsAsync(projectId, agent.Id));
+        var exception = await Assert.ThrowsAsync<AgwException>(() => service.GetSuggestionsAsync(projectId, agent.Id));
 
         Assert.Equal(ErrorCodes.ResourceNotFound.Code, exception.Code);
         Assert.Contains(projectId.ToString(), exception.Message, StringComparison.Ordinal);
@@ -283,9 +252,11 @@ public class AgentSuggestionAppServiceTests
                 AgentSuggestionMode.ClaudeCode,
                 [
                     new AgentSuggestionResponse("/deploy", "Skill", AgentSuggestionKind.Skill),
-                    new AgentSuggestionResponse("/todos_add", "Tool · Todo", AgentSuggestionKind.Tool)
-                ]),
-            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                    new AgentSuggestionResponse("/todos_add", "Tool · Todo", AgentSuggestionKind.Tool),
+                ]
+            ),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        );
 
         Assert.Contains("ApiResult", result.GetType().Name, StringComparison.Ordinal);
         Assert.Contains("\"mode\":\"claudeCode\"", json, StringComparison.Ordinal);
@@ -295,27 +266,33 @@ public class AgentSuggestionAppServiceTests
             typeof(AgentsController)
                 .GetMethod(nameof(AgentsController.SuggestionsAsync))!
                 .GetCustomAttributes(typeof(ProducesApiResultAttribute), inherit: true),
-            attribute => ((ProducesApiResultAttribute)attribute).Type.Name.StartsWith("ApiResult", StringComparison.Ordinal));
+            attribute =>
+                ((ProducesApiResultAttribute)attribute).Type.Name.StartsWith("ApiResult", StringComparison.Ordinal)
+        );
     }
 
     private static AgentSuggestionAppService CreateService(
         IEnumerable<Agent>? agents = null,
         IEnumerable<Project>? projects = null,
-        IEnumerable<Skill>? skills = null)
+        IEnumerable<Skill>? skills = null
+    )
     {
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             new ServiceCollection().BuildServiceProvider(),
             [new WebSearchContextualTool()],
-            new ToolBlockRegistry([new TodoToolBlock(), new ModeToolBlock()]));
+            new ToolBlockRegistry([new TodoToolBlock(), new ModeToolBlock()])
+        );
         return new AgentSuggestionAppService(
             new TestRepository<Agent>(agents),
             new TestRepository<Project>(projects),
             new TestRepository<Skill>(skills),
-            registry);
+            registry
+        );
     }
 
-    private sealed class TestRepository<TEntity> : IRepository<TEntity> where TEntity : class
+    private sealed class TestRepository<TEntity> : IRepository<TEntity>
+        where TEntity : class
     {
         private readonly List<TEntity> _items;
 
@@ -330,12 +307,13 @@ public class AgentSuggestionAppServiceTests
 
         public Task<TEntity?> SingleOrDefaultAsync(
             Expression<Func<TEntity, bool>> predicate,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(_items.AsQueryable().SingleOrDefault(predicate));
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(_items.AsQueryable().SingleOrDefault(predicate));
 
         public Task<IReadOnlyList<TEntity>> ListAsync(
             Expression<Func<TEntity, bool>>? predicate = null,
-            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null)
+            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
+        )
         {
             IQueryable<TEntity> query = _items.AsQueryable();
             if (predicate != null)
@@ -354,20 +332,15 @@ public class AgentSuggestionAppServiceTests
         public Task<IReadOnlyList<TEntity>> ListAsync(
             Expression<Func<TEntity, bool>>? predicate,
             Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy,
-            params Expression<Func<TEntity, object>>[] includes) =>
-            ListAsync(predicate, orderBy);
+            params Expression<Func<TEntity, object>>[] includes
+        ) => ListAsync(predicate, orderBy);
 
         public Task AddAsync(TEntity entity) => Task.CompletedTask;
 
-        public void Update(TEntity entity)
-        {
-        }
+        public void Update(TEntity entity) { }
 
-        public void Remove(TEntity entity)
-        {
-        }
+        public void Remove(TEntity entity) { }
 
         public Task SaveChangesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
-
 }

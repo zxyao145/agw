@@ -1,9 +1,7 @@
 using Agw.Setup.Middleware;
 using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
-
 using Microsoft.AspNetCore.Http;
-
 using Xunit;
 
 namespace Agw.Setup.Tests;

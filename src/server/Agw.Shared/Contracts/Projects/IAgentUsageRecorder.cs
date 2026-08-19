@@ -7,5 +7,6 @@ public interface IAgentUsageRecorder
         string contextId,
         string agentName,
         ProjectContextUsage usage,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default
+    );
 }

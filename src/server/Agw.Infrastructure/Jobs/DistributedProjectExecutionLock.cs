@@ -1,5 +1,4 @@
 using Agw.Jobs.Scheduling.Coordination;
-
 using Medallion.Threading;
 
 namespace Agw.Infrastructure.Jobs;

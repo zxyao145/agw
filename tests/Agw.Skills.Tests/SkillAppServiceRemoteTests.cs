@@ -1,5 +1,4 @@
 using System.Linq.Expressions;
-
 using Agw.Domain.Services.Skills;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Skills;
@@ -9,7 +8,6 @@ using Agw.Shared.Runtime;
 using Agw.Skills.Application;
 using Agw.Skills.Application.Remote;
 using Agw.Testing;
-
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
@@ -17,8 +15,7 @@ namespace Agw.Skills.Tests;
 
 public class SkillAppServiceRemoteTests
 {
-    private static readonly DateTimeOffset UtcNow =
-        new(2026, 7, 26, 8, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset UtcNow = new(2026, 7, 26, 8, 0, 0, TimeSpan.Zero);
 
     [Fact]
     public async Task CreateAsync_RemoteSkill_UsesRemoteMetadataAndStoresSnapshot()
@@ -28,22 +25,23 @@ public class SkillAppServiceRemoteTests
                 "expense-report",
                 "Enterprise expense policy",
                 "Complete skill instructions.",
-                ["finance", "policy"]));
+                ["finance", "policy"]
+            )
+        );
 
         var result = await fixture.Service.CreateAsync(
             new Skill { Kind = SkillKind.Remote },
             archive: null,
             "remote-admin",
             "https://example.com/skills/expense-report",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal("expense-report", result.Skill.Name);
         Assert.Equal("Enterprise expense policy", result.Skill.Description);
         Assert.Equal(SkillKind.Remote, result.Skill.Kind);
         Assert.Equal(string.Empty, result.Skill.ContentPath);
-        Assert.Equal(
-            "https://example.com/skills/expense-report",
-            result.Skill.RemoteUrl);
+        Assert.Equal("https://example.com/skills/expense-report", result.Skill.RemoteUrl);
         Assert.Equal("remote-admin", result.Skill.CreateBy);
         Assert.Equal(UtcNow, result.Skill.CreateTime);
         var cache = Assert.Single(fixture.CacheRepository.Items);
@@ -52,7 +50,8 @@ public class SkillAppServiceRemoteTests
         Assert.Equal(UtcNow, cache.FetchedAt);
         Assert.Equal(
             "Complete skill instructions.",
-            RemoteSkillDefinitionSerializer.Deserialize(cache.ContentJson)?.Instructions);
+            RemoteSkillDefinitionSerializer.Deserialize(cache.ContentJson)?.Instructions
+        );
     }
 
     [Fact]
@@ -65,7 +64,8 @@ public class SkillAppServiceRemoteTests
             archive: null,
             "remote-admin",
             "https://user:password@example.com/skills/expense-report?token=secret#fragment",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         var message = Assert.Single(fixture.Logger.Messages);
         Assert.Contains("https://example.com/skills/expense-report", message);
@@ -89,7 +89,9 @@ public class SkillAppServiceRemoteTests
                 archive,
                 "remote-admin",
                 "https://example.com/skill",
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(ErrorCodes.RemoteSkillArchiveNotAllowed.Code, exception.Code);
         Assert.Empty(fixture.SkillRepository.Items);
@@ -106,7 +108,9 @@ public class SkillAppServiceRemoteTests
                 new Skill { Kind = SkillKind.BuiltIn },
                 archive: null,
                 "remote-admin",
-                cancellationToken: TestContext.Current.CancellationToken));
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(ErrorCodes.SkillKindInvalid.Code, exception.Code);
     }
@@ -128,18 +132,16 @@ public class SkillAppServiceRemoteTests
             SkillId = skill.Id,
             SourceUrl = skill.RemoteUrl,
             ContentJson = RemoteSkillDefinitionSerializer.Serialize(
-                new RemoteSkillDefinition(
-                    skill.Name,
-                    skill.Description,
-                    "old instructions",
-                    [])),
+                new RemoteSkillDefinition(skill.Name, skill.Description, "old instructions", [])
+            ),
             FetchedAt = UtcNow.AddHours(-1),
         };
         var refreshed = new RemoteSkillDefinition(
             "renamed-expense-report",
             "Updated description",
             "updated instructions",
-            ["finance"]);
+            ["finance"]
+        );
         await using var fixture = new TestFixture(refreshed, [skill], [cache]);
 
         var result = await fixture.Service.UpdateAsync(
@@ -149,7 +151,8 @@ public class SkillAppServiceRemoteTests
             archive: null,
             "remote-admin",
             "https://new.example.com/skill",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.NotNull(result);
         Assert.Equal("renamed-expense-report", result.Skill.Name);
@@ -162,7 +165,8 @@ public class SkillAppServiceRemoteTests
         Assert.Equal(result.Skill.RemoteUrl, cache.SourceUrl);
         Assert.Equal(
             "updated instructions",
-            RemoteSkillDefinitionSerializer.Deserialize(cache.ContentJson)?.Instructions);
+            RemoteSkillDefinitionSerializer.Deserialize(cache.ContentJson)?.Instructions
+        );
     }
 
     [Fact]
@@ -186,7 +190,9 @@ public class SkillAppServiceRemoteTests
                 archive: null,
                 "local-admin",
                 "https://example.com/remote",
-                TestContext.Current.CancellationToken));
+                TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(ErrorCodes.SkillKindInvalid.Code, exception.Code);
         Assert.Equal(SkillKind.Local, skill.Kind);
@@ -213,9 +219,7 @@ public class SkillAppServiceRemoteTests
         };
         await using var fixture = new TestFixture(CreateDefinition(), [skill], [cache]);
 
-        var deleted = await fixture.Service.DeleteAsync(
-            skill.Id,
-            TestContext.Current.CancellationToken);
+        var deleted = await fixture.Service.DeleteAsync(skill.Id, TestContext.Current.CancellationToken);
 
         Assert.True(deleted);
         Assert.Empty(fixture.SkillRepository.Items);
@@ -225,11 +229,7 @@ public class SkillAppServiceRemoteTests
 
     private static RemoteSkillDefinition CreateDefinition()
     {
-        return new RemoteSkillDefinition(
-            "expense-report",
-            "Remote description",
-            "instructions",
-            []);
+        return new RemoteSkillDefinition("expense-report", "Remote description", "instructions", []);
     }
 
     private sealed class TestFixture : IAsyncDisposable
@@ -239,19 +239,14 @@ public class SkillAppServiceRemoteTests
         public TestFixture(
             RemoteSkillDefinition definition,
             IEnumerable<Skill>? skills = null,
-            IEnumerable<RemoteSkillCache>? caches = null)
+            IEnumerable<RemoteSkillCache>? caches = null
+        )
         {
-            _root = Path.Combine(
-                Path.GetTempPath(),
-                $"agw-remote-skill-service-{Guid.CreateVersion7():N}");
+            _root = Path.Combine(Path.GetTempPath(), $"agw-remote-skill-service-{Guid.CreateVersion7():N}");
             var dataPaths = AgwDataPaths.Resolve(_root, "/unused");
             dataPaths.EnsureCreated();
-            SkillRepository = new TestRepository<Skill>(
-                skills ?? [],
-                entity => entity.Id);
-            CacheRepository = new TestRepository<RemoteSkillCache>(
-                caches ?? [],
-                entity => entity.SkillId);
+            SkillRepository = new TestRepository<Skill>(skills ?? [], entity => entity.Id);
+            CacheRepository = new TestRepository<RemoteSkillCache>(caches ?? [], entity => entity.SkillId);
             RefreshLock = new TestRemoteSkillRefreshLock();
             Logger = new TestLogger<SkillAppService>();
             Service = new SkillAppService(
@@ -265,7 +260,8 @@ public class SkillAppServiceRemoteTests
                 Logger,
                 new TestRemoteSkillClient(definition),
                 RefreshLock,
-                new TestTimeProvider(UtcNow));
+                new TestTimeProvider(UtcNow)
+            );
         }
 
         public SkillAppService Service { get; }
@@ -289,7 +285,8 @@ public class SkillAppServiceRemoteTests
     {
         public List<string> Messages { get; } = [];
 
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
 
         public bool IsEnabled(LogLevel logLevel) => true;
 
@@ -298,8 +295,8 @@ public class SkillAppServiceRemoteTests
             EventId eventId,
             TState state,
             Exception? exception,
-            Func<TState, Exception?, string> formatter) =>
-            Messages.Add(formatter(state, exception));
+            Func<TState, Exception?, string> formatter
+        ) => Messages.Add(formatter(state, exception));
     }
 
     private sealed class TestRemoteSkillClient : IRemoteSkillClient
@@ -318,8 +315,10 @@ public class SkillAppServiceRemoteTests
                 throw new AgwException(ErrorCodes.RemoteSkillUrlRequired);
             }
 
-            if (!Uri.TryCreate(remoteUrl.Trim(), UriKind.Absolute, out var uri) ||
-                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+            if (
+                !Uri.TryCreate(remoteUrl.Trim(), UriKind.Absolute, out var uri)
+                || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+            )
             {
                 throw new AgwException(ErrorCodes.RemoteSkillUrlInvalid);
             }
@@ -329,17 +328,15 @@ public class SkillAppServiceRemoteTests
 
         public Task<RemoteSkillDefinition> FetchAsync(
             string remoteUrl,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(_definition);
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(_definition);
     }
 
     private sealed class TestRemoteSkillRefreshLock : IRemoteSkillRefreshLock
     {
         public int AcquireCount { get; private set; }
 
-        public Task<IAsyncDisposable> AcquireAsync(
-            Guid skillId,
-            CancellationToken cancellationToken)
+        public Task<IAsyncDisposable> AcquireAsync(Guid skillId, CancellationToken cancellationToken)
         {
             AcquireCount++;
             return Task.FromResult<IAsyncDisposable>(new TestLease());
@@ -356,9 +353,7 @@ public class SkillAppServiceRemoteTests
     {
         private readonly Func<TEntity, Guid> _idSelector;
 
-        public TestRepository(
-            IEnumerable<TEntity> items,
-            Func<TEntity, Guid> idSelector)
+        public TestRepository(IEnumerable<TEntity> items, Func<TEntity, Guid> idSelector)
         {
             Items = items.ToList();
             _idSelector = idSelector;
@@ -371,18 +366,18 @@ public class SkillAppServiceRemoteTests
         public Task<TEntity?> GetByIdAsync(object id)
         {
             var typedId = Assert.IsType<Guid>(id);
-            return Task.FromResult(
-                Items.SingleOrDefault(item => _idSelector(item) == typedId));
+            return Task.FromResult(Items.SingleOrDefault(item => _idSelector(item) == typedId));
         }
 
         public Task<TEntity?> SingleOrDefaultAsync(
             Expression<Func<TEntity, bool>> predicate,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(Items.AsQueryable().SingleOrDefault(predicate));
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(Items.AsQueryable().SingleOrDefault(predicate));
 
         public Task<IReadOnlyList<TEntity>> ListAsync(
             Expression<Func<TEntity, bool>>? predicate = null,
-            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null)
+            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
+        )
         {
             IQueryable<TEntity> query = Items.AsQueryable();
             if (predicate != null)
@@ -401,8 +396,8 @@ public class SkillAppServiceRemoteTests
         public Task<IReadOnlyList<TEntity>> ListAsync(
             Expression<Func<TEntity, bool>>? predicate,
             Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy,
-            params Expression<Func<TEntity, object>>[] includes) =>
-            ListAsync(predicate, orderBy);
+            params Expression<Func<TEntity, object>>[] includes
+        ) => ListAsync(predicate, orderBy);
 
         public Task AddAsync(TEntity entity)
         {
@@ -410,29 +405,22 @@ public class SkillAppServiceRemoteTests
             return Task.CompletedTask;
         }
 
-        public void Update(TEntity entity)
-        {
-        }
+        public void Update(TEntity entity) { }
 
         public void Remove(TEntity entity)
         {
             Items.Remove(entity);
         }
 
-        public Task SaveChangesAsync(CancellationToken cancellationToken) =>
-            Task.CompletedTask;
+        public Task SaveChangesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class TestUnitOfWork : IUnitOfWork
     {
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
 
-        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(0);
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(0);
 
-        public Task<bool> SaveEntitiesAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
+        public Task<bool> SaveEntitiesAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
     }
 }

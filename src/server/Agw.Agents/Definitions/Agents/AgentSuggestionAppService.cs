@@ -21,7 +21,8 @@ public class AgentSuggestionAppService
         IRepository<Agent> agentRepository,
         IRepository<Project> projectRepository,
         IRepository<Skill> skillRepository,
-        ToolRegistryService toolRegistryService)
+        ToolRegistryService toolRegistryService
+    )
     {
         _agentRepository = agentRepository;
         _projectRepository = projectRepository;
@@ -34,9 +35,9 @@ public class AgentSuggestionAppService
         var agents = await _agentRepository.ListAsync(
             agent => agent.Id == agentId,
             null,
-            agent => agent.AgentSkillRelations);
-        var agent = agents.FirstOrDefault()
-            ?? throw new AgwException(ErrorCodes.AgentNotFound);
+            agent => agent.AgentSkillRelations
+        );
+        var agent = agents.FirstOrDefault() ?? throw new AgwException(ErrorCodes.AgentNotFound);
 
         Project? project = null;
         if (projectId.HasValue)
@@ -44,11 +45,11 @@ public class AgentSuggestionAppService
             var projects = await _projectRepository.ListAsync(
                 item => item.Id == projectId.Value,
                 null,
-                item => item.ProjectSkillRelations);
-            project = projects.FirstOrDefault()
-                ?? throw new AgwException(
-                    ErrorCodes.ResourceNotFound,
-                    $"Project '{projectId.Value}' was not found.");
+                item => item.ProjectSkillRelations
+            );
+            project =
+                projects.FirstOrDefault()
+                ?? throw new AgwException(ErrorCodes.ResourceNotFound, $"Project '{projectId.Value}' was not found.");
         }
 
         if (agent.Type == AgentType.External)
@@ -60,27 +61,27 @@ public class AgentSuggestionAppService
         }
 
         var suggestions = new List<AgentSuggestionResponse>();
-        IEnumerable<Guid> relatedSkillIds = agent.AgentSkillRelations
-            .Select(relation => relation.SkillId);
+        IEnumerable<Guid> relatedSkillIds = agent.AgentSkillRelations.Select(relation => relation.SkillId);
         if (project != null)
         {
             relatedSkillIds = relatedSkillIds.Concat(
-                project.ProjectSkillRelations.Select(relation => relation.SkillId));
+                project.ProjectSkillRelations.Select(relation => relation.SkillId)
+            );
         }
 
-        var skillIds = relatedSkillIds
-            .Where(id => id != Guid.Empty)
-            .Distinct()
-            .ToArray();
+        var skillIds = relatedSkillIds.Where(id => id != Guid.Empty).Distinct().ToArray();
         if (skillIds.Length > 0)
         {
             var skills = await _skillRepository.ListAsync(skill => skillIds.Contains(skill.Id));
-            suggestions.AddRange(skills
-                .Where(skill => !string.IsNullOrWhiteSpace(skill.Name))
-                .Select(skill => new AgentSuggestionResponse(
-                    ToCommandText(skill.Name),
-                    JoinDescription("Skill", skill.Description),
-                    AgentSuggestionKind.Skill)));
+            suggestions.AddRange(
+                skills
+                    .Where(skill => !string.IsNullOrWhiteSpace(skill.Name))
+                    .Select(skill => new AgentSuggestionResponse(
+                        ToCommandText(skill.Name),
+                        JoinDescription("Skill", skill.Description),
+                        AgentSuggestionKind.Skill
+                    ))
+            );
         }
 
         var resolvedToolValues = ToolValueResolution.Resolve(agent.Tools, project?.Tools);
@@ -93,10 +94,13 @@ public class AgentSuggestionAppService
                 continue;
             }
 
-            suggestions.Add(new AgentSuggestionResponse(
-                ToCommandText(tool.Name),
-                JoinDescription("Tool", tool.Category, tool.Description),
-                AgentSuggestionKind.Tool));
+            suggestions.Add(
+                new AgentSuggestionResponse(
+                    ToCommandText(tool.Name),
+                    JoinDescription("Tool", tool.Category, tool.Description),
+                    AgentSuggestionKind.Tool
+                )
+            );
         }
 
         foreach (var definition in resolvedToolValues.ToolBlocks)
@@ -107,11 +111,13 @@ public class AgentSuggestionAppService
                 continue;
             }
 
-            suggestions.AddRange(toolBlock.MemberToolNames.Select(memberToolName =>
-                new AgentSuggestionResponse(
+            suggestions.AddRange(
+                toolBlock.MemberToolNames.Select(memberToolName => new AgentSuggestionResponse(
                     ToCommandText(memberToolName),
                     JoinDescription("Tool", toolBlock.DisplayName, toolBlock.Description),
-                    AgentSuggestionKind.Tool)));
+                    AgentSuggestionKind.Tool
+                ))
+            );
         }
 
         return new AgentSuggestionsResponse(
@@ -119,7 +125,8 @@ public class AgentSuggestionAppService
             suggestions
                 .OrderBy(suggestion => suggestion.Text, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(suggestion => suggestion.Kind)
-                .ToArray());
+                .ToArray()
+        );
     }
 
     private static string ToCommandText(string name)
@@ -129,8 +136,6 @@ public class AgentSuggestionAppService
 
     private static string JoinDescription(params string?[] parts)
     {
-        return string.Join(
-            " · ",
-            parts.Where(part => !string.IsNullOrWhiteSpace(part)).Select(part => part!.Trim()));
+        return string.Join(" · ", parts.Where(part => !string.IsNullOrWhiteSpace(part)).Select(part => part!.Trim()));
     }
 }

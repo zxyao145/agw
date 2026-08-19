@@ -6,18 +6,15 @@ public interface IProviderSessionState
 {
     void InitializeSessionState(AgentSession session, string contextId, Guid projectId);
 
-    void InitializeSessionState(
-        AgentSession session,
-        string contextId,
-        Guid projectId,
-        string historyScope);
+    void InitializeSessionState(AgentSession session, string contextId, Guid projectId, string historyScope);
 
     void InitializeSessionState(
         AgentSession session,
         string contextId,
         Guid projectId,
         string historyScope,
-        string? nodeName)
+        string? nodeName
+    )
     {
         InitializeSessionState(session, contextId, projectId, historyScope);
     }

@@ -6,8 +6,8 @@ namespace Agw.Shared.Data.Entities.Integrations;
 public enum CategoryType
 {
     GitServer,
+
     //CloudStorage,
     //Chat,
-    Other
+    Other,
 }
-

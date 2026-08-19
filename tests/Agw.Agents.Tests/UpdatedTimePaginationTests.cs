@@ -3,7 +3,6 @@ using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Pagination;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,20 +19,26 @@ public class UpdatedTimePaginationTests
         await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
 
         var commonTime = new DateTimeOffset(2026, 7, 16, 8, 0, 0, TimeSpan.Zero);
-        var expectedIds = Enumerable.Range(1, 12)
+        var expectedIds = Enumerable
+            .Range(1, 12)
             .Select(index => Guid.Parse($"00000000-0000-0000-0000-{index:D12}"))
             .OrderDescending()
             .ToArray();
 
-        dbContext.Agents.AddRange(expectedIds.Select((id, index) => new Agent
-        {
-            Id = id,
-            Name = $"agent-{index}",
-            DisplayName = $"Agent {index}",
-            Type = AgentType.External,
-            CreateTime = commonTime.AddDays(-1),
-            UpdateTime = commonTime,
-        }));
+        dbContext.Agents.AddRange(
+            expectedIds.Select(
+                (id, index) =>
+                    new Agent
+                    {
+                        Id = id,
+                        Name = $"agent-{index}",
+                        DisplayName = $"Agent {index}",
+                        Type = AgentType.External,
+                        CreateTime = commonTime.AddDays(-1),
+                        UpdateTime = commonTime,
+                    }
+            )
+        );
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var result = await UpdatedTimePagination.ToPagedResultAsync(
@@ -41,7 +46,8 @@ public class UpdatedTimePaginationTests
             agent => agent.Id,
             pageIndex: 2,
             pageSize: 10,
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.Equal(12, result.Total);
         Assert.Equal(2, result.PageIndex);
@@ -60,11 +66,13 @@ public class UpdatedTimePaginationTests
         var olderUpdated = BuildAgent(
             Guid.Parse("00000000-0000-0000-0000-000000000001"),
             new DateTimeOffset(2026, 7, 14, 0, 0, 0, TimeSpan.Zero),
-            new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero));
+            new DateTimeOffset(2026, 7, 15, 0, 0, 0, TimeSpan.Zero)
+        );
         var newerCreated = BuildAgent(
             Guid.Parse("00000000-0000-0000-0000-000000000002"),
             new DateTimeOffset(2026, 7, 16, 0, 0, 0, TimeSpan.Zero),
-            null);
+            null
+        );
 
         dbContext.Agents.AddRange(olderUpdated, newerCreated);
         await dbContext.SaveChangesAsync(cancellationToken);
@@ -74,7 +82,8 @@ public class UpdatedTimePaginationTests
             agent => agent.Id,
             pageIndex: 1,
             pageSize: 10,
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.Equal(new[] { newerCreated.Id, olderUpdated.Id }, result.Items.Select(agent => agent.Id));
     }
@@ -87,10 +96,13 @@ public class UpdatedTimePaginationTests
         await connection.OpenAsync(cancellationToken);
         await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
 
-        dbContext.Agents.Add(BuildAgent(
-            Guid.Parse("00000000-0000-0000-0000-000000000001"),
-            new DateTimeOffset(2026, 7, 16, 0, 0, 0, TimeSpan.Zero),
-            null));
+        dbContext.Agents.Add(
+            BuildAgent(
+                Guid.Parse("00000000-0000-0000-0000-000000000001"),
+                new DateTimeOffset(2026, 7, 16, 0, 0, 0, TimeSpan.Zero),
+                null
+            )
+        );
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var result = await UpdatedTimePagination.ToPagedResultAsync(
@@ -98,7 +110,8 @@ public class UpdatedTimePaginationTests
             agent => agent.Id,
             pageIndex: 2,
             pageSize: 10,
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.Empty(result.Items);
         Assert.Equal(1, result.Total);
@@ -122,7 +135,8 @@ public class UpdatedTimePaginationTests
             agent => agent.Id,
             pageIndex: 1,
             pageSize,
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.Equal(pageSize, result.PageSize);
         Assert.Empty(result.Items);
@@ -134,7 +148,8 @@ public class UpdatedTimePaginationTests
     public async Task ToPagedResultAsync_WithInvalidPaging_ThrowsAgwException(
         int pageIndex,
         int pageSize,
-        int expectedErrorCode)
+        int expectedErrorCode
+    )
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -147,7 +162,9 @@ public class UpdatedTimePaginationTests
                 agent => agent.Id,
                 pageIndex,
                 pageSize,
-                cancellationToken));
+                cancellationToken
+            )
+        );
 
         Assert.Equal(expectedErrorCode, exception.Code);
     }
@@ -167,11 +184,10 @@ public class UpdatedTimePaginationTests
 
     private static async Task<AgwDbContext> CreateDbContextAsync(
         SqliteConnection connection,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(connection)
-            .Options;
+        var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options;
         var dbContext = new AgwDbContext(options);
         await dbContext.Database.EnsureCreatedAsync(cancellationToken);
         return dbContext;

@@ -1,7 +1,6 @@
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Commands.Abstracts;
-
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -24,7 +23,8 @@ internal sealed class ExecutionConnection : IAsyncDisposable
         AsyncServiceScope scope,
         ExecutionCommandDispatcher dispatcher,
         ExecutionConnectionContext context,
-        ILogger logger)
+        ILogger logger
+    )
     {
         _connectionId = connectionId;
         UserName = userName;
@@ -55,7 +55,8 @@ internal sealed class ExecutionConnection : IAsyncDisposable
 
     public async Task<IReadOnlyList<AgentflowCheckpointAvailability>> GetAgentflowCheckpointsAsync(
         Guid agentflowId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         await _commandGate.WaitAsync(cancellationToken);
         try
@@ -134,10 +135,7 @@ internal sealed class ExecutionConnection : IAsyncDisposable
         }
         catch (Exception exception)
         {
-            _logger.LogError(
-                exception,
-                "Failed to dispose execution connection {ConnectionId}.",
-                _connectionId);
+            _logger.LogError(exception, "Failed to dispose execution connection {ConnectionId}.", _connectionId);
         }
         finally
         {

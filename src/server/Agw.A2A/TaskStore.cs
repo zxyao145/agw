@@ -1,11 +1,8 @@
 using System.Globalization;
 using System.Text.Json;
-
 using A2A;
-
 using Agw.Projects.Application;
 using Agw.Shared.Exceptions;
-
 using AgwTaskProjection = Agw.Shared.Contracts.Projects.TaskProjection;
 
 namespace Agw.A2A;
@@ -26,7 +23,8 @@ public class TaskStore : ITaskStore
         IRepository<ProjectConversation> contextRepository,
         IRepository<ProjectConversationChatHistory> recordRepository,
         IUnitOfWork unitOfWork,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider
+    )
     {
         _contextRepository = contextRepository;
         _recordRepository = recordRepository;
@@ -71,7 +69,10 @@ public class TaskStore : ITaskStore
         return BuildTaskResult(agentTask, null, includeArtifacts: true);
     }
 
-    public async Task<ListTasksResponse> ListTasksAsync(ListTasksRequest request, CancellationToken cancellationToken = default)
+    public async Task<ListTasksResponse> ListTasksAsync(
+        ListTasksRequest request,
+        CancellationToken cancellationToken = default
+    )
     {
         var contexts = await _contextRepository.ListAsync(context => context.ProjectId == ProjectDefaults.A2AId);
         var filteredContexts = string.IsNullOrWhiteSpace(request.ContextId)
@@ -107,9 +108,7 @@ public class TaskStore : ITaskStore
 
         var totalSize = orderedTasks.Count;
         var requestedPageSize = request.PageSize.GetValueOrDefault(totalSize == 0 ? 0 : totalSize);
-        var pageSize = requestedPageSize <= 0
-            ? (totalSize == 0 ? 0 : totalSize)
-            : requestedPageSize;
+        var pageSize = requestedPageSize <= 0 ? (totalSize == 0 ? 0 : totalSize) : requestedPageSize;
         var offset = ParsePageToken(request.PageToken);
 
         var page = orderedTasks
@@ -124,7 +123,7 @@ public class TaskStore : ITaskStore
             Tasks = page,
             PageSize = page.Count,
             TotalSize = totalSize,
-            NextPageToken = nextOffset < totalSize ? nextOffset.ToString(CultureInfo.InvariantCulture) : string.Empty
+            NextPageToken = nextOffset < totalSize ? nextOffset.ToString(CultureInfo.InvariantCulture) : string.Empty,
         };
     }
 
@@ -141,10 +140,10 @@ public class TaskStore : ITaskStore
         var now = _timeProvider.GetUtcNow();
         var statusTimestampUtc = task.Status?.Timestamp ?? now;
         var records = await _recordRepository.ListAsync(record => record.TaskId == taskGuid);
-        var existingContext = records.Count == 0 ? null : await _contextRepository.GetByIdAsync(records[0].ConversationId);
-        var existingTask = existingContext == null || records.Count == 0
-            ? null
-            : TaskExecutionMapper.ToTask(existingContext, records);
+        var existingContext =
+            records.Count == 0 ? null : await _contextRepository.GetByIdAsync(records[0].ConversationId);
+        var existingTask =
+            existingContext == null || records.Count == 0 ? null : TaskExecutionMapper.ToTask(existingContext, records);
         if (existingTask != null && existingTask.ProjectId != ProjectDefaults.A2AId)
         {
             throw new AgwException(ErrorCodes.A2ATaskIdAlreadyUsed);
@@ -165,14 +164,16 @@ public class TaskStore : ITaskStore
                 CreateBy = SystemUser,
                 CreateTime = statusTimestampUtc,
                 UpdateBy = SystemUser,
-                UpdateTime = statusTimestampUtc
+                UpdateTime = statusTimestampUtc,
             };
 
             await _contextRepository.AddAsync(existingContext);
         }
         else
         {
-            existingContext!.ContextId = string.IsNullOrWhiteSpace(task.ContextId) ? existingContext.ContextId : task.ContextId.Trim();
+            existingContext!.ContextId = string.IsNullOrWhiteSpace(task.ContextId)
+                ? existingContext.ContextId
+                : task.ContextId.Trim();
             existingContext.Title = BuildTitle(firstUserText, existingContext.Title);
             existingContext.UpdateBy = SystemUser;
             existingContext.UpdateTime = statusTimestampUtc;
@@ -184,22 +185,24 @@ public class TaskStore : ITaskStore
             _recordRepository.Remove(record);
         }
 
-        await _recordRepository.AddAsync(new ProjectConversationChatHistory
-        {
-            Id = Guid.CreateVersion7(),
-            ConversationId = existingContext!.Id,
-            TaskId = taskGuid,
-            JobId = null,
-            Status = coarseStatus,
-            FinishedTime = IsTerminal(coarseStatus) ? statusTimestampUtc : null,
-            TaskErrorMessage = statusMessageText,
-            ConversationSequence = 0,
-            AgentName = task.Status?.Message?.Role == Role.Agent ? SystemUser : null,
-            Metadata = CreateSnapshotMetadata(task),
-            Error = statusMessageText,
-            CreateTime = statusTimestampUtc,
-            UpdateTime = statusTimestampUtc
-        });
+        await _recordRepository.AddAsync(
+            new ProjectConversationChatHistory
+            {
+                Id = Guid.CreateVersion7(),
+                ConversationId = existingContext!.Id,
+                TaskId = taskGuid,
+                JobId = null,
+                Status = coarseStatus,
+                FinishedTime = IsTerminal(coarseStatus) ? statusTimestampUtc : null,
+                TaskErrorMessage = statusMessageText,
+                ConversationSequence = 0,
+                AgentName = task.Status?.Message?.Role == Role.Agent ? SystemUser : null,
+                Metadata = CreateSnapshotMetadata(task),
+                Error = statusMessageText,
+                CreateTime = statusTimestampUtc,
+                UpdateTime = statusTimestampUtc,
+            }
+        );
 
         await _unitOfWork.SaveChangesAsync();
     }
@@ -220,7 +223,7 @@ public class TaskStore : ITaskStore
         new()
         {
             [RecordTypeMetadataKey] = JsonSerializer.SerializeToElement(SnapshotRecordType),
-            [SnapshotMetadataKey] = JsonSerializer.SerializeToElement(task)
+            [SnapshotMetadataKey] = JsonSerializer.SerializeToElement(task),
         };
 
     private static AgentTask? TryReadSnapshot(IEnumerable<ProjectConversationChatHistory> records)
@@ -232,8 +235,10 @@ public class TaskStore : ITaskStore
                 continue;
             }
 
-            if (!record.Metadata.TryGetValue(RecordTypeMetadataKey, out var recordType)
-                || !string.Equals(recordType.GetString(), SnapshotRecordType, StringComparison.Ordinal))
+            if (
+                !record.Metadata.TryGetValue(RecordTypeMetadataKey, out var recordType)
+                || !string.Equals(recordType.GetString(), SnapshotRecordType, StringComparison.Ordinal)
+            )
             {
                 continue;
             }
@@ -269,12 +274,12 @@ public class TaskStore : ITaskStore
                         MessageId = Guid.CreateVersion7().ToString("N"),
                         ContextId = task.ContextId,
                         TaskId = task.TaskId.Normalize(),
-                        Parts = [Part.FromText(statusMessageText)]
-                    }
+                        Parts = [Part.FromText(statusMessageText)],
+                    },
             },
             History = [],
             Artifacts = [],
-            Metadata = new Dictionary<string, JsonElement>()
+            Metadata = new Dictionary<string, JsonElement>(),
         };
     }
 
@@ -288,8 +293,8 @@ public class TaskStore : ITaskStore
 
         if (historyLength.HasValue && historyLength.Value >= 0 && projected.History.Count > historyLength.Value)
         {
-            projected.History = projected.History
-                .Skip(Math.Max(0, projected.History.Count - historyLength.Value))
+            projected.History = projected
+                .History.Skip(Math.Max(0, projected.History.Count - historyLength.Value))
                 .ToList();
         }
 
@@ -309,8 +314,7 @@ public class TaskStore : ITaskStore
         requestedStatus == null || task.Status?.State == requestedStatus.Value;
 
     private static bool MatchesStatusTimestamp(AgentTask task, DateTimeOffset? requestedAfter) =>
-        requestedAfter == null
-        || (task.Status?.Timestamp != null && task.Status.Timestamp > requestedAfter.Value);
+        requestedAfter == null || (task.Status?.Timestamp != null && task.Status.Timestamp > requestedAfter.Value);
 
     private static int ParsePageToken(string? pageToken)
     {
@@ -335,18 +339,14 @@ public class TaskStore : ITaskStore
     }
 
     private static string? ExtractFirstUserText(AgentTask task) =>
-        task.History?
-            .FirstOrDefault(message => message.Role == Role.User)
-            ?.Parts?
-            .Select(part => part.Text)
+        task
+            .History?.FirstOrDefault(message => message.Role == Role.User)
+            ?.Parts?.Select(part => part.Text)
             .FirstOrDefault(text => !string.IsNullOrWhiteSpace(text))
             ?.Trim();
 
     private static string? ExtractMessageText(Message? message) =>
-        message?.Parts?
-            .Select(part => part.Text)
-            .FirstOrDefault(text => !string.IsNullOrWhiteSpace(text))
-            ?.Trim();
+        message?.Parts?.Select(part => part.Text).FirstOrDefault(text => !string.IsNullOrWhiteSpace(text))?.Trim();
 
     private static string BuildTitle(string? text, string? fallback = null)
     {
@@ -367,7 +367,7 @@ public class TaskStore : ITaskStore
             TaskState.Completed => TaskExecutionStatus.Succeeded,
             TaskState.Failed or TaskState.Rejected or TaskState.AuthRequired => TaskExecutionStatus.Failed,
             TaskState.Canceled => TaskExecutionStatus.Canceled,
-            _ => TaskExecutionStatus.Pending
+            _ => TaskExecutionStatus.Pending,
         };
 
     private static TaskState ToA2ATaskState(TaskExecutionStatus taskStatus) =>
@@ -377,7 +377,7 @@ public class TaskStore : ITaskStore
             TaskExecutionStatus.Succeeded => TaskState.Completed,
             TaskExecutionStatus.Failed => TaskState.Failed,
             TaskExecutionStatus.Canceled => TaskState.Canceled,
-            _ => TaskState.Submitted
+            _ => TaskState.Submitted,
         };
 
     private static bool IsTerminal(TaskExecutionStatus status) =>

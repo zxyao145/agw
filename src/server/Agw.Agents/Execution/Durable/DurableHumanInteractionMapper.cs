@@ -1,9 +1,7 @@
 using System.Text.Json;
-
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution.Durable;
@@ -25,7 +23,8 @@ internal static class DurableHumanInteractionMapper
             var functionCall = toolApproval.ToolCall as FunctionCallContent;
             var isInteraction = ToolApprovalSupport.TryCreateInteractionPayload(
                 toolApproval,
-                out var interactionPayload);
+                out var interactionPayload
+            );
             var arguments = ToolApprovalSupport.GetArguments(toolApproval);
             // ask_user_question 只持久化 questions/metadata；answers 必须来自后续 HumanResponseCommand。
             return new DurableHumanInteractionSnapshot
@@ -38,15 +37,14 @@ internal static class DurableHumanInteractionMapper
                 CallId = functionCall?.CallId,
                 Prompt = request.Prompt,
                 Payload = isInteraction ? interactionPayload : null,
-                Arguments = isInteraction ? null : arguments
+                Arguments = isInteraction ? null : arguments,
             };
         }
 
         var inputPreview = request.Messages.LastOrDefault()?.Text;
         JsonElement? payload = string.IsNullOrWhiteSpace(inputPreview)
             ? null
-            : JsonSerializer.SerializeToElement(
-                new Dictionary<string, string> { ["inputPreview"] = inputPreview });
+            : JsonSerializer.SerializeToElement(new Dictionary<string, string> { ["inputPreview"] = inputPreview });
         return new DurableHumanInteractionSnapshot
         {
             RequestId = request.RequestId,
@@ -54,7 +52,7 @@ internal static class DurableHumanInteractionMapper
             NodeId = request.NodeId,
             NodeName = request.NodeName,
             Prompt = request.Prompt,
-            Payload = payload
+            Payload = payload,
         };
     }
 
@@ -64,14 +62,15 @@ internal static class DurableHumanInteractionMapper
     public static AgwMessage ToMessage(
         DurableHumanInteractionSnapshot interaction,
         Guid? executionId = null,
-        string? streamingScopeId = null)
+        string? streamingScopeId = null
+    )
     {
         ArgumentNullException.ThrowIfNull(interaction);
 
         var properties = new AdditionalPropertiesDictionary
         {
             ["requestId"] = interaction.RequestId,
-            ["prompt"] = interaction.Prompt
+            ["prompt"] = interaction.Prompt,
         };
         if (executionId.HasValue)
         {
@@ -120,9 +119,11 @@ internal static class DurableHumanInteractionMapper
         {
             properties["type"] = "human-gate-request";
             properties["mode"] = interaction.Kind;
-            if (interaction.Payload is { ValueKind: JsonValueKind.Object } payload
+            if (
+                interaction.Payload is { ValueKind: JsonValueKind.Object } payload
                 && payload.TryGetProperty("inputPreview", out var inputPreview)
-                && inputPreview.ValueKind == JsonValueKind.String)
+                && inputPreview.ValueKind == JsonValueKind.String
+            )
             {
                 properties["inputPreview"] = inputPreview.GetString();
             }
@@ -133,6 +134,7 @@ internal static class DurableHumanInteractionMapper
             Constants.DefaultAgentAuthor,
             AiRole.System,
             [new AgwTextContent { Content = interaction.Prompt }],
-            properties);
+            properties
+        );
     }
 }

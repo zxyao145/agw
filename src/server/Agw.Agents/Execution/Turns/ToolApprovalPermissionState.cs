@@ -1,5 +1,4 @@
 using Agw.Agents.Execution.Commands.Setting;
-
 using Microsoft.Agents.AI;
 
 namespace Agw.Agents.Execution.Turns;
@@ -24,8 +23,10 @@ internal static class ToolApprovalPermissionState
         }
 
         var mode = permissionMode.Value.ToString();
-        if (session.StateBag.TryGetValue<string>(PermissionModeStateKey, out var currentMode) &&
-            string.Equals(currentMode, mode, StringComparison.Ordinal))
+        if (
+            session.StateBag.TryGetValue<string>(PermissionModeStateKey, out var currentMode)
+            && string.Equals(currentMode, mode, StringComparison.Ordinal)
+        )
         {
             return;
         }

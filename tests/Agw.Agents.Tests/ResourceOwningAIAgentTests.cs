@@ -1,9 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Runtimes;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -34,8 +32,7 @@ public class ResourceOwningAIAgentTests
         var resource = new TrackingResource(order);
         var agent = new ResourceOwningAIAgent(inner, resource);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            async () => await agent.DisposeAsync());
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await agent.DisposeAsync());
 
         Assert.Equal(["agent", "resource"], order);
     }
@@ -48,8 +45,7 @@ public class ResourceOwningAIAgentTests
         var resource = new TrackingResource(order, throwOnDispose: true);
         var agent = new ResourceOwningAIAgent(inner, resource);
 
-        var exception = await Assert.ThrowsAsync<AggregateException>(
-            async () => await agent.DisposeAsync());
+        var exception = await Assert.ThrowsAsync<AggregateException>(async () => await agent.DisposeAsync());
 
         Assert.Equal(2, exception.InnerExceptions.Count);
         Assert.Equal(["agent", "resource"], order);
@@ -67,7 +63,8 @@ public class ResourceOwningAIAgentTests
             new TestAgentSession(),
             Guid.CreateVersion7(),
             "context",
-            sessionStateScope: null);
+            sessionStateScope: null
+        );
 
         await runtime.DisposeAsync();
 
@@ -119,27 +116,28 @@ public class ResourceOwningAIAgentTests
         protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
             AgentSession session,
             JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
 
         protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
             JsonElement sessionState,
             JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult<AgentSession>(new TestAgentSession());
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult<AgentSession>(new TestAgentSession());
 
         protected override Task<AgentResponse> RunCoreAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
-            CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            CancellationToken cancellationToken
+        ) => throw new NotSupportedException();
 
         protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
-            [EnumeratorCancellation] CancellationToken cancellationToken)
+            [EnumeratorCancellation] CancellationToken cancellationToken
+        )
         {
             yield break;
         }

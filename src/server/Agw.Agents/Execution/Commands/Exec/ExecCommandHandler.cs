@@ -9,7 +9,8 @@ public sealed class ExecCommandHandler : IExecutionCommandHandler<ExecCommand>
     public Task HandleAsync(
         ExecCommand command,
         ExecutionConnectionContext context,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (!command.AgentId.HasValue || command.AgentId.Value == Guid.Empty)
         {

@@ -5,20 +5,14 @@ namespace Agw.Agents.Execution.Commands.Abstracts;
 public interface IExecutionCommandHandler<in TCommand>
     where TCommand : AgentRunCommand
 {
-    Task HandleAsync(
-        TCommand command,
-        ExecutionConnectionContext context,
-        CancellationToken cancellationToken);
+    Task HandleAsync(TCommand command, ExecutionConnectionContext context, CancellationToken cancellationToken);
 }
 
 internal interface IExecutionCommandHandler
 {
     Type CommandType { get; }
 
-    Task HandleAsync(
-        AgentRunCommand command,
-        ExecutionConnectionContext context,
-        CancellationToken cancellationToken);
+    Task HandleAsync(AgentRunCommand command, ExecutionConnectionContext context, CancellationToken cancellationToken);
 }
 
 internal sealed class ExecutionCommandHandlerAdapter<TCommand> : IExecutionCommandHandler
@@ -36,6 +30,6 @@ internal sealed class ExecutionCommandHandlerAdapter<TCommand> : IExecutionComma
     public Task HandleAsync(
         AgentRunCommand command,
         ExecutionConnectionContext context,
-        CancellationToken cancellationToken) =>
-        _handler.HandleAsync((TCommand)command, context, cancellationToken);
+        CancellationToken cancellationToken
+    ) => _handler.HandleAsync((TCommand)command, context, cancellationToken);
 }

@@ -1,9 +1,7 @@
 using Agw.Files.Api.Dtos;
 using Agw.Files.Application.Files;
 using Agw.Files.Exceptions;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -29,22 +27,18 @@ public class FilesController : ControllerBase
         [FromQuery, BindRequired] Guid projectId,
         [FromQuery] string? path = "",
         [FromQuery] bool diff = false,
-        [FromQuery] bool recursive = false)
+        [FromQuery] bool recursive = false
+    )
     {
         TrackRequestedPath(projectId, path);
-        var result = await _fileAppService.ListAsync(
-            projectId,
-            path,
-            diff,
-            recursive,
-            RequestCancellationToken);
+        var result = await _fileAppService.ListAsync(projectId, path, diff, recursive, RequestCancellationToken);
         if (result.Status != FileOperationStatus.Success)
         {
             return MapError(result);
         }
 
-        var items = result.Value!.Items
-            .Select(entry => new FileItem
+        var items = result
+            .Value!.Items.Select(entry => new FileItem
             {
                 Name = entry.Name,
                 Path = entry.Path,
@@ -53,7 +47,7 @@ public class FilesController : ControllerBase
                 ModifiedTime = entry.ModifiedTime,
                 GitStatus = entry.GitStatus,
                 GitStagedStatus = entry.GitStagedStatus,
-                GitUnstagedStatus = entry.GitUnstagedStatus
+                GitUnstagedStatus = entry.GitUnstagedStatus,
             })
             .ToList();
         return ApiResult.Ok(new FileListResponse { Items = items });
@@ -63,18 +57,11 @@ public class FilesController : ControllerBase
     [ProducesResponseType(typeof(ApiResult<string>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> ReadAsync(
-        [FromQuery, BindRequired] Guid projectId,
-        [FromQuery] string? path)
+    public async Task<IActionResult> ReadAsync([FromQuery, BindRequired] Guid projectId, [FromQuery] string? path)
     {
         TrackRequestedPath(projectId, path);
-        var result = await _fileAppService.ReadAsync(
-            projectId,
-            path,
-            RequestCancellationToken);
-        return result.Status == FileOperationStatus.Success
-            ? ApiResult.Ok(result.Value)
-            : MapError(result);
+        var result = await _fileAppService.ReadAsync(projectId, path, RequestCancellationToken);
+        return result.Status == FileOperationStatus.Success ? ApiResult.Ok(result.Value) : MapError(result);
     }
 
     [HttpGet("diff")]
@@ -84,14 +71,11 @@ public class FilesController : ControllerBase
     public async Task<IActionResult> DiffAsync(
         [FromQuery, BindRequired] Guid projectId,
         [FromQuery] string? path,
-        [FromQuery] string? scope = null)
+        [FromQuery] string? scope = null
+    )
     {
         TrackRequestedPath(projectId, path);
-        var result = await _fileAppService.DiffAsync(
-            projectId,
-            path,
-            scope,
-            RequestCancellationToken);
+        var result = await _fileAppService.DiffAsync(projectId, path, scope, RequestCancellationToken);
         if (result.Status != FileOperationStatus.Success)
         {
             return MapError(result);
@@ -99,35 +83,28 @@ public class FilesController : ControllerBase
 
         if (result.Value!.Unchanged)
         {
-            return ApiResult.Ok(new
-            {
-                diff = "",
-                message = "No changes detected",
-                unchanged = true,
-                originalContent = result.Value.OriginalContent
-            });
+            return ApiResult.Ok(
+                new
+                {
+                    diff = "",
+                    message = "No changes detected",
+                    unchanged = true,
+                    originalContent = result.Value.OriginalContent,
+                }
+            );
         }
 
-        return ApiResult.Ok(new
-        {
-            diff = result.Value.Diff,
-            unchanged = false
-        });
+        return ApiResult.Ok(new { diff = result.Value.Diff, unchanged = false });
     }
 
     [HttpDelete("delete")]
     [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteAsync(
-        [FromQuery, BindRequired] Guid projectId,
-        [FromQuery] string? path)
+    public async Task<IActionResult> DeleteAsync([FromQuery, BindRequired] Guid projectId, [FromQuery] string? path)
     {
         TrackRequestedPath(projectId, path);
-        var result = await _fileAppService.DeleteAsync(
-            projectId,
-            path,
-            RequestCancellationToken);
+        var result = await _fileAppService.DeleteAsync(projectId, path, RequestCancellationToken);
         return MapMutationResult(result);
     }
 
@@ -136,15 +113,10 @@ public class FilesController : ControllerBase
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> ResetAsync(
-        [FromQuery, BindRequired] Guid projectId,
-        [FromQuery] string? path)
+    public async Task<IActionResult> ResetAsync([FromQuery, BindRequired] Guid projectId, [FromQuery] string? path)
     {
         TrackRequestedPath(projectId, path);
-        var result = await _fileAppService.ResetAsync(
-            projectId,
-            path,
-            RequestCancellationToken);
+        var result = await _fileAppService.ResetAsync(projectId, path, RequestCancellationToken);
         return MapMutationResult(result);
     }
 
@@ -152,9 +124,7 @@ public class FilesController : ControllerBase
     [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> StageAsync(
-        [FromQuery, BindRequired] Guid projectId,
-        [FromQuery] string? path)
+    public async Task<IActionResult> StageAsync([FromQuery, BindRequired] Guid projectId, [FromQuery] string? path)
     {
         return await SetStagedAsync(projectId, path, staged: true);
     }
@@ -163,17 +133,12 @@ public class FilesController : ControllerBase
     [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> UnstageAsync(
-        [FromQuery, BindRequired] Guid projectId,
-        [FromQuery] string? path)
+    public async Task<IActionResult> UnstageAsync([FromQuery, BindRequired] Guid projectId, [FromQuery] string? path)
     {
         return await SetStagedAsync(projectId, path, staged: false);
     }
 
-    private async Task<IActionResult> SetStagedAsync(
-        Guid projectId,
-        string? path,
-        bool staged)
+    private async Task<IActionResult> SetStagedAsync(Guid projectId, string? path, bool staged)
     {
         TrackRequestedPath(projectId, path);
         var result = staged
@@ -191,7 +156,8 @@ public class FilesController : ControllerBase
         [FromQuery] string? path = "",
         [FromQuery] string? keyword = null,
         [FromQuery] int limit = 10,
-        [FromQuery] bool recursive = true)
+        [FromQuery] bool recursive = true
+    )
     {
         TrackRequestedPath(projectId, path);
         var result = await _fileAppService.SearchAsync(
@@ -200,18 +166,19 @@ public class FilesController : ControllerBase
             keyword,
             limit,
             recursive,
-            RequestCancellationToken);
+            RequestCancellationToken
+        );
         if (result.Status != FileOperationStatus.Success)
         {
             return MapError(result);
         }
 
-        var results = result.Value!.Results
-            .Select(entry => new FileSearchResult
+        var results = result
+            .Value!.Results.Select(entry => new FileSearchResult
             {
                 FullPath = entry.FullPath,
                 RelativePath = entry.RelativePath,
-                Type = entry.Type
+                Type = entry.Type,
             })
             .ToList();
         return ApiResult.Ok(new FileSearchResponse { Results = results });
@@ -224,8 +191,7 @@ public class FilesController : ControllerBase
     {
         if (ControllerContext.HttpContext != null)
         {
-            ControllerContext.HttpContext.Items[
-                FileEndpointExceptionMappingMiddleware.ResolvedPathItemKey] =
+            ControllerContext.HttpContext.Items[FileEndpointExceptionMappingMiddleware.ResolvedPathItemKey] =
                 $"{projectId}:{path ?? string.Empty}";
         }
     }
@@ -238,7 +204,8 @@ public class FilesController : ControllerBase
                 FilesErrorCode.ResourceNotFound,
                 result.Message ?? "Resource was not found.",
                 StatusCodes.Status404NotFound,
-                result.Details);
+                result.Details
+            );
         }
 
         if (result.Status == FileOperationStatus.InvalidRequest)
@@ -247,14 +214,16 @@ public class FilesController : ControllerBase
                 FilesErrorCode.InvalidParameter,
                 result.Message ?? "Invalid params.",
                 StatusCodes.Status400BadRequest,
-                result.Details);
+                result.Details
+            );
         }
 
         return CreateError(
             FilesErrorCode.FileOperationFailed,
             result.Message ?? "Failed to process file request.",
             StatusCodes.Status500InternalServerError,
-            result.Details);
+            result.Details
+        );
     }
 
     private IActionResult MapMutationResult(FileOperationResult<FileMutationOutput> result)
@@ -264,22 +233,12 @@ public class FilesController : ControllerBase
             return MapError(result);
         }
 
-        return ApiResult.Ok(new
-        {
-            success = result.Value!.Success,
-            message = result.Value.Message
-        });
+        return ApiResult.Ok(new { success = result.Value!.Success, message = result.Value.Message });
     }
 
-    private static IActionResult CreateError(
-        FilesErrorCode code,
-        string title,
-        int statusCode,
-        string? detail)
+    private static IActionResult CreateError(FilesErrorCode code, string title, int statusCode, string? detail)
     {
         var result = ApiResult.Fail((int)code, title, statusCode);
-        return string.IsNullOrWhiteSpace(detail)
-            ? result
-            : result.WithDetail(detail);
+        return string.IsNullOrWhiteSpace(detail) ? result : result.WithDetail(detail);
     }
 }

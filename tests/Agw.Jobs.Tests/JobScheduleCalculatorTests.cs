@@ -15,7 +15,8 @@ public class JobScheduleCalculatorTests
     public void GetNextRunTime_ValidTrigger_ReturnsExpected(
         TriggerType triggerType,
         string triggerValue,
-        string expected)
+        string expected
+    )
     {
         var calculator = new JobScheduleCalculator();
         var job = new Job { TriggerType = triggerType, TriggerValue = triggerValue };
@@ -29,11 +30,7 @@ public class JobScheduleCalculatorTests
     public void GetNextRunTime_PastOnceTrigger_ReturnsNull()
     {
         var calculator = new JobScheduleCalculator();
-        var job = new Job
-        {
-            TriggerType = TriggerType.Once,
-            TriggerValue = "2026-07-15T07:00:00Z"
-        };
+        var job = new Job { TriggerType = TriggerType.Once, TriggerValue = "2026-07-15T07:00:00Z" };
 
         var result = calculator.GetNextRunTime(job, UtcNow);
 
@@ -46,7 +43,8 @@ public class JobScheduleCalculatorTests
     public void GetNextRunTime_InvalidTrigger_ThrowsExpectedAgwException(
         TriggerType triggerType,
         string triggerValue,
-        int expectedCode)
+        int expectedCode
+    )
     {
         var calculator = new JobScheduleCalculator();
         var job = new Job { TriggerType = triggerType, TriggerValue = triggerValue };

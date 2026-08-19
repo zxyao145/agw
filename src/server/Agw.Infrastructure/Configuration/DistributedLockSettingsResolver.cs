@@ -13,26 +13,28 @@ public static class DistributedLockSettingsResolver
             "postgres" => DistributedLockProvider.Postgres,
             _ => throw new AgwException(
                 ErrorCodes.UnsupportedDistributedLockProvider,
-                $"Distributed lock provider '{provider}' is not supported.")
+                $"Distributed lock provider '{provider}' is not supported."
+            ),
         };
     }
 
     public static DistributedLockSettings Resolve(
         DistributedLockSettings? settings,
         DatabaseProvider databaseProvider,
-        string databaseConnectionString)
+        string databaseConnectionString
+    )
     {
-        var provider = settings?.Provider
-            ?? ResolveFromDatabase(databaseProvider);
+        var provider = settings?.Provider ?? ResolveFromDatabase(databaseProvider);
 
         Validate(provider);
 
         return new DistributedLockSettings
         {
             Provider = provider,
-            ConnectionString = provider == DistributedLockProvider.Postgres
-                ? ResolveConnectionString(settings?.ConnectionString, databaseConnectionString)
-                : string.Empty
+            ConnectionString =
+                provider == DistributedLockProvider.Postgres
+                    ? ResolveConnectionString(settings?.ConnectionString, databaseConnectionString)
+                    : string.Empty,
         };
     }
 
@@ -42,7 +44,7 @@ public static class DistributedLockSettingsResolver
         {
             DatabaseProvider.Sqlite => DistributedLockProvider.InMemory,
             DatabaseProvider.Postgres => DistributedLockProvider.Postgres,
-            _ => throw new AgwException(ErrorCodes.UnsupportedDatabaseProvider)
+            _ => throw new AgwException(ErrorCodes.UnsupportedDatabaseProvider),
         };
     }
 
@@ -52,14 +54,13 @@ public static class DistributedLockSettingsResolver
         {
             throw new AgwException(
                 ErrorCodes.UnsupportedDistributedLockProvider,
-                $"Distributed lock provider '{provider}' is not supported.");
+                $"Distributed lock provider '{provider}' is not supported."
+            );
         }
     }
 
     private static string ResolveConnectionString(string? connectionString, string databaseConnectionString)
     {
-        return string.IsNullOrWhiteSpace(connectionString)
-            ? databaseConnectionString
-            : connectionString;
+        return string.IsNullOrWhiteSpace(connectionString) ? databaseConnectionString : connectionString;
     }
 }

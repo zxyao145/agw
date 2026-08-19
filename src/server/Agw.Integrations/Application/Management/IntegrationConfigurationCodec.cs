@@ -1,5 +1,4 @@
 using System.Text.Json;
-
 using Agw.Shared.Exceptions;
 
 namespace Agw.Integrations.Application.Management;
@@ -35,7 +34,8 @@ internal static class IntegrationConfigurationCodec
         IReadOnlyDictionary<string, string?> allValues,
         string connectorId,
         string authSchemeId,
-        IReadOnlyCollection<string> fieldIds)
+        IReadOnlyCollection<string> fieldIds
+    )
     {
         var result = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         foreach (var fieldId in fieldIds)
@@ -54,7 +54,8 @@ internal static class IntegrationConfigurationCodec
         string connectorId,
         string authSchemeId,
         IReadOnlyCollection<string> fieldIds,
-        IReadOnlyDictionary<string, string?> replacement)
+        IReadOnlyDictionary<string, string?> replacement
+    )
     {
         foreach (var fieldId in fieldIds)
         {

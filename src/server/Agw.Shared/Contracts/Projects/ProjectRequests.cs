@@ -12,7 +12,8 @@ public record ProjectCreateRequest(
     List<Guid>? McpToolServerIds = null,
     List<Guid>? SkillIds = null,
     List<Guid>? ConnectionIds = null,
-    Dictionary<string, string>? EnvironmentVariables = null);
+    Dictionary<string, string>? EnvironmentVariables = null
+);
 
 public record ProjectUpdateRequest(
     string Name,
@@ -23,27 +24,22 @@ public record ProjectUpdateRequest(
     List<Guid>? McpToolServerIds = null,
     List<Guid>? SkillIds = null,
     List<Guid>? ConnectionIds = null,
-    Dictionary<string, string>? EnvironmentVariables = null);
+    Dictionary<string, string>? EnvironmentVariables = null
+);
 
-public sealed record ProjectMcpToolServerRelationResponse(
-    Guid ProjectId,
-    Guid McpToolServerId)
+public sealed record ProjectMcpToolServerRelationResponse(Guid ProjectId, Guid McpToolServerId)
 {
     public static ProjectMcpToolServerRelationResponse FromDomain(ProjectMcpServerRelation relation) =>
         new(relation.ProjectId, relation.McpToolServerId);
 }
 
-public sealed record ProjectSkillRelationResponse(
-    Guid ProjectId,
-    Guid SkillId)
+public sealed record ProjectSkillRelationResponse(Guid ProjectId, Guid SkillId)
 {
     public static ProjectSkillRelationResponse FromDomain(ProjectSkillRelation relation) =>
         new(relation.ProjectId, relation.SkillId);
 }
 
-public sealed record ProjectConnectionRelationResponse(
-    Guid ProjectId,
-    Guid ConnectionId)
+public sealed record ProjectConnectionRelationResponse(Guid ProjectId, Guid ConnectionId)
 {
     public static ProjectConnectionRelationResponse FromDomain(ProjectConnectionRelation relation) =>
         new(relation.ProjectId, relation.ConnectionId);
@@ -64,7 +60,8 @@ public sealed record ProjectResponse(
     DateTimeOffset CreateTime,
     string? CreateBy,
     DateTimeOffset? UpdateTime,
-    string? UpdateBy)
+    string? UpdateBy
+)
 {
     public static ProjectResponse FromDomain(Project project) =>
         new(
@@ -82,5 +79,6 @@ public sealed record ProjectResponse(
             project.CreateTime,
             project.CreateBy,
             project.UpdateTime,
-            project.UpdateBy);
+            project.UpdateBy
+        );
 }

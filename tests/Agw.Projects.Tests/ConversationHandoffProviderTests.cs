@@ -1,5 +1,4 @@
 using System.Text.Json;
-
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Projects.Infrastructure;
@@ -8,7 +7,6 @@ using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Projects;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -38,31 +36,34 @@ public class ConversationHandoffProviderTests
                 conversationId,
                 0,
                 CreateUserMessage("prepare the implementation plan", "general-user"),
-                CreateMetadata(AgentRuntimeType.Agent, generalAgentId)),
+                CreateMetadata(AgentRuntimeType.Agent, generalAgentId)
+            ),
             CreateRecord(
                 conversationId,
                 1,
                 new ChatMessage(
                     ChatRole.System,
-                    [new TextReasoningContent("private reasoning"), new TextContent("public plan")])
+                    [new TextReasoningContent("private reasoning"), new TextContent("public plan")]
+                )
                 {
                     MessageId = "general-plan",
                     AuthorName = Constants.DefaultAgentAuthor,
-                    AdditionalProperties = new AdditionalPropertiesDictionary { ["type"] = "result" }
-                }),
+                    AdditionalProperties = new AdditionalPropertiesDictionary { ["type"] = "result" },
+                }
+            ),
             CreateRecord(
                 conversationId,
                 2,
                 CreateUserMessage("start implementation", "coding-user"),
-                CreateMetadata(historyScope: CreateScope(codingAgentflowId))),
+                CreateMetadata(historyScope: CreateScope(codingAgentflowId))
+            ),
             CreateRecord(
                 conversationId,
                 3,
-                new ChatMessage(ChatRole.Assistant, "Which plan should I implement?")
-                {
-                    MessageId = "coding-response"
-                },
-                CreateMetadata(historyScope: CreateScope(codingAgentflowId))));
+                new ChatMessage(ChatRole.Assistant, "Which plan should I implement?") { MessageId = "coding-response" },
+                CreateMetadata(historyScope: CreateScope(codingAgentflowId))
+            )
+        );
 
         await using var dbContext = new AgwDbContext(options);
         var provider = CreateProvider(dbContext);
@@ -71,18 +72,20 @@ public class ConversationHandoffProviderTests
             conversationId,
             AgentRuntimeType.Agentflow,
             codingAgentflowId,
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.Equal(3, handoff.ThroughSequence);
         Assert.Equal(
             ["prepare the implementation plan", "public plan"],
-            handoff.Messages.Select(message => message.Text));
+            handoff.Messages.Select(message => message.Text)
+        );
         Assert.Equal([ChatRole.User, ChatRole.Assistant], handoff.Messages.Select(message => message.Role));
-        Assert.All(handoff.Messages, message => Assert.True(
-            ConversationHandoffMetadata.IsHandoffMessage(message)));
+        Assert.All(handoff.Messages, message => Assert.True(ConversationHandoffMetadata.IsHandoffMessage(message)));
         Assert.DoesNotContain(
             handoff.Messages.SelectMany(message => message.Contents),
-            content => content is TextReasoningContent);
+            content => content is TextReasoningContent
+        );
     }
 
     [Fact]
@@ -104,7 +107,8 @@ public class ConversationHandoffProviderTests
                 conversationId,
                 0,
                 CreateUserMessage("old request", "old-user"),
-                CreateMetadata(AgentRuntimeType.Agent, generalAgentId)),
+                CreateMetadata(AgentRuntimeType.Agent, generalAgentId)
+            ),
             CreateRecord(conversationId, 1, CreateAssistantMessage("old response", "old-response")),
             CreateRecord(
                 conversationId,
@@ -114,13 +118,17 @@ public class ConversationHandoffProviderTests
                     AgentRuntimeType.Agentflow,
                     codingAgentflowId,
                     CreateScope(codingAgentflowId),
-                    throughSequence: 1)),
+                    throughSequence: 1
+                )
+            ),
             CreateRecord(
                 conversationId,
                 3,
                 CreateUserMessage("new request", "new-user"),
-                CreateMetadata(AgentRuntimeType.Agent, generalAgentId)),
-            CreateRecord(conversationId, 4, CreateAssistantMessage("new response", "new-response")));
+                CreateMetadata(AgentRuntimeType.Agent, generalAgentId)
+            ),
+            CreateRecord(conversationId, 4, CreateAssistantMessage("new response", "new-response"))
+        );
 
         await using var dbContext = new AgwDbContext(options);
         var provider = CreateProvider(dbContext);
@@ -129,29 +137,33 @@ public class ConversationHandoffProviderTests
             conversationId,
             AgentRuntimeType.Agentflow,
             codingAgentflowId,
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.Equal(4, handoff.ThroughSequence);
-        Assert.Equal(
-            ["new request", "new response"],
-            handoff.Messages.Select(message => message.Text));
+        Assert.Equal(["new request", "new response"], handoff.Messages.Select(message => message.Text));
 
-        dbContext.ProjectConversationChatHistories.Add(CreateRecord(
-            conversationId,
-            5,
-            CreateUserMessage("continue coding", "coding-user-2"),
-            CreateMetadata(
-                AgentRuntimeType.Agentflow,
-                codingAgentflowId,
-                CreateScope(codingAgentflowId),
-                throughSequence: 4)));
+        dbContext.ProjectConversationChatHistories.Add(
+            CreateRecord(
+                conversationId,
+                5,
+                CreateUserMessage("continue coding", "coding-user-2"),
+                CreateMetadata(
+                    AgentRuntimeType.Agentflow,
+                    codingAgentflowId,
+                    CreateScope(codingAgentflowId),
+                    throughSequence: 4
+                )
+            )
+        );
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var repeated = await provider.CreateAsync(
             conversationId,
             AgentRuntimeType.Agentflow,
             codingAgentflowId,
-            cancellationToken);
+            cancellationToken
+        );
 
         Assert.Empty(repeated.Messages);
         Assert.Equal(5, repeated.ThroughSequence);
@@ -177,7 +189,8 @@ public class ConversationHandoffProviderTests
                 conversationId,
                 0,
                 CreateUserMessage("visible request", "visible-user"),
-                CreateMetadata(AgentRuntimeType.Agent, firstAgentId)),
+                CreateMetadata(AgentRuntimeType.Agent, firstAgentId)
+            ),
             CreateRecord(conversationId, 1, CreateAssistantMessage("already visible", "visible-response")),
             CreateRecord(
                 conversationId,
@@ -185,32 +198,31 @@ public class ConversationHandoffProviderTests
                 new ChatMessage(ChatRole.System, "hidden final result")
                 {
                     MessageId = "result",
-                    AdditionalProperties = new AdditionalPropertiesDictionary { ["type"] = "result" }
-                }),
+                    AdditionalProperties = new AdditionalPropertiesDictionary { ["type"] = "result" },
+                }
+            ),
             CreateRecord(
                 conversationId,
                 3,
                 CreateUserMessage("agentflow request", "flow-user"),
-                CreateMetadata(
-                    AgentRuntimeType.Agentflow,
-                    agentflowId,
-                    CreateScope(agentflowId))),
+                CreateMetadata(AgentRuntimeType.Agentflow, agentflowId, CreateScope(agentflowId))
+            ),
             CreateRecord(
                 conversationId,
                 4,
                 CreateAssistantMessage("agentflow response", "flow-response"),
-                CreateMetadata(historyScope: CreateScope(agentflowId))));
+                CreateMetadata(historyScope: CreateScope(agentflowId))
+            )
+        );
 
         await using var dbContext = new AgwDbContext(options);
-        var handoff = await CreateProvider(dbContext).CreateAsync(
-            conversationId,
-            AgentRuntimeType.Agent,
-            currentAgentId,
-            cancellationToken);
+        var handoff = await CreateProvider(dbContext)
+            .CreateAsync(conversationId, AgentRuntimeType.Agent, currentAgentId, cancellationToken);
 
         Assert.Equal(
             ["hidden final result", "agentflow request", "agentflow response"],
-            handoff.Messages.Select(message => message.Text));
+            handoff.Messages.Select(message => message.Text)
+        );
     }
 
     [Fact]
@@ -233,20 +245,20 @@ public class ConversationHandoffProviderTests
                 conversationId,
                 0,
                 CreateUserMessage("duplicated", "duplicate-user"),
-                CreateMetadata(AgentRuntimeType.Agent, sourceAgentId)),
+                CreateMetadata(AgentRuntimeType.Agent, sourceAgentId)
+            ),
             CreateRecord(
                 conversationId,
                 1,
                 CreateUserMessage("duplicated", "duplicate-user"),
-                CreateMetadata(AgentRuntimeType.Agent, sourceAgentId)),
-            CreateRecord(conversationId, 2, CreateAssistantMessage(oversizedPlan, "large-plan")));
+                CreateMetadata(AgentRuntimeType.Agent, sourceAgentId)
+            ),
+            CreateRecord(conversationId, 2, CreateAssistantMessage(oversizedPlan, "large-plan"))
+        );
 
         await using var dbContext = new AgwDbContext(options);
-        var handoff = await CreateProvider(dbContext).CreateAsync(
-            conversationId,
-            AgentRuntimeType.Agentflow,
-            targetAgentflowId,
-            cancellationToken);
+        var handoff = await CreateProvider(dbContext)
+            .CreateAsync(conversationId, AgentRuntimeType.Agentflow, targetAgentflowId, cancellationToken);
 
         var message = Assert.Single(handoff.Messages);
         Assert.Equal("large-plan", message.MessageId);
@@ -271,20 +283,20 @@ public class ConversationHandoffProviderTests
                 conversationId,
                 0,
                 CreateUserMessage("request", "user-message"),
-                CreateMetadata(AgentRuntimeType.Agent, sourceAgentId)),
+                CreateMetadata(AgentRuntimeType.Agent, sourceAgentId)
+            ),
             CreateRecord(
                 conversationId,
                 1,
                 CreateUserMessage("partial", "shared-response"),
-                CreateMetadata(AgentRuntimeType.Agent, sourceAgentId)),
-            CreateRecord(conversationId, 2, CreateAssistantMessage("complete", "shared-response")));
+                CreateMetadata(AgentRuntimeType.Agent, sourceAgentId)
+            ),
+            CreateRecord(conversationId, 2, CreateAssistantMessage("complete", "shared-response"))
+        );
 
         await using var dbContext = new AgwDbContext(options);
-        var handoff = await CreateProvider(dbContext).CreateAsync(
-            conversationId,
-            AgentRuntimeType.Agentflow,
-            Guid.CreateVersion7(),
-            cancellationToken);
+        var handoff = await CreateProvider(dbContext)
+            .CreateAsync(conversationId, AgentRuntimeType.Agentflow, Guid.CreateVersion7(), cancellationToken);
 
         Assert.Equal(["request", "complete"], handoff.Messages.Select(message => message.Text));
     }
@@ -307,7 +319,8 @@ public class ConversationHandoffProviderTests
                 conversationId,
                 0,
                 CreateUserMessage("request", "user-message"),
-                CreateMetadata(AgentRuntimeType.Agent, sourceAgentId)),
+                CreateMetadata(AgentRuntimeType.Agent, sourceAgentId)
+            ),
             CreateRecord(
                 conversationId,
                 1,
@@ -316,52 +329,49 @@ public class ConversationHandoffProviderTests
                     [
                         new TextReasoningContent("private reasoning"),
                         new FunctionCallContent("call-1", "private-tool"),
-                        new TextContent("public explanation")
-                    ])
+                        new TextContent("public explanation"),
+                    ]
+                )
                 {
-                    MessageId = "mixed-response"
-                }),
+                    MessageId = "mixed-response",
+                }
+            ),
             CreateRecord(
                 conversationId,
                 2,
                 new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call-1", "private result")])
                 {
-                    MessageId = "tool-result"
-                }),
+                    MessageId = "tool-result",
+                }
+            ),
             CreateRecord(
                 conversationId,
                 3,
-                CreateTypedAssistantMessage("saved checkpoint", "checkpoint", "agentflow-checkpoint")),
+                CreateTypedAssistantMessage("saved checkpoint", "checkpoint", "agentflow-checkpoint")
+            ),
             CreateRecord(
                 conversationId,
                 4,
-                CreateTypedAssistantMessage("pending approval", "approval", "tool-approval-request")),
+                CreateTypedAssistantMessage("pending approval", "approval", "tool-approval-request")
+            ),
             CreateRecord(
                 conversationId,
                 5,
-                CreateTypedAssistantMessage("tool state", "tool-state", ToolMessageTypes.ModeStatus)),
-            CreateRecord(
-                conversationId,
-                6,
-                CreateAssistantMessage(" \t\r\n", "blank")),
-            CreateRecord(
-                conversationId,
-                7,
-                CreateTypedAssistantMessage("final plan", "result", "result")));
+                CreateTypedAssistantMessage("tool state", "tool-state", ToolMessageTypes.ModeStatus)
+            ),
+            CreateRecord(conversationId, 6, CreateAssistantMessage(" \t\r\n", "blank")),
+            CreateRecord(conversationId, 7, CreateTypedAssistantMessage("final plan", "result", "result"))
+        );
 
         await using var dbContext = new AgwDbContext(options);
-        var handoff = await CreateProvider(dbContext).CreateAsync(
-            conversationId,
-            AgentRuntimeType.Agentflow,
-            Guid.CreateVersion7(),
-            cancellationToken);
+        var handoff = await CreateProvider(dbContext)
+            .CreateAsync(conversationId, AgentRuntimeType.Agentflow, Guid.CreateVersion7(), cancellationToken);
 
-        Assert.Equal(
-            ["request", "public explanation", "final plan"],
-            handoff.Messages.Select(message => message.Text));
+        Assert.Equal(["request", "public explanation", "final plan"], handoff.Messages.Select(message => message.Text));
         Assert.All(
             handoff.Messages.SelectMany(message => message.Contents),
-            content => Assert.IsType<TextContent>(content));
+            content => Assert.IsType<TextContent>(content)
+        );
     }
 
     private static ConversationHandoffProvider CreateProvider(AgwDbContext dbContext) =>
@@ -375,39 +385,41 @@ public class ConversationHandoffProviderTests
     }
 
     private static DbContextOptions<AgwDbContext> CreateOptions(SqliteConnection connection) =>
-        new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(connection)
-            .UseSnakeCaseNamingConvention()
-            .Options;
+        new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).UseSnakeCaseNamingConvention().Options;
 
     private static async Task SeedAsync(
         DbContextOptions<AgwDbContext> options,
         Guid projectId,
         Guid conversationId,
         CancellationToken cancellationToken,
-        params ProjectConversationChatHistory[] records)
+        params ProjectConversationChatHistory[] records
+    )
     {
         await using var dbContext = new AgwDbContext(options);
         await dbContext.Database.EnsureCreatedAsync(cancellationToken);
-        dbContext.Projects.Add(new Project
-        {
-            Id = projectId,
-            Name = "handoff-project",
-            Type = ProjectType.UserDefined,
-            CreateBy = "tester",
-            CreateTime = TimeProvider.System.GetUtcNow()
-        });
-        dbContext.ProjectConversations.Add(new ProjectConversation
-        {
-            Id = conversationId,
-            ProjectId = projectId,
-            ContextId = Guid.CreateVersion7().ToString(),
-            Title = "handoff",
-            CreateBy = "tester",
-            CreateTime = TimeProvider.System.GetUtcNow(),
-            UpdateBy = "tester",
-            UpdateTime = TimeProvider.System.GetUtcNow()
-        });
+        dbContext.Projects.Add(
+            new Project
+            {
+                Id = projectId,
+                Name = "handoff-project",
+                Type = ProjectType.UserDefined,
+                CreateBy = "tester",
+                CreateTime = TimeProvider.System.GetUtcNow(),
+            }
+        );
+        dbContext.ProjectConversations.Add(
+            new ProjectConversation
+            {
+                Id = conversationId,
+                ProjectId = projectId,
+                ContextId = Guid.CreateVersion7().ToString(),
+                Title = "handoff",
+                CreateBy = "tester",
+                CreateTime = TimeProvider.System.GetUtcNow(),
+                UpdateBy = "tester",
+                UpdateTime = TimeProvider.System.GetUtcNow(),
+            }
+        );
         dbContext.ProjectConversationChatHistories.AddRange(records);
         await dbContext.SaveChangesAsync(cancellationToken);
     }
@@ -416,7 +428,9 @@ public class ConversationHandoffProviderTests
         Guid conversationId,
         long sequence,
         ChatMessage message,
-        Dictionary<string, JsonElement>? metadata = null) => new()
+        Dictionary<string, JsonElement>? metadata = null
+    ) =>
+        new()
         {
             Id = Guid.CreateVersion7(),
             ConversationId = conversationId,
@@ -426,45 +440,36 @@ public class ConversationHandoffProviderTests
             ConversationPayload = JsonSerializer.Serialize(message, JsonOptions),
             Metadata = metadata,
             CreateTime = TimeProvider.System.GetUtcNow(),
-            UpdateTime = TimeProvider.System.GetUtcNow()
+            UpdateTime = TimeProvider.System.GetUtcNow(),
         };
 
     private static ChatMessage CreateUserMessage(string text, string messageId) =>
-        new(ChatRole.User, text)
-        {
-            MessageId = messageId,
-            AuthorName = Constants.DefaultInputAuthor
-        };
+        new(ChatRole.User, text) { MessageId = messageId, AuthorName = Constants.DefaultInputAuthor };
 
     private static ChatMessage CreateAssistantMessage(string text, string messageId) =>
-        new(ChatRole.Assistant, text)
-        {
-            MessageId = messageId,
-            AuthorName = Constants.DefaultAgentAuthor
-        };
+        new(ChatRole.Assistant, text) { MessageId = messageId, AuthorName = Constants.DefaultAgentAuthor };
 
-    private static ChatMessage CreateTypedAssistantMessage(
-        string text,
-        string messageId,
-        string type) =>
+    private static ChatMessage CreateTypedAssistantMessage(string text, string messageId, string type) =>
         new(ChatRole.Assistant, text)
         {
             MessageId = messageId,
             AuthorName = Constants.DefaultAgentAuthor,
-            AdditionalProperties = new AdditionalPropertiesDictionary { ["type"] = type }
+            AdditionalProperties = new AdditionalPropertiesDictionary { ["type"] = type },
         };
 
     private static Dictionary<string, JsonElement> CreateMetadata(
         AgentRuntimeType? targetType = null,
         Guid? targetId = null,
         string? historyScope = null,
-        long? throughSequence = null)
+        long? throughSequence = null
+    )
     {
         var metadata = new Dictionary<string, JsonElement>();
         if (targetType.HasValue && targetId.HasValue)
         {
             metadata["targetType"] = JsonSerializer.SerializeToElement(
-                targetType == AgentRuntimeType.Agent ? "agent" : "agentflow");
+                targetType == AgentRuntimeType.Agent ? "agent" : "agentflow"
+            );
             metadata["targetId"] = JsonSerializer.SerializeToElement(targetId.Value.ToString("D"));
         }
 
@@ -475,13 +480,13 @@ public class ConversationHandoffProviderTests
 
         if (throughSequence.HasValue)
         {
-            metadata[ConversationHandoffMetadata.ThroughSequenceKey] =
-                JsonSerializer.SerializeToElement(throughSequence.Value);
+            metadata[ConversationHandoffMetadata.ThroughSequenceKey] = JsonSerializer.SerializeToElement(
+                throughSequence.Value
+            );
         }
 
         return metadata;
     }
 
-    private static string CreateScope(Guid agentflowId) =>
-        $"agentflow:{agentflowId:N}:node:general-agent";
+    private static string CreateScope(Guid agentflowId) => $"agentflow:{agentflowId:N}:node:general-agent";
 }

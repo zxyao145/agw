@@ -7,5 +7,6 @@ public interface IToolBlock
     ValueTask<ToolContribution> MaterializeAsync(
         ToolBlockDefinition definition,
         ToolMaterializationContext context,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken
+    );
 }

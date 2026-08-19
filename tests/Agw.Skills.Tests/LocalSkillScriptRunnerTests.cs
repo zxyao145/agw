@@ -1,5 +1,4 @@
 using System.Text.Json;
-
 using Agw.Shared.Exceptions;
 using Agw.Skills.Execution;
 
@@ -12,30 +11,32 @@ public class LocalSkillScriptRunnerTests
     {
         var root = CreateTempDirectory();
         var script = Path.Combine(root, "inspect.py");
-        await File.WriteAllTextAsync(
-            Path.Combine(root, "marker.txt"),
-            "marker",
-            TestContext.Current.CancellationToken);
+        await File.WriteAllTextAsync(Path.Combine(root, "marker.txt"), "marker", TestContext.Current.CancellationToken);
         await File.WriteAllTextAsync(
             script,
             "import json, os, sys; print(json.dumps({'cwd': os.getcwd(), 'marker': os.path.isfile('marker.txt'), 'args': sys.argv[1:]}))",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         using var arguments = JsonDocument.Parse("""["alpha beta","literal;value"]""");
 
         try
         {
-            var result = Assert.IsType<string>(await LocalSkillScriptRunner.RunAsync(
-                root,
-                script,
-                arguments.RootElement,
-                TestContext.Current.CancellationToken));
+            var result = Assert.IsType<string>(
+                await LocalSkillScriptRunner.RunAsync(
+                    root,
+                    script,
+                    arguments.RootElement,
+                    TestContext.Current.CancellationToken
+                )
+            );
             using var output = JsonDocument.Parse(result);
 
             Assert.Equal(Path.GetFileName(root), Path.GetFileName(output.RootElement.GetProperty("cwd").GetString()));
             Assert.True(output.RootElement.GetProperty("marker").GetBoolean());
             Assert.Equal(
                 ["alpha beta", "literal;value"],
-                output.RootElement.GetProperty("args").EnumerateArray().Select(item => item.GetString()!).ToArray());
+                output.RootElement.GetProperty("args").EnumerateArray().Select(item => item.GetString()!).ToArray()
+            );
         }
         finally
         {
@@ -51,10 +52,7 @@ public class LocalSkillScriptRunnerTests
 
         try
         {
-            var startInfo = LocalSkillScriptRunner.CreateStartInfo(
-                root,
-                script,
-                ["alpha beta", "literal;value"]);
+            var startInfo = LocalSkillScriptRunner.CreateStartInfo(root, script, ["alpha beta", "literal;value"]);
 
             Assert.Equal("node", startInfo.FileName);
             Assert.Equal([script, "alpha beta", "literal;value"], startInfo.ArgumentList);
@@ -74,15 +72,10 @@ public class LocalSkillScriptRunnerTests
 
         try
         {
-            var startInfo = LocalSkillScriptRunner.CreateStartInfo(
-                root,
-                script,
-                ["alpha beta", "literal;value"]);
+            var startInfo = LocalSkillScriptRunner.CreateStartInfo(root, script, ["alpha beta", "literal;value"]);
 
             Assert.Equal("dotnet", startInfo.FileName);
-            Assert.Equal(
-                ["run", "--file", script, "--", "alpha beta", "literal;value"],
-                startInfo.ArgumentList);
+            Assert.Equal(["run", "--file", script, "--", "alpha beta", "literal;value"], startInfo.ArgumentList);
             Assert.False(startInfo.UseShellExecute);
         }
         finally
@@ -101,11 +94,8 @@ public class LocalSkillScriptRunnerTests
         try
         {
             var exception = await Assert.ThrowsAsync<AgwException>(() =>
-                LocalSkillScriptRunner.RunAsync(
-                    root,
-                    outside,
-                    arguments: null,
-                    TestContext.Current.CancellationToken));
+                LocalSkillScriptRunner.RunAsync(root, outside, arguments: null, TestContext.Current.CancellationToken)
+            );
 
             Assert.Equal(ErrorCodes.CommandExecutionFailed.Code, exception.Code);
         }
@@ -129,11 +119,8 @@ public class LocalSkillScriptRunnerTests
         try
         {
             var exception = await Assert.ThrowsAsync<AgwException>(() =>
-                LocalSkillScriptRunner.RunAsync(
-                    root,
-                    script,
-                    arguments: null,
-                    TestContext.Current.CancellationToken));
+                LocalSkillScriptRunner.RunAsync(root, script, arguments: null, TestContext.Current.CancellationToken)
+            );
 
             Assert.Equal(ErrorCodes.CommandExecutionFailed.Code, exception.Code);
         }
@@ -153,11 +140,8 @@ public class LocalSkillScriptRunnerTests
         try
         {
             var exception = await Assert.ThrowsAsync<AgwException>(() =>
-                LocalSkillScriptRunner.RunAsync(
-                    root,
-                    script,
-                    arguments: null,
-                    TestContext.Current.CancellationToken));
+                LocalSkillScriptRunner.RunAsync(root, script, arguments: null, TestContext.Current.CancellationToken)
+            );
 
             Assert.Equal(ErrorCodes.CommandExecutionFailed.Code, exception.Code);
             Assert.Contains("7", exception.Message, StringComparison.Ordinal);
@@ -183,7 +167,9 @@ public class LocalSkillScriptRunnerTests
                     script,
                     arguments: null,
                     TestContext.Current.CancellationToken,
-                    timeout: TimeSpan.FromMilliseconds(100)));
+                    timeout: TimeSpan.FromMilliseconds(100)
+                )
+            );
 
             Assert.Equal(ErrorCodes.CommandTimeout.Code, exception.Code);
         }

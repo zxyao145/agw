@@ -1,5 +1,4 @@
 using Agw.Agents.Execution.Commands.Setting;
-
 using Microsoft.Agents.AI;
 
 namespace Agw.Agents.Execution.Turns;
@@ -43,6 +42,5 @@ internal sealed class PermissionModeState
     private static int Encode(PermissionMode? permissionMode) =>
         permissionMode.HasValue ? (int)permissionMode.Value + 1 : 0;
 
-    private static PermissionMode? Decode(int value) =>
-        value == 0 ? null : (PermissionMode)(value - 1);
+    private static PermissionMode? Decode(int value) => value == 0 ? null : (PermissionMode)(value - 1);
 }

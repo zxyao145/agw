@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.ExternalAgents;
@@ -8,13 +7,10 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
-
 using ClaudeCodeSdk.MAF;
 using ClaudeCodeSdk.Types;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
-
 using OpenAI.CodexSdk;
 using OpenAI.CodexSdk.MAF;
 
@@ -27,7 +23,8 @@ public partial class AgentRuntimeService
         Project project,
         IReadOnlyDictionary<string, string> environmentVariables,
         [NotNullWhen(true)] out AIAgent? aiAgent,
-        bool isBackground = false)
+        bool isBackground = false
+    )
     {
         aiAgent = null;
         if (request.Agent.Type != AgentType.External)
@@ -41,32 +38,37 @@ public partial class AgentRuntimeService
                 project,
                 request.ProviderSessionId,
                 request.Resume,
-                environmentVariables),
+                environmentVariables
+            ),
             AgentNames.Codex => CreateCodexAgent(
                 project,
                 request.ProviderSessionId,
                 request.Resume,
                 environmentVariables,
-                request.OnExternalSessionStartedAsync),
-            _ => null
+                request.OnExternalSessionStartedAsync
+            ),
+            _ => null,
         };
 
         if (aiAgent != null)
         {
-            var agentBuilder = aiAgent.AsBuilder()
+            var agentBuilder = aiAgent
+                .AsBuilder()
                 .Use(
                     runFunc: _observabilityMiddleware.LogRunMiddleware,
-                    runStreamingFunc: _observabilityMiddleware.LogStreamingMiddleware)
+                    runStreamingFunc: _observabilityMiddleware.LogStreamingMiddleware
+                )
                 .Use(
                     runFunc: _usageTrackingMiddleware.TrackRunMiddleware,
-                    runStreamingFunc: _usageTrackingMiddleware.TrackStreamingMiddleware);
+                    runStreamingFunc: _usageTrackingMiddleware.TrackStreamingMiddleware
+                );
             if (isBackground)
             {
-                var approvalMiddleware = new BackgroundAgentApprovalMiddleware(
-                    _humanInteractionContextAccessor);
+                var approvalMiddleware = new BackgroundAgentApprovalMiddleware(_humanInteractionContextAccessor);
                 agentBuilder.Use(
                     runFunc: approvalMiddleware.RejectNewApprovalAsync,
-                    runStreamingFunc: approvalMiddleware.RejectNewApprovalStreamingAsync);
+                    runStreamingFunc: approvalMiddleware.RejectNewApprovalStreamingAsync
+                );
             }
 
             aiAgent = agentBuilder.Build();
@@ -79,15 +81,15 @@ public partial class AgentRuntimeService
         Project project,
         Guid? contextId,
         bool resume,
-        IReadOnlyDictionary<string, string>? environmentVariables)
+        IReadOnlyDictionary<string, string>? environmentVariables
+    )
     {
         string? extra = project.ExtraSetting;
         if (string.IsNullOrWhiteSpace(extra) || IsEmptyJsonObject(extra))
         {
-            extra = JsonUtil.Serialize(new ClaudeCodeAIAgentOptions
-            {
-                PermissionMode = PermissionMode.bypassPermissions,
-            });
+            extra = JsonUtil.Serialize(
+                new ClaudeCodeAIAgentOptions { PermissionMode = PermissionMode.bypassPermissions }
+            );
         }
 
         var options = JsonUtil.Deserialize<ClaudeCodeAIAgentOptions>(extra);
@@ -100,14 +102,22 @@ public partial class AgentRuntimeService
         options = options with
         {
             WorkingDirectory = PathUtil.ExpandTilde(project.Workspace),
-            ChatHistoryProvider = _chatHistoryProvider
+            ChatHistoryProvider = _chatHistoryProvider,
         };
 
         if (contextId != null)
         {
             options = resume
-                ? options with { Resume = contextId.Value.Normalize(), SessionId = null }
-                : options with { Resume = null, SessionId = contextId };
+                ? options with
+                {
+                    Resume = contextId.Value.Normalize(),
+                    SessionId = null,
+                }
+                : options with
+                {
+                    Resume = null,
+                    SessionId = contextId,
+                };
         }
 
         options = ApplyEnvironmentVariables(options, environmentVariables);
@@ -119,7 +129,8 @@ public partial class AgentRuntimeService
         Guid? threadId,
         bool resume,
         IReadOnlyDictionary<string, string>? environmentVariables,
-        Func<string, CancellationToken, ValueTask>? onThreadStartedAsync)
+        Func<string, CancellationToken, ValueTask>? onThreadStartedAsync
+    )
     {
         string? extra = project.ExtraSetting;
         if (string.IsNullOrWhiteSpace(extra) || IsEmptyJsonObject(extra))
@@ -133,7 +144,8 @@ public partial class AgentRuntimeService
             threadId,
             resume,
             environmentVariables,
-            onThreadStartedAsync);
+            onThreadStartedAsync
+        );
         if (options == null)
         {
             _logger.LogError("agent.Extra Deserialize to options error");
@@ -144,8 +156,6 @@ public partial class AgentRuntimeService
         return new CodexAIAgent(options, _logger);
     }
 
-
-
     #region CodexAgentOptions
 
     private static CodexAIAgentOptions? BuildCodexAIAgentOptions(
@@ -154,7 +164,8 @@ public partial class AgentRuntimeService
         Guid? threadId,
         bool resume,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
-        Func<string, CancellationToken, ValueTask>? onThreadStartedAsync = null)
+        Func<string, CancellationToken, ValueTask>? onThreadStartedAsync = null
+    )
     {
         var options = JsonUtil.Deserialize<CodexAIAgentOptions>(extra);
         if (options == null)
@@ -166,34 +177,25 @@ public partial class AgentRuntimeService
         {
             options = options with
             {
-                ThreadOptions = CreateCodexThreadOptionsWithWorkspace(options.ThreadOptions, workspace)
+                ThreadOptions = CreateCodexThreadOptionsWithWorkspace(options.ThreadOptions, workspace),
             };
         }
 
         if (threadId != null)
         {
-            options = options with
-            {
-                ThreadId = threadId.Value,
-                IsResume = resume
-            };
+            options = options with { ThreadId = threadId.Value, IsResume = resume };
         }
 
         if (onThreadStartedAsync != null)
         {
-            options = options with
-            {
-                OnThreadStartedAsync = onThreadStartedAsync
-            };
+            options = options with { OnThreadStartedAsync = onThreadStartedAsync };
         }
 
         if (environmentVariables is { Count: > 0 })
         {
             options = options with
             {
-                CodexOptions = CreateCodexOptionsWithEnvironmentVariables(
-                    options.CodexOptions,
-                    environmentVariables)
+                CodexOptions = CreateCodexOptionsWithEnvironmentVariables(options.CodexOptions, environmentVariables),
             };
         }
 
@@ -202,7 +204,8 @@ public partial class AgentRuntimeService
 
     public static ClaudeCodeAIAgentOptions ApplyEnvironmentVariables(
         ClaudeCodeAIAgentOptions options,
-        IReadOnlyDictionary<string, string>? environmentVariables)
+        IReadOnlyDictionary<string, string>? environmentVariables
+    )
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -225,7 +228,10 @@ public partial class AgentRuntimeService
             merged[key] = value;
         }
 
-        return options with { EnvironmentVariables = merged };
+        return options with
+        {
+            EnvironmentVariables = merged,
+        };
     }
 
     private static ThreadOptions CreateCodexThreadOptionsWithWorkspace(ThreadOptions? options, string workspace)
@@ -249,7 +255,8 @@ public partial class AgentRuntimeService
 
     private static CodexOptions CreateCodexOptionsWithEnvironmentVariables(
         CodexOptions? options,
-        IReadOnlyDictionary<string, string> environmentVariables)
+        IReadOnlyDictionary<string, string> environmentVariables
+    )
     {
         options ??= new CodexOptions();
 
@@ -283,7 +290,7 @@ public partial class AgentRuntimeService
             BaseUrl = options.BaseUrl,
             ApiKey = options.ApiKey,
             Config = options.Config,
-            Env = merged
+            Env = merged,
         };
     }
 
@@ -305,12 +312,14 @@ public partial class AgentRuntimeService
 
             if (!hasOpen)
             {
-                if (c != '{') return false;
+                if (c != '{')
+                    return false;
                 hasOpen = true;
                 continue;
             }
 
-            if (c != '}') return false;
+            if (c != '}')
+                return false;
             return true;
         }
 

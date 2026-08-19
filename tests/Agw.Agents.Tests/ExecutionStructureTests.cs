@@ -42,7 +42,8 @@ public class ExecutionStructureTests
         Assert.Null(assembly.GetType("Agw.Agents.Execution.Runtimes.StreamingExecutionStartRequest"));
         Assert.DoesNotContain(
             assembly.GetTypes(),
-            type => type.Namespace?.StartsWith("Agw.Agents.Runtime", StringComparison.Ordinal) == true);
+            type => type.Namespace?.StartsWith("Agw.Agents.Runtime", StringComparison.Ordinal) == true
+        );
     }
 
     [Fact]
@@ -57,7 +58,8 @@ public class ExecutionStructureTests
         Assert.NotNull(appServiceType);
         Assert.NotNull(domainServiceType);
 
-        var parameterTypes = Assert.Single(controllerType!.GetConstructors())
+        var parameterTypes = Assert
+            .Single(controllerType!.GetConstructors())
             .GetParameters()
             .Select(parameter => parameter.ParameterType)
             .ToArray();

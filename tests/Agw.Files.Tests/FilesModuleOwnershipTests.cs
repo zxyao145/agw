@@ -34,14 +34,9 @@ public class FilesModuleOwnershipTests
     public void FilesController_DependsOnlyOnApplicationService()
     {
         var constructor = Assert.Single(typeof(FilesController).GetConstructors());
-        var parameterTypes = constructor
-            .GetParameters()
-            .Select(parameter => parameter.ParameterType)
-            .ToArray();
+        var parameterTypes = constructor.GetParameters().Select(parameter => parameter.ParameterType).ToArray();
 
-        Assert.Equal(
-            [typeof(FileAppService)],
-            parameterTypes);
+        Assert.Equal([typeof(FileAppService)], parameterTypes);
     }
 
     [Theory]

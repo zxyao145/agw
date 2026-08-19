@@ -1,9 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-
 using Agw.Shared.Data.Entities.Agentflows;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Agents.Execution.Agentflows;
@@ -15,9 +13,11 @@ internal static class AgentflowDefinitionFingerprint
     public static async Task<string?> CreateAsync(
         DbContext dbContext,
         Guid agentflowId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
-        var agentflow = await dbContext.Set<Agentflow>()
+        var agentflow = await dbContext
+            .Set<Agentflow>()
             .AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == agentflowId, cancellationToken)
             .ConfigureAwait(false);
@@ -26,7 +26,8 @@ internal static class AgentflowDefinitionFingerprint
             return null;
         }
 
-        var nodes = await dbContext.Set<AgentflowNode>()
+        var nodes = await dbContext
+            .Set<AgentflowNode>()
             .AsNoTracking()
             .Where(item => item.AgentflowId == agentflowId)
             .OrderBy(item => item.NodeId)
@@ -37,11 +38,12 @@ internal static class AgentflowDefinitionFingerprint
                 item.RelateId,
                 item.Name,
                 item.Instructions,
-                item.ConfigJson
+                item.ConfigJson,
             })
             .ToArrayAsync(cancellationToken)
             .ConfigureAwait(false);
-        var edges = await dbContext.Set<AgentflowEdge>()
+        var edges = await dbContext
+            .Set<AgentflowEdge>()
             .AsNoTracking()
             .Where(item => item.AgentflowId == agentflowId)
             .OrderBy(item => item.EdgeId)
@@ -53,20 +55,21 @@ internal static class AgentflowDefinitionFingerprint
                 item.Kind,
                 item.Label,
                 item.ConditionJson,
-                item.ConfigJson
+                item.ConfigJson,
             })
             .ToArrayAsync(cancellationToken)
             .ConfigureAwait(false);
-        var definition = JsonSerializer.Serialize(new
-        {
-            CheckpointRuntimeVersion,
-            agentflow.Id,
-            agentflow.SystemPrompt,
-            agentflow.SummaryModelProviderId,
-            Nodes = nodes,
-            Edges = edges
-        });
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(definition)))
-            .ToLowerInvariant();
+        var definition = JsonSerializer.Serialize(
+            new
+            {
+                CheckpointRuntimeVersion,
+                agentflow.Id,
+                agentflow.SystemPrompt,
+                agentflow.SummaryModelProviderId,
+                Nodes = nodes,
+                Edges = edges,
+            }
+        );
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(definition))).ToLowerInvariant();
     }
 }

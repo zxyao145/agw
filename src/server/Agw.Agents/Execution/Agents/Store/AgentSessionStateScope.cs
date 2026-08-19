@@ -10,7 +10,8 @@ public sealed class AgentSessionStateScope
         Guid projectId,
         string contextId,
         Guid agentId,
-        string? agentflowNodeId = null)
+        string? agentflowNodeId = null
+    )
     {
         ProjectConversationId = projectConversationId;
         ProjectId = projectId;
@@ -35,5 +36,6 @@ public sealed class AgentSessionStateScope
             ProjectDefaults.GetDefaultProjectIdentifier(ProjectId).Normalize(),
             ContextId,
             AgentId.Normalize(),
-            AgentflowNodeId);
+            AgentflowNodeId
+        );
 }

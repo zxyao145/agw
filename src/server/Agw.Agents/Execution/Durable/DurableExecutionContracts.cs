@@ -1,5 +1,4 @@
 using System.Text.Json;
-
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
 using Agw.Shared.AgwMsgVm;
@@ -17,8 +16,7 @@ internal static class DurableExecutionLock
     /// <summary>
     /// 为 execution 生成稳定的 PostgreSQL advisory lock 资源名。
     /// </summary>
-    public static string GetResourceName(Guid executionId) =>
-        $"distributed-execution:{executionId:N}";
+    public static string GetResourceName(Guid executionId) => $"distributed-execution:{executionId:N}";
 }
 
 /// <summary>
@@ -28,7 +26,7 @@ internal enum DurableExecutionSegmentStatus
 {
     WaitingForHuman = 0,
     Completed = 1,
-    Failed = 2
+    Failed = 2,
 }
 
 /// <summary>
@@ -96,8 +94,7 @@ internal sealed record DurableExecutionManifest
     /// </summary>
     public IReadOnlyList<string> ResumeCheckpointNodeIds { get; init; } = [];
 
-    public string ResolveUserId() =>
-        string.IsNullOrWhiteSpace(UserId) ? Constants.AdminUserId : UserId;
+    public string ResolveUserId() => string.IsNullOrWhiteSpace(UserId) ? Constants.AdminUserId : UserId;
 }
 
 /// <summary>
@@ -134,7 +131,7 @@ internal sealed record DurableProjectTaskSnapshot
             TaskId = task.TaskId,
             ProjectConversationId = task.ProjectConversationId,
             ProjectId = task.ProjectId,
-            ContextId = task.ContextId
+            ContextId = task.ContextId,
         };
 
     /// <summary>
@@ -146,7 +143,7 @@ internal sealed record DurableProjectTaskSnapshot
             TaskId = TaskId,
             ProjectConversationId = ProjectConversationId,
             ProjectId = ProjectId,
-            ContextId = ContextId
+            ContextId = ContextId,
         };
 }
 
@@ -176,24 +173,20 @@ internal sealed record DurableExecutionSettings
     public static DurableExecutionSettings FromSettings(ExecutionSettings settings) =>
         new()
         {
-            EnvironmentVariables = settings.EnvironmentVariables
-                .OrderBy(pair => pair.Key, StringComparer.Ordinal)
+            EnvironmentVariables = settings
+                .EnvironmentVariables.OrderBy(pair => pair.Key, StringComparer.Ordinal)
                 .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
             PermissionMode = settings.PermissionMode,
-            Resume = settings.Resume
+            Resume = settings.Resume,
         };
 
     /// <summary>
     /// 重建 Agent runtime 接受的 SettingCommand。
     /// </summary>
     public SettingCommand ToCommand(Guid projectId, string contextId) =>
-        new(
-            projectId,
-            new Dictionary<string, string>(EnvironmentVariables),
-            contextId,
-            PermissionMode)
+        new(projectId, new Dictionary<string, string>(EnvironmentVariables), contextId, PermissionMode)
         {
-            Resume = Resume
+            Resume = Resume,
         };
 }
 
@@ -208,7 +201,8 @@ internal sealed record DurableExecutionSegmentInput(
     Guid ExecutionId,
     int SegmentIndex,
     IReadOnlyList<DurableResolvedInteraction> ResolvedInteractions,
-    DurableAgentflowCheckpoint? Checkpoint);
+    DurableAgentflowCheckpoint? Checkpoint
+);
 
 /// <summary>
 /// 分段执行器与 PostgreSQL 状态机之间的持久边界。
@@ -371,7 +365,8 @@ internal sealed record DurableHumanInteractionSnapshot
 /// <param name="Response">PostgreSQL 中持久化的人工回答。</param>
 internal sealed record DurableResolvedInteraction(
     DurableHumanInteractionSnapshot Request,
-    DurableHumanResponseEnvelope Response);
+    DurableHumanResponseEnvelope Response
+);
 
 /// <summary>
 /// 协调层返回给 connection attachment 的最小执行状态。
@@ -382,7 +377,8 @@ internal sealed record DurableResolvedInteraction(
 internal sealed record DurableExecutionStatusResponse(
     Guid ExecutionId,
     DurableExecutionStatus Status,
-    string StreamingScopeId);
+    string StreamingScopeId
+);
 
 /// <summary>
 /// 从 SignalR HumanResponseCommand 映射得到的 durable 回答请求。
@@ -399,4 +395,5 @@ internal sealed record SubmitDurableHumanResponseRequest(
     bool Approved,
     string? ResponseText = null,
     string ApprovalScope = "once",
-    JsonElement? ResponseData = null);
+    JsonElement? ResponseData = null
+);

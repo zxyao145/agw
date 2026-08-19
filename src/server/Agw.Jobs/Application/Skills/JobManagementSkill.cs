@@ -1,5 +1,4 @@
 using System.ComponentModel;
-
 using Agw.Agents.Execution.Turns;
 using Agw.Jobs.Application.Contracts;
 using Agw.Jobs.Application.Services;
@@ -8,7 +7,6 @@ using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -25,51 +23,53 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
     public JobManagementSkill(
         Guid projectId,
         IServiceScopeFactory serviceScopeFactory,
-        IRuntimeTurnContextAccessor turnContextAccessor)
+        IRuntimeTurnContextAccessor turnContextAccessor
+    )
     {
         _projectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
         _serviceScopeFactory = serviceScopeFactory;
         _turnContextAccessor = turnContextAccessor;
     }
 
-    public override AgentSkillFrontmatter Frontmatter { get; } = new(
-        JobManagementSkillRegistration.SkillName,
-        "Manage scheduled jobs in the current project. Use when asked to list, inspect, create, modify, enable, disable, or delete jobs.");
+    public override AgentSkillFrontmatter Frontmatter { get; } =
+        new(
+            JobManagementSkillRegistration.SkillName,
+            "Manage scheduled jobs in the current project. Use when asked to list, inspect, create, modify, enable, disable, or delete jobs."
+        );
 
     protected override string Instructions =>
         """
-        Use this skill only to manage jobs in the current project.
+            Use this skill only to manage jobs in the current project.
 
-        - Use list-jobs to discover jobs and get-job before changing or deleting a job.
-        - Read job-trigger-reference before creating a job or changing its schedule.
-        - create-job and update-job require an interactive user context.
-        - update-job has patch semantics. Omitted values remain unchanged.
-        - To clear a prompt, set clearPrompt to true. Do not send prompt and clearPrompt together.
-        - When changing the agent target, provide both agentType and agentId.
-        - Before deleting, show the job details and ask the user to confirm the exact job ID.
-        - Call delete-job only after confirmation, passing the same job ID in confirmation.
-        - Report the returned job ID and nextRunTime. Never claim a write succeeded without a successful script result.
-        """;
+            - Use list-jobs to discover jobs and get-job before changing or deleting a job.
+            - Read job-trigger-reference before creating a job or changing its schedule.
+            - create-job and update-job require an interactive user context.
+            - update-job has patch semantics. Omitted values remain unchanged.
+            - To clear a prompt, set clearPrompt to true. Do not send prompt and clearPrompt together.
+            - When changing the agent target, provide both agentType and agentId.
+            - Before deleting, show the job details and ask the user to confirm the exact job ID.
+            - Call delete-job only after confirmation, passing the same job ID in confirmation.
+            - Report the returned job ID and nextRunTime. Never claim a write succeeded without a successful script result.
+            """;
 
     [AgentSkillResource("job-trigger-reference")]
     [Description("Valid trigger types and values for scheduled jobs.")]
     public string JobTriggerReference =>
         """
-        # Job trigger reference
+            # Job trigger reference
 
-        All schedules are evaluated in UTC.
+            All schedules are evaluated in UTC.
 
-        - Once: an RFC 3339 timestamp with `Z` or an explicit offset, for example `2026-08-01T09:00:00Z`.
-        - Interval: a positive .NET TimeSpan value, for example `00:15:00` for fifteen minutes.
-        - Cron: a standard five-field cron expression interpreted in UTC, for example `0 9 * * 1-5`.
+            - Once: an RFC 3339 timestamp with `Z` or an explicit offset, for example `2026-08-01T09:00:00Z`.
+            - Interval: a positive .NET TimeSpan value, for example `00:15:00` for fifteen minutes.
+            - Cron: a standard five-field cron expression interpreted in UTC, for example `0 9 * * 1-5`.
 
-        AgentType values are `Agent` and `Agentflow`.
-        """;
+            AgentType values are `Agent` and `Agentflow`.
+            """;
 
     [AgentSkillScript("list-jobs")]
     [Description("Lists all scheduled jobs in the current project.")]
-    private async Task<IReadOnlyList<JobSkillResponse>> ListJobsAsync(
-        CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<JobSkillResponse>> ListJobsAsync(CancellationToken cancellationToken)
     {
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var service = scope.ServiceProvider.GetRequiredService<JobAppService>();
@@ -79,13 +79,12 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
 
     [AgentSkillScript("get-job")]
     [Description("Gets one scheduled job in the current project by job ID.")]
-    private async Task<JobSkillResponse> GetJobAsync(
-        Guid jobId,
-        CancellationToken cancellationToken)
+    private async Task<JobSkillResponse> GetJobAsync(Guid jobId, CancellationToken cancellationToken)
     {
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var service = scope.ServiceProvider.GetRequiredService<JobAppService>();
-        var job = await service.GetByProjectAsync(jobId, _projectId, cancellationToken)
+        var job =
+            await service.GetByProjectAsync(jobId, _projectId, cancellationToken)
             ?? throw new AgwException(ErrorCodes.JobNotFound);
         return Map(job);
     }
@@ -101,7 +100,8 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
         string? name = null,
         int maxRetryCount = 3,
         bool isEnabled = true,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var userName = RequireInteractiveUser();
         if (string.IsNullOrWhiteSpace(prompt))
@@ -134,7 +134,8 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
                 MaxRetryCount = maxRetryCount,
                 IsEnabled = isEnabled,
             },
-            userName);
+            userName
+        );
         return Map(job);
     }
 
@@ -151,7 +152,8 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
         string? triggerValue = null,
         int? maxRetryCount = null,
         bool? isEnabled = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var userName = RequireInteractiveUser();
         ValidatePatch(
@@ -163,11 +165,13 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
             triggerType,
             triggerValue,
             maxRetryCount,
-            isEnabled);
+            isEnabled
+        );
 
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var service = scope.ServiceProvider.GetRequiredService<JobAppService>();
-        var existing = await service.GetByProjectAsync(jobId, _projectId, cancellationToken)
+        var existing =
+            await service.GetByProjectAsync(jobId, _projectId, cancellationToken)
             ?? throw new AgwException(ErrorCodes.JobNotFound);
         var updated = await service.UpdateByProjectAsync(
             jobId,
@@ -187,7 +191,8 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
             },
             userName,
             recalculateSchedule: triggerType != null || triggerValue != null,
-            cancellationToken: cancellationToken);
+            cancellationToken: cancellationToken
+        );
 
         return Map(updated ?? throw new AgwException(ErrorCodes.JobNotFound));
     }
@@ -197,14 +202,13 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
     private async Task<JobSkillResponse> DeleteJobAsync(
         Guid jobId,
         string confirmation,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         _ = RequireInteractiveUser();
         if (!Guid.TryParse(confirmation, out var confirmedJobId) || confirmedJobId != jobId)
         {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                "Delete confirmation must exactly match the job ID.");
+            throw new AgwException(ErrorCodes.InvalidParam, "Delete confirmation must exactly match the job ID.");
         }
 
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
@@ -216,15 +220,12 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
     private string RequireInteractiveUser()
     {
         var context = _turnContextAccessor.Current;
-        if (context == null ||
-            ProjectDefaults.GetDefaultProjectIdentifier(context.ProjectId) != _projectId)
+        if (context == null || ProjectDefaults.GetDefaultProjectIdentifier(context.ProjectId) != _projectId)
         {
             throw new AgwException(ErrorCodes.InteractiveAdminRequired);
         }
 
-        return string.IsNullOrWhiteSpace(context.UserName)
-            ? Constants.AdminUserName
-            : context.UserName;
+        return string.IsNullOrWhiteSpace(context.UserName) ? Constants.AdminUserName : context.UserName;
     }
 
     private static void ValidatePatch(
@@ -236,17 +237,20 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
         TriggerType? triggerType,
         string? triggerValue,
         int? maxRetryCount,
-        bool? isEnabled)
+        bool? isEnabled
+    )
     {
-        if (name == null &&
-            prompt == null &&
-            !clearPrompt &&
-            agentType == null &&
-            agentId == null &&
-            triggerType == null &&
-            triggerValue == null &&
-            maxRetryCount == null &&
-            isEnabled == null)
+        if (
+            name == null
+            && prompt == null
+            && !clearPrompt
+            && agentType == null
+            && agentId == null
+            && triggerType == null
+            && triggerValue == null
+            && maxRetryCount == null
+            && isEnabled == null
+        )
         {
             throw new AgwException(ErrorCodes.NoChangesToMake);
         }
@@ -258,23 +262,20 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
 
         if (clearPrompt && prompt != null)
         {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                "prompt and clearPrompt cannot be supplied together.");
+            throw new AgwException(ErrorCodes.InvalidParam, "prompt and clearPrompt cannot be supplied together.");
         }
 
         if (prompt != null && string.IsNullOrWhiteSpace(prompt))
         {
             throw new AgwException(
                 ErrorCodes.InvalidParam,
-                "Job prompt cannot be blank. Use clearPrompt to remove it.");
+                "Job prompt cannot be blank. Use clearPrompt to remove it."
+            );
         }
 
         if (agentType.HasValue != agentId.HasValue)
         {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                "agentType and agentId must be supplied together.");
+            throw new AgwException(ErrorCodes.InvalidParam, "agentType and agentId must be supplied together.");
         }
 
         if (agentId == Guid.Empty)
@@ -303,7 +304,8 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
             job.IsEnabled,
             job.RetryCount,
             job.MaxRetryCount,
-            job.LastError);
+            job.LastError
+        );
 }
 
 #pragma warning restore MAAI001

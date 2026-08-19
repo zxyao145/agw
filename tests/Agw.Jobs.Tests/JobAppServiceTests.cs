@@ -7,7 +7,6 @@ using Agw.Jobs.Scheduling.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Testing;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -55,9 +54,10 @@ public class JobAppServiceTests
                 TriggerValue = "00:01:00",
                 MaxRetryCount = 3,
                 IsEnabled = true,
-                Status = JobStatus.Pending
+                Status = JobStatus.Pending,
             },
-            "test-user");
+            "test-user"
+        );
 
         Assert.NotNull(job);
         Assert.Equal("job-3-20260715", job!.Name);
@@ -73,12 +73,9 @@ public class JobAppServiceTests
         fixture.TimeProvider.SetUtcNow(updatedAt);
 
         var job = await fixture.Service.UpdateEnabledAsync(
-            new JobEnabledUpdateRequest
-            {
-                JobId = fixture.FirstJobId,
-                IsEnabled = false
-            },
-            "toggle-user");
+            new JobEnabledUpdateRequest { JobId = fixture.FirstJobId, IsEnabled = false },
+            "toggle-user"
+        );
 
         Assert.NotNull(job);
         Assert.False(job!.IsEnabled);
@@ -101,12 +98,9 @@ public class JobAppServiceTests
         await using var fixture = await JobAppServiceFixture.CreateAsync(0, cancellationToken);
 
         var job = await fixture.Service.UpdateEnabledAsync(
-            new JobEnabledUpdateRequest
-            {
-                JobId = Guid.CreateVersion7(),
-                IsEnabled = false
-            },
-            "toggle-user");
+            new JobEnabledUpdateRequest { JobId = Guid.CreateVersion7(), IsEnabled = false },
+            "toggle-user"
+        );
 
         Assert.Null(job);
     }
@@ -119,12 +113,9 @@ public class JobAppServiceTests
         var wait = fixture.SchedulerWakeSignal.WaitAsync(cancellationToken);
 
         await fixture.Service.UpdateEnabledAsync(
-            new JobEnabledUpdateRequest
-            {
-                JobId = fixture.FirstJobId,
-                IsEnabled = true
-            },
-            "toggle-user");
+            new JobEnabledUpdateRequest { JobId = fixture.FirstJobId, IsEnabled = true },
+            "toggle-user"
+        );
 
         await wait.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
     }
@@ -138,7 +129,7 @@ public class JobAppServiceTests
             TriggerType = TriggerType.Interval,
             TriggerValue = "00:01:00",
             MaxRetryCount = 3,
-            IsEnabled = true
+            IsEnabled = true,
         };
     }
 
@@ -153,7 +144,8 @@ public class JobAppServiceTests
             JobAppService service,
             TestTimeProvider timeProvider,
             JobSchedulerWakeSignal schedulerWakeSignal,
-            Guid firstJobId)
+            Guid firstJobId
+        )
         {
             _connection = connection;
             _dbContext = dbContext;
@@ -171,14 +163,10 @@ public class JobAppServiceTests
         public async Task<Job> GetJobAsync(Guid id, CancellationToken cancellationToken)
         {
             _dbContext.ChangeTracker.Clear();
-            return await _dbContext.Jobs
-                .AsNoTracking()
-                .SingleAsync(job => job.Id == id, cancellationToken);
+            return await _dbContext.Jobs.AsNoTracking().SingleAsync(job => job.Id == id, cancellationToken);
         }
 
-        public static async Task<JobAppServiceFixture> CreateAsync(
-            int jobCount,
-            CancellationToken cancellationToken)
+        public static async Task<JobAppServiceFixture> CreateAsync(int jobCount, CancellationToken cancellationToken)
         {
             var connection = new SqliteConnection("Data Source=:memory:");
             await connection.OpenAsync(cancellationToken);
@@ -190,7 +178,8 @@ public class JobAppServiceTests
             var dbContext = new AgwDbContext(options);
             await dbContext.Database.EnsureCreatedAsync(cancellationToken);
 
-            var jobs = Enumerable.Range(1, jobCount)
+            var jobs = Enumerable
+                .Range(1, jobCount)
                 .Select(index => new Job
                 {
                     Id = Guid.CreateVersion7(),
@@ -205,7 +194,7 @@ public class JobAppServiceTests
                     CreateBy = "test-user",
                     CreateTime = UtcNow,
                     UpdateBy = "test-user",
-                    UpdateTime = UtcNow
+                    UpdateTime = UtcNow,
                 })
                 .ToList();
 
@@ -225,7 +214,8 @@ public class JobAppServiceTests
                 dbContext,
                 new JobScheduleCalculator(),
                 schedulerWakeSignal,
-                timeProvider);
+                timeProvider
+            );
 
             return new JobAppServiceFixture(
                 connection,
@@ -233,7 +223,8 @@ public class JobAppServiceTests
                 service,
                 timeProvider,
                 schedulerWakeSignal,
-                jobs.FirstOrDefault()?.Id ?? Guid.Empty);
+                jobs.FirstOrDefault()?.Id ?? Guid.Empty
+            );
         }
 
         public async ValueTask DisposeAsync()

@@ -1,6 +1,5 @@
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace Agw.Agents.Execution.Agentflows;
@@ -8,16 +7,17 @@ namespace Agw.Agents.Execution.Agentflows;
 internal static class AgentflowMessageTransforms
 {
     internal const string FeedbackLoopInstruction =
-        "Continue only your assigned node responsibility. Treat the latest upstream result as " +
-        "feedback to implement, not as a role to repeat. Apply actionable feedback directly and " +
-        "do not redo the upstream review or analysis.";
+        "Continue only your assigned node responsibility. Treat the latest upstream result as "
+        + "feedback to implement, not as a role to repeat. Apply actionable feedback directly and "
+        + "do not redo the upstream review or analysis.";
 
     /// <summary>
     /// 将工作流上游 Agent 的输出转换为下游 Agent 可安全消费的输入。
     /// </summary>
     internal static List<ChatMessage> CreatePortableAgentInput(
         IReadOnlyList<ChatMessage> messages,
-        IReadOnlySet<string> pendingFunctionCallIds)
+        IReadOnlySet<string> pendingFunctionCallIds
+    )
     {
         var result = new List<ChatMessage>(messages.Count);
         foreach (var message in messages)
@@ -31,10 +31,11 @@ internal static class AgentflowMessageTransforms
             // 外部工具结果会回到同一个 workflow executor；只允许当前会话正在等待的调用继续保留协议角色。
             if (message.Role == ChatRole.Tool)
             {
-                var continuationContents = message.Contents
-                    .Where(content =>
-                        content is not FunctionResultContent functionResult ||
-                        pendingFunctionCallIds.Contains(functionResult.CallId))
+                var continuationContents = message
+                    .Contents.Where(content =>
+                        content is not FunctionResultContent functionResult
+                        || pendingFunctionCallIds.Contains(functionResult.CallId)
+                    )
                     .ToList();
                 if (continuationContents.OfType<FunctionResultContent>().Any())
                 {
@@ -53,8 +54,8 @@ internal static class AgentflowMessageTransforms
                 }
             }
 
-            var contents = message.Contents
-                .Where(content => content is TextContent or DataContent or UriContent)
+            var contents = message
+                .Contents.Where(content => content is TextContent or DataContent or UriContent)
                 .ToList();
             if (contents.Count == 0)
             {
@@ -73,9 +74,7 @@ internal static class AgentflowMessageTransforms
     /// <summary>
     /// 将节点指令作为平台生成的 system 消息添加到现有消息列表之前。
     /// </summary>
-    internal static List<ChatMessage> ApplyInstructions(
-        IReadOnlyList<ChatMessage> messages,
-        string? instructions)
+    internal static List<ChatMessage> ApplyInstructions(IReadOnlyList<ChatMessage> messages, string? instructions)
     {
         if (string.IsNullOrWhiteSpace(instructions))
         {
@@ -88,7 +87,8 @@ internal static class AgentflowMessageTransforms
         }.WithAgentRequestMessageSource(
             // 审批恢复时该消息可能位于历史 FunctionCall 与当前 FunctionResult 之间，需允许中间件重排。
             AgentRequestMessageSourceType.AIContextProvider,
-            nameof(AgentflowMessageTransforms));
+            nameof(AgentflowMessageTransforms)
+        );
         var result = new List<ChatMessage> { instructionMessage };
         result.AddRange(messages);
         return result;
@@ -97,8 +97,7 @@ internal static class AgentflowMessageTransforms
     /// <summary>
     /// 将 HumanGate 回环压缩为最新上游结果和最新人工回复，避免把完整评审记录重新注入执行节点。
     /// </summary>
-    internal static List<ChatMessage> CreateFeedbackLoopAgentInput(
-        IReadOnlyList<ChatMessage> messages)
+    internal static List<ChatMessage> CreateFeedbackLoopAgentInput(IReadOnlyList<ChatMessage> messages)
     {
         var latestHumanReply = messages.LastOrDefault(IsHumanReply);
         if (latestHumanReply == null)
@@ -107,20 +106,19 @@ internal static class AgentflowMessageTransforms
         }
 
         var latestUpstreamResult = messages.LastOrDefault(message =>
-            message.Role == ChatRole.Assistant &&
-            !IsHumanReply(message) &&
-            HasPortableText(message));
+            message.Role == ChatRole.Assistant && !IsHumanReply(message) && HasPortableText(message)
+        );
         latestUpstreamResult ??= messages.LastOrDefault(message =>
-            message.Role != ChatRole.System &&
-            !IsHumanReply(message) &&
-            HasPortableText(message));
+            message.Role != ChatRole.System && !IsHumanReply(message) && HasPortableText(message)
+        );
 
         var instructionMessage = new ChatMessage(ChatRole.System, FeedbackLoopInstruction)
         {
             AuthorName = Constants.DefaultInputAuthor,
         }.WithAgentRequestMessageSource(
             AgentRequestMessageSourceType.AIContextProvider,
-            nameof(AgentflowMessageTransforms));
+            nameof(AgentflowMessageTransforms)
+        );
         var result = new List<ChatMessage> { instructionMessage };
 
         var upstreamMessage = CreatePortableFeedbackMessage(latestUpstreamResult);
@@ -144,18 +142,19 @@ internal static class AgentflowMessageTransforms
     /// </summary>
     internal static List<ChatMessage> ReassignOtherAgentsAsUsers(
         IReadOnlyList<ChatMessage> messages,
-        string targetAgentName)
+        string targetAgentName
+    )
     {
         return messages
             .Select(message =>
             {
-                if (message.Role != ChatRole.Assistant
+                if (
+                    message.Role != ChatRole.Assistant
                     || string.Equals(message.AuthorName, targetAgentName, StringComparison.Ordinal)
                     || message.Contents.Any(content =>
-                        content is not TextContent
-                            and not DataContent
-                            and not UriContent
-                            and not UsageContent))
+                        content is not TextContent and not DataContent and not UriContent and not UsageContent
+                    )
+                )
                 {
                     return message;
                 }
@@ -174,8 +173,8 @@ internal static class AgentflowMessageTransforms
 
     private static bool HasPortableText(ChatMessage message)
     {
-        return !string.IsNullOrWhiteSpace(message.Text) &&
-            message.Contents.Any(content => content is TextContent or DataContent or UriContent);
+        return !string.IsNullOrWhiteSpace(message.Text)
+            && message.Contents.Any(content => content is TextContent or DataContent or UriContent);
     }
 
     private static ChatMessage? CreatePortableFeedbackMessage(ChatMessage? message)
@@ -185,9 +184,7 @@ internal static class AgentflowMessageTransforms
             return null;
         }
 
-        var contents = message.Contents
-            .Where(content => content is TextContent or DataContent or UriContent)
-            .ToList();
+        var contents = message.Contents.Where(content => content is TextContent or DataContent or UriContent).ToList();
         if (contents.Count == 0)
         {
             return null;

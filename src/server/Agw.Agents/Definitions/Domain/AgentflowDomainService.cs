@@ -1,5 +1,4 @@
 using System.Text.Json;
-
 using Agw.Shared.Data.Entities.Agentflows;
 
 namespace Agw.Agents.Definitions.Domain;
@@ -51,7 +50,8 @@ public class AgentflowDomainService
         IReadOnlyCollection<Guid> existingAgentIds,
         Guid? summaryModelProviderId = null,
         IReadOnlyCollection<Guid>? existingModelProviderIds = null,
-        IReadOnlyDictionary<Guid, string>? existingAgentNames = null)
+        IReadOnlyDictionary<Guid, string>? existingAgentNames = null
+    )
     {
         if (nodes == null || edges == null)
         {
@@ -99,11 +99,15 @@ public class AgentflowDomainService
             summaryEnabled |= nodeSummaryEnabled;
         }
 
-        if (summaryEnabled &&
-            (outputNodes.Count != 1 ||
-             !summaryModelProviderId.HasValue ||
-             existingModelProviderIds == null ||
-             !existingModelProviderIds.Contains(summaryModelProviderId.Value)))
+        if (
+            summaryEnabled
+            && (
+                outputNodes.Count != 1
+                || !summaryModelProviderId.HasValue
+                || existingModelProviderIds == null
+                || !existingModelProviderIds.Contains(summaryModelProviderId.Value)
+            )
+        )
         {
             return (null, null);
         }
@@ -116,8 +120,10 @@ public class AgentflowDomainService
 
         foreach (var edge in edges)
         {
-            if (!nodeIds.Contains(edge.SourceNodeId, StringComparer.Ordinal) ||
-                !nodeIds.Contains(edge.TargetNodeId, StringComparer.Ordinal))
+            if (
+                !nodeIds.Contains(edge.SourceNodeId, StringComparer.Ordinal)
+                || !nodeIds.Contains(edge.TargetNodeId, StringComparer.Ordinal)
+            )
             {
                 return (null, null);
             }
@@ -174,26 +180,25 @@ public class AgentflowDomainService
         return (normalizedNodes, normalizedEdges);
     }
 
-    private static string? ResolveNodeName(
-        AgentflowNode node,
-        IReadOnlyDictionary<Guid, string>? existingAgentNames)
+    private static string? ResolveNodeName(AgentflowNode node, IReadOnlyDictionary<Guid, string>? existingAgentNames)
     {
-        if (!string.IsNullOrWhiteSpace(node.Name) ||
-            node.Kind != AgentflowNodeKind.Agent ||
-            !node.RelateId.HasValue ||
-            existingAgentNames == null)
+        if (
+            !string.IsNullOrWhiteSpace(node.Name)
+            || node.Kind != AgentflowNodeKind.Agent
+            || !node.RelateId.HasValue
+            || existingAgentNames == null
+        )
         {
             return node.Name;
         }
 
-        return existingAgentNames.TryGetValue(node.RelateId.Value, out var agentName)
-            ? agentName
-            : node.Name;
+        return existingAgentNames.TryGetValue(node.RelateId.Value, out var agentName) ? agentName : node.Name;
     }
 
     public IReadOnlyList<AgentflowNode> OrderNodesByEdges(
         IReadOnlyList<AgentflowNode> nodes,
-        IReadOnlyList<AgentflowEdge> edges)
+        IReadOnlyList<AgentflowEdge> edges
+    )
     {
         if (edges.Count == 0)
         {
@@ -240,9 +245,7 @@ public class AgentflowDomainService
         return sorted.Count == nodes.Count ? sorted : nodes;
     }
 
-    private static bool IsValidInputRootedGraph(
-        IReadOnlyList<AgentflowNode> nodes,
-        IReadOnlyList<AgentflowEdge> edges)
+    private static bool IsValidInputRootedGraph(IReadOnlyList<AgentflowNode> nodes, IReadOnlyList<AgentflowEdge> edges)
     {
         var inputNodes = nodes
             .Where(node => node.NodeId == InputNodeId || node.Kind == AgentflowNodeKind.Input)
@@ -265,14 +268,13 @@ public class AgentflowDomainService
 
         var visibleNodeIds = GetRuntimeVisibleNodeIds(nodes, edges);
         var reachableNodeIds = GetReachableNodeIds(InputNodeId, edges, visibleNodeIds);
-        return visibleNodeIds
-            .Where(nodeId => nodeId != InputNodeId)
-            .All(reachableNodeIds.Contains);
+        return visibleNodeIds.Where(nodeId => nodeId != InputNodeId).All(reachableNodeIds.Contains);
     }
 
     private static HashSet<string> GetRuntimeVisibleNodeIds(
         IReadOnlyList<AgentflowNode> nodes,
-        IReadOnlyList<AgentflowEdge> edges)
+        IReadOnlyList<AgentflowEdge> edges
+    )
     {
         var hiddenParticipantIds = GetHiddenBlockParticipantIds(nodes, edges);
         return nodes
@@ -284,12 +286,10 @@ public class AgentflowDomainService
     private static HashSet<string> GetReachableNodeIds(
         string startNodeId,
         IReadOnlyList<AgentflowEdge> edges,
-        HashSet<string> visibleNodeIds)
+        HashSet<string> visibleNodeIds
+    )
     {
-        var adjacency = visibleNodeIds.ToDictionary(
-            nodeId => nodeId,
-            _ => new List<string>(),
-            StringComparer.Ordinal);
+        var adjacency = visibleNodeIds.ToDictionary(nodeId => nodeId, _ => new List<string>(), StringComparer.Ordinal);
         foreach (var edge in edges)
         {
             if (visibleNodeIds.Contains(edge.SourceNodeId) && visibleNodeIds.Contains(edge.TargetNodeId))
@@ -319,7 +319,8 @@ public class AgentflowDomainService
 
     private static HashSet<string> GetHiddenBlockParticipantIds(
         IReadOnlyList<AgentflowNode> nodes,
-        IReadOnlyList<AgentflowEdge> edges)
+        IReadOnlyList<AgentflowEdge> edges
+    )
     {
         var nodeById = nodes.ToDictionary(node => node.NodeId, StringComparer.Ordinal);
         var edgeNodeIds = edges
@@ -344,10 +345,12 @@ public class AgentflowDomainService
         var hiddenParticipantIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (participantNodeId, ownerBlockIds) in participantOwnersByNodeId)
         {
-            if (nodeById.TryGetValue(participantNodeId, out var participantNode) &&
-                IsAgentParticipantKind(participantNode.Kind) &&
-                ownerBlockIds.Count == 1 &&
-                !edgeNodeIds.Contains(participantNodeId))
+            if (
+                nodeById.TryGetValue(participantNodeId, out var participantNode)
+                && IsAgentParticipantKind(participantNode.Kind)
+                && ownerBlockIds.Count == 1
+                && !edgeNodeIds.Contains(participantNodeId)
+            )
             {
                 hiddenParticipantIds.Add(participantNodeId);
             }
@@ -366,8 +369,10 @@ public class AgentflowDomainService
         try
         {
             using var doc = JsonDocument.Parse(node.ConfigJson);
-            if (!doc.RootElement.TryGetProperty("participantNodeIds", out var participants) ||
-                participants.ValueKind != JsonValueKind.Array)
+            if (
+                !doc.RootElement.TryGetProperty("participantNodeIds", out var participants)
+                || participants.ValueKind != JsonValueKind.Array
+            )
             {
                 return [];
             }
@@ -394,8 +399,11 @@ public class AgentflowDomainService
 
     private static bool IsBlockNode(AgentflowNodeKind kind)
     {
-        return kind is AgentflowNodeKind.ConcurrentBlock or AgentflowNodeKind.HandoffBlock or
-            AgentflowNodeKind.GroupChatBlock or AgentflowNodeKind.MagenticBlock;
+        return kind
+            is AgentflowNodeKind.ConcurrentBlock
+                or AgentflowNodeKind.HandoffBlock
+                or AgentflowNodeKind.GroupChatBlock
+                or AgentflowNodeKind.MagenticBlock;
     }
 
     private static bool IsValidConditionJson(string? conditionJson)
@@ -442,11 +450,13 @@ public class AgentflowDomainService
         try
         {
             using var document = JsonDocument.Parse(configJson);
-            if (document.RootElement.ValueKind != JsonValueKind.Object ||
-                !document.RootElement.TryGetProperty("switchCaseOrder", out var property) ||
-                property.ValueKind != JsonValueKind.Number ||
-                !property.TryGetInt32(out order) ||
-                order < 0)
+            if (
+                document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("switchCaseOrder", out var property)
+                || property.ValueKind != JsonValueKind.Number
+                || !property.TryGetInt32(out order)
+                || order < 0
+            )
             {
                 order = 0;
                 return false;
@@ -464,20 +474,23 @@ public class AgentflowDomainService
     {
         foreach (var sourceGroup in edges.GroupBy(edge => edge.SourceNodeId, StringComparer.Ordinal))
         {
-            var sourceEdges = sourceGroup
-                .Where(edge => edge.Kind != AgentflowEdgeKind.FanInBarrier)
-                .ToList();
+            var sourceEdges = sourceGroup.Where(edge => edge.Kind != AgentflowEdgeKind.FanInBarrier).ToList();
             var strategyCount = sourceEdges
-                .Select(edge => edge.Kind switch
-                {
-                    AgentflowEdgeKind.Direct => "direct",
-                    AgentflowEdgeKind.FanOut => "fan-out",
-                    AgentflowEdgeKind.SwitchCase or AgentflowEdgeKind.SwitchDefault => "switch",
-                    _ => "unsupported",
-                })
+                .Select(edge =>
+                    edge.Kind switch
+                    {
+                        AgentflowEdgeKind.Direct => "direct",
+                        AgentflowEdgeKind.FanOut => "fan-out",
+                        AgentflowEdgeKind.SwitchCase or AgentflowEdgeKind.SwitchDefault => "switch",
+                        _ => "unsupported",
+                    }
+                )
                 .Distinct(StringComparer.Ordinal)
                 .Count();
-            if (strategyCount > 1 || sourceEdges.Any(edge => edge.Kind is < AgentflowEdgeKind.Direct or > AgentflowEdgeKind.SwitchDefault))
+            if (
+                strategyCount > 1
+                || sourceEdges.Any(edge => edge.Kind is < AgentflowEdgeKind.Direct or > AgentflowEdgeKind.SwitchDefault)
+            )
             {
                 return false;
             }
@@ -492,8 +505,11 @@ public class AgentflowDomainService
 
             var cases = switchEdges.Where(edge => edge.Kind == AgentflowEdgeKind.SwitchCase).ToList();
             var defaults = switchEdges.Where(edge => edge.Kind == AgentflowEdgeKind.SwitchDefault).ToList();
-            if (cases.Count == 0 || defaults.Count > 1 ||
-                defaults.Any(edge => !string.IsNullOrWhiteSpace(edge.ConditionJson)))
+            if (
+                cases.Count == 0
+                || defaults.Count > 1
+                || defaults.Any(edge => !string.IsNullOrWhiteSpace(edge.ConditionJson))
+            )
             {
                 return false;
             }
@@ -501,9 +517,11 @@ public class AgentflowDomainService
             var orders = new HashSet<int>();
             foreach (var edge in cases)
             {
-                if (string.IsNullOrWhiteSpace(edge.ConditionJson) ||
-                    !TryReadSwitchCaseOrder(edge.ConfigJson, out var order) ||
-                    !orders.Add(order))
+                if (
+                    string.IsNullOrWhiteSpace(edge.ConditionJson)
+                    || !TryReadSwitchCaseOrder(edge.ConfigJson, out var order)
+                    || !orders.Add(order)
+                )
                 {
                     return false;
                 }
@@ -553,20 +571,16 @@ public class AgentflowDomainService
         return property.Name switch
         {
             "always" => property.Value.ValueKind is JsonValueKind.True or JsonValueKind.False,
-            "contains" or "notContains" or "equals" or "author" or "role" =>
-                property.Value.ValueKind == JsonValueKind.String,
+            "contains" or "notContains" or "equals" or "author" or "role" => property.Value.ValueKind
+                == JsonValueKind.String,
             "minMessages" => property.Value.ValueKind == JsonValueKind.Number,
             _ => false,
         };
     }
 
-    private static bool HasValidCycleSemantics(
-        IReadOnlyList<AgentflowNode> nodes,
-        IReadOnlyList<AgentflowEdge> edges)
+    private static bool HasValidCycleSemantics(IReadOnlyList<AgentflowNode> nodes, IReadOnlyList<AgentflowEdge> edges)
     {
-        var cyclicComponents = FindCyclicComponents(
-            nodes.Select(node => node.NodeId).ToList(),
-            edges);
+        var cyclicComponents = FindCyclicComponents(nodes.Select(node => node.NodeId).ToList(), edges);
         if (cyclicComponents.Count == 0)
         {
             return true;
@@ -576,9 +590,10 @@ public class AgentflowDomainService
         foreach (var component in cyclicComponents)
         {
             var hasConditionalExit = edges.Any(edge =>
-                component.Contains(edge.SourceNodeId) &&
-                !component.Contains(edge.TargetNodeId) &&
-                edge.Kind is AgentflowEdgeKind.SwitchCase or AgentflowEdgeKind.SwitchDefault);
+                component.Contains(edge.SourceNodeId)
+                && !component.Contains(edge.TargetNodeId)
+                && edge.Kind is AgentflowEdgeKind.SwitchCase or AgentflowEdgeKind.SwitchDefault
+            );
             if (!hasConditionalExit)
             {
                 return false;
@@ -586,12 +601,12 @@ public class AgentflowDomainService
 
             var outsideBarrierSources = edges
                 .Where(edge =>
-                    edge.Kind == AgentflowEdgeKind.FanInBarrier &&
-                    component.Contains(edge.TargetNodeId) &&
-                    !component.Contains(edge.SourceNodeId))
+                    edge.Kind == AgentflowEdgeKind.FanInBarrier
+                    && component.Contains(edge.TargetNodeId)
+                    && !component.Contains(edge.SourceNodeId)
+                )
                 .Select(edge => nodeById[edge.SourceNodeId]);
-            if (outsideBarrierSources.Any(node =>
-                    node.NodeId != InputNodeId || node.Kind != AgentflowNodeKind.Input))
+            if (outsideBarrierSources.Any(node => node.NodeId != InputNodeId || node.Kind != AgentflowNodeKind.Input))
             {
                 return false;
             }
@@ -602,12 +617,10 @@ public class AgentflowDomainService
 
     internal static IReadOnlyList<HashSet<string>> FindCyclicComponents(
         IReadOnlyCollection<string> nodeIds,
-        IReadOnlyList<AgentflowEdge> edges)
+        IReadOnlyList<AgentflowEdge> edges
+    )
     {
-        var adjacency = nodeIds.ToDictionary(
-            nodeId => nodeId,
-            _ => new List<string>(),
-            StringComparer.Ordinal);
+        var adjacency = nodeIds.ToDictionary(nodeId => nodeId, _ => new List<string>(), StringComparer.Ordinal);
 
         foreach (var edge in edges)
         {
@@ -654,8 +667,7 @@ public class AgentflowDomainService
                 current = stack.Pop();
                 onStack.Remove(current);
                 component.Add(current);
-            }
-            while (current != nodeId);
+            } while (current != nodeId);
 
             if (component.Count > 1 || adjacency[nodeId].Contains(nodeId, StringComparer.Ordinal))
             {

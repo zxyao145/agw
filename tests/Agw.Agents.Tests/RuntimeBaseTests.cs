@@ -82,20 +82,26 @@ public class RuntimeBaseTests
         var applied = new List<string>();
         runtime.TryStartTurn(new ActiveTurn(completion.Task, cts));
 
-        Assert.True(runtime.TryScheduleAfterTurn(
-            "mode",
-            _ =>
-            {
-                applied.Add("plan");
-                return Task.CompletedTask;
-            }));
-        Assert.True(runtime.TryScheduleAfterTurn(
-            "mode",
-            _ =>
-            {
-                applied.Add("execute");
-                return Task.CompletedTask;
-            }));
+        Assert.True(
+            runtime.TryScheduleAfterTurn(
+                "mode",
+                _ =>
+                {
+                    applied.Add("plan");
+                    return Task.CompletedTask;
+                }
+            )
+        );
+        Assert.True(
+            runtime.TryScheduleAfterTurn(
+                "mode",
+                _ =>
+                {
+                    applied.Add("execute");
+                    return Task.CompletedTask;
+                }
+            )
+        );
 
         completion.SetResult();
         await runtime.WhenIdleAsync();
@@ -122,7 +128,8 @@ public class RuntimeBaseTests
             new ExecutionTarget(Guid.CreateVersion7(), AgentRuntimeType.Agent),
             "user",
             "/workspace",
-            new NullSink());
+            new NullSink()
+        );
         RuntimeTurnContext? captured = null;
         using var cts = new CancellationTokenSource();
 
@@ -135,7 +142,8 @@ public class RuntimeBaseTests
             {
                 captured = accessor.Current;
                 return Task.CompletedTask;
-            });
+            }
+        );
 
         Assert.NotNull(turn);
         await runtime.WhenIdleAsync();
@@ -147,7 +155,6 @@ public class RuntimeBaseTests
 
     private sealed class NullSink : IExecutionMessageSink
     {
-        public ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken) =>
-            ValueTask.CompletedTask;
+        public ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken) => ValueTask.CompletedTask;
     }
 }

@@ -14,12 +14,10 @@ using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace Agw.Agents.Tests;
@@ -67,16 +65,19 @@ public class AgentflowRuntimeServiceTests
             new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(_ => new ApprovalRequestAgent()),
             new StubProviderSessionState(),
-            new RecordingSummaryService());
+            new RecordingSummaryService()
+        );
 
-        var exception = await Assert.ThrowsAsync<AgwException>(
-            async () => await service.ExecuteAsync(
+        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+            await service.ExecuteAsync(
                 agentflow.Id,
                 Guid.CreateVersion7(),
                 "run",
                 TestContext.Current.CancellationToken,
                 Guid.CreateVersion7(),
-                "unattended-context"));
+                "unattended-context"
+            )
+        );
 
         Assert.Contains("unattended Agentflow execution", exception.Message);
     }
@@ -85,8 +86,7 @@ public class AgentflowRuntimeServiceTests
     [InlineData("once")]
     [InlineData("always-tool")]
     [InlineData("always-arguments")]
-    public async Task ExecuteStreamingAsync_ToolApprovalRequest_ResumesThroughWorkflowResponse(
-        string approvalScope)
+    public async Task ExecuteStreamingAsync_ToolApprovalRequest_ResumesThroughWorkflowResponse(string approvalScope)
     {
         var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "approval-flow" };
         var agentId = Guid.CreateVersion7();
@@ -125,27 +125,35 @@ public class AgentflowRuntimeServiceTests
             new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(_ => new ApprovalRequestAgent()),
             new StubProviderSessionState(),
-            new RecordingSummaryService());
+            new RecordingSummaryService()
+        );
         var messages = new List<AgwMessage>();
 
-        await foreach (var message in service.ExecuteStreamingAsync(
-            agentflow.Id,
-            "run",
-            TestContext.Current.CancellationToken,
-            Guid.CreateVersion7(),
-            "interactive-context",
-            Guid.CreateVersion7(),
-            new DelayedApprovalHandler(approvalScope)))
+        await foreach (
+            var message in service.ExecuteStreamingAsync(
+                agentflow.Id,
+                "run",
+                TestContext.Current.CancellationToken,
+                Guid.CreateVersion7(),
+                "interactive-context",
+                Guid.CreateVersion7(),
+                new DelayedApprovalHandler(approvalScope)
+            )
+        )
         {
             messages.Add(message);
         }
 
-        Assert.Single(messages, message =>
-            message.AdditionalProperties?.TryGetValue("type", out var type) == true &&
-            string.Equals(type?.ToString(), "tool-approval-request", StringComparison.Ordinal));
+        Assert.Single(
+            messages,
+            message =>
+                message.AdditionalProperties?.TryGetValue("type", out var type) == true
+                && string.Equals(type?.ToString(), "tool-approval-request", StringComparison.Ordinal)
+        );
         Assert.Contains(
             messages.SelectMany(message => message.Contents).OfType<AgwTextContent>(),
-            content => content.Content == approvalScope);
+            content => content.Content == approvalScope
+        );
     }
 
     [Fact]
@@ -203,11 +211,10 @@ public class AgentflowRuntimeServiceTests
             new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(agentId => agentId == firstAgentId ? firstAgent : null),
             new StubProviderSessionState(),
-            new RecordingSummaryService());
+            new RecordingSummaryService()
+        );
 
-        var mermaid = await service.GetMermaidAsync(
-            agentflow.Id,
-            TestContext.Current.CancellationToken);
+        var mermaid = await service.GetMermaidAsync(agentflow.Id, TestContext.Current.CancellationToken);
 
         Assert.Null(mermaid);
         Assert.True(firstAgent.Disposed);
@@ -268,18 +275,22 @@ public class AgentflowRuntimeServiceTests
             new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(agentId),
             new StubProviderSessionState(),
-            new RecordingSummaryService());
+            new RecordingSummaryService()
+        );
 
-        await foreach (var _ in service.ExecuteStreamingAsync(
-                           agentflow.Id,
-                           "run",
-                           TestContext.Current.CancellationToken,
-                           taskId: Guid.CreateVersion7()))
-        {
-        }
+        await foreach (
+            var _ in service.ExecuteStreamingAsync(
+                agentflow.Id,
+                "run",
+                TestContext.Current.CancellationToken,
+                taskId: Guid.CreateVersion7()
+            )
+        ) { }
 
-        var checkpoint = Assert.Single(logger.Entries, entry =>
-            Equals(entry.GetProperty("CheckpointName"), "Review Ready"));
+        var checkpoint = Assert.Single(
+            logger.Entries,
+            entry => Equals(entry.GetProperty("CheckpointName"), "Review Ready")
+        );
         Assert.Equal("checkpoint", checkpoint.GetProperty("CheckpointNodeId"));
         Assert.False(string.IsNullOrWhiteSpace(checkpoint.GetProperty("CheckpointId")?.ToString()));
     }
@@ -340,19 +351,20 @@ public class AgentflowRuntimeServiceTests
             new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(_ => worker),
             new StubProviderSessionState(),
-            new RecordingSummaryService());
+            new RecordingSummaryService()
+        );
 
-        await foreach (var _ in service.ExecuteStreamingAsync(
-                           agentflow.Id,
-                           "run",
-                           TestContext.Current.CancellationToken,
-                           taskId: Guid.CreateVersion7(),
-                           humanGateApprovalHandler: new DelayedApprovalHandler("once")))
-        {
-        }
+        await foreach (
+            var _ in service.ExecuteStreamingAsync(
+                agentflow.Id,
+                "run",
+                TestContext.Current.CancellationToken,
+                taskId: Guid.CreateVersion7(),
+                humanGateApprovalHandler: new DelayedApprovalHandler("once")
+            )
+        ) { }
 
-        Assert.Single(logger.Entries, entry =>
-            Equals(entry.GetProperty("CheckpointName"), "Ready"));
+        Assert.Single(logger.Entries, entry => Equals(entry.GetProperty("CheckpointName"), "Ready"));
     }
 
     [Fact]
@@ -396,7 +408,8 @@ public class AgentflowRuntimeServiceTests
             new AgentflowDomainService(TimeProvider.System),
             agentRuntimeService,
             new StubProviderSessionState(),
-            new RecordingSummaryService());
+            new RecordingSummaryService()
+        );
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
         var task = new TaskProjection
@@ -409,19 +422,21 @@ public class AgentflowRuntimeServiceTests
         var settings = new SettingCommand(
             projectId,
             new Dictionary<string, string> { ["SESSION_ONLY"] = "session" },
-            task.ContextId);
+            task.ContextId
+        );
         var runtime = new AgentflowRuntime(agentflow.Id, task, settings, runtimeService);
         var command = new ExecCommand(
             AgentRuntimeType.Agentflow,
-            new AgwUserInput
-            {
-                Contents = [new AgwTextContent { Content = "run" }],
-            });
+            new AgwUserInput { Contents = [new AgwTextContent { Content = "run" }] }
+        );
 
-        await foreach (var _ in runtime.ExecuteStreamingAsync(
-                           command,
-                           new DelayedApprovalHandler(),
-                           TestContext.Current.CancellationToken))
+        await foreach (
+            var _ in runtime.ExecuteStreamingAsync(
+                command,
+                new DelayedApprovalHandler(),
+                TestContext.Current.CancellationToken
+            )
+        )
         {
             break;
         }
@@ -493,11 +508,10 @@ public class AgentflowRuntimeServiceTests
             new AgentflowDomainService(TimeProvider.System),
             agentRuntimeService,
             new StubProviderSessionState(),
-            new RecordingSummaryService());
+            new RecordingSummaryService()
+        );
 
-        var mermaid = await service.GetMermaidAsync(
-            outerFlow.Id,
-            TestContext.Current.CancellationToken);
+        var mermaid = await service.GetMermaidAsync(outerFlow.Id, TestContext.Current.CancellationToken);
 
         Assert.NotNull(mermaid);
         Assert.All(agentRuntimeService.CreatedAgents, agent => Assert.True(agent.Disposed));
@@ -556,16 +570,18 @@ public class AgentflowRuntimeServiceTests
             new AgentflowDomainService(TimeProvider.System),
             agentRuntimeService,
             new StubProviderSessionState(),
-            new RecordingSummaryService());
+            new RecordingSummaryService()
+        );
         using var cancellationSource = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
 
-        await foreach (var _ in service.ExecuteStreamingAsync(
-                           agentflow.Id,
-                           "cancel",
-                           cancellationSource.Token,
-                           humanGateApprovalHandler: new CancellingApprovalHandler()))
-        {
-        }
+        await foreach (
+            var _ in service.ExecuteStreamingAsync(
+                agentflow.Id,
+                "cancel",
+                cancellationSource.Token,
+                humanGateApprovalHandler: new CancellingApprovalHandler()
+            )
+        ) { }
 
         Assert.All(agentRuntimeService.CreatedAgents, agent => Assert.True(agent.Disposed));
     }
@@ -619,7 +635,8 @@ public class AgentflowRuntimeServiceTests
         var traceStore = new CollectingTraceStore();
         using var collector = new AgentflowNodeExecutionTraceCollector(
             traceStore,
-            NullLogger<AgentflowNodeExecutionTraceCollector>.Instance);
+            NullLogger<AgentflowNodeExecutionTraceCollector>.Instance
+        );
         await collector.StartAsync(TestContext.Current.CancellationToken);
         var service = new AgentflowRuntimeService(
             NullLogger<AgentflowRuntimeService>.Instance,
@@ -629,24 +646,27 @@ public class AgentflowRuntimeServiceTests
             new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(agentId),
             new StubProviderSessionState(),
-            new RecordingSummaryService());
+            new RecordingSummaryService()
+        );
         var projectId = Guid.CreateVersion7();
         var taskId = Guid.CreateVersion7();
 
-        await foreach (var _ in service.ExecuteStreamingAsync(
-                           agentflow.Id,
-                           "review this",
-                           TestContext.Current.CancellationToken,
-                           projectId,
-                           "context-approval",
-                           taskId,
-                           new DelayedApprovalHandler()))
-        {
-        }
+        await foreach (
+            var _ in service.ExecuteStreamingAsync(
+                agentflow.Id,
+                "review this",
+                TestContext.Current.CancellationToken,
+                projectId,
+                "context-approval",
+                taskId,
+                new DelayedApprovalHandler()
+            )
+        ) { }
 
         var trace = await traceStore.WaitForAsync(
             item => item.NodeKind == AgentflowNodeKind.HumanGate,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
         Assert.Equal("human", trace.NodeId);
         Assert.Equal("Approval", trace.NodeName);
         Assert.Equal(projectId, trace.ProjectId);
@@ -710,23 +730,30 @@ public class AgentflowRuntimeServiceTests
             new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(agentId),
             new StubProviderSessionState(),
-            summaryService);
+            summaryService
+        );
         var messages = new List<AgwMessage>();
 
-        await foreach (var message in service.ExecuteStreamingAsync(
-            agentflow.Id,
-            "workflow input",
-            TestContext.Current.CancellationToken,
-            projectId,
-            "context-1",
-            Guid.CreateVersion7()))
+        await foreach (
+            var message in service.ExecuteStreamingAsync(
+                agentflow.Id,
+                "workflow input",
+                TestContext.Current.CancellationToken,
+                projectId,
+                "context-1",
+                Guid.CreateVersion7()
+            )
+        )
         {
             messages.Add(message);
         }
 
-        Assert.Single(messages, message =>
-            message.AdditionalProperties?.TryGetValue("type", out var type) == true &&
-            string.Equals(type?.ToString(), "result", StringComparison.Ordinal));
+        Assert.Single(
+            messages,
+            message =>
+                message.AdditionalProperties?.TryGetValue("type", out var type) == true
+                && string.Equals(type?.ToString(), "result", StringComparison.Ordinal)
+        );
         var call = Assert.Single(summaryService.Calls);
         Assert.Equal(modelProviderId, call.ModelProviderId);
         Assert.Equal(projectId, call.ProjectId);
@@ -777,36 +804,35 @@ public class AgentflowRuntimeServiceTests
             new StubAgentRuntimeService(_ => new TrackingAIAgent(enableTodo: true)),
             new StubProviderSessionState(),
             new RecordingSummaryService(),
-            conversationHistoryWriter: historyWriter);
+            conversationHistoryWriter: historyWriter
+        );
         var messages = new List<AgwMessage>();
 
-        await foreach (var message in service.ExecuteStreamingAsync(
-            agentflow.Id,
-            "workflow input",
-            TestContext.Current.CancellationToken,
-            projectId,
-            "context-1",
-            Guid.CreateVersion7()))
+        await foreach (
+            var message in service.ExecuteStreamingAsync(
+                agentflow.Id,
+                "workflow input",
+                TestContext.Current.CancellationToken,
+                projectId,
+                "context-1",
+                Guid.CreateVersion7()
+            )
+        )
         {
             messages.Add(message);
         }
 
         Assert.DoesNotContain(
             messages,
-            message => IsMessageType(message.AdditionalProperties, ToolMessageTypes.TodoSnapshot));
+            message => IsMessageType(message.AdditionalProperties, ToolMessageTypes.TodoSnapshot)
+        );
         Assert.Empty(historyWriter.Calls);
     }
 
     [Fact]
     public void CreateWorkflowOutputMessages_ListOfChatMessages_ReturnsAgwMessages()
     {
-        var output = new List<ChatMessage>
-        {
-            new(ChatRole.Assistant, "Bonjour")
-            {
-                AuthorName = "french-translator",
-            },
-        };
+        var output = new List<ChatMessage> { new(ChatRole.Assistant, "Bonjour") { AuthorName = "french-translator" } };
 
         var messages = AgentflowRuntimeService.CreateWorkflowOutputMessages(output);
 
@@ -838,20 +864,19 @@ public class AgentflowRuntimeServiceTests
         var input = new AgwUserInput
         {
             MessageId = "current-input",
-            Contents = [new AgwTextContent { Content = "start implementation" }]
+            Contents = [new AgwTextContent { Content = "start implementation" }],
         };
 
         var messages = AgentflowRuntimeService.CreateWorkflowInputMessages(
             input,
             agentflowId,
-            new ConversationHandoff([handoffMessage], 29));
+            new ConversationHandoff([handoffMessage], 29)
+        );
 
         Assert.Equal(["approved plan", "start implementation"], messages.Select(message => message.Text));
         var current = messages[1];
         Assert.Equal("current-input", current.MessageId);
-        Assert.Equal(
-            29L,
-            current.AdditionalProperties![ConversationHandoffMetadata.ThroughSequenceKey]);
+        Assert.Equal(29L, current.AdditionalProperties![ConversationHandoffMetadata.ThroughSequenceKey]);
         var text = Assert.IsType<TextContent>(Assert.Single(current.Contents));
         Assert.Equal("agentflow", text.AdditionalProperties!["targetType"]);
         Assert.Equal(agentflowId.ToString("D"), text.AdditionalProperties["targetId"]);
@@ -868,14 +893,11 @@ public class AgentflowRuntimeServiceTests
 
         public async ValueTask<HumanGateApprovalDecision> WaitForApprovalAsync(
             HumanGateApprovalRequest request,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             await Task.Delay(20, cancellationToken);
-            return new HumanGateApprovalDecision(
-                request.RequestId,
-                true,
-                "approved",
-                _approvalScope);
+            return new HumanGateApprovalDecision(request.RequestId, true, "approved", _approvalScope);
         }
     }
 
@@ -883,7 +905,8 @@ public class AgentflowRuntimeServiceTests
     {
         public async ValueTask<HumanGateApprovalDecision> WaitForApprovalAsync(
             HumanGateApprovalRequest request,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
             return new HumanGateApprovalDecision(request.RequestId, true, null);
@@ -909,7 +932,8 @@ public class AgentflowRuntimeServiceTests
 
         public async Task<AgentflowTrace> WaitForAsync(
             Func<AgentflowTrace, bool> predicate,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(2));
@@ -929,7 +953,8 @@ public class AgentflowRuntimeServiceTests
         }
     }
 
-    private sealed class TestRepository<TEntity> : IRepository<TEntity> where TEntity : class
+    private sealed class TestRepository<TEntity> : IRepository<TEntity>
+        where TEntity : class
     {
         private readonly List<TEntity> _items;
         private readonly Func<TEntity, object> _getId;
@@ -947,12 +972,13 @@ public class AgentflowRuntimeServiceTests
 
         public Task<TEntity?> SingleOrDefaultAsync(
             System.Linq.Expressions.Expression<Func<TEntity, bool>> predicate,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(_items.AsQueryable().SingleOrDefault(predicate));
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(_items.AsQueryable().SingleOrDefault(predicate));
 
         public Task<IReadOnlyList<TEntity>> ListAsync(
             System.Linq.Expressions.Expression<Func<TEntity, bool>>? predicate = null,
-            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null)
+            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
+        )
         {
             IQueryable<TEntity> query = _items.AsQueryable();
             if (predicate != null)
@@ -971,8 +997,8 @@ public class AgentflowRuntimeServiceTests
         public Task<IReadOnlyList<TEntity>> ListAsync(
             System.Linq.Expressions.Expression<Func<TEntity, bool>>? predicate,
             Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy,
-            params System.Linq.Expressions.Expression<Func<TEntity, object>>[] includes) =>
-            ListAsync(predicate, orderBy);
+            params System.Linq.Expressions.Expression<Func<TEntity, object>>[] includes
+        ) => ListAsync(predicate, orderBy);
 
         public Task AddAsync(TEntity entity)
         {
@@ -980,9 +1006,7 @@ public class AgentflowRuntimeServiceTests
             return Task.CompletedTask;
         }
 
-        public void Update(TEntity entity)
-        {
-        }
+        public void Update(TEntity entity) { }
 
         public void Remove(TEntity entity) => _items.Remove(entity);
 
@@ -1017,14 +1041,10 @@ public class AgentflowRuntimeServiceTests
             Guid agentId,
             Guid? projectId,
             bool resume,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
-            return CreateAiAgentAsync(
-                agentId,
-                projectId,
-                resume,
-                environmentVariables: null,
-                cancellationToken);
+            return CreateAiAgentAsync(agentId, projectId, resume, environmentVariables: null, cancellationToken);
         }
 
         public Task<AIAgent?> CreateAiAgentAsync(
@@ -1032,11 +1052,11 @@ public class AgentflowRuntimeServiceTests
             Guid? projectId,
             bool resume,
             IReadOnlyDictionary<string, string>? environmentVariables,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             LastEnvironmentVariables = environmentVariables;
-            AIAgent? agent = _agentFactory?.Invoke(agentId) ??
-                (agentId == _agentId ? new TrackingAIAgent() : null);
+            AIAgent? agent = _agentFactory?.Invoke(agentId) ?? (agentId == _agentId ? new TrackingAIAgent() : null);
             if (agent is TrackingAIAgent trackingAgent)
             {
                 CreatedAgents.Add(trackingAgent);
@@ -1050,40 +1070,36 @@ public class AgentflowRuntimeServiceTests
             Guid? projectId,
             Guid conversationId,
             IReadOnlyDictionary<string, string>? environmentVariables,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             LastConversationId = conversationId;
-            return CreateAiAgentAsync(
-                agentId,
-                projectId,
-                resume: false,
-                environmentVariables,
-                cancellationToken);
+            return CreateAiAgentAsync(agentId, projectId, resume: false, environmentVariables, cancellationToken);
         }
 
         public Task<AgentRuntime?> CreateRuntimeAsync(
             Guid agentId,
             TaskProjection task,
             SettingCommand settings,
-            CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotImplementedException();
 
         public IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
             AgentRuntime session,
             AgwUserInput input,
-            CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotImplementedException();
 
         public Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
             AgentRuntime session,
             AgwUserInput input,
-            CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotImplementedException();
 
         public Task<AgentExecutionResult?> ExecuteByIdAsync(
             AgentExecuteByIdRequest request,
-            CancellationToken cancellationToken = default) =>
-            throw new NotImplementedException();
+            CancellationToken cancellationToken = default
+        ) => throw new NotImplementedException();
     }
 
     private sealed class TrackingAIAgent : DelegatingAIAgent, IAsyncDisposable
@@ -1091,9 +1107,12 @@ public class AgentflowRuntimeServiceTests
         private readonly TodoProvider? _todoProvider;
 
         public TrackingAIAgent(bool enableTodo = false)
-            : base(new ChatClientAgent(
-                new StubChatClient(),
-                new ChatClientAgentOptions { Id = "tracking", Name = "tracking" }))
+            : base(
+                new ChatClientAgent(
+                    new StubChatClient(),
+                    new ChatClientAgentOptions { Id = "tracking", Name = "tracking" }
+                )
+            )
         {
             _todoProvider = enableTodo ? new TodoProvider() : null;
         }
@@ -1101,8 +1120,7 @@ public class AgentflowRuntimeServiceTests
         public bool Disposed { get; private set; }
 
         public override object? GetService(Type serviceType, object? serviceKey = null) =>
-            base.GetService(serviceType, serviceKey) ??
-            _todoProvider?.GetService(serviceType, serviceKey);
+            base.GetService(serviceType, serviceKey) ?? _todoProvider?.GetService(serviceType, serviceKey);
 
         public ValueTask DisposeAsync()
         {
@@ -1113,9 +1131,7 @@ public class AgentflowRuntimeServiceTests
 
     private sealed class StubChatClient : IChatClient
     {
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
 
         public object? GetService(Type serviceType, object? serviceKey = null) =>
             serviceType.IsInstanceOfType(this) ? this : null;
@@ -1123,14 +1139,14 @@ public class AgentflowRuntimeServiceTests
         public Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, "done")]));
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(new ChatResponse([new ChatMessage(ChatRole.Assistant, "done")]));
 
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            [System.Runtime.CompilerServices.EnumeratorCancellation]
-            CancellationToken cancellationToken = default)
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
+        )
         {
             await Task.Yield();
             yield return new ChatResponseUpdate(ChatRole.Assistant, "done");
@@ -1149,45 +1165,43 @@ public class AgentflowRuntimeServiceTests
         protected override ValueTask<System.Text.Json.JsonElement> SerializeSessionCoreAsync(
             AgentSession session,
             System.Text.Json.JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult(System.Text.Json.JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult(System.Text.Json.JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
 
         protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
             System.Text.Json.JsonElement sessionState,
             System.Text.Json.JsonSerializerOptions? jsonSerializerOptions,
-            CancellationToken cancellationToken) =>
-            ValueTask.FromResult<AgentSession>(new ApprovalRequestSession());
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult<AgentSession>(new ApprovalRequestSession());
 
         protected override Task<AgentResponse> RunCoreAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
-            CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            CancellationToken cancellationToken
+        ) => throw new NotSupportedException();
 
         protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
             IEnumerable<ChatMessage> messages,
             AgentSession? session,
             AgentRunOptions? options,
-            [System.Runtime.CompilerServices.EnumeratorCancellation]
-            CancellationToken cancellationToken = default)
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
+        )
         {
             await Task.Yield();
             var response = messages
                 .SelectMany(message => message.Contents)
                 .FirstOrDefault(content =>
-                    content is ToolApprovalResponseContent or AlwaysApproveToolApprovalResponseContent);
+                    content is ToolApprovalResponseContent or AlwaysApproveToolApprovalResponseContent
+                );
             if (response != null)
             {
                 var approvalScope = response switch
                 {
-                    AlwaysApproveToolApprovalResponseContent { AlwaysApproveTool: true } =>
-                        "always-tool",
-                    AlwaysApproveToolApprovalResponseContent
-                    {
-                        AlwaysApproveToolWithArguments: true
-                    } => "always-arguments",
-                    _ => "once"
+                    AlwaysApproveToolApprovalResponseContent { AlwaysApproveTool: true } => "always-tool",
+                    AlwaysApproveToolApprovalResponseContent { AlwaysApproveToolWithArguments: true } =>
+                        "always-arguments",
+                    _ => "once",
                 };
                 yield return new AgentResponseUpdate(ChatRole.Assistant, approvalScope);
                 yield break;
@@ -1200,10 +1214,8 @@ public class AgentflowRuntimeServiceTests
                 [
                     new ToolApprovalRequestContent(
                         "approval-1",
-                        new FunctionCallContent(
-                            "call-1",
-                            "run_shell",
-                            new Dictionary<string, object?>())),
+                        new FunctionCallContent("call-1", "run_shell", new Dictionary<string, object?>())
+                    ),
                 ],
             };
         }
@@ -1213,17 +1225,14 @@ public class AgentflowRuntimeServiceTests
 
     private sealed class StubProviderSessionState : IProviderSessionState
     {
-        public void InitializeSessionState(AgentSession session, string contextId, Guid projectId)
-        {
-        }
+        public void InitializeSessionState(AgentSession session, string contextId, Guid projectId) { }
 
         public void InitializeSessionState(
             AgentSession session,
             string contextId,
             Guid projectId,
-            string historyScope)
-        {
-        }
+            string historyScope
+        ) { }
 
         public bool TryGetProjectContext(AgentSession session, out Guid projectId, out string contextId)
         {
@@ -1241,23 +1250,19 @@ public class AgentflowRuntimeServiceTests
             Guid projectId,
             string contextId,
             IReadOnlyList<ChatMessage> messages,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Calls.Add(new HistoryCall(projectId, contextId, messages.ToList()));
             return Task.CompletedTask;
         }
     }
 
-    private sealed record HistoryCall(
-        Guid ProjectId,
-        string ContextId,
-        IReadOnlyList<ChatMessage> Messages);
+    private sealed record HistoryCall(Guid ProjectId, string ContextId, IReadOnlyList<ChatMessage> Messages);
 
-    private static bool IsMessageType(
-        AdditionalPropertiesDictionary? properties,
-        string expectedType) =>
-        properties?.TryGetValue("type", out var type) == true &&
-        string.Equals(type?.ToString(), expectedType, StringComparison.Ordinal);
+    private static bool IsMessageType(AdditionalPropertiesDictionary? properties, string expectedType) =>
+        properties?.TryGetValue("type", out var type) == true
+        && string.Equals(type?.ToString(), expectedType, StringComparison.Ordinal);
 
     private sealed class RecordingSummaryService : IAgentTurnSummaryService
     {
@@ -1269,14 +1274,10 @@ public class AgentflowRuntimeServiceTests
             Guid projectId,
             string contextId,
             string? customInstructions,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
-            Calls.Add(new SummaryCall(
-                modelProviderId,
-                sourceMessages,
-                projectId,
-                contextId,
-                customInstructions));
+            Calls.Add(new SummaryCall(modelProviderId, sourceMessages, projectId, contextId, customInstructions));
             return Task.FromResult(AgentTurnSummaryService.CreateResultMessage("summary"));
         }
     }
@@ -1286,13 +1287,15 @@ public class AgentflowRuntimeServiceTests
         IReadOnlyList<ChatMessage> Messages,
         Guid ProjectId,
         string ContextId,
-        string? CustomInstructions);
+        string? CustomInstructions
+    );
 
     private sealed class CapturingLogger<T> : ILogger<T>
     {
         public List<LogEntry> Entries { get; } = [];
 
-        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
 
         public bool IsEnabled(LogLevel logLevel) => true;
 
@@ -1301,7 +1304,8 @@ public class AgentflowRuntimeServiceTests
             EventId eventId,
             TState state,
             Exception? exception,
-            Func<TState, Exception?, string> formatter)
+            Func<TState, Exception?, string> formatter
+        )
         {
             var properties = state as IEnumerable<KeyValuePair<string, object?>> ?? [];
             Entries.Add(new LogEntry(properties.ToList()));
@@ -1310,8 +1314,7 @@ public class AgentflowRuntimeServiceTests
 
     private sealed record LogEntry(IReadOnlyList<KeyValuePair<string, object?>> Properties)
     {
-        public object? GetProperty(string name) => Properties
-            .FirstOrDefault(property => string.Equals(property.Key, name, StringComparison.Ordinal))
-            .Value;
+        public object? GetProperty(string name) =>
+            Properties.FirstOrDefault(property => string.Equals(property.Key, name, StringComparison.Ordinal)).Value;
     }
 }

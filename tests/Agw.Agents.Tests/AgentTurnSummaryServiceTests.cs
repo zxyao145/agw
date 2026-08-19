@@ -1,9 +1,7 @@
 using System.Runtime.CompilerServices;
-
 using Agw.Agents.Execution.Summaries;
 using Agw.Shared;
 using Agw.Shared.Contracts.Projects;
-
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -16,17 +14,17 @@ public class AgentTurnSummaryServiceTests
     {
         var projectId = Guid.CreateVersion7();
         var modelProviderId = Guid.CreateVersion7();
-        var client = new RecordingChatClient(new ChatResponse([
-            new ChatMessage(ChatRole.Assistant, "  ## 完成\n\n- 已支持 **Markdown**。  ")
-        ])
-        {
-            Usage = new UsageDetails
+        var client = new RecordingChatClient(
+            new ChatResponse([new ChatMessage(ChatRole.Assistant, "  ## 完成\n\n- 已支持 **Markdown**。  ")])
             {
-                InputTokenCount = 11,
-                OutputTokenCount = 7,
-                TotalTokenCount = 18,
+                Usage = new UsageDetails
+                {
+                    InputTokenCount = 11,
+                    OutputTokenCount = 7,
+                    TotalTokenCount = 18,
+                },
             }
-        });
+        );
         var writer = new RecordingConversationHistoryWriter();
         var usageRecorder = new RecordingUsageRecorder();
         var clientFactory = new StubSummaryChatClientFactory(client);
@@ -34,18 +32,17 @@ public class AgentTurnSummaryServiceTests
             clientFactory,
             writer,
             usageRecorder,
-            NullLogger<AgentTurnSummaryService>.Instance);
+            NullLogger<AgentTurnSummaryService>.Instance
+        );
 
         var result = await service.CreateResultAsync(
             modelProviderId,
-            [
-                new ChatMessage(ChatRole.User, "请修改后端"),
-                new ChatMessage(ChatRole.Assistant, "修改完成")
-            ],
+            [new ChatMessage(ChatRole.User, "请修改后端"), new ChatMessage(ChatRole.Assistant, "修改完成")],
             projectId,
             "context-1",
             "突出说明验证结果。",
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal(ChatRole.System, result.Role);
         Assert.Equal(Constants.DefaultAgentAuthor, result.AuthorName);
@@ -84,9 +81,10 @@ public class AgentTurnSummaryServiceTests
     [InlineData("   ")]
     public async Task CreateResultAsync_EmptySummary_ReturnsFailureResult(string? summaryText)
     {
-        var response = summaryText == null
-            ? new ChatResponse([])
-            : new ChatResponse([new ChatMessage(ChatRole.Assistant, summaryText)]);
+        var response =
+            summaryText == null
+                ? new ChatResponse([])
+                : new ChatResponse([new ChatMessage(ChatRole.Assistant, summaryText)]);
         var writer = new RecordingConversationHistoryWriter();
         var service = CreateService(new RecordingChatClient(response), writer);
 
@@ -96,7 +94,8 @@ public class AgentTurnSummaryServiceTests
             Guid.CreateVersion7(),
             "context-1",
             null,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal("Summary generation failed.", Assert.IsType<TextContent>(Assert.Single(result.Contents)).Text);
         Assert.Same(result, Assert.Single(Assert.Single(writer.Entries).Messages));
@@ -114,7 +113,8 @@ public class AgentTurnSummaryServiceTests
             Guid.CreateVersion7(),
             "context-1",
             null,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         Assert.Equal("Summary generation failed.", Assert.IsType<TextContent>(Assert.Single(result.Contents)).Text);
         Assert.Same(result, Assert.Single(Assert.Single(writer.Entries).Messages));
@@ -128,27 +128,33 @@ public class AgentTurnSummaryServiceTests
         var writer = new RecordingConversationHistoryWriter();
         var service = CreateService(
             new RecordingChatClient(new OperationCanceledException(cancellationTokenSource.Token)),
-            writer);
+            writer
+        );
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.CreateResultAsync(
-            Guid.CreateVersion7(),
-            [new ChatMessage(ChatRole.User, "input")],
-            Guid.CreateVersion7(),
-            "context-1",
-            null,
-            cancellationTokenSource.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.CreateResultAsync(
+                Guid.CreateVersion7(),
+                [new ChatMessage(ChatRole.User, "input")],
+                Guid.CreateVersion7(),
+                "context-1",
+                null,
+                cancellationTokenSource.Token
+            )
+        );
 
         Assert.Empty(writer.Entries);
     }
 
     private static AgentTurnSummaryService CreateService(
         IChatClient client,
-        RecordingConversationHistoryWriter writer) =>
+        RecordingConversationHistoryWriter writer
+    ) =>
         new(
             new StubSummaryChatClientFactory(client),
             writer,
             new RecordingUsageRecorder(),
-            NullLogger<AgentTurnSummaryService>.Instance);
+            NullLogger<AgentTurnSummaryService>.Instance
+        );
 
     private sealed class StubSummaryChatClientFactory(IChatClient client) : ISummaryChatClientFactory
     {
@@ -180,9 +186,7 @@ public class AgentTurnSummaryServiceTests
 
         public ChatOptions? Options { get; private set; }
 
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
 
         public object? GetService(Type serviceType, object? serviceKey = null) =>
             serviceType.IsInstanceOfType(this) ? this : null;
@@ -190,19 +194,19 @@ public class AgentTurnSummaryServiceTests
         public Task<ChatResponse> GetResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Messages.AddRange(messages);
             Options = options;
-            return _exception == null
-                ? Task.FromResult(_response!)
-                : Task.FromException<ChatResponse>(_exception);
+            return _exception == null ? Task.FromResult(_response!) : Task.FromException<ChatResponse>(_exception);
         }
 
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> messages,
             ChatOptions? options = null,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+            [EnumeratorCancellation] CancellationToken cancellationToken = default
+        )
         {
             await Task.CompletedTask;
             yield break;
@@ -217,7 +221,8 @@ public class AgentTurnSummaryServiceTests
             Guid projectId,
             string contextId,
             IReadOnlyList<ChatMessage> messages,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Entries.Add(new Entry(projectId, contextId, messages));
             return Task.CompletedTask;
@@ -235,16 +240,13 @@ public class AgentTurnSummaryServiceTests
             string contextId,
             string agentName,
             ProjectContextUsage usage,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default
+        )
         {
             Entries.Add(new Entry(projectId, contextId, agentName, usage));
             return Task.CompletedTask;
         }
 
-        public sealed record Entry(
-            Guid ProjectId,
-            string ContextId,
-            string AgentName,
-            ProjectContextUsage Usage);
+        public sealed record Entry(Guid ProjectId, string ContextId, string AgentName, ProjectContextUsage Usage);
     }
 }

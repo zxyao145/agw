@@ -6,11 +6,11 @@ internal sealed class ProjectInstructionsSource : IAgentInstructionsSource
 {
     public ValueTask<string?> GetInstructionsAsync(
         AgwInstructionsSourceContext context,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var workspace = PathUtil.ExpandTilde(context.Project.GetMustWorkspace());
-        var instructions =
-            $"""
+        var instructions = $"""
             # others
 
             - Your default workspace or working directory is '{workspace}'.

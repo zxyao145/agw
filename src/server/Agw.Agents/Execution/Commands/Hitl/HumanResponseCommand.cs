@@ -1,7 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-
 using Agw.Agents.Execution.Commands.Abstracts;
 
 namespace Agw.Agents.Execution.Commands.Hitl;
@@ -18,7 +17,8 @@ public class HumanResponseCommand : AgentRunCommand
         string? responseText = null,
         string approvalScope = "once",
         JsonElement? responseData = null,
-        Guid? executionId = null)
+        Guid? executionId = null
+    )
     {
         RequestId = requestId;
         Approved = approved;

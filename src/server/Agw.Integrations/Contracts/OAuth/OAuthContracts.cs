@@ -28,7 +28,7 @@ public sealed class OAuthCallbackResult
 public enum OAuthCompletionTarget
 {
     Web,
-    Desktop
+    Desktop,
 }
 
 public sealed class OAuthRefreshResponse

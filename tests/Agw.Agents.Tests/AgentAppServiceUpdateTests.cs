@@ -1,6 +1,5 @@
 using System.Linq.Expressions;
 using System.Text.Json;
-
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Shared.Data.Entities.Agents;
@@ -25,27 +24,31 @@ public class AgentAppServiceUpdateTests
         var agent = CreateExternalAgent();
         agent.EnableSummary = true;
         agent.SummaryModelProviderId = summaryModelProviderId;
-        var mcpRelations = new TestRepository<AgentMcpServerRelation>(
-            [new AgentMcpServerRelation { AgentId = agent.Id, McpToolServerId = Guid.CreateVersion7() }])
+        var mcpRelations = new TestRepository<AgentMcpServerRelation>([
+            new AgentMcpServerRelation { AgentId = agent.Id, McpToolServerId = Guid.CreateVersion7() },
+        ])
         {
-            ThrowOnList = true
+            ThrowOnList = true,
         };
-        var skillRelations = new TestRepository<AgentSkillRelation>(
-            [new AgentSkillRelation { AgentId = agent.Id, SkillId = Guid.CreateVersion7() }])
+        var skillRelations = new TestRepository<AgentSkillRelation>([
+            new AgentSkillRelation { AgentId = agent.Id, SkillId = Guid.CreateVersion7() },
+        ])
         {
-            ThrowOnList = true
+            ThrowOnList = true,
         };
-        var connectionRelations = new TestRepository<AgentConnectionRelation>(
-            [new AgentConnectionRelation { AgentId = agent.Id, ConnectionId = Guid.CreateVersion7() }])
+        var connectionRelations = new TestRepository<AgentConnectionRelation>([
+            new AgentConnectionRelation { AgentId = agent.Id, ConnectionId = Guid.CreateVersion7() },
+        ])
         {
-            ThrowOnList = true
+            ThrowOnList = true,
         };
         var service = CreateService(
             agent,
             modelProviderIds: [newModelProviderId, summaryModelProviderId],
             mcpRelationRepository: mcpRelations,
             skillRelationRepository: skillRelations,
-            connectionRelationRepository: connectionRelations);
+            connectionRelationRepository: connectionRelations
+        );
         var request = Deserialize(
             $$"""
             {
@@ -55,7 +58,8 @@ public class AgentAppServiceUpdateTests
               "extra": "  {\"sandbox\":false}  ",
               "environmentVariables": { "  TOKEN  ": "value" }
             }
-            """);
+            """
+        );
 
         var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester");
 
@@ -66,8 +70,7 @@ public class AgentAppServiceUpdateTests
         Assert.Equal("{\"sandbox\":false}", agent.Extra);
         Assert.Equal("value", agent.EnvironmentVariables["TOKEN"]);
         Assert.Equal("original-prompt", agent.SystemPrompt);
-        Assert.IsType<WebFetchToolDefinition>(
-            Assert.IsType<ToolValue>(Assert.Single(agent.Tools)).Definition);
+        Assert.IsType<WebFetchToolDefinition>(Assert.IsType<ToolValue>(Assert.Single(agent.Tools)).Definition);
         Assert.True(agent.EnableSummary);
         Assert.Equal(summaryModelProviderId, agent.SummaryModelProviderId);
         Assert.Equal(0, mcpRelations.ListCallCount);
@@ -81,16 +84,13 @@ public class AgentAppServiceUpdateTests
     [InlineData("modelProviderId")]
     [InlineData("extra")]
     [InlineData("environmentVariables")]
-    public async Task UpdateAgentAsync_ExternalSingleAllowedField_UpdatesOnlySpecifiedField(
-        string fieldName)
+    public async Task UpdateAgentAsync_ExternalSingleAllowedField_UpdatesOnlySpecifiedField(string fieldName)
     {
         var originalModelProviderId = Guid.CreateVersion7();
         var updatedModelProviderId = Guid.CreateVersion7();
         var agent = CreateExternalAgent();
         agent.ModelProviderId = originalModelProviderId;
-        var service = CreateService(
-            agent,
-            modelProviderIds: [originalModelProviderId, updatedModelProviderId]);
+        var service = CreateService(agent, modelProviderIds: [originalModelProviderId, updatedModelProviderId]);
         var json = fieldName switch
         {
             "displayName" => "{\"displayName\":\"Updated Agent\"}",
@@ -98,30 +98,20 @@ public class AgentAppServiceUpdateTests
             "modelProviderId" => $"{{\"modelProviderId\":\"{updatedModelProviderId}\"}}",
             "extra" => "{\"extra\":\"{\\\"updated\\\":true}\"}",
             "environmentVariables" => "{\"environmentVariables\":{\"TOKEN\":\"updated\"}}",
-            _ => throw new Xunit.Sdk.XunitException($"Unexpected field: {fieldName}")
+            _ => throw new Xunit.Sdk.XunitException($"Unexpected field: {fieldName}"),
         };
 
-        var updated = await service.UpdateAgentAsync(
-            agent.Id,
-            Deserialize(json).ToCommand(),
-            "tester");
+        var updated = await service.UpdateAgentAsync(agent.Id, Deserialize(json).ToCommand(), "tester");
 
         Assert.Same(agent, updated);
-        Assert.Equal(
-            fieldName == "displayName" ? "Updated Agent" : "External Agent",
-            agent.DisplayName);
-        Assert.Equal(
-            fieldName == "description" ? "Updated description" : "Original description",
-            agent.Description);
+        Assert.Equal(fieldName == "displayName" ? "Updated Agent" : "External Agent", agent.DisplayName);
+        Assert.Equal(fieldName == "description" ? "Updated description" : "Original description", agent.Description);
         Assert.Equal(
             fieldName == "modelProviderId" ? updatedModelProviderId : originalModelProviderId,
-            agent.ModelProviderId);
-        Assert.Equal(
-            fieldName == "extra" ? "{\"updated\":true}" : "{\"original\":true}",
-            agent.Extra);
-        Assert.Equal(
-            fieldName == "environmentVariables" ? "updated" : "original",
-            agent.EnvironmentVariables["TOKEN"]);
+            agent.ModelProviderId
+        );
+        Assert.Equal(fieldName == "extra" ? "{\"updated\":true}" : "{\"original\":true}", agent.Extra);
+        Assert.Equal(fieldName == "environmentVariables" ? "updated" : "original", agent.EnvironmentVariables["TOKEN"]);
     }
 
     [Fact]
@@ -130,10 +120,7 @@ public class AgentAppServiceUpdateTests
         var agent = CreateExternalAgent();
         var service = CreateService(agent);
 
-        var updated = await service.UpdateAgentAsync(
-            agent.Id,
-            Deserialize("{}").ToCommand(),
-            "tester");
+        var updated = await service.UpdateAgentAsync(agent.Id, Deserialize("{}").ToCommand(), "tester");
 
         Assert.Same(agent, updated);
         Assert.Equal("External Agent", agent.DisplayName);
@@ -157,7 +144,8 @@ public class AgentAppServiceUpdateTests
               "extra": null,
               "environmentVariables": null
             }
-            """);
+            """
+        );
 
         var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester");
 
@@ -177,7 +165,8 @@ public class AgentAppServiceUpdateTests
         var request = Deserialize($"{{\"{fieldName}\":null}}");
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester"));
+            service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester")
+        );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
         Assert.Contains(fieldName, exception.Message, StringComparison.Ordinal);
@@ -192,9 +181,7 @@ public class AgentAppServiceUpdateTests
     [InlineData("{\"connectionIds\":[]}", "connectionIds")]
     [InlineData("{\"enableSummary\":false}", "enableSummary")]
     [InlineData("{\"summaryModelProviderId\":null}", "summaryModelProviderId")]
-    public async Task UpdateAgentAsync_ExternalForbiddenField_ThrowsBeforeMutation(
-        string json,
-        string fieldName)
+    public async Task UpdateAgentAsync_ExternalForbiddenField_ThrowsBeforeMutation(string json, string fieldName)
     {
         var agent = CreateExternalAgent();
         var unitOfWork = new TestUnitOfWork();
@@ -202,7 +189,8 @@ public class AgentAppServiceUpdateTests
         var request = Deserialize(json);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester"));
+            service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester")
+        );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
         Assert.Contains(fieldName, exception.Message, StringComparison.Ordinal);
@@ -224,11 +212,8 @@ public class AgentAppServiceUpdateTests
             SystemPrompt = "Before",
             ModelProviderId = oldModelProviderId,
             EnableSummary = true,
-            Tools =
-            [
-                new ToolValue { Definition = new WebSearchToolDefinition() }
-            ],
-            EnvironmentVariables = new Dictionary<string, string> { ["BEFORE"] = "value" }
+            Tools = [new ToolValue { Definition = new WebSearchToolDefinition() }],
+            EnvironmentVariables = new Dictionary<string, string> { ["BEFORE"] = "value" },
         };
         var service = CreateService(agent, modelProviderIds: [oldModelProviderId, newModelProviderId]);
         var request = Deserialize(
@@ -239,7 +224,8 @@ public class AgentAppServiceUpdateTests
               "systemPrompt": "After",
               "modelProviderId": "{{newModelProviderId}}"
             }
-            """);
+            """
+        );
 
         var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester");
 
@@ -261,7 +247,7 @@ public class AgentAppServiceUpdateTests
         {
             Id = Guid.CreateVersion7(),
             Type = AgentType.System,
-            ModelProviderId = modelProviderId
+            ModelProviderId = modelProviderId,
         };
         var service = CreateService(agent, modelProviderIds: [modelProviderId]);
         var request = Deserialize(
@@ -273,10 +259,12 @@ public class AgentAppServiceUpdateTests
               "modelProviderId": "{{modelProviderId}}",
               "enableSummary": null
             }
-            """);
+            """
+        );
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester"));
+            service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester")
+        );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
         Assert.Contains("enableSummary", exception.Message, StringComparison.Ordinal);
@@ -291,7 +279,7 @@ public class AgentAppServiceUpdateTests
         {
             Id = Guid.CreateVersion7(),
             Type = AgentType.System,
-            ModelProviderId = modelProviderId
+            ModelProviderId = modelProviderId,
         };
         var service = CreateService(agent, modelProviderIds: [modelProviderId]);
         var request = Deserialize(
@@ -301,31 +289,31 @@ public class AgentAppServiceUpdateTests
               "description": "Description",
               "systemPrompt": "Prompt"
             }
-            """);
+            """
+        );
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester"));
+            service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester")
+        );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
         Assert.Contains("modelProviderId", exception.Message, StringComparison.Ordinal);
         Assert.Null(agent.UpdateBy);
     }
 
-    private static Agent CreateExternalAgent() => new()
-    {
-        Id = Guid.CreateVersion7(),
-        Name = "external-agent",
-        Type = AgentType.External,
-        DisplayName = "External Agent",
-        Description = "Original description",
-        SystemPrompt = "original-prompt",
-        Tools =
-        [
-            new ToolValue { Definition = new WebFetchToolDefinition() }
-        ],
-        Extra = "{\"original\":true}",
-        EnvironmentVariables = new Dictionary<string, string> { ["TOKEN"] = "original" }
-    };
+    private static Agent CreateExternalAgent() =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "external-agent",
+            Type = AgentType.External,
+            DisplayName = "External Agent",
+            Description = "Original description",
+            SystemPrompt = "original-prompt",
+            Tools = [new ToolValue { Definition = new WebFetchToolDefinition() }],
+            Extra = "{\"original\":true}",
+            EnvironmentVariables = new Dictionary<string, string> { ["TOKEN"] = "original" },
+        };
 
     private static AgentUpdateRequest Deserialize(string json) =>
         JsonSerializer.Deserialize<AgentUpdateRequest>(json, JsonOptions)
@@ -337,11 +325,10 @@ public class AgentAppServiceUpdateTests
         TestRepository<AgentMcpServerRelation>? mcpRelationRepository = null,
         TestRepository<AgentSkillRelation>? skillRelationRepository = null,
         TestRepository<AgentConnectionRelation>? connectionRelationRepository = null,
-        TestUnitOfWork? unitOfWork = null)
+        TestUnitOfWork? unitOfWork = null
+    )
     {
-        var modelProviders = (modelProviderIds ?? [])
-            .Select(id => new ModelProviderRelation { Id = id })
-            .ToArray();
+        var modelProviders = (modelProviderIds ?? []).Select(id => new ModelProviderRelation { Id = id }).ToArray();
         return new AgentAppService(
             new TestRepository<Agent>([agent], item => item.Id),
             connectionRelationRepository ?? new TestRepository<AgentConnectionRelation>(),
@@ -354,17 +341,17 @@ public class AgentAppServiceUpdateTests
             new TestRepository<Skill>(),
             skillRelationRepository ?? new TestRepository<AgentSkillRelation>(),
             unitOfWork ?? new TestUnitOfWork(),
-            new AgentDomainService(TimeProvider.System));
+            new AgentDomainService(TimeProvider.System)
+        );
     }
 
-    private sealed class TestRepository<TEntity> : IRepository<TEntity> where TEntity : class
+    private sealed class TestRepository<TEntity> : IRepository<TEntity>
+        where TEntity : class
     {
         private readonly Func<TEntity, object?>? _idSelector;
         private readonly List<TEntity> _items;
 
-        public TestRepository(
-            IEnumerable<TEntity>? items = null,
-            Func<TEntity, object?>? idSelector = null)
+        public TestRepository(IEnumerable<TEntity>? items = null, Func<TEntity, object?>? idSelector = null)
         {
             _items = items?.ToList() ?? [];
             _idSelector = idSelector;
@@ -374,19 +361,18 @@ public class AgentAppServiceUpdateTests
         public bool ThrowOnList { get; init; }
         public int ListCallCount { get; private set; }
 
-        public Task<TEntity?> GetByIdAsync(object id) => Task.FromResult(
-            _idSelector == null
-                ? null
-                : _items.SingleOrDefault(item => Equals(_idSelector(item), id)));
+        public Task<TEntity?> GetByIdAsync(object id) =>
+            Task.FromResult(_idSelector == null ? null : _items.SingleOrDefault(item => Equals(_idSelector(item), id)));
 
         public Task<TEntity?> SingleOrDefaultAsync(
             Expression<Func<TEntity, bool>> predicate,
-            CancellationToken cancellationToken = default) =>
-            Task.FromResult(_items.AsQueryable().SingleOrDefault(predicate));
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(_items.AsQueryable().SingleOrDefault(predicate));
 
         public Task<IReadOnlyList<TEntity>> ListAsync(
             Expression<Func<TEntity, bool>>? predicate = null,
-            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null)
+            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
+        )
         {
             ListCallCount++;
             if (ThrowOnList)
@@ -411,8 +397,8 @@ public class AgentAppServiceUpdateTests
         public Task<IReadOnlyList<TEntity>> ListAsync(
             Expression<Func<TEntity, bool>>? predicate,
             Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy,
-            params Expression<Func<TEntity, object>>[] includes) =>
-            ListAsync(predicate, orderBy);
+            params Expression<Func<TEntity, object>>[] includes
+        ) => ListAsync(predicate, orderBy);
 
         public Task AddAsync(TEntity entity)
         {
@@ -420,9 +406,7 @@ public class AgentAppServiceUpdateTests
             return Task.CompletedTask;
         }
 
-        public void Update(TEntity entity)
-        {
-        }
+        public void Update(TEntity entity) { }
 
         public void Remove(TEntity entity) => _items.Remove(entity);
 
@@ -439,11 +423,8 @@ public class AgentAppServiceUpdateTests
             return Task.FromResult(0);
         }
 
-        public Task<bool> SaveEntitiesAsync(CancellationToken cancellationToken = default) =>
-            Task.FromResult(true);
+        public Task<bool> SaveEntitiesAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
 
-        public void Dispose()
-        {
-        }
+        public void Dispose() { }
     }
 }

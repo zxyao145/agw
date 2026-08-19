@@ -1,5 +1,4 @@
 using A2A;
-
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -14,15 +13,14 @@ public static class DependencyInjection
         services.AddSingleton<IAgentExecutionBridge, A2AAgentExecutionBridge>();
         services.AddSingleton(sp => new AgentHandlerFactory(
             sp.GetRequiredService<IServiceScopeFactory>(),
-            sp.GetRequiredService<IAgentExecutionBridge>()));
+            sp.GetRequiredService<IAgentExecutionBridge>()
+        ));
         services.AddSingleton<AgwChannelEventNotifier>();
 
         services.AddScoped<A2AAgentService>();
         services.AddScoped<ITaskStore, TaskStore>();
         services.AddScoped<IAgwA2ARequestHandler, AgwA2ARequestHandler>();
-        services.Configure<AgwA2AServerOptions>(o =>
-        {
-        });
+        services.Configure<AgwA2AServerOptions>(o => { });
 
         return services;
     }

@@ -1,10 +1,8 @@
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
-
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
-
 using StackExchange.Redis;
 
 namespace Agw.Agents.Execution.Durable;
@@ -24,9 +22,7 @@ internal sealed class RedisExecutionEventStream : IExecutionEventStream
     /// <summary>
     /// 创建使用共享 Redis connection 和执行配置的事件流。
     /// </summary>
-    public RedisExecutionEventStream(
-        IConnectionMultiplexer connection,
-        IOptions<ExecutionRuntimeOptions> options)
+    public RedisExecutionEventStream(IConnectionMultiplexer connection, IOptions<ExecutionRuntimeOptions> options)
     {
         _connection = connection;
         _eventStreamOptions = options.Value.Distributed.EventStream;
@@ -41,7 +37,8 @@ internal sealed class RedisExecutionEventStream : IExecutionEventStream
         int segmentIndex,
         int sequence,
         AgwMessage message,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         ArgumentNullException.ThrowIfNull(message);
         cancellationToken.ThrowIfCancellationRequested();
@@ -62,35 +59,33 @@ internal sealed class RedisExecutionEventStream : IExecutionEventStream
             var payload = JsonUtil.Serialize(message);
             try
             {
-                await database.StreamAddAsync(
-                        key,
-                        [new NameValueEntry(PayloadField, payload)],
-                        streamId)
+                await database
+                    .StreamAddAsync(key, [new NameValueEntry(PayloadField, payload)], streamId)
                     .ConfigureAwait(false);
             }
             catch (RedisServerException exception) when (IsDuplicateStreamId(exception))
             {
                 // at-least-once 分段可能重放相同逻辑位置；已存在该 ID 即视为该位置已经发布。
-                var existing = await database.StreamRangeAsync(key, streamId, streamId, count: 1)
-                    .ConfigureAwait(false);
+                var existing = await database.StreamRangeAsync(key, streamId, streamId, count: 1).ConfigureAwait(false);
                 if (existing.Length == 0)
                 {
                     throw new AgwException(
                         ErrorCodes.DurableExecutionConflict,
                         $"Execution stream entry '{streamId}' could not be verified after a duplicate append.",
-                        exception);
+                        exception
+                    );
                 }
             }
 
-            await database.KeyExpireAsync(key, TimeSpan.FromMinutes(_options.StreamTtlMinutes))
-                .ConfigureAwait(false);
+            await database.KeyExpireAsync(key, TimeSpan.FromMinutes(_options.StreamTtlMinutes)).ConfigureAwait(false);
         }
         catch (RedisException exception)
         {
             throw new AgwException(
                 ErrorCodes.DurableExecutionUnavailable,
                 "Redis Stream append is unavailable.",
-                exception);
+                exception
+            );
         }
     }
 
@@ -100,7 +95,8 @@ internal sealed class RedisExecutionEventStream : IExecutionEventStream
     public async Task<IReadOnlyList<ExecutionStreamEntry>> ReadAsync(
         Guid executionId,
         string? afterCursor,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         cancellationToken.ThrowIfCancellationRequested();
         try
@@ -108,10 +104,8 @@ internal sealed class RedisExecutionEventStream : IExecutionEventStream
             var database = _connection.GetDatabase();
             var key = GetKey(executionId);
             var cursor = string.IsNullOrWhiteSpace(afterCursor) ? "0-0" : afterCursor.Trim();
-            var entries = await database.StreamReadAsync(
-                    key,
-                    cursor,
-                    _eventStreamOptions.ReadBatchSize)
+            var entries = await database
+                .StreamReadAsync(key, cursor, _eventStreamOptions.ReadBatchSize)
                 .ConfigureAwait(false);
             var result = new List<ExecutionStreamEntry>(entries.Length);
             foreach (var entry in entries)
@@ -124,18 +118,19 @@ internal sealed class RedisExecutionEventStream : IExecutionEventStream
                     continue;
                 }
 
-                var message = JsonUtil.Deserialize<AgwMessage>(payload!)
+                var message =
+                    JsonUtil.Deserialize<AgwMessage>(payload!)
                     ?? throw new AgwException(
                         ErrorCodes.DurableExecutionConflict,
-                        $"Execution stream entry '{entry.Id}' contains an invalid message.");
-                var properties = message.AdditionalProperties == null
-                    ? new AdditionalPropertiesDictionary()
-                    : new AdditionalPropertiesDictionary(message.AdditionalProperties);
+                        $"Execution stream entry '{entry.Id}' contains an invalid message."
+                    );
+                var properties =
+                    message.AdditionalProperties == null
+                        ? new AdditionalPropertiesDictionary()
+                        : new AdditionalPropertiesDictionary(message.AdditionalProperties);
                 properties["executionId"] = executionId.ToString("D");
                 properties["streamCursor"] = cursor;
-                result.Add(new ExecutionStreamEntry(
-                    cursor,
-                    message with { AdditionalProperties = properties }));
+                result.Add(new ExecutionStreamEntry(cursor, message with { AdditionalProperties = properties }));
             }
 
             return result;
@@ -145,15 +140,15 @@ internal sealed class RedisExecutionEventStream : IExecutionEventStream
             throw new AgwException(
                 ErrorCodes.DurableExecutionUnavailable,
                 "Redis Stream read is unavailable.",
-                exception);
+                exception
+            );
         }
     }
 
     /// <summary>
     /// 生成 execution 专属的 Redis Stream key。
     /// </summary>
-    private static RedisKey GetKey(Guid executionId) =>
-        $"agw:execution:{executionId:N}:messages";
+    private static RedisKey GetKey(Guid executionId) => $"agw:execution:{executionId:N}:messages";
 
     /// <summary>
     /// 将 segment 和 sequence 映射为单调递增且可重放去重的 Redis stream ID。

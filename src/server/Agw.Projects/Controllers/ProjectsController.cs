@@ -4,9 +4,7 @@ using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Projects.Controllers;
@@ -54,7 +52,8 @@ public class ProjectsController : ControllerBase
         {
             return ApiResult.BadRequest(
                 $"Tool Block '{ToolBlockDefinitionNames.BackgroundAgents}' can only be configured on an Agent.",
-                ErrorCodes.InvalidParam.Code);
+                ErrorCodes.InvalidParam.Code
+            );
         }
 
         var user = User?.Identity?.Name ?? Constants.AdminUserName;
@@ -65,7 +64,7 @@ public class ProjectsController : ControllerBase
             Workspace = request.Workspace,
             ExtraSetting = request.ExtraSetting,
             Tools = request.Tools ?? [],
-            EnvironmentVariables = request.EnvironmentVariables ?? new Dictionary<string, string>()
+            EnvironmentVariables = request.EnvironmentVariables ?? new Dictionary<string, string>(),
         };
 
         var created = await _projectAppService.CreateAsync(
@@ -73,12 +72,11 @@ public class ProjectsController : ControllerBase
             request.McpToolServerIds,
             request.SkillIds,
             request.ConnectionIds,
-            user);
+            user
+        );
         if (created == null)
         {
-            return ApiResult.BadRequest(
-                "Failed to create project.",
-                ErrorCodes.InvalidParam.Code);
+            return ApiResult.BadRequest("Failed to create project.", ErrorCodes.InvalidParam.Code);
         }
 
         return ApiResult.Ok(ProjectResponse.FromDomain(created));
@@ -98,7 +96,8 @@ public class ProjectsController : ControllerBase
         {
             return ApiResult.BadRequest(
                 $"Tool Block '{ToolBlockDefinitionNames.BackgroundAgents}' can only be configured on an Agent.",
-                ErrorCodes.InvalidParam.Code);
+                ErrorCodes.InvalidParam.Code
+            );
         }
 
         var user = User?.Identity?.Name ?? Constants.AdminUserName;
@@ -123,7 +122,8 @@ public class ProjectsController : ControllerBase
             request.McpToolServerIds,
             request.SkillIds,
             request.ConnectionIds,
-            user);
+            user
+        );
 
         return updated == null
             ? ErrorCodes.ResourceNotFound.ToApiResult()
@@ -138,8 +138,7 @@ public class ProjectsController : ControllerBase
         return deleted ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
     }
 
-    private static bool ContainsAgentOnlyToolBlock(
-        IReadOnlyList<ToolValueObject>? values) =>
-        values?.Any(static value =>
-            value is ToolBlockValue { Definition: BackgroundAgentsToolBlockDefinition }) == true;
+    private static bool ContainsAgentOnlyToolBlock(IReadOnlyList<ToolValueObject>? values) =>
+        values?.Any(static value => value is ToolBlockValue { Definition: BackgroundAgentsToolBlockDefinition })
+        == true;
 }

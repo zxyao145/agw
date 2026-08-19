@@ -2,7 +2,6 @@ using Agw.Jobs.Scheduling;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Infrastructure.Repositories;
@@ -11,36 +10,31 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
 {
     private readonly TimeProvider _timeProvider;
 
-    public JobRepo(DbContext dbContext, TimeProvider timeProvider) : base(dbContext)
+    public JobRepo(DbContext dbContext, TimeProvider timeProvider)
+        : base(dbContext)
     {
         _timeProvider = timeProvider;
     }
 
-
-    public async Task<IReadOnlyList<Job>> PrefetchAsync(DateTimeOffset now, DateTimeOffset horizon, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<Job>> PrefetchAsync(
+        DateTimeOffset now,
+        DateTimeOffset horizon,
+        CancellationToken cancellationToken
+    )
     {
-        var jobs = await _dbSet
-            .Where(t => t.IsEnabled)
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
+        var jobs = await _dbSet.Where(t => t.IsEnabled).AsNoTracking().ToListAsync(cancellationToken);
 
-        return jobs
-            .Where(t => t.Status == JobStatus.Pending
-                && t.NextRunTime <= horizon)
-            .ToList();
+        return jobs.Where(t => t.Status == JobStatus.Pending && t.NextRunTime <= horizon).ToList();
     }
 
     public async Task<bool> MarkRunningAsync(Guid jobId, CancellationToken cancellationToken)
     {
         var now = _timeProvider.GetUtcNow();
-        var job = await _dbSet
-            .FirstOrDefaultAsync(t => t.Id == jobId && t.IsEnabled, cancellationToken);
+        var job = await _dbSet.FirstOrDefaultAsync(t => t.Id == jobId && t.IsEnabled, cancellationToken);
 
         if (job == null)
         {
-            var exists = await _dbSet
-                .AsNoTracking()
-                .AnyAsync(t => t.Id == jobId, cancellationToken);
+            var exists = await _dbSet.AsNoTracking().AnyAsync(t => t.Id == jobId, cancellationToken);
 
             if (!exists)
             {
@@ -65,7 +59,8 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
 
     public async Task MarkSucceededAsync(Guid jobId, DateTimeOffset? nextRunTime, CancellationToken cancellationToken)
     {
-        var task = await _dbSet.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
+        var task =
+            await _dbSet.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
             ?? throw new AgwException(ErrorCodes.JobNotFound, $"Job not found: {jobId}");
 
         task.RetryCount = 0;
@@ -88,9 +83,16 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task MarkRetryAsync(Guid jobId, DateTimeOffset nextRunTime, int retryCount, string errorMessage, CancellationToken cancellationToken)
+    public async Task MarkRetryAsync(
+        Guid jobId,
+        DateTimeOffset nextRunTime,
+        int retryCount,
+        string errorMessage,
+        CancellationToken cancellationToken
+    )
     {
-        var task = await _dbSet.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
+        var task =
+            await _dbSet.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
             ?? throw new AgwException(ErrorCodes.JobNotFound, $"Job not found: {jobId}");
 
         task.Status = JobStatus.Pending;
@@ -103,9 +105,15 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task MarkFailedAsync(Guid jobId, int retryCount, string errorMessage, CancellationToken cancellationToken)
+    public async Task MarkFailedAsync(
+        Guid jobId,
+        int retryCount,
+        string errorMessage,
+        CancellationToken cancellationToken
+    )
     {
-        var task = await _dbSet.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
+        var task =
+            await _dbSet.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
             ?? throw new AgwException(ErrorCodes.JobNotFound, $"Job not found: {jobId}");
 
         task.Status = JobStatus.Paused;
@@ -118,7 +126,16 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task AddExecutionLogAsync(Guid jobId, Guid taskId, DateTimeOffset startTime, DateTimeOffset endTime, bool success, int attempt, string? errorMessage, CancellationToken cancellationToken)
+    public async Task AddExecutionLogAsync(
+        Guid jobId,
+        Guid taskId,
+        DateTimeOffset startTime,
+        DateTimeOffset endTime,
+        bool success,
+        int attempt,
+        string? errorMessage,
+        CancellationToken cancellationToken
+    )
     {
         var now = _timeProvider.GetUtcNow();
         var log = new JobLog
@@ -134,11 +151,10 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
             CreateBy = "scheduler",
             CreateTime = now,
             UpdateBy = "scheduler",
-            UpdateTime = now
+            UpdateTime = now,
         };
 
         await _dbContext.Set<JobLog>().AddAsync(log, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
     }
-
 }

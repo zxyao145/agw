@@ -25,11 +25,9 @@ public enum AgentSuggestionKind
     Tool,
 }
 
-public sealed record AgentSuggestionResponse(
-    string Text,
-    string Description,
-    AgentSuggestionKind Kind);
+public sealed record AgentSuggestionResponse(string Text, string Description, AgentSuggestionKind Kind);
 
 public sealed record AgentSuggestionsResponse(
     AgentSuggestionMode Mode,
-    IReadOnlyList<AgentSuggestionResponse> Suggestions);
+    IReadOnlyList<AgentSuggestionResponse> Suggestions
+);

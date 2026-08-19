@@ -2,7 +2,6 @@ using Agw.Infrastructure.Data;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Auth;
 using Agw.Shared.Exceptions;
-
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -17,18 +16,19 @@ public sealed class LegacyApiTokenMigrator
     public LegacyApiTokenMigrator(
         JsonInitializationStateStore stateStore,
         AgwDbContext context,
-        ILogger<LegacyApiTokenMigrator> logger)
+        ILogger<LegacyApiTokenMigrator> logger
+    )
     {
         _stateStore = stateStore;
         _context = context;
         _logger = logger;
     }
 
-    public async Task<int> MigrateAsync(
-        CancellationToken cancellationToken = default)
+    public async Task<int> MigrateAsync(CancellationToken cancellationToken = default)
     {
         var legacyTokens = _stateStore.GetLegacyApiTokens();
-        if (!_stateStore.HasLegacyApiTokenSection) return 0;
+        if (!_stateStore.HasLegacyApiTokenSection)
+            return 0;
         if (legacyTokens.Count == 0)
         {
             await _stateStore.ClearLegacyApiTokensAsync(cancellationToken);
@@ -44,16 +44,18 @@ public sealed class LegacyApiTokenMigrator
                 continue;
             }
 
-            _context.ApiTokens.Add(new ApiToken
-            {
-                Id = legacyToken.Id,
-                Name = legacyToken.Name,
-                NormalizedName = ApiToken.NormalizeName(legacyToken.Name),
-                Prefix = legacyToken.Prefix,
-                SecretHash = legacyToken.SecretHash,
-                CreateBy = Constants.AdminUserId,
-                CreateTime = legacyToken.CreatedAt
-            });
+            _context.ApiTokens.Add(
+                new ApiToken
+                {
+                    Id = legacyToken.Id,
+                    Name = legacyToken.Name,
+                    NormalizedName = ApiToken.NormalizeName(legacyToken.Name),
+                    Prefix = legacyToken.Prefix,
+                    SecretHash = legacyToken.SecretHash,
+                    CreateBy = Constants.AdminUserId,
+                    CreateTime = legacyToken.CreatedAt,
+                }
+            );
         }
 
         try
@@ -64,9 +66,11 @@ public sealed class LegacyApiTokenMigrator
         {
             _context.ChangeTracker.Clear();
             existingTokens = await LoadExistingTokensAsync(legacyTokens, cancellationToken);
-            if (!legacyTokens.All(token =>
-                    existingTokens.TryGetValue(token.Id, out var existing)
-                    && IsSameToken(existing, token)))
+            if (
+                !legacyTokens.All(token =>
+                    existingTokens.TryGetValue(token.Id, out var existing) && IsSameToken(existing, token)
+                )
+            )
             {
                 throw;
             }
@@ -75,48 +79,42 @@ public sealed class LegacyApiTokenMigrator
         await _stateStore.ClearLegacyApiTokensAsync(cancellationToken);
         _logger.LogInformation(
             "Migrated {TokenCount} API Tokens from server-state.json to the database",
-            legacyTokens.Count);
+            legacyTokens.Count
+        );
         return legacyTokens.Count;
     }
 
     private async Task<Dictionary<Guid, ApiToken>> LoadExistingTokensAsync(
         IReadOnlyList<LegacyApiTokenState> legacyTokens,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var ids = legacyTokens.Select(token => token.Id).ToArray();
-        return await _context.ApiTokens
-            .AsNoTracking()
+        return await _context
+            .ApiTokens.AsNoTracking()
             .Where(token => ids.Contains(token.Id))
             .ToDictionaryAsync(token => token.Id, cancellationToken);
     }
 
-    private static void EnsureSameToken(
-        ApiToken existingToken,
-        LegacyApiTokenState legacyToken)
+    private static void EnsureSameToken(ApiToken existingToken, LegacyApiTokenState legacyToken)
     {
         if (!IsSameToken(existingToken, legacyToken))
         {
             throw new AgwException(
                 ErrorCodes.LegacyApiTokenConflict,
-                $"API Token '{legacyToken.Id}' conflicts with its legacy server-state record.");
+                $"API Token '{legacyToken.Id}' conflicts with its legacy server-state record."
+            );
         }
     }
 
-    private static bool IsSameToken(
-        ApiToken existingToken,
-        LegacyApiTokenState legacyToken)
+    private static bool IsSameToken(ApiToken existingToken, LegacyApiTokenState legacyToken)
     {
         return string.Equals(
-                   existingToken.NormalizedName,
-                   ApiToken.NormalizeName(legacyToken.Name),
-                   StringComparison.Ordinal)
-               && string.Equals(
-                   existingToken.Prefix,
-                   legacyToken.Prefix,
-                   StringComparison.Ordinal)
-               && string.Equals(
-                   existingToken.SecretHash,
-                   legacyToken.SecretHash,
-                   StringComparison.Ordinal);
+                existingToken.NormalizedName,
+                ApiToken.NormalizeName(legacyToken.Name),
+                StringComparison.Ordinal
+            )
+            && string.Equals(existingToken.Prefix, legacyToken.Prefix, StringComparison.Ordinal)
+            && string.Equals(existingToken.SecretHash, legacyToken.SecretHash, StringComparison.Ordinal);
     }
 }

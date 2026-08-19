@@ -1,7 +1,5 @@
 using System.Security.Cryptography;
-
 using Agw.Shared.Exceptions;
-
 using Microsoft.AspNetCore.DataProtection;
 
 namespace Agw.Infrastructure.Data.Encryption;
@@ -50,10 +48,7 @@ public sealed class DataProtectionEncryptedDataProtector : IEncryptedDataProtect
         }
         catch (CryptographicException exception)
         {
-            throw new AgwException(
-                ErrorCodes.EncryptedDataInvalid,
-                ErrorCodes.EncryptedDataInvalid.Message,
-                exception);
+            throw new AgwException(ErrorCodes.EncryptedDataInvalid, ErrorCodes.EncryptedDataInvalid.Message, exception);
         }
     }
 
@@ -61,16 +56,12 @@ public sealed class DataProtectionEncryptedDataProtector : IEncryptedDataProtect
     {
         if (string.IsNullOrWhiteSpace(tableName))
         {
-            throw new AgwException(
-                ErrorCodes.EncryptedModelInvalid,
-                "Encrypted entity table name is required.");
+            throw new AgwException(ErrorCodes.EncryptedModelInvalid, "Encrypted entity table name is required.");
         }
 
         if (entityId == Guid.Empty)
         {
-            throw new AgwException(
-                ErrorCodes.EncryptedModelInvalid,
-                "Encrypted entity ID must be a non-empty Guid.");
+            throw new AgwException(ErrorCodes.EncryptedModelInvalid, "Encrypted entity ID must be a non-empty Guid.");
         }
 
         return _dataProtectionProvider

@@ -1,30 +1,30 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-    <PropertyGroup>
-        <NoWarn>$(NoWarn);MAAI001</NoWarn>
-    </PropertyGroup>
-    <ItemGroup>
-        <PackageReference Include="CodexSdk.MAF"/>
-        <PackageReference Include="ClaudeCodeSdk.MAF"/>
-<!--        <ProjectReference Include="..\..\..\..\codex-sdk-csharp\src\CodexSdk.MAF\CodexSdk.MAF.csproj"/>-->
-<!--        <ProjectReference Include="..\..\..\..\claude-code-sdk-csharp\src\ClaudeCodeSdk.MAF\ClaudeCodeSdk.MAF.csproj"/>-->
-    </ItemGroup>
-    
-    <ItemGroup>
-        <FrameworkReference Include="Microsoft.AspNetCore.App"/>
-        <PackageReference Include="Microsoft.Agents.AI"/>
-        <PackageReference Include="Microsoft.Agents.AI.OpenAI"/>
-        <PackageReference Include="Microsoft.Agents.AI.Anthropic"/>
-        <PackageReference Include="ModelContextProtocol"/>
-        <PackageReference Include="StackExchange.Redis"/>
-        <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj"/>
-        <ProjectReference Include="..\Agw.Files\Agw.Files.csproj"/>
-        <ProjectReference Include="..\Agw.Integrations\Agw.Integrations.csproj"/>
-        <ProjectReference Include="..\Agw.Providers\Agw.Providers.csproj"/>
-        <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj"/>
-        <ProjectReference Include="..\Agw.Skills\Agw.Skills.csproj"/>
-        <ProjectReference Include="..\Agw.Tools\Agw.Tools.csproj"/>
-    </ItemGroup>
-    <ItemGroup>
-        <Folder Include="Definitions\"/>
-    </ItemGroup>
+  <PropertyGroup>
+    <NoWarn>$(NoWarn);MAAI001</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="CodexSdk.MAF" />
+    <PackageReference Include="ClaudeCodeSdk.MAF" />
+    <!--        <ProjectReference Include="..\..\..\..\codex-sdk-csharp\src\CodexSdk.MAF\CodexSdk.MAF.csproj"/>-->
+    <!--        <ProjectReference Include="..\..\..\..\claude-code-sdk-csharp\src\ClaudeCodeSdk.MAF\ClaudeCodeSdk.MAF.csproj"/>-->
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Agents.AI" />
+    <PackageReference Include="Microsoft.Agents.AI.OpenAI" />
+    <PackageReference Include="Microsoft.Agents.AI.Anthropic" />
+    <PackageReference Include="ModelContextProtocol" />
+    <PackageReference Include="StackExchange.Redis" />
+    <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
+    <ProjectReference Include="..\Agw.Files\Agw.Files.csproj" />
+    <ProjectReference Include="..\Agw.Integrations\Agw.Integrations.csproj" />
+    <ProjectReference Include="..\Agw.Providers\Agw.Providers.csproj" />
+    <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
+    <ProjectReference Include="..\Agw.Skills\Agw.Skills.csproj" />
+    <ProjectReference Include="..\Agw.Tools\Agw.Tools.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Definitions\" />
+  </ItemGroup>
 </Project>

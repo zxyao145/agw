@@ -1,8 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
-
 using Agw.Shared.Data.Abstractions;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Shared.Data.Entities.Integrations;
@@ -25,5 +23,6 @@ public class PluginInstallation : BaseEntity, IAggregateRoot
     public string ConfigurationJson { get; set; } = "{}";
 
     [JsonIgnore]
-    public ICollection<PluginInstallationCredential> Credentials { get; set; } = new List<PluginInstallationCredential>();
+    public ICollection<PluginInstallationCredential> Credentials { get; set; } =
+        new List<PluginInstallationCredential>();
 }

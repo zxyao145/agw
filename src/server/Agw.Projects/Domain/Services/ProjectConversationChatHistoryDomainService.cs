@@ -16,7 +16,9 @@ public class ProjectConversationChatHistoryDomainService
     public ProjectConversationChatHistory? GetLatest(IEnumerable<ProjectConversationChatHistory> records) =>
         Order(records).LastOrDefault();
 
-    public Dictionary<string, List<ProjectConversationChatHistory>> GroupByTaskId(IEnumerable<ProjectConversationChatHistory> records) =>
+    public Dictionary<string, List<ProjectConversationChatHistory>> GroupByTaskId(
+        IEnumerable<ProjectConversationChatHistory> records
+    ) =>
         Order(records)
             .GroupBy(record => record.TaskId.Normalize(), StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
@@ -24,14 +26,17 @@ public class ProjectConversationChatHistoryDomainService
     public TaskProjection? FindTask(
         string taskId,
         IReadOnlyList<TaskProjection> tasks,
-        IReadOnlyList<ProjectConversationChatHistory> records)
+        IReadOnlyList<ProjectConversationChatHistory> records
+    )
     {
         if (string.IsNullOrWhiteSpace(taskId) || tasks.Count == 0)
         {
             return null;
         }
 
-        var directTask = tasks.FirstOrDefault(task => string.Equals(task.TaskId.Normalize(), taskId, StringComparison.OrdinalIgnoreCase));
+        var directTask = tasks.FirstOrDefault(task =>
+            string.Equals(task.TaskId.Normalize(), taskId, StringComparison.OrdinalIgnoreCase)
+        );
         if (directTask != null)
         {
             return directTask;
@@ -44,9 +49,7 @@ public class ProjectConversationChatHistoryDomainService
             .ThenByDescending(record => record.CreateTime)
             .FirstOrDefault();
 
-        return latestMatch == null
-            ? null
-            : taskById.GetValueOrDefault(latestMatch.TaskId.Normalize());
+        return latestMatch == null ? null : taskById.GetValueOrDefault(latestMatch.TaskId.Normalize());
     }
 
     public bool ShouldDeleteTask(TaskProjection task) => false;

@@ -1,6 +1,5 @@
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
-
 using Microsoft.Agents.AI;
 
 namespace Agw.Agents.Execution.Agents.AIContextProviders.AgwWorkspace;
@@ -10,10 +9,7 @@ namespace Agw.Agents.Execution.Agents.AIContextProviders.AgwWorkspace;
 /// </summary>
 public sealed record AgwInstructionsSourceContext
 {
-    public AgwInstructionsSourceContext(
-        Agent agent,
-        Project project,
-        AIContextProvider.InvokingContext invocation)
+    public AgwInstructionsSourceContext(Agent agent, Project project, AIContextProvider.InvokingContext invocation)
     {
         Agent = agent;
         Project = project;

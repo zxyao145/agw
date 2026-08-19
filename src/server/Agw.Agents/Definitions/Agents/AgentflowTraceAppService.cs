@@ -4,7 +4,6 @@ using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Agents.Definitions.Agents;
@@ -22,7 +21,8 @@ public class AgentflowTraceAppService
 
     public async Task<PagedResult<AgentflowTraceDto>> ListAsync(
         AgentflowTraceQuery query,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         ValidateQuery(query);
 
@@ -82,10 +82,7 @@ public class AgentflowTraceAppService
             }
 
             var ordered = filtered.OrderByDescending(trace => trace.StartTimeUtc).ToList();
-            var page = ordered
-                .Skip((query.PageIndex - 1) * query.PageSize)
-                .Take(query.PageSize)
-                .ToList();
+            var page = ordered.Skip((query.PageIndex - 1) * query.PageSize).Take(query.PageSize).ToList();
 
             return CreatePagedResult(query, page, ordered.Count);
         }
@@ -94,29 +91,31 @@ public class AgentflowTraceAppService
     private static PagedResult<AgentflowTraceDto> CreatePagedResult(
         AgentflowTraceQuery query,
         IReadOnlyList<AgentflowTrace> traces,
-        int total)
+        int total
+    )
     {
         return new PagedResult<AgentflowTraceDto>
         {
-            Items = traces.Select(trace => new AgentflowTraceDto
-            {
-                Id = trace.Id,
-                StartTimeUtc = trace.StartTimeUtc,
-                ProjectId = trace.ProjectId,
-                ContextId = trace.ContextId,
-                TaskId = trace.TaskId,
-                AgentflowId = trace.AgentflowId,
-                NodeId = trace.NodeId,
-                NodeName = trace.NodeName,
-                NodeKind = trace.NodeKind,
-                AgentId = trace.AgentId,
-                AgentName = trace.AgentName,
-                Input = trace.Input,
-                DurationMilliseconds = trace.DurationMilliseconds,
-                Status = trace.Status,
-                Error = trace.Error,
-            })
-            .ToList(),
+            Items = traces
+                .Select(trace => new AgentflowTraceDto
+                {
+                    Id = trace.Id,
+                    StartTimeUtc = trace.StartTimeUtc,
+                    ProjectId = trace.ProjectId,
+                    ContextId = trace.ContextId,
+                    TaskId = trace.TaskId,
+                    AgentflowId = trace.AgentflowId,
+                    NodeId = trace.NodeId,
+                    NodeName = trace.NodeName,
+                    NodeKind = trace.NodeKind,
+                    AgentId = trace.AgentId,
+                    AgentName = trace.AgentName,
+                    Input = trace.Input,
+                    DurationMilliseconds = trace.DurationMilliseconds,
+                    Status = trace.Status,
+                    Error = trace.Error,
+                })
+                .ToList(),
             Total = total,
             PageIndex = query.PageIndex,
             PageSize = query.PageSize,
@@ -128,7 +127,8 @@ public class AgentflowTraceAppService
         return exception is NotSupportedException
                 && exception.Message.Contains(
                     "SQLite does not support expressions of type 'DateTimeOffset'",
-                    StringComparison.Ordinal)
+                    StringComparison.Ordinal
+                )
             || exception is InvalidOperationException
                 && exception.Message.Contains("StartTimeUtc", StringComparison.Ordinal)
                 && exception.Message.Contains("could not be translated", StringComparison.Ordinal);
@@ -140,21 +140,21 @@ public class AgentflowTraceAppService
         {
             throw new AgwException(
                 ErrorCodes.InvalidPageSize,
-                $"Invalid pageIndex: {query.PageIndex}. Must be at least 1.");
+                $"Invalid pageIndex: {query.PageIndex}. Must be at least 1."
+            );
         }
 
         if (query.PageSize < 1 || query.PageSize > MaxPageSize)
         {
             throw new AgwException(
                 ErrorCodes.InvalidPageSize,
-                $"Invalid pageSize: {query.PageSize}. Must be between 1 and {MaxPageSize}.");
+                $"Invalid pageSize: {query.PageSize}. Must be between 1 and {MaxPageSize}."
+            );
         }
 
         if (query.FromUtc.HasValue && query.ToUtc.HasValue && query.FromUtc.Value > query.ToUtc.Value)
         {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                "fromUtc must be earlier than or equal to toUtc.");
+            throw new AgwException(ErrorCodes.InvalidParam, "fromUtc must be earlier than or equal to toUtc.");
         }
     }
 }

@@ -1,10 +1,7 @@
 using System.Text;
-
 using Agw.Shared.Contracts.Tools.Abstractions;
-
 using DiffPlex.DiffBuilder;
 using DiffPlex.DiffBuilder.Model;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Tools.Impl.Files;
@@ -12,16 +9,16 @@ namespace Agw.Tools.Impl.Files;
 public class DiffToolParams
 {
     [Description(
-    """
-        the before text.
-    """
+        """
+                the before text.
+            """
     )]
     public string Before { get; set; } = "";
 
     [Description(
-    """
-        the after text.
-    """
+        """
+                the after text.
+            """
     )]
     public string After { get; set; } = "";
 }
@@ -40,9 +37,9 @@ internal class DiffTool : IAgwTool
     public bool AllowInPlanMode => true;
 
     [Description(
-    """
-    Generate the difference between the two texts before and after.
-    """
+        """
+            Generate the difference between the two texts before and after.
+            """
     )]
     public DiffToolResult Execute(DiffToolParams toolParams)
     {
@@ -69,10 +66,7 @@ internal class DiffTool : IAgwTool
             sb.AppendLine(line.Text);
         }
 
-        var res = new DiffToolResult
-        {
-            Result = sb.ToString()
-        };
+        var res = new DiffToolResult { Result = sb.ToString() };
         return res;
     }
 

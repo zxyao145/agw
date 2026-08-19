@@ -9,12 +9,14 @@ public class AgentMcpServerRelationConfiguration : IEntityTypeConfiguration<Agen
     {
         builder.HasKey(e => new { e.AgentId, e.McpToolServerId });
 
-        builder.HasOne(e => e.Agent)
+        builder
+            .HasOne(e => e.Agent)
             .WithMany(a => a.AgentMcpToolServers)
             .HasForeignKey(e => e.AgentId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasOne(e => e.McpToolServer)
+        builder
+            .HasOne(e => e.McpToolServer)
             .WithMany(s => s.AgentMcpToolServers)
             .HasForeignKey(e => e.McpToolServerId)
             .OnDelete(DeleteBehavior.Cascade);

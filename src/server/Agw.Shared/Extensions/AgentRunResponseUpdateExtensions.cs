@@ -1,8 +1,6 @@
 using System.Text.Json;
-
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Utils;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -15,7 +13,8 @@ public static class AgentRunResponseUpdateExtensions
     /// </summary>
     public static AgwMessage? ToAiMessage(this ChatMessage? chatMessage)
     {
-        if (chatMessage == null) return null;
+        if (chatMessage == null)
+            return null;
 
         var contents = ConvertContents(chatMessage.Contents, chatMessage.AdditionalProperties);
 
@@ -33,12 +32,10 @@ public static class AgentRunResponseUpdateExtensions
     /// </summary>
     public static AgwMessage? ToAiMessage(this AgentResponseUpdate? update)
     {
-        if (update == null) return null;
+        if (update == null)
+            return null;
 
-        var contents = ConvertContents(
-            update.Contents,
-            update.AdditionalProperties,
-            preserveWhitespaceOnlyText: true);
+        var contents = ConvertContents(update.Contents, update.AdditionalProperties, preserveWhitespaceOnlyText: true);
 
         return new AgwMessage(
             update.MessageId ?? "",
@@ -52,32 +49,31 @@ public static class AgentRunResponseUpdateExtensions
     private static List<AgwContent> ConvertContents(
         IEnumerable<AIContent> contents,
         AdditionalPropertiesDictionary? messageProperties,
-        bool preserveWhitespaceOnlyText = false)
+        bool preserveWhitespaceOnlyText = false
+    )
     {
         var filteredContents = preserveWhitespaceOnlyText
             ? contents.WithoutEmptyStreamingTextualContent(messageProperties)
             : contents.WithoutBlankTextualContent(messageProperties);
 
-        return filteredContents
-            .Select(ConvertContent)
-            .OfType<AgwContent>()
-            .ToList();
+        return filteredContents.Select(ConvertContent).OfType<AgwContent>().ToList();
     }
 
     private static AgwContent? ConvertContent(AIContent content)
     {
-        var additionalProps = content.AdditionalProperties == null
-            ? new AdditionalPropertiesDictionary()
-            : new AdditionalPropertiesDictionary(content.AdditionalProperties);
-        var citations = content.Annotations?
-            .OfType<CitationAnnotation>()
+        var additionalProps =
+            content.AdditionalProperties == null
+                ? new AdditionalPropertiesDictionary()
+                : new AdditionalPropertiesDictionary(content.AdditionalProperties);
+        var citations = content
+            .Annotations?.OfType<CitationAnnotation>()
             .Where(static citation => citation.Url != null)
             .Select(static citation => new
             {
                 title = citation.Title,
                 url = citation.Url!.ToString(),
                 snippet = citation.Snippet,
-                toolName = citation.ToolName
+                toolName = citation.ToolName,
             })
             .ToArray();
         if (citations?.Length > 0)
@@ -88,15 +84,27 @@ public static class AgentRunResponseUpdateExtensions
         return content switch
         {
             TextContent text => new AgwTextContent { Content = text.Text, AdditionalProperties = additionalProps },
-            TextReasoningContent thinking => new AgwTextReasoningContent { Content = thinking.Text, AdditionalProperties = additionalProps },
+            TextReasoningContent thinking => new AgwTextReasoningContent
+            {
+                Content = thinking.Text,
+                AdditionalProperties = additionalProps,
+            },
             FunctionCallContent call => CreateFunctionCallContent(call, additionalProps),
             FunctionResultContent result => CreateFunctionResultContent(result, additionalProps),
-            ErrorContent error => new AgwErrorContent { Content = error.Message, AdditionalProperties = additionalProps },
-            UsageContent usage => new AgwUsageContent { Content = usage.Details, AdditionalProperties = additionalProps },
+            ErrorContent error => new AgwErrorContent
+            {
+                Content = error.Message,
+                AdditionalProperties = additionalProps,
+            },
+            UsageContent usage => new AgwUsageContent
+            {
+                Content = usage.Details,
+                AdditionalProperties = additionalProps,
+            },
 
             UriContent uriContent => new AgwUriContent(uriContent.Uri, uriContent.MediaType),
             DataContent dataContent => new AgwDataContent(dataContent.Uri, dataContent.MediaType),
-            _ => null
+            _ => null,
         };
     }
 
@@ -108,13 +116,15 @@ public static class AgentRunResponseUpdateExtensions
         return new AgwFunctionCallContent { Content = content, AdditionalProperties = props };
     }
 
-    private static AgwContent CreateFunctionResultContent(FunctionResultContent result, AdditionalPropertiesDictionary props)
+    private static AgwContent CreateFunctionResultContent(
+        FunctionResultContent result,
+        AdditionalPropertiesDictionary props
+    )
     {
         props["callId"] = result.CallId;
         var content = Obj2String(result.Result);
         return new AgwFunctionResultContent { Content = content, AdditionalProperties = props };
     }
-
 
     private static string Obj2String(object? obj)
     {
@@ -123,7 +133,7 @@ public static class AgentRunResponseUpdateExtensions
             null => "",
             string text => text,
             JsonElement { ValueKind: JsonValueKind.String } element => element.GetString() ?? "",
-            _ => JsonUtil.Serialize(obj)
+            _ => JsonUtil.Serialize(obj),
         };
         return content;
     }

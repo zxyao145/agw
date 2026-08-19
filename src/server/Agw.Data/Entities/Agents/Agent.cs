@@ -1,9 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
-
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Tools;
-
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Shared.Data.Entities.Agents;
@@ -48,5 +46,6 @@ public class Agent : BaseEntity, IAggregateRoot
 
     public ICollection<AgentMcpServerRelation> AgentMcpToolServers { get; set; } = new List<AgentMcpServerRelation>();
 
-    public ICollection<AgentConnectionRelation> AgentConnectionRelations { get; set; } = new List<AgentConnectionRelation>();
+    public ICollection<AgentConnectionRelation> AgentConnectionRelations { get; set; } =
+        new List<AgentConnectionRelation>();
 }

@@ -13,5 +13,6 @@ public interface IAgentInstructionsSource
     /// </remarks>
     ValueTask<string?> GetInstructionsAsync(
         AgwInstructionsSourceContext context,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default
+    );
 }

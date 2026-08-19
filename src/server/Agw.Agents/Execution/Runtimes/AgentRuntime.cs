@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Agents.Tools;
@@ -10,7 +9,6 @@ using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -49,7 +47,8 @@ public sealed class AgentRuntime : RuntimeBase
         bool enableSummary = false,
         Guid? summaryModelProviderId = null,
         IAgentTurnSummaryService? summaryService = null,
-        IConversationHistoryWriter? conversationHistoryWriter = null)
+        IConversationHistoryWriter? conversationHistoryWriter = null
+    )
     {
         Agent = agent ?? throw new AgwException(ErrorCodes.InvalidParam, "agent cannot be null.");
         Session = thread ?? throw new AgwException(ErrorCodes.InvalidParam, "thread cannot be null.");
@@ -66,17 +65,21 @@ public sealed class AgentRuntime : RuntimeBase
 
     public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         AgwUserInput input,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default
+    )
     {
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(input.Contents);
 
-        await foreach (var message in ExecuteStreamingAsync(
-                           input.Contents,
-                           input.MessageId,
-                           input.Author,
-                           approvalHandler: null,
-                           cancellationToken))
+        await foreach (
+            var message in ExecuteStreamingAsync(
+                input.Contents,
+                input.MessageId,
+                input.Author,
+                approvalHandler: null,
+                cancellationToken
+            )
+        )
         {
             yield return message;
         }
@@ -84,7 +87,8 @@ public sealed class AgentRuntime : RuntimeBase
 
     public async Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
         AgwUserInput input,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         return await ExecuteAsync(input, approvalHandler: null, cancellationToken);
     }
@@ -92,7 +96,8 @@ public sealed class AgentRuntime : RuntimeBase
     public async Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
         AgwUserInput input,
         IHumanGateApprovalHandler? approvalHandler,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(input.Contents);
@@ -101,22 +106,21 @@ public sealed class AgentRuntime : RuntimeBase
             [AgwMessageUtil.CreateUserChatMessage(input)],
             input,
             approvalHandler,
-            cancellationToken);
+            cancellationToken
+        );
     }
 
     internal async Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
         IReadOnlyList<ChatMessage> requestMessages,
         AgwUserInput summaryInput,
         IHumanGateApprovalHandler? approvalHandler,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         ArgumentNullException.ThrowIfNull(requestMessages);
         ArgumentNullException.ThrowIfNull(summaryInput);
 
-        var turnPersistence = new ToolTurnPersistence(
-            Agent,
-            Session,
-            PersistToolBlockMessagesAsync);
+        var turnPersistence = new ToolTurnPersistence(Agent, Session, PersistToolBlockMessagesAsync);
         Exception? executionFailure = null;
         try
         {
@@ -127,10 +131,11 @@ public sealed class AgentRuntime : RuntimeBase
                 var response = await Agent.RunAsync(
                     currentRequestMessages,
                     Session,
-                    cancellationToken: cancellationToken);
+                    cancellationToken: cancellationToken
+                );
                 turnPersistence.RecordRange(response.Messages);
-                var approvals = response.Messages
-                    .SelectMany(static item => item.Contents)
+                var approvals = response
+                    .Messages.SelectMany(static item => item.Contents)
                     .OfType<ToolApprovalRequestContent>()
                     .ToList();
                 if (approvals.Count == 0)
@@ -144,7 +149,8 @@ public sealed class AgentRuntime : RuntimeBase
                 {
                     throw new AgwException(
                         ErrorCodes.AgentExecutionFailed,
-                        "Tool approval requires an active interactive approval channel.");
+                        "Tool approval requires an active interactive approval channel."
+                    );
                 }
 
                 var approvalResponses = new List<AIContent>(approvals.Count);
@@ -160,21 +166,15 @@ public sealed class AgentRuntime : RuntimeBase
 
             ThrowIfApprovalLimitExceeded(approvalPending);
 
-            var messages = turnPersistence.ResponseMessages
-                .Select(item => item.ToAiMessage())
+            var messages = turnPersistence
+                .ResponseMessages.Select(item => item.ToAiMessage())
                 .OfType<AgwMessage>()
                 .ToList();
-            var stateSnapshots = await turnPersistence
-                .CompleteAsync(CancellationToken.None)
-                .ConfigureAwait(false);
+            var stateSnapshots = await turnPersistence.CompleteAsync(CancellationToken.None).ConfigureAwait(false);
             messages.AddRange(
-                stateSnapshots
-                    .Select(static stateMessage => stateMessage.ToAiMessage())
-                    .OfType<AgwMessage>());
-            var result = await CreateSummaryAsync(
-                    summaryInput,
-                    turnPersistence.ResponseMessages,
-                    cancellationToken)
+                stateSnapshots.Select(static stateMessage => stateMessage.ToAiMessage()).OfType<AgwMessage>()
+            );
+            var result = await CreateSummaryAsync(summaryInput, turnPersistence.ResponseMessages, cancellationToken)
                 .ConfigureAwait(false);
             if (result != null)
             {
@@ -194,15 +194,14 @@ public sealed class AgentRuntime : RuntimeBase
             {
                 try
                 {
-                    await turnPersistence
-                        .CompleteAsync(CancellationToken.None)
-                        .ConfigureAwait(false);
+                    await turnPersistence.CompleteAsync(CancellationToken.None).ConfigureAwait(false);
                 }
                 catch (Exception persistenceException) when (executionFailure != null)
                 {
                     _logger.LogError(
                         persistenceException,
-                        "Failed to persist Tool state while preserving an Agent execution failure.");
+                        "Failed to persist Tool state while preserving an Agent execution failure."
+                    );
                 }
             }
         }
@@ -211,17 +210,21 @@ public sealed class AgentRuntime : RuntimeBase
     public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         AgwUserInput input,
         IHumanGateApprovalHandler? approvalHandler,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default
+    )
     {
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(input.Contents);
 
-        await foreach (var message in ExecuteStreamingAsync(
-                           input.Contents,
-                           input.MessageId,
-                           input.Author,
-                           approvalHandler,
-                           cancellationToken))
+        await foreach (
+            var message in ExecuteStreamingAsync(
+                input.Contents,
+                input.MessageId,
+                input.Author,
+                approvalHandler,
+                cancellationToken
+            )
+        )
         {
             yield return message;
         }
@@ -232,19 +235,23 @@ public sealed class AgentRuntime : RuntimeBase
         string? messageId,
         string? author,
         IHumanGateApprovalHandler? approvalHandler,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default
+    )
     {
         var summaryInput = new AgwUserInput
         {
             MessageId = string.IsNullOrWhiteSpace(messageId) ? Guid.CreateVersion7().ToString() : messageId,
             Author = author,
-            Contents = contents
+            Contents = contents,
         };
-        await foreach (var output in ExecuteStreamingCoreAsync(
-                           [AgwMessageUtil.CreateUserChatMessage(summaryInput)],
-                           summaryInput,
-                           approvalHandler,
-                           cancellationToken))
+        await foreach (
+            var output in ExecuteStreamingCoreAsync(
+                [AgwMessageUtil.CreateUserChatMessage(summaryInput)],
+                summaryInput,
+                approvalHandler,
+                cancellationToken
+            )
+        )
         {
             yield return output;
         }
@@ -257,17 +264,16 @@ public sealed class AgentRuntime : RuntimeBase
         ChatMessage message,
         AgwUserInput summaryInput,
         IHumanGateApprovalHandler approvalHandler,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default
+    )
     {
         ArgumentNullException.ThrowIfNull(message);
         ArgumentNullException.ThrowIfNull(summaryInput);
         ArgumentNullException.ThrowIfNull(approvalHandler);
 
-        await foreach (var output in ExecuteStreamingCoreAsync(
-                           [message],
-                           summaryInput,
-                           approvalHandler,
-                           cancellationToken))
+        await foreach (
+            var output in ExecuteStreamingCoreAsync([message], summaryInput, approvalHandler, cancellationToken)
+        )
         {
             yield return output;
         }
@@ -277,16 +283,15 @@ public sealed class AgentRuntime : RuntimeBase
         IReadOnlyList<ChatMessage> requestMessages,
         AgwUserInput summaryInput,
         IHumanGateApprovalHandler? approvalHandler,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        [EnumeratorCancellation] CancellationToken cancellationToken = default
+    )
     {
         ArgumentNullException.ThrowIfNull(requestMessages);
         ArgumentNullException.ThrowIfNull(summaryInput);
 
-        await foreach (var output in ExecuteStreamingCoreAsync(
-                           requestMessages,
-                           summaryInput,
-                           approvalHandler,
-                           cancellationToken))
+        await foreach (
+            var output in ExecuteStreamingCoreAsync(requestMessages, summaryInput, approvalHandler, cancellationToken)
+        )
         {
             yield return output;
         }
@@ -299,13 +304,11 @@ public sealed class AgentRuntime : RuntimeBase
         IReadOnlyList<ChatMessage> requestMessages,
         AgwUserInput summaryInput,
         IHumanGateApprovalHandler? approvalHandler,
-        [EnumeratorCancellation] CancellationToken cancellationToken)
+        [EnumeratorCancellation] CancellationToken cancellationToken
+    )
     {
         var assistantText = new List<string>();
-        var turnPersistence = new ToolTurnPersistence(
-            Agent,
-            Session,
-            PersistToolBlockMessagesAsync);
+        var turnPersistence = new ToolTurnPersistence(Agent, Session, PersistToolBlockMessagesAsync);
         try
         {
             IEnumerable<ChatMessage> currentRequestMessages = requestMessages;
@@ -313,16 +316,16 @@ public sealed class AgentRuntime : RuntimeBase
             for (var approvalCount = 0; approvalCount < MaxToolApprovalRounds; approvalCount++)
             {
                 var approvals = new List<ToolApprovalRequestContent>();
-                await foreach (var update in Agent.RunStreamingAsync(
-                                   currentRequestMessages,
-                                   Session,
-                                   cancellationToken: cancellationToken))
+                await foreach (
+                    var update in Agent.RunStreamingAsync(
+                        currentRequestMessages,
+                        Session,
+                        cancellationToken: cancellationToken
+                    )
+                )
                 {
                     turnPersistence.Record(ToolStateSnapshots.ToMessage(update));
-                    assistantText.AddRange(
-                        update.Contents
-                            .OfType<TextContent>()
-                            .Select(content => content.Text));
+                    assistantText.AddRange(update.Contents.OfType<TextContent>().Select(content => content.Text));
                     approvals.AddRange(update.Contents.OfType<ToolApprovalRequestContent>());
 
                     var aiMessage = update.ToAiMessage();
@@ -343,7 +346,8 @@ public sealed class AgentRuntime : RuntimeBase
                 {
                     throw new AgwException(
                         ErrorCodes.AgentExecutionFailed,
-                        "Tool approval requires an active interactive approval channel.");
+                        "Tool approval requires an active interactive approval channel."
+                    );
                 }
 
                 var approvalResponses = new List<AIContent>(approvals.Count);
@@ -364,9 +368,7 @@ public sealed class AgentRuntime : RuntimeBase
 
             ThrowIfApprovalLimitExceeded(approvalPending);
 
-            var stateSnapshots = await turnPersistence
-                .CompleteAsync(CancellationToken.None)
-                .ConfigureAwait(false);
+            var stateSnapshots = await turnPersistence.CompleteAsync(CancellationToken.None).ConfigureAwait(false);
             foreach (var stateSnapshot in stateSnapshots)
             {
                 if (stateSnapshot.ToAiMessage() is { } stateMessage)
@@ -376,9 +378,10 @@ public sealed class AgentRuntime : RuntimeBase
             }
 
             var result = await CreateSummaryAsync(
-                input: summaryInput,
-                assistantMessages: [new ChatMessage(ChatRole.Assistant, string.Concat(assistantText))],
-                cancellationToken)
+                    input: summaryInput,
+                    assistantMessages: [new ChatMessage(ChatRole.Assistant, string.Concat(assistantText))],
+                    cancellationToken
+                )
                 .ConfigureAwait(false);
             if (result != null)
             {
@@ -393,15 +396,11 @@ public sealed class AgentRuntime : RuntimeBase
             {
                 try
                 {
-                    await turnPersistence
-                        .CompleteAsync(CancellationToken.None)
-                        .ConfigureAwait(false);
+                    await turnPersistence.CompleteAsync(CancellationToken.None).ConfigureAwait(false);
                 }
                 catch (Exception exception)
                 {
-                    _logger.LogError(
-                        exception,
-                        "Failed to persist Tool state while finalizing an Agent stream.");
+                    _logger.LogError(exception, "Failed to persist Tool state while finalizing an Agent stream.");
                 }
             }
         }
@@ -461,38 +460,30 @@ public sealed class AgentRuntime : RuntimeBase
         {
             throw new AgwException(
                 ErrorCodes.AgentExecutionFailed,
-                $"Tool approval exceeded the limit of {MaxToolApprovalRounds} rounds.");
+                $"Tool approval exceeded the limit of {MaxToolApprovalRounds} rounds."
+            );
         }
     }
 
-    private Task PersistToolBlockMessagesAsync(
-        IReadOnlyList<ChatMessage> messages,
-        CancellationToken cancellationToken)
+    private Task PersistToolBlockMessagesAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken)
     {
         return _conversationHistoryWriter == null || messages.Count == 0
             ? Task.CompletedTask
-            : _conversationHistoryWriter.AppendAsync(
-                _projectId,
-                _contextId,
-                messages,
-                cancellationToken);
+            : _conversationHistoryWriter.AppendAsync(_projectId, _contextId, messages, cancellationToken);
     }
 
     private async Task<AgwMessage?> CreateSummaryAsync(
         AgwUserInput input,
         IReadOnlyList<ChatMessage> assistantMessages,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (!_enableSummary || !_summaryModelProviderId.HasValue || _summaryService == null)
         {
             return null;
         }
 
-        var userText = string.Concat(
-                input.Contents
-                    .OfType<AgwTextContent>()
-                    .Select(content => content.Content))
-            .Trim();
+        var userText = string.Concat(input.Contents.OfType<AgwTextContent>().Select(content => content.Content)).Trim();
         var sourceMessages = new List<ChatMessage>();
         if (!string.IsNullOrWhiteSpace(userText))
         {
@@ -504,20 +495,23 @@ public sealed class AgentRuntime : RuntimeBase
                     .Where(message => message.Role == ChatRole.Assistant)
                     .SelectMany(message => message.Contents)
                     .OfType<TextContent>()
-                    .Select(content => content.Text))
+                    .Select(content => content.Text)
+            )
             .Trim();
         if (!string.IsNullOrWhiteSpace(assistantText))
         {
             sourceMessages.Add(new ChatMessage(ChatRole.Assistant, assistantText));
         }
 
-        var result = await _summaryService.CreateResultAsync(
-            _summaryModelProviderId.Value,
-            sourceMessages,
-            _projectId,
-            _contextId,
-            customInstructions: null,
-            cancellationToken)
+        var result = await _summaryService
+            .CreateResultAsync(
+                _summaryModelProviderId.Value,
+                sourceMessages,
+                _projectId,
+                _contextId,
+                customInstructions: null,
+                cancellationToken
+            )
             .ConfigureAwait(false);
         return result.ToAiMessage();
     }

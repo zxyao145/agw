@@ -23,7 +23,8 @@ internal interface IExecutionEventStream
         int segmentIndex,
         int sequence,
         AgwMessage message,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken
+    );
 
     /// <summary>
     /// 读取指定 cursor 之后的一批消息。
@@ -31,5 +32,6 @@ internal interface IExecutionEventStream
     Task<IReadOnlyList<ExecutionStreamEntry>> ReadAsync(
         Guid executionId,
         string? afterCursor,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken
+    );
 }

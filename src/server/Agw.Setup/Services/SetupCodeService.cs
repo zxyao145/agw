@@ -7,9 +7,7 @@ public sealed class SetupCodeService
     private string? _code;
 
     public SetupCodeService()
-        : this(GenerateCode())
-    {
-    }
+        : this(GenerateCode()) { }
 
     public SetupCodeService(string code)
     {
@@ -27,7 +25,8 @@ public sealed class SetupCodeService
     public bool Consume(string? candidate)
     {
         var current = _code;
-        if (current == null || !string.Equals(current, candidate?.Trim(), StringComparison.OrdinalIgnoreCase)) return false;
+        if (current == null || !string.Equals(current, candidate?.Trim(), StringComparison.OrdinalIgnoreCase))
+            return false;
         return Interlocked.CompareExchange(ref _code, null, current) == current;
     }
 

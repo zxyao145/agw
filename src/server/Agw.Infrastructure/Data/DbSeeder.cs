@@ -1,5 +1,4 @@
 using System.IO.Compression;
-
 using Agw.Agents.ExternalAgents;
 using Agw.Shared;
 using Agw.Shared.Contracts.Projects;
@@ -12,7 +11,6 @@ using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Skills.Contracts.Registration;
-
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -48,14 +46,14 @@ public class DbSeeder
             Id = ProjectDefaults.DefaultBuiltInId,
             Name = ProjectDefaults.DefaultBuiltInName,
             Description = "Default built-in project for general task execution.",
-            Type = ProjectType.DefaultBuiltIn
+            Type = ProjectType.DefaultBuiltIn,
         },
         new Project
         {
             Id = ProjectDefaults.A2AId,
             Name = ProjectDefaults.A2AName,
             Description = "Built-in project for A2A task execution.",
-            Type = ProjectType.DefaultBuiltIn
+            Type = ProjectType.DefaultBuiltIn,
         },
     ];
 
@@ -70,7 +68,8 @@ public class DbSeeder
         ILogger<DbSeeder> logger,
         TimeProvider timeProvider,
         AgwDataPaths dataPaths,
-        IEnumerable<IAgentSkillRegistration>? skillRegistrations = null)
+        IEnumerable<IAgentSkillRegistration>? skillRegistrations = null
+    )
     {
         _context = context;
         _logger = logger;
@@ -112,8 +111,9 @@ public class DbSeeder
     {
         foreach (var definition in BuiltInProjects)
         {
-            var existingProject = await _context.Projects
-                .FirstOrDefaultAsync(project => project.Id == definition.Id || project.Name == definition.Name);
+            var existingProject = await _context.Projects.FirstOrDefaultAsync(project =>
+                project.Id == definition.Id || project.Name == definition.Name
+            );
 
             if (existingProject == null)
             {
@@ -146,7 +146,7 @@ public class DbSeeder
             CreateBy = Constants.AdminUserName,
             CreateTime = now,
             UpdateBy = Constants.AdminUserName,
-            UpdateTime = now
+            UpdateTime = now,
         };
     }
 
@@ -155,8 +155,9 @@ public class DbSeeder
         foreach (var agent in AgentNames.ExternalAgentNames)
         {
             var agentName = agent.Name;
-            var existingAgent = await _context.Agents
-                .FirstOrDefaultAsync(a => a.Name == agentName && a.Type == AgentType.External);
+            var existingAgent = await _context.Agents.FirstOrDefaultAsync(a =>
+                a.Name == agentName && a.Type == AgentType.External
+            );
 
             if (existingAgent != null)
             {
@@ -185,7 +186,7 @@ public class DbSeeder
             CreateBy = Constants.AdminUserName,
             CreateTime = now,
             UpdateBy = Constants.AdminUserName,
-            UpdateTime = now
+            UpdateTime = now,
         };
     }
 
@@ -204,7 +205,7 @@ public class DbSeeder
                 CreateBy = Constants.AdminUserName,
                 CreateTime = now,
                 UpdateBy = Constants.AdminUserName,
-                UpdateTime = now
+                UpdateTime = now,
             },
             new Provider
             {
@@ -216,26 +217,33 @@ public class DbSeeder
                 CreateBy = Constants.AdminUserName,
                 CreateTime = now,
                 UpdateBy = Constants.AdminUserName,
-                UpdateTime = now
+                UpdateTime = now,
             },
         };
         var providers = new Dictionary<ProviderType, Provider>();
 
         foreach (var definition in definitions)
         {
-            var provider = await _context.Providers
-                .FirstOrDefaultAsync(p => p.Name == definition.Name && p.ProviderType == definition.ProviderType);
+            var provider = await _context.Providers.FirstOrDefaultAsync(p =>
+                p.Name == definition.Name && p.ProviderType == definition.ProviderType
+            );
             if (provider == null)
             {
-                _logger.LogInformation("Seeding Provider: {ProviderName} of type {ProviderType}",
-                    definition.Name, definition.ProviderType);
+                _logger.LogInformation(
+                    "Seeding Provider: {ProviderName} of type {ProviderType}",
+                    definition.Name,
+                    definition.ProviderType
+                );
                 provider = definition;
                 _context.Providers.Add(provider);
             }
             else
             {
-                _logger.LogInformation("Provider {ProviderName} of type {ProviderType} already exists, skipping seed",
-                    definition.Name, definition.ProviderType);
+                _logger.LogInformation(
+                    "Provider {ProviderName} of type {ProviderType} already exists, skipping seed",
+                    definition.Name,
+                    definition.ProviderType
+                );
             }
 
             providers[definition.ProviderType] = provider;
@@ -245,11 +253,13 @@ public class DbSeeder
     }
 
     private async Task<ModelProviderRelation> SeedDefaultModelAsync(
-        IReadOnlyDictionary<ProviderType, Provider> providers)
+        IReadOnlyDictionary<ProviderType, Provider> providers
+    )
     {
         var now = _timeProvider.GetUtcNow();
-        var model = await _context.Models
-            .FirstOrDefaultAsync(x => x.Id == DeepSeekModelId || x.Name == "deepseek-v4-pro");
+        var model = await _context.Models.FirstOrDefaultAsync(x =>
+            x.Id == DeepSeekModelId || x.Name == "deepseek-v4-pro"
+        );
         if (model == null)
         {
             _logger.LogInformation("Seeding LLM Model: deepseek-v4-pro");
@@ -262,7 +272,7 @@ public class DbSeeder
                 CreateBy = Constants.AdminUserName,
                 CreateTime = now,
                 UpdateBy = Constants.AdminUserName,
-                UpdateTime = now
+                UpdateTime = now,
             };
             _context.Models.Add(model);
         }
@@ -271,12 +281,14 @@ public class DbSeeder
             DeepSeekOpenAiModelProviderId,
             model.Id,
             providers[ProviderType.OpenAIChatCompletions].Id,
-            now);
+            now
+        );
         await SeedModelProviderRelationAsync(
             DeepSeekAnthropicModelProviderId,
             model.Id,
             providers[ProviderType.Anthropic].Id,
-            now);
+            now
+        );
 
         return openAiRelation;
     }
@@ -285,10 +297,12 @@ public class DbSeeder
         Guid relationId,
         Guid modelId,
         Guid providerId,
-        DateTimeOffset now)
+        DateTimeOffset now
+    )
     {
         var relation = await _context.ModelProviders.FirstOrDefaultAsync(x =>
-            x.Id == relationId || (x.ModelId == modelId && x.ProviderId == providerId));
+            x.Id == relationId || (x.ModelId == modelId && x.ProviderId == providerId)
+        );
         if (relation != null)
         {
             return relation;
@@ -303,7 +317,7 @@ public class DbSeeder
             CreateBy = Constants.AdminUserName,
             CreateTime = now,
             UpdateBy = Constants.AdminUserName,
-            UpdateTime = now
+            UpdateTime = now,
         };
         _context.ModelProviders.Add(relation);
         return relation;
@@ -317,8 +331,9 @@ public class DbSeeder
 
         foreach (var definition in definitions)
         {
-            var agent = await _context.Agents
-                .FirstOrDefaultAsync(x => x.Id == definition.Id || x.Name == definition.Name);
+            var agent = await _context.Agents.FirstOrDefaultAsync(x =>
+                x.Id == definition.Id || x.Name == definition.Name
+            );
             if (agent == null)
             {
                 _logger.LogInformation("Seeding Agent: {AgentName}", definition.Name);
@@ -355,12 +370,12 @@ public class DbSeeder
                     new ToolValue { Definition = new DiffToolDefinition() },
                     new ToolValue { Definition = new GitCloneToolDefinition() },
                     new ToolValue { Definition = new BashToolDefinition() },
-                    new ToolBlockValue { Definition = new FileAccessToolBlockDefinition() }
+                    new ToolBlockValue { Definition = new FileAccessToolBlockDefinition() },
                 ],
                 CreateBy = Constants.AdminUserName,
                 CreateTime = now,
                 UpdateBy = Constants.AdminUserName,
-                UpdateTime = now
+                UpdateTime = now,
             },
             new Agent
             {
@@ -368,8 +383,7 @@ public class DbSeeder
                 DisplayName = "地址提取器",
                 Name = "location-extractor",
                 Description = "中国地理地址 POI 解析助手",
-                SystemPrompt =
-                    """
+                SystemPrompt = """
                     你是一个中国地理地址 POI 解析助手。
 
                     任务：
@@ -482,20 +496,19 @@ public class DbSeeder
                 [
                     new ToolValue { Definition = new WebFetchToolDefinition() },
                     new ToolValue { Definition = new WebSearchToolDefinition() },
-                    new ToolBlockValue { Definition = new TodoToolBlockDefinition() }
+                    new ToolBlockValue { Definition = new TodoToolBlockDefinition() },
                 ],
                 CreateBy = Constants.AdminUserName,
                 CreateTime = now,
                 UpdateBy = Constants.AdminUserName,
-                UpdateTime = now
+                UpdateTime = now,
             },
             new Agent
             {
                 Id = AmapPoiSearchAgentId,
                 DisplayName = "高德地图关键词搜索",
                 Name = "amap-poi-search",
-                SystemPrompt =
-                    """
+                SystemPrompt = """
                     根据用户输入的城市名 city 和关键字 address，使用高德地图关键词搜索能力，搜索相关的 poi。
 
                     如果搜索成功，则返回其中的第一个 poi 数据的信息包括：
@@ -519,15 +532,12 @@ public class DbSeeder
                 CreateBy = Constants.AdminUserName,
                 CreateTime = now,
                 UpdateBy = Constants.AdminUserName,
-                UpdateTime = now
-            }
+                UpdateTime = now,
+            },
         ];
     }
 
-    private static void BackfillDefaultAgentTools(
-        Agent agent,
-        Agent definition,
-        DateTimeOffset now)
+    private static void BackfillDefaultAgentTools(Agent agent, Agent definition, DateTimeOffset now)
     {
         if (agent.Id != definition.Id)
         {
@@ -540,13 +550,10 @@ public class DbSeeder
             [
                 new ToolValue { Definition = new DiffToolDefinition() },
                 new ToolValue { Definition = new GitCloneToolDefinition() },
-                new ToolValue { Definition = new BashToolDefinition() }
+                new ToolValue { Definition = new BashToolDefinition() },
             ],
-            var id when id == LocationExtractorAgentId =>
-            [
-                new ToolValue { Definition = new WebFetchToolDefinition() }
-            ],
-            _ => null
+            var id when id == LocationExtractorAgentId => [new ToolValue { Definition = new WebFetchToolDefinition() }],
+            _ => null,
         };
         if (obsoleteTools == null || !agent.Tools.SequenceEqual(obsoleteTools))
         {
@@ -560,8 +567,9 @@ public class DbSeeder
 
     private async Task<Skill> SeedDefaultSkillAsync()
     {
-        var skill = await _context.Skills
-            .FirstOrDefaultAsync(x => x.Id == XhsExploreSkillId || x.Name == DefaultSkillName);
+        var skill = await _context.Skills.FirstOrDefaultAsync(x =>
+            x.Id == XhsExploreSkillId || x.Name == DefaultSkillName
+        );
         if (skill == null)
         {
             var now = _timeProvider.GetUtcNow();
@@ -576,15 +584,19 @@ public class DbSeeder
                 CreateBy = Constants.AdminUserName,
                 CreateTime = now,
                 UpdateBy = Constants.AdminUserName,
-                UpdateTime = now
+                UpdateTime = now,
             };
             _context.Skills.Add(skill);
         }
-        else if (skill.Id == XhsExploreSkillId &&
-                 (skill.Name != DefaultSkillName ||
-                  skill.Kind != SkillKind.Local ||
-                  skill.ContentPath != DefaultSkillContentPath ||
-                  skill.RemoteUrl != null))
+        else if (
+            skill.Id == XhsExploreSkillId
+            && (
+                skill.Name != DefaultSkillName
+                || skill.Kind != SkillKind.Local
+                || skill.ContentPath != DefaultSkillContentPath
+                || skill.RemoteUrl != null
+            )
+        )
         {
             skill.Name = DefaultSkillName;
             skill.Kind = SkillKind.Local;
@@ -602,55 +614,60 @@ public class DbSeeder
     {
         foreach (var registration in _skillRegistrations)
         {
-            var existingById = await _context.Skills
-                .FirstOrDefaultAsync(skill => skill.Id == registration.Id);
+            var existingById = await _context.Skills.FirstOrDefaultAsync(skill => skill.Id == registration.Id);
             if (existingById == null)
             {
-                var nameConflict = await _context.Skills
-                    .FirstOrDefaultAsync(skill => skill.Name == registration.Name);
+                var nameConflict = await _context.Skills.FirstOrDefaultAsync(skill => skill.Name == registration.Name);
                 if (nameConflict != null)
                 {
                     _logger.LogWarning(
                         "Built-in class skill {SkillName} was not seeded because the name is already used by skill {SkillId}",
                         registration.Name,
-                        nameConflict.Id);
+                        nameConflict.Id
+                    );
                     continue;
                 }
 
                 var now = _timeProvider.GetUtcNow();
-                _context.Skills.Add(new Skill
-                {
-                    Id = registration.Id,
-                    Name = registration.Name,
-                    Description = registration.Description,
-                    Kind = SkillKind.BuiltIn,
-                    ContentPath = string.Empty,
-                    RemoteUrl = null,
-                    CreateBy = Constants.AdminUserName,
-                    CreateTime = now,
-                    UpdateBy = Constants.AdminUserName,
-                    UpdateTime = now,
-                });
+                _context.Skills.Add(
+                    new Skill
+                    {
+                        Id = registration.Id,
+                        Name = registration.Name,
+                        Description = registration.Description,
+                        Kind = SkillKind.BuiltIn,
+                        ContentPath = string.Empty,
+                        RemoteUrl = null,
+                        CreateBy = Constants.AdminUserName,
+                        CreateTime = now,
+                        UpdateBy = Constants.AdminUserName,
+                        UpdateTime = now,
+                    }
+                );
                 continue;
             }
 
-            if (existingById.Name == registration.Name &&
-                existingById.Description == registration.Description &&
-                existingById.Kind == SkillKind.BuiltIn &&
-                existingById.RemoteUrl == null &&
-                string.IsNullOrEmpty(existingById.ContentPath))
+            if (
+                existingById.Name == registration.Name
+                && existingById.Description == registration.Description
+                && existingById.Kind == SkillKind.BuiltIn
+                && existingById.RemoteUrl == null
+                && string.IsNullOrEmpty(existingById.ContentPath)
+            )
             {
                 continue;
             }
 
-            var conflictingName = await _context.Skills.AnyAsync(
-                skill => skill.Id != registration.Id && skill.Name == registration.Name);
+            var conflictingName = await _context.Skills.AnyAsync(skill =>
+                skill.Id != registration.Id && skill.Name == registration.Name
+            );
             if (conflictingName)
             {
                 _logger.LogWarning(
                     "Built-in class skill {SkillId} metadata was not updated because name {SkillName} is already in use",
                     registration.Id,
-                    registration.Name);
+                    registration.Name
+                );
                 continue;
             }
 
@@ -671,17 +688,14 @@ public class DbSeeder
             return;
         }
 
-        _context.AgentSkillRelations.Add(new AgentSkillRelation
-        {
-            AgentId = agentId,
-            SkillId = skillId
-        });
+        _context.AgentSkillRelations.Add(new AgentSkillRelation { AgentId = agentId, SkillId = skillId });
     }
 
     private async Task SeedDefaultAgentflowAsync(IReadOnlyDictionary<string, Agent> agents)
     {
         var existingAgentflow = await _context.Agentflows.FirstOrDefaultAsync(x =>
-            x.Id == XiaohongshuAgentflowId || x.Name == "Xiaohongshu Address Extraction");
+            x.Id == XiaohongshuAgentflowId || x.Name == "Xiaohongshu Address Extraction"
+        );
         if (existingAgentflow != null)
         {
             return;
@@ -692,8 +706,7 @@ public class DbSeeder
         {
             Id = XiaohongshuAgentflowId,
             Name = "Xiaohongshu Address Extraction",
-            Description =
-                """
+            Description = """
                 Follow the steps provided by the user for the Xiaohongshu Post link:
 
                 1. Call Xiaohongshu parsing skill to obtain the article title, body, and related content.
@@ -725,7 +738,7 @@ public class DbSeeder
                     CreateBy = Constants.AdminUserName,
                     CreateTime = now,
                     UpdateBy = Constants.AdminUserName,
-                    UpdateTime = now
+                    UpdateTime = now,
                 },
                 new AgentflowNode
                 {
@@ -734,8 +747,7 @@ public class DbSeeder
                     RelateId = agents["general-agent"].Id,
                     Name = "general-agent",
                     PositionJson = "{\"x\":332,\"y\":12}",
-                    Instructions =
-                        """
+                    Instructions = """
                         从文字中识别出相关的 http 或 https 连接地址。
 
                         然后从通过识别出来的 http 或 https 的地址，获取小红书的内容详情。
@@ -745,7 +757,7 @@ public class DbSeeder
                     CreateBy = Constants.AdminUserName,
                     CreateTime = now,
                     UpdateBy = Constants.AdminUserName,
-                    UpdateTime = now
+                    UpdateTime = now,
                 },
                 new AgentflowNode
                 {
@@ -757,7 +769,7 @@ public class DbSeeder
                     CreateBy = Constants.AdminUserName,
                     CreateTime = now,
                     UpdateBy = Constants.AdminUserName,
-                    UpdateTime = now
+                    UpdateTime = now,
                 },
                 new AgentflowNode
                 {
@@ -769,8 +781,8 @@ public class DbSeeder
                     CreateBy = Constants.AdminUserName,
                     CreateTime = now,
                     UpdateBy = Constants.AdminUserName,
-                    UpdateTime = now
-                }
+                    UpdateTime = now,
+                },
             ],
             Edges =
             [
@@ -783,7 +795,7 @@ public class DbSeeder
                     CreateBy = Constants.AdminUserName,
                     CreateTime = now,
                     UpdateBy = Constants.AdminUserName,
-                    UpdateTime = now
+                    UpdateTime = now,
                 },
                 new AgentflowEdge
                 {
@@ -794,7 +806,7 @@ public class DbSeeder
                     CreateBy = Constants.AdminUserName,
                     CreateTime = now,
                     UpdateBy = Constants.AdminUserName,
-                    UpdateTime = now
+                    UpdateTime = now,
                 },
                 new AgentflowEdge
                 {
@@ -805,9 +817,9 @@ public class DbSeeder
                     CreateBy = Constants.AdminUserName,
                     CreateTime = now,
                     UpdateBy = Constants.AdminUserName,
-                    UpdateTime = now
-                }
-            ]
+                    UpdateTime = now,
+                },
+            ],
         };
 
         _context.Agentflows.Add(agentflow);
@@ -819,16 +831,15 @@ public class DbSeeder
         if (!Directory.Exists(targetDirectory))
         {
             Directory.CreateDirectory(_dataPaths.TempDirectory);
-            var extractionRoot = Path.Combine(
-                _dataPaths.TempDirectory,
-                $"agw-default-skill-{Guid.CreateVersion7():N}");
+            var extractionRoot = Path.Combine(_dataPaths.TempDirectory, $"agw-default-skill-{Guid.CreateVersion7():N}");
             try
             {
-                using var archiveStream = typeof(DbSeeder).Assembly
-                    .GetManifestResourceStream(DefaultSkillResourceName)
+                using var archiveStream =
+                    typeof(DbSeeder).Assembly.GetManifestResourceStream(DefaultSkillResourceName)
                     ?? throw new AgwException(
                         ErrorCodes.CannotCreateInstance,
-                        $"Embedded skill resource '{DefaultSkillResourceName}' was not found.");
+                        $"Embedded skill resource '{DefaultSkillResourceName}' was not found."
+                    );
                 ZipFile.ExtractToDirectory(archiveStream, extractionRoot);
 
                 var extractedDirectory = Path.Combine(extractionRoot, DefaultSkillName);
@@ -836,7 +847,8 @@ public class DbSeeder
                 {
                     throw new AgwException(
                         ErrorCodes.CannotCreateInstance,
-                        $"Embedded skill resource does not contain '{DefaultSkillName}'.");
+                        $"Embedded skill resource does not contain '{DefaultSkillName}'."
+                    );
                 }
 
                 Directory.CreateDirectory(_dataPaths.SkillsDirectory);
@@ -862,7 +874,8 @@ public class DbSeeder
         {
             throw new AgwException(
                 ErrorCodes.CannotCreateInstance,
-                "Embedded skill SKILL.md does not contain a name field.");
+                "Embedded skill SKILL.md does not contain a name field."
+            );
         }
 
         if (lines[nameLineIndex] == $"name: {DefaultSkillName}")

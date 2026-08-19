@@ -1,9 +1,7 @@
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Utils;
-
 using ClaudeCodeSdk.MAF;
 using ClaudeCodeSdk.Types;
-
 using OpenAI.CodexSdk.MAF;
 
 namespace Agw.Agents.ExternalAgents;
@@ -19,32 +17,34 @@ public class AgentNames
     public static readonly Guid GithubCopilotId = Guid.Parse("11111111-1111-1111-2222-000000000003");
 
     public static IReadOnlyList<Agent> ExternalAgentNames { get; } =
-        [
-            new Agent
-            {
-                Id = ClaudeCodeId,
-                DisplayName = "Claude Code",
-                Name = ClaudeCode,
-                Description = "External agent for Claude Code integration with AI-powered coding assistance",
-                Type = AgentType.External,
-                Extra = JsonUtil.Serialize(new ClaudeCodeAIAgentOptions(){ PermissionMode = PermissionMode.bypassPermissions, }),
-            },
-            new Agent
-            {
-                Id = CodexId,
-                DisplayName = "OpenAI Codex",
-                Name = Codex,
-                Description = "External agent for OpenAI Codex integration",
-                Type = AgentType.External,
-                Extra = JsonUtil.Serialize(new CodexAIAgentOptions()),
-            },
-            //new Agent
-            //{
-            //    Id = GithubCopilotId,
-            //    DisplayName = "Github Copilot",
-            //    Name = GithubCopilot,
-            //    Description = "External agent for Github Copilot integration",
-            //    Type = AgentType.External,
-            //}
-        ];
+    [
+        new Agent
+        {
+            Id = ClaudeCodeId,
+            DisplayName = "Claude Code",
+            Name = ClaudeCode,
+            Description = "External agent for Claude Code integration with AI-powered coding assistance",
+            Type = AgentType.External,
+            Extra = JsonUtil.Serialize(
+                new ClaudeCodeAIAgentOptions() { PermissionMode = PermissionMode.bypassPermissions }
+            ),
+        },
+        new Agent
+        {
+            Id = CodexId,
+            DisplayName = "OpenAI Codex",
+            Name = Codex,
+            Description = "External agent for OpenAI Codex integration",
+            Type = AgentType.External,
+            Extra = JsonUtil.Serialize(new CodexAIAgentOptions()),
+        },
+        //new Agent
+        //{
+        //    Id = GithubCopilotId,
+        //    DisplayName = "Github Copilot",
+        //    Name = GithubCopilot,
+        //    Description = "External agent for Github Copilot integration",
+        //    Type = AgentType.External,
+        //}
+    ];
 }

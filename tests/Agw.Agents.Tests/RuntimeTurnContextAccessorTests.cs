@@ -70,12 +70,12 @@ public class RuntimeTurnContextAccessorTests
             new ExecutionTarget(Guid.CreateVersion7(), AgentRuntimeType.Agent),
             userName,
             "/workspace",
-            new NullSink());
+            new NullSink()
+        );
     }
 
     private sealed class NullSink : IExecutionMessageSink
     {
-        public ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken) =>
-            ValueTask.CompletedTask;
+        public ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken) => ValueTask.CompletedTask;
     }
 }

@@ -1,6 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
-
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Shared.AgwMsgVm;
@@ -12,9 +11,7 @@ public class ExecCommand : AgentRunCommand
 {
     [JsonConstructor]
     [SetsRequiredMembers]
-    public ExecCommand(
-        AgentRuntimeType agentType,
-        AgwUserInput input)
+    public ExecCommand(AgentRuntimeType agentType, AgwUserInput input)
     {
         AgentType = agentType;
         Input = input;

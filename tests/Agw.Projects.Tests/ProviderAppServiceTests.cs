@@ -7,7 +7,6 @@ using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -32,15 +31,17 @@ public class ProviderAppServiceTests
         await using (var setupContext = new AgwDbContext(options))
         {
             await setupContext.Database.EnsureCreatedAsync(cancellationToken);
-            setupContext.Models.Add(new AgwAiModel
-            {
-                Id = Guid.CreateVersion7(),
-                Name = "existing-model",
-                MaxContextWindowTokens = 8192,
-                MaxOutputTokens = 2048,
-                CreateBy = "seed",
-                CreateTime = TimeProvider.System.GetUtcNow()
-            });
+            setupContext.Models.Add(
+                new AgwAiModel
+                {
+                    Id = Guid.CreateVersion7(),
+                    Name = "existing-model",
+                    MaxContextWindowTokens = 8192,
+                    MaxOutputTokens = 2048,
+                    CreateBy = "seed",
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                }
+            );
             await setupContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -54,19 +55,17 @@ public class ProviderAppServiceTests
                     Description: null,
                     Endpoint: "https://example.test/v1",
                     AuthConfigs: null,
-                    ModelNames: [" existing-model ", "new-model", "new-model"]),
-                "tester");
+                    ModelNames: [" existing-model ", "new-model", "new-model"]
+                ),
+                "tester"
+            );
         }
 
         await using var verifyContext = new AgwDbContext(options);
         var provider = await verifyContext.Providers.SingleAsync(cancellationToken);
-        var relatedModels = await verifyContext.ModelProviders
-            .Where(relation => relation.ProviderId == provider.Id)
-            .Join(
-                verifyContext.Models,
-                relation => relation.ModelId,
-                model => model.Id,
-                (_, model) => model)
+        var relatedModels = await verifyContext
+            .ModelProviders.Where(relation => relation.ProviderId == provider.Id)
+            .Join(verifyContext.Models, relation => relation.ModelId, model => model.Id, (_, model) => model)
             .OrderBy(model => model.Name)
             .ToListAsync(cancellationToken);
 
@@ -86,7 +85,8 @@ public class ProviderAppServiceTests
                 Assert.Equal(0, relation.CacheRead);
                 Assert.Equal(0, relation.CacheWrite);
                 Assert.Equal(0, relation.RpsLimit);
-            });
+            }
+        );
     }
 
     [Fact]
@@ -108,7 +108,8 @@ public class ProviderAppServiceTests
             setupContext.Providers.Add(CreateProvider(providerId));
             setupContext.ModelProviders.AddRange(
                 CreateRelation(providerId, keepModel.Id),
-                CreateRelation(providerId, removeModel.Id));
+                CreateRelation(providerId, removeModel.Id)
+            );
             await setupContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -123,18 +124,16 @@ public class ProviderAppServiceTests
                     Description: "updated",
                     Endpoint: "https://example.test/v1",
                     AuthConfigs: null,
-                    ModelNames: ["keep-model", "add-model"]),
-                "tester");
+                    ModelNames: ["keep-model", "add-model"]
+                ),
+                "tester"
+            );
         }
 
         await using var verifyContext = new AgwDbContext(options);
-        var relatedNames = await verifyContext.ModelProviders
-            .Where(relation => relation.ProviderId == providerId)
-            .Join(
-                verifyContext.Models,
-                relation => relation.ModelId,
-                model => model.Id,
-                (_, model) => model.Name)
+        var relatedNames = await verifyContext
+            .ModelProviders.Where(relation => relation.ProviderId == providerId)
+            .Join(verifyContext.Models, relation => relation.ModelId, model => model.Id, (_, model) => model.Name)
             .OrderBy(name => name)
             .ToListAsync(cancellationToken);
 
@@ -171,14 +170,19 @@ public class ProviderAppServiceTests
                     Description: "updated",
                     Endpoint: "https://example.test/v1",
                     AuthConfigs: null,
-                    ModelNames: null),
-                "tester");
+                    ModelNames: null
+                ),
+                "tester"
+            );
         }
 
         await using var verifyContext = new AgwDbContext(options);
-        Assert.True(await verifyContext.ModelProviders.AnyAsync(
-            relation => relation.ProviderId == providerId && relation.ModelId == model.Id,
-            cancellationToken));
+        Assert.True(
+            await verifyContext.ModelProviders.AnyAsync(
+                relation => relation.ProviderId == providerId && relation.ModelId == model.Id,
+                cancellationToken
+            )
+        );
     }
 
     [Theory]
@@ -203,30 +207,34 @@ public class ProviderAppServiceTests
             setupContext.ModelProviders.Add(relation);
             if (usage == "agentflow-summary")
             {
-                setupContext.Agentflows.Add(new Agentflow
-                {
-                    Id = Guid.CreateVersion7(),
-                    Name = "flow",
-                    SystemPrompt = string.Empty,
-                    SummaryModelProviderId = relation.Id,
-                    CreateBy = "seed",
-                    CreateTime = TimeProvider.System.GetUtcNow()
-                });
+                setupContext.Agentflows.Add(
+                    new Agentflow
+                    {
+                        Id = Guid.CreateVersion7(),
+                        Name = "flow",
+                        SystemPrompt = string.Empty,
+                        SummaryModelProviderId = relation.Id,
+                        CreateBy = "seed",
+                        CreateTime = TimeProvider.System.GetUtcNow(),
+                    }
+                );
             }
             else
             {
-                setupContext.Agents.Add(new Agent
-                {
-                    Id = Guid.CreateVersion7(),
-                    DisplayName = "Agent",
-                    Name = $"agent-{usage}",
-                    Description = string.Empty,
-                    SystemPrompt = string.Empty,
-                    ModelProviderId = usage == "agent-model" ? relation.Id : null,
-                    SummaryModelProviderId = usage == "agent-summary" ? relation.Id : null,
-                    CreateBy = "seed",
-                    CreateTime = TimeProvider.System.GetUtcNow()
-                });
+                setupContext.Agents.Add(
+                    new Agent
+                    {
+                        Id = Guid.CreateVersion7(),
+                        DisplayName = "Agent",
+                        Name = $"agent-{usage}",
+                        Description = string.Empty,
+                        SystemPrompt = string.Empty,
+                        ModelProviderId = usage == "agent-model" ? relation.Id : null,
+                        SummaryModelProviderId = usage == "agent-summary" ? relation.Id : null,
+                        CreateBy = "seed",
+                        CreateTime = TimeProvider.System.GetUtcNow(),
+                    }
+                );
             }
 
             await setupContext.SaveChangesAsync(cancellationToken);
@@ -235,37 +243,40 @@ public class ProviderAppServiceTests
         await using (var updateContext = new AgwDbContext(options))
         {
             var service = CreateService(updateContext);
-            var exception = await Assert.ThrowsAsync<AgwException>(() => service.UpdateAsync(
-                providerId,
-                new ProviderUpdateRequest(
-                    Name: "Changed",
-                    ProviderType: ProviderType.OpenAIChatCompletions,
-                    Description: "changed",
-                    Endpoint: "https://changed.test/v1",
-                    AuthConfigs:
-                    [
-                        new ProviderAuthConfigRequest(
-                            ProviderAuthType.ApiKey,
-                            ApiKey: "new-key",
-                            EnvKey: null,
-                            Enable: true)
-                    ],
-                    ModelNames: []),
-                "tester"));
+            var exception = await Assert.ThrowsAsync<AgwException>(() =>
+                service.UpdateAsync(
+                    providerId,
+                    new ProviderUpdateRequest(
+                        Name: "Changed",
+                        ProviderType: ProviderType.OpenAIChatCompletions,
+                        Description: "changed",
+                        Endpoint: "https://changed.test/v1",
+                        AuthConfigs:
+                        [
+                            new ProviderAuthConfigRequest(
+                                ProviderAuthType.ApiKey,
+                                ApiKey: "new-key",
+                                EnvKey: null,
+                                Enable: true
+                            ),
+                        ],
+                        ModelNames: []
+                    ),
+                    "tester"
+                )
+            );
 
             Assert.Equal(ErrorCodes.ModelProviderInUse.Code, exception.Code);
         }
 
         await using var verifyContext = new AgwDbContext(options);
-        var provider = await verifyContext.Providers
-            .Include(item => item.AuthConfigs)
+        var provider = await verifyContext
+            .Providers.Include(item => item.AuthConfigs)
             .SingleAsync(item => item.Id == providerId, cancellationToken);
         Assert.Equal("OpenAI", provider.Name);
         Assert.Equal("Original description", provider.Description);
         Assert.Empty(provider.AuthConfigs);
-        Assert.True(await verifyContext.ModelProviders.AnyAsync(
-            item => item.Id == relation.Id,
-            cancellationToken));
+        Assert.True(await verifyContext.ModelProviders.AnyAsync(item => item.Id == relation.Id, cancellationToken));
         Assert.Single(await verifyContext.Models.ToListAsync(cancellationToken));
     }
 
@@ -290,28 +301,30 @@ public class ProviderAppServiceTests
         var providerId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
-            seedContext.Providers.Add(new Provider
-            {
-                Id = providerId,
-                Name = "OpenAI",
-                ProviderType = ProviderType.OpenAIChatCompletions,
-                Endpoint = "https://api.openai.com/v1",
-                CreateBy = "seed",
-                CreateTime = TimeProvider.System.GetUtcNow(),
-                AuthConfigs =
-                [
-                    new ProviderAuthConfig
-                    {
-                        Id = Guid.CreateVersion7(),
-                        ProviderId = providerId,
-                        AuthType = ProviderAuthType.ApiKey,
-                        ApiKey = "test-key",
-                        Enable = true,
-                        CreateBy = "seed",
-                        CreateTime = TimeProvider.System.GetUtcNow()
-                    }
-                ]
-            });
+            seedContext.Providers.Add(
+                new Provider
+                {
+                    Id = providerId,
+                    Name = "OpenAI",
+                    ProviderType = ProviderType.OpenAIChatCompletions,
+                    Endpoint = "https://api.openai.com/v1",
+                    CreateBy = "seed",
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                    AuthConfigs =
+                    [
+                        new ProviderAuthConfig
+                        {
+                            Id = Guid.CreateVersion7(),
+                            ProviderId = providerId,
+                            AuthType = ProviderAuthType.ApiKey,
+                            ApiKey = "test-key",
+                            Enable = true,
+                            CreateBy = "seed",
+                            CreateTime = TimeProvider.System.GetUtcNow(),
+                        },
+                    ],
+                }
+            );
 
             await seedContext.SaveChangesAsync(cancellationToken);
         }
@@ -333,7 +346,9 @@ public class ProviderAppServiceTests
 
         await using var verifyContext = new AgwDbContext(options);
         Assert.False(await verifyContext.Providers.AnyAsync(x => x.Id == providerId, cancellationToken));
-        Assert.False(await verifyContext.ProviderAuthConfigs.AnyAsync(x => x.ProviderId == providerId, cancellationToken));
+        Assert.False(
+            await verifyContext.ProviderAuthConfigs.AnyAsync(x => x.ProviderId == providerId, cancellationToken)
+        );
     }
 
     [Fact]
@@ -357,29 +372,31 @@ public class ProviderAppServiceTests
         var providerId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
-            seedContext.Providers.Add(new Provider
-            {
-                Id = providerId,
-                Name = "OpenAI",
-                ProviderType = ProviderType.OpenAIChatCompletions,
-                Endpoint = "https://api.openai.com/v1",
-                Description = "Original description",
-                CreateBy = "seed",
-                CreateTime = TimeProvider.System.GetUtcNow(),
-                AuthConfigs =
-                [
-                    new ProviderAuthConfig
-                    {
-                        Id = Guid.CreateVersion7(),
-                        ProviderId = providerId,
-                        AuthType = ProviderAuthType.ApiKey,
-                        ApiKey = "old-key",
-                        Enable = true,
-                        CreateBy = "seed",
-                        CreateTime = TimeProvider.System.GetUtcNow()
-                    }
-                ]
-            });
+            seedContext.Providers.Add(
+                new Provider
+                {
+                    Id = providerId,
+                    Name = "OpenAI",
+                    ProviderType = ProviderType.OpenAIChatCompletions,
+                    Endpoint = "https://api.openai.com/v1",
+                    Description = "Original description",
+                    CreateBy = "seed",
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                    AuthConfigs =
+                    [
+                        new ProviderAuthConfig
+                        {
+                            Id = Guid.CreateVersion7(),
+                            ProviderId = providerId,
+                            AuthType = ProviderAuthType.ApiKey,
+                            ApiKey = "old-key",
+                            Enable = true,
+                            CreateBy = "seed",
+                            CreateTime = TimeProvider.System.GetUtcNow(),
+                        },
+                    ],
+                }
+            );
 
             await seedContext.SaveChangesAsync(cancellationToken);
         }
@@ -401,16 +418,19 @@ public class ProviderAppServiceTests
                             ProviderAuthType.ApiKey,
                             ApiKey: "new-key",
                             EnvKey: null,
-                            Enable: true)
-                    ]),
-                "tester");
+                            Enable: true
+                        ),
+                    ]
+                ),
+                "tester"
+            );
 
             Assert.NotNull(updated);
         }
 
         await using var verifyContext = new AgwDbContext(options);
-        var provider = await verifyContext.Providers
-            .Include(x => x.AuthConfigs)
+        var provider = await verifyContext
+            .Providers.Include(x => x.AuthConfigs)
             .SingleAsync(x => x.Id == providerId, cancellationToken);
 
         var authConfig = Assert.Single(provider.AuthConfigs);
@@ -430,44 +450,43 @@ public class ProviderAppServiceTests
             new ProviderDomainService(TimeProvider.System),
             new ModelDomainService(TimeProvider.System),
             new ModelProviderDomainService(TimeProvider.System),
-            new ModelProviderUsageGuard(
-                new EfRepository<Agent>(dbContext),
-                new EfRepository<Agentflow>(dbContext)));
+            new ModelProviderUsageGuard(new EfRepository<Agent>(dbContext), new EfRepository<Agentflow>(dbContext))
+        );
     }
 
     private static DbContextOptions<AgwDbContext> CreateOptions(SqliteConnection connection) =>
-        new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(connection)
-            .UseSnakeCaseNamingConvention()
-            .Options;
+        new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).UseSnakeCaseNamingConvention().Options;
 
-    private static Provider CreateProvider(Guid providerId) => new()
-    {
-        Id = providerId,
-        Name = "OpenAI",
-        ProviderType = ProviderType.OpenAIChatCompletions,
-        Endpoint = "https://example.test/v1",
-        Description = "Original description",
-        CreateBy = "seed",
-        CreateTime = TimeProvider.System.GetUtcNow()
-    };
+    private static Provider CreateProvider(Guid providerId) =>
+        new()
+        {
+            Id = providerId,
+            Name = "OpenAI",
+            ProviderType = ProviderType.OpenAIChatCompletions,
+            Endpoint = "https://example.test/v1",
+            Description = "Original description",
+            CreateBy = "seed",
+            CreateTime = TimeProvider.System.GetUtcNow(),
+        };
 
-    private static AgwAiModel CreateModel(string name) => new()
-    {
-        Id = Guid.CreateVersion7(),
-        Name = name,
-        MaxContextWindowTokens = AgwAiModel.DefaultMaxContextWindowTokens,
-        MaxOutputTokens = AgwAiModel.DefaultMaxOutputTokens,
-        CreateBy = "seed",
-        CreateTime = TimeProvider.System.GetUtcNow()
-    };
+    private static AgwAiModel CreateModel(string name) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            Name = name,
+            MaxContextWindowTokens = AgwAiModel.DefaultMaxContextWindowTokens,
+            MaxOutputTokens = AgwAiModel.DefaultMaxOutputTokens,
+            CreateBy = "seed",
+            CreateTime = TimeProvider.System.GetUtcNow(),
+        };
 
-    private static ModelProviderRelation CreateRelation(Guid providerId, Guid modelId) => new()
-    {
-        Id = Guid.CreateVersion7(),
-        ProviderId = providerId,
-        ModelId = modelId,
-        CreateBy = "seed",
-        CreateTime = TimeProvider.System.GetUtcNow()
-    };
+    private static ModelProviderRelation CreateRelation(Guid providerId, Guid modelId) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            ProviderId = providerId,
+            ModelId = modelId,
+            CreateBy = "seed",
+            CreateTime = TimeProvider.System.GetUtcNow(),
+        };
 }

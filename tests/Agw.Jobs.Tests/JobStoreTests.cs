@@ -1,10 +1,8 @@
 using System.Reflection;
-
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Testing;
-
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -46,11 +44,13 @@ public class JobStoreTests
             var parameters = method!.GetParameters().Select(parameter => parameter.Name ?? string.Empty).ToArray();
             Assert.Equal(
                 ["jobId", "taskId", "startTime", "endTime", "success", "attempt", "errorMessage", "cancellationToken"],
-                parameters);
+                parameters
+            );
 
             var invokeResult = method.Invoke(
                 store,
-                [jobId, taskId, startTime, endTime, true, 1, null, cancellationToken]);
+                [jobId, taskId, startTime, endTime, true, 1, null, cancellationToken]
+            );
 
             var task = Assert.IsAssignableFrom<Task>(invokeResult);
             await task;

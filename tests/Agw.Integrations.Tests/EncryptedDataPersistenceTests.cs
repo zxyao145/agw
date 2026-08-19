@@ -1,6 +1,5 @@
 using System.Reflection;
 using System.Text.Json;
-
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Shared.Data.Encryption;
@@ -10,7 +9,6 @@ using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
-
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -30,7 +28,7 @@ public class EncryptedDataPersistenceTests
         {
             Id = Guid.CreateVersion7(),
             ProviderId = Guid.CreateVersion7(),
-            ApiKey = "provider-secret"
+            ApiKey = "provider-secret",
         };
         var mcpServer = new McpServer
         {
@@ -39,22 +37,22 @@ public class EncryptedDataPersistenceTests
             Headers = new Dictionary<string, string>
             {
                 ["Authorization"] = "Bearer header-secret",
-                ["X-Api-Key"] = "header-api-key"
-            }
+                ["X-Api-Key"] = "header-api-key",
+            },
         };
         var pluginCredential = new PluginInstallationCredential
         {
             Id = Guid.CreateVersion7(),
             PluginInstallationId = Guid.CreateVersion7(),
             Slot = "client-secret",
-            Value = "plugin-secret"
+            Value = "plugin-secret",
         };
         var connectionCredential = new ConnectionCredential
         {
             Id = Guid.CreateVersion7(),
             ConnectionId = Guid.CreateVersion7(),
             Slot = "access-token",
-            Value = "connection-secret"
+            Value = "connection-secret",
         };
 
         await using (var context = new AgwDbContext(options, protector))
@@ -74,10 +72,12 @@ public class EncryptedDataPersistenceTests
         var storedHeadersJson = await ReadScalarAsync(connection, "SELECT headers FROM mcp_server");
         var storedPluginCredential = await ReadScalarAsync(
             connection,
-            "SELECT protected_value FROM plugin_installation_credential");
+            "SELECT protected_value FROM plugin_installation_credential"
+        );
         var storedConnectionCredential = await ReadScalarAsync(
             connection,
-            "SELECT protected_value FROM integration_connection_credential");
+            "SELECT protected_value FROM integration_connection_credential"
+        );
 
         AssertCiphertext(storedApiKey, "provider-secret");
         AssertCiphertext(storedPluginCredential, "plugin-secret");
@@ -90,15 +90,17 @@ public class EncryptedDataPersistenceTests
         AssertCiphertext(storedHeaders["X-Api-Key"], "header-api-key");
 
         await using var verifyContext = new AgwDbContext(options, protector);
-        var trackedAuthConfig = await verifyContext.ProviderAuthConfigs
+        var trackedAuthConfig = await verifyContext.ProviderAuthConfigs.SingleAsync(
+            TestContext.Current.CancellationToken
+        );
+        var untrackedMcpServer = await verifyContext
+            .McpToolServers.AsNoTracking()
             .SingleAsync(TestContext.Current.CancellationToken);
-        var untrackedMcpServer = await verifyContext.McpToolServers
-            .AsNoTracking()
-            .SingleAsync(TestContext.Current.CancellationToken);
-        var reloadedPluginCredential = await verifyContext.PluginInstallationCredentials
-            .SingleAsync(TestContext.Current.CancellationToken);
-        var reloadedConnectionCredential = await verifyContext.ConnectionCredentials
-            .AsNoTracking()
+        var reloadedPluginCredential = await verifyContext.PluginInstallationCredentials.SingleAsync(
+            TestContext.Current.CancellationToken
+        );
+        var reloadedConnectionCredential = await verifyContext
+            .ConnectionCredentials.AsNoTracking()
             .SingleAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("provider-secret", trackedAuthConfig.ApiKey);
@@ -118,13 +120,13 @@ public class EncryptedDataPersistenceTests
         {
             Id = Guid.CreateVersion7(),
             ProviderId = Guid.CreateVersion7(),
-            ApiKey = "old-api-key"
+            ApiKey = "old-api-key",
         };
         var mcpServer = new McpServer
         {
             Id = Guid.CreateVersion7(),
             Name = "modified-headers",
-            Headers = new Dictionary<string, string> { ["Authorization"] = "old-header" }
+            Headers = new Dictionary<string, string> { ["Authorization"] = "old-header" },
         };
 
         await using (var context = new AgwDbContext(options, protector))
@@ -141,9 +143,7 @@ public class EncryptedDataPersistenceTests
             Assert.Equal("new-header", mcpServer.Headers["Authorization"]);
         }
 
-        AssertCiphertext(
-            await ReadScalarAsync(connection, "SELECT api_key FROM provider_auth_config"),
-            "new-api-key");
+        AssertCiphertext(await ReadScalarAsync(connection, "SELECT api_key FROM provider_auth_config"), "new-api-key");
         var storedHeadersJson = await ReadScalarAsync(connection, "SELECT headers FROM mcp_server");
         var storedHeaders = JsonSerializer.Deserialize<Dictionary<string, string>>(storedHeadersJson);
         Assert.NotNull(storedHeaders);
@@ -152,11 +152,14 @@ public class EncryptedDataPersistenceTests
         await using var verifyContext = new AgwDbContext(options, protector);
         Assert.Equal(
             "new-api-key",
-            (await verifyContext.ProviderAuthConfigs.SingleAsync(TestContext.Current.CancellationToken)).ApiKey);
+            (await verifyContext.ProviderAuthConfigs.SingleAsync(TestContext.Current.CancellationToken)).ApiKey
+        );
         Assert.Equal(
             "new-header",
-            (await verifyContext.McpToolServers.SingleAsync(TestContext.Current.CancellationToken))
-                .Headers["Authorization"]);
+            (await verifyContext.McpToolServers.SingleAsync(TestContext.Current.CancellationToken)).Headers[
+                "Authorization"
+            ]
+        );
     }
 
     [Fact]
@@ -170,22 +173,21 @@ public class EncryptedDataPersistenceTests
             Id = Guid.CreateVersion7(),
             ConnectionId = Guid.CreateVersion7(),
             Slot = "access-token",
-            Value = "plaintext-token"
+            Value = "plaintext-token",
         };
 
         await using var context = new AgwDbContext(options, protector);
         await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
         context.ConnectionCredentials.Add(credential);
 
-        await context.SaveChangesAsync(
-            acceptAllChangesOnSuccess: false,
-            TestContext.Current.CancellationToken);
+        await context.SaveChangesAsync(acceptAllChangesOnSuccess: false, TestContext.Current.CancellationToken);
 
         Assert.Equal("plaintext-token", credential.Value);
         Assert.Equal(EntityState.Added, context.Entry(credential).State);
         AssertCiphertext(
             await ReadScalarAsync(connection, "SELECT protected_value FROM integration_connection_credential"),
-            "plaintext-token");
+            "plaintext-token"
+        );
     }
 
     [Fact]
@@ -200,14 +202,14 @@ public class EncryptedDataPersistenceTests
             Id = Guid.CreateVersion7(),
             PluginInstallationId = ownerId,
             Slot = "duplicate-slot",
-            Value = "first-secret"
+            Value = "first-secret",
         };
         var second = new PluginInstallationCredential
         {
             Id = Guid.CreateVersion7(),
             PluginInstallationId = ownerId,
             Slot = "duplicate-slot",
-            Value = "second-secret"
+            Value = "second-secret",
         };
 
         await using var context = new AgwDbContext(options, protector);
@@ -215,7 +217,8 @@ public class EncryptedDataPersistenceTests
         context.PluginInstallationCredentials.AddRange(first, second);
 
         await Assert.ThrowsAsync<DbUpdateException>(() =>
-            context.SaveChangesAsync(TestContext.Current.CancellationToken));
+            context.SaveChangesAsync(TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal("first-secret", first.Value);
         Assert.Equal("second-secret", second.Value);
@@ -233,14 +236,14 @@ public class EncryptedDataPersistenceTests
             Id = Guid.CreateVersion7(),
             ConnectionId = Guid.CreateVersion7(),
             Slot = "refresh-token",
-            Value = "valid-plaintext-token"
+            Value = "valid-plaintext-token",
         };
         var invalidCredential = new ConnectionCredential
         {
             Id = Guid.CreateVersion7(),
             ConnectionId = Guid.CreateVersion7(),
             Slot = "access-token",
-            Value = "invalid-plaintext-token"
+            Value = "invalid-plaintext-token",
         };
 
         await using var context = new AgwDbContext(options, CreateProtector());
@@ -249,7 +252,8 @@ public class EncryptedDataPersistenceTests
         invalidCredential.Id = Guid.Empty;
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            context.SaveChangesAsync(TestContext.Current.CancellationToken));
+            context.SaveChangesAsync(TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(ErrorCodes.EncryptedModelInvalid.Code, exception.Code);
         Assert.Contains("non-empty Guid", exception.Message, StringComparison.Ordinal);
@@ -261,10 +265,13 @@ public class EncryptedDataPersistenceTests
     [Fact]
     public void Model_EncryptedAttributeInventory_IsExact()
     {
-        var encryptedProperties = typeof(ProviderAuthConfig).Assembly.GetTypes()
-            .SelectMany(type => type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
-                .Where(property => property.GetCustomAttribute<EncryptedAttribute>() != null)
-                .Select(property => $"{type.FullName}.{property.Name}"))
+        var encryptedProperties = typeof(ProviderAuthConfig)
+            .Assembly.GetTypes()
+            .SelectMany(type =>
+                type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
+                    .Where(property => property.GetCustomAttribute<EncryptedAttribute>() != null)
+                    .Select(property => $"{type.FullName}.{property.Name}")
+            )
             .OrderBy(name => name)
             .ToArray();
 
@@ -282,16 +289,18 @@ public class EncryptedDataPersistenceTests
                 $"{typeof(ConnectionCredential).FullName}.{nameof(ConnectionCredential.Value)}",
                 $"{typeof(PluginInstallationCredential).FullName}.{nameof(PluginInstallationCredential.Value)}",
                 $"{typeof(ProviderAuthConfig).FullName}.{nameof(ProviderAuthConfig.ApiKey)}",
-                $"{typeof(UserMemory).FullName}.{nameof(UserMemory.Content)}"
+                $"{typeof(UserMemory).FullName}.{nameof(UserMemory.Content)}",
             }.OrderBy(name => name),
-            encryptedProperties);
+            encryptedProperties
+        );
     }
 
     [Fact]
     public void Model_EncryptedUnsupportedType_Throws()
     {
-        using var context = new ValidationDbContext<UnsupportedEncryptedEntity>(
-            configure: builder => builder.HasKey(entity => entity.Id));
+        using var context = new ValidationDbContext<UnsupportedEncryptedEntity>(configure: builder =>
+            builder.HasKey(entity => entity.Id)
+        );
 
         var exception = Assert.Throws<AgwException>(() => _ = context.Model);
 
@@ -318,7 +327,8 @@ public class EncryptedDataPersistenceTests
     public void Model_EncryptedEntityWithoutSingleGuidKey_Throws()
     {
         using var context = new ValidationDbContext<CompositeKeyEncryptedEntity>(configure: builder =>
-            builder.HasKey(entity => new { entity.Id, entity.Sequence }));
+            builder.HasKey(entity => new { entity.Id, entity.Sequence })
+        );
 
         var exception = Assert.Throws<AgwException>(() => _ = context.Model);
 
@@ -341,25 +351,23 @@ public class EncryptedDataPersistenceTests
         await ExecuteAsync(
             connection,
             "INSERT INTO provider_auth_config (id, provider_id, auth_type, api_key, enable, create_time, update_time) "
-            + "VALUES ($id, $providerId, 0, 'legacy-plaintext', 1, $now, $now)",
+                + "VALUES ($id, $providerId, 0, 'legacy-plaintext', 1, $now, $now)",
             ("$id", id),
             ("$providerId", Guid.CreateVersion7()),
-            ("$now", DateTimeOffset.UtcNow));
+            ("$now", DateTimeOffset.UtcNow)
+        );
 
         await using var context = new AgwDbContext(options, CreateProtector());
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            context.ProviderAuthConfigs.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken));
+            context.ProviderAuthConfigs.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)
+        );
         Assert.Equal(ErrorCodes.EncryptedDataInvalid.Code, exception.Code);
     }
 
     private static DbContextOptions<AgwDbContext> CreateOptions(SqliteConnection connection) =>
-        new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(connection)
-            .UseSnakeCaseNamingConvention()
-            .Options;
+        new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).UseSnakeCaseNamingConvention().Options;
 
-    private static DataProtectionEncryptedDataProtector CreateProtector() =>
-        new(new EphemeralDataProtectionProvider());
+    private static DataProtectionEncryptedDataProtector CreateProtector() => new(new EphemeralDataProtectionProvider());
 
     private static async Task<SqliteConnection> OpenConnectionAsync()
     {
@@ -372,8 +380,10 @@ public class EncryptedDataPersistenceTests
     {
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
-        return (string)(await command.ExecuteScalarAsync(TestContext.Current.CancellationToken)
-            ?? throw new InvalidOperationException("No value was stored."));
+        return (string)(
+            await command.ExecuteScalarAsync(TestContext.Current.CancellationToken)
+            ?? throw new InvalidOperationException("No value was stored.")
+        );
     }
 
     private static async Task<long> CountRowsAsync(SqliteConnection connection, string tableName)
@@ -386,7 +396,8 @@ public class EncryptedDataPersistenceTests
     private static async Task ExecuteAsync(
         SqliteConnection connection,
         string sql,
-        params (string Name, object Value)[] parameters)
+        params (string Name, object Value)[] parameters
+    )
     {
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
@@ -410,10 +421,11 @@ public class EncryptedDataPersistenceTests
         private readonly Action<Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<TEntity>> _configure;
 
         public ValidationDbContext(
-            Action<Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<TEntity>> configure)
-            : base(new DbContextOptionsBuilder<ValidationDbContext<TEntity>>()
-                .UseSqlite("Data Source=:memory:")
-                .Options)
+            Action<Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<TEntity>> configure
+        )
+            : base(
+                new DbContextOptionsBuilder<ValidationDbContext<TEntity>>().UseSqlite("Data Source=:memory:").Options
+            )
         {
             _configure = configure;
         }
@@ -430,6 +442,7 @@ public class EncryptedDataPersistenceTests
     private sealed class UnsupportedEncryptedEntity
     {
         public Guid Id { get; set; }
+
         [Encrypted]
         public int Secret { get; set; }
     }
@@ -437,6 +450,7 @@ public class EncryptedDataPersistenceTests
     private sealed class IndexedEncryptedEntity
     {
         public Guid Id { get; set; }
+
         [Encrypted]
         public string Secret { get; set; } = string.Empty;
     }
@@ -445,6 +459,7 @@ public class EncryptedDataPersistenceTests
     {
         public Guid Id { get; set; }
         public int Sequence { get; set; }
+
         [Encrypted]
         public string Secret { get; set; } = string.Empty;
     }

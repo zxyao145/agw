@@ -1,8 +1,6 @@
 using System.Text;
-
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.FileSystemGlobbing;
@@ -26,8 +24,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
     private const string MemoryIndexFileName = "memories.md";
     private const int MaxIndexEntries = 50;
 
-    private const string Instructions =
-        """
+    private const string Instructions = """
         ## Project Memory
         You have access to project-scoped, file-based memory through the `project_memory_*` tools.
         These memories are shared by all agents and conversations in the current project.
@@ -48,7 +45,8 @@ public sealed class ProjectMemoryProvider : AIContextProvider
     public ProjectMemoryProvider(
         AgentFileStore fileStore,
         IApplicationLock applicationLock,
-        string mutationResourceName)
+        string mutationResourceName
+    )
     {
         ArgumentNullException.ThrowIfNull(fileStore);
         ArgumentNullException.ThrowIfNull(applicationLock);
@@ -63,40 +61,39 @@ public sealed class ProjectMemoryProvider : AIContextProvider
 
     protected override async ValueTask<AIContext> ProvideAIContextAsync(
         InvokingContext context,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
-        var result = new AIContext
-        {
-            Instructions = Instructions,
-            Tools = _tools ??= CreateTools()
-        };
-        var index = await _fileStore.ReadAsync(MemoryIndexFileName, cancellationToken)
-            .ConfigureAwait(false);
+        var result = new AIContext { Instructions = Instructions, Tools = _tools ??= CreateTools() };
+        var index = await _fileStore.ReadAsync(MemoryIndexFileName, cancellationToken).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(index))
         {
             result.Messages =
             [
                 new ChatMessage(
                     ChatRole.User,
-                    "The following is the shared project memory index. " +
-                    "Read relevant files with project_memory_read before continuing.\n\n" +
-                    index)
+                    "The following is the shared project memory index. "
+                        + "Read relevant files with project_memory_read before continuing.\n\n"
+                        + index
+                ),
             ];
         }
 
         return result;
     }
 
-    [Description("Write a project memory file. Overwrites the file if it already exists. Include a description to improve future discovery.")]
+    [Description(
+        "Write a project memory file. Overwrites the file if it already exists. Include a description to improve future discovery."
+    )]
     private async Task<string> WriteAsync(
         string fileName,
         string content,
         string? description = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var normalized = NormalizeMemoryFileName(fileName);
-        await using var mutationLease = await AcquireMutationLockAsync(cancellationToken)
-            .ConfigureAwait(false);
+        await using var mutationLease = await AcquireMutationLockAsync(cancellationToken).ConfigureAwait(false);
 
         await _fileStore.WriteAsync(normalized, content, cancellationToken).ConfigureAwait(false);
         var descriptionPath = GetDescriptionFileName(normalized);
@@ -106,8 +103,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
         }
         else
         {
-            await _fileStore.WriteAsync(descriptionPath, description, cancellationToken)
-                .ConfigureAwait(false);
+            await _fileStore.WriteAsync(descriptionPath, description, cancellationToken).ConfigureAwait(false);
         }
 
         await RebuildMemoryIndexAsync(cancellationToken).ConfigureAwait(false);
@@ -117,9 +113,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
     }
 
     [Description("Read a project memory file by name. Returns a not-found message when the file does not exist.")]
-    private async Task<string> ReadAsync(
-        string fileName,
-        CancellationToken cancellationToken = default)
+    private async Task<string> ReadAsync(string fileName, CancellationToken cancellationToken = default)
     {
         var normalized = NormalizeMemoryFileName(fileName);
         return await _fileStore.ReadAsync(normalized, cancellationToken).ConfigureAwait(false)
@@ -127,31 +121,26 @@ public sealed class ProjectMemoryProvider : AIContextProvider
     }
 
     [Description("Delete a project memory file and its companion description, if present.")]
-    private async Task<string> DeleteAsync(
-        string fileName,
-        CancellationToken cancellationToken = default)
+    private async Task<string> DeleteAsync(string fileName, CancellationToken cancellationToken = default)
     {
         var normalized = NormalizeMemoryFileName(fileName);
-        await using var mutationLease = await AcquireMutationLockAsync(cancellationToken)
-            .ConfigureAwait(false);
+        await using var mutationLease = await AcquireMutationLockAsync(cancellationToken).ConfigureAwait(false);
 
-        var deleted = await _fileStore.DeleteAsync(normalized, cancellationToken)
-            .ConfigureAwait(false);
-        await _fileStore.DeleteAsync(GetDescriptionFileName(normalized), cancellationToken)
-            .ConfigureAwait(false);
+        var deleted = await _fileStore.DeleteAsync(normalized, cancellationToken).ConfigureAwait(false);
+        await _fileStore.DeleteAsync(GetDescriptionFileName(normalized), cancellationToken).ConfigureAwait(false);
         await RebuildMemoryIndexAsync(cancellationToken).ConfigureAwait(false);
-        return deleted
-            ? $"File '{fileName}' deleted."
-            : $"File '{fileName}' not found.";
+        return deleted ? $"File '{fileName}' deleted." : $"File '{fileName}' not found.";
     }
 
-    [Description("List project memory files with their descriptions. Optionally filter names with a glob_pattern such as '*.md'.")]
+    [Description(
+        "List project memory files with their descriptions. Optionally filter names with a glob_pattern such as '*.md'."
+    )]
     private async Task<List<FileListEntry>> LsAsync(
         string? globPattern = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
-        var files = (await _fileStore.ListChildrenAsync(string.Empty, cancellationToken)
-                .ConfigureAwait(false))
+        var files = (await _fileStore.ListChildrenAsync(string.Empty, cancellationToken).ConfigureAwait(false))
             .Where(static entry => string.Equals(entry.Type, FileStoreEntry.File, StringComparison.Ordinal))
             .Select(static entry => entry.Name)
             .ToList();
@@ -170,76 +159,81 @@ public sealed class ProjectMemoryProvider : AIContextProvider
             var descriptionPath = GetDescriptionFileName(file);
             if (availableFiles.Contains(descriptionPath))
             {
-                description = await _fileStore.ReadAsync(descriptionPath, cancellationToken)
-                    .ConfigureAwait(false);
+                description = await _fileStore.ReadAsync(descriptionPath, cancellationToken).ConfigureAwait(false);
             }
 
-            result.Add(new FileListEntry
-            {
-                Name = file,
-                Type = FileStoreEntry.File,
-                Description = description
-            });
+            result.Add(
+                new FileListEntry
+                {
+                    Name = file,
+                    Type = FileStoreEntry.File,
+                    Description = description,
+                }
+            );
         }
 
         return result;
     }
 
-    [Description("Search project memory contents with a case-insensitive regular expression and an optional glob_pattern.")]
+    [Description(
+        "Search project memory contents with a case-insensitive regular expression and an optional glob_pattern."
+    )]
     private async Task<List<FileSearchResult>> GrepAsync(
         string regexPattern,
         string? globPattern = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
-        var matches = await _fileStore.SearchAsync(
+        var matches = await _fileStore
+            .SearchAsync(
                 string.Empty,
                 regexPattern,
                 string.IsNullOrWhiteSpace(globPattern) ? null : globPattern,
                 recursive: false,
-                cancellationToken)
+                cancellationToken
+            )
             .ConfigureAwait(false);
-        return matches
-            .Where(static match => !IsInternalFile(match.FileName))
-            .ToList();
+        return matches.Where(static match => !IsInternalFile(match.FileName)).ToList();
     }
 
-    [Description("Replace old_string with new_string in a project memory file. Unless replace_all is true, exactly one occurrence is required.")]
+    [Description(
+        "Replace old_string with new_string in a project memory file. Unless replace_all is true, exactly one occurrence is required."
+    )]
     private async Task<string> ReplaceAsync(
         string fileName,
         string oldString,
         string newString,
         bool replaceAll = false,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var normalized = NormalizeMemoryFileName(fileName);
-        await using var mutationLease = await AcquireMutationLockAsync(cancellationToken)
-            .ConfigureAwait(false);
+        await using var mutationLease = await AcquireMutationLockAsync(cancellationToken).ConfigureAwait(false);
 
-        var content = await _fileStore.ReadAsync(normalized, cancellationToken)
-            .ConfigureAwait(false);
+        var content = await _fileStore.ReadAsync(normalized, cancellationToken).ConfigureAwait(false);
         if (content == null)
         {
             return $"File '{fileName}' not found.";
         }
 
         var replacement = ApplyReplace(content, oldString, newString, replaceAll);
-        await _fileStore.WriteAsync(normalized, replacement.Content, cancellationToken)
-            .ConfigureAwait(false);
+        await _fileStore.WriteAsync(normalized, replacement.Content, cancellationToken).ConfigureAwait(false);
         return $"Replaced {replacement.Count} occurrence(s) in '{fileName}'.";
     }
 
-    [Description("Replace 1-based lines in a project memory file. Each edit supplies line_number and literal new_line, including any trailing newline to keep; an empty new_line deletes the line.")]
+    [Description(
+        "Replace 1-based lines in a project memory file. Each edit supplies line_number and literal new_line, including any trailing newline to keep; an empty new_line deletes the line."
+    )]
     private async Task<string> ReplaceLinesAsync(
         string fileName,
         List<FileLineEdit> edits,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         var normalized = NormalizeMemoryFileName(fileName);
-        await using var mutationLease = await AcquireMutationLockAsync(cancellationToken)
-            .ConfigureAwait(false);
+        await using var mutationLease = await AcquireMutationLockAsync(cancellationToken).ConfigureAwait(false);
 
-        var content = await _fileStore.ReadAsync(normalized, cancellationToken)
-            .ConfigureAwait(false);
+        var content = await _fileStore.ReadAsync(normalized, cancellationToken).ConfigureAwait(false);
         if (content == null)
         {
             return $"File '{fileName}' not found.";
@@ -256,47 +250,50 @@ public sealed class ProjectMemoryProvider : AIContextProvider
         [
             AIFunctionFactory.Create(
                 (Func<string, string, string?, CancellationToken, Task<string>>)WriteAsync,
-                new AIFunctionFactoryOptions { Name = WriteToolName }),
+                new AIFunctionFactoryOptions { Name = WriteToolName }
+            ),
             AIFunctionFactory.Create(
                 (Func<string, CancellationToken, Task<string>>)ReadAsync,
-                new AIFunctionFactoryOptions { Name = ReadFileToolName }),
+                new AIFunctionFactoryOptions { Name = ReadFileToolName }
+            ),
             AIFunctionFactory.Create(
                 (Func<string, CancellationToken, Task<string>>)DeleteAsync,
-                new AIFunctionFactoryOptions { Name = DeleteFileToolName }),
+                new AIFunctionFactoryOptions { Name = DeleteFileToolName }
+            ),
             AIFunctionFactory.Create(
                 (Func<string?, CancellationToken, Task<List<FileListEntry>>>)LsAsync,
-                new AIFunctionFactoryOptions { Name = LsToolName }),
+                new AIFunctionFactoryOptions { Name = LsToolName }
+            ),
             AIFunctionFactory.Create(
                 (Func<string, string?, CancellationToken, Task<List<FileSearchResult>>>)GrepAsync,
-                new AIFunctionFactoryOptions { Name = GrepToolName }),
+                new AIFunctionFactoryOptions { Name = GrepToolName }
+            ),
             AIFunctionFactory.Create(
                 (Func<string, string, string, bool, CancellationToken, Task<string>>)ReplaceAsync,
-                new AIFunctionFactoryOptions { Name = ReplaceToolName }),
+                new AIFunctionFactoryOptions { Name = ReplaceToolName }
+            ),
             AIFunctionFactory.Create(
                 (Func<string, List<FileLineEdit>, CancellationToken, Task<string>>)ReplaceLinesAsync,
-                new AIFunctionFactoryOptions { Name = ReplaceLinesToolName })
+                new AIFunctionFactoryOptions { Name = ReplaceLinesToolName }
+            ),
         ];
     }
 
     private async Task RebuildMemoryIndexAsync(CancellationToken cancellationToken)
     {
-        var files = (await _fileStore.ListChildrenAsync(string.Empty, cancellationToken)
-                .ConfigureAwait(false))
+        var files = (await _fileStore.ListChildrenAsync(string.Empty, cancellationToken).ConfigureAwait(false))
             .Where(static entry => string.Equals(entry.Type, FileStoreEntry.File, StringComparison.Ordinal))
             .Select(static entry => entry.Name)
             .Where(static file => !IsInternalFile(file))
             .OrderBy(static file => file, StringComparer.OrdinalIgnoreCase)
             .Take(MaxIndexEntries)
             .ToList();
-        var index = new StringBuilder()
-            .AppendLine("# Project Memory Index")
-            .AppendLine();
+        var index = new StringBuilder().AppendLine("# Project Memory Index").AppendLine();
 
         foreach (var file in files)
         {
-            var description = await _fileStore.ReadAsync(
-                    GetDescriptionFileName(file),
-                    cancellationToken)
+            var description = await _fileStore
+                .ReadAsync(GetDescriptionFileName(file), cancellationToken)
                 .ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(description))
             {
@@ -308,8 +305,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
             }
         }
 
-        await _fileStore.WriteAsync(MemoryIndexFileName, index.ToString(), cancellationToken)
-            .ConfigureAwait(false);
+        await _fileStore.WriteAsync(MemoryIndexFileName, index.ToString(), cancellationToken).ConfigureAwait(false);
     }
 
     private Task<IAsyncDisposable> AcquireMutationLockAsync(CancellationToken cancellationToken) =>
@@ -323,16 +319,17 @@ public sealed class ProjectMemoryProvider : AIContextProvider
         }
 
         var normalized = fileName.Replace('\\', '/').Trim('/');
-        if (Path.IsPathRooted(fileName) ||
-            fileName.StartsWith("/", StringComparison.Ordinal) ||
-            fileName.StartsWith('\\') ||
-            (normalized.Length >= 2 && char.IsLetter(normalized[0]) && normalized[1] == ':'))
+        if (
+            Path.IsPathRooted(fileName)
+            || fileName.StartsWith("/", StringComparison.Ordinal)
+            || fileName.StartsWith('\\')
+            || (normalized.Length >= 2 && char.IsLetter(normalized[0]) && normalized[1] == ':')
+        )
         {
             throw InvalidParameter("Project memory file names must be relative.");
         }
 
-        var parts = normalized
-            .Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Any(static part => part is "." or ".."))
         {
             throw InvalidParameter("Project memory file names must not contain '.' or '..' segments.");
@@ -346,8 +343,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
 
         if (normalized.Contains('/'))
         {
-            throw InvalidParameter(
-                "Project memory files must use flat names without directory separators.");
+            throw InvalidParameter("Project memory files must use flat names without directory separators.");
         }
 
         if (IsInternalFile(normalized))
@@ -374,7 +370,8 @@ public sealed class ProjectMemoryProvider : AIContextProvider
         string content,
         string oldString,
         string newString,
-        bool replaceAll)
+        bool replaceAll
+    )
     {
         if (string.IsNullOrEmpty(oldString))
         {
@@ -397,7 +394,8 @@ public sealed class ProjectMemoryProvider : AIContextProvider
         if (count > 1 && !replaceAll)
         {
             throw InvalidParameter(
-                $"old_string occurs {count} times; pass replace_all=true or provide a more specific value.");
+                $"old_string occurs {count} times; pass replace_all=true or provide a more specific value."
+            );
         }
 
         return (content.Replace(oldString, newString, StringComparison.Ordinal), count);
@@ -422,7 +420,8 @@ public sealed class ProjectMemoryProvider : AIContextProvider
             if (edit.LineNumber < 1 || edit.LineNumber > lines.Count)
             {
                 throw InvalidParameter(
-                    $"line_number {edit.LineNumber} is out of range (file has {lines.Count} lines).");
+                    $"line_number {edit.LineNumber} is out of range (file has {lines.Count} lines)."
+                );
             }
         }
 
@@ -447,9 +446,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
                     start = index + 1;
                     break;
                 case '\r':
-                    var end = index + 1 < content.Length && content[index + 1] == '\n'
-                        ? index + 2
-                        : index + 1;
+                    var end = index + 1 < content.Length && content[index + 1] == '\n' ? index + 2 : index + 1;
                     lines.Add(content[start..end]);
                     index = end - 1;
                     start = end;
@@ -468,15 +465,12 @@ public sealed class ProjectMemoryProvider : AIContextProvider
     private static string GetDescriptionFileName(string fileName)
     {
         var extensionIndex = fileName.LastIndexOf('.');
-        return extensionIndex > 0
-            ? fileName[..extensionIndex] + DescriptionSuffix
-            : fileName + DescriptionSuffix;
+        return extensionIndex > 0 ? fileName[..extensionIndex] + DescriptionSuffix : fileName + DescriptionSuffix;
     }
 
     private static bool IsInternalFile(string fileName) =>
-        fileName.EndsWith(DescriptionSuffix, StringComparison.OrdinalIgnoreCase) ||
-        fileName.Equals(MemoryIndexFileName, StringComparison.OrdinalIgnoreCase);
+        fileName.EndsWith(DescriptionSuffix, StringComparison.OrdinalIgnoreCase)
+        || fileName.Equals(MemoryIndexFileName, StringComparison.OrdinalIgnoreCase);
 
-    private static AgwException InvalidParameter(string message) =>
-        new(ErrorCodes.InvalidParam, message);
+    private static AgwException InvalidParameter(string message) => new(ErrorCodes.InvalidParam, message);
 }

@@ -1,6 +1,5 @@
 using Agw.Integrations.Mcp;
 using Agw.Shared.Exceptions;
-
 using Microsoft.Extensions.AI;
 
 namespace Agw.Integrations.Tests;
@@ -15,10 +14,8 @@ public class McpToolMaterializerTests
             "server-command",
             [],
             null,
-            new Dictionary<string, string>
-            {
-                ["DECLARED_ONLY"] = "configured",
-            });
+            new Dictionary<string, string> { ["DECLARED_ONLY"] = "configured" }
+        );
 
         var options = DefaultMcpMaterializerFactory.CreateStdioTransportOptions(endpoint);
 
@@ -41,22 +38,22 @@ public class McpToolMaterializerTests
                 ["SHARED"] = "configured",
                 ["CONFIG_ONLY"] = "configured",
             },
-            credentialEnvironmentVariables: new Dictionary<string, string>
-            {
-                ["TOKEN"] = "credential-token",
-            });
+            credentialEnvironmentVariables: new Dictionary<string, string> { ["TOKEN"] = "credential-token" }
+        );
         var runtimeOverrides = new McpRuntimeOverrides(
             environmentVariables: new Dictionary<string, string>
             {
                 ["SHARED"] = "runtime",
                 ["RUNTIME_ONLY"] = "runtime",
                 ["token"] = "untrusted-runtime-token",
-            });
+            }
+        );
 
         await using var lease = await materializer.MaterializeAsync(
             descriptor,
             runtimeOverrides,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         var resolved = Assert.IsType<ResolvedMcpStdioEndpoint>(factory.LastEndpoint);
         Assert.Equal("runtime", resolved.EnvironmentVariables["SHARED"]);
@@ -81,22 +78,22 @@ public class McpToolMaterializerTests
                 ["X-Config"] = "configured",
                 ["Authorization"] = "configured-token",
             },
-            credentialHeaders: new Dictionary<string, string>
-            {
-                ["Authorization"] = "Bearer credential-token",
-            });
+            credentialHeaders: new Dictionary<string, string> { ["Authorization"] = "Bearer credential-token" }
+        );
         var runtimeOverrides = new McpRuntimeOverrides(
             headers: new Dictionary<string, string>
             {
                 ["x-shared"] = "runtime",
                 ["X-Runtime"] = "runtime",
                 ["authorization"] = "Bearer untrusted-runtime-token",
-            });
+            }
+        );
 
         await using var lease = await materializer.MaterializeAsync(
             descriptor,
             runtimeOverrides,
-            TestContext.Current.CancellationToken);
+            TestContext.Current.CancellationToken
+        );
 
         var resolved = Assert.IsType<ResolvedMcpHttpEndpoint>(factory.LastEndpoint);
         Assert.False(resolved.UseSse);
@@ -113,11 +110,13 @@ public class McpToolMaterializerTests
         var materializer = new McpToolMaterializer(factory);
         var descriptor = new McpSseEndpointDescriptor(
             name: "sse-server",
-            endpoint: new Uri("https://mcp.example.test/sse"));
+            endpoint: new Uri("https://mcp.example.test/sse")
+        );
 
         await using var lease = await materializer.MaterializeAsync(
             descriptor,
-            cancellationToken: TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
         var resolved = Assert.IsType<ResolvedMcpHttpEndpoint>(factory.LastEndpoint);
         Assert.True(resolved.UseSse);
@@ -132,7 +131,8 @@ public class McpToolMaterializerTests
 
         var lease = await materializer.MaterializeAsync(
             CreateValidStdioDescriptor(),
-            cancellationToken: TestContext.Current.CancellationToken);
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
         Assert.Single(lease);
         Assert.Single(lease.Tools);
@@ -155,9 +155,12 @@ public class McpToolMaterializerTests
         };
         var materializer = new McpToolMaterializer(factory);
 
-        var exception = await Assert.ThrowsAsync<AgwException>(() => materializer.MaterializeAsync(
-            CreateValidStdioDescriptor(),
-            cancellationToken: TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            materializer.MaterializeAsync(
+                CreateValidStdioDescriptor(),
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.DoesNotContain("credential-token", exception.ToString(), StringComparison.Ordinal);
         Assert.Equal(1, factory.Transport.DisposeCount);
@@ -172,9 +175,12 @@ public class McpToolMaterializerTests
         factory.Client.ListToolsException = new InvalidOperationException("credential-token");
         var materializer = new McpToolMaterializer(factory);
 
-        var exception = await Assert.ThrowsAsync<AgwException>(() => materializer.MaterializeAsync(
-            CreateValidStdioDescriptor(),
-            cancellationToken: TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            materializer.MaterializeAsync(
+                CreateValidStdioDescriptor(),
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.DoesNotContain("credential-token", exception.ToString(), StringComparison.Ordinal);
         Assert.Equal(["client", "transport"], order);
@@ -187,9 +193,12 @@ public class McpToolMaterializerTests
     {
         var materializer = new McpToolMaterializer(new RecordingMcpMaterializerFactory());
 
-        var exception = await Assert.ThrowsAsync<AgwException>(() => materializer.MaterializeAsync(
-            new UnsupportedEndpointDescriptor("unsupported"),
-            cancellationToken: TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            materializer.MaterializeAsync(
+                new UnsupportedEndpointDescriptor("unsupported"),
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        );
 
         Assert.Equal(ErrorCodes.UnsupportedTransportType.Code, exception.Code);
     }
@@ -200,9 +209,9 @@ public class McpToolMaterializerTests
         var materializer = new McpToolMaterializer(new RecordingMcpMaterializerFactory());
         var descriptor = new McpStdioEndpointDescriptor("stdio-server", command: " ");
 
-        var exception = await Assert.ThrowsAsync<AgwException>(() => materializer.MaterializeAsync(
-            descriptor,
-            cancellationToken: TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            materializer.MaterializeAsync(descriptor, cancellationToken: TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(ErrorCodes.McpStdioCommandRequired.Code, exception.Code);
     }
@@ -213,9 +222,9 @@ public class McpToolMaterializerTests
         var materializer = new McpToolMaterializer(new RecordingMcpMaterializerFactory());
         var descriptor = new McpHttpEndpointDescriptor("http-server", endpoint: null);
 
-        var exception = await Assert.ThrowsAsync<AgwException>(() => materializer.MaterializeAsync(
-            descriptor,
-            cancellationToken: TestContext.Current.CancellationToken));
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            materializer.MaterializeAsync(descriptor, cancellationToken: TestContext.Current.CancellationToken)
+        );
 
         Assert.Equal(ErrorCodes.McpHttpUrlRequired.Code, exception.Code);
     }
@@ -228,9 +237,7 @@ public class McpToolMaterializerTests
     private sealed class UnsupportedEndpointDescriptor : McpEndpointDescriptor
     {
         public UnsupportedEndpointDescriptor(string name)
-            : base(name)
-        {
-        }
+            : base(name) { }
     }
 
     private sealed class RecordingMcpMaterializerFactory : IMcpMaterializerFactory
@@ -238,9 +245,7 @@ public class McpToolMaterializerTests
         private readonly IList<string> _disposeOrder;
 
         public RecordingMcpMaterializerFactory()
-            : this(new List<string>())
-        {
-        }
+            : this(new List<string>()) { }
 
         public RecordingMcpMaterializerFactory(IList<string> disposeOrder)
         {
@@ -265,7 +270,8 @@ public class McpToolMaterializerTests
 
         public Task<IMcpMaterializerClient> CreateClientAsync(
             IMcpInitialTransport transport,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken
+        )
         {
             if (ClientCreationException != null)
             {
@@ -317,7 +323,8 @@ public class McpToolMaterializerTests
 
             AITool tool = AIFunctionFactory.Create(
                 (Func<string>)(() => "ok"),
-                new AIFunctionFactoryOptions { Name = "test_tool" });
+                new AIFunctionFactoryOptions { Name = "test_tool" }
+            );
             return Task.FromResult<IReadOnlyList<AITool>>([tool]);
         }
 

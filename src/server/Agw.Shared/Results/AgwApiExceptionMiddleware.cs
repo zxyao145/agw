@@ -1,7 +1,5 @@
 using Agw.Shared.Exceptions;
-
 using Bens.Results;
-
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
@@ -12,9 +10,7 @@ public sealed class AgwApiExceptionMiddleware
     private readonly RequestDelegate _next;
     private readonly ILogger<AgwApiExceptionMiddleware> _logger;
 
-    public AgwApiExceptionMiddleware(
-        RequestDelegate next,
-        ILogger<AgwApiExceptionMiddleware> logger)
+    public AgwApiExceptionMiddleware(RequestDelegate next, ILogger<AgwApiExceptionMiddleware> logger)
     {
         _next = next;
         _logger = logger;

@@ -10,7 +10,6 @@ using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Entities.Tools;
-
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -26,13 +25,9 @@ public class AgwDbContext : EFContext
     private readonly EncryptedPropertyProcessor _encryptedPropertyProcessor;
 
     public AgwDbContext(DbContextOptions<AgwDbContext> options)
-        : this(options, DefaultEncryptedDataProtector)
-    {
-    }
+        : this(options, DefaultEncryptedDataProtector) { }
 
-    public AgwDbContext(
-        DbContextOptions<AgwDbContext> options,
-        IEncryptedDataProtector encryptedDataProtector)
+    public AgwDbContext(DbContextOptions<AgwDbContext> options, IEncryptedDataProtector encryptedDataProtector)
         : base(options)
     {
         _encryptedPropertyProcessor = new EncryptedPropertyProcessor(encryptedDataProtector);
@@ -45,7 +40,10 @@ public class AgwDbContext : EFContext
         return SaveChangesWithEncryption(acceptAllChangesOnSuccess);
     }
 
-    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    public override Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default
+    )
     {
         PruneDeletedRelations();
         StampJobRowVersions();
@@ -68,14 +66,12 @@ public class AgwDbContext : EFContext
     /// </summary>
     public DbSet<DurableExecutionRecord> DurableExecutions => Set<DurableExecutionRecord>();
 
-    public DbSet<AgentflowCheckpointRecord> AgentflowCheckpoints =>
-        Set<AgentflowCheckpointRecord>();
+    public DbSet<AgentflowCheckpointRecord> AgentflowCheckpoints => Set<AgentflowCheckpointRecord>();
 
     /// <summary>
     /// 获取 PostgreSQL event stream 实现的 append-only execution 消息集合。
     /// </summary>
-    public DbSet<DurableExecutionEventRecord> DurableExecutionEvents =>
-        Set<DurableExecutionEventRecord>();
+    public DbSet<DurableExecutionEventRecord> DurableExecutionEvents => Set<DurableExecutionEventRecord>();
 
     public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<RemoteSkillCache> RemoteSkillCaches => Set<RemoteSkillCache>();
@@ -98,7 +94,8 @@ public class AgwDbContext : EFContext
     public DbSet<ProjectConversation> ProjectConversations => Set<ProjectConversation>();
     public DbSet<AgentUsage> AgentUsages => Set<AgentUsage>();
     public DbSet<TaskSessionBinding> TaskSessionBindings => Set<TaskSessionBinding>();
-    public DbSet<ProjectConversationChatHistory> ProjectConversationChatHistories => Set<ProjectConversationChatHistory>();
+    public DbSet<ProjectConversationChatHistory> ProjectConversationChatHistories =>
+        Set<ProjectConversationChatHistory>();
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<JobLog> JobLogs => Set<JobLog>();
 
@@ -165,7 +162,8 @@ public class AgwDbContext : EFContext
 
     private async Task<int> SaveChangesWithEncryptionAsync(
         bool acceptAllChangesOnSuccess,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var autoDetectChangesEnabled = ChangeTracker.AutoDetectChangesEnabled;
         if (autoDetectChangesEnabled)
@@ -178,9 +176,7 @@ public class AgwDbContext : EFContext
         try
         {
             ChangeTracker.AutoDetectChangesEnabled = false;
-            var result = await base.SaveChangesAsync(
-                acceptAllChangesOnSuccess: false,
-                cancellationToken);
+            var result = await base.SaveChangesAsync(acceptAllChangesOnSuccess: false, cancellationToken);
             _encryptedPropertyProcessor.RestorePlaintext(restores);
             plaintextRestored = true;
 
@@ -223,7 +219,8 @@ public class AgwDbContext : EFContext
                 continue;
             }
 
-            modelBuilder.Entity(entityType.ClrType)
+            modelBuilder
+                .Entity(entityType.ClrType)
                 .Property(primaryKey.Properties[0].Name)
                 .HasValueGenerator<GuidVersion7ValueGenerator>();
         }
@@ -233,7 +230,8 @@ public class AgwDbContext : EFContext
     {
         if (Database.IsNpgsql())
         {
-            modelBuilder.Entity<ProjectConversationChatHistory>()
+            modelBuilder
+                .Entity<ProjectConversationChatHistory>()
                 .Property(history => history.Metadata)
                 .HasColumnType("jsonb");
         }
@@ -241,27 +239,33 @@ public class AgwDbContext : EFContext
 
     private void PruneDeletedRelations()
     {
-        var deletedAgentIds = ChangeTracker.Entries<Agent>()
+        var deletedAgentIds = ChangeTracker
+            .Entries<Agent>()
             .Where(entry => entry.State == EntityState.Deleted)
             .Select(entry => entry.Entity.Id)
             .ToHashSet();
-        var deletedProjectIds = ChangeTracker.Entries<Project>()
+        var deletedProjectIds = ChangeTracker
+            .Entries<Project>()
             .Where(entry => entry.State == EntityState.Deleted)
             .Select(entry => entry.Entity.Id)
             .ToHashSet();
-        var deletedSkillIds = ChangeTracker.Entries<Skill>()
+        var deletedSkillIds = ChangeTracker
+            .Entries<Skill>()
             .Where(entry => entry.State == EntityState.Deleted)
             .Select(entry => entry.Entity.Id)
             .ToHashSet();
-        var deletedMcpToolServerIds = ChangeTracker.Entries<McpServer>()
+        var deletedMcpToolServerIds = ChangeTracker
+            .Entries<McpServer>()
             .Where(entry => entry.State == EntityState.Deleted)
             .Select(entry => entry.Entity.Id)
             .ToHashSet();
-        var deletedPluginInstallationIds = ChangeTracker.Entries<PluginInstallation>()
+        var deletedPluginInstallationIds = ChangeTracker
+            .Entries<PluginInstallation>()
             .Where(entry => entry.State == EntityState.Deleted)
             .Select(entry => entry.Entity.Id)
             .ToHashSet();
-        var deletedConnectionIds = ChangeTracker.Entries<Connection>()
+        var deletedConnectionIds = ChangeTracker
+            .Entries<Connection>()
             .Where(entry => entry.State == EntityState.Deleted)
             .Select(entry => entry.Entity.Id)
             .ToHashSet();
@@ -270,8 +274,8 @@ public class AgwDbContext : EFContext
         {
             var projectSkillRelationsToRemove = ProjectSkillRelations
                 .Where(relation =>
-                    deletedProjectIds.Contains(relation.ProjectId)
-                    || deletedSkillIds.Contains(relation.SkillId))
+                    deletedProjectIds.Contains(relation.ProjectId) || deletedSkillIds.Contains(relation.SkillId)
+                )
                 .ToList();
 
             if (projectSkillRelationsToRemove.Count > 0)
@@ -285,7 +289,8 @@ public class AgwDbContext : EFContext
             var projectMcpRelationsToRemove = ProjectMcpToolServers
                 .Where(relation =>
                     deletedProjectIds.Contains(relation.ProjectId)
-                    || deletedMcpToolServerIds.Contains(relation.McpToolServerId))
+                    || deletedMcpToolServerIds.Contains(relation.McpToolServerId)
+                )
                 .ToList();
 
             if (projectMcpRelationsToRemove.Count > 0)
@@ -322,8 +327,8 @@ public class AgwDbContext : EFContext
         {
             var agentConnectionRelationsToRemove = AgentConnectionRelations
                 .Where(relation =>
-                    deletedAgentIds.Contains(relation.AgentId)
-                    || deletedConnectionIds.Contains(relation.ConnectionId))
+                    deletedAgentIds.Contains(relation.AgentId) || deletedConnectionIds.Contains(relation.ConnectionId)
+                )
                 .ToList();
 
             if (agentConnectionRelationsToRemove.Count > 0)
@@ -337,7 +342,8 @@ public class AgwDbContext : EFContext
             var projectConnectionRelationsToRemove = ProjectConnectionRelations
                 .Where(relation =>
                     deletedProjectIds.Contains(relation.ProjectId)
-                    || deletedConnectionIds.Contains(relation.ConnectionId))
+                    || deletedConnectionIds.Contains(relation.ConnectionId)
+                )
                 .ToList();
 
             if (projectConnectionRelationsToRemove.Count > 0)
