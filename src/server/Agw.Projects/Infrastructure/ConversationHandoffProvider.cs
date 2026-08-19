@@ -199,7 +199,11 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
     private static HandoffCandidate? CreateCandidate(AttributedRecord item)
     {
         var message = item.Record.ToChatMessage();
-        if (message == null || ConversationHandoffMetadata.IsHandoffMessage(message))
+        if (
+            message == null
+            || ConversationHandoffMetadata.IsHandoffMessage(message)
+            || ConversationHistoryMetadata.IsModelHistoryExcluded(message)
+        )
         {
             return null;
         }

@@ -76,6 +76,36 @@ test("editor store tracks dirty state and supports undo and redo", () => {
   assert.equal(store.getState().isDirty, true);
 });
 
+test("changing an Agent runtime is one undoable document edit", () => {
+  const store = createAgentflowEditorStore(createDocument());
+
+  store.getState().updateDocument((document) => ({
+    ...document,
+    nodes: document.nodes.map((node) =>
+      node.id === "agent"
+        ? {
+            ...node,
+            data: { ...node.data, relateId: "runtime-reviewer", title: "reviewer" },
+          }
+        : node,
+    ),
+  }));
+
+  assert.equal(store.getState().document.nodes[1]?.data.relateId, "runtime-reviewer");
+  assert.equal(store.getState().document.nodes[1]?.data.title, "reviewer");
+  assert.equal(store.getState().document.edges[0]?.id, "edge");
+  assert.equal(store.getState().isDirty, true);
+  assert.equal(store.getState().past.length, 1);
+
+  store.getState().undo();
+  assert.equal(store.getState().document.nodes[1]?.data.relateId, "runtime-agent");
+  assert.equal(store.getState().document.nodes[1]?.data.title, "agent");
+
+  store.getState().redo();
+  assert.equal(store.getState().document.nodes[1]?.data.relateId, "runtime-reviewer");
+  assert.equal(store.getState().document.nodes[1]?.data.title, "reviewer");
+});
+
 test("a new mutation clears redo history", () => {
   const store = createAgentflowEditorStore(createDocument());
   store.getState().updateDocument((document) => rename(document, "First"));

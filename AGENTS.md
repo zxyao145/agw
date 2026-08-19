@@ -90,6 +90,8 @@ The development backend listens on `http://localhost:30816` by default through `
 
 Run a focused project with `dotnet test tests/Agw.Files.Tests` (or the matching `Agw.*.Tests` project), and use `--filter "FullyQualifiedName~MethodName"` for a specific test.
 
+Unit and composition tests for External Agents must not construct real `CodexAIAgent` or `ClaudeCodeAIAgent` instances. Their constructors may probe for locally installed `codex` or `claude` executables, which makes ordinary CI tests depend on developer-machine tools. Test Agw wrappers with fake `AIAgent` implementations and test SDK option normalization through pure helpers. Any test that exercises a real External Agent CLI must be an explicit integration test, gated by both an opt-in setting and an executable-availability check, and must not run as part of the default unit-test suite.
+
 Do not add or apply EF Core migrations automatically. Each model change needs matching SQLite and PostgreSQL migrations. When the user explicitly requests migrations, use:
 
 ```bash

@@ -1,8 +1,14 @@
+using System.Text.Json;
 using Agw.Agents.Execution.Agents;
+using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Utils;
 using Agw.Agents.ExternalAgents;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
+using ClaudeCodeSdk.MAF;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging.Abstractions;
 using OpenAI.CodexSdk.MAF;
 
 namespace Agw.Agents.Tests;
@@ -87,6 +93,34 @@ public class AgentRuntimeServiceCompositionTests
         Assert.NotNull(options);
         Assert.NotNull(options.CodexOptions);
         Assert.NotNull(options.ThreadOptions);
+    }
+
+    [Fact]
+    public void WrapExternalAgent_UsesHistoryAdapterWithoutCreatingSdkAgent()
+    {
+        var historyProvider = new InMemoryChatHistoryProvider();
+        var service = CreateRuntimeService(historyProvider);
+
+        var agent = service.WrapExternalAgent(new StubAIAgent(), isBackground: false);
+
+        Assert.NotNull(agent.GetService<ExternalAgentChatHistoryAgent>());
+        Assert.NotNull(agent.GetService<StubAIAgent>());
+    }
+
+    [Fact]
+    public void DisableExternalSdkChatHistoryPersistence_ForCodexAndClaude_ClearsProvider()
+    {
+        var historyProvider = new InMemoryChatHistoryProvider();
+
+        var codexOptions = AgentRuntimeService.DisableExternalSdkChatHistoryPersistence(
+            new CodexAIAgentOptions { ChatHistoryProvider = historyProvider }
+        );
+        var claudeOptions = AgentRuntimeService.DisableExternalSdkChatHistoryPersistence(
+            new ClaudeCodeAIAgentOptions { ChatHistoryProvider = historyProvider }
+        );
+
+        Assert.Null(codexOptions.ChatHistoryProvider);
+        Assert.Null(claudeOptions.ChatHistoryProvider);
     }
 
     [Fact]
@@ -197,5 +231,65 @@ public class AgentRuntimeServiceCompositionTests
         return Assert.IsType<CodexAIAgentOptions>(
             method.Invoke(null, [extra, workspace, threadId, resume, environmentVariables, onThreadStartedAsync])
         );
+    }
+
+    private static AgentRuntimeService CreateRuntimeService(ChatHistoryProvider historyProvider) =>
+        new(
+            agentAppService: null!,
+            projectAppService: null!,
+            capabilityComposer: null!,
+            historyProvider,
+            providerSessionState: null!,
+            taskSessionBindingService: null!,
+            dataPaths: null!,
+            fileSystemResolver: null!,
+            sessionStateStore: null!,
+            NullLogger<AgentRuntimeService>.Instance,
+            new ObservabilityMiddleware(NullLogger<ObservabilityMiddleware>.Instance),
+            new UsageTrackingMiddleware(
+                providerSessionState: null!,
+                usageRecorder: null!,
+                NullLogger<UsageTrackingMiddleware>.Instance
+            ),
+            summaryService: null!,
+            timeProvider: TimeProvider.System
+        );
+
+    private sealed class StubAIAgent : AIAgent
+    {
+        protected override ValueTask<AgentSession> CreateSessionCoreAsync(CancellationToken cancellationToken) =>
+            ValueTask.FromResult<AgentSession>(new StubAgentSession());
+
+        protected override ValueTask<JsonElement> SerializeSessionCoreAsync(
+            AgentSession session,
+            JsonSerializerOptions? jsonSerializerOptions,
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult(JsonSerializer.SerializeToElement(new { }, jsonSerializerOptions));
+
+        protected override ValueTask<AgentSession> DeserializeSessionCoreAsync(
+            JsonElement sessionState,
+            JsonSerializerOptions? jsonSerializerOptions,
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult<AgentSession>(new StubAgentSession());
+
+        protected override Task<AgentResponse> RunCoreAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session,
+            AgentRunOptions? options,
+            CancellationToken cancellationToken
+        ) => Task.FromResult(new AgentResponse());
+
+        protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session,
+            AgentRunOptions? options,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken
+        )
+        {
+            await Task.CompletedTask;
+            yield break;
+        }
+
+        private sealed class StubAgentSession : AgentSession;
     }
 }
