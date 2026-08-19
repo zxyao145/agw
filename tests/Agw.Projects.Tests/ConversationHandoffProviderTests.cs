@@ -360,7 +360,8 @@ public class ConversationHandoffProviderTests
                 CreateTypedAssistantMessage("tool state", "tool-state", ToolMessageTypes.ModeStatus)
             ),
             CreateRecord(conversationId, 6, CreateAssistantMessage(" \t\r\n", "blank")),
-            CreateRecord(conversationId, 7, CreateTypedAssistantMessage("final plan", "result", "result"))
+            CreateRecord(conversationId, 7, CreateTypedAssistantMessage("final plan", "result", "result")),
+            CreateRecord(conversationId, 8, CreateDisplayOnlyMessage("progress", "display-only"))
         );
 
         await using var dbContext = new AgwDbContext(options);
@@ -456,6 +457,13 @@ public class ConversationHandoffProviderTests
             AuthorName = Constants.DefaultAgentAuthor,
             AdditionalProperties = new AdditionalPropertiesDictionary { ["type"] = type },
         };
+
+    private static ChatMessage CreateDisplayOnlyMessage(string text, string messageId)
+    {
+        var message = CreateAssistantMessage(text, messageId);
+        ConversationHistoryMetadata.ExcludeFromModelHistory(message);
+        return message;
+    }
 
     private static Dictionary<string, JsonElement> CreateMetadata(
         AgentRuntimeType? targetType = null,

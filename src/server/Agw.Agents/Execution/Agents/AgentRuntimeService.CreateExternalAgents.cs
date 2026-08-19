@@ -52,7 +52,7 @@ public partial class AgentRuntimeService
 
         if (aiAgent != null)
         {
-            var agentBuilder = aiAgent
+            var agentBuilder = new ExternalAgentChatHistoryAgent(aiAgent, _chatHistoryProvider, _timeProvider, _logger)
                 .AsBuilder()
                 .Use(
                     runFunc: _observabilityMiddleware.LogRunMiddleware,
@@ -102,7 +102,7 @@ public partial class AgentRuntimeService
         options = options with
         {
             WorkingDirectory = PathUtil.ExpandTilde(project.Workspace),
-            ChatHistoryProvider = _chatHistoryProvider,
+            ChatHistoryProvider = null,
         };
 
         if (contextId != null)
@@ -152,7 +152,7 @@ public partial class AgentRuntimeService
             return null;
         }
 
-        options = options with { ChatHistoryProvider = _chatHistoryProvider };
+        options = options with { ChatHistoryProvider = null };
         return new CodexAIAgent(options, _logger);
     }
 

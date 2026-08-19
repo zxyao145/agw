@@ -1,8 +1,16 @@
+using System.Reflection;
 using Agw.Agents.Execution.Agents;
+using Agw.Agents.Execution.Agents.Dtos;
+using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Utils;
 using Agw.Agents.ExternalAgents;
+using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
+using ClaudeCodeSdk.MAF;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.Logging.Abstractions;
 using OpenAI.CodexSdk.MAF;
 
 namespace Agw.Agents.Tests;
@@ -87,6 +95,66 @@ public class AgentRuntimeServiceCompositionTests
         Assert.NotNull(options);
         Assert.NotNull(options.CodexOptions);
         Assert.NotNull(options.ThreadOptions);
+    }
+
+    [Theory]
+    [InlineData(AgentNames.Codex)]
+    [InlineData(AgentNames.ClaudeCode)]
+    public async Task TryCreateExternalAgent_WrapsSdkAgentAndDisablesSdkHistoryProvider(string agentName)
+    {
+        var historyProvider = new InMemoryChatHistoryProvider();
+        var service = new AgentRuntimeService(
+            agentAppService: null!,
+            projectAppService: null!,
+            capabilityComposer: null!,
+            historyProvider,
+            providerSessionState: null!,
+            taskSessionBindingService: null!,
+            dataPaths: null!,
+            fileSystemResolver: null!,
+            sessionStateStore: null!,
+            NullLogger<AgentRuntimeService>.Instance,
+            new ObservabilityMiddleware(NullLogger<ObservabilityMiddleware>.Instance),
+            new UsageTrackingMiddleware(
+                providerSessionState: null!,
+                usageRecorder: null!,
+                NullLogger<UsageTrackingMiddleware>.Instance
+            ),
+            summaryService: null!,
+            timeProvider: TimeProvider.System
+        );
+        var method = typeof(AgentRuntimeService).GetMethod(
+            "TryCreateExternalAgent",
+            BindingFlags.Instance | BindingFlags.NonPublic
+        );
+        var request = new CreateAiAgentRequest
+        {
+            Agent = new Agent { Name = agentName, Type = AgentType.External },
+        };
+        object?[] arguments =
+        [
+            request,
+            new Project { Workspace = Path.GetTempPath(), ExtraSetting = "{}" },
+            new Dictionary<string, string>(),
+            null,
+            false,
+        ];
+
+        Assert.NotNull(method);
+        Assert.True(Assert.IsType<bool>(method.Invoke(service, arguments)));
+        var agent = Assert.IsAssignableFrom<AIAgent>(arguments[3]);
+        Assert.NotNull(agent.GetService<ExternalAgentChatHistoryAgent>());
+
+        if (agentName == AgentNames.Codex)
+        {
+            Assert.Null(Assert.IsType<CodexAIAgent>(agent.GetService<CodexAIAgent>()).ChatHistoryProvider);
+        }
+        else
+        {
+            var claudeAgent = Assert.IsType<ClaudeCodeAIAgent>(agent.GetService<ClaudeCodeAIAgent>());
+            Assert.Null(claudeAgent.ChatHistoryProvider);
+            await claudeAgent.DisposeAsync();
+        }
     }
 
     [Fact]

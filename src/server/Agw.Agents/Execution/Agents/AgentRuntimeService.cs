@@ -35,6 +35,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
     private readonly IRemoteSkillContentResolver? _remoteSkillContentResolver;
     private readonly HumanInteractionContextAccessor? _humanInteractionContextAccessor;
     private readonly IConversationHandoffProvider? _conversationHandoffProvider;
+    private readonly TimeProvider _timeProvider;
 
     private readonly ILoggerFactory _loggerFactory;
     private readonly IServiceProvider _services;
@@ -59,7 +60,8 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         IServiceProvider? services = null,
         IConversationHistoryWriter? conversationHistoryWriter = null,
         HumanInteractionContextAccessor? humanInteractionContextAccessor = null,
-        IConversationHandoffProvider? conversationHandoffProvider = null
+        IConversationHandoffProvider? conversationHandoffProvider = null,
+        TimeProvider? timeProvider = null
     )
     {
         _agentAppService = agentAppService;
@@ -75,6 +77,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         _observabilityMiddleware = observabilityMiddleware;
         _usageTrackingMiddleware = usageTrackingMiddleware;
         _summaryService = summaryService;
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _conversationHistoryWriter = conversationHistoryWriter ?? chatHistoryProvider as IConversationHistoryWriter;
         _skillRegistrations = (skillRegistrations ?? [])
             .GroupBy(registration => registration.Id)

@@ -369,7 +369,10 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         && string.Equals(type?.ToString(), "result", StringComparison.Ordinal);
 
     private static bool IsExcludedFromModelHistory(ChatMessage message) =>
-        IsResult(message) || IsCheckpoint(message) || IsToolMessage(message);
+        ConversationHistoryMetadata.IsModelHistoryExcluded(message)
+        || IsResult(message)
+        || IsCheckpoint(message)
+        || IsToolMessage(message);
 
     private static bool IsCheckpoint(ChatMessage message) =>
         message.AdditionalProperties?.TryGetValue("type", out var type) == true

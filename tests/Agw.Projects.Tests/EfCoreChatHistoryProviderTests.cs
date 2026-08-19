@@ -766,6 +766,8 @@ public class EfCoreChatHistoryProviderTests
         );
         var session = new FakeAgentSession();
         provider.InitializeSessionState(session, "context-1", projectId, "agentflow:flow:node-a", "  Review Node  ");
+        var displayOnlyMessage = new ChatMessage(ChatRole.System, "working") { MessageId = "progress-1" };
+        ConversationHistoryMetadata.ExcludeFromModelHistory(displayOnlyMessage);
 
         await InvokeStoreChatHistoryAsync(
             provider,
@@ -785,6 +787,7 @@ public class EfCoreChatHistoryProviderTests
                             ["marker"] = "kept",
                         },
                     },
+                    displayOnlyMessage,
                 ]
             ),
             cancellationToken
@@ -803,7 +806,10 @@ public class EfCoreChatHistoryProviderTests
             )
             .ToList();
 
-        Assert.Equal(["user-1", "assistant-1", "assistant-2"], messages.Select(message => message.MessageId));
+        Assert.Equal(
+            ["user-1", "assistant-1", "assistant-2", "progress-1"],
+            messages.Select(message => message.MessageId)
+        );
         Assert.Null(messages[0].AdditionalProperties);
         Assert.Null(messages[1].AuthorName);
         Assert.Equal("Review Node", messages[1].AdditionalProperties!["nodeName"]?.ToString());
@@ -812,10 +818,20 @@ public class EfCoreChatHistoryProviderTests
         Assert.Equal("Inner Node", messages[2].AdditionalProperties!["nodeName"]?.ToString());
         Assert.False(messages[2].AdditionalProperties!.ContainsKey("agentName"));
         Assert.Equal("kept", messages[2].AdditionalProperties!["marker"]?.ToString());
+        Assert.True(ConversationHistoryMetadata.IsModelHistoryExcluded(messages[3]));
+        Assert.Equal("Review Node", messages[3].AdditionalProperties!["nodeName"]?.ToString());
+        Assert.Equal("general-agent", messages[3].AdditionalProperties!["agentName"]?.ToString());
         Assert.All(
             records,
             record => Assert.Equal("agentflow:flow:node-a", record.Metadata!["historyScope"].GetString())
         );
+
+        var modelHistory = await InvokeProvideChatHistoryAsync(
+            provider,
+            new ChatHistoryProvider.InvokingContext(new FakeAgent(), session, []),
+            cancellationToken
+        );
+        Assert.Equal(["question", "answer", "nested answer"], modelHistory.Select(message => message.Text));
     }
 
     [Fact]
