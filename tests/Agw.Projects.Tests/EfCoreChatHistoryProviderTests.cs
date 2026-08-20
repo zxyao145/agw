@@ -1276,6 +1276,70 @@ public class EfCoreChatHistoryProviderTests
     }
 
     [Fact]
+    public async Task StoreChatHistoryAsync_DataContent_PersistsAndRestoresImage()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using (var setupContext = new AgwDbContext(options))
+        {
+            await setupContext.Database.EnsureCreatedAsync(cancellationToken);
+        }
+
+        var projectId = Guid.CreateVersion7();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId));
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+        var provider = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            TimeProvider.System
+        );
+        var session = new FakeAgentSession();
+        provider.InitializeSessionState(session, "context-1", projectId);
+        var request = new ChatMessage(
+            ChatRole.User,
+            [
+                new DataContent(new byte[] { 1, 2, 3 }, "image/png") { Name = "screen.png" },
+                new TextContent("describe this"),
+            ]
+        )
+        {
+            MessageId = "user-with-image",
+        };
+
+        await InvokeStoreChatHistoryAsync(
+            provider,
+            new ChatHistoryProvider.InvokedContext(new FakeAgent(), session, [request], []),
+            cancellationToken
+        );
+
+        var history = await InvokeProvideChatHistoryAsync(
+            provider,
+            new ChatHistoryProvider.InvokingContext(new FakeAgent(), session, []),
+            cancellationToken
+        );
+        var restored = Assert.Single(history);
+        var image = Assert.IsType<DataContent>(restored.Contents[0]);
+
+        Assert.Equal("user-with-image", restored.MessageId);
+        Assert.Equal(new byte[] { 1, 2, 3 }, image.Data.ToArray());
+        Assert.Equal("image/png", image.MediaType);
+        Assert.Equal("screen.png", image.Name);
+        Assert.Equal("describe this", Assert.IsType<TextContent>(restored.Contents[1]).Text);
+    }
+
+    [Fact]
     public async Task StoreChatHistoryAsync_PersistsTargetMetadataFromRequestMessage()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

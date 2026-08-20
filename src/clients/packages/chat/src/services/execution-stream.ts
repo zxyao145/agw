@@ -1,5 +1,6 @@
 import { createUuidV7 } from "@agw/api";
 import { MessageContentType, type AiMessage, type AiMessageContent } from "@agw/api";
+import type { ChatImageAttachment } from "../lib/chat/image-attachments";
 import type { ExecutionUserInput } from "./execution-hub";
 
 const default_user = "$agw";
@@ -80,11 +81,27 @@ export function scopeMessagesByUserTurn(messages: AiMessage[]): AiMessage[] {
 }
 
 export function createUserTextMessage(input: string): AiMessage {
+  return createUserMessage(input, []);
+}
+
+export function createUserMessage(
+  input: string,
+  imageAttachments: readonly ChatImageAttachment[],
+): AiMessage {
+  const contents: AiMessage["contents"] = imageAttachments.map((attachment) => ({
+    type: MessageContentType.DataContent,
+    uri: attachment.dataUrl,
+    name: attachment.name,
+  }));
+  if (input.trim()) {
+    contents.push({ type: MessageContentType.TextContent, content: input });
+  }
+
   return {
     messageId: createUuidV7(),
     author: default_user,
     role: "user",
-    contents: [{ type: MessageContentType.TextContent, content: input }],
+    contents,
   };
 }
 

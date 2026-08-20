@@ -13,7 +13,7 @@ async function loadExecutionStream() {
     'const createUuidV7 = () => "generated-user-id";',
   );
   source = source.replace(/import \{[\s\S]*?\} from "@\/types";/, "");
-  source = `const MessageContentType = { TextContent: "TextContent" };\n${source}`;
+  source = `const MessageContentType = { DataContent: "DataContent", TextContent: "TextContent" };\n${source}`;
 
   const javascript = ts.transpileModule(source, {
     compilerOptions: {
@@ -431,4 +431,55 @@ test("the local streaming scope is excluded from execution input", async () => {
     contents: [{ type: "TextContent", content: "one", additionalProperties: undefined }],
   });
   assert.equal("streamingScopeId" in input, false);
+});
+
+test("createUserTextMessage creates an authored user text message", async () => {
+  const { createUserTextMessage } = await loadExecutionStream();
+
+  assert.deepEqual(createUserTextMessage("hello"), {
+    messageId: "generated-user-id",
+    author: "$agw",
+    role: "user",
+    contents: [{ type: "TextContent", content: "hello" }],
+  });
+});
+
+test("createUserMessage puts images before optional text", async () => {
+  const { createUserMessage } = await loadExecutionStream();
+  const message = createUserMessage("describe this", [
+    {
+      id: "image-1",
+      name: "screen.png",
+      mediaType: "image/png",
+      size: 3,
+      dataUrl: "data:image/png;base64,AQID",
+    },
+  ]);
+
+  assert.deepEqual(message.contents, [
+    { type: "DataContent", uri: "data:image/png;base64,AQID", name: "screen.png" },
+    { type: "TextContent", content: "describe this" },
+  ]);
+});
+
+test("createUserMessage supports image-only input and preserves data fields for execution", async () => {
+  const { createUserMessage, toExecutionUserInput } = await loadExecutionStream();
+  const message = createUserMessage("", [
+    {
+      id: "image-1",
+      name: "screen.webp",
+      mediaType: "image/webp",
+      size: 1,
+      dataUrl: "data:image/webp;base64,AQ==",
+    },
+  ]);
+
+  assert.deepEqual(toExecutionUserInput(message).contents, [
+    {
+      type: "DataContent",
+      uri: "data:image/webp;base64,AQ==",
+      name: "screen.webp",
+      additionalProperties: undefined,
+    },
+  ]);
 });

@@ -58,6 +58,13 @@ test("composer context and additional input participate in submission", () => {
   assert.match(source, /input\.trim\(\) \|\| hasAdditionalInput/);
 });
 
+test("submit-only disabled state keeps the textarea interactive", () => {
+  assert.match(source, /isSubmitDisabled\?: boolean/);
+  assert.match(source, /isDisabled\s*\|\|\s*isSubmitDisabled\s*\|\|/);
+  assert.match(source, /if \(isDisabled \|\| isSubmitDisabled\)/);
+  assert.match(source, /disabled=\{isExecuting \|\| isDisabled\}/);
+});
+
 test("suggestion descriptions use phrasing elements inside ItemDescription", () => {
   assert.match(source, /<ItemDescription>[\s\S]*?<span className="flex item-start">/);
   assert.match(source, /<span className="text-\[11px\]">\{suggestion\.description\}<\/span>/);

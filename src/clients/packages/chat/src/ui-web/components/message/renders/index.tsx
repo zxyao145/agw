@@ -6,10 +6,15 @@ import TextContent from "./text-content";
 import SystemMessage from "./system-message";
 import { isResultMessage } from "../../../../lib/chat/ai-message-handlers";
 import PlanCard from "./plan-card";
+import DataContent from "./data-content";
 
 const renderContent = (node: MessageNode, msg: AiMessage): React.ReactNode => {
   if (node.proposedPlan) {
     return <PlanCard {...node.proposedPlan} />;
+  }
+
+  if (node.type === MessageContentType.DataContent) {
+    return <DataContent node={node} />;
   }
 
   const isTextNode = (
@@ -18,7 +23,6 @@ const renderContent = (node: MessageNode, msg: AiMessage): React.ReactNode => {
       MessageContentType.FunctionCallContent,
       MessageContentType.FunctionResultContent,
 
-      MessageContentType.DataContent,
       MessageContentType.ErrorContent,
     ] as string[]
   ).includes(node.type);

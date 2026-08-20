@@ -3,6 +3,8 @@ export type AdditionalProperties = Record<string, unknown>;
 export interface AiMessageContent {
   type: string;
   content?: unknown;
+  uri?: string;
+  name?: string;
   additionalProperties?: AdditionalProperties;
 }
 

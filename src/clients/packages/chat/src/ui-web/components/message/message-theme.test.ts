@@ -15,3 +15,9 @@ test("light surfaces use a white background", () => {
 test("user messages use the neutral chat card", () => {
   assert.match(messageSource, /bg-\[#f3f3f4\] text-\[#17191d\]/);
 });
+
+test("historical user messages keep full-width right alignment when metadata is present", () => {
+  assert.match(messageSource, /const isUser = message\.role === "user"/);
+  assert.match(messageSource, /isUser \|\| isResult \? "w-full mb-8"/);
+  assert.doesNotMatch(messageSource, /isUserBlock|!message\.additionalProperties/);
+});

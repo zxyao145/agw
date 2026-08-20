@@ -3,7 +3,14 @@
 import { ArrowUp } from "lucide-react";
 import { Button } from "@agw/components";
 import { Textarea } from "@agw/components";
-import { KeyboardEvent, ReactNode, useRef, useImperativeHandle, forwardRef } from "react";
+import {
+  ClipboardEvent,
+  KeyboardEvent,
+  ReactNode,
+  useRef,
+  useImperativeHandle,
+  forwardRef,
+} from "react";
 import React from "react";
 import { Item, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@agw/components";
 import { Badge } from "@agw/components";
@@ -23,11 +30,14 @@ export interface UserInputProps {
   ) => SuggestionItem[] | Promise<SuggestionItem[]>;
   // Execution state
   isExecuting?: boolean;
+  isDisabled?: boolean;
+  isSubmitDisabled?: boolean;
   hasAdditionalInput?: boolean;
 
   // Actions
   onExecute?: (value: string) => void;
   onStop?: () => void;
+  onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
 
   // Textarea configuration
   placeholder?: string;
@@ -49,6 +59,8 @@ interface UserInputSlots {
 
 interface UserInputRootProps {
   isExecuting: boolean;
+  isDisabled: boolean;
+  isSubmitDisabled: boolean;
   hasAdditionalInput: boolean;
   placeholder: string;
   rows: number;
@@ -58,6 +70,7 @@ interface UserInputRootProps {
   slots: UserInputSlots;
   onInputChange: (value: string, caretIndex: number) => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
   onSend: () => void;
   onStop?: () => void;
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
@@ -65,6 +78,8 @@ interface UserInputRootProps {
 
 function UserInputRoot({
   isExecuting,
+  isDisabled,
+  isSubmitDisabled,
   hasAdditionalInput,
   placeholder,
   rows,
@@ -74,13 +89,17 @@ function UserInputRoot({
   slots,
   onInputChange,
   onKeyDown,
+  onPaste,
   onSend,
   onStop,
   textareaRef,
 }: UserInputRootProps) {
   const { context, topLeft, topRight, bottomLeft, help, sender } = slots;
   const canStop = isExecuting && Boolean(onStop);
-  const isDisabled = isExecuting ? !canStop : !input.trim() && !hasAdditionalInput;
+  const isSendDisabled =
+    isDisabled ||
+    isSubmitDisabled ||
+    (isExecuting ? !canStop : !input.trim() && !hasAdditionalInput);
   const handleClick = () => {
     if (canStop) {
       onStop?.();
@@ -116,6 +135,7 @@ function UserInputRoot({
             value={input}
             onChange={(e) => onInputChange(e.target.value, e.target.selectionStart)}
             onKeyDown={onKeyDown}
+            onPaste={onPaste}
             placeholder={placeholder}
             rows={rows}
             className={`${maxHeight} agw-scrollbar min-h-[1lh] resize-none overflow-x-hidden
@@ -124,7 +144,7 @@ function UserInputRoot({
             shadow-none 
             focus-visible:ring-0 
             focus-visible:ring-offset-0`}
-            disabled={isExecuting}
+            disabled={isExecuting || isDisabled}
           />
 
           {/* Action button - comment mode or regular send */}
@@ -134,7 +154,7 @@ function UserInputRoot({
               size="icon-sm"
               className="rounded-full size-7"
               onClick={handleClick}
-              disabled={isDisabled}
+              disabled={isSendDisabled}
             >
               {sender.length > 0 ? <>{sender}</> : <ArrowUp className="size-5" />}
             </Button>
@@ -254,9 +274,12 @@ export interface UserInputRef {
 
 function UserInputContainer({
   isExecuting = false,
+  isDisabled = false,
+  isSubmitDisabled = false,
   hasAdditionalInput = false,
   onExecute,
   onStop,
+  onPaste,
   placeholder = "Type your message...",
   rows = 1,
   maxHeight = "max-h-60",
@@ -358,6 +381,9 @@ function UserInputContainer({
   );
 
   const handleSend = () => {
+    if (isDisabled || isSubmitDisabled) {
+      return;
+    }
     onExecute?.(input);
     suggestionRequestRef.current += 1;
     setInput("");
@@ -376,6 +402,8 @@ function UserInputContainer({
   return (
     <UserInputRoot
       isExecuting={isExecuting}
+      isDisabled={isDisabled}
+      isSubmitDisabled={isSubmitDisabled}
       hasAdditionalInput={hasAdditionalInput}
       placeholder={placeholder}
       rows={rows}
@@ -385,6 +413,7 @@ function UserInputContainer({
       slots={slots}
       onInputChange={handleInputChange}
       onKeyDown={handleKeyDown}
+      onPaste={onPaste}
       onSend={handleSend}
       onStop={onStop}
       textareaRef={textareaRef}
