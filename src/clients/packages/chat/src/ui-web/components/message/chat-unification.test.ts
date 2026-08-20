@@ -316,10 +316,29 @@ test("shared Chat renders only the pending file comment count in the composer", 
   assert.match(inputSource, /pendingFileCommentCount: number/);
   assert.match(inputSource, /\{pendingFileCommentCount\} code comment/);
   assert.match(inputSource, /aria-label="Clear pending code comments"/);
-  assert.match(inputSource, /hasAdditionalInput=\{pendingFileCommentCount > 0\}/);
+  assert.match(
+    inputSource,
+    /hasAdditionalInput=\{pendingFileCommentCount > 0 \|\| imageAttachments\.length > 0\}/,
+  );
   assert.doesNotMatch(inputSource, /LineComment|filePath|lineNumber|comment\.content/);
   assert.match(workspaceSource, /pendingFileComments=\{comments\}/);
   assert.match(workspaceSource, /new Set\(commentIds\)/);
+});
+
+test("shared Chat input intercepts image clipboard files and renders removable previews", async () => {
+  const [chatSource, inputSource] = await Promise.all([
+    readFile(CHAT_URL, "utf8"),
+    readFile(CHAT_INPUT_URL, "utf8"),
+  ]);
+
+  assert.match(inputSource, /event\.clipboardData\.items/);
+  assert.match(inputSource, /event\.preventDefault\(\)/);
+  assert.match(inputSource, /createImageAttachments\(imageFiles\)/);
+  assert.match(inputSource, /isSubmitDisabled=\{isReadingImages\}/);
+  assert.doesNotMatch(inputSource, /isDisabled=\{isReadingImages\}/);
+  assert.match(inputSource, /aria-label="Pasted images"/);
+  assert.match(inputSource, /handleRemoveImage\(attachment\.id\)/);
+  assert.match(chatSource, /createUserMessage\(resolvedInput, imageAttachments\)/);
 });
 
 test("shared Chat consumes only submitted file comments after execution succeeds", async () => {

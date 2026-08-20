@@ -64,7 +64,7 @@ const buildContentNode = (content: AiMessageContent, message: AiMessage): string
  * @param
  * @returns
  */
-const groupContentsByType = (message: AiMessage): MessageNode[] => {
+export const groupContentsByType = (message: AiMessage): MessageNode[] => {
   const contents = message.contents || [];
   const nodes: MessageNode[] = [];
   let currentContent = "";
@@ -72,6 +72,16 @@ const groupContentsByType = (message: AiMessage): MessageNode[] => {
 
   for (const content of contents) {
     const { type } = content;
+
+    if (type === MessageContentType.DataContent) {
+      if (lastType) {
+        nodes.push(createMessageNode(lastType, currentContent, message));
+        currentContent = "";
+        lastType = "";
+      }
+      nodes.push(createMessageNode(type, content.uri ?? "", message, content.name));
+      continue;
+    }
 
     if (lastType && type !== lastType) {
       nodes.push(createMessageNode(lastType, currentContent, message));
@@ -91,10 +101,19 @@ const groupContentsByType = (message: AiMessage): MessageNode[] => {
 };
 
 // 识别是否为 plan
-const createMessageNode = (type: string, content: string, message: AiMessage): MessageNode => {
+const createMessageNode = (
+  type: string,
+  content: string,
+  message: AiMessage,
+  name?: string,
+): MessageNode => {
   const proposedPlan = parseMessageProposedPlan(message, type, content);
+  const node: MessageNode = { type, content };
 
-  return proposedPlan ? { type, content, proposedPlan } : { type, content };
+  if (name !== undefined) node.name = name;
+  if (proposedPlan) node.proposedPlan = proposedPlan;
+
+  return node;
 };
 
 function AiMessageView({ message }: { message: AiMessage }) {

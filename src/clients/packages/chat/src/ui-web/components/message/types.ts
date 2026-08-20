@@ -8,5 +8,6 @@ export type ProposedPlanPresentation = {
 export type MessageNode = {
   type: string;
   content: string;
+  name?: string;
   proposedPlan?: ProposedPlanPresentation;
 };

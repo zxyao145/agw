@@ -34,7 +34,7 @@ import { getClaudeInitCommands, prepareClaudeHistory } from "../../../lib/chat/a
 import { updateAutoScrollState, type AutoScrollState } from "../../../lib/chat/auto-scroll";
 import {
   createStreamingMessageBatcher,
-  createUserTextMessage,
+  createUserMessage,
   mergeStreamingMessages,
   scopeMessagesByUserTurn,
   scopeStreamingMessage,
@@ -59,6 +59,7 @@ import type { AiMessage } from "@agw/api";
 import type { ChatTargetOption } from "@agw/api";
 import { hasMatchingHumanInteractionCall } from "../../../services/human-interaction-call";
 import { buildFileCommentPrompt } from "../../../lib/chat/file-comment-prompt";
+import type { ChatImageAttachment } from "../../../lib/chat/image-attachments";
 
 export interface ChatSessionSeed {
   revision: string | number;
@@ -775,7 +776,7 @@ export function Chat({
   );
 
   const handleExecute = React.useCallback(
-    async (value: string) => {
+    async (value: string, imageAttachments: readonly ChatImageAttachment[]) => {
       if (reconnectState) return;
       if (isTransitioning) {
         toast.error("Please wait for the previous execution to stop");
@@ -784,7 +785,7 @@ export function Chat({
 
       const submittedFileComments = [...pendingFileComments];
       const resolvedInput = buildFileCommentPrompt(value, submittedFileComments);
-      if (!resolvedInput) {
+      if (!resolvedInput && imageAttachments.length === 0) {
         toast.error("Please enter a prompt");
         return;
       }
@@ -799,7 +800,7 @@ export function Chat({
 
       const nextId = ensureContextId(true);
 
-      const userMessage = createUserTextMessage(resolvedInput);
+      const userMessage = createUserMessage(resolvedInput, imageAttachments);
       const firstContent = userMessage.contents[0];
       if (firstContent) {
         firstContent.additionalProperties = {
@@ -1195,8 +1196,8 @@ export function Chat({
             isExecuting={isExecuting}
             isTransitioning={isTransitioning}
             hasMessages={visibleMessages.length > 0}
-            onExecute={(value) => {
-              void handleExecute(value);
+            onExecute={(value, imageAttachments) => {
+              void handleExecute(value, imageAttachments);
             }}
             onInterrupt={handleInterrupt}
             onClearSession={handleClear}
