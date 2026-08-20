@@ -291,7 +291,7 @@ try
     });
     builder.Services.AddSignalR(options =>
     {
-        options.MaximumReceiveMessageSize = 64 * 1024;
+        options.MaximumReceiveMessageSize = 16 * 1024 * 1024;
     });
     builder.Services.Configure<ForwardedHeadersOptions>(options =>
     {

@@ -3,6 +3,7 @@ using Agw.Shared;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
+using Agw.Shared.Exceptions;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Tests;
@@ -76,5 +77,99 @@ public class AgwMessageUtilTests
         Assert.Equal(Constants.DefaultInputAuthor, message.AuthorName);
         Assert.Equal("metadata", Assert.IsType<TextContent>(message.Contents[0]).AdditionalProperties!["text"]);
         Assert.Equal("metadata", Assert.IsType<UriContent>(message.Contents[1]).AdditionalProperties!["uri"]);
+    }
+
+    [Fact]
+    public void CreateUserChatMessage_ImageAndText_PreservesOrderBytesAndProperties()
+    {
+        var input = new AgwUserInput
+        {
+            MessageId = "message-1",
+            Contents =
+            [
+                new AgwDataContent(new byte[] { 1, 2, 3 }, "image/png")
+                {
+                    Name = "screen.png",
+                    AdditionalProperties = new AdditionalPropertiesDictionary { ["image"] = "metadata" },
+                },
+                new AgwTextContent { Content = "describe this" },
+            ],
+        };
+
+        var message = AgwMessageUtil.CreateUserChatMessage(input);
+
+        var image = Assert.IsType<DataContent>(message.Contents[0]);
+        Assert.Equal(new byte[] { 1, 2, 3 }, image.Data.ToArray());
+        Assert.Equal("image/png", image.MediaType);
+        Assert.Equal("screen.png", image.Name);
+        Assert.Equal("metadata", image.AdditionalProperties!["image"]);
+        Assert.Equal("describe this", Assert.IsType<TextContent>(message.Contents[1]).Text);
+    }
+
+    [Fact]
+    public void CreateUserChatMessage_MoreThanFiveImages_ThrowsInvalidParam()
+    {
+        var input = new AgwUserInput
+        {
+            Contents = Enumerable
+                .Range(0, 6)
+                .Select(index =>
+                    (AgwContent)new AgwDataContent(new byte[] { 1 }, "image/png") { Name = $"image-{index}.png" }
+                )
+                .ToList(),
+        };
+
+        var exception = Assert.Throws<AgwException>(() => AgwMessageUtil.CreateUserChatMessage(input));
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.Contains("up to 5 images", exception.Message);
+    }
+
+    [Fact]
+    public void CreateUserChatMessage_NonImageDataContent_ThrowsInvalidParam()
+    {
+        var input = new AgwUserInput
+        {
+            Contents = [new AgwDataContent(new byte[] { 1 }, "application/pdf") { Name = "file.pdf" }],
+        };
+
+        var exception = Assert.Throws<AgwException>(() => AgwMessageUtil.CreateUserChatMessage(input));
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.Contains("Unsupported image type", exception.Message);
+    }
+
+    [Fact]
+    public void CreateUserChatMessage_ImageOverFiveMegabytes_ThrowsInvalidParam()
+    {
+        var input = new AgwUserInput
+        {
+            Contents = [new AgwDataContent(new byte[5 * 1024 * 1024 + 1], "image/png") { Name = "large.png" }],
+        };
+
+        var exception = Assert.Throws<AgwException>(() => AgwMessageUtil.CreateUserChatMessage(input));
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.Contains("large.png exceeds the 5 MB limit", exception.Message);
+    }
+
+    [Fact]
+    public void CreateUserChatMessage_ImagesOverTenMegabytesTotal_ThrowsInvalidParam()
+    {
+        var imageBytes = new byte[4 * 1024 * 1024];
+        var input = new AgwUserInput
+        {
+            Contents =
+            [
+                new AgwDataContent(imageBytes, "image/png"),
+                new AgwDataContent(imageBytes, "image/png"),
+                new AgwDataContent(imageBytes, "image/png"),
+            ],
+        };
+
+        var exception = Assert.Throws<AgwException>(() => AgwMessageUtil.CreateUserChatMessage(input));
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.Contains("total up to 10 MB", exception.Message);
     }
 }

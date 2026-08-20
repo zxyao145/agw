@@ -2,6 +2,7 @@ using Agw.Agents.Execution.Runtimes;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
+using Agw.Shared.Exceptions;
 using ClaudeCodeSdk.MAF;
 using Microsoft.Extensions.AI;
 
@@ -9,6 +10,18 @@ namespace Agw.Agents.Execution;
 
 internal static class AgwMessageUtil
 {
+    private const int MaxImageCount = 5;
+    private const int MaxImageBytes = 5 * 1024 * 1024;
+    private const int MaxTotalImageBytes = 10 * 1024 * 1024;
+
+    private static readonly HashSet<string> SupportedImageMediaTypes =
+    [
+        "image/jpeg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+    ];
+
     #region runtimes
 
     public static string ExtractInputText(AgwUserInput input)
@@ -41,6 +54,7 @@ internal static class AgwMessageUtil
     {
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(input.Contents);
+        ValidateImageContents(input.Contents);
 
         return new ChatMessage(ChatRole.User, ConvertToAIContents(input.Contents))
         {
@@ -110,10 +124,51 @@ internal static class AgwMessageUtil
                         }
                     );
                     break;
+
+                case AgwDataContent data:
+                    aiContents.Add(
+                        new DataContent(data.Data, data.MediaType)
+                        {
+                            Name = data.Name,
+                            AdditionalProperties = CloneAdditionalProperties(data.AdditionalProperties),
+                        }
+                    );
+                    break;
             }
         }
 
         return aiContents;
+    }
+
+    private static void ValidateImageContents(IEnumerable<AgwContent> contents)
+    {
+        var images = contents.OfType<AgwDataContent>().ToList();
+        if (images.Count > MaxImageCount)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, $"You can attach up to {MaxImageCount} images.");
+        }
+
+        var totalBytes = 0;
+        foreach (var image in images)
+        {
+            if (!SupportedImageMediaTypes.Contains(image.MediaType))
+            {
+                throw new AgwException(ErrorCodes.InvalidParam, "Unsupported image type. Use JPEG, PNG, GIF, or WebP.");
+            }
+
+            var imageBytes = image.Data.Length;
+            if (imageBytes > MaxImageBytes)
+            {
+                throw new AgwException(ErrorCodes.InvalidParam, $"{image.Name ?? "Image"} exceeds the 5 MB limit.");
+            }
+
+            totalBytes += imageBytes;
+        }
+
+        if (totalBytes > MaxTotalImageBytes)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "Images can total up to 10 MB.");
+        }
     }
 
     private static AdditionalPropertiesDictionary? CloneAdditionalProperties(
