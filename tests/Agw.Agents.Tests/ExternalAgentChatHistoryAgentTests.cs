@@ -4,6 +4,7 @@ using System.Threading.Channels;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents;
 using Agw.Shared.Contracts.Projects;
+using Agw.Shared.Extensions;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -241,6 +242,150 @@ public class ExternalAgentChatHistoryAgentTests
     }
 
     [Fact]
+    public async Task RunStreamingAsync_ClaudeInit_CapturesProviderSessionOnceWithoutChangingUpdates()
+    {
+        var provider = new RecordingChatHistoryProvider();
+        var innerAgent = new PausableExternalAgent();
+        var capturedSessionIds = new List<string>();
+        var agent = CreateAgent(
+            innerAgent,
+            provider,
+            (providerSessionId, _) =>
+            {
+                capturedSessionIds.Add(providerSessionId);
+                return ValueTask.CompletedTask;
+            }
+        );
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var expectedSessionId = Guid.Parse("11111111-2222-3333-4444-555555555555");
+        innerAgent.Emit(CreateClaudeInitUpdate(expectedSessionId));
+        innerAgent.Emit(CreateClaudeInitUpdate(Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")));
+        innerAgent.Complete();
+
+        var updates = await CollectAsync(
+            agent.RunStreamingAsync(
+                [new ChatMessage(ChatRole.User, "request")],
+                session,
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        );
+
+        Assert.Equal(2, updates.Count);
+        Assert.Equal(expectedSessionId.Normalize(), Assert.Single(capturedSessionIds));
+        var persistedMessages = Assert.Single(provider.Calls, call => call.ResponseMessages.Count > 0).ResponseMessages;
+        Assert.Equal(2, persistedMessages.Count);
+    }
+
+    [Fact]
+    public async Task RunAsync_ClaudeInit_CapturesProviderSession()
+    {
+        var provider = new RecordingChatHistoryProvider();
+        var expectedSessionId = Guid.Parse("11111111-2222-3333-4444-555555555555");
+        var innerAgent = new PausableExternalAgent
+        {
+            NonStreamingMessages =
+            [
+                CreateClaudeInitMessage(expectedSessionId),
+                new ChatMessage(ChatRole.Assistant, "non-streaming answer"),
+            ],
+        };
+        string? capturedSessionId = null;
+        var agent = CreateAgent(
+            innerAgent,
+            provider,
+            (providerSessionId, _) =>
+            {
+                capturedSessionId = providerSessionId;
+                return ValueTask.CompletedTask;
+            }
+        );
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+
+        var response = await agent.RunAsync(
+            [new ChatMessage(ChatRole.User, "request")],
+            session,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(expectedSessionId.Normalize(), capturedSessionId);
+        Assert.Equal(2, response.Messages.Count);
+        Assert.Equal(2, Assert.Single(provider.Calls, call => call.ResponseMessages.Count > 0).ResponseMessages.Count);
+    }
+
+    [Fact]
+    public async Task RunStreamingAsync_InvalidClaudeInit_DoesNotCaptureOrChangeUpdates()
+    {
+        var provider = new RecordingChatHistoryProvider();
+        var innerAgent = new PausableExternalAgent();
+        var callbackCount = 0;
+        var agent = CreateAgent(
+            innerAgent,
+            provider,
+            (_, _) =>
+            {
+                callbackCount++;
+                return ValueTask.CompletedTask;
+            }
+        );
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        innerAgent.Emit(CreateClaudeInitUpdate("{bad json"));
+        innerAgent.Emit(CreateClaudeInitUpdate(JsonSerializer.Serialize(new { session_id = "not-a-guid" })));
+        innerAgent.Emit(CreateClaudeInitUpdate(JsonSerializer.Serialize(new { tools = Array.Empty<string>() })));
+        innerAgent.Emit(
+            CreateClaudeInitUpdate(
+                JsonSerializer.Serialize(new { session_id = Guid.CreateVersion7() }),
+                subtype: "status"
+            )
+        );
+        innerAgent.Complete();
+
+        var updates = await CollectAsync(
+            agent.RunStreamingAsync(
+                [new ChatMessage(ChatRole.User, "request")],
+                session,
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        );
+
+        Assert.Equal(4, updates.Count);
+        Assert.Equal(0, callbackCount);
+    }
+
+    [Fact]
+    public async Task RunStreamingAsync_ClaudeInitBeforeFailure_CapturesSessionAndPreservesFailure()
+    {
+        var provider = new RecordingChatHistoryProvider();
+        var innerAgent = new PausableExternalAgent();
+        var expectedSessionId = Guid.Parse("11111111-2222-3333-4444-555555555555");
+        string? capturedSessionId = null;
+        var agent = CreateAgent(
+            innerAgent,
+            provider,
+            (providerSessionId, _) =>
+            {
+                capturedSessionId = providerSessionId;
+                return ValueTask.CompletedTask;
+            }
+        );
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        await using var enumerator = agent
+            .RunStreamingAsync(
+                [new ChatMessage(ChatRole.User, "request")],
+                session,
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+            .GetAsyncEnumerator(TestContext.Current.CancellationToken);
+        innerAgent.Emit(CreateClaudeInitUpdate(expectedSessionId));
+        Assert.True(await enumerator.MoveNextAsync());
+        innerAgent.Fail(new InvalidOperationException("429 quota exceeded"));
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => enumerator.MoveNextAsync().AsTask());
+
+        Assert.Equal(expectedSessionId.Normalize(), capturedSessionId);
+        Assert.Equal("429 quota exceeded", exception.Message);
+    }
+
+    [Fact]
     public async Task RunStreamingAsync_WhenFinalPersistenceFailsDuringExecutionFailure_PreservesExecutionFailure()
     {
         var provider = new RecordingChatHistoryProvider { FailureCallNumber = 2 };
@@ -320,8 +465,33 @@ public class ExternalAgentChatHistoryAgentTests
         Assert.All(provider.Calls, call => Assert.Same(providerSessionState.Session, call.Session));
     }
 
-    private static ExternalAgentChatHistoryAgent CreateAgent(AIAgent innerAgent, ChatHistoryProvider provider) =>
-        new(innerAgent, provider, TimeProvider.System, NullLogger<ExternalAgentChatHistoryAgent>.Instance);
+    private static ExternalAgentChatHistoryAgent CreateAgent(
+        AIAgent innerAgent,
+        ChatHistoryProvider provider,
+        Func<string, CancellationToken, ValueTask>? onProviderSessionStartedAsync = null
+    ) =>
+        new(
+            innerAgent,
+            provider,
+            TimeProvider.System,
+            NullLogger<ExternalAgentChatHistoryAgent>.Instance,
+            onProviderSessionStartedAsync
+        );
+
+    private static AgentResponseUpdate CreateClaudeInitUpdate(Guid sessionId) =>
+        CreateClaudeInitUpdate(JsonSerializer.Serialize(new { session_id = sessionId }));
+
+    private static AgentResponseUpdate CreateClaudeInitUpdate(string content, string subtype = "init") =>
+        new(ChatRole.System, content)
+        {
+            AdditionalProperties = new AdditionalPropertiesDictionary { ["subtype"] = subtype },
+        };
+
+    private static ChatMessage CreateClaudeInitMessage(Guid sessionId) =>
+        new(ChatRole.System, JsonSerializer.Serialize(new { session_id = sessionId }))
+        {
+            AdditionalProperties = new AdditionalPropertiesDictionary { ["subtype"] = "init" },
+        };
 
     private static async Task<List<AgentResponseUpdate>> CollectAsync(IAsyncEnumerable<AgentResponseUpdate> updates)
     {
@@ -435,6 +605,9 @@ public class ExternalAgentChatHistoryAgentTests
 
         public bool StreamDisposed { get; private set; }
 
+        public IReadOnlyList<ChatMessage> NonStreamingMessages { get; init; } =
+        [new ChatMessage(ChatRole.Assistant, "non-streaming answer")];
+
         public void Emit(AgentResponseUpdate update) => Assert.True(_updates.Writer.TryWrite(update));
 
         public void Complete() => Assert.True(_updates.Writer.TryComplete());
@@ -465,7 +638,7 @@ public class ExternalAgentChatHistoryAgentTests
             AgentSession? session,
             AgentRunOptions? options,
             CancellationToken cancellationToken
-        ) => Task.FromResult(new AgentResponse([new ChatMessage(ChatRole.Assistant, "non-streaming answer")]));
+        ) => Task.FromResult(new AgentResponse(NonStreamingMessages.ToList()));
 
         protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
             IEnumerable<ChatMessage> messages,

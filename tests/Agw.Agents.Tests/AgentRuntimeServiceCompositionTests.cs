@@ -3,6 +3,7 @@ using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Utils;
 using Agw.Agents.ExternalAgents;
+using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
 using ClaudeCodeSdk.MAF;
@@ -123,6 +124,130 @@ public class AgentRuntimeServiceCompositionTests
         Assert.Null(claudeOptions.ChatHistoryProvider);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void BuildClaudeCodeAIAgentOptions_WhenProviderSessionProvided_MapsIsResume(bool isResume)
+    {
+        var providerSessionId = Guid.Parse("11111111-2222-3333-4444-555555555555");
+        var configuredSessionId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        var extra = JsonUtil.Serialize(
+            new ClaudeCodeAIAgentOptions
+            {
+                ContinueConversation = true,
+                Resume = configuredSessionId.Normalize(),
+                SessionId = configuredSessionId,
+            }
+        );
+
+        var options = BuildClaudeCodeAIAgentOptions(extra, workspace: "/source/workspace", providerSessionId, isResume);
+
+        Assert.NotNull(options);
+        Assert.False(options.ContinueConversation);
+        Assert.Equal("/source/workspace", options.WorkingDirectory);
+        if (isResume)
+        {
+            Assert.Equal(providerSessionId.Normalize(), options.Resume);
+            Assert.Null(options.SessionId);
+        }
+        else
+        {
+            Assert.Null(options.Resume);
+            Assert.Equal(providerSessionId, options.SessionId);
+        }
+    }
+
+    [Fact]
+    public void BuildClaudeCodeAIAgentOptions_WhenProviderSessionMissing_ClearsConfiguredSessionState()
+    {
+        var configuredSessionId = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        var extra = JsonUtil.Serialize(
+            new ClaudeCodeAIAgentOptions
+            {
+                ContinueConversation = true,
+                Resume = configuredSessionId.Normalize(),
+                SessionId = configuredSessionId,
+            }
+        );
+
+        var options = BuildClaudeCodeAIAgentOptions(extra, workspace: null, providerSessionId: null, isResume: true);
+
+        Assert.NotNull(options);
+        Assert.False(options.ContinueConversation);
+        Assert.Null(options.Resume);
+        Assert.Null(options.SessionId);
+    }
+
+    [Fact]
+    public void ResolveExternalProviderSession_ClaudeCode_CreatesThenResumesSameSession()
+    {
+        var agent = new Agent { Type = AgentType.External, Name = AgentNames.ClaudeCode };
+
+        var created = AgentRuntimeService.ResolveExternalProviderSession(
+            agent,
+            persistedProviderSessionId: null,
+            requestedResume: true
+        );
+        var resumed = AgentRuntimeService.ResolveExternalProviderSession(
+            agent,
+            created.ProviderSessionId,
+            requestedResume: false
+        );
+
+        Assert.True(created.ProviderSessionId.HasValue);
+        Assert.False(created.IsResume);
+        Assert.Equal(created.ProviderSessionId, resumed.ProviderSessionId);
+        Assert.True(resumed.IsResume);
+    }
+
+    [Fact]
+    public void ResolveExternalProviderSession_Codex_PreservesExistingBehavior()
+    {
+        var agent = new Agent { Type = AgentType.External, Name = AgentNames.Codex };
+        var providerSessionId = Guid.Parse("22222222-3333-4444-5555-666666666666");
+
+        var created = AgentRuntimeService.ResolveExternalProviderSession(
+            agent,
+            persistedProviderSessionId: null,
+            requestedResume: true
+        );
+        var resumed = AgentRuntimeService.ResolveExternalProviderSession(
+            agent,
+            providerSessionId,
+            requestedResume: false
+        );
+
+        Assert.Null(created.ProviderSessionId);
+        Assert.False(created.IsResume);
+        Assert.Equal(providerSessionId, resumed.ProviderSessionId);
+        Assert.True(resumed.IsResume);
+    }
+
+    [Fact]
+    public void UsesProviderSessionBinding_OnlySupportsClaudeCodeAndCodexExternalAgents()
+    {
+        Assert.True(
+            AgentRuntimeService.UsesProviderSessionBinding(
+                new Agent { Type = AgentType.External, Name = AgentNames.ClaudeCode }
+            )
+        );
+        Assert.True(
+            AgentRuntimeService.UsesProviderSessionBinding(
+                new Agent { Type = AgentType.External, Name = AgentNames.Codex }
+            )
+        );
+        Assert.False(
+            AgentRuntimeService.UsesProviderSessionBinding(
+                new Agent { Type = AgentType.External, Name = AgentNames.GithubCopilot }
+            )
+        );
+        Assert.False(
+            AgentRuntimeService.UsesProviderSessionBinding(
+                new Agent { Type = AgentType.System, Name = AgentNames.ClaudeCode }
+            )
+        );
+    }
+
     [Fact]
     public void BuildCodexAIAgentOptions_WhenWorkspaceProvided_SetsThreadWorkingDirectory()
     {
@@ -230,6 +355,25 @@ public class AgentRuntimeServiceCompositionTests
         Assert.NotNull(method);
         return Assert.IsType<CodexAIAgentOptions>(
             method.Invoke(null, [extra, workspace, threadId, resume, environmentVariables, onThreadStartedAsync])
+        );
+    }
+
+    private static ClaudeCodeAIAgentOptions? BuildClaudeCodeAIAgentOptions(
+        string extra,
+        string? workspace,
+        Guid? providerSessionId,
+        bool isResume,
+        IReadOnlyDictionary<string, string>? environmentVariables = null
+    )
+    {
+        var method = typeof(AgentRuntimeService).GetMethod(
+            "BuildClaudeCodeAIAgentOptions",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic
+        );
+
+        Assert.NotNull(method);
+        return Assert.IsType<ClaudeCodeAIAgentOptions>(
+            method.Invoke(null, [extra, workspace, providerSessionId, isResume, environmentVariables])
         );
     }
 

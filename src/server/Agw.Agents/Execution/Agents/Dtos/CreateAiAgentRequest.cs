@@ -19,7 +19,7 @@ public sealed class CreateAiAgentRequest
 
     public Func<string, CancellationToken, ValueTask>? OnExternalSessionStartedAsync { get; init; }
 
-    public bool Resume { get; init; }
+    public bool IsResume { get; init; }
 
     public string DefaultMode { get; init; } = "execute";
 

@@ -58,13 +58,17 @@ public partial class AgentRuntimeService
                     .ConfigureAwait(false)
                     ?? Guid.Empty;
         var sessionScope = new AgentSessionStateScope(conversationId, projectId, resolvedContextId, agent.Id);
-        var providerSessionId = await GetCodexProviderSessionIdAsync(
+        var persistedProviderSessionId = await GetExternalProviderSessionIdAsync(
             agent,
             projectId,
             resolvedContextId,
             cancellationToken
         );
-        var resume = IsCodexExternalAgent(agent) ? providerSessionId.HasValue : settings.Resume;
+        var (providerSessionId, isResume) = ResolveExternalProviderSession(
+            agent,
+            persistedProviderSessionId,
+            settings.Resume
+        );
 
         var fs = await _fileSystemResolver.ResolveAsync(projectId, cancellationToken);
         var rootStat = await fs.StatAsync("", cancellationToken);
@@ -81,7 +85,7 @@ public partial class AgentRuntimeService
                 ProviderSessionId = providerSessionId,
                 ProjectId = projectId,
                 ConversationId = conversationId,
-                Resume = resume,
+                IsResume = isResume,
                 DeferHumanInteractions = deferHumanInteractions,
                 OnExternalSessionStartedAsync = CreateExternalSessionStartedCallback(agent, task, resolvedContextId),
             },
@@ -124,14 +128,14 @@ public partial class AgentRuntimeService
         }
     }
 
-    private async Task<Guid?> GetCodexProviderSessionIdAsync(
+    private async Task<Guid?> GetExternalProviderSessionIdAsync(
         Agent agent,
         Guid projectId,
         string contextId,
         CancellationToken cancellationToken
     )
     {
-        if (!IsCodexExternalAgent(agent))
+        if (!UsesProviderSessionBinding(agent))
         {
             return null;
         }
@@ -151,13 +155,32 @@ public partial class AgentRuntimeService
         return Guid.TryParse(binding.ProviderSessionId, out var providerSessionId) ? providerSessionId : null;
     }
 
+    internal static (Guid? ProviderSessionId, bool IsResume) ResolveExternalProviderSession(
+        Agent agent,
+        Guid? persistedProviderSessionId,
+        bool requestedResume
+    )
+    {
+        if (IsClaudeCodeExternalAgent(agent))
+        {
+            return (persistedProviderSessionId ?? Guid.NewGuid(), persistedProviderSessionId.HasValue);
+        }
+
+        if (IsCodexExternalAgent(agent))
+        {
+            return (persistedProviderSessionId, persistedProviderSessionId.HasValue);
+        }
+
+        return (null, requestedResume);
+    }
+
     private Func<string, CancellationToken, ValueTask>? CreateExternalSessionStartedCallback(
         Agent agent,
         TaskProjection task,
         string contextId
     )
     {
-        if (!IsCodexExternalAgent(agent))
+        if (!UsesProviderSessionBinding(agent))
         {
             return null;
         }

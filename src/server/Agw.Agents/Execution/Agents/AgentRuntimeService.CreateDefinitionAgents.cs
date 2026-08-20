@@ -247,7 +247,7 @@ public partial class AgentRuntimeService
                         ProjectId = project.Id,
                         ConversationId = conversationId,
                         EnvironmentVariables = environmentVariables,
-                        Resume = false,
+                        IsResume = false,
                     };
                     if (!TryCreateExternalAgent(request, project, environmentVariables, out agent, isBackground: true))
                     {
