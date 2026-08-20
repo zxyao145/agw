@@ -50,7 +50,7 @@ public partial class AgentRuntimeService
                 Agent = agent,
                 EnvironmentVariables = environmentVariables,
                 ProjectId = projectId,
-                Resume = resume,
+                IsResume = resume,
             },
             cancellationToken
         );
@@ -75,7 +75,7 @@ public partial class AgentRuntimeService
                 Agent = agent,
                 EnvironmentVariables = environmentVariables,
                 ProjectId = projectId,
-                Resume = false,
+                IsResume = false,
                 DefaultMode = "execute",
             },
             cancellationToken
@@ -125,7 +125,7 @@ public partial class AgentRuntimeService
                 EnvironmentVariables = environmentVariables,
                 ProjectId = projectId,
                 ConversationId = conversationId,
-                Resume = false,
+                IsResume = false,
                 DefaultMode = "execute",
                 DeferHumanInteractions = deferHumanInteractions,
             },

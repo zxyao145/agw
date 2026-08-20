@@ -313,7 +313,7 @@ sequenceDiagram
 8. 后台任务进入 `RuntimeTurnContextAccessor` 作用域，并把输出交给 `TurnPipeline`。
 9. turn 结束后，runtime 清理 `ActiveTurn`；runtime 本身仍留在 connection context 中，供下一轮复用。
 
-Agent 执行结束时，`AgentRuntimeService` 会在 `finally` 中保存 SDK session state。外部 Codex Agent 还会通过 task-session binding 记录 provider session id，以支持后续恢复。
+Agent 执行结束时，`AgentRuntimeService` 会在 `finally` 中保存 SDK session state。External Agent 不持久化通用 SDK session state；Claude Code 与 Codex 通过 project conversation 作用域内的 task-session binding 保存 provider session id。Codex 从 `OnThreadStartedAsync` 获取 thread id，并以 `ThreadId + IsResume` 恢复；Claude Code 首次运行使用 `SessionId + IsResume=false`，从 `subtype=init` 消息确认真实 `session_id` 后保存，后续以 `Resume=<session_id> + IsResume=true` 恢复。
 
 ### Definition Agent 自动 Compaction
 

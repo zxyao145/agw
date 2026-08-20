@@ -37,13 +37,13 @@ public partial class AgentRuntimeService
             AgentNames.ClaudeCode => CreateClaudeCodeAgent(
                 project,
                 request.ProviderSessionId,
-                request.Resume,
+                request.IsResume,
                 environmentVariables
             ),
             AgentNames.Codex => CreateCodexAgent(
                 project,
                 request.ProviderSessionId,
-                request.Resume,
+                request.IsResume,
                 environmentVariables,
                 request.OnExternalSessionStartedAsync
             ),
@@ -52,15 +52,28 @@ public partial class AgentRuntimeService
 
         if (aiAgent != null)
         {
-            aiAgent = WrapExternalAgent(aiAgent, isBackground);
+            var onProviderSessionStartedAsync = IsClaudeCodeExternalAgent(request.Agent)
+                ? request.OnExternalSessionStartedAsync
+                : null;
+            aiAgent = WrapExternalAgent(aiAgent, isBackground, onProviderSessionStartedAsync);
         }
 
         return aiAgent != null;
     }
 
-    internal AIAgent WrapExternalAgent(AIAgent aiAgent, bool isBackground)
+    internal AIAgent WrapExternalAgent(
+        AIAgent aiAgent,
+        bool isBackground,
+        Func<string, CancellationToken, ValueTask>? onProviderSessionStartedAsync = null
+    )
     {
-        var agentBuilder = new ExternalAgentChatHistoryAgent(aiAgent, _chatHistoryProvider, _timeProvider, _logger)
+        var agentBuilder = new ExternalAgentChatHistoryAgent(
+            aiAgent,
+            _chatHistoryProvider,
+            _timeProvider,
+            _logger,
+            onProviderSessionStartedAsync
+        )
             .AsBuilder()
             .Use(
                 runFunc: _observabilityMiddleware.LogRunMiddleware,
@@ -84,8 +97,8 @@ public partial class AgentRuntimeService
 
     private AIAgent? CreateClaudeCodeAgent(
         Project project,
-        Guid? contextId,
-        bool resume,
+        Guid? providerSessionId,
+        bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables
     )
     {
@@ -97,43 +110,66 @@ public partial class AgentRuntimeService
             );
         }
 
-        var options = JsonUtil.Deserialize<ClaudeCodeAIAgentOptions>(extra);
+        var options = BuildClaudeCodeAIAgentOptions(
+            extra,
+            PathUtil.ExpandTilde(project.Workspace),
+            providerSessionId,
+            isResume,
+            environmentVariables
+        );
         if (options == null)
         {
             _logger.LogError("agent.Extra Deserialize to options error");
             return null;
         }
 
+        return new ClaudeCodeAIAgent(options, _logger);
+    }
+
+    private static ClaudeCodeAIAgentOptions? BuildClaudeCodeAIAgentOptions(
+        string extra,
+        string? workspace,
+        Guid? providerSessionId,
+        bool isResume,
+        IReadOnlyDictionary<string, string>? environmentVariables = null
+    )
+    {
+        var options = JsonUtil.Deserialize<ClaudeCodeAIAgentOptions>(extra);
+        if (options == null)
+        {
+            return null;
+        }
+
         options = DisableExternalSdkChatHistoryPersistence(
             options with
             {
-                WorkingDirectory = PathUtil.ExpandTilde(project.Workspace),
+                WorkingDirectory = workspace,
+                ContinueConversation = false,
+                Resume = null,
+                SessionId = null,
             }
         );
 
-        if (contextId != null)
+        if (providerSessionId.HasValue)
         {
-            options = resume
+            options = isResume
                 ? options with
                 {
-                    Resume = contextId.Value.Normalize(),
-                    SessionId = null,
+                    Resume = providerSessionId.Value.Normalize(),
                 }
                 : options with
                 {
-                    Resume = null,
-                    SessionId = contextId,
+                    SessionId = providerSessionId.Value,
                 };
         }
 
-        options = ApplyEnvironmentVariables(options, environmentVariables);
-        return new ClaudeCodeAIAgent(options, _logger);
+        return ApplyEnvironmentVariables(options, environmentVariables);
     }
 
     private AIAgent? CreateCodexAgent(
         Project project,
         Guid? threadId,
-        bool resume,
+        bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables,
         Func<string, CancellationToken, ValueTask>? onThreadStartedAsync
     )
@@ -148,7 +184,7 @@ public partial class AgentRuntimeService
             extra,
             PathUtil.ExpandTilde(project.Workspace),
             threadId,
-            resume,
+            isResume,
             environmentVariables,
             onThreadStartedAsync
         );
@@ -178,7 +214,7 @@ public partial class AgentRuntimeService
         string extra,
         string? workspace,
         Guid? threadId,
-        bool resume,
+        bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         Func<string, CancellationToken, ValueTask>? onThreadStartedAsync = null
     )
@@ -199,7 +235,7 @@ public partial class AgentRuntimeService
 
         if (threadId != null)
         {
-            options = options with { ThreadId = threadId.Value, IsResume = resume };
+            options = options with { ThreadId = threadId.Value, IsResume = isResume };
         }
 
         if (onThreadStartedAsync != null)
@@ -311,6 +347,13 @@ public partial class AgentRuntimeService
     }
 
     #endregion
+
+    internal static bool UsesProviderSessionBinding(Agent agent) =>
+        IsClaudeCodeExternalAgent(agent) || IsCodexExternalAgent(agent);
+
+    private static bool IsClaudeCodeExternalAgent(Agent agent) =>
+        agent.Type == AgentType.External
+        && string.Equals(agent.Name, AgentNames.ClaudeCode, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsCodexExternalAgent(Agent agent) =>
         agent.Type == AgentType.External
