@@ -77,6 +77,23 @@ test("Tool state messages are not collapsed with adjacent system messages", () =
   assert.deepEqual(collapseConsecutiveSystemMessages([todo, mode, warning]), [todo, mode, warning]);
 });
 
+test("turn.started remains visible beside other system messages", () => {
+  const turnStarted = {
+    messageId: "turn-started",
+    role: "system",
+    author: "codex",
+    contents: [{ type: "TextContent", content: "turn.started" }],
+    additionalProperties: { type: "turn.started", agentName: "codex" },
+  };
+  const status = {
+    messageId: "status",
+    role: "system",
+    contents: [{ type: "TextContent", content: "Working" }],
+  };
+
+  assert.deepEqual(collapseConsecutiveSystemMessages([turnStarted, status]), [turnStarted, status]);
+});
+
 test("read-only mode snapshots are hidden while mode changes remain visible", () => {
   const modeGet = {
     messageId: "mode-get",

@@ -625,7 +625,7 @@ pre.msg-content-md-code > code.msg-content-md-code {
 }
 
 .msg-content .katex-display {
-  @apply my-3 overflow-x-auto overflow-y-hidden pb-1;
+  @apply my-3 overflow-x-auto py-1;
 }
 
 .msg-content .katex-display > .katex {

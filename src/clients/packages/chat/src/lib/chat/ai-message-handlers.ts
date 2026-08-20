@@ -16,6 +16,7 @@ const ToolMessageTypes = new Set([
   "tool-background-task-status",
   "tool-warning",
 ]);
+const StandaloneSystemMessageTypes = new Set([...ToolMessageTypes, "turn.started"]);
 
 export function isResultMessage(message: AiMessage): boolean {
   return (
@@ -29,9 +30,11 @@ export function collapseConsecutiveSystemMessages(messages: AiMessage[]): AiMess
   return visibleMessages.filter(
     (message, index) =>
       message.role !== "system" ||
-      ToolMessageTypes.has(String(message.additionalProperties?.type)) ||
+      StandaloneSystemMessageTypes.has(String(message.additionalProperties?.type)) ||
       visibleMessages[index + 1]?.role !== "system" ||
-      ToolMessageTypes.has(String(visibleMessages[index + 1]?.additionalProperties?.type)),
+      StandaloneSystemMessageTypes.has(
+        String(visibleMessages[index + 1]?.additionalProperties?.type),
+      ),
   );
 }
 

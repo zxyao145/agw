@@ -129,9 +129,7 @@ function AiMessageView({ message }: { message: AiMessage }) {
   const isResult = isResultMessage(message);
   const isProposedPlan = groupContents.some((node) => node.proposedPlan != null);
 
-  // const isUser = message.role === "user" && message.author === "user" && !message.additionalProperties;
   const isUser = message.role === "user";
-  const isUserBlock = message.role === "user" && !message.additionalProperties;
 
   // TODO: There are pits here that need to be optimized
   const isToolUse = message.contents.some((c) => c.type === MessageContentType.FunctionCallContent);
@@ -177,7 +175,7 @@ function AiMessageView({ message }: { message: AiMessage }) {
       className={cn(
         "flex",
         IsSideRight ? "justify-end" : "justify-start",
-        isUserBlock || isResult ? "w-full mb-8" : isProposedPlan ? "w-full" : "max-w-[80%]",
+        isUser || isResult ? "w-full mb-8" : isProposedPlan ? "w-full" : "max-w-[80%]",
       )}
     >
       <div

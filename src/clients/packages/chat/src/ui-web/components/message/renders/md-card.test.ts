@@ -132,10 +132,12 @@ test("reasoning text can render without KaTeX", async () => {
   assert.match(html, /\\beta/);
 });
 
-test("display math scrolls instead of overflowing the message", () => {
+test("display math scrolls horizontally without clipping tall glyphs", () => {
   const displayBody = getRuleBody(".msg-content .katex-display");
   const formulaBody = getRuleBody(".msg-content .katex-display > .katex");
 
   assert.match(displayBody, /overflow-x-auto/);
+  assert.match(displayBody, /py-1/);
+  assert.doesNotMatch(displayBody, /overflow-y-hidden/);
   assert.match(formulaBody, /min-w-max/);
 });
