@@ -1,0 +1,28 @@
+{
+  "name": "@agw/projects-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "react-native": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "oxlint ./src",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "format": "oxfmt ./src *.json",
+    "format:check": "oxfmt --check ./src *.json"
+  },
+  "dependencies": {
+    "@agw/api": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "25.5.0",
+    "oxfmt": "0.41.0",
+    "oxlint": "1.56.0",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
+  }
+}

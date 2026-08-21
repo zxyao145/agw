@@ -17,6 +17,12 @@ export type ApiRuntimeConfig = {
   token: string | null;
 };
 
+export type BearerApiClientConfig = {
+  baseUrl: string;
+  token: string;
+  onUnauthorized?: () => void;
+};
+
 const browserApiRuntime: ApiRuntimeConfig = { baseUrl: "", token: null };
 let apiRuntime = browserApiRuntime;
 
@@ -276,4 +282,87 @@ export function apiDelete<P extends PathsWith<"delete">>(
   options?: ApiRequestOptions<P, "delete">,
 ): Promise<ApiResponse<P, "delete">> {
   return apiRequest(path, "delete", options) as Promise<ApiResponse<P, "delete">>;
+}
+
+export type AgwApiClient = {
+  apiGet: typeof apiGet;
+  apiPost: typeof apiPost;
+  apiPut: typeof apiPut;
+  apiDelete: typeof apiDelete;
+};
+
+/**
+ * Creates an isolated API client for Desktop, Mobile, and automation clients that authenticate
+ * with a Bearer token. Bearer requests never participate in the browser cookie/CSRF flow.
+ */
+export function createBearerApiClient(config: BearerApiClientConfig): AgwApiClient {
+  const baseUrl = config.baseUrl.trim().replace(/\/+$/u, "");
+  const token = config.token.trim();
+
+  if (!baseUrl) throw new Error("API base URL is required.");
+  if (!token) throw new Error("Bearer token is required.");
+
+  const request = async (
+    path: keyof paths,
+    method: ApiMethod,
+    options?: {
+      params?: {
+        path?: Record<string, unknown>;
+        query?: Record<string, unknown>;
+      };
+      body?: unknown;
+      headers?: HeadersInit;
+      signal?: AbortSignal;
+    },
+  ): Promise<unknown> => {
+    const opts = options ?? {};
+    const urlWithPath = compilePath(String(path), opts.params?.path);
+    const url = `${baseUrl}${appendQuery(urlWithPath, opts.params?.query)}`;
+    const headers: HeadersInit = {
+      ...opts.headers,
+      Authorization: `Bearer ${token}`,
+    };
+    const init: RequestInit = {
+      method: method.toUpperCase(),
+      headers,
+      signal: opts.signal,
+      credentials: "omit",
+    };
+
+    if (opts.body !== undefined) {
+      if (typeof FormData !== "undefined" && opts.body instanceof FormData) {
+        delete (headers as Record<string, string>)["content-type"];
+        delete (headers as Record<string, string>)["Content-Type"];
+        init.body = opts.body;
+      } else {
+        (headers as Record<string, string>)["content-type"] ??= "application/json";
+        init.body = JSON.stringify(opts.body);
+      }
+    }
+
+    const response = await fetch(url, init);
+    const responseBody = await readResponseBody(response);
+    if (!response.ok) {
+      if (response.status === 401) config.onUnauthorized?.();
+      throw new ApiError({
+        status: response.status,
+        statusText: response.statusText,
+        url,
+        body: responseBody,
+      });
+    }
+
+    return unwrapApiResultEnvelope(responseBody);
+  };
+
+  return {
+    apiGet: ((path: keyof paths, options?: unknown) =>
+      request(path, "get", options as never)) as AgwApiClient["apiGet"],
+    apiPost: ((path: keyof paths, options?: unknown) =>
+      request(path, "post", options as never)) as AgwApiClient["apiPost"],
+    apiPut: ((path: keyof paths, options?: unknown) =>
+      request(path, "put", options as never)) as AgwApiClient["apiPut"],
+    apiDelete: ((path: keyof paths, options?: unknown) =>
+      request(path, "delete", options as never)) as AgwApiClient["apiDelete"],
+  };
 }

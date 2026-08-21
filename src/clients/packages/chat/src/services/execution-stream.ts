@@ -1,11 +1,9 @@
-import { createUuidV7 } from "@agw/api";
-import { MessageContentType, type AiMessage } from "@agw/api";
+import type { AiMessage } from "@agw/api";
 import {
   createStreamingMessageBatcher as createCoreStreamingMessageBatcher,
   type StreamingMessageBatcher as CoreStreamingMessageBatcher,
 } from "@agw/execution-core";
-import type { ChatImageAttachment } from "../lib/chat/image-attachments";
-import type { ExecutionUserInput } from "./execution-hub";
+export { createUserMessage, createUserTextMessage, toExecutionUserInput } from "./message-factory";
 
 export {
   getMessageTextContent,
@@ -16,46 +14,6 @@ export {
   scopeStreamingMessage,
   STREAMING_MESSAGE_BATCH_INTERVAL_MS,
 } from "@agw/execution-core";
-
-const default_user = "$agw";
-
-export function createUserTextMessage(input: string): AiMessage {
-  return createUserMessage(input, []);
-}
-
-export function createUserMessage(
-  input: string,
-  imageAttachments: readonly ChatImageAttachment[],
-): AiMessage {
-  const contents: AiMessage["contents"] = imageAttachments.map((attachment) => ({
-    type: MessageContentType.DataContent,
-    uri: attachment.dataUrl,
-    name: attachment.name,
-  }));
-  if (input.trim()) {
-    contents.push({ type: MessageContentType.TextContent, content: input });
-  }
-
-  return {
-    messageId: createUuidV7(),
-    author: default_user,
-    role: "user",
-    contents,
-  };
-}
-
-export function toExecutionUserInput(message: AiMessage): ExecutionUserInput {
-  return {
-    messageId: message.messageId,
-    author: message.author,
-    contents: message.contents.map((content) => ({
-      ...content,
-      additionalProperties: content.additionalProperties
-        ? { ...content.additionalProperties }
-        : undefined,
-    })),
-  };
-}
 
 type StreamingMessageBatchTimer = ReturnType<typeof setTimeout>;
 type StreamingMessageBatchSchedule = (

@@ -1,58 +1,41 @@
-# Repository Guidelines
+# Mobile Repository Guidelines
 
-This workspace contains the Agw Expo mobile app.
+This directory is the Expo Router root for `@agw/mobile`.
 
-## Project Structure & Module Organization
+## Project Structure
 
-- `shared/`: Expo app root, package metadata, Metro/Babel/TypeScript config, source, and tests.
-- `shared/src/rn/`: React Native app entry and route definitions (`App.tsx`, `routes.ts`).
-- `shared/src/rn/config/`: local configuration parsing and Expo SecureStore persistence.
-- `shared/__tests__/`: Jest tests for React Native behavior and repository layout.
-- `shared/android/` and `shared/ios/`: Expo prebuild output when generated. Treat these as generated unless a task explicitly targets native output.
-- `docs/`: project and workflow documentation.
+- `app/`: Expo Router route files and route-group layouts only.
+- `src/features/`: Mobile-owned authentication, servers, Chat, Files, History, and workspace behavior.
+- `src/components/` and `src/theme/`: React Native UI primitives and the Figma-derived light theme.
+- `tests/`: Jest Expo and React Native Testing Library tests.
+- `assets/`: committed app icons and visual assets.
+- `android/`, `ios/`, `.expo/`, and `dist/`: generated output; do not hand-edit or commit.
 
-The old top-level `ios/` SwiftUI shell and `android/` Kotlin shell are not part of the Expo workflow.
+Mobile may consume `@agw/api`, `@agw/execution-core`, `@agw/chat-core`, and `@agw/projects-core`. It must not import Web/Desktop applications, Web UI barrels, DOM APIs, or source files through relative monorepo paths.
 
-## Build, Test, and Development Commands
+## Commands
 
-Run mobile commands from `shared/`:
+Run commands from `src/clients/`:
 
-- `npm ci`: install from `package-lock.json`.
-- `npm start`: start Expo.
-- `npm run android`: generate/build/run the Android development app through Expo.
-- `npm run ios`: generate/build/run the iOS development app through Expo.
-- `npm run prebuild`: generate Expo native projects from app config.
-- `npm test`: run Jest tests.
-- `npm run typecheck`: run TypeScript checking with `tsc --noEmit`.
-- `npx expo config`: inspect resolved Expo config.
-- `npx expo install --check`: verify Expo SDK-compatible package versions.
-
-## Coding Style & Naming Conventions
-
-Use TypeScript and React function components for shared React Native code. Keep filenames descriptive and consistent with current casing, such as `App.tsx` and `routes.ts`. Follow existing indentation: 2 spaces in TS/JS. Prefer typed route props in `shared/src/rn/routes.ts` when adding screens.
-
-## Testing Guidelines
-
-Jest is the active test framework. Place React Native tests in `shared/__tests__/` and name files `*.test.ts`, `*.test.tsx`, or `*.test.js`. Cover route registration, configuration persistence, and platform-specific rendering when changing navigation or native-facing behavior. Run `npm test` and `npm run typecheck` before submitting shared-code changes.
-
-## Expo And Native Configuration
-
-Prefer Expo app config, config plugins, and Expo modules over hand-written native code. If native projects are needed, regenerate them from `shared/` with:
-
-```sh
-npm run prebuild
+```bash
+pnpm install
+pnpm dev:mobile
+pnpm android:mobile
+pnpm ios:mobile
+pnpm --filter @agw/mobile native:generate
+pnpm --filter @agw/mobile typecheck
+pnpm --filter @agw/mobile test
+pnpm --filter @agw/mobile build
+pnpm --filter @agw/mobile exec expo install --check
+pnpm --filter @agw/mobile exec expo-doctor
 ```
 
-Do not edit generated `shared/android/` or `shared/ios/` output unless the task is explicitly about generated native output.
+Use Expo app config and config plugins for native settings. Regenerate native projects with Expo CNG instead of editing them.
 
-Local Agw configuration is stored through `expo-secure-store`. Do not reintroduce the old file-backed `NativeAgwConfigFile` TurboModule.
+## Security
 
-## Commit & Pull Request Guidelines
+Store only Profile metadata in AsyncStorage. Store each API token in its own Expo SecureStore key. Never log, render, or place tokens in route parameters or query caches. HTTP profiles require an explicit warning confirmation before connection.
 
-Git history uses Conventional Commits, for example `feat:`, `fix(shared):`, and `docs(readme):`. Keep commits scoped with `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, or `chore:`.
+## Tests and Style
 
-Pull requests should include a summary, linked issue when available, test results, and screenshots or recordings for UI changes. Call out native dependency, prebuild output, or lockfile changes.
-
-## Security & Configuration Tips
-
-Do not commit local secrets, signing files, simulator settings, or machine-local environment files. Prefer setup steps in `README.md` and update lockfiles with dependency changes.
+Use TypeScript, React function components, kebab-case filenames, 2-space indentation, Jest Expo, and React Native Testing Library. Cover Profile migration, authentication, execution reconnect/stop behavior, destructive file actions, and both platform configurations when changing their boundaries.
