@@ -5,15 +5,18 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ScreenFrame } from "@/components/screen-frame";
 import { Composer } from "@/features/chat/composer";
 import { WorkspaceHeader } from "./workspace-header";
+import type { WorkspaceTab } from "./workspace-types";
 
 export function WorkspaceShell({
   active,
   children,
   onScrollToTop,
+  onTabChange,
 }: {
-  active: "chat" | "files";
+  active: WorkspaceTab;
   children: React.ReactNode;
   onScrollToTop?: () => void;
+  onTabChange(tab: WorkspaceTab): void;
 }): React.JSX.Element {
   const insets = useSafeAreaInsets();
   return (
@@ -22,7 +25,12 @@ export function WorkspaceShell({
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <WorkspaceHeader active={active} safeTop={insets.top} onScrollToTop={onScrollToTop} />
+        <WorkspaceHeader
+          active={active}
+          safeTop={insets.top}
+          onScrollToTop={onScrollToTop}
+          onTabChange={onTabChange}
+        />
         <View style={styles.content}>{children}</View>
         <Composer safeBottom={insets.bottom} onScrollToTop={onScrollToTop} />
       </KeyboardAvoidingView>

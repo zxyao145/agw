@@ -1,7 +1,7 @@
 import React from "react";
 
-import { ChatScreen } from "@/features/chat/chat-screen";
+import { WorkspaceScreen } from "@/features/workspace/workspace-screen";
 
 export default function ChatRoute(): React.JSX.Element {
-  return <ChatScreen />;
+  return <WorkspaceScreen initialTab="chat" />;
 }

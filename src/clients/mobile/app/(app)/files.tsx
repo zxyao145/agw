@@ -1,7 +1,7 @@
 import React from "react";
 
-import { FilesScreen } from "@/features/files/files-screen";
+import { WorkspaceScreen } from "@/features/workspace/workspace-screen";
 
 export default function FilesRoute(): React.JSX.Element {
-  return <FilesScreen />;
+  return <WorkspaceScreen initialTab="files" />;
 }

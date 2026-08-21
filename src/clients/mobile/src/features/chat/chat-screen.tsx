@@ -15,7 +15,7 @@ import {
 import { useMarkdown } from "react-native-marked";
 
 import { useWorkspace } from "@/features/workspace/workspace-provider";
-import { WorkspaceShell } from "@/features/workspace/workspace-shell";
+import type { WorkspacePaneHandle } from "@/features/workspace/workspace-types";
 import { colors, radius, typography } from "@/theme/tokens";
 import {
   getRenderableMessageContents,
@@ -23,7 +23,7 @@ import {
   stringifyContentValue,
 } from "./message-rendering";
 
-export function ChatScreen(): React.JSX.Element {
+export const ChatScreen = React.forwardRef<WorkspacePaneHandle>(function ChatScreen(_, ref) {
   const workspace = useWorkspace();
   const listRef = React.useRef<FlatList<ProcessedMessageItem<AiMessage>>>(null);
   const items = React.useMemo(
@@ -38,11 +38,16 @@ export function ChatScreen(): React.JSX.Element {
     if (items.length) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
   }, [items.length]);
 
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      scrollToTop: () => listRef.current?.scrollToOffset({ offset: 0, animated: true }),
+    }),
+    [],
+  );
+
   return (
-    <WorkspaceShell
-      active="chat"
-      onScrollToTop={() => listRef.current?.scrollToOffset({ offset: 0, animated: true })}
-    >
+    <>
       {workspace.isChatLoading ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.primary} />
@@ -86,9 +91,9 @@ export function ChatScreen(): React.JSX.Element {
         <Text style={styles.status}>Reconnecting to the execution…</Text>
       ) : null}
       {workspace.error ? <Text style={styles.error}>{workspace.error}</Text> : null}
-    </WorkspaceShell>
+    </>
   );
-}
+});
 
 function MessageCard({
   message,

@@ -6,16 +6,19 @@ import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 import { IconButton } from "@/components/icon-button";
 import { useComposer } from "@/features/chat/composer-provider";
 import { useWorkspace } from "./workspace-provider";
+import type { WorkspaceTab } from "./workspace-types";
 import { colors, radius, typography } from "@/theme/tokens";
 
 export function WorkspaceHeader({
   active,
   safeTop,
   onScrollToTop,
+  onTabChange,
 }: {
-  active: "chat" | "files";
+  active: WorkspaceTab;
   safeTop: number;
   onScrollToTop?: () => void;
+  onTabChange(tab: WorkspaceTab): void;
 }): React.JSX.Element {
   const workspace = useWorkspace();
   const composer = useComposer();
@@ -23,7 +26,7 @@ export function WorkspaceHeader({
   const newChat = () => {
     try {
       workspace.newChat();
-      router.replace("/chat");
+      onTabChange("chat");
     } catch (error) {
       Alert.alert(
         "Execution in progress",
@@ -64,8 +67,8 @@ export function WorkspaceHeader({
     <View style={[styles.header, { paddingTop: safeTop, height: 64 + safeTop }]}>
       <IconButton icon={Menu} label="Open chat history" onPress={() => router.push("/history")} />
       <View accessibilityRole="tablist" style={styles.tabs}>
-        <Tab active={active === "chat"} label="Chat" onPress={() => router.replace("/chat")} />
-        <Tab active={active === "files"} label="Files" onPress={() => router.replace("/files")} />
+        <Tab active={active === "chat"} label="Chat" onPress={() => onTabChange("chat")} />
+        <Tab active={active === "files"} label="Files" onPress={() => onTabChange("files")} />
       </View>
       <View style={styles.actions}>
         <IconButton icon={MessageSquarePlus} label="New chat" size={20} onPress={newChat} />

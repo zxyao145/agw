@@ -23,13 +23,13 @@ import {
 
 import { IconButton } from "@/components/icon-button";
 import { useWorkspace } from "@/features/workspace/workspace-provider";
-import { WorkspaceShell } from "@/features/workspace/workspace-shell";
+import type { WorkspacePaneHandle } from "@/features/workspace/workspace-types";
 import { getErrorMessage } from "@/lib/errors";
 import { colors, radius, typography } from "@/theme/tokens";
 
 type TreeItem = FileItem & { depth: number };
 
-export function FilesScreen(): React.JSX.Element {
+export const FilesScreen = React.forwardRef<WorkspacePaneHandle>(function FilesScreen(_, ref) {
   const workspace = useWorkspace();
   const [onlyChanged, setOnlyChanged] = React.useState(true);
   const [items, setItems] = React.useState<FileItem[]>([]);
@@ -66,6 +66,14 @@ export function FilesScreen(): React.JSX.Element {
   React.useEffect(() => {
     void load();
   }, [load]);
+
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      scrollToTop: () => listRef.current?.scrollToOffset({ offset: 0, animated: true }),
+    }),
+    [],
+  );
 
   const toggleDirectory = async (item: FileItem) => {
     if (expanded.has(item.path)) {
@@ -137,10 +145,7 @@ export function FilesScreen(): React.JSX.Element {
 
   const flattened = React.useMemo(() => flattenTree(items, expanded), [expanded, items]);
   return (
-    <WorkspaceShell
-      active="files"
-      onScrollToTop={() => listRef.current?.scrollToOffset({ offset: 0, animated: true })}
-    >
+    <>
       <View style={styles.titleRow}>
         <View>
           <Text style={styles.title}>Project files</Text>
@@ -202,9 +207,9 @@ export function FilesScreen(): React.JSX.Element {
           )}
         />
       )}
-    </WorkspaceShell>
+    </>
   );
-}
+});
 
 function FileRow({
   item,
@@ -359,9 +364,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 3,
   },
-  changedControl: { flexDirection: "row", alignItems: "center", gap: 4,},
+  changedControl: { flexDirection: "row", alignItems: "center", gap: 4 },
   changedLabel: { color: colors.muted, fontFamily: typography.medium, fontSize: 11 },
-  changedSwitch: { alignItems: "center", justifyContent: "center",  },
+  changedSwitch: { alignSelf: "center" },
   list: { padding: 8, paddingBottom: 20 },
   fileRow: {
     minHeight: 52,
