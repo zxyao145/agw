@@ -1,5 +1,5 @@
 import { searchFiles } from "@agw/projects";
-import type { SuggestionItem } from "../../ui-web/components/message/user-input";
+import { toFileSuggestions, type SuggestionItem } from "@agw/chat-core";
 
 export async function searchFile(
   projectId: string | null,
@@ -11,10 +11,7 @@ export async function searchFile(
 
   try {
     const response = await searchFiles(projectId, "", keyword, true);
-    return response.results.slice(0, 5).map((result) => ({
-      text: `@${result.relativePath}`,
-      description: result.fullPath,
-    }));
+    return toFileSuggestions(response.results);
   } catch (error) {
     console.error("Failed to search files:", error);
     return [];

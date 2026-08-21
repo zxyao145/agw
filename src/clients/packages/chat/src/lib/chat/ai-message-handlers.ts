@@ -1,4 +1,7 @@
 import type { AiMessage } from "@agw/api";
+import { getClaudeInitCommands, parseClaudeInitCommands } from "@agw/chat-core";
+
+export { getClaudeInitCommands } from "@agw/chat-core";
 
 const ErrorContent = "ErrorContent";
 const TextContent = "TextContent";
@@ -99,11 +102,6 @@ export function handleAiMessage(message: AiMessage): AiMessageAction[] {
   return [];
 }
 
-export function getClaudeInitCommands(message: AiMessage): string[] | null {
-  const result = parseClaudeInitMessage(message);
-  return result.isInit ? result.commands : null;
-}
-
 export function prepareClaudeHistory(messages: AiMessage[]): {
   messages: AiMessage[];
   commands: string[];
@@ -113,7 +111,7 @@ export function prepareClaudeHistory(messages: AiMessage[]): {
   let foundValidInit = false;
 
   for (const message of messages) {
-    const init = parseClaudeInitMessage(message);
+    const init = parseClaudeInitCommands(message);
     if (!init.isInit) {
       if (
         !isReadOnlyModeSnapshot(message) &&
@@ -134,40 +132,5 @@ export function prepareClaudeHistory(messages: AiMessage[]): {
   return {
     messages: visibleMessages,
     commands: foundValidInit ? commands : [],
-  };
-}
-
-type ClaudeInitParseResult =
-  | { isInit: false }
-  | { isInit: true; isValid: boolean; commands: string[] };
-
-function parseClaudeInitMessage(message: AiMessage): ClaudeInitParseResult {
-  if (message.additionalProperties?.subtype !== "init") {
-    return { isInit: false };
-  }
-
-  const rawContent = message.contents[0]?.content;
-  let content: unknown = rawContent;
-  if (typeof rawContent === "string") {
-    try {
-      content = JSON.parse(rawContent);
-    } catch {
-      return { isInit: true, isValid: false, commands: [] };
-    }
-  }
-
-  if (typeof content !== "object" || content === null || Array.isArray(content)) {
-    return { isInit: true, isValid: false, commands: [] };
-  }
-
-  const slashCommands = (content as Record<string, unknown>).slash_commands;
-  if (!Array.isArray(slashCommands)) {
-    return { isInit: true, isValid: false, commands: [] };
-  }
-
-  return {
-    isInit: true,
-    isValid: true,
-    commands: slashCommands.filter((command): command is string => typeof command === "string"),
   };
 }

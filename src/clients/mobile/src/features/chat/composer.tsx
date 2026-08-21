@@ -1,3 +1,9 @@
+import {
+  replaceSuggestion,
+  resolveInputSuggestions,
+  toFileSuggestions,
+  type SuggestionItem,
+} from "@agw/chat-core";
 import type { PermissionMode } from "@agw/execution-core";
 import { Image as ExpoImage } from "expo-image";
 import {
@@ -23,6 +29,8 @@ import {
   Text,
   TextInput,
   View,
+  type NativeSyntheticEvent,
+  type TextInputSelectionChangeEventData,
 } from "react-native";
 
 import { IconButton } from "@/components/icon-button";
@@ -60,11 +68,105 @@ export function Composer({
   const [targetPickerOpen, setTargetPickerOpen] = React.useState(false);
   const [permissionPickerOpen, setPermissionPickerOpen] = React.useState(false);
   const [addPanelOpen, setAddPanelOpen] = React.useState(false);
+  const [suggestions, setSuggestions] = React.useState<SuggestionItem[]>([]);
+  const [caretIndex, setCaretIndex] = React.useState(0);
+  const [selectionOverride, setSelectionOverride] = React.useState<
+    { start: number; end: number } | undefined
+  >();
+  const inputRef = React.useRef<TextInput>(null);
+  const suggestionRequestRef = React.useRef(0);
   const canSend = Boolean(
     workspace.selectedProjectId &&
     workspace.selectedTarget &&
     (composer.text.trim() || composer.attachments.length > 0),
   );
+
+  React.useEffect(() => {
+    const requestId = suggestionRequestRef.current + 1;
+    suggestionRequestRef.current = requestId;
+
+    if (workspace.isExecuting) {
+      setSuggestions([]);
+      return;
+    }
+
+    const result = resolveInputSuggestions(
+      composer.text,
+      caretIndex,
+      workspace.commandSource,
+      async (keyword) => {
+        if (!workspace.selectedProjectId || !workspace.filesService) {
+          return [];
+        }
+
+        const response = await workspace.filesService.searchFiles(
+          workspace.selectedProjectId,
+          "",
+          keyword,
+          true,
+        );
+        return toFileSuggestions(response.results);
+      },
+    );
+
+    if (result instanceof Promise) {
+      setSuggestions([]);
+      void result
+        .then((nextSuggestions) => {
+          if (suggestionRequestRef.current === requestId) {
+            setSuggestions(nextSuggestions);
+          }
+        })
+        .catch(() => {
+          if (suggestionRequestRef.current === requestId) {
+            setSuggestions([]);
+          }
+        });
+      return;
+    }
+
+    setSuggestions(result);
+  }, [
+    caretIndex,
+    composer.text,
+    workspace.commandSource,
+    workspace.filesService,
+    workspace.isExecuting,
+    workspace.selectedProjectId,
+    workspace.selectedTargetValue,
+  ]);
+
+  React.useEffect(() => {
+    suggestionRequestRef.current += 1;
+    setSuggestions([]);
+  }, [workspace.selectedContextId]);
+
+  const handleSelectionChange = (
+    event: NativeSyntheticEvent<TextInputSelectionChangeEventData>,
+  ) => {
+    const selection = event.nativeEvent.selection;
+    setCaretIndex(selection.start);
+    if (
+      selectionOverride &&
+      selection.start === selectionOverride.start &&
+      selection.end === selectionOverride.end
+    ) {
+      setSelectionOverride(undefined);
+    }
+  };
+
+  const handleSuggestionSelect = (suggestion: SuggestionItem) => {
+    const replacement = replaceSuggestion(composer.text, suggestion.text, caretIndex);
+    suggestionRequestRef.current += 1;
+    setSuggestions([]);
+    setCaretIndex(replacement.caretIndex);
+    setSelectionOverride({
+      start: replacement.caretIndex,
+      end: replacement.caretIndex,
+    });
+    composer.setText(replacement.value);
+    inputRef.current?.focus();
+  };
 
   return (
     <View style={[styles.container, { paddingBottom: Math.max(8, safeBottom) }]}>
@@ -102,105 +204,113 @@ export function Composer({
         </View>
       </View>
 
-      <View style={styles.inputCard}>
-        {composer.attachments.length ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.attachments}
-          >
-            {composer.attachments.map((attachment) => (
-              <View key={attachment.id} style={styles.attachment}>
-                <ExpoImage
-                  source={{ uri: attachment.dataUrl }}
-                  style={styles.attachmentImage}
-                  contentFit="cover"
-                />
-                <Pressable
-                  accessibilityLabel={`Remove ${attachment.name}`}
-                  disabled={workspace.isExecuting}
-                  onPress={() => composer.removeAttachment(attachment.id)}
-                  style={({ pressed }) => [
-                    styles.removeAttachment,
-                    workspace.isExecuting && styles.disabled,
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <X color={colors.black} size={18} strokeWidth={2.5} />
-                </Pressable>
-              </View>
-            ))}
-          </ScrollView>
-        ) : null}
-
-        <TextInput
-          accessibilityLabel="Message"
-          multiline
-          editable={!workspace.isExecuting}
-          placeholder="Type your message..."
-          placeholderTextColor={colors.subtle}
-          value={composer.text}
-          onChangeText={composer.setText}
-          style={styles.input}
-        />
-
-        <View style={styles.bottomBar}>
-          <View style={styles.bottomLeft}>
-            <Pressable
-              accessibilityLabel="Add"
-              accessibilityRole="button"
-              disabled={workspace.isExecuting}
-              onPress={() => setAddPanelOpen(true)}
-              style={({ pressed }) => [
-                styles.addButton,
-                workspace.isExecuting && styles.disabled,
-                pressed && styles.utilityPressed,
-              ]}
+      <View style={styles.inputStack}>
+        <ComposerSuggestions suggestions={suggestions} onSelect={handleSuggestionSelect} />
+        <View style={styles.inputCard}>
+          {composer.attachments.length ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.attachments}
             >
-              <Plus color={colors.ink} size={25} strokeWidth={2} />
-            </Pressable>
-            <Pressable
-              accessibilityLabel="Tool permission mode"
-              accessibilityRole="button"
-              disabled={workspace.isExecuting}
-              onPress={() => setPermissionPickerOpen(true)}
-              style={({ pressed }) => [
-                styles.permissionButton,
-                workspace.isExecuting && styles.disabled,
-                pressed && styles.utilityPressed,
-              ]}
-            >
-              <ShieldAlert color={colors.subtle} size={18} />
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.permissionText,
-                  workspace.permissionMode === "fullAccess" && styles.fullAccessText,
+              {composer.attachments.map((attachment) => (
+                <View key={attachment.id} style={styles.attachment}>
+                  <ExpoImage
+                    source={{ uri: attachment.dataUrl }}
+                    style={styles.attachmentImage}
+                    contentFit="cover"
+                  />
+                  <Pressable
+                    accessibilityLabel={`Remove ${attachment.name}`}
+                    disabled={workspace.isExecuting}
+                    onPress={() => composer.removeAttachment(attachment.id)}
+                    style={({ pressed }) => [
+                      styles.removeAttachment,
+                      workspace.isExecuting && styles.disabled,
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <X color={colors.black} size={18} strokeWidth={2.5} />
+                  </Pressable>
+                </View>
+              ))}
+            </ScrollView>
+          ) : null}
+
+          <TextInput
+            ref={inputRef}
+            accessibilityLabel="Message"
+            multiline
+            editable={!workspace.isExecuting}
+            placeholder="Type your message..."
+            placeholderTextColor={colors.subtle}
+            value={composer.text}
+            selection={selectionOverride}
+            onChangeText={composer.setText}
+            onSelectionChange={handleSelectionChange}
+            style={styles.input}
+          />
+
+          <View style={styles.bottomBar}>
+            <View style={styles.bottomLeft}>
+              <Pressable
+                accessibilityLabel="Add"
+                accessibilityRole="button"
+                disabled={workspace.isExecuting}
+                onPress={() => setAddPanelOpen(true)}
+                style={({ pressed }) => [
+                  styles.addButton,
+                  workspace.isExecuting && styles.disabled,
+                  pressed && styles.utilityPressed,
                 ]}
               >
-                {permissionLabels[workspace.permissionMode]}
-              </Text>
-              <ChevronDown color={colors.subtle} size={15} />
+                <Plus color={colors.ink} size={25} strokeWidth={2} />
+              </Pressable>
+              <Pressable
+                accessibilityLabel="Tool permission mode"
+                accessibilityRole="button"
+                disabled={workspace.isExecuting}
+                onPress={() => setPermissionPickerOpen(true)}
+                style={({ pressed }) => [
+                  styles.permissionButton,
+                  workspace.isExecuting && styles.disabled,
+                  pressed && styles.utilityPressed,
+                ]}
+              >
+                <ShieldAlert color={colors.subtle} size={18} />
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.permissionText,
+                    workspace.permissionMode === "fullAccess" && styles.fullAccessText,
+                  ]}
+                >
+                  {permissionLabels[workspace.permissionMode]}
+                </Text>
+                <ChevronDown color={colors.subtle} size={15} />
+              </Pressable>
+            </View>
+
+            <Pressable
+              accessibilityLabel={workspace.isExecuting ? "Stop generating" : "Send message"}
+              accessibilityRole="button"
+              disabled={workspace.isExecuting ? false : !canSend}
+              onPress={
+                workspace.isExecuting ? workspace.stopExecution : () => void composer.submit()
+              }
+              style={({ pressed }) => [
+                styles.sendButton,
+                !workspace.isExecuting && !canSend && styles.sendDisabled,
+                pressed && styles.pressed,
+              ]}
+            >
+              {workspace.isExecuting ? (
+                <Square color={colors.white} fill={colors.white} size={16} />
+              ) : (
+                <ArrowUp color={colors.white} size={24} strokeWidth={2.2} />
+              )}
             </Pressable>
           </View>
-
-          <Pressable
-            accessibilityLabel={workspace.isExecuting ? "Stop generating" : "Send message"}
-            accessibilityRole="button"
-            disabled={workspace.isExecuting ? false : !canSend}
-            onPress={workspace.isExecuting ? workspace.stopExecution : () => void composer.submit()}
-            style={({ pressed }) => [
-              styles.sendButton,
-              !workspace.isExecuting && !canSend && styles.sendDisabled,
-              pressed && styles.pressed,
-            ]}
-          >
-            {workspace.isExecuting ? (
-              <Square color={colors.white} fill={colors.white} size={16} />
-            ) : (
-              <ArrowUp color={colors.white} size={24} strokeWidth={2.2} />
-            )}
-          </Pressable>
         </View>
       </View>
 
@@ -216,6 +326,51 @@ export function Composer({
         onClose={() => setAddPanelOpen(false)}
       />
       <QuickTextPicker />
+    </View>
+  );
+}
+
+function ComposerSuggestions({
+  suggestions,
+  onSelect,
+}: {
+  suggestions: SuggestionItem[];
+  onSelect(suggestion: SuggestionItem): void;
+}): React.JSX.Element | null {
+  if (suggestions.length === 0) return null;
+
+  return (
+    <View accessibilityLabel="Suggestions" style={styles.suggestionsPanel}>
+      <Text style={styles.suggestionsTitle}>Suggestions</Text>
+      <ScrollView
+        bounces={false}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {suggestions.map((suggestion, index) => (
+          <Pressable
+            key={`${suggestion.kind ?? "file"}:${suggestion.text}:${index}`}
+            accessibilityLabel={`Use suggestion ${suggestion.text}`}
+            accessibilityRole="button"
+            onPress={() => onSelect(suggestion)}
+            style={({ pressed }) => [styles.suggestionRow, pressed && styles.utilityPressed]}
+          >
+            <View style={styles.suggestionHeader}>
+              <Text numberOfLines={1} style={styles.suggestionText}>
+                {suggestion.text}
+              </Text>
+              {suggestion.kind ? (
+                <Text style={styles.suggestionKind}>{suggestion.kind}</Text>
+              ) : null}
+            </View>
+            {suggestion.description ? (
+              <Text numberOfLines={2} style={styles.suggestionDescription}>
+                {suggestion.description}
+              </Text>
+            ) : null}
+          </Pressable>
+        ))}
+      </ScrollView>
     </View>
   );
 }
@@ -572,6 +727,74 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   utilityPressed: { backgroundColor: colors.segment },
+  inputStack: { position: "relative", zIndex: 20 },
+  suggestionsPanel: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: "100%",
+    maxHeight: 280,
+    paddingHorizontal: 6,
+    paddingTop: 8,
+    paddingBottom: 6,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 16,
+    backgroundColor: colors.white,
+    shadowColor: colors.ink,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    elevation: 14,
+  },
+  suggestionsTitle: {
+    paddingHorizontal: 8,
+    paddingBottom: 5,
+    color: colors.subtle,
+    fontFamily: typography.semibold,
+    fontSize: 11,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  suggestionRow: {
+    minHeight: 48,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    justifyContent: "center",
+    gap: 3,
+    borderRadius: 10,
+  },
+  suggestionHeader: {
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  suggestionText: {
+    flex: 1,
+    color: colors.ink,
+    fontFamily: typography.medium,
+    fontSize: 13,
+  },
+  suggestionKind: {
+    flexShrink: 0,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    overflow: "hidden",
+    borderRadius: radius.pill,
+    color: colors.primary,
+    backgroundColor: colors.primarySoft,
+    fontFamily: typography.medium,
+    fontSize: 10,
+    textTransform: "uppercase",
+  },
+  suggestionDescription: {
+    color: colors.subtle,
+    fontFamily: typography.regular,
+    fontSize: 11,
+    lineHeight: 15,
+  },
   inputCard: {
     minHeight: 120,
     paddingHorizontal: 8,

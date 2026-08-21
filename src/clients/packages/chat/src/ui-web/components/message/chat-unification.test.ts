@@ -299,10 +299,9 @@ test("shared Chat input provides slash and project file suggestions", async () =
 
   assert.match(chatSource, /getAgentSuggestionQueryParams\(projectId, target\)/);
   assert.match(chatSource, /toCommandSource\(agentSuggestionsQuery\.data, claudeCommands\)/);
-  assert.match(inputSource, /getSuggestionTrigger\(input, caretIndex\)/);
-  assert.match(inputSource, /searchCommand\(trigger\.query, commandSource\)/);
-  assert.match(inputSource, /searchFile\(projectId, trigger\.query\)/);
-  assert.match(searchFileSource, /response\.results\.slice\(0, 5\)/);
+  assert.match(inputSource, /resolveInputSuggestions\(input, caretIndex, commandSource/);
+  assert.match(inputSource, /searchFile\(projectId, keyword\)/);
+  assert.match(searchFileSource, /toFileSuggestions\(response\.results\)/);
 });
 
 test("shared Chat renders only the pending file comment count in the composer", async () => {

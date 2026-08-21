@@ -6,7 +6,17 @@ import {
   type ChatTargetOption,
   type components,
 } from "@agw/api";
-import { createUserMessage, toExecutionUserInput, type ChatImageAttachment } from "@agw/chat-core";
+import {
+  createUserMessage,
+  getAgentSuggestionQueryParams,
+  getClaudeHistoryCommands,
+  getClaudeInitCommands,
+  toCommandSource,
+  toExecutionUserInput,
+  type AgentSuggestionsResponse,
+  type ChatImageAttachment,
+  type CommandSource,
+} from "@agw/chat-core";
 import {
   createStreamingMessageBatcher,
   mergeStreamingMessages,
@@ -39,7 +49,6 @@ export type Project = components["schemas"]["ProjectResponse"];
 export type Agent = components["schemas"]["AgentResponse"];
 export type Agentflow = components["schemas"]["Agentflow"];
 export type AgentSuggestion = components["schemas"]["AgentSuggestionResponse"];
-type AgentSuggestionsResponse = components["schemas"]["AgentSuggestionsResponse"];
 
 type WorkspaceContextValue = {
   projects: Project[];
@@ -53,6 +62,7 @@ type WorkspaceContextValue = {
   selectedTarget: ChatTargetOption | null;
   permissionMode: PermissionMode;
   agentMode: AgentMode;
+  commandSource: CommandSource;
   agentSuggestions: AgentSuggestion[];
   supportsAgentMode: boolean;
   isSuggestionsLoading: boolean;
@@ -99,6 +109,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
   const [selectedContextId, setSelectedContextId] = React.useState<string | null>(null);
   const [permissionMode, setPermissionMode] = React.useState<PermissionMode>("fullAccess");
   const [agentMode, setAgentMode] = React.useState<AgentMode>("execute");
+  const [claudeCommands, setClaudeCommands] = React.useState<string[]>([]);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [reconnectState, setReconnectState] = React.useState<ExecutionReconnectState | null>(null);
@@ -156,28 +167,36 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
   const selectedTarget =
     targets.find((target) => getTargetValue(target) === selectedTargetValue) ?? null;
+  const suggestionQueryParams = React.useMemo(
+    () => getAgentSuggestionQueryParams(selectedProjectId, selectedTarget),
+    [selectedProjectId, selectedTarget],
+  );
   const suggestionsQuery = useQuery({
     queryKey: [
       "mobile",
       profileId,
       "agent-suggestions",
-      selectedProjectId,
-      selectedTarget?.type,
-      selectedTarget?.id,
+      suggestionQueryParams?.projectId,
+      suggestionQueryParams?.agentId,
     ],
-    enabled: Boolean(client && selectedTarget?.type === "agent"),
-    queryFn: async () =>
-      (await client!.apiGet("/api/agents/suggestions", {
+    enabled: Boolean(client && suggestionQueryParams),
+    queryFn: async () => {
+      if (!suggestionQueryParams) {
+        throw new Error("Agent suggestion query requires an agent.");
+      }
+
+      return (await client!.apiGet("/api/agents/suggestions", {
         params: {
-          query: {
-            projectId: selectedProjectId ?? undefined,
-            agentId: selectedTarget!.id,
-          },
+          query: suggestionQueryParams,
         },
-      })) as AgentSuggestionsResponse,
+      })) as AgentSuggestionsResponse;
+    },
   });
-  const agentSuggestions =
-    suggestionsQuery.data?.mode === "system" ? suggestionsQuery.data.suggestions : [];
+  const commandSource = React.useMemo(
+    () => toCommandSource(suggestionsQuery.data, claudeCommands),
+    [claudeCommands, suggestionsQuery.data],
+  );
+  const agentSuggestions = commandSource.mode === "system" ? commandSource.suggestions : [];
   const supportsAgentMode = agentSuggestions.some((suggestion) => suggestion.text === "/mode_set");
 
   React.useEffect(() => {
@@ -202,6 +221,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
 
   React.useEffect(() => {
     setAgentMode("execute");
+    setClaudeCommands([]);
   }, [profileId, selectedTargetValue]);
 
   React.useEffect(() => {
@@ -210,11 +230,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
     if (!key) {
       hydratedContextRef.current = null;
       setMessages([]);
+      setClaudeCommands([]);
       return;
     }
     if (contextDetailsQuery.data && hydratedContextRef.current !== key) {
       hydratedContextRef.current = key;
       setMessages(scopeMessagesByUserTurn(contextDetailsQuery.data.messages));
+      setClaudeCommands(getClaudeHistoryCommands(contextDetailsQuery.data.messages));
     }
   }, [contextDetailsQuery.data, selectedContextId, selectedProjectId]);
 
@@ -227,6 +249,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
     setSelectedTargetValue(null);
     setSelectedContextId(null);
     setMessages([]);
+    setClaudeCommands([]);
     setIsExecuting(false);
     setReconnectState(null);
     setOperationError(null);
@@ -247,6 +270,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
     hydratedContextRef.current = null;
     setSelectedContextId(null);
     setMessages([]);
+    setClaudeCommands([]);
     setOperationError(null);
   }, [ensureIdle]);
 
@@ -256,6 +280,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
       setSelectedProjectId(projectId);
       setSelectedContextId(null);
       setMessages([]);
+      setClaudeCommands([]);
       hydratedContextRef.current = null;
       setOperationError(null);
     },
@@ -266,6 +291,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
       ensureIdle();
       hydratedContextRef.current = null;
       setSelectedContextId(contextId);
+      setClaudeCommands([]);
       setOperationError(null);
     },
     [ensureIdle],
@@ -308,7 +334,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
           input: toExecutionUserInput(userMessage),
         },
         onMessage: (incoming) => {
-          if (generation !== executionGenerationRef.current || incoming.role === "user") return;
+          if (generation !== executionGenerationRef.current) return;
+          const initCommands = getClaudeInitCommands(incoming);
+          if (initCommands !== null) {
+            setClaudeCommands(initCommands);
+            return;
+          }
+          if (incoming.role === "user") return;
           batcherRef.current?.enqueue(
             scopeStreamingMessage(incoming, userMessage.messageId),
             generation,
@@ -370,6 +402,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
     ensureIdle();
     await contextService.clearProjectContextRecords(selectedProjectId, selectedContextId);
     setMessages([]);
+    setClaudeCommands([]);
     await contextsQuery.refetch();
   }, [contextService, contextsQuery, ensureIdle, selectedContextId, selectedProjectId]);
 
@@ -407,6 +440,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
       selectedTarget,
       permissionMode,
       agentMode,
+      commandSource,
       agentSuggestions,
       supportsAgentMode,
       isSuggestionsLoading: suggestionsQuery.isLoading,
@@ -454,6 +488,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
       selectedTarget,
       permissionMode,
       agentMode,
+      commandSource,
       agentSuggestions,
       supportsAgentMode,
       suggestionsQuery.isLoading,

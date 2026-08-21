@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { QuickTextDialog } from "@agw/projects";
 import { Button } from "@agw/components";
 import { Separator } from "@agw/components";
-import { searchCommand, type CommandSource } from "../../../lib/chat/search-command";
+import { resolveInputSuggestions, type CommandSource } from "@agw/chat-core";
 import { searchFile } from "../../../lib/chat/search-file";
 import {
   createImageAttachments,
@@ -16,7 +16,6 @@ import {
 } from "../../../lib/chat/image-attachments";
 import type { AgentMode, PermissionMode } from "../../../services/execution-hub";
 import { ChatInputToolbar } from "./chat-input-toolbar";
-import { getSuggestionTrigger } from "./suggestion-trigger";
 import { UserInput, type UserInputRef } from "./user-input";
 
 interface ChatInputProps {
@@ -127,18 +126,10 @@ export function ChatInput({
   );
 
   const handleSuggestion = React.useCallback(
-    (input: string, caretIndex: number) => {
-      const trigger = getSuggestionTrigger(input, caretIndex);
-      if (!trigger) {
-        return [];
-      }
-
-      if (trigger.type === "command") {
-        return searchCommand(trigger.query, commandSource);
-      }
-
-      return searchFile(projectId, trigger.query);
-    },
+    (input: string, caretIndex: number) =>
+      resolveInputSuggestions(input, caretIndex, commandSource, (keyword) =>
+        searchFile(projectId, keyword),
+      ),
     [commandSource, projectId],
   );
 
