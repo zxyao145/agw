@@ -1,13 +1,10 @@
 import type { ConfigContext, ExpoConfig } from "expo/config";
 
-const appVersion = process.env.AGW_APP_VERSION ?? "0.1.0";
-const buildNumber = process.env.AGW_BUILD_NUMBER ?? "1";
-
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: "Agw",
   slug: "agw",
-  version: appVersion,
+  version: "0.1.0",
   platforms: ["ios", "android"],
   scheme: "agw",
   orientation: "default",
@@ -15,7 +12,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   icon: "./assets/agw-logo@2x.png",
   ios: {
     bundleIdentifier: "com.agw",
-    buildNumber,
     supportsTablet: true,
     config: { usesNonExemptEncryption: false },
     infoPlist: {
@@ -24,7 +20,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: "com.agw",
-    versionCode: Number(buildNumber),
     usesCleartextTraffic: true,
     softwareKeyboardLayoutMode: "resize",
     adaptiveIcon: {
