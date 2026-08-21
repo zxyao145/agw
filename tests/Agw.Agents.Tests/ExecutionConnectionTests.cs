@@ -79,7 +79,7 @@ public class ExecutionConnectionTests
             CreateTime = TimeProvider.System.GetUtcNow(),
         };
         var context = new ExecutionConnectionContext(
-            "user",
+            "user-id",
             new NullSink(),
             CancellationToken.None,
             runtimeFactory,
@@ -88,12 +88,13 @@ public class ExecutionConnectionTests
         );
         var connection = new ExecutionConnection(
             "connection",
-            "user",
+            "user-id",
             provider.CreateAsyncScope(),
             new ExecutionCommandDispatcher([]),
             context,
             NullLogger.Instance
         );
+        Assert.Equal("user-id", connection.UserId);
         return new ConnectionFixture(connection, context, runtimeFactory);
     }
 

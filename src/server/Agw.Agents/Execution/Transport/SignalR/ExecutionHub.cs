@@ -3,6 +3,7 @@ using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Agents.Execution.Durable;
 using Agw.Files.Exceptions;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
@@ -26,7 +27,7 @@ public sealed class ExecutionHub : Hub<IExecutionHubClient>
 
     public override Task OnConnectedAsync()
     {
-        _registry.Connect(Context.ConnectionId, CurrentUser);
+        _registry.Connect(Context.ConnectionId, CurrentUserId);
         return base.OnConnectedAsync();
     }
 
@@ -39,7 +40,7 @@ public sealed class ExecutionHub : Hub<IExecutionHubClient>
     public Task DispatchCommand(AgentRunCommand command)
     {
         return InvokeAsync(() =>
-            _registry.DispatchAsync(Context.ConnectionId, CurrentUser, command, Context.ConnectionAborted)
+            _registry.DispatchAsync(Context.ConnectionId, CurrentUserId, command, Context.ConnectionAborted)
         );
     }
 
@@ -52,13 +53,13 @@ public sealed class ExecutionHub : Hub<IExecutionHubClient>
         InvokeResultAsync(() =>
             _registry.GetAgentflowCheckpointsAsync(
                 Context.ConnectionId,
-                CurrentUser,
+                CurrentUserId,
                 agentflowId,
                 Context.ConnectionAborted
             )
         );
 
-    private string CurrentUser => Context.User?.Identity?.Name ?? Constants.AdminUserName;
+    private string CurrentUserId => Context.User?.GetUserId() ?? Constants.AdminUserId;
 
     private static async Task InvokeAsync(Func<Task> action)
     {

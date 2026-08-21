@@ -32,7 +32,9 @@ public sealed class EfApiTokenStoreTests
         Assert.Equal(CreatedAt, created.CreatedAt);
         Assert.DoesNotContain(created.Token, persisted.SecretHash, StringComparison.Ordinal);
         Assert.Equal(64, persisted.SecretHash.Length);
-        Assert.True(await fixture.Store.ValidateTokenAsync(created.Token, TestContext.Current.CancellationToken));
+        var identity = await fixture.Store.ValidateTokenAsync(created.Token, TestContext.Current.CancellationToken);
+        Assert.NotNull(identity);
+        Assert.Equal("creator-42", identity.UserId);
     }
 
     [Fact]
@@ -57,7 +59,7 @@ public sealed class EfApiTokenStoreTests
         var revoked = await fixture.Store.RevokeTokenAsync(created.Id, TestContext.Current.CancellationToken);
 
         Assert.True(revoked);
-        Assert.False(await fixture.Store.ValidateTokenAsync(created.Token, TestContext.Current.CancellationToken));
+        Assert.Null(await fixture.Store.ValidateTokenAsync(created.Token, TestContext.Current.CancellationToken));
         Assert.Empty(await fixture.Store.ListTokensAsync(TestContext.Current.CancellationToken));
     }
 

@@ -23,7 +23,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     internal const string BusyMessage =
         "The previous execution is currently in progress, please wait and execute again.";
 
-    private readonly string _userName;
+    private readonly string _userId;
     private readonly IExecutionMessageSink _messageSink;
     private readonly CancellationToken _hostToken;
     private readonly IRuntimeFactory _runtimeFactory;
@@ -40,7 +40,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     private volatile bool _waitingForHuman;
 
     internal ExecutionConnectionContext(
-        string userName,
+        string userId,
         IExecutionMessageSink messageSink,
         CancellationToken hostToken,
         IRuntimeFactory runtimeFactory,
@@ -50,7 +50,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         AgentflowCheckpointStore? checkpointStore = null
     )
     {
-        _userName = userName;
+        _userId = string.IsNullOrWhiteSpace(userId) ? Constants.AdminUserId : userId.Trim();
         _messageSink = messageSink;
         _hostToken = hostToken;
         _runtimeFactory = runtimeFactory;
@@ -62,7 +62,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     public ExecutionSettings? Settings { get; private set; }
 
-    public string UserName => _userName;
+    public string UserId => _userId;
 
     public Guid? ProjectId => _resolvedTask?.ProjectId ?? Settings?.ProjectId;
 
@@ -167,11 +167,13 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             Settings,
             _resolvedTask!,
             target,
-            _userName,
             _workspace!,
             _messageSink,
             pending => _waitingForHuman = pending != null
-        );
+        )
+        {
+            UserId = _userId,
+        };
         var requestedMode =
             command.AgentType == AgentRuntimeType.Agent
             && _pendingModeChange is { } pendingModeChange
@@ -316,7 +318,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId),
                 ContextIdUtil.ResolveContextId(settings.ContextId),
                 agentflowId,
-                _userName,
+                _userId,
                 inProcessOccurrences,
                 cancellationToken
             )
@@ -397,7 +399,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 projectId,
                 contextId,
                 command.AgentflowId,
-                _userName,
+                _userId,
                 cancellationToken
             )
             .ConfigureAwait(false);
@@ -477,7 +479,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                     ContextId: Settings.ContextId,
                     Input: AgwMessageUtil.ExtractInputText(command.Input),
                     Resume: Settings.Resume,
-                    User: _userName
+                    User: _userId
                 ),
                 cancellationToken
             );

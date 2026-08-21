@@ -1,7 +1,7 @@
-using Agw.Shared;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Extensions;
 using Agw.Shared.Results;
 using Agw.Skills.Application;
 using Agw.Skills.Contracts.Manager;
@@ -68,7 +68,7 @@ public class SkillsController : ControllerBase
     {
         try
         {
-            var user = User?.Identity?.Name ?? Constants.AdminUserName;
+            var user = User.GetUserId();
             var skill = new Skill
             {
                 Kind = request.Kind,
@@ -103,7 +103,7 @@ public class SkillsController : ControllerBase
     {
         try
         {
-            var user = User?.Identity?.Name ?? Constants.AdminUserName;
+            var user = User.GetUserId();
             var updated = await _skillAppService.UpdateAsync(
                 id,
                 request.Name,

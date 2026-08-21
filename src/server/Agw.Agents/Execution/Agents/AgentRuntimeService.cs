@@ -35,6 +35,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
     private readonly IRemoteSkillContentResolver? _remoteSkillContentResolver;
     private readonly HumanInteractionContextAccessor? _humanInteractionContextAccessor;
     private readonly IConversationHandoffProvider? _conversationHandoffProvider;
+    private readonly IRuntimeTurnContextAccessor? _turnContextAccessor;
     private readonly TimeProvider _timeProvider;
 
     private readonly ILoggerFactory _loggerFactory;
@@ -61,6 +62,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         IConversationHistoryWriter? conversationHistoryWriter = null,
         HumanInteractionContextAccessor? humanInteractionContextAccessor = null,
         IConversationHandoffProvider? conversationHandoffProvider = null,
+        IRuntimeTurnContextAccessor? turnContextAccessor = null,
         TimeProvider? timeProvider = null
     )
     {
@@ -85,6 +87,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         _remoteSkillContentResolver = remoteSkillContentResolver;
         _humanInteractionContextAccessor = humanInteractionContextAccessor;
         _conversationHandoffProvider = conversationHandoffProvider;
+        _turnContextAccessor = turnContextAccessor;
         _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
         _services = services ?? new ServiceCollection().BuildServiceProvider();
     }

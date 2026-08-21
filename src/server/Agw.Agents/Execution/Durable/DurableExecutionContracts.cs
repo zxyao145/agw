@@ -55,11 +55,6 @@ internal sealed record DurableExecutionManifest
     public string UserId { get; init; } = Constants.AdminUserId;
 
     /// <summary>
-    /// 获取 execution owner 的稳定登录名，用于 checkpoint 授权。
-    /// </summary>
-    public string UserName { get; init; } = Constants.AdminUserName;
-
-    /// <summary>
     /// 获取需要执行的 Agent 标识。
     /// </summary>
     public required Guid AgentId { get; init; }

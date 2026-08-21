@@ -394,7 +394,7 @@ public class ProjectContextAppServiceTests
                     ContextId = "context-1",
                     TaskId = Guid.CreateVersion7(),
                     AgentflowId = Guid.CreateVersion7(),
-                    UserName = "tester",
+                    UserId = "tester-id",
                     BoundarySequence = 0,
                     DefinitionFingerprint = new string('a', 64),
                     MarkersJson = "[]",

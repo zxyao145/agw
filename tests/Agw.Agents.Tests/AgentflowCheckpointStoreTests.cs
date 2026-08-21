@@ -35,7 +35,7 @@ public sealed class AgentflowCheckpointStoreTests
             fixture.ContextId,
             fixture.TaskId,
             fixture.AgentflowId,
-            "user",
+            "user-id",
             isDurable: false,
             fingerprint!,
             CreateCheckpoint("checkpoint-1"),
@@ -52,7 +52,7 @@ public sealed class AgentflowCheckpointStoreTests
             fixture.ContextId,
             fixture.TaskId,
             fixture.AgentflowId,
-            "user",
+            "user-id",
             isDurable: false,
             fingerprint!,
             CreateCheckpoint("checkpoint-2"),
@@ -66,7 +66,7 @@ public sealed class AgentflowCheckpointStoreTests
             fixture.ProjectId,
             fixture.ContextId,
             fixture.AgentflowId,
-            "user",
+            "user-id",
             new HashSet<Guid> { first.Snapshot.OccurrenceId, second.Snapshot.OccurrenceId },
             cancellationToken
         );
@@ -78,7 +78,7 @@ public sealed class AgentflowCheckpointStoreTests
             fixture.ProjectId,
             fixture.ContextId,
             fixture.AgentflowId,
-            "user",
+            "user-id",
             cancellationToken
         );
 
@@ -111,7 +111,7 @@ public sealed class AgentflowCheckpointStoreTests
             fixture.ContextId,
             fixture.TaskId,
             fixture.AgentflowId,
-            "user",
+            "user-id",
             isDurable: false,
             fingerprint!,
             CreateCheckpoint("checkpoint-1"),
@@ -135,6 +135,13 @@ public sealed class AgentflowCheckpointStoreTests
         var checkpoint = await context.AgentflowCheckpoints.SingleAsync(cancellationToken);
         Assert.Equal(recorded.Snapshot.OccurrenceId, checkpoint.Id);
         Assert.Equal(2, checkpoint.BoundarySequence);
+        Assert.Equal("user-id", checkpoint.UserId);
+        Assert.Equal("user-id", checkpoint.CreateBy);
+        Assert.Equal("user-id", checkpoint.UpdateBy);
+        var checkpointMessages = await context
+            .ProjectConversationChatHistories.Where(item => item.ConversationSequence > 0)
+            .ToArrayAsync(cancellationToken);
+        Assert.Equal(2, checkpointMessages.Length);
         var checkpointSequences = await context
             .ProjectConversationChatHistories.Where(item => item.ConversationSequence > 0)
             .OrderBy(item => item.ConversationSequence)
@@ -158,7 +165,7 @@ public sealed class AgentflowCheckpointStoreTests
             fixture.ContextId,
             fixture.TaskId,
             fixture.AgentflowId,
-            "user",
+            "user-id",
             isDurable: false,
             fingerprint!,
             CreateCheckpoint("checkpoint-1"),
@@ -175,7 +182,7 @@ public sealed class AgentflowCheckpointStoreTests
                 fixture.ProjectId,
                 fixture.ContextId,
                 fixture.AgentflowId,
-                "user",
+                "user-id",
                 cancellationToken
             )
         );
@@ -202,7 +209,7 @@ public sealed class AgentflowCheckpointStoreTests
             fixture.ContextId,
             fixture.TaskId,
             fixture.AgentflowId,
-            "user",
+            "user-id",
             isDurable: true,
             fingerprint!,
             CreateCheckpoint("checkpoint-1"),
@@ -219,7 +226,7 @@ public sealed class AgentflowCheckpointStoreTests
             fixture.ProjectId,
             fixture.ContextId,
             fixture.AgentflowId,
-            "user",
+            "user-id",
             cancellationToken
         );
         await store.PrepareDistributedResumeAsync(
@@ -228,7 +235,7 @@ public sealed class AgentflowCheckpointStoreTests
             fixture.ProjectId,
             fixture.ContextId,
             fixture.AgentflowId,
-            "user",
+            "user-id",
             cancellationToken
         );
 
@@ -244,6 +251,9 @@ public sealed class AgentflowCheckpointStoreTests
             );
             Assert.Equal(DurableExecutionStatus.Resuming, branch.Status);
             Assert.Equal(1, branch.SegmentIndex);
+            Assert.Equal("user-id", branch.UserId);
+            Assert.Equal("user-id", branch.CreateBy);
+            Assert.Equal("user-id", branch.UpdateBy);
             Assert.Equal(recorded.Snapshot.OccurrenceId, branchManifest.ResumeCheckpointOccurrenceId);
             Assert.Equal(["checkpoint-node"], branchManifest.ResumeCheckpointNodeIds);
             Assert.Equal(2, await context.DurableExecutions.CountAsync(cancellationToken));
@@ -260,7 +270,7 @@ public sealed class AgentflowCheckpointStoreTests
             fixture.ProjectId,
             fixture.ContextId,
             fixture.AgentflowId,
-            "user",
+            "user-id",
             cancellationToken
         );
 
@@ -286,7 +296,7 @@ public sealed class AgentflowCheckpointStoreTests
             fixture.ContextId,
             fixture.TaskId,
             fixture.AgentflowId,
-            "user",
+            "user-id",
             isDurable: true,
             fingerprint!,
             CreateCheckpoint("checkpoint-1"),
@@ -303,7 +313,7 @@ public sealed class AgentflowCheckpointStoreTests
                 fixture.ProjectId,
                 fixture.ContextId,
                 fixture.AgentflowId,
-                "user",
+                "user-id",
                 cancellationToken
             )
         );
@@ -469,7 +479,7 @@ public sealed class AgentflowCheckpointStoreTests
             var manifest = new DurableExecutionManifest
             {
                 ExecutionId = executionId,
-                UserName = "user",
+                UserId = "user-id",
                 AgentId = fixture.AgentflowId,
                 AgentType = AgentRuntimeType.Agentflow,
                 Input = new AgwUserInput { Contents = [] },
@@ -489,7 +499,7 @@ public sealed class AgentflowCheckpointStoreTests
                 new DurableExecutionRecord
                 {
                     Id = executionId,
-                    UserName = "user",
+                    UserId = "user-id",
                     ManifestJson = DurableExecutionJson.Serialize(manifest),
                     Status = status,
                     StateChangedAt = TimeProvider.System.GetUtcNow(),

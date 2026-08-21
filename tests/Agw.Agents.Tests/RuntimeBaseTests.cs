@@ -126,7 +126,6 @@ public class RuntimeBaseTests
                 CreateTime = TimeProvider.System.GetUtcNow(),
             },
             new ExecutionTarget(Guid.CreateVersion7(), AgentRuntimeType.Agent),
-            "user",
             "/workspace",
             new NullSink()
         );

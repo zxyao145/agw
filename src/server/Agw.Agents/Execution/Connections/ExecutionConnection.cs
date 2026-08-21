@@ -19,7 +19,7 @@ internal sealed class ExecutionConnection : IAsyncDisposable
 
     public ExecutionConnection(
         string connectionId,
-        string userName,
+        string userId,
         AsyncServiceScope scope,
         ExecutionCommandDispatcher dispatcher,
         ExecutionConnectionContext context,
@@ -27,14 +27,14 @@ internal sealed class ExecutionConnection : IAsyncDisposable
     )
     {
         _connectionId = connectionId;
-        UserName = userName;
+        UserId = string.IsNullOrWhiteSpace(userId) ? Constants.AdminUserId : userId.Trim();
         _scope = scope;
         _dispatcher = dispatcher;
         _context = context;
         _logger = logger;
     }
 
-    public string UserName { get; }
+    public string UserId { get; }
 
     internal bool IsAttached => _attached;
 

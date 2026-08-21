@@ -14,7 +14,7 @@ public sealed class DurableExecutionRecordConfiguration : IEntityTypeConfigurati
     public void Configure(EntityTypeBuilder<DurableExecutionRecord> builder)
     {
         builder.HasKey(item => item.Id);
-        builder.Property(item => item.UserName).HasMaxLength(256).IsRequired();
+        builder.Property(item => item.UserId).HasMaxLength(128).IsRequired();
         builder.Property(item => item.ManifestJson).IsRequired();
         builder.Property(item => item.Status).IsRequired();
         builder.Property(item => item.StateChangedAt).IsRequired();

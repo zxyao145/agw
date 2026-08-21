@@ -332,7 +332,7 @@ public class JobManagementSkillTests
 
         public AgentSkill CreateSkill(Guid projectId) => Registration.Create(projectId);
 
-        public IDisposable PushInteractiveContext(Guid projectId, string userName)
+        public IDisposable PushInteractiveContext(Guid projectId, string userId)
         {
             var contextId = Guid.CreateVersion7().ToString("D");
             return TurnContextAccessor.Push(
@@ -347,10 +347,12 @@ public class JobManagementSkillTests
                         CreateTime = TimeProvider.System.GetUtcNow(),
                     },
                     new ExecutionTarget(Guid.CreateVersion7(), AgentRuntimeType.Agent),
-                    userName,
                     workspace: string.Empty,
                     messageSink: null!
                 )
+                {
+                    UserId = userId,
+                }
             );
         }
 

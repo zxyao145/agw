@@ -390,7 +390,7 @@ Execution.Provider
 
 状态机只使用一张 `durable_execution` 表，没有为 checkpoint、pending 或 response 分表。除 `BaseEntity` 审计列外，核心字段为：
 
-- `Id`、`UserName`、加密的 `ManifestJson`；
+- `Id`、稳定 owner `UserId`、加密的 `ManifestJson`；
 - `Status`、`SegmentIndex`、`StateChangedAt`；
 - 加密的 `CheckpointJson`、`PendingInteractionsJson`、`ResponsesJson`、`ErrorMessage`；
 - 乐观并发字段 `StateVersion`，用于保护终态不被迟到结果覆盖。
