@@ -1,88 +1,51 @@
-import type { AgwMessage, AgwMessageContent } from "../../../api/agw-api-types";
+import {
+  HubConnectionBuilder,
+  HubConnectionState,
+  HttpTransportType,
+  LogLevel,
+  type HubConnection,
+  type IHttpConnectionOptions,
+  type IRetryPolicy,
+} from "@microsoft/signalr";
+import {
+  buildExecCommand,
+  buildInterruptCommand,
+  buildSettingCommand,
+  buildSubscribeExecutionCommand,
+  cloneMessageContent,
+  executionReconnectDelaysMs,
+  getExecutionReconnectDelay,
+  getTurnFinishedStatus,
+  mergeStreamingMessages,
+  type ExecutionUserInput,
+  type PermissionMode,
+} from "@agw/execution-core";
+import type { AgwMessage } from "../../../api/agw-api-types";
 
-export type ExecutionWsUserInput = Pick<AgwMessage, "messageId" | "author" | "contents">;
+export { mergeStreamingMessages };
+
+export type ExecutionWsUserInput = ExecutionUserInput<AgwMessage>;
+export type ExecutionWsPermissionMode = PermissionMode;
 
 export type ExecutionWsSettingCommandRequest = {
   projectId: string;
-  taskId: string;
-  resume?: boolean;
-  workspace?: string | null;
-  settingContent?: string;
+  contextId?: string | null;
   environmentVariables?: Record<string, string> | null;
-};
-
-export type ExecutionWsSettingCommandPayload = {
-  type: "SettingCommand";
-  settingContent: string;
-  projectId: string;
-  taskId: string;
-  resume: boolean;
-  workspace?: string | null;
-  environmentVariables?: Record<string, string> | null;
+  permissionMode?: ExecutionWsPermissionMode | null;
 };
 
 export type ExecutionWsRequest = ExecutionWsSettingCommandRequest & {
+  agentId: string;
   agentType: number;
+  /** Mobile 为每次执行生成稳定 ID，以便 distributed provider 断线后重新订阅。 */
+  executionId: string;
+  stream?: boolean;
   input: ExecutionWsUserInput;
 };
 
-type ExecutionWsResultStatus = "completed" | "interrupted" | "cancelled" | "failed";
+type ExecutionProviderCapability = "in-process" | "distributed" | null;
 
-type ExecutionWsResult = {
-  status: ExecutionWsResultStatus;
-  message: string;
-};
-
-const TEXT_CONTENT_TYPES = new Set(["TextContent", "text"]);
-const RESULT_STATUSES = new Set<ExecutionWsResultStatus>([
-  "completed",
-  "interrupted",
-  "cancelled",
-  "failed",
-]);
-
-function buildExecutionWebSocketUrls(serverUrl: string, agentId: string): string[] {
-  const normalizedBaseUrl = serverUrl.replace(/\/+$/g, "");
-  const parsed = new URL(normalizedBaseUrl);
-  const basePath = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/+$/g, "");
-  const protocol =
-    parsed.protocol === "https:"
-      ? "wss:"
-      : parsed.protocol === "wss:"
-        ? "wss:"
-        : parsed.protocol === "ws:"
-          ? "ws:"
-          : "ws:";
-
-  return [
-    `${protocol}//${parsed.host}${basePath}/api/executions/${encodeURIComponent(agentId)}/ws`,
-  ];
-}
-
-function cloneAdditionalProperties(
-  additionalProperties: Record<string, unknown> | null | undefined,
-): Record<string, unknown> | null | undefined {
-  if (additionalProperties === null || additionalProperties === undefined) {
-    return additionalProperties;
-  }
-
-  return { ...additionalProperties };
-}
-
-function cloneMessageContent(content: AgwMessageContent): AgwMessageContent {
-  return {
-    ...content,
-    additionalProperties: cloneAdditionalProperties(content.additionalProperties),
-  };
-}
-
-function cloneMessage(message: AgwMessage): AgwMessage {
-  return {
-    ...message,
-    additionalProperties: cloneAdditionalProperties(message.additionalProperties),
-    contents: message.contents.map(cloneMessageContent),
-  };
-}
+const SIGNALR_SERVER_TIMEOUT_MS = 30_000;
 
 export function toExecutionWsUserInput(message: AgwMessage): ExecutionWsUserInput {
   return {
@@ -92,214 +55,190 @@ export function toExecutionWsUserInput(message: AgwMessage): ExecutionWsUserInpu
   };
 }
 
-export function parseExecutionWsMessage(payload: string): AgwMessage | null {
-  try {
-    return JSON.parse(payload) as AgwMessage;
-  } catch (error) {
-    return null;
-  }
+/** 兼容既有 Mobile 导出；命令形状由 execution-core 统一维护。 */
+export function buildSettingCommandPayload(request: ExecutionWsSettingCommandRequest) {
+  return buildSettingCommand(request);
 }
 
-function tryParseExecutionWsResult(payload: string): ExecutionWsResult | null {
-  const message = parseExecutionWsMessage(payload);
-  if (!message || message.role !== "system") {
-    return null;
-  }
+/** 兼容既有 Mobile 导出；命令形状由 execution-core 统一维护。 */
+export function buildExecCommandPayload(request: ExecutionWsRequest) {
+  return buildExecCommand(request);
+}
 
-  const status =
-    message.additionalProperties?.status ?? message.contents[0]?.additionalProperties?.status;
-  const contentType = message.contents[0]?.additionalProperties?.type;
-  const hasTurnFinishedType = message.contents.some(
-    (content) => content.additionalProperties?.type === "turn-finished",
-  );
+/** 兼容既有 Mobile 导出；命令形状由 execution-core 统一维护。 */
+export function buildInterruptCommandPayload(executionId?: string, reason?: string) {
+  return buildInterruptCommand(executionId, reason);
+}
 
-  if (typeof status !== "string" || !RESULT_STATUSES.has(status as ExecutionWsResultStatus)) {
-    if (contentType === "turn-finished" || hasTurnFinishedType) {
-      const content = message.contents[0]?.content;
-      return {
-        message: typeof content === "string" ? content : "Execution completed",
-        status: "completed",
-      };
-    }
+export type ExecutionWsHandle = {
+  promise: Promise<void>;
+  interrupt: (reason?: string) => Promise<void>;
+  close: () => void;
+};
 
-    return null;
-  }
+function normalizeExecutionProvider(value: string): ExecutionProviderCapability {
+  const provider = value.toLowerCase();
+  if (provider === "distributed") return "distributed";
+  if (provider === "inprocess") return "in-process";
+  return null;
+}
 
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function getExecutionFailureMessage(message: AgwMessage): string {
   const content = message.contents[0]?.content;
-  const messageContent = typeof content === "string" ? content : "Execution completed";
-
-  return {
-    message: messageContent,
-    status: status as ExecutionWsResultStatus,
-  };
+  return typeof content === "string" && content.trim().length > 0 ? content : "Execution failed";
 }
 
-function isTextContent(content: AgwMessageContent): boolean {
-  return TEXT_CONTENT_TYPES.has(content.type);
-}
-
-function getFirstTextContent(contents: AgwMessageContent[]): AgwMessageContent | undefined {
-  return contents.find(isTextContent);
-}
-
-function getNonTextContents(contents: AgwMessageContent[]): AgwMessageContent[] {
-  return contents.filter((content) => !isTextContent(content)).map(cloneMessageContent);
-}
-
-function mergeStreamingMessage(
-  currentMessages: AgwMessage[],
-  incomingMessage: AgwMessage,
-): AgwMessage[] {
-  const index = currentMessages.findIndex(
-    (message) => message.messageId === incomingMessage.messageId,
-  );
-  if (index === -1) {
-    return [...currentMessages, cloneMessage(incomingMessage)];
+function stopConnection(connection: HubConnection): void {
+  if (connection.state !== HubConnectionState.Disconnected) {
+    void connection.stop().catch(() => undefined);
   }
-
-  const merged = [...currentMessages];
-  const current = cloneMessage(merged[index]);
-  const incomingText = getFirstTextContent(incomingMessage.contents);
-  const currentText = getFirstTextContent(current.contents);
-
-  if (incomingText) {
-    if (currentText) {
-      currentText.content = `${currentText.content ?? ""}${incomingText.content ?? ""}`;
-    } else {
-      current.contents.push(cloneMessageContent(incomingText));
-    }
-  }
-
-  const nonTextContents = getNonTextContents(incomingMessage.contents);
-  if (nonTextContents.length > 0) {
-    current.contents = [...current.contents, ...nonTextContents];
-  }
-
-  if (incomingMessage.additionalProperties !== undefined) {
-    current.additionalProperties = cloneAdditionalProperties(incomingMessage.additionalProperties);
-  }
-
-  merged[index] = current;
-  return merged;
 }
 
-export function mergeStreamingMessages(
-  currentMessages: AgwMessage[],
-  incomingMessages: AgwMessage[],
-): AgwMessage[] {
-  return incomingMessages.reduce<AgwMessage[]>(
-    (nextMessages, incomingMessage) => mergeStreamingMessage(nextMessages, incomingMessage),
-    [...currentMessages],
-  );
-}
-
-export function buildSettingCommandPayload(
-  request: ExecutionWsSettingCommandRequest,
-): ExecutionWsSettingCommandPayload {
-  return {
-    type: "SettingCommand",
-    settingContent: request.settingContent ?? "{}",
-    projectId: request.projectId,
-    taskId: request.taskId,
-    resume: request.resume ?? false,
-    workspace: request.workspace,
-    environmentVariables: request.environmentVariables,
-  };
-}
-
-function openExecutionWebSocket(
-  wsUrl: string,
-  token: string,
-  request: ExecutionWsRequest,
-  onMessage: (data: string) => void,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const NativeWebSocket = WebSocket as unknown as new (
-      uri: string,
-      protocols?: string | string[] | null,
-      options?: { headers: Record<string, string> },
-    ) => WebSocket;
-    const ws = new NativeWebSocket(wsUrl, null, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    let settled = false;
-
-    const fail = (message: string) => {
-      if (settled) return;
-      settled = true;
-      reject(new Error(message));
-    };
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify(buildSettingCommandPayload(request)));
-      ws.send(
-        JSON.stringify({
-          type: "ExecCommand",
-          agentType: request.agentType,
-          input: request.input,
-        }),
-      );
-    };
-
-    ws.onmessage = (event) => {
-      if (typeof event.data !== "string") {
-        return;
-      }
-
-      const result = tryParseExecutionWsResult(event.data);
-      if (result) {
-        if (settled) return;
-        settled = true;
-        if (ws.readyState === 1) {
-          ws.close(1000, result.message);
-        }
-
-        if (result.status === "failed") {
-          reject(new Error(result.message || "Execution failed"));
-          return;
-        }
-
-        resolve();
-        return;
-      }
-
-      onMessage(event.data);
-    };
-
-    ws.onerror = () => {
-      fail("WebSocket connection error");
-    };
-
-    ws.onclose = (event) => {
-      if (settled) return;
-      settled = true;
-      if (event.code === 1000) {
-        resolve();
-        return;
-      }
-      reject(new Error(event.reason || `WebSocket closed unexpectedly with code ${event.code}`));
-    };
-  });
-}
-
-export async function executeWithWebSocket(
+export function executeWithWebSocket(
   serverUrl: string,
   token: string,
-  agentId: string,
   request: ExecutionWsRequest,
-  onMessage: (data: string) => void,
-): Promise<void> {
-  const urls = buildExecutionWebSocketUrls(serverUrl, agentId);
-  let lastError: Error | null = null;
+  onMessage: (message: AgwMessage) => void,
+): ExecutionWsHandle {
+  const hubUrl = `${serverUrl.replace(/\/+$/u, "")}/api/hubs/exec`;
+  const reconnectPolicy: IRetryPolicy = {
+    nextRetryDelayInMilliseconds: (context) =>
+      getExecutionReconnectDelay(context.previousRetryCount),
+  };
+  const connectionOptions: IHttpConnectionOptions & { WebSocket: typeof WebSocket } = {
+    transport: HttpTransportType.WebSockets,
+    skipNegotiation: true,
+    accessTokenFactory: async () => token,
+    // SignalR marks this injection hook internal, but passing RN's implementation also keeps Jest on
+    // the same transport path instead of silently selecting the Node `ws` package.
+    WebSocket: globalThis.WebSocket,
+  };
+  const connection = new HubConnectionBuilder()
+    .withUrl(hubUrl, connectionOptions)
+    .configureLogging(LogLevel.Warning)
+    .withAutomaticReconnect(reconnectPolicy)
+    .build();
+  connection.serverTimeoutInMilliseconds = SIGNALR_SERVER_TIMEOUT_MS;
 
-  for (const url of urls) {
+  let resolveExecution!: () => void;
+  let rejectExecution!: (error: Error) => void;
+  const promise = new Promise<void>((resolve, reject) => {
+    resolveExecution = resolve;
+    rejectExecution = reject;
+  });
+  let settled = false;
+  let provider: ExecutionProviderCapability = null;
+  let durableConfirmed = false;
+  let streamCursor: string | null = null;
+
+  const settle = (error?: Error) => {
+    if (settled) return;
+    settled = true;
+    if (error) rejectExecution(error);
+    else resolveExecution();
+    stopConnection(connection);
+  };
+
+  const refreshExecutionProvider = async () => {
     try {
-      await openExecutionWebSocket(url, token, request, onMessage);
-      return;
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error("WebSocket connection error");
+      provider = normalizeExecutionProvider(
+        await connection.invoke<string>("GetExecutionProvider"),
+      );
+    } catch {
+      // 兼容尚未提供 capability Hub method 的服务端；消息中的 executionId 仍可确认 durable。
+      provider = null;
     }
-  }
+  };
 
-  throw lastError ?? new Error("WebSocket connection error");
+  connection.on("ReceiveMessage", (message: AgwMessage) => {
+    if (settled) return;
+
+    const messageExecutionId = readString(message.additionalProperties?.executionId);
+    if (messageExecutionId === request.executionId) {
+      durableConfirmed = true;
+      streamCursor = readString(message.additionalProperties?.streamCursor) ?? streamCursor;
+    }
+
+    const terminalStatus = getTurnFinishedStatus(message);
+    if (terminalStatus) {
+      settle(
+        terminalStatus === "failed" ? new Error(getExecutionFailureMessage(message)) : undefined,
+      );
+      return;
+    }
+
+    onMessage(message);
+  });
+
+  connection.onreconnected(() => {
+    void (async () => {
+      if (settled) return;
+      await refreshExecutionProvider();
+      await connection.invoke("DispatchCommand", buildSettingCommandPayload(request));
+
+      if (provider === "in-process") {
+        throw new Error(
+          "Execution connection was restored, but an in-process execution cannot resume streaming; it may still be running on the server.",
+        );
+      }
+      if (provider !== "distributed" && !durableConfirmed) {
+        throw new Error(
+          "Execution connection was restored, but the server cannot confirm that this execution is resumable; it may still be running on the server.",
+        );
+      }
+
+      await connection.invoke(
+        "DispatchCommand",
+        buildSubscribeExecutionCommand(request.executionId, streamCursor),
+      );
+    })().catch((error) => {
+      settle(error instanceof Error ? error : new Error(String(error)));
+    });
+  });
+
+  connection.onclose((error) => {
+    if (settled) return;
+    const detail = error?.message ? ` ${error.message}` : "";
+    settle(
+      new Error(
+        `Execution connection retries exhausted; the execution may still be running on the server.${detail}`,
+      ),
+    );
+  });
+
+  const initialize = async () => {
+    await connection.start();
+    if (settled) return;
+    await refreshExecutionProvider();
+    if (settled) return;
+    if (provider === "distributed") durableConfirmed = true;
+    await connection.invoke("DispatchCommand", buildSettingCommandPayload(request));
+    if (settled) return;
+    await connection.invoke("DispatchCommand", buildExecCommandPayload(request));
+  };
+  const initialization = initialize();
+  void initialization.catch((error) => {
+    settle(error instanceof Error ? error : new Error(String(error)));
+  });
+
+  return {
+    promise,
+    interrupt: async (reason?: string) => {
+      await initialization;
+      if (settled || connection.state !== HubConnectionState.Connected) {
+        throw new Error("Execution connection is not ready.");
+      }
+      await connection.invoke(
+        "DispatchCommand",
+        buildInterruptCommandPayload(request.executionId, reason),
+      );
+    },
+    close: () => settle(),
+  };
 }
+
+export { executionReconnectDelaysMs };

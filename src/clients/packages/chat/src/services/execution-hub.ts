@@ -9,6 +9,19 @@ import {
 
 import type { AiMessage } from "@agw/api";
 import {
+  buildExecCommand as buildCoreExecCommand,
+  buildInterruptCommand,
+  buildSettingCommand as buildCoreSettingCommand,
+  buildSubscribeExecutionCommand as buildCoreSubscribeExecutionCommand,
+  executionReconnectDelaysMs,
+  getExecutionReconnectDelay,
+  getMessageStreamingScopeId,
+  getTurnFinishedStatus,
+  type ExecutionUserInput as CoreExecutionUserInput,
+  type PermissionMode as CorePermissionMode,
+  type TurnFinishedStatus,
+} from "@agw/execution-core";
+import {
   parseHumanInteractionModeChange,
   parseHumanInteractionQuestions,
   type HumanInteractionModeChange,
@@ -22,8 +35,7 @@ export type ExecutionRuntimeConfig = {
 
 let executionRuntime: ExecutionRuntimeConfig = { baseUrl: "", token: null };
 
-/** SignalR 断线后的重试间隔；数组耗尽后结束自动重试。 */
-export const executionReconnectDelaysMs = [0, 2_000, 5_000, 7_000, 10_000, 20_000, 30_000] as const;
+export { executionReconnectDelaysMs, getExecutionReconnectDelay, getTurnFinishedStatus };
 
 /** 描述当前 SignalR 自动重连尝试。 */
 export type ExecutionReconnectState = {
@@ -34,11 +46,6 @@ export type ExecutionReconnectState = {
   /** 距离本次重连尝试的等待时间。 */
   retryDelayMs: number;
 };
-
-/** 按已配置的重试序列返回等待时间，序列耗尽时停止自动重试。 */
-export function getExecutionReconnectDelay(previousRetryCount: number): number | null {
-  return executionReconnectDelaysMs[previousRetryCount] ?? null;
-}
 
 /** 判断 SignalR 是否已经完成最后一次自动重连尝试。 */
 export function isExecutionReconnectExhausted(state: ExecutionReconnectState | null): boolean {
@@ -51,9 +58,9 @@ export function configureExecutionRuntime(config: ExecutionRuntimeConfig): void 
   executionRuntime = config;
 }
 
-export type ExecutionUserInput = Pick<AiMessage, "messageId" | "author" | "contents">;
+export type ExecutionUserInput = CoreExecutionUserInput<AiMessage>;
 
-export type PermissionMode = "fullAccess" | "alwaysAsk" | "allowSameArguments";
+export type PermissionMode = CorePermissionMode;
 export type AgentMode = "plan" | "execute";
 
 export type ExecutionSetting = {
@@ -116,7 +123,7 @@ export type PendingHumanGate = {
   modeChange?: HumanInteractionModeChange;
 };
 
-export type TurnFinishedStatus = "completed" | "interrupted" | "failed";
+export type { TurnFinishedStatus };
 
 export type ExecutionHubHandlers = {
   onMessage: (message: AiMessage) => void;
@@ -146,15 +153,7 @@ export function buildExecutionHubOptions(runtime: ExecutionRuntimeConfig = execu
 }
 
 export function buildSettingCommand(setting: ExecutionSetting) {
-  return {
-    type: "SettingCommand" as const,
-    projectId: setting.projectId,
-    contextId: setting.contextId,
-    ...(setting.environmentVariables === undefined
-      ? {}
-      : { environmentVariables: setting.environmentVariables }),
-    ...(setting.permissionMode === undefined ? {} : { permissionMode: setting.permissionMode }),
-  };
+  return buildCoreSettingCommand(setting);
 }
 
 export function buildSetModeCommand(agentId: string, mode: AgentMode) {
@@ -185,23 +184,12 @@ export function isModeControlMessage(message: AiMessage): boolean {
 }
 
 export function buildExecCommand(request: ExecutionRequest) {
-  return {
-    type: "ExecCommand" as const,
-    agentId: request.agentId,
-    agentType: request.agentType,
-    ...(request.executionId ? { executionId: request.executionId } : {}),
-    stream: request.stream ?? true,
-    input: request.input,
-  };
+  return buildCoreExecCommand(request);
 }
 
 /** 创建重新附着 durable execution 并继续消息回放的 SignalR 命令。 */
 export function buildSubscribeExecutionCommand(executionId: string, cursor?: string | null) {
-  return {
-    type: "SubscribeExecutionCommand" as const,
-    executionId,
-    ...(cursor ? { cursor } : {}),
-  };
+  return buildCoreSubscribeExecutionCommand(executionId, cursor);
 }
 
 export function buildResumeCheckpointCommand(args: {
@@ -215,25 +203,12 @@ export function buildResumeCheckpointCommand(args: {
   };
 }
 
-export function getTurnFinishedStatus(message: AiMessage): TurnFinishedStatus | null {
-  if (message.additionalProperties?.type !== "turn-finished") return null;
-  const status = message.additionalProperties.status;
-  return status === "completed" || status === "interrupted" || status === "failed"
-    ? status
-    : "completed";
-}
-
 function readString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
-/** 读取服务端持久化的作用域；该值在跨 Server 恢复后仍指向原始用户消息。 */
-export function getMessageStreamingScopeId(message: AiMessage): string | undefined {
-  return (
-    readString(message.additionalProperties?.streamingScopeId) ??
-    readString(message.streamingScopeId)
-  );
-}
+/** 读取服务端持久化的作用域；委托给 platform-neutral 的 execution-core，保持单一来源。 */
+export { getMessageStreamingScopeId };
 
 export function getPendingHumanGate(message: AiMessage): PendingHumanGate | null {
   const properties = message.additionalProperties;
@@ -629,11 +604,7 @@ export class ExecutionHubClient {
   }
 
   public async interrupt(reason?: string): Promise<void> {
-    await this.dispatch({
-      type: "InterruptCommand",
-      ...(this.activeExecutionId ? { executionId: this.activeExecutionId } : {}),
-      reason,
-    });
+    await this.dispatch(buildInterruptCommand(this.activeExecutionId ?? undefined, reason));
   }
 
   public async interruptAndWait(reason?: string): Promise<void> {

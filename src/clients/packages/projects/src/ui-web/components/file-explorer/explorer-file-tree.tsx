@@ -118,7 +118,7 @@ function FileTreeNode({
   const [isDeleting, setIsDeleting] = React.useState(false);
   const [isUpdatingGitScope, setIsUpdatingGitScope] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-
+  const childrenLoadGenerationRef = React.useRef(0);
   // Update children when item.children change (for pre-built trees)
   React.useEffect(() => {
     if (item.children) {
@@ -129,17 +129,26 @@ function FileTreeNode({
   const loadChildren = async () => {
     if (item.type !== FileItemType.Directory || children.length > 0) return;
 
+    const generation = ++childrenLoadGenerationRef.current;
     setIsLoading(true);
     setError(null);
 
     try {
       const data = await listFiles(projectId, item.path, diffMode, recursiveMode);
+      if (generation !== childrenLoadGenerationRef.current) {
+        return;
+      }
       setChildren(data.items || []);
     } catch (err) {
+      if (generation !== childrenLoadGenerationRef.current) {
+        return;
+      }
       console.error("Error loading directory:", err);
       setError((err as Error).message);
     } finally {
-      setIsLoading(false);
+      if (generation === childrenLoadGenerationRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 

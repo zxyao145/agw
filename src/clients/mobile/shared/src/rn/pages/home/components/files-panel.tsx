@@ -90,6 +90,10 @@ export function FilesPanel({
 
   const recursiveMode = true;
 
+  const rootLoadGenerationRef = React.useRef(0);
+  const contentLoadGenerationRef = React.useRef(0);
+  const childrenLoadGenerationsRef = React.useRef<Record<string, number>>({});
+
   const loadRootDirectory = React.useCallback(async () => {
     if (!apiClient || !projectId) {
       setRootItems([]);
@@ -97,6 +101,7 @@ export function FilesPanel({
       return;
     }
 
+    const generation = ++rootLoadGenerationRef.current;
     setIsExplorerLoading(true);
     setExplorerError(null);
     setStatusMessage(null);
@@ -109,6 +114,9 @@ export function FilesPanel({
         onlyDiff,
         recursiveMode
       );
+      if (generation !== rootLoadGenerationRef.current) {
+        return;
+      }
       const nextItems =
         onlyDiff && recursiveMode
           ? buildFileTree(data.items ?? [], "")
@@ -120,10 +128,15 @@ export function FilesPanel({
         onlyDiff && recursiveMode ? collectDirectoryPaths(nextItems) : new Set()
       );
     } catch (error) {
+      if (generation !== rootLoadGenerationRef.current) {
+        return;
+      }
       setRootItems([]);
       setExplorerError(`Failed to load files: ${getErrorMessage(error)}`);
     } finally {
-      setIsExplorerLoading(false);
+      if (generation === rootLoadGenerationRef.current) {
+        setIsExplorerLoading(false);
+      }
     }
   }, [apiClient, onlyDiff, projectId]);
 
@@ -133,6 +146,7 @@ export function FilesPanel({
         return;
       }
 
+      const generation = ++contentLoadGenerationRef.current;
       setSelectedFile(filePath);
       setIsContentLoading(true);
       setContentError(null);
@@ -141,19 +155,30 @@ export function FilesPanel({
       try {
         if (onlyDiff) {
           const diff = await getFileDiff(apiClient, projectId, filePath);
+          if (generation !== contentLoadGenerationRef.current) {
+            return;
+          }
           setDiffContentData(diff);
           setFileContent("");
         } else {
           const content = await readFile(apiClient, projectId, filePath);
+          if (generation !== contentLoadGenerationRef.current) {
+            return;
+          }
           setFileContent(content);
           setDiffContentData(null);
         }
       } catch (error) {
+        if (generation !== contentLoadGenerationRef.current) {
+          return;
+        }
         setContentError(getErrorMessage(error));
         setDiffContentData(null);
         setFileContent("");
       } finally {
-        setIsContentLoading(false);
+        if (generation === contentLoadGenerationRef.current) {
+          setIsContentLoading(false);
+        }
       }
     },
     [apiClient, onlyDiff, projectId]
@@ -164,6 +189,10 @@ export function FilesPanel({
       if (!apiClient || !projectId || item.type !== FILE_TYPE.Directory || childItems[item.path]) {
         return;
       }
+
+      const generation =
+        (childrenLoadGenerationsRef.current[item.path] ?? 0) + 1;
+      childrenLoadGenerationsRef.current[item.path] = generation;
 
       setChildItems((current) => ({
         ...current,
@@ -178,25 +207,38 @@ export function FilesPanel({
           onlyDiff,
           recursiveMode
         );
+        if (generation !== childrenLoadGenerationsRef.current[item.path]) {
+          return;
+        }
         setChildItems((current) => ({
           ...current,
           [item.path]: data.items ?? [],
         }));
       } catch (error) {
+        if (generation !== childrenLoadGenerationsRef.current[item.path]) {
+          return;
+        }
         setExplorerError(`Failed to load directory: ${getErrorMessage(error)}`);
       }
     },
     [apiClient, childItems, onlyDiff, projectId]
   );
 
-  React.useEffect(() => {
+  const clearFileContent = React.useCallback(() => {
+    contentLoadGenerationRef.current += 1;
     setSelectedFile(null);
     setFileContent("");
     setDiffContentData(null);
+    setContentError(null);
+    setIsContentLoading(false);
+  }, []);
+
+  React.useEffect(() => {
+    clearFileContent();
     setComments([]);
     setActionTarget(null);
     void loadRootDirectory();
-  }, [loadRootDirectory]);
+  }, [clearFileContent, loadRootDirectory]);
 
   React.useEffect(() => {
     if (selectedFile) {
@@ -206,11 +248,8 @@ export function FilesPanel({
 
   const handleToggleDiff = React.useCallback((value: boolean) => {
     setOnlyDiff(value);
-    setSelectedFile(null);
-    setFileContent("");
-    setDiffContentData(null);
-    setContentError(null);
-  }, []);
+    clearFileContent();
+  }, [clearFileContent]);
 
   const handleDirectoryPress = React.useCallback(
     (item: FileItem) => {
@@ -258,9 +297,7 @@ export function FilesPanel({
 
       if (result.success) {
         if (selectedFile === targetPath) {
-          setSelectedFile(null);
-          setFileContent("");
-          setDiffContentData(null);
+          clearFileContent();
         }
         setStatusMessage(result.message);
         await loadRootDirectory();

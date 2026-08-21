@@ -10,6 +10,8 @@ import type {
 } from "@desktop/shared/contracts";
 import { configureApiRuntime, resetApiRuntime } from "@agw/api";
 import { configureExecutionRuntime, ExecutionPlatformProvider } from "@agw/chat";
+import { createQueryClient } from "@agw/components";
+import { QueryClientProvider, type QueryClient } from "@agw/components/query";
 import {
   classifyDesktopConnection,
   getActiveServerProfile,
@@ -17,6 +19,7 @@ import {
   type DesktopConnectionStatus,
   type ServerInfo,
 } from "./runtime-model";
+import { ServerQueryClientRegistry } from "./query-client-registry";
 
 declare global {
   interface Window {
@@ -42,20 +45,30 @@ type AuthSession = {
   accessMode?: string;
 };
 
-async function probeServer(profile: ServerProfile, token: string | null): Promise<ServerInfo> {
+async function probeServer(
+  profile: ServerProfile,
+  token: string | null,
+  signal?: AbortSignal,
+): Promise<ServerInfo> {
   const response = await fetch(`${profile.baseUrl.replace(/\/+$/u, "")}/api/server-info`, {
     credentials: "omit",
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    signal,
   });
   const body = (await response.json()) as { title?: string; data?: ServerInfo };
   if (!response.ok || !body.data) throw new Error(body.title || "Unable to reach Agw Server.");
   return body.data;
 }
 
-async function hasBearerAccess(profile: ServerProfile, token: string): Promise<boolean> {
+async function hasBearerAccess(
+  profile: ServerProfile,
+  token: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
   const response = await fetch(`${profile.baseUrl.replace(/\/+$/u, "")}/api/auth/session`, {
     credentials: "omit",
     headers: { Authorization: `Bearer ${token}` },
+    signal,
   });
   const body = (await response.json()) as { data?: AuthSession };
   return response.ok && body.data?.accessMode === "bearer";
@@ -76,6 +89,29 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
   const setupAttempted = React.useRef(new Set<string>());
   const platform = runtimeState?.platform ?? "browser";
 
+  // 每个 profile 最多保留一份 QueryClient；地址或 token 变化会安全冷启动。
+  const queryClientRegistryRef = React.useRef<ServerQueryClientRegistry | null>(null);
+  if (queryClientRegistryRef.current === null) {
+    queryClientRegistryRef.current = new ServerQueryClientRegistry(createQueryClient);
+  }
+  const queryClientRef = React.useRef<QueryClient | null>(null);
+  const [queryClient, setQueryClient] = React.useState<QueryClient>(() => {
+    const client = createQueryClient();
+    queryClientRef.current = client;
+    return client;
+  });
+  // 每次 connect 递增 generation 并中断上一次连接，防止较慢的旧连接覆盖新连接。
+  const connectGenerationRef = React.useRef(0);
+  const connectAbortRef = React.useRef<AbortController | null>(null);
+
+  const activateQueryClient = React.useCallback((profile: ServerProfile, token: string | null) => {
+    const client = queryClientRegistryRef.current!.get(profile, token);
+    if (queryClientRef.current === client) return;
+    queryClientRef.current?.cancelQueries();
+    queryClientRef.current = client;
+    setQueryClient(client);
+  }, []);
+
   React.useEffect(() => {
     const root = document.documentElement;
     root.dataset.agwDesktop = String(isDesktop);
@@ -87,67 +123,112 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
     };
   }, [isDesktop, platform]);
 
-  const connect = React.useCallback(async (providedState?: DesktopRuntimeState) => {
-    const bridge = window.agwDesktop;
-    if (!bridge) {
-      resetApiRuntime();
-      configureExecutionRuntime({ baseUrl: "", token: null });
-      setStatus("ready");
-      return;
-    }
+  const connect = React.useCallback(
+    async (providedState?: DesktopRuntimeState) => {
+      const generation = ++connectGenerationRef.current;
+      connectAbortRef.current?.abort();
+      const abortController = new AbortController();
+      connectAbortRef.current = abortController;
 
-    setStatus("loading");
-    setError(null);
-    try {
-      let nextState = providedState ?? (await bridge.getRuntimeState());
-      setRuntimeState(nextState);
-      let profile = getEffectiveActiveServerProfile(nextState);
-      let token = nextState.activeToken;
-      configureClients(profile, token);
-
-      let info = await probeServer(profile, token);
-      if (!info.initialized && !setupAttempted.current.has(profile.baseUrl)) {
-        setupAttempted.current.add(profile.baseUrl);
-        setStatus("setup-required");
-        await bridge.openSetup(profile.baseUrl);
-        nextState = await bridge.getRuntimeState();
-        profile = getEffectiveActiveServerProfile(nextState);
-        token = nextState.activeToken;
-        info = await probeServer(profile, token);
+      const bridge = window.agwDesktop;
+      if (!bridge) {
+        resetApiRuntime();
+        configureExecutionRuntime({ baseUrl: "", token: null });
+        if (generation === connectGenerationRef.current) setStatus("ready");
+        return;
       }
 
-      if (info.initialized && token && !(await hasBearerAccess(profile, token))) {
-        token = null;
-        nextState = { ...nextState, activeToken: null };
+      if (generation === connectGenerationRef.current) {
+        setStatus("loading");
+        setError(null);
       }
+      try {
+        let nextState = providedState ?? (await bridge.getRuntimeState());
+        if (generation !== connectGenerationRef.current) return;
+        queryClientRegistryRef.current!.prune(nextState.settings.profiles.map((item) => item.id));
 
-      if (info.initialized && profile.kind === "local" && !token) {
-        token = await bridge.provisionLocalToken();
-        nextState = { ...nextState, activeToken: token };
+        let profile = getEffectiveActiveServerProfile(nextState);
+        let token = nextState.activeToken;
+        configureClients(profile, token);
+        activateQueryClient(profile, token);
+
+        let info = await probeServer(profile, token, abortController.signal);
+        if (!info.initialized && !setupAttempted.current.has(profile.baseUrl)) {
+          setupAttempted.current.add(profile.baseUrl);
+          if (generation === connectGenerationRef.current) setStatus("setup-required");
+          await bridge.openSetup(profile.baseUrl);
+          if (generation !== connectGenerationRef.current) return;
+
+          nextState = await bridge.getRuntimeState();
+          if (generation !== connectGenerationRef.current) return;
+          queryClientRegistryRef.current!.prune(nextState.settings.profiles.map((item) => item.id));
+
+          profile = getEffectiveActiveServerProfile(nextState);
+          token = nextState.activeToken;
+          activateQueryClient(profile, token);
+          info = await probeServer(profile, token, abortController.signal);
+        }
+
+        if (
+          info.initialized &&
+          token &&
+          !(await hasBearerAccess(profile, token, abortController.signal))
+        ) {
+          token = null;
+          nextState = { ...nextState, activeToken: null };
+        }
+
+        if (info.initialized && profile.kind === "local" && !token) {
+          token = await bridge.provisionLocalToken();
+          if (generation !== connectGenerationRef.current) return;
+
+          nextState = { ...nextState, activeToken: token };
+        }
+
+        if (generation !== connectGenerationRef.current) return;
+
+        configureClients(profile, token);
+        activateQueryClient(profile, token);
+
+        setRuntimeState(nextState);
+        setServerInfo(info);
+        setStatus(classifyDesktopConnection(profile, info, token));
+      } catch (connectionError) {
+        if (generation !== connectGenerationRef.current) return;
+        if (connectionError instanceof DOMException && connectionError.name === "AbortError")
+          return;
+        setStatus("unreachable");
+        setError(
+          connectionError instanceof Error
+            ? connectionError.message
+            : "Unable to reach Agw Server.",
+        );
       }
-
-      configureClients(profile, token);
-
-      setRuntimeState(nextState);
-      setServerInfo(info);
-      setStatus(classifyDesktopConnection(profile, info, token));
-    } catch (connectionError) {
-      setStatus("unreachable");
-      setError(
-        connectionError instanceof Error ? connectionError.message : "Unable to reach Agw Server.",
-      );
-    }
-  }, []);
+    },
+    [activateQueryClient],
+  );
 
   React.useEffect(() => {
     void connect();
   }, [connect]);
+
+  React.useEffect(
+    () => () => {
+      connectAbortRef.current?.abort();
+      queryClientRegistryRef.current?.dispose();
+    },
+    [],
+  );
 
   const saveSettings = React.useCallback(
     async (settings: DesktopSettings) => {
       const bridge = window.agwDesktop;
       if (!bridge) return;
       const saved = await bridge.saveSettings(settings);
+      // Keep persisted profiles available to the settings UI even when the
+      // selected Server cannot be reached by the connection attempt below.
+      setRuntimeState(saved);
+      queryClientRegistryRef.current!.prune(saved.settings.profiles.map((item) => item.id));
       const previousProfile = runtimeState ? getActiveServerProfile(runtimeState.settings) : null;
       const nextProfile = getActiveServerProfile(saved.settings);
       if (
@@ -155,7 +236,6 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
         previousProfile.baseUrl === nextProfile.baseUrl &&
         runtimeState?.activeToken === saved.activeToken
       ) {
-        setRuntimeState(saved);
         return;
       }
       await connect(saved);
@@ -208,13 +288,15 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
 
   return (
     <DesktopRuntimeContext.Provider value={value}>
-      <ExecutionPlatformProvider
-        isDesktop={isDesktop}
-        serverId={activeProfile?.id ?? "browser"}
-        onActiveCountChange={handleActiveCountChange}
-      >
-        {children}
-      </ExecutionPlatformProvider>
+      <QueryClientProvider client={queryClient}>
+        <ExecutionPlatformProvider
+          isDesktop={isDesktop}
+          serverId={activeProfile?.id ?? "browser"}
+          onActiveCountChange={handleActiveCountChange}
+        >
+          {children}
+        </ExecutionPlatformProvider>
+      </QueryClientProvider>
     </DesktopRuntimeContext.Provider>
   );
 }

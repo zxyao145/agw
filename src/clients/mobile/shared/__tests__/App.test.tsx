@@ -6,6 +6,8 @@ import App from "../src/rn/App";
 import { Composer } from "../src/rn/pages/home/components/composer";
 import { styles } from "../src/rn/pages/home/components/styles";
 
+const RECORD_SEPARATOR = "\x1e";
+
 class MockWebSocket {
   static readonly CONNECTING = 0;
   static readonly OPEN = 1;
@@ -20,7 +22,8 @@ class MockWebSocket {
   public url: string;
   public readyState = MockWebSocket.CONNECTING;
   public sentData: string[] = [];
-  public onclose: ((event: { code: number; reason: string }) => void) | null = null;
+  public onclose: ((event: { code: number; reason: string; wasClean: boolean }) => void) | null =
+    null;
   public onerror: ((event: unknown) => void) | null = null;
   public onmessage: ((event: { data: string }) => void) | null = null;
   public onopen: ((event: { target: MockWebSocket }) => void) | null = null;
@@ -29,6 +32,7 @@ class MockWebSocket {
     this.url = url;
     MockWebSocket.instances.push(this);
     setTimeout(() => {
+      if (this.readyState !== MockWebSocket.CONNECTING) return;
       this.readyState = MockWebSocket.OPEN;
       this.onopen?.({ target: this });
     }, 0);
@@ -46,13 +50,109 @@ class MockWebSocket {
 
   public close(code = 1000, reason = ""): void {
     this.readyState = MockWebSocket.CLOSING;
-    this.onclose?.({ code, reason });
     this.readyState = MockWebSocket.CLOSED;
+    this.onclose?.({ code, reason, wasClean: code === 1000 });
   }
 }
 
 function getLatestWebSocket(): MockWebSocket | undefined {
   return MockWebSocket.instances[MockWebSocket.instances.length - 1];
+}
+
+const mountedTrees = new Set<renderer.ReactTestRenderer>();
+
+function createTestRenderer(element: React.ReactElement): renderer.ReactTestRenderer {
+  const tree = renderer.create(element);
+  mountedTrees.add(tree);
+  return tree;
+}
+
+type SignalRFrame = {
+  type?: number;
+  invocationId?: string;
+  target?: string;
+  arguments?: unknown[];
+  [key: string]: unknown;
+};
+
+function emitSignalR(ws: MockWebSocket, frame: unknown): void {
+  ws.emitMessage(`${JSON.stringify(frame)}${RECORD_SEPARATOR}`);
+}
+
+function sentFrames(ws: MockWebSocket): SignalRFrame[] {
+  return ws.sentData.flatMap((payload) =>
+    payload
+      .split(RECORD_SEPARATOR)
+      .filter(Boolean)
+      .map((part) => JSON.parse(part) as SignalRFrame),
+  );
+}
+
+function findInvocation(
+  ws: MockWebSocket,
+  predicate: (frame: SignalRFrame) => boolean,
+): SignalRFrame {
+  const invocation = sentFrames(ws).find(
+    (frame) => frame.type === 1 && frame.invocationId && predicate(frame),
+  );
+  if (!invocation) throw new Error(`Invocation not found in ${JSON.stringify(sentFrames(ws))}`);
+  return invocation;
+}
+
+function findDispatch(ws: MockWebSocket, commandType: string): SignalRFrame {
+  return findInvocation(
+    ws,
+    (frame) =>
+      frame.target === "DispatchCommand" &&
+      (frame.arguments?.[0] as { type?: string } | undefined)?.type === commandType,
+  );
+}
+
+async function completeMobileExecutionInitialization(
+  ws: MockWebSocket,
+  provider = "InProcess",
+): Promise<{ setting: SignalRFrame; exec: SignalRFrame }> {
+  await act(async () => {
+    emitSignalR(ws, {});
+  });
+  await settleAsync();
+  const providerInvocation = findInvocation(ws, (frame) => frame.target === "GetExecutionProvider");
+  await act(async () => {
+    emitSignalR(ws, { type: 3, invocationId: providerInvocation.invocationId, result: provider });
+  });
+  await settleAsync();
+  const setting = findDispatch(ws, "SettingCommand");
+  await act(async () => {
+    emitSignalR(ws, { type: 3, invocationId: setting.invocationId });
+  });
+  await settleAsync();
+  const exec = findDispatch(ws, "ExecCommand");
+  await act(async () => {
+    emitSignalR(ws, { type: 3, invocationId: exec.invocationId });
+  });
+  await settleAsync();
+  return { setting, exec };
+}
+
+async function completeInProcessReconnect(ws: MockWebSocket): Promise<void> {
+  await act(async () => {
+    emitSignalR(ws, {});
+  });
+  await settleAsync();
+  const providerInvocation = findInvocation(ws, (frame) => frame.target === "GetExecutionProvider");
+  await act(async () => {
+    emitSignalR(ws, {
+      type: 3,
+      invocationId: providerInvocation.invocationId,
+      result: "InProcess",
+    });
+  });
+  await settleAsync();
+  const setting = findDispatch(ws, "SettingCommand");
+  await act(async () => {
+    emitSignalR(ws, { type: 3, invocationId: setting.invocationId });
+  });
+  await settleAsync();
 }
 
 jest.mock("react-native-safe-area-context", () => {
@@ -93,6 +193,10 @@ describe("App", () => {
   });
 
   afterEach(() => {
+    act(() => {
+      for (const tree of mountedTrees) tree.unmount();
+      mountedTrees.clear();
+    });
     jest.clearAllMocks();
   });
 
@@ -100,7 +204,7 @@ describe("App", () => {
     let tree: renderer.ReactTestRenderer | undefined;
 
     await act(async () => {
-      tree = renderer.create(<App routeName="home" title="Home" source="SwiftUI" />);
+      tree = createTestRenderer(<App routeName="home" title="Home" source="SwiftUI" />);
     });
     await settleAsync();
 
@@ -117,7 +221,7 @@ describe("App", () => {
     let tree: renderer.ReactTestRenderer | undefined;
 
     await act(async () => {
-      tree = renderer.create(<App routeName="missing" title="Missing" />);
+      tree = createTestRenderer(<App routeName="missing" title="Missing" />);
     });
 
     expect(collectText(tree?.toJSON())).toContain("Unknown route: missing");
@@ -127,7 +231,7 @@ describe("App", () => {
     let tree: renderer.ReactTestRenderer | undefined;
 
     await act(async () => {
-      tree = renderer.create(<App routeName="home" title="Home" source="Android" />);
+      tree = createTestRenderer(<App routeName="home" title="Home" source="Android" />);
     });
 
     await settleAsync();
@@ -160,7 +264,7 @@ describe("App", () => {
     let tree: renderer.ReactTestRenderer | undefined;
 
     await act(async () => {
-      tree = renderer.create(<App routeName="home" title="Home" source="SwiftUI" />);
+      tree = createTestRenderer(<App routeName="home" title="Home" source="SwiftUI" />);
     });
 
     const openDrawer = tree!.root.findByProps({ testID: "agw-open-drawer" });
@@ -189,7 +293,7 @@ describe("App", () => {
     let tree: renderer.ReactTestRenderer | undefined;
 
     await act(async () => {
-      tree = renderer.create(<App routeName="home" title="Home" />);
+      tree = createTestRenderer(<App routeName="home" title="Home" />);
     });
     await settleAsync();
 
@@ -236,7 +340,7 @@ describe("App", () => {
     let tree: renderer.ReactTestRenderer | undefined;
 
     await act(async () => {
-      tree = renderer.create(<App routeName="home" title="Home" />);
+      tree = createTestRenderer(<App routeName="home" title="Home" />);
     });
     await settleAsync();
 
@@ -262,54 +366,126 @@ describe("App", () => {
     const ws = getLatestWebSocket();
 
     expect(ws).toBeDefined();
+    expect(ws!.sentData[0]).toContain('"protocol":"json"');
 
-    const sentPayloads = ws!.sentData.map((payload) => JSON.parse(payload));
-    expect(sentPayloads[0]).toMatchObject({
-      type: "SettingCommand",
-      projectId: "default-built-in",
-      taskId: "task-default",
+    const { setting: settingInvocation, exec: execInvocation } =
+      await completeMobileExecutionInitialization(ws!);
+    expect(settingInvocation).toMatchObject({
+      type: 1,
+      target: "DispatchCommand",
+      arguments: [
+        {
+          type: "SettingCommand",
+          projectId: "default-built-in",
+          contextId: "context-default",
+        },
+      ],
     });
-    expect(sentPayloads[1]).toMatchObject({
-      type: "ExecCommand",
-      agentType: 0,
+
+    expect(execInvocation).toMatchObject({
+      type: 1,
+      target: "DispatchCommand",
+      arguments: [
+        {
+          type: "ExecCommand",
+          agentId: "agent-hello",
+          agentType: 0,
+        },
+      ],
     });
 
     await act(async () => {
-      ws!.emitMessage(
-        JSON.stringify({
-          messageId: "hello-assistant",
-          author: "Hello",
-          role: "assistant",
-          contents: [
-            {
-              type: "TextContent",
-              content: "Hello from stream.",
-            },
-          ],
-        }),
-      );
-    });
-    await act(async () => {
-      ws!.emitMessage(
-        JSON.stringify({
-          messageId: "hello-system",
-          author: "$agw-server",
-          role: "system",
-          contents: [
-            {
-              type: "TextContent",
-              content: "Execution done.",
-              additionalProperties: {
-                type: "turn-finished",
+      emitSignalR(ws!, {
+        type: 1,
+        target: "ReceiveMessage",
+        arguments: [
+          {
+            messageId: "hello-assistant",
+            author: "Hello",
+            role: "assistant",
+            contents: [
+              {
+                type: "TextContent",
+                content: "Hello from stream.",
               },
-            },
-          ],
-        }),
-      );
+            ],
+          },
+        ],
+      });
+    });
+    await act(async () => {
+      emitSignalR(ws!, {
+        type: 1,
+        target: "ReceiveMessage",
+        arguments: [
+          {
+            messageId: "hello-system",
+            author: "$agw-server",
+            role: "system",
+            contents: [{ type: "TextContent", content: "Execution done." }],
+            additionalProperties: { type: "turn-finished", status: "completed" },
+          },
+        ],
+      });
     });
 
     await settleAsync();
     expect(collectText(tree?.toJSON())).toContain("Hello from stream.");
+  });
+
+  it("keeps the composer busy while reconnecting and releases an unrecoverable in-process turn", async () => {
+    let tree: renderer.ReactTestRenderer | undefined;
+
+    await act(async () => {
+      tree = createTestRenderer(<App routeName="home" title="Home" />);
+    });
+    await settleAsync();
+
+    await act(async () => {
+      tree!.root.findByProps({ testID: "agw-message-input" }).props.onChangeText("First turn");
+    });
+    await act(async () => {
+      tree!.root.findByProps({ testID: "agw-send-message" }).props.onPress();
+    });
+    await settleAsync();
+    const ws = getLatestWebSocket();
+    await completeMobileExecutionInitialization(ws!);
+
+    await act(async () => {
+      tree!.root.findByProps({ testID: "agw-open-drawer" }).props.onPress();
+    });
+    await act(async () => {
+      tree!.root.findByProps({ testID: "agw-project-selector" }).props.onPress();
+    });
+    await act(async () => {
+      tree!.root.findByProps({ testID: "agw-project-option-project-2" }).props.onPress();
+    });
+    await settleAsync();
+    await act(async () => {
+      tree!.root.findByProps({ testID: "agw-close-drawer" }).props.onPress();
+    });
+    await settleAsync();
+    await act(async () => {
+      tree!.root.findByProps({ testID: "agw-message-input" }).props.onChangeText("Second turn");
+    });
+
+    expect(tree!.root.findByProps({ testID: "agw-stop-message" }).props.disabled).toBe(false);
+
+    await act(async () => {
+      ws!.close(1006, "network lost");
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    });
+    await settleAsync();
+
+    expect(tree!.root.findByProps({ testID: "agw-stop-message" }).props.disabled).toBe(false);
+    const reconnectSocket = getLatestWebSocket();
+    expect(reconnectSocket).not.toBe(ws);
+    await act(async () => {
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    });
+    await completeInProcessReconnect(reconnectSocket!);
+
+    expect(tree!.root.findByProps({ testID: "agw-send-message" }).props.disabled).toBe(false);
   });
 
   it("imports a Base64URL config when no local config exists", async () => {
@@ -317,7 +493,7 @@ describe("App", () => {
     let tree: renderer.ReactTestRenderer | undefined;
 
     await act(async () => {
-      tree = renderer.create(<App routeName="home" title="Home" />);
+      tree = createTestRenderer(<App routeName="home" title="Home" />);
     });
 
     expect(collectText(tree?.toJSON())).toContain("Server Configuration");
@@ -360,7 +536,7 @@ describe("App", () => {
     let tree: renderer.ReactTestRenderer | undefined;
 
     await act(async () => {
-      tree = renderer.create(<App routeName="home" title="Home" />);
+      tree = createTestRenderer(<App routeName="home" title="Home" />);
     });
 
     await act(async () => {
@@ -404,7 +580,7 @@ describe("App", () => {
     let tree: renderer.ReactTestRenderer | undefined;
 
     await act(async () => {
-      tree = renderer.create(<App routeName="home" title="Home" />);
+      tree = createTestRenderer(<App routeName="home" title="Home" />);
     });
     await settleAsync();
 
@@ -434,7 +610,7 @@ describe("App", () => {
     let tree: renderer.ReactTestRenderer | undefined;
 
     await act(async () => {
-      tree = renderer.create(<App routeName="home" title="Home" />);
+      tree = createTestRenderer(<App routeName="home" title="Home" />);
     });
     await settleAsync();
 
@@ -451,21 +627,21 @@ describe("App", () => {
     const ws = getLatestWebSocket();
 
     expect(ws).toBeDefined();
-    expect(ws!.sentData[0]).toBeDefined();
-    expect(ws!.sentData[1]).toBeDefined();
+    expect(ws!.sentData[0]).toContain('"protocol":"json"');
 
-    const settingCommand = JSON.parse(ws!.sentData[0]);
-    const execCommand = JSON.parse(ws!.sentData[1]);
-
-    expect(settingCommand).toMatchObject({
+    const { setting: settingInvocation, exec: execInvocation } =
+      await completeMobileExecutionInitialization(ws!);
+    expect(settingInvocation.arguments[0]).toMatchObject({
       type: "SettingCommand",
       projectId: "project-1",
-      taskId: "task-1",
-      settingContent: "{}",
+      contextId: "context-1",
     });
-    expect(execCommand).toMatchObject({
+
+    expect(execInvocation.arguments[0]).toMatchObject({
       type: "ExecCommand",
+      agentId: "agent-2",
       agentType: 0,
+      executionId: "task-1",
       input: {
         messageId: expect.any(String),
         author: "$agw",
@@ -474,41 +650,41 @@ describe("App", () => {
     });
 
     await act(async () => {
-      ws!.emitMessage(
-        JSON.stringify({
-          messageId: "assistant-stream",
-          author: "Mobile Agent",
-          role: "assistant",
-          contents: [
-            {
-              type: "TextContent",
-              content: "Execution response from stream.",
-            },
-          ],
-        }),
-      );
+      emitSignalR(ws!, {
+        type: 1,
+        target: "ReceiveMessage",
+        arguments: [
+          {
+            messageId: "assistant-stream",
+            author: "Mobile Agent",
+            role: "assistant",
+            contents: [
+              {
+                type: "TextContent",
+                content: "Execution response from stream.",
+              },
+            ],
+          },
+        ],
+      });
     });
     await act(async () => {
-      ws!.emitMessage(
-        JSON.stringify({
-          messageId: "system-end",
-          author: "$agw-server",
-          role: "system",
-          contents: [
-            {
-              type: "TextContent",
-              content: "",
-              additionalProperties: {
-                type: "turn-finished",
-              },
-            },
-          ],
-        }),
-      );
+      emitSignalR(ws!, {
+        type: 1,
+        target: "ReceiveMessage",
+        arguments: [
+          {
+            messageId: "system-end",
+            author: "$agw-server",
+            role: "system",
+            contents: [{ type: "TextContent", content: "" }],
+            additionalProperties: { type: "turn-finished", status: "completed" },
+          },
+        ],
+      });
     });
 
     await settleAsync();
-
     expect(collectText(tree?.toJSON())).toContain("Execution response from stream.");
   });
 
@@ -519,7 +695,7 @@ describe("App", () => {
     let tree: renderer.ReactTestRenderer | undefined;
 
     await act(async () => {
-      tree = renderer.create(
+      tree = createTestRenderer(
         <Composer
           message=""
           onClear={onClear}
@@ -569,11 +745,39 @@ describe("App", () => {
     expect(tree!.root.findByProps({ testID: "agw-clear-session" }).props.disabled).toBe(true);
   });
 
+  it("sends a stop callback when pressing the send button while sending", async () => {
+    const onStop = jest.fn();
+    let tree: renderer.ReactTestRenderer | undefined;
+
+    await act(async () => {
+      tree = createTestRenderer(
+        <Composer
+          isSending
+          message=""
+          onMessageChange={jest.fn()}
+          onSend={jest.fn()}
+          onStop={onStop}
+          safeBottom={0}
+        />,
+      );
+    });
+
+    const sendButton = tree!.root.findByProps({ testID: "agw-stop-message" });
+    expect(sendButton.props.disabled).toBe(false);
+    expect(sendButton.props.accessibilityLabel).toBe("Stop generating");
+
+    await act(async () => {
+      sendButton.props.onPress();
+    });
+
+    expect(onStop).toHaveBeenCalledTimes(1);
+  });
+
   it("clears current context records from the composer toolbar", async () => {
     let tree: renderer.ReactTestRenderer | undefined;
 
     await act(async () => {
-      tree = renderer.create(<App routeName="home" title="Home" />);
+      tree = createTestRenderer(<App routeName="home" title="Home" />);
     });
     await settleAsync();
 

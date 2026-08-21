@@ -2,18 +2,14 @@ import React from "react";
 import renderer, { act } from "react-test-renderer";
 import { HistoryDrawer } from "../src/rn/pages/home/components/history-drawer";
 
-jest.mock(
-  "lucide-react-native",
-  () => {
-    const React = require("react");
-    const { Text } = require("react-native");
+jest.mock("lucide-react-native", () => {
+  const React = require("react");
+  const { Text } = require("react-native");
 
-    return {
-      Bolt: () => React.createElement(Text, null, "lucide-bolt"),
-    };
-  },
-  { virtual: true }
-);
+  return {
+    Bolt: () => React.createElement(Text, null, "lucide-bolt"),
+  };
+});
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }

@@ -72,6 +72,16 @@ npm run prebuild
 
 本地配置使用版本 2，保存 Server 根 URL、API major version 和 Bearer API Token。Token 存在 Expo SecureStore 中，请求通过 `Authorization: Bearer agw_...` 发送。旧安装里的文件配置路径不再读取，也不做迁移；用户需要重新导入或保存配置。
 
+## 跨 workspace 共享
+
+Mobile（`shared/`）是独立 npm workspace，不参与 `src/clients/pnpm-workspace.yaml` 的 `packages/*`，因此 `@agw/execution-core` 不会安装进 `shared/node_modules`。为复用同一份 platform-neutral 的执行命令、终态、重连间隔、流式合并/合批和工具配对实现，Mobile 直接引用 `src/clients/packages/execution-core/src` 源码：
+
+- `shared/execution-core-alias.cjs`：路径的**单一来源**，被 `metro.config.js` 与 `jest.config.js` 引用。
+- `shared/tsconfig.json` 的 `paths`（JSON 无法 require CJS）需与此文件的 `executionCoreEntry` 保持同步。
+- 若后续改为发布版本化包，请把这三处（metro / jest / tsconfig）一并替换为普通依赖，并删除该 alias 文件。
+
+Mobile 执行流使用 `@microsoft/signalr` 的 WebSocket-only 连接，并启用共享自动重连策略。Distributed provider 会在重连后重新发送 Setting 并从最后一个 stream cursor 订阅原 execution；InProcess provider 无法恢复消息流时会明确结束本地等待，并提示服务端执行可能仍在运行。
+
 ## 测试
 
 ```sh

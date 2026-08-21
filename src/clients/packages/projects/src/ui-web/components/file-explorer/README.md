@@ -40,7 +40,6 @@ Left-panel file tree for:
   recursiveMode: boolean;
   onOnlyDiffChange?: (value: boolean) => void;
   onFileDeleted: (filePath: string) => void;
-  onLoadFileContent: (filePath: string, scope?: GitDiffScope) => void;
   onFileSelected: (filePath: string | null, scope?: GitDiffScope) => void;
   onFileReseted: (filePath: string | null) => void;
 }
@@ -214,9 +213,6 @@ export function ExampleFileExplorer({
           if (filePath) {
             void loadFileContent(filePath, selectedDiffScope);
           }
-        }}
-        onLoadFileContent={(filePath, scope) => {
-          void loadFileContent(filePath, scope);
         }}
       />
 

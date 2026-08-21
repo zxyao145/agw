@@ -1,7 +1,12 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "types": ["jest"]
+    "types": ["jest"],
+    "baseUrl": ".",
+    "paths": {
+      // 与 execution-core-alias.cjs 的 executionCoreEntry 保持一致（TS paths 无法 require CJS）。
+      "@agw/execution-core": ["../../packages/execution-core/src/index.ts"]
+    }
   },
   "include": ["**/*.ts", "**/*.tsx"],
   "exclude": ["**/node_modules", "**/Pods", "android", "ios"]

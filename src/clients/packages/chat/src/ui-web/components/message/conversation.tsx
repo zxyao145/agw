@@ -4,7 +4,8 @@ import * as React from "react";
 import { Badge } from "@agw/components";
 import { Accordion, AccordionContent, AccordionItem } from "@agw/components";
 import { AiMessageComponent, isResultMessage } from "./message";
-import { AiMessage, MessageContentType, ProcessedMessageItem } from "@agw/api";
+import { MessageContentType, type AiMessage } from "@agw/api";
+import { processMessages, type ProcessedMessageItem } from "@agw/execution-core";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@agw/components";
 import { collapseConsecutiveSystemMessages } from "../../../lib/chat/ai-message-handlers";
 import { cn } from "@agw/components";
@@ -24,7 +25,7 @@ export interface ChatSessionProps {
   messages: AiMessage[];
   messagesStartRef?: React.RefObject<HTMLDivElement>;
   messagesEndRef: React.RefObject<HTMLDivElement>;
-  processMessages?: (msgs: AiMessage[]) => ProcessedMessageItem[];
+  processMessages?: (msgs: AiMessage[]) => ProcessedMessageItem<AiMessage>[];
   scrollable?: boolean;
   pendingHumanInteraction?: (PendingHumanGate & { requestType: "human-interaction" }) | null;
   onHumanInteractionSubmit?: (responseData: unknown) => void;
@@ -88,135 +89,7 @@ function getFunctionToolName(message: AiMessage): string | null {
   return typeof toolName === "string" && toolName.trim() ? toolName.trim() : null;
 }
 
-type FragmentType = "normal" | "result" | "function-call" | "function-result";
-type MessageFragment = {
-  type: FragmentType;
-  message: AiMessage;
-  groupKey: string | null;
-  toolName: string;
-};
-type ToolGroup = {
-  calls: MessageFragment[];
-  results: MessageFragment[];
-};
-
-const messageFragmentCache = new WeakMap<AiMessage, MessageFragment[]>();
-
-function createMessageFragments(message: AiMessage): MessageFragment[] {
-  const cached = messageFragmentCache.get(message);
-  if (cached) {
-    return cached;
-  }
-
-  const fragments: MessageFragment[] = [];
-  if (isResultMessage(message)) {
-    fragments.push({ type: "result", message, groupKey: null, toolName: "" });
-  } else if (!((message.role === "user" && !message.author) || message.contents.length === 0)) {
-    let normalContents: AiMessage["contents"] = [];
-    const flushNormalContents = () => {
-      if (normalContents.length === 0) {
-        return;
-      }
-
-      fragments.push({
-        type: "normal",
-        message: { ...message, contents: normalContents },
-        groupKey: null,
-        toolName: "",
-      });
-      normalContents = [];
-    };
-
-    for (const content of message.contents) {
-      const isFunctionCall = content.type === MessageContentType.FunctionCallContent;
-      const isFunctionResult = content.type === MessageContentType.FunctionResultContent;
-      if (!isFunctionCall && !isFunctionResult) {
-        normalContents.push(content);
-        continue;
-      }
-
-      flushNormalContents();
-      const callId = content.additionalProperties?.callId;
-      const groupKey =
-        typeof callId === "string" && callId.length > 0
-          ? JSON.stringify([message.streamingScopeId ?? null, callId])
-          : null;
-      const toolName = content.additionalProperties?.toolName;
-      fragments.push({
-        type: isFunctionCall ? "function-call" : "function-result",
-        message: { ...message, contents: [content] },
-        groupKey,
-        toolName: typeof toolName === "string" ? toolName : "",
-      });
-    }
-
-    flushNormalContents();
-  }
-
-  messageFragmentCache.set(message, fragments);
-  return fragments;
-}
-
-const defaultProcessMessages = (msgs: AiMessage[]): ProcessedMessageItem[] => {
-  const items: ProcessedMessageItem[] = [];
-  const fragments = msgs.flatMap(createMessageFragments);
-
-  const toolGroups = new Map<string, ToolGroup>();
-  for (const fragment of fragments) {
-    if (!fragment.groupKey) {
-      continue;
-    }
-
-    const group = toolGroups.get(fragment.groupKey) ?? { calls: [], results: [] };
-    if (fragment.type === "function-call") {
-      group.calls.push(fragment);
-    } else if (fragment.type === "function-result") {
-      group.results.push(fragment);
-    }
-    toolGroups.set(fragment.groupKey, group);
-  }
-
-  const renderedGroups = new Set<string>();
-  for (const fragment of fragments) {
-    if (fragment.type === "result") {
-      items.push({ type: "result", message: fragment.message });
-      continue;
-    }
-
-    if (fragment.type === "normal") {
-      items.push({ type: "normal", message: fragment.message });
-      continue;
-    }
-
-    const group = fragment.groupKey ? toolGroups.get(fragment.groupKey) : undefined;
-    if (fragment.type === "function-result") {
-      if (group && group.calls.length > 0) {
-        continue;
-      }
-
-      items.push({ type: "normal", message: fragment.message });
-      continue;
-    }
-
-    if (!fragment.groupKey || !group || group.results.length === 0) {
-      items.push({ type: "normal", message: fragment.message });
-      continue;
-    }
-
-    if (renderedGroups.has(fragment.groupKey)) {
-      continue;
-    }
-
-    renderedGroups.add(fragment.groupKey);
-    items.push({
-      type: "accordion",
-      messages: [...group.calls, ...group.results].map((item) => item.message),
-      toolName: group.calls[0].toolName,
-    });
-  }
-
-  return items;
-};
+const defaultProcessMessages = processMessages;
 
 function getMessageKey(message: AiMessage): string {
   return JSON.stringify([
@@ -227,7 +100,7 @@ function getMessageKey(message: AiMessage): string {
   ]);
 }
 
-function getItemBaseKey(item: ProcessedMessageItem): string {
+function getItemBaseKey(item: ProcessedMessageItem<AiMessage>): string {
   if (item.type === "accordion") {
     const callId = item.messages[0]?.contents[0]?.additionalProperties?.callId;
     return `accordion:${getMessageKey(item.messages[0])}:${String(callId ?? item.toolName)}`;
@@ -237,7 +110,7 @@ function getItemBaseKey(item: ProcessedMessageItem): string {
   return `${item.type}:${getMessageKey(item.message)}:${contentType}`;
 }
 
-function addStableKeys(items: ProcessedMessageItem[]) {
+function addStableKeys(items: ProcessedMessageItem<AiMessage>[]) {
   const occurrences = new Map<string, number>();
   return items.map((item) => {
     const baseKey = getItemBaseKey(item);

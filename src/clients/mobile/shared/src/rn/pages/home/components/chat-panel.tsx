@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import Markdown from "react-native-markdown-display";
 import type { AgwMessage } from "../../../api/agw-api-types";
+import { processMessages, type ProcessedMessageItem } from "@agw/execution-core";
 import { styles } from "./styles";
 
 const MessageContentType = {
@@ -28,21 +29,33 @@ type MessageNode = {
   type: string;
 };
 
-type ProcessedMessageItem =
-  | { message: AgwMessage; type: "normal" }
-  | { messages: AgwMessage[]; toolName: string; type: "toolGroup" };
-
-export function ChatPanel({
-  error,
-  isLoading,
-  messages,
-  scrollViewRef,
-}: {
+type ChatPanelProps = {
   error?: string | null;
   isLoading?: boolean;
   messages: AgwMessage[];
   scrollViewRef?: React.RefObject<ScrollView | null>;
-}): React.JSX.Element {
+};
+
+function ChatPanelComponent({
+  error,
+  isLoading,
+  messages,
+  scrollViewRef,
+}: ChatPanelProps): React.JSX.Element {
+  // 先让 core 在完整 messages 上配对工具调用与结果（authorless 的 tool result 也能参与），
+  // 再在渲染层过滤掉不需要独立展示的 normal/result 项，避免破坏配对。
+  const displayItems = React.useMemo(
+    () =>
+      processMessages(messages).filter((item) => {
+        if (item.type === "accordion") {
+          return true;
+        }
+
+        return shouldDisplayMessage(item.message);
+      }),
+    [messages],
+  );
+
   if (isLoading) {
     return (
       <View style={styles.emptyPanel}>
@@ -74,8 +87,8 @@ export function ChatPanel({
       ref={scrollViewRef}
       style={styles.panelScroll}
     >
-      {processMessages(messages).map((item, index) =>
-        item.type === "toolGroup" ? (
+      {displayItems.map((item, index) =>
+        item.type === "accordion" ? (
           <ToolGroup key={`tool-${index}`} item={item} />
         ) : (
           <AgwMessageComponent
@@ -88,10 +101,12 @@ export function ChatPanel({
   );
 }
 
+export const ChatPanel = React.memo(ChatPanelComponent);
+
 function ToolGroup({
   item,
 }: {
-  item: Extract<ProcessedMessageItem, { type: "toolGroup" }>;
+  item: Extract<ProcessedMessageItem<AgwMessage>, { type: "accordion" }>;
 }): React.JSX.Element {
   return (
     <View style={styles.toolGroup} testID="agw-tool-group">
@@ -262,84 +277,6 @@ function renderContent(
   }
 
   return null;
-}
-
-function processMessages(messages: AgwMessage[]): ProcessedMessageItem[] {
-  const items: ProcessedMessageItem[] = [];
-  const processedIndices = new Set<number>();
-
-  for (let i = 0; i < messages.length; i += 1) {
-    if (processedIndices.has(i)) {
-      continue;
-    }
-    processedIndices.add(i);
-
-    const currentMessage = messages[i];
-    if (!shouldDisplayMessage(currentMessage)) {
-      continue;
-    }
-
-    const firstType = currentMessage.contents[0]?.type;
-    if (firstType === MessageContentType.FunctionCallContent) {
-      handleFunctionCall(currentMessage, i);
-      continue;
-    }
-
-    items.push({
-      message: currentMessage,
-      type: "normal",
-    });
-  }
-
-  return items;
-
-  function handleFunctionCall(currentMessage: AgwMessage, index: number) {
-    const callId = currentMessage.contents[0].additionalProperties?.callId;
-
-    if (typeof callId !== "string" || !callId) {
-      items.push({
-        message: currentMessage,
-        type: "normal",
-      });
-      return;
-    }
-
-    const matchingResults: { index: number; message: AgwMessage }[] = [];
-    for (let j = 0; j < messages.length; j += 1) {
-      if (j === index || processedIndices.has(j)) {
-        continue;
-      }
-
-      const message = messages[j];
-      const isFunctionResult =
-        message.contents.length === 1 &&
-        message.contents[0].type === MessageContentType.FunctionResultContent;
-      const resultCallId = message.contents[0]?.additionalProperties?.callId;
-
-      if (isFunctionResult && resultCallId === callId) {
-        matchingResults.push({ index: j, message });
-      }
-    }
-
-    if (matchingResults.length === 0) {
-      items.push({
-        message: currentMessage,
-        type: "normal",
-      });
-      return;
-    }
-
-    const toolName = currentMessage.contents[0].additionalProperties?.toolName;
-    items.push({
-      messages: [
-        currentMessage,
-        ...matchingResults.map((result) => result.message),
-      ],
-      toolName: typeof toolName === "string" ? toolName : "",
-      type: "toolGroup",
-    });
-    matchingResults.forEach((result) => processedIndices.add(result.index));
-  }
 }
 
 function shouldDisplayMessage(message: AgwMessage): boolean {

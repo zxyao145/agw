@@ -77,6 +77,7 @@ export function Composer({
   onMessageChange,
   onScrollToTop,
   onSend,
+  onStop,
   safeBottom,
 }: {
   disabled?: boolean;
@@ -86,6 +87,7 @@ export function Composer({
   onMessageChange: (message: string) => void;
   onScrollToTop?: () => void;
   onSend: () => void;
+  onStop?: () => void;
   safeBottom: number;
 }): React.JSX.Element {
   const canSend = !disabled && !isSending && message.trim().length > 0;
@@ -156,16 +158,16 @@ export function Composer({
           />
         </View>
         <Pressable
-          accessibilityLabel="Send message"
+          accessibilityLabel={isSending ? "Stop generating" : "Send message"}
           accessibilityRole="button"
-          disabled={!canSend}
-          onPress={canSend ? onSend : undefined}
+          disabled={isSending ? !onStop : !canSend}
+          onPress={isSending ? (onStop ?? undefined) : canSend ? onSend : undefined}
           style={({ pressed }) => [
             styles.sendButton,
-            !canSend && styles.sendButtonDisabled,
+            (isSending ? !onStop : !canSend) && styles.sendButtonDisabled,
             pressed && styles.pressed,
           ]}
-          testID="agw-send-message"
+          testID={isSending ? "agw-stop-message" : "agw-send-message"}
         >
           {isSending ? (
             <Square color={colors.white} size={20} />

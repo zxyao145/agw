@@ -23,10 +23,16 @@ import { FilesPanel } from "./components/files-panel";
 import { HistoryDrawer } from "./components/history-drawer";
 import {
   executeWithWebSocket,
-  mergeStreamingMessages,
-  parseExecutionWsMessage,
   toExecutionWsUserInput,
+  type ExecutionWsHandle,
 } from "./lib/execution-ws";
+import {
+  createStreamingMessageBatcher,
+  mergeStreamingMessages,
+  scopeMessagesByUserTurn,
+  scopeStreamingMessage,
+  type StreamingMessageBatcher,
+} from "@agw/execution-core";
 import { DEFAULT_AGENT_LABEL, DEFAULT_PROJECT_VALUE } from "./lib/default-selections";
 import { buildAgwTargetOptions, getTargetValue } from "./lib/target-options";
 import { styles } from "./components/styles";
@@ -72,16 +78,21 @@ function AgwMobilePage({
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [executionError, setExecutionError] = React.useState<string | null>(null);
   const chatScrollRef = React.useRef<ScrollView | null>(null);
-  const isTurnFinishedMessage = React.useCallback((message: AgwMessage): boolean => {
-    if (message.role?.toLowerCase() !== "system") {
-      return false;
-    }
+  const executionGenerationRef = React.useRef(0);
+  const executionHandleRef = React.useRef<ExecutionWsHandle | null>(null);
+  const stopFallbackTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const streamingMessageBatcherRef = React.useRef<StreamingMessageBatcher<AgwMessage> | null>(null);
 
-    return (
-      message.author === "$agw-server" &&
-      message.contents.some((content) => content.additionalProperties?.type === "turn-finished")
+  if (streamingMessageBatcherRef.current === null) {
+    streamingMessageBatcherRef.current = createStreamingMessageBatcher(
+      (incomingMessages, generation) => {
+        if (generation !== executionGenerationRef.current) return;
+        setMessages((currentMessages) =>
+          mergeStreamingMessages(currentMessages, incomingMessages),
+        );
+      },
     );
-  }, []);
+  }
 
   const apiClient = React.useMemo(() => (config ? createAgwApiClient(config) : null), [config]);
 
@@ -140,6 +151,13 @@ function AgwMobilePage({
       isMounted = false;
     };
   }, []);
+
+  React.useEffect(
+    () => () => {
+      streamingMessageBatcherRef.current?.discard();
+    },
+    [],
+  );
 
   async function saveConfig(nextConfig: AgwLocalConfig) {
     await verifyServerCompatibility(nextConfig);
@@ -338,7 +356,7 @@ function AgwMobilePage({
         }
 
         setCurrentTaskId(contextDetails.latestTaskId ?? null);
-        setMessages(contextDetails.messages ?? []);
+        setMessages(scopeMessagesByUserTurn(contextDetails.messages ?? []));
       } catch (error) {
         if (!isMounted) {
           return;
@@ -376,6 +394,8 @@ function AgwMobilePage({
 
   function selectContext(contextId: string) {
     const context = contexts.find((item) => item.contextId === contextId);
+    streamingMessageBatcherRef.current?.discard();
+    executionGenerationRef.current += 1;
     setCurrentContextId(contextId);
     setCurrentTaskId(context?.latestTaskId ?? null);
     setExecutionError(null);
@@ -383,6 +403,8 @@ function AgwMobilePage({
   }
 
   function selectProject(projectId: string) {
+    streamingMessageBatcherRef.current?.discard();
+    executionGenerationRef.current += 1;
     setSelectedProjectId(projectId);
     setCurrentContextId(null);
     setCurrentTaskId(null);
@@ -403,43 +425,48 @@ function AgwMobilePage({
 
     const executionTaskId = currentTaskId ?? createUuid();
     const userMessage = createUserMessage(input);
+    const scopedUserMessage = scopeStreamingMessage(userMessage, userMessage.messageId);
+    const generation = executionGenerationRef.current;
 
     setComposerText("");
     setExecutionError(null);
     setCurrentTaskId(executionTaskId);
-    setMessages((currentMessages) => [...currentMessages, userMessage]);
+    setMessages((currentMessages) => [...currentMessages, scopedUserMessage]);
     setIsExecuting(true);
 
+    const executionHandle = executeWithWebSocket(
+      config.serverUrl,
+      config.token,
+      {
+        projectId: selectedProjectId,
+        contextId: currentContextId,
+        agentId: selectedTarget.id,
+        agentType: selectedTarget.agentType,
+        executionId: executionTaskId,
+        input: toExecutionWsUserInput(userMessage),
+      },
+      (incomingMessage) => {
+        if (generation !== executionGenerationRef.current) {
+          return;
+        }
+
+        if (incomingMessage.role === "user") {
+          return;
+        }
+
+        const scopedIncomingMessage = scopeStreamingMessage(incomingMessage, userMessage.messageId);
+        streamingMessageBatcherRef.current?.enqueue(scopedIncomingMessage, generation);
+      },
+    );
+    executionHandleRef.current = executionHandle;
+
     try {
-      await executeWithWebSocket(
-        config.serverUrl,
-        config.token,
-        selectedTarget.id,
-        {
-          projectId: selectedProjectId,
-          taskId: executionTaskId,
-          workspace: selectedProject?.workspace,
-          settingContent: selectedProject?.extraSetting,
-          agentType: selectedTarget.agentType,
-          input: toExecutionWsUserInput(userMessage),
-        },
-        (data) => {
-          const incomingMessage = parseExecutionWsMessage(data);
-          if (!incomingMessage || incomingMessage.role === "user") {
-            return;
-          }
+      await executionHandle.promise;
+      streamingMessageBatcherRef.current?.flush(generation);
 
-          setMessages((currentMessages) =>
-            mergeStreamingMessages(currentMessages, [incomingMessage]),
-          );
-
-          if (isTurnFinishedMessage(incomingMessage)) {
-            setIsExecuting(false);
-          }
-        },
-      );
-
-      setCurrentTaskId(executionTaskId);
+      if (generation !== executionGenerationRef.current) {
+        return;
+      }
 
       const latestContexts = await apiClient.getJson<AgwContextSummary[]>(
         `/api/projects/${encodeURIComponent(selectedProjectId)}/contexts`,
@@ -451,10 +478,63 @@ function AgwMobilePage({
           currentContextId,
       );
     } catch (error) {
-      setExecutionError(`Failed to send message: ${getErrorMessage(error)}`);
+      streamingMessageBatcherRef.current?.flush(generation);
+      if (generation === executionGenerationRef.current) {
+        setExecutionError(`Failed to send message: ${getErrorMessage(error)}`);
+      }
     } finally {
+      if (stopFallbackTimerRef.current) {
+        clearTimeout(stopFallbackTimerRef.current);
+        stopFallbackTimerRef.current = null;
+      }
+
+      if (executionHandleRef.current?.promise === executionHandle.promise) {
+        executionHandleRef.current = null;
+      }
+
       setIsExecuting(false);
     }
+  }
+
+  function stopMessage() {
+    const handle = executionHandleRef.current;
+    if (!handle) {
+      return;
+    }
+
+    if (stopFallbackTimerRef.current) {
+      clearTimeout(stopFallbackTimerRef.current);
+      stopFallbackTimerRef.current = null;
+    }
+
+    // 服务端未在超时内响应中断时关闭连接兜底，避免 isExecuting 永远为 true。
+    // 连接断开不会取消服务端执行，因此提示语必须明确服务端可能仍在运行。
+    stopFallbackTimerRef.current = setTimeout(() => {
+      stopFallbackTimerRef.current = null;
+      if (executionHandleRef.current?.promise === handle.promise) {
+        executionHandleRef.current = null;
+      }
+      streamingMessageBatcherRef.current?.flush(executionGenerationRef.current);
+      handle.close();
+      setIsExecuting(false);
+      setExecutionError("Disconnected from the server; the execution may still be running.");
+    }, 3000);
+
+    handle
+      .interrupt("Stop requested by user.")
+      .catch(() => {
+        if (stopFallbackTimerRef.current) {
+          clearTimeout(stopFallbackTimerRef.current);
+          stopFallbackTimerRef.current = null;
+        }
+        if (executionHandleRef.current?.promise === handle.promise) {
+          executionHandleRef.current = null;
+        }
+        streamingMessageBatcherRef.current?.flush(executionGenerationRef.current);
+        handle.close();
+        setIsExecuting(false);
+        setExecutionError("Failed to stop the current execution.");
+      });
   }
 
   async function clearCurrentContextRecords() {
@@ -528,6 +608,7 @@ function AgwMobilePage({
                 onMessageChange={setComposerText}
                 onScrollToTop={scrollChatToTop}
                 onSend={sendMessage}
+                onStop={stopMessage}
                 safeBottom={safeAreaInsets.bottom}
               />
             </View>

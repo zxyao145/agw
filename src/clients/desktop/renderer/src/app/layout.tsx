@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { QueryProvider, ThemeProvider, Toaster, TooltipProvider } from "@agw/components";
+import { ThemeProvider, Toaster, TooltipProvider } from "@agw/components";
 import { DesktopRuntimeProvider } from "@/runtime";
 
 import "./globals.css";
@@ -21,23 +21,21 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           disableTransitionOnChange
         >
           <TooltipProvider>
-            <QueryProvider>
-              <DesktopRuntimeProvider>
-                {children}
-                <Toaster
-                  position="top-center"
-                  richColors
-                  closeButton
-                  style={
-                    {
-                      "--toast-close-button-start": "unset",
-                      "--toast-close-button-end": "0",
-                      "--toast-close-button-transform": "translate(35%, -35%)",
-                    } as React.CSSProperties
-                  }
-                />
-              </DesktopRuntimeProvider>
-            </QueryProvider>
+            <DesktopRuntimeProvider>
+              {children}
+              <Toaster
+                position="top-center"
+                richColors
+                closeButton
+                style={
+                  {
+                    "--toast-close-button-start": "unset",
+                    "--toast-close-button-end": "0",
+                    "--toast-close-button-transform": "translate(35%, -35%)",
+                  } as React.CSSProperties
+                }
+              />
+            </DesktopRuntimeProvider>
           </TooltipProvider>
         </ThemeProvider>
       </body>

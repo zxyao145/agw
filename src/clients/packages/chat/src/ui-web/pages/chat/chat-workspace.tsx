@@ -347,6 +347,7 @@ export function ChatWorkspace({
   const [envVars, setEnvVars] = React.useState<EnvVar[]>([]);
 
   const hydratedContextKeyRef = React.useRef<string | null>(null);
+  const fileLoadGenerationRef = React.useRef(0);
 
   const projectsQuery = useQuery({
     queryKey: ["projects"],
@@ -421,6 +422,8 @@ export function ChatWorkspace({
   }, []);
 
   const clearFilePreview = React.useCallback(() => {
+    fileLoadGenerationRef.current += 1;
+    setIsLoadingContent(false);
     setSelectedFile(null);
     setSelectedDiffScope(undefined);
     setFileContent("");
@@ -474,6 +477,7 @@ export function ChatWorkspace({
 
   const loadFileContent = React.useCallback(
     async (filePath: string, diffScope?: GitDiffScope) => {
+      const generation = ++fileLoadGenerationRef.current;
       setIsLoadingContent(true);
       setContentError(null);
       setDiffContentData(null);
@@ -484,6 +488,9 @@ export function ChatWorkspace({
             throw new Error("Select a project before loading files");
           }
           const diff = await getFileDiff(selectedProjectId, filePath, diffScope);
+          if (generation !== fileLoadGenerationRef.current) {
+            return;
+          }
           setDiffContentData(diff);
           setFileContent("");
           setSelectedFile(filePath);
@@ -493,18 +500,26 @@ export function ChatWorkspace({
             throw new Error("Select a project before loading files");
           }
           const content = await readFile(selectedProjectId, filePath);
+          if (generation !== fileLoadGenerationRef.current) {
+            return;
+          }
           setFileContent(content);
           setDiffContentData(null);
           setSelectedFile(filePath);
           setSelectedDiffScope(diffScope);
         }
       } catch (error) {
+        if (generation !== fileLoadGenerationRef.current) {
+          return;
+        }
         console.error("Error loading file:", error);
         setContentError((error as Error).message);
         setFileContent("");
         setDiffContentData(null);
       } finally {
-        setIsLoadingContent(false);
+        if (generation === fileLoadGenerationRef.current) {
+          setIsLoadingContent(false);
+        }
       }
     },
     [onlyDiff, selectedProjectId],
@@ -517,13 +532,6 @@ export function ChatWorkspace({
       }
     },
     [clearFilePreview, selectedFile],
-  );
-
-  const handleOnLoadFileContent = React.useCallback(
-    (filePath: string, scope?: GitDiffScope) => {
-      void loadFileContent(filePath, scope);
-    },
-    [loadFileContent],
   );
 
   const handleOnFileReseted = React.useCallback(
@@ -1129,7 +1137,6 @@ export function ChatWorkspace({
                   onFileSelected={handleOnFileSelected}
                   onFileReseted={handleOnFileReseted}
                   onFileGitScopeChanged={handleOnFileGitScopeChanged}
-                  onLoadFileContent={handleOnLoadFileContent}
                 />
               </ColResizeSplit.Left>
             ) : null}
@@ -1177,7 +1184,6 @@ export function ChatWorkspace({
                   onFileSelected={handleOnFileSelected}
                   onFileReseted={handleOnFileReseted}
                   onFileGitScopeChanged={handleOnFileGitScopeChanged}
-                  onLoadFileContent={handleOnLoadFileContent}
                 />
               ) : (
                 <ProjectRequiredState />

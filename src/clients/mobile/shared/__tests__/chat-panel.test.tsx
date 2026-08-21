@@ -1,32 +1,56 @@
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import renderer, { act } from "react-test-renderer";
+import { processMessages } from "@agw/execution-core";
 import type { AgwMessage } from "../src/rn/api/agw-api-types";
 import { ChatPanel } from "../src/rn/pages/home/components/chat-panel";
 import { styles } from "../src/rn/pages/home/components/styles";
 
-jest.mock(
-  "react-native-markdown-display",
-  () => {
-    const React = require("react");
-    const { Text } = require("react-native");
+jest.mock("react-native-markdown-display", () => {
+  const React = require("react");
+  const { Text } = require("react-native");
 
-    return {
-      __esModule: true,
-      default: ({ children }: { children: React.ReactNode }) =>
-        React.createElement(Text, { testID: "agw-markdown" }, children),
-    };
-  },
-  { virtual: true }
-);
+  return {
+    __esModule: true,
+    default: ({ children }: { children: React.ReactNode }) =>
+      React.createElement(Text, { testID: "agw-markdown" }, children),
+  };
+});
+
+jest.mock("@agw/execution-core", () => {
+  const actual = jest.requireActual("@agw/execution-core");
+  return { ...actual, processMessages: jest.fn(actual.processMessages) };
+});
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe("ChatPanel", () => {
-  it("renders text contents through the markdown component", () => {
-    const tree = renderChat([
+  it("reuses processed messages when only non-message props change", async () => {
+    const messages = [createMessage()];
+    const processMessagesMock = processMessages as jest.MockedFunction<typeof processMessages>;
+    processMessagesMock.mockClear();
+    let tree: renderer.ReactTestRenderer | undefined;
+
+    await act(async () => {
+      tree = renderer.create(<ChatPanel messages={messages} />);
+    });
+    expect(processMessagesMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      tree!.update(<ChatPanel error="Temporary error" messages={messages} />);
+    });
+    expect(processMessagesMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      tree!.update(<ChatPanel messages={[...messages]} />);
+    });
+    expect(processMessagesMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders text contents through the markdown component", async () => {
+    const tree = await renderChat([
       createMessage({
         contents: [
           {
@@ -78,8 +102,8 @@ describe("ChatPanel", () => {
     });
   });
 
-  it("skips system messages and messages without an author", () => {
-    const tree = renderChat([
+  it("skips system messages and messages without an author", async () => {
+    const tree = await renderChat([
       createMessage({
         author: "$agw-server",
         messageId: "system-message",
@@ -104,8 +128,8 @@ describe("ChatPanel", () => {
     expect(output).not.toContain("Hidden author text");
   });
 
-  it("groups matching function calls and function results by call id", () => {
-    const tree = renderChat([
+  it("groups matching function calls and function results by call id", async () => {
+    const tree = await renderChat([
       createMessage({
         messageId: "call-message",
         contents: [
@@ -147,8 +171,42 @@ describe("ChatPanel", () => {
     expect(markdownTexts(tree)).toContain('\n```json\n{\n  "total": 1\n}\n```');
   });
 
-  it("formats standalone function JSON content as a fenced json code block", () => {
-    const tree = renderChat([
+  it("pairs an authorless function result into its tool group", async () => {
+    const tree = await renderChat([
+      createMessage({
+        messageId: "call-message",
+        contents: [
+          {
+            type: "FunctionCallContent",
+            content: "query repo",
+            additionalProperties: { callId: "call-1", toolName: "Search" },
+          },
+        ],
+      }),
+      createMessage({
+        messageId: "result-message",
+        role: "tool",
+        author: null,
+        contents: [
+          {
+            type: "FunctionResultContent",
+            content: "total 1",
+            additionalProperties: { callId: "call-1" },
+          },
+        ],
+      }),
+    ]);
+
+    const toolGroups = tree.root.findAll(
+      (node) => node.type === View && node.props.testID === "agw-tool-group"
+    );
+
+    expect(toolGroups).toHaveLength(1);
+    expect(collectInstanceText(toolGroups[0])).toContain("Search");
+    expect(collectInstanceText(toolGroups[0])).toContain("total");
+  });
+  it("formats standalone function JSON content as a fenced json code block", async () => {
+    const tree = await renderChat([
       createMessage({
         contents: [
           {
@@ -168,10 +226,10 @@ describe("ChatPanel", () => {
   });
 });
 
-function renderChat(messages: AgwMessage[]): renderer.ReactTestRenderer {
+async function renderChat(messages: AgwMessage[]): Promise<renderer.ReactTestRenderer> {
   let tree: renderer.ReactTestRenderer | undefined;
 
-  act(() => {
+  await act(async () => {
     tree = renderer.create(<ChatPanel messages={messages} />);
   });
 

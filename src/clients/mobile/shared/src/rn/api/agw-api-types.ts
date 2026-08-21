@@ -52,6 +52,7 @@ export type AgwMessage = {
   role: string;
   contents: AgwMessageContent[];
   additionalProperties?: Record<string, unknown> | null;
+  streamingScopeId?: string | null;
 };
 
 export type AgwContextSummary = {
