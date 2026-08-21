@@ -686,11 +686,11 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
-                    b.Property<string>("UserName")
+                    b.Property<string>("UserId")
                         .IsRequired()
-                        .HasMaxLength(256)
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
-                        .HasColumnName("user_name");
+                        .HasColumnName("user_id");
 
                     b.HasKey("Id")
                         .HasName("pk_agentflow_checkpoint");
@@ -815,11 +815,11 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("update_time");
 
-                    b.Property<string>("UserName")
+                    b.Property<string>("UserId")
                         .IsRequired()
-                        .HasMaxLength(256)
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
-                        .HasColumnName("user_name");
+                        .HasColumnName("user_id");
 
                     b.HasKey("Id")
                         .HasName("pk_durable_execution");

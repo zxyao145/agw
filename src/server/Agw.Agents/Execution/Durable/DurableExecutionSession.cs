@@ -16,7 +16,6 @@ namespace Agw.Agents.Execution.Durable;
 /// </summary>
 internal sealed class DurableExecutionSession : IAsyncDisposable
 {
-    private readonly string _userName;
     private readonly string _userId;
     private readonly IExecutionMessageSink _messageSink;
     private readonly CancellationToken _hostToken;
@@ -30,14 +29,12 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
     /// 创建当前用户和 SignalR connection 对应的 durable attachment。
     /// </summary>
     public DurableExecutionSession(
-        string userName,
         string userId,
         IExecutionMessageSink messageSink,
         CancellationToken hostToken,
         DurableExecutionCoordinator coordinator
     )
     {
-        _userName = userName;
         _userId = string.IsNullOrWhiteSpace(userId) ? Constants.AdminUserId : userId.Trim();
         _messageSink = messageSink;
         _hostToken = hostToken;
@@ -79,7 +76,7 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
                 : Guid.CreateVersion7();
         command.ExecutionId = executionId;
         await _coordinator
-            .StartAsync(executionId, _userName, _userId, command, task, settings, cancellationToken)
+            .StartAsync(executionId, _userId, command, task, settings, cancellationToken)
             .ConfigureAwait(false);
         await AttachAsync(executionId, cursor: null, cancellationToken).ConfigureAwait(false);
     }
@@ -95,7 +92,7 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
         }
 
         // 先完成 PostgreSQL 鉴权，再启动由协调器自行创建 DbContext scope 的后台 pump。
-        var status = await _coordinator.GetStatusAsync(executionId, _userName, cancellationToken).ConfigureAwait(false);
+        var status = await _coordinator.GetStatusAsync(executionId, _userId, cancellationToken).ConfigureAwait(false);
         await StopSubscriptionAsync().ConfigureAwait(false);
         await SendTurnStateAsync(status, cancellationToken).ConfigureAwait(false);
         SetActiveExecution(IsTerminal(status.Status) ? null : executionId);
@@ -125,7 +122,7 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
         }
 
         var interrupted = await _coordinator
-            .InterruptAsync(targetExecutionId.Value, _userName, reason, cancellationToken)
+            .InterruptAsync(targetExecutionId.Value, _userId, reason, cancellationToken)
             .ConfigureAwait(false);
         if (interrupted)
         {
@@ -140,7 +137,7 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
         else
         {
             var status = await _coordinator
-                .GetStatusAsync(targetExecutionId.Value, _userName, cancellationToken)
+                .GetStatusAsync(targetExecutionId.Value, _userId, cancellationToken)
                 .ConfigureAwait(false);
             await SendTurnStateAsync(status, cancellationToken).ConfigureAwait(false);
         }
@@ -171,12 +168,12 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
                     command.ApprovalScope,
                     command.ResponseData
                 ),
-                _userName,
+                _userId,
                 cancellationToken
             )
             .ConfigureAwait(false);
         var remaining = await _coordinator
-            .GetPendingAsync(executionId.Value, _userName, cancellationToken)
+            .GetPendingAsync(executionId.Value, _userId, cancellationToken)
             .ConfigureAwait(false);
         foreach (var interaction in remaining)
         {
@@ -210,7 +207,7 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
                 projectId,
                 contextId,
                 agentflowId,
-                _userName,
+                _userId,
                 cancellationToken
             )
             .ConfigureAwait(false);

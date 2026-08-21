@@ -32,7 +32,7 @@ public sealed class ExecutionConnectionRegistry : IAsyncDisposable
         _loggerFactory = loggerFactory;
     }
 
-    public void Connect(string connectionId, string userName, string userId)
+    public void Connect(string connectionId, string userId)
     {
         var scope = _scopeFactory.CreateAsyncScope();
         var logger = _loggerFactory.CreateLogger<ExecutionConnection>();
@@ -45,10 +45,10 @@ public sealed class ExecutionConnectionRegistry : IAsyncDisposable
         );
         var context = scope
             .ServiceProvider.GetRequiredService<ExecutionConnectionContextFactory>()
-            .Create(userName, userId, sink, _hostToken);
+            .Create(userId, sink, _hostToken);
         connection = new ExecutionConnection(
             connectionId,
-            userName,
+            userId,
             scope,
             scope.ServiceProvider.GetRequiredService<ExecutionCommandDispatcher>(),
             context,
@@ -62,14 +62,14 @@ public sealed class ExecutionConnectionRegistry : IAsyncDisposable
 
     public Task DispatchAsync(
         string connectionId,
-        string userName,
+        string userId,
         AgentRunCommand command,
         CancellationToken cancellationToken
     )
     {
         if (
             !_connections.TryGetValue(connectionId, out var connection)
-            || !string.Equals(connection.UserName, userName, StringComparison.Ordinal)
+            || !string.Equals(connection.UserId, userId, StringComparison.Ordinal)
         )
         {
             throw new AgwException(ErrorCodes.InvalidParam, "Execution connection is not available.");
@@ -80,14 +80,14 @@ public sealed class ExecutionConnectionRegistry : IAsyncDisposable
 
     public Task<IReadOnlyList<AgentflowCheckpointAvailability>> GetAgentflowCheckpointsAsync(
         string connectionId,
-        string userName,
+        string userId,
         Guid agentflowId,
         CancellationToken cancellationToken
     )
     {
         if (
             !_connections.TryGetValue(connectionId, out var connection)
-            || !string.Equals(connection.UserName, userName, StringComparison.Ordinal)
+            || !string.Equals(connection.UserId, userId, StringComparison.Ordinal)
         )
         {
             throw new AgwException(ErrorCodes.InvalidParam, "Execution connection is not available.");

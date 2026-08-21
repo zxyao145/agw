@@ -12,7 +12,6 @@ public sealed record RuntimeTurnContext
         ExecutionSettings settings,
         TaskProjection task,
         ExecutionTarget target,
-        string userName,
         string workspace,
         IExecutionMessageSink messageSink,
         Action<HumanGateApprovalRequest?>? pendingHumanGateChanged = null
@@ -21,7 +20,6 @@ public sealed record RuntimeTurnContext
         Settings = settings;
         Task = task;
         Target = target;
-        UserName = userName;
         Workspace = workspace;
         MessageSink = messageSink;
         PendingHumanGateChanged = pendingHumanGateChanged;
@@ -42,8 +40,6 @@ public sealed record RuntimeTurnContext
     public Guid AgentId => Target.AgentId;
 
     public AgentRuntimeType AgentType => Target.AgentType;
-
-    public string UserName { get; }
 
     public string UserId { get; init; } = Constants.AdminUserId;
 

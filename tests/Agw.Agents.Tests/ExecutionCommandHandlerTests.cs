@@ -110,7 +110,6 @@ public class ExecutionCommandHandlerTests
     {
         var sink = new CapturingSink();
         await using var session = new DurableExecutionSession(
-            "user",
             "user-id",
             sink,
             CancellationToken.None,
@@ -363,7 +362,6 @@ public class ExecutionCommandHandlerTests
         Assert.Equal(turnContext.ProjectId, context.ProjectId);
         Assert.Equal(turnContext.ProjectConversationId, context.ProjectConversationId);
         Assert.Equal(turnContext.AgentId, context.AgentId);
-        Assert.Equal("user", context.UserName);
         Assert.Equal("user-id", context.UserId);
         Assert.Equal("user-id", turnContext.UserId);
         Assert.Equal("user-id", taskAppService.LastRequest?.User);
@@ -377,7 +375,6 @@ public class ExecutionCommandHandlerTests
         IProjectAppService? projectAppService = null
     ) =>
         new(
-            "user",
             "user-id",
             sink ?? new CapturingSink(),
             CancellationToken.None,

@@ -70,7 +70,6 @@ public sealed class DurableExecutionStoreTests
         var task = CreateTask();
         var snapshot = await store.RegisterAsync(
             Guid.CreateVersion7(),
-            "user-name",
             "stable-user-id",
             Guid.CreateVersion7(),
             AgentRuntimeType.Agent,
@@ -82,7 +81,7 @@ public sealed class DurableExecutionStoreTests
 
         Assert.Equal("stable-user-id", snapshot.Manifest.ResolveUserId());
         var record = await database.Context.DurableExecutions.SingleAsync(TestContext.Current.CancellationToken);
-        Assert.Equal("user-name", record.UserName);
+        Assert.Equal("stable-user-id", record.UserId);
         Assert.Equal("stable-user-id", record.CreateBy);
         Assert.Equal("stable-user-id", record.UpdateBy);
         Assert.Equal(Constants.AdminUserId, CreateManifest().ResolveUserId());
@@ -108,7 +107,6 @@ public sealed class DurableExecutionStoreTests
         var task = CreateTask();
         await coordinator.StartAsync(
             executionId,
-            "display-name",
             "explicit-user-id",
             new ExecCommand(AgentRuntimeType.Agent, CreateInput("hello")) { AgentId = Guid.CreateVersion7() },
             task,
@@ -158,7 +156,7 @@ public sealed class DurableExecutionStoreTests
     }
 
     [Fact]
-    public async Task GetAuthorizedAsync_DifferentUser_ReturnsNotFound()
+    public async Task GetAuthorizedAsync_DifferentUserId_ReturnsNotFound()
     {
         await using var database = await TestDatabase.CreateAsync();
         var store = database.CreateStore();
@@ -213,7 +211,7 @@ public sealed class DurableExecutionStoreTests
                 Approved: true,
                 ResponseData: JsonSerializer.SerializeToElement(new { answer = "blue" })
             ),
-            "user",
+            "user-id",
             TestContext.Current.CancellationToken
         );
 
@@ -272,7 +270,11 @@ public sealed class DurableExecutionStoreTests
         );
         Assert.NotNull(running);
 
-        var interrupted = await store.RequestInterruptAsync(executionId, "user", TestContext.Current.CancellationToken);
+        var interrupted = await store.RequestInterruptAsync(
+            executionId,
+            "user-id",
+            TestContext.Current.CancellationToken
+        );
         var persisted = await store.SaveSegmentResultAsync(
             new DurableExecutionSegmentResult
             {
@@ -320,8 +322,8 @@ public sealed class DurableExecutionStoreTests
             ResponseData: JsonSerializer.SerializeToElement(new { answer = "blue" })
         );
 
-        var first = await store.SubmitHumanResponseAsync(request, "user", TestContext.Current.CancellationToken);
-        var second = await store.SubmitHumanResponseAsync(request, "user", TestContext.Current.CancellationToken);
+        var first = await store.SubmitHumanResponseAsync(request, "user-id", TestContext.Current.CancellationToken);
+        var second = await store.SubmitHumanResponseAsync(request, "user-id", TestContext.Current.CancellationToken);
 
         Assert.Equal(DurableExecutionStatus.Resuming, first.Status);
         Assert.Equal(DurableExecutionStatus.Resuming, second.Status);
@@ -418,7 +420,11 @@ public sealed class DurableExecutionStoreTests
             TestContext.Current.CancellationToken
         );
 
-        var interrupted = await store.RequestInterruptAsync(executionId, "user", TestContext.Current.CancellationToken);
+        var interrupted = await store.RequestInterruptAsync(
+            executionId,
+            "user-id",
+            TestContext.Current.CancellationToken
+        );
 
         Assert.False(interrupted);
     }
@@ -647,7 +653,7 @@ public sealed class DurableExecutionStoreTests
         var task = CreateTask();
         await store.RegisterAsync(
             executionId,
-            "user",
+            "user-id",
             Guid.CreateVersion7(),
             AgentRuntimeType.Agent,
             CreateInput("hello"),

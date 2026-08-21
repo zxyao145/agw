@@ -27,7 +27,7 @@ public sealed class ExecutionHub : Hub<IExecutionHubClient>
 
     public override Task OnConnectedAsync()
     {
-        _registry.Connect(Context.ConnectionId, CurrentUserName, CurrentUserId);
+        _registry.Connect(Context.ConnectionId, CurrentUserId);
         return base.OnConnectedAsync();
     }
 
@@ -40,7 +40,7 @@ public sealed class ExecutionHub : Hub<IExecutionHubClient>
     public Task DispatchCommand(AgentRunCommand command)
     {
         return InvokeAsync(() =>
-            _registry.DispatchAsync(Context.ConnectionId, CurrentUserName, command, Context.ConnectionAborted)
+            _registry.DispatchAsync(Context.ConnectionId, CurrentUserId, command, Context.ConnectionAborted)
         );
     }
 
@@ -53,13 +53,11 @@ public sealed class ExecutionHub : Hub<IExecutionHubClient>
         InvokeResultAsync(() =>
             _registry.GetAgentflowCheckpointsAsync(
                 Context.ConnectionId,
-                CurrentUserName,
+                CurrentUserId,
                 agentflowId,
                 Context.ConnectionAborted
             )
         );
-
-    private string CurrentUserName => Context.User?.Identity?.Name ?? Constants.AdminUserName;
 
     private string CurrentUserId => Context.User?.GetUserId() ?? Constants.AdminUserId;
 

@@ -59,7 +59,6 @@ internal sealed class DurableExecutionCoordinator
     /// </summary>
     public async Task StartAsync(
         Guid executionId,
-        string userName,
         string userId,
         ExecCommand command,
         TaskProjection task,
@@ -79,7 +78,6 @@ internal sealed class DurableExecutionCoordinator
         await store
             .RegisterAsync(
                 executionId,
-                userName,
                 userId,
                 agentId,
                 command.AgentType,
@@ -96,7 +94,7 @@ internal sealed class DurableExecutionCoordinator
     /// </summary>
     public async Task SubmitHumanResponseAsync(
         SubmitDurableHumanResponseRequest request,
-        string userName,
+        string userId,
         CancellationToken cancellationToken
     )
     {
@@ -115,7 +113,7 @@ internal sealed class DurableExecutionCoordinator
             .ConfigureAwait(false);
         await using var scope = _scopeFactory.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-        await store.SubmitHumanResponseAsync(request, userName, cancellationToken).ConfigureAwait(false);
+        await store.SubmitHumanResponseAsync(request, userId, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -123,13 +121,13 @@ internal sealed class DurableExecutionCoordinator
     /// </summary>
     public async Task<DurableExecutionStatusResponse> GetStatusAsync(
         Guid executionId,
-        string userName,
+        string userId,
         CancellationToken cancellationToken
     )
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-        var snapshot = await store.GetAuthorizedAsync(executionId, userName, cancellationToken).ConfigureAwait(false);
+        var snapshot = await store.GetAuthorizedAsync(executionId, userId, cancellationToken).ConfigureAwait(false);
         return ToStatus(snapshot);
     }
 
@@ -138,13 +136,13 @@ internal sealed class DurableExecutionCoordinator
     /// </summary>
     public async Task<IReadOnlyList<DurableHumanInteractionSnapshot>> GetPendingAsync(
         Guid executionId,
-        string userName,
+        string userId,
         CancellationToken cancellationToken
     )
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-        var snapshot = await store.GetAuthorizedAsync(executionId, userName, cancellationToken).ConfigureAwait(false);
+        var snapshot = await store.GetAuthorizedAsync(executionId, userId, cancellationToken).ConfigureAwait(false);
         return snapshot.Status == DurableExecutionStatus.WaitingForHuman ? snapshot.GetUnansweredInteractions() : [];
     }
 
@@ -153,14 +151,14 @@ internal sealed class DurableExecutionCoordinator
     /// </summary>
     public async Task<bool> InterruptAsync(
         Guid executionId,
-        string userName,
+        string userId,
         string? reason,
         CancellationToken cancellationToken
     )
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-        return await store.RequestInterruptAsync(executionId, userName, cancellationToken).ConfigureAwait(false);
+        return await store.RequestInterruptAsync(executionId, userId, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -172,7 +170,7 @@ internal sealed class DurableExecutionCoordinator
         Guid projectId,
         string contextId,
         Guid agentflowId,
-        string userName,
+        string userId,
         CancellationToken cancellationToken
     )
     {
@@ -184,7 +182,7 @@ internal sealed class DurableExecutionCoordinator
             );
         var sourceExecutionId =
             await checkpointStore
-                .GetSourceExecutionIdAsync(occurrenceId, userName, cancellationToken)
+                .GetSourceExecutionIdAsync(occurrenceId, userId, cancellationToken)
                 .ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
 
@@ -198,7 +196,7 @@ internal sealed class DurableExecutionCoordinator
                 projectId,
                 contextId,
                 agentflowId,
-                userName,
+                userId,
                 cancellationToken
             )
             .ConfigureAwait(false);
