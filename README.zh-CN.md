@@ -13,6 +13,9 @@ Agw 是一个面向个人用户和小型研发团队的、自托管的后台工�
 
 本项目主要基于 [MAF](https://github.com/microsoft/agent-framework) 开发。
 
+> [!NOTE]
+> Agw在 1.0 版本之前仍在积极开发中。数据库 schema、API和 interface 可能会在不同版本之间发生变化。
+
 
 ## 使用场景
 

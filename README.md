@@ -14,6 +14,9 @@ Agw also provides Jobs and Agent Workflow (Agentflow) capabilities for creating 
 
 This project is primarily built on [MAF](https://github.com/microsoft/agent-framework).
 
+> [!NOTE]
+> Agw is still under active development before version 1.0. The database schema, APIs, and interfaces may change between different versions.
+
 ## Use Cases
 
 ### Multi-Agent Collaboration Workflows (Agentflows)
