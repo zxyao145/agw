@@ -2,8 +2,8 @@
 
 [中文文档](README.zh-CN.md) | [Documentation](README.md)
 
-[![Desktop Release](https://img.shields.io/github/v/release/zxyao145/agw?sort=date&display_name=tag&label=Desktop&logo=github)](https://github.com/zxyao145/agw/releases)
-[![Server Docker Image](https://img.shields.io/github/v/release/zxyao145/agw?sort=date&display_name=tag&label=Server%20Image&logo=docker)](https://github.com/zxyao145/agw/pkgs/container/agw)
+[![Desktop Release](https://img.shields.io/github/v/release/zxyao145/agw?include_prereleases=true&sort=date&display_name=tag&label=Desktop&logo=github)](https://github.com/zxyao145/agw/releases)
+[![Server Docker Image](https://img.shields.io/github/v/release/zxyao145/agw?include_prereleases=true&sort=date&display_name=tag&label=Server%20Image&logo=docker)](https://github.com/zxyao145/agw/pkgs/container/agw)
 
 Agw is a self-hosted backend engineering agent hub for individuals and small R&D teams, as well as an AaaS (Agent as a Service) platform and agent gateway. It lets users work with multiple agents from a single UI:
 
@@ -111,7 +111,7 @@ pnpm install
 pnpm dev:web
 ```
 
-The `src/clients` pnpm Workspace contains independent `@agw/web` and `@agw/desktop` applications plus shared infrastructure and business domains under `src/clients/packages/`, with Turborepo orchestrating their tasks. Neither application imports, builds, or consumes artifacts from the other. Each application owns its own thin Next.js route shell; reusable business UI comes from `packages/*`. The Expo mobile app remains a separate npm workspace. After the backend and Web are running, open `http://localhost:3001`. Web proxies `/api/*` and `/openapi/*` to the backend. The proxy target is resolved from `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, and defaults to `http://localhost:30816`.
+The `src/clients` pnpm Workspace contains independent `@agw/web`, `@agw/desktop`, and `@agw/mobile` applications plus shared infrastructure and business domains under `src/clients/packages/`, with Turborepo orchestrating their tasks. Web and Desktop do not import, build, or consume artifacts from each other; each owns a thin Next.js route shell and composes reusable business UI from `packages/*`. Mobile consumes only React Native-safe core packages from the same workspace. After the backend and Web are running, open `http://localhost:3001`. Web proxies `/api/*` and `/openapi/*` to the backend. The proxy target is resolved from `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, and defaults to `http://localhost:30816`.
 
 Production packages embed the static Web UI in ASP.NET Core and serve it from a single server process. See the deployment guide below for details.
 
@@ -124,6 +124,10 @@ A typical local workflow is:
 3. Create an agent under `Agents`, then attach MCP tool servers, tools, skills, or integrated apps as needed.
 4. Use `Chat` or `Projects` to run agent sessions and review the persisted task history.
 5. Use `Agentflows` for multi-agent orchestration and `Jobs` for scheduled or recurring tasks.
+
+Chat on Web, Desktop, and Mobile accepts text plus up to five JPEG, PNG, GIF, or WebP images. Each image may be at most 5 MB, with a 10 MB combined limit per message.
+
+Management tables can copy System Agents, complete Agentflow graphs, and non-built-in Projects. External Agents and built-in Projects are intentionally not copyable.
 
 ### Project workspaces
 
@@ -155,13 +159,15 @@ pnpm dev:web
 
 To develop Desktop instead of Web, keep the backend running and use `pnpm dev:desktop` from `src/clients`. The Desktop renderer runs on `http://localhost:3000`; it does not require the Web development server.
 
+For Mobile, run `pnpm dev:mobile`, `pnpm android:mobile`, or `pnpm ios:mobile` from `src/clients`. Its native projects are generated through Expo CNG and are not hand-maintained.
+
 Run the main verification commands before submitting a change:
 
 ```bash
 # Repository root
 dotnet build Agw.slnx
 dotnet test Agw.slnx
-dotnet format Agw.slnx --verify-no-changes
+dotnet csharpier check .
 
 # src/clients
 pnpm build
@@ -234,7 +240,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The [release workflow](.github/workflows/release.yml) publishes Linux amd64/arm64 images to GHCR and creates a GitHub Release containing all Desktop assets. A manual release requires a valid `release_tag`. The [Desktop build workflow](.github/workflows/build-desktop.yml) builds temporary Desktop assets on pushes to `main` and manual runs. See the [Deployment Guide](docs/4.Deployment.md) for image loading, registry publishing, data directories, reverse proxies, and upgrades.
+Prereleases use `vX.Y.Z-preview.N`, `vX.Y.Z-alpha.N`, or `vX.Y.Z-beta.N`. The [release workflow](.github/workflows/release.yml) publishes Linux amd64/arm64 images to GHCR and creates a GitHub Release containing all Desktop assets for supported tags or a manually supplied `release_tag`. The [Desktop build workflow](.github/workflows/build-desktop.yml) builds temporary Desktop assets for relevant pull requests, pushes to `main`, and manual runs. See the [Deployment Guide](docs/4.Deployment.md) for image loading, registry publishing, data directories, reverse proxies, and upgrades.
 
 ## Screenshots
 
@@ -276,7 +282,7 @@ The following screenshots show the main Agw interfaces:
 
 ## Architecture
 
-Agw uses a domain-based modular monolith architecture. `src/server/Agw.Host` is the ASP.NET Core application entry point and assembles the modules. The pnpm Workspace at `src/clients` contains the Web and Electron Desktop applications plus shared business and infrastructure packages, while the Expo mobile client remains separate in `src/clients/mobile`.
+Agw uses a domain-based modular monolith architecture. `src/server/Agw.Host` is the ASP.NET Core application entry point and assembles the modules. The pnpm Workspace at `src/clients` contains the Web, Electron Desktop, and Expo Mobile applications plus shared business and infrastructure packages.
 
 A typical backend flow is:
 
@@ -284,7 +290,7 @@ A typical backend flow is:
 Controller -> AppService / RuntimeService -> DomainService -> IRepository / IUnitOfWork -> EF Core
 ```
 
-Module overview (direct in-repository project references; `A --> B` means A references B):
+Module overview (runtime-facing in-repository project references; provider-specific migration projects are omitted, and `A --> B` means A references B):
 
 ```mermaid
 flowchart TB
@@ -329,31 +335,36 @@ flowchart TB
     SETUP --> AUTH
     SETUP --> INFRA
     SETUP --> SHARED
+    SETUP --> SKILLS
 
     A2A --> AGENTS
     A2A --> PROJECTS
 
     INFRA --> AGENTS
+    INFRA --> AUTH
     INFRA --> INTEGRATIONS
     INFRA --> PROVIDERS
     INFRA --> PROJECTS
     INFRA --> SKILLS
     INFRA --> JOBS
 
-    SKILLS --> AGENTS
     SKILLS --> SHARED
     JOBS --> AGENTS
     JOBS --> PROJECTS
     JOBS --> SHARED
+    JOBS --> SKILLS
 
+    AGENTS --> AUTH
     AGENTS --> FILES
     AGENTS --> INTEGRATIONS
     AGENTS --> PROVIDERS
     AGENTS --> TOOLS
     AGENTS --> SHARED
+    AGENTS --> SKILLS
 
     PROJECTS --> FILES
     PROJECTS --> SHARED
+    TOOLS --> AUTH
     TOOLS --> FILES
     TOOLS --> SHARED
 
@@ -410,10 +421,11 @@ Detailed project documentation is available under [`docs/`](docs/):
 - [Architecture](docs/2.Architecture.md): System overview, backend and frontend architecture, and core domain concepts.
 - [Module Organization](docs/3.Module%20Organization.md): Layering principles used within modules.
 - [Chat Suggestions Design](docs/5.Chat%20Suggestions.md): Agent-aware slash commands, Claude init commands, file suggestions, and failure fallback behavior.
-- [Agentflow Guide](docs/6.Agentflow.md): Graph routing and cycle rules, editor Undo and dirty state, and Chat message attribution.
-- [Agent Execution Flow](docs/ws-flow.md): SignalR commands, turn messages, runtime lifecycle, and disconnection behavior.
-- [Execution Subsystem](src/server/Agw.Agents/Execution/README.md): Directory responsibilities, data flow, Definition Agent compaction, and command extension methods.
+- [Agentflow Guide](docs/6.Agentflow.md): Graph routing and cycle rules, checkpoint branching, editor Undo and dirty state, and Chat message attribution.
+- [Agent Execution Flow](docs/ws-flow.md): SignalR commands, execution providers, turn messages, and disconnection behavior.
+- [Execution Subsystem](src/server/Agw.Agents/Execution/README.md): In-process and distributed execution, directory responsibilities, data flow, Definition Agent compaction, and command extension methods.
 - [Files Module](src/server/Agw.Files/README.zh-CN.md): Project workspace resolution, path boundaries, Git behavior, and mount requirements.
+- [Mobile Client](src/clients/mobile/README.md): Expo development, Server profiles and Tokens, image input, and React Native-safe package boundaries.
 
 ## Configuration
 
@@ -429,6 +441,14 @@ Primary backend settings are located in [`src/server/Agw.Host/appsettings.json`]
     "Provider": null,
     "ConnectionString": ""
   },
+  "Execution": {
+    "Provider": "InProcess",
+    "Distributed": {
+      "EventStream": {
+        "Provider": "Postgres"
+      }
+    }
+  },
   "OpenTelemetry": {
     "ServiceName": "Agw",
     "ServiceVersion": "1.0.0",
@@ -439,6 +459,7 @@ Primary backend settings are located in [`src/server/Agw.Host/appsettings.json`]
 
 - Supported database providers are `sqlite` and `postgres`.
 - Supported distributed execution lock providers are `inmemory` and `postgres`. When `DistributedLock:Provider` is `null` or absent, SQLite uses an in-process lock, while PostgreSQL uses an advisory lock. If the PostgreSQL lock connection string is empty, it reuses `Database:ConnectionString`.
+- `Execution:Provider` supports `InProcess` and `Distributed`. Distributed execution requires PostgreSQL for the database and lock; message replay uses PostgreSQL by default and can explicitly use Redis.
 - Do not store secrets in static configuration files; prefer environment variable overrides.
 
 ## License

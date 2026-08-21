@@ -104,7 +104,7 @@ dotnet restore Agw.slnx
 dotnet run --project src/server/Agw.Host
 ```
 
-开发环境后端默认监听 `http://localhost:30816`。首次运行时，打开 `http://localhost:30816/setup`，选择部署模式、填写结构化数据库设置并创建管理员密码。无人值守部署可在不存在 `server-state.json` 时通过 `Setup` 配置节提供相同字段，密码应使用环境变量或 Secret 注入。运行数据统一保存在当前用户主目录下的 `agw`；通过域名初始化还需要 Server 启动日志中的一次性 Setup Code。
+开发环境后端默认监听 `http://localhost:30816`。首次运行时，打开 `http://localhost:30816/setup`，选择部署模式、填写结构化数据库设置并创建管理员密码。Standalone 支持 SQLite 和 PostgreSQL；Cluster 需要 PostgreSQL，并在浏览器 Setup 完成后重启 Server 才会生效。无人值守部署可在不存在 `server-state.json` 时通过 `Setup` 配置节提供相同字段，密码应使用环境变量或 Secret 注入。运行数据统一保存在当前用户主目录下的 `agw`；通过域名初始化还需要 Server 启动日志中的一次性 Setup Code。
 
 在另一个终端启动前端：
 
@@ -114,7 +114,7 @@ pnpm install
 pnpm dev:web
 ```
 
-`src/clients` 是 Web、Desktop 和 `src/clients/packages/` 下共享包的 pnpm Workspace，由 Turborepo 统一编排任务；一次 `pnpm install` 即可安装整个 Workspace。Web 与 Desktop 各自拥有独立的 Next.js 应用，不会互相导入、构建或消费对方的产物，业务和基础设施模块通过根目录下的 `packages/*` 复用。Expo 移动端仍是单独的 npm Workspace。后端和 Web 都启动后，打开 `http://localhost:3001`。Web 会将 `/api/*` 和 `/openapi/*` 代理到后端，代理目标按顺序读取 `BACKEND_API_BASE_URL`、`NEXT_PUBLIC_API_BASE_URL`，默认使用 `http://localhost:30816`。
+`src/clients` 是 Web、Desktop、Mobile 和 `src/clients/packages/` 下共享包的 pnpm Workspace，由 Turborepo 统一编排任务；一次 `pnpm install` 即可安装整个 Workspace。Web 与 Desktop 各自拥有独立的 Next.js 应用，不会互相导入、构建或消费对方的产物，业务和基础设施模块通过根目录下的 `packages/*` 复用；Mobile 只消费其中兼容 React Native 的核心包。后端和 Web 都启动后，打开 `http://localhost:3001`。Web 会将 `/api/*` 和 `/openapi/*` 代理到后端，代理目标按顺序读取 `BACKEND_API_BASE_URL`、`NEXT_PUBLIC_API_BASE_URL`，默认使用 `http://localhost:30816`。
 
 生产发布包会把静态 Web UI 嵌入 ASP.NET Core，由单一 Server 进程提供服务，详见下方部署指南。
 
@@ -127,6 +127,10 @@ Agw Desktop 在 `src/clients/desktop/` 下拥有独立的 Electron main/preload 
 3. 在 `Agents` 中创建 Agent，并按需关联 MCP Tool Servers、Tools、Skills 或集成应用。
 4. 通过 `Chat` 或 `Projects` 运行 Agent Session，并查看持久化的 Task 历史。
 5. 使用 `Agentflows` 进行多 Agent 编排，使用 `Jobs` 执行定时或周期任务。
+
+Web、Desktop 和 Mobile 的 Chat 都支持文字与图片混合输入；每条消息最多附带 5 张 JPEG、PNG、GIF 或 WebP 图片，单张不超过 5 MB，总计不超过 10 MB。
+
+管理列表支持复制 System Agent、完整 Agentflow 图和非内建 Project；External Agent 与内建 Project 不允许复制。
 
 ### 项目 Workspace
 
@@ -158,13 +162,15 @@ pnpm dev:web
 
 如果开发 Desktop，请保持后端运行，并在 `src/clients` 下执行 `pnpm dev:desktop`。Desktop renderer 使用 `http://localhost:3000`，不需要同时启动 Web 开发服务器。
 
+开发 Mobile 时，在 `src/clients` 下执行 `pnpm dev:mobile`、`pnpm android:mobile` 或 `pnpm ios:mobile`。原生工程由 Expo CNG 生成，不应手工维护。
+
 提交改动前，运行主要校验命令：
 
 ```bash
 # 仓库根目录
 dotnet build Agw.slnx
 dotnet test Agw.slnx
-dotnet format Agw.slnx --verify-no-changes
+dotnet csharpier check .
 
 # src/clients
 pnpm build
@@ -237,7 +243,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-[发布工作流](.github/workflows/release.yml)会将 Linux amd64/arm64 镜像发布到 GHCR，并创建包含全部 Desktop Assets 的 GitHub Release。手动发布必须提供合法的 `release_tag`。[Desktop 构建工作流](.github/workflows/build-desktop.yml)会在推送到 `main` 或手动运行时生成临时 Desktop 产物。镜像导入、Registry 发布、数据目录、反向代理和升级流程详见[部署指南](docs/4.Deployment.md)。
+预发布版本使用 `vX.Y.Z-preview.N`、`vX.Y.Z-alpha.N` 或 `vX.Y.Z-beta.N`。[发布工作流](.github/workflows/release.yml)会为受支持的 tag 或手动传入的 `release_tag` 发布 Linux amd64/arm64 镜像，并创建包含全部 Desktop Assets 的 GitHub Release。[Desktop 构建工作流](.github/workflows/build-desktop.yml)会在相关 Pull Request、推送到 `main` 或手动运行时生成临时 Desktop 产物。镜像导入、Registry 发布、数据目录、反向代理和升级流程详见[部署指南](docs/4.Deployment.md)。
 
 ## 界面截图
 
@@ -279,7 +285,7 @@ git push origin v0.1.0
 
 ## 架构
 
-Agw 采用基于领域的模块化单体架构。`src/server/Agw.Host` 是 ASP.NET Core 程序入口，负责组装各个模块；`src/clients` pnpm Workspace 包含 Web、Electron Desktop 以及共享业务和基础设施 package，Expo 移动客户端位于 `src/clients/mobile`。
+Agw 采用基于领域的模块化单体架构。`src/server/Agw.Host` 是 ASP.NET Core 程序入口，负责组装各个模块；`src/clients` pnpm Workspace 包含 Web、Electron Desktop、Expo Mobile 以及共享业务和基础设施 package。
 
 典型的后端流程如下：
 
@@ -287,7 +293,7 @@ Agw 采用基于领域的模块化单体架构。`src/server/Agw.Host` 是 ASP.N
 Controller -> AppService / RuntimeService -> DomainService -> IRepository / IUnitOfWork -> EF Core
 ```
 
-模块介绍（仅展示仓库内项目的直接引用；`A --> B` 表示 A 引用 B）：
+模块介绍（展示运行时相关的仓库内项目直接引用，省略数据库 Provider 专用 migration 项目；`A --> B` 表示 A 引用 B）：
 
 ```mermaid
 flowchart TB
@@ -332,31 +338,36 @@ flowchart TB
     SETUP --> AUTH
     SETUP --> INFRA
     SETUP --> SHARED
+    SETUP --> SKILLS
 
     A2A --> AGENTS
     A2A --> PROJECTS
 
     INFRA --> AGENTS
+    INFRA --> AUTH
     INFRA --> INTEGRATIONS
     INFRA --> PROVIDERS
     INFRA --> PROJECTS
     INFRA --> SKILLS
     INFRA --> JOBS
 
-    SKILLS --> AGENTS
     SKILLS --> SHARED
     JOBS --> AGENTS
     JOBS --> PROJECTS
     JOBS --> SHARED
+    JOBS --> SKILLS
 
+    AGENTS --> AUTH
     AGENTS --> FILES
     AGENTS --> INTEGRATIONS
     AGENTS --> PROVIDERS
     AGENTS --> TOOLS
     AGENTS --> SHARED
+    AGENTS --> SKILLS
 
     PROJECTS --> FILES
     PROJECTS --> SHARED
+    TOOLS --> AUTH
     TOOLS --> FILES
     TOOLS --> SHARED
 
@@ -413,10 +424,11 @@ flowchart TB
 - [Architecture](docs/2.Architecture.md): 系统概述、后端/前端架构以及核心领域概念。
 - [Module Organization](docs/3.Module%20Organization.md): 模块内部采用的分层原则。
 - [Chat Suggestions 设计](docs/5.Chat%20Suggestions.md)：Agent 感知的 slash commands、Claude init commands、文件建议与失败降级。
-- [Agentflow 指南](docs/6.Agentflow.md)：图路由与循环规则、编辑器撤销和未保存状态、Chat 消息归属。
-- [Agent 执行流程](docs/ws-flow.md)：SignalR 命令、turn 消息、runtime 生命周期与断线行为。
-- [Execution 子系统](src/server/Agw.Agents/Execution/README.md)：目录职责、数据流、Definition Agent 自动上下文压缩与 command 扩展方式。
+- [Agentflow 指南](docs/6.Agentflow.md)：图路由与循环规则、Checkpoint 分支恢复、编辑器撤销和未保存状态、Chat 消息归属。
+- [Agent 执行流程](docs/ws-flow.md)：SignalR 命令、执行 Provider、turn 消息与断线行为。
+- [Execution 子系统](src/server/Agw.Agents/Execution/README.md)：进程内与分布式执行、目录职责、数据流、Definition Agent 自动上下文压缩与 command 扩展方式。
 - [Files 模块](src/server/Agw.Files/README.zh-CN.md)：Project Workspace 解析、路径边界、Git 行为与挂载要求。
+- [Mobile Client](src/clients/mobile/README.md)：Expo 开发、Server Profile 与 Token、图片输入和 React Native 安全包边界。
 
 ## 配置
 
@@ -432,6 +444,14 @@ flowchart TB
     "Provider": null,
     "ConnectionString": ""
   },
+  "Execution": {
+    "Provider": "InProcess",
+    "Distributed": {
+      "EventStream": {
+        "Provider": "Postgres"
+      }
+    }
+  },
   "OpenTelemetry": {
     "ServiceName": "Agw",
     "ServiceVersion": "1.0.0",
@@ -442,6 +462,7 @@ flowchart TB
 
 - 数据库 Provider 支持：`sqlite` 和 `postgres`。
 - 分布式执行锁 Provider 支持 `inmemory` 和 `postgres`。`DistributedLock:Provider` 为 `null` 或不存在时，SQLite 使用进程内锁，PostgreSQL 使用 advisory lock；PostgreSQL 锁连接串为空时复用 `Database:ConnectionString`。
+- `Execution:Provider` 支持 `InProcess` 和 `Distributed`。分布式执行要求数据库与分布式锁都使用 PostgreSQL；消息回放默认使用 PostgreSQL，也可以显式改用 Redis。
 - 请勿将机密信息写入固定配置文件；建议优先使用环境变量进行覆盖。
 
 ## 协议

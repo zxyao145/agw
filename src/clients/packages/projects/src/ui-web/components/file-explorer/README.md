@@ -25,6 +25,7 @@ Left-panel file tree for:
 - grouping recursive diff results into `Staged` and `Unstaged` trees
 - compacting single-child directory paths and showing recursive file counts
 - selecting a file
+- staging or unstaging a changed file or directory
 - deleting a file or directory
 - resetting a file back to git `HEAD`
 
@@ -42,6 +43,7 @@ Left-panel file tree for:
   onFileDeleted: (filePath: string) => void;
   onFileSelected: (filePath: string | null, scope?: GitDiffScope) => void;
   onFileReseted: (filePath: string | null) => void;
+  onFileGitScopeChanged: (path: string, targetScope: GitDiffScope) => void;
 }
 ```
 
@@ -133,6 +135,7 @@ This module currently depends on [`@agw/projects`](../../../services/files.ts) f
 - `listFiles`
 - `readFile`
 - `getFileDiff`
+- `setFileStaged`
 - `deleteFile`
 - `resetFile`
 
@@ -214,6 +217,12 @@ export function ExampleFileExplorer({
             void loadFileContent(filePath, selectedDiffScope);
           }
         }}
+        onFileGitScopeChanged={(path, targetScope) => {
+          const directoryPrefix = `${path.replace(/\/+$/u, "")}/`;
+          if (selectedFile === path || selectedFile?.startsWith(directoryPrefix)) {
+            setSelectedDiffScope(targetScope);
+          }
+        }}
       />
 
       <FileContent
@@ -236,6 +245,7 @@ export function ExampleFileExplorer({
 
 - `explorer.tsx`: file tree container and data loading
 - `explorer-file-tree.tsx`: recursive tree node rendering and actions
+- `git-change-tree.ts`: staged/unstaged grouping and partially staged duplication
 - `file-content.tsx`: selected file content shell
 - `file-viewer.tsx`: plain text file viewer with line comments
 - `diff-viewer.tsx`: split original/modified diff viewer
@@ -244,7 +254,7 @@ export function ExampleFileExplorer({
 
 ## Current Boundaries
 
-This module is decoupled from `claude-code/page.tsx` and does not import page-local types anymore.
+This module does not depend on a route page or import page-local types.
 
 What it still does not try to abstract:
 

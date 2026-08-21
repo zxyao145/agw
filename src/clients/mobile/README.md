@@ -31,6 +31,10 @@ pnpm --filter @agw/mobile native:generate -- --clean
 - 旧版 `agw.localConfig` 会在首次启动时自动迁移。
 - HTTP 连接必须确认明文传输风险；公网使用仍建议 HTTPS。
 - 删除 Mobile Profile 不会撤销服务端 token，撤销操作需在 Agw Web 完成。
+- Chat、Files 与 History 切换时保留当前 Workspace、会话和执行状态。
+- 执行连接使用官方 SignalR Client 自动重连；Distributed 执行会按 cursor 重新订阅，InProcess 执行断线后无法恢复流式输出并会明确报错。
+
+Chat 可从图库选择 JPEG、PNG、GIF 或 WebP 图片；每条消息最多 5 张、单张最多 5 MB、总计最多 10 MB，与服务端校验一致。
 
 ## 共享代码边界
 

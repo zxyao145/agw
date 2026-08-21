@@ -15,7 +15,7 @@
 
 | 职责 | 所在位置 |
 | --- | --- |
-| 项目文件列举、读取、删除、Git diff、重置和文件名搜索 | `Agw.Files.Application.Files.FileAppService` |
+| 项目文件列举、读取、删除、Git diff、暂存/取消暂存、重置和文件名搜索 | `Agw.Files.Application.Files.FileAppService` |
 | HTTP 参数和响应映射 | `Agw.Files.Api.FilesController`、`Agw.Files.Api.FileEndpointExceptionMappingMiddleware` |
 | Local 文件系统实现与项目解析 | `Agw.Files.Application.Storage` |
 | 文件系统公共契约 | `Agw.Files.Abstracts`、`Agw.Files.Abstracts.Dtos` |
@@ -47,7 +47,7 @@ Agent runtime 和文件工具先解析 Project：
 var fileSystem = await resolver.ResolveAsync(projectId, cancellationToken);
 ```
 
-调用方随后只传相对于 Workspace 的路径，例如 `README.md` 或 `src/server/Program.cs`。Git、Claude Code 和 Codex 则使用同一 Workspace 的宿主机绝对路径作为进程工作目录。
+调用方随后只传相对于 Workspace 的路径，例如 `README.md` 或 `src/server/Agw.Host/Program.cs`。Git、Claude Code 和 Codex 则使用同一 Workspace 的宿主机绝对路径作为进程工作目录。
 
 ## Project 文件系统解析
 
@@ -125,9 +125,11 @@ public sealed class WorkspaceDocumentService
 | --- | --- | --- |
 | `GET /api/files/list` | `projectId`、`path`、`diff`、`recursive` | 列出目录，可按 Git 变更过滤 |
 | `GET /api/files/read` | `projectId`、`path` | 读取文本文件 |
-| `GET /api/files/diff` | `projectId`、`path` | 获取单个文件的 Git diff |
+| `GET /api/files/diff` | `projectId`、`path`、可选 `scope` | 获取完整、`staged` 或 `unstaged` Git diff |
 | `DELETE /api/files/delete` | `projectId`、`path` | 删除文件或递归删除目录 |
 | `POST /api/files/reset` | `projectId`、`path` | 把文件重置到 Git HEAD |
+| `POST /api/files/stage` | `projectId`、`path` | 暂存一个文件或目录下的变更 |
+| `POST /api/files/unstage` | `projectId`、`path` | 取消暂存一个文件或目录下的变更 |
 | `GET /api/files/search` | `projectId`、`path`、`keyword`、`limit`、`recursive` | 按相对路径名称搜索 |
 
 HTTP `search` 搜索文件或目录名称；`IAgwFileSystem.SearchAsync` 搜索文件内容，两者语义不同。
@@ -138,7 +140,7 @@ HTTP `search` 搜索文件或目录名称；`IAgwFileSystem.SearchAsync` 搜索�
 
 当前检查是词法路径检查，不解析符号链接的最终目标。部署时不要在 Workspace 中放置指向敏感目录的符号链接；需要增强时必须同时处理跨平台链接解析、目标不存在和竞态条件。
 
-`DELETE /api/files/delete` 会递归删除目录，但空路径返回 `400`，防止删除整个 Workspace。
+`DELETE /api/files/delete` 会递归删除目录，但空路径返回 `400`，防止删除整个 Workspace。Stage/Unstage 同样拒绝空路径，不允许把整个 Workspace 作为隐含目标。
 
 ## 扩展原则
 
@@ -166,7 +168,7 @@ dotnet test tests/Agw.Files.Tests/Agw.Files.Tests.csproj
 dotnet build src/server/Agw.Files/Agw.Files.csproj
 ```
 
-现有测试覆盖文件操作、Git 编排、文件名搜索、项目解析、Local 路径安全、异常映射和 controller 归属。
+现有测试覆盖文件操作、Git diff scope、Stage/Unstage、文件名搜索、项目解析、Local 路径安全、异常映射和 controller 归属。
 
 ## 常见误区
 

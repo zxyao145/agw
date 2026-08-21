@@ -1,103 +1,90 @@
 # Agent execution flow
 
-Agw exposes the authenticated SignalR Hub at `/api/hubs/exec` for real-time agent execution. The Hub accepts the `AgentRunCommand` command family and returns raw `AgwMessage` values.
+Agw exposes the authenticated SignalR Hub at `/api/hubs/exec`. The Hub is a transport adapter over connection-scoped command handling and either the in-process or distributed execution provider. Detailed state ownership, extension rules, checkpoint storage, and distributed recovery are documented in the [Execution subsystem README](../src/server/Agw.Agents/Execution/README.md).
 
-## SignalR command flow
+## Hub contract
 
-The Hub exposes one client method:
+Clients dispatch the polymorphic `AgentRunCommand` family through:
 
 ```text
 DispatchCommand(AgentRunCommand)
 ```
 
-The server sends every runtime and control message through one typed client callback:
+The Hub also exposes two read operations:
+
+```text
+GetExecutionProvider() -> "InProcess" | "Distributed"
+GetAgentflowCheckpoints(agentflowId) -> AgentflowCheckpointAvailability[]
+```
+
+Runtime, control, and lifecycle output uses one typed callback:
 
 ```text
 ReceiveMessage(AgwMessage)
 ```
 
-`ExecutionHub` does not retain mutable execution state. SignalR creates Hub instances for invocations, so `ExecutionConnectionRegistry` maps each `Context.ConnectionId` to an `ExecutionConnection`. Each connection owns an independent DI scope and serialized command gate. Its `ExecutionConnectionContext` owns settings, resolved task, workspace, target, runtime, and message sink. `ExecutionCommandDispatcher` routes each command to its registered typed handler. Background work sends through `IHubContext<ExecutionHub, IExecutionHubClient>` rather than capturing a Hub instance or `Clients.Caller`.
+`ExecutionHub` owns no mutable execution state. `ExecutionConnectionRegistry` maps each SignalR connection ID and authenticated user ID to an `ExecutionConnection`. Each connection owns an independent dependency-injection scope and serialized command gate; `ExecutionConnectionContext` owns settings, task, workspace, target, runtime attachment, and message sink. Background output uses `IHubContext`, never a captured Hub instance.
 
-Each active turn receives an immutable `RuntimeTurnContext` containing settings, task, target, project/context/agent identifiers, user, expanded absolute project workspace, and the transport-neutral message sink. `RuntimeBase` exposes that snapshot through `RuntimeTurnContextAccessor` only for the lifetime of the asynchronous turn; mutable connection state remains in `ExecutionConnectionContext` and is never stored in `AsyncLocal`.
+## Commands
+
+Commands are registered through the typed handler and JSON-discriminator seam. The current command set is:
+
+| Command | Purpose |
+| --- | --- |
+| `SettingCommand` | Sets Project, context, environment variables, and the initial permission policy. |
+| `ExecCommand` | Selects an Agent or Agentflow and starts a turn; distributed clients should supply a stable `executionId`, and distributed execution requires `stream=true`. |
+| `InterruptCommand` | Interrupts the active in-process turn or the identified durable execution. |
+| `SetModeCommand` | Changes the mode of an Agent that supports runtime modes. |
+| `SetPermissionModeCommand` | Changes the Tool approval policy without rebuilding the runtime. |
+| `HumanResponseCommand` | Answers a HumanGate, Tool approval, or structured user-information request; durable responses include `executionId`. |
+| `SubscribeExecutionCommand` | Reattaches the connection to an existing durable execution and resumes output after an optional cursor. |
+| `ResumeCheckpointCommand` | Starts a new Agentflow branch from one exact checkpoint occurrence. |
+
+`SettingCommand.Resume` and `ExecCommand.ResumeCheckpoint` are Server-only properties and are not part of the wire contract. Without a prior Setting command, the Server uses the built-in Project, a generated context, no environment variables, and the default permission mode.
+
+## Turn lifecycle
+
+Each active turn receives an immutable `RuntimeTurnContext` containing settings, task, target, Project/context/Agent identifiers, authenticated user ID, absolute Project workspace, and the transport-neutral message sink. Mutable connection state never enters `AsyncLocal`; only this per-turn snapshot does.
 
 ```mermaid
 sequenceDiagram
     participant Client
     participant Hub as ExecutionHub
-    participant Registry as Connection Registry
     participant Connection as ExecutionConnection
     participant Context as ExecutionConnectionContext
-    participant Runtime as Agent/Agentflow Runtime
+    participant Runtime as Agent or Agentflow runtime
 
     Client->>Hub: DispatchCommand(SettingCommand)
-    Hub->>Registry: dispatch by connectionId
-    Registry->>Connection: dispatch serialized command
-    Connection->>Context: SettingCommandHandler applies settings
+    Hub->>Connection: dispatch serialized command
+    Connection->>Context: apply immutable settings
     Client->>Hub: DispatchCommand(ExecCommand)
-    Hub->>Registry: dispatch by connectionId
-    Registry->>Connection: dispatch serialized command
-    Connection->>Context: ExecCommandHandler starts turn
-    Context->>Runtime: create/reuse runtime and register ActiveTurn
-    Runtime->>Client: ReceiveMessage(turn-start)
-    Runtime->>Runtime: ExecuteStreaming / Execute
+    Connection->>Context: resolve task, workspace, target, and user
+    Context->>Runtime: create or reuse runtime and start turn
+    Runtime-->>Client: turn-start
     loop runtime output
-        Runtime-->>Client: ReceiveMessage(AgwMessage)
+        Runtime-->>Client: AgwMessage
     end
-    Runtime-->>Client: ReceiveMessage(turn-finished)
-    Runtime->>Runtime: release ActiveTurn
+    Runtime-->>Client: turn-finished
 ```
 
-### Commands
+Turn state is part of the `AgwMessage` protocol:
 
-`Execution/Commands` is organized as vertical command slices. `Abstracts/` contains `AgentRunCommand` and the shared handler interfaces; `Exec/`, `Setting/`, `Interrupt/`, and `Hip/` each co-locate one transport contract with its handler. `ExecutionCommandDispatcher` and `ExecutionCommandRegistration` remain at the `Commands/` root because they coordinate all slices.
+- `additionalProperties.type = "turn-start"` precedes runtime output.
+- HumanGate, Tool approval, and `human-interaction-request` messages carry their request identity and structured payload.
+- `additionalProperties.type = "turn-finished"` carries `status = completed | interrupted | failed`.
+- Durable lifecycle messages also carry `executionId`; streamed messages use a stable scope so replay and checkpoint branches merge with the correct user turn.
 
-`SettingCommand` remains a transport-neutral settings snapshot:
+When `stream=false`, the in-process provider buffers ordinary output until completion but forwards human-interaction control messages immediately. The distributed provider rejects non-streaming execution because a durable buffer across multiple human-interaction segments has no defined compatibility contract.
 
-```json
-{
-  "type": "SettingCommand",
-  "projectId": "00000000-0000-0000-0000-000000000000",
-  "contextId": "conversation-id",
-  "environmentVariables": {}
-}
-```
+## Provider-specific recovery
 
-It does not contain `agentId` or `agentType`. `ExecutionConnectionContext` stores a connection-level immutable settings snapshot when it receives the command. The concrete `AgentRuntime` or `AgentflowRuntime` is created by the first `ExecCommand`, because the target and first user input are required to resolve the task. `SettingCommand.Resume` keeps its existing server-only `[JsonIgnore]` behavior.
+`Execution:Provider` is selected once at Server startup:
 
-```json
-{
-  "type": "ExecCommand",
-  "agentId": "00000000-0000-0000-0000-000000000000",
-  "agentType": 0,
-  "stream": true,
-  "input": {
-    "messageId": "message-id",
-    "author": "$agw",
-    "contents": []
-  }
-}
-```
+- `InProcess` keeps the runtime and Human-in-the-loop state in the current process. An idle disconnected connection is disposed. A running turn may finish and persist without a subscriber, but a turn waiting for a human response is interrupted because that response can no longer arrive through the detached connection.
+- `Distributed` stores user-owned execution state, checkpoints, pending interactions, and responses in PostgreSQL. Disconnecting only detaches the current subscription. Another connection can send `SubscribeExecutionCommand` with the same authenticated user ID and replay cursor; a worker resumes runnable segments under a PostgreSQL distributed lock. Output replay uses PostgreSQL by default or Redis when configured.
 
-For SignalR, `agentId` is required. `stream` defaults to `true`. Without an earlier Setting command, the server creates default settings using the built-in project, a generated context, and no environment variables. A different target on a later idle turn disposes the old runtime and creates a new one while retaining the conversation task.
+Distributed execution is at-least-once, not exactly-once. A Tool with external side effects must use `executionId`, request identity, or a business idempotency key. There is no separate active-execution REST lifecycle; start, subscribe, interrupt, human response, and checkpoint resume remain Hub operations.
 
-`InterruptCommandHandler` asks `ExecutionConnectionContext` to interrupt the current turn and leaves the runtime available for later turns. `HumanResponseCommandHandler` forwards approval decisions and structured human-interaction responses through the context only to the active turn's coordinator.
+## Agentflow checkpoint branches
 
-### Turn messages
-
-Turn state remains part of the raw `AgwMessage` protocol:
-
-- `additionalProperties.type = "turn-start"` before runtime output.
-- Existing `human-gate-*` messages for approval control.
-- `additionalProperties.type = "human-interaction-request"` with the originating `toolName`/`callId`, an interaction kind, and structured payload when a Tool needs user input.
-- `additionalProperties.type = "turn-finished"` with `status` equal to `completed`, `interrupted`, or `failed`.
-
-With `stream=false`, normal runtime messages are buffered until the run completes. Approval and human-interaction control messages are still forwarded immediately so the client can respond.
-
-### Disconnect behavior
-
-- An idle SignalR connection is disposed immediately.
-- A running turn continues without a subscriber, persists its runtime/history state, and releases its connection scope after completion.
-- A disconnected turn waiting for HumanGate is interrupted because no response can arrive.
-- Host shutdown interrupts and disposes every connection-owned runtime.
-
-There is no execution id, replay buffer, active-execution REST endpoint, automatic reconnect, or cross-process recovery in this protocol.
+Checkpoint markers emit visible `agentflow-checkpoint` messages and persist occurrence metadata. `GetAgentflowCheckpoints` reports whether each occurrence is still resumable. `ResumeCheckpointCommand` validates the authenticated user, current Project/context, Agentflow ID, definition fingerprint, and snapshot before removing history after the saved boundary and starting the new branch. In-process occurrences require the original runtime to remain alive; distributed occurrences survive reconnects and Server restarts.

@@ -5,10 +5,10 @@
 ## Authentication modes
 
 - Remote Web requests sign in with the administrator password and receive the `agw.session` Cookie.
-- Desktop, Mobile, and automation clients send named `Authorization: Bearer agw_...` Tokens.
+- Desktop, Mobile, and automation clients send named `Authorization: Bearer agw_...` Tokens. The resulting principal uses the Token creator's user ID.
 - Direct loopback requests with a localhost Host and no forwarding headers use the `LocalTrusted` identity.
 
-All authenticated modes create the same administrator principal. Agw does not currently provide multiple users, roles, Token scopes, or JWT authentication.
+Cookie and `LocalTrusted` requests use the built-in administrator ID. Bearer requests preserve the creating user's ID while using a Token-specific display name, so downstream ownership must read the `NameIdentifier` claim rather than `Identity.Name`. Agw does not currently provide multiple login accounts, roles, Token scopes, or JWT authentication.
 
 ## Runtime
 
@@ -28,7 +28,7 @@ The Host must call `UseAuthorization()` after `UseRouting()` so endpoint authori
 
 `IAuthenticationStateStore` exposes administrator password-hash and Web-session-version state. `IApiTokenStore` separately owns named Token listing, creation, validation, and revocation.
 
-`Agw.Setup.JsonInitializationStateStore` remains the production Adapter for password and session state. `Agw.Infrastructure.Auth.EfApiTokenStore` stores Token hashes in the `api_token` database table. Each row also records `create_by` and UTC `create_time` through the standard entity-audit interceptor. Token plaintext is returned only once at creation and is never persisted.
+`Agw.Setup.JsonInitializationStateStore` remains the production Adapter for password and session state. `Agw.Infrastructure.Auth.EfApiTokenStore` stores Token hashes in the `api_token` database table. Each row also records `create_by` and UTC `create_time` through the standard entity-audit interceptor. Successful validation returns that creator ID for execution ownership, task-session bindings, checkpoints, User Memory, and later audit writes. Token plaintext is returned only once at creation and is never persisted.
 
 On startup, `LegacyApiTokenMigrator` imports any hashed Token records from an older `server-state.json`. Old records did not include a creator, so they are attributed to the built-in administrator while retaining their original creation time. The JSON `tokens` property is removed only after the database write succeeds; retrying after an interrupted write is idempotent.
 

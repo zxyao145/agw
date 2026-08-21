@@ -11,44 +11,36 @@ Agw is a modular-monolith AaaS platform and agent gateway for system and externa
 ### Backend (`src/server/`)
 
 ```text
-Agw.Host/            # ASP.NET Core entry point, composition root, middleware, OpenAPI, static files, websockets, and DB seeding
-Agw.Data/            # Persisted entities, EF configurations, repository abstractions, and unit-of-work contracts
-Agw.Infrastructure/  # EF Core DbContext, repositories, provider configuration, and seeding
+Agw.Host/            # ASP.NET Core entry point and composition root
+Agw.Data/            # Entities, EF mappings, and repository/unit-of-work contracts
+Agw.Infrastructure/  # DbContext, repositories, provider adapters, and seeding
 Agw.Migrations.Sqlite/   # SQLite migrations and provider-specific model snapshot
 Agw.Migrations.Postgres/ # PostgreSQL migrations and provider-specific model snapshot
-Agw.Shared/          # Shared contracts, exceptions, results, and utilities
-Agw.A2A/             # A2A protocol types, discovery, communication endpoints, and route builders
-Agw.Auth/            # Administrator Cookie/Bearer authentication, LocalTrusted, CSRF, and authorization guards
-Agw.Agents/          # Agent definitions, agentflows, MCP tools, and runtime execution services
-Agw.Files/           # File and workspace APIs, path security, request validation, and error mapping
-Agw.Integrations/    # Plugin catalog, installations, connections, credentials, OAuth, MCP, and connection-bound tools
-Agw.Jobs/            # Scheduled jobs, project leases, execution logs, and hosted scheduling
-Agw.Providers/       # LLM models, providers, model-provider links, and auth configuration
-Agw.Setup/           # First-run setup, initialization state, server-state persistence, and legacy Token import
-Agw.Skills/          # Skill definitions, local/remote content, execution adapters, and agent-skill relations
-Agw.Projects/         # Projects, project tasks, task records, contexts, and task APIs
-Agw.Tools/           # Tool discovery, metadata, and AI tool factory and registry
+Agw.Shared/          # Cross-module contracts, errors, results, and utilities
+Agw.A2A/             # A2A discovery, protocol types, and endpoints
+Agw.Auth/            # Cookie/Bearer/LocalTrusted auth, CSRF, and guards
+Agw.Agents/          # Agent/Agentflow definitions, tools, and runtimes
+Agw.Files/           # Project file/Git APIs and path security
+Agw.Integrations/    # Plugin catalog, connections, credentials, OAuth, and MCP
+Agw.Jobs/            # Scheduling, project leases, and execution logs
+Agw.Providers/       # Models, providers, links, and auth configuration
+Agw.Setup/           # First-run setup and server-state persistence
+Agw.Skills/          # Local/remote Skills and execution adapters
+Agw.Projects/        # Projects, tasks, contexts, and history
+Agw.Tools/           # Tool/ToolBlock catalog and materialization
 ```
 
-`Agw.slnx` is the root solution and includes all backend projects and tests; `src/server/server.sln` contains backend projects only.
+`Agw.slnx` is the root solution and includes all backend projects and tests.
 
 ### Module Layering
 
-Backend modules use lightweight layering:
-
-```text
-Api → Application → Domain ← Infrastructure
-```
-
-Api owns protocol adapters, Application owns use cases, Domain owns data-only entities and value objects, and Infrastructure implements persistence and external adapters. Dependencies point inward; a typical flow is `Controller → AppService / RuntimeService → DomainService → IRepository / IUnitOfWork → EF Core`.
+Backend modules use `Api → Application → Domain ← Infrastructure`. Api owns protocol adapters, Application owns use cases, Domain contains data-only entities/value objects, and Infrastructure implements persistence and external adapters. Dependencies point inward.
 
 ### Client Workspace (`src/clients/`)
 
 `@agw/web`, `@agw/desktop`, `@agw/mobile`, and packages under `src/clients/packages/` share a pnpm Workspace and Turborepo. Run pnpm commands from `src/clients/`.
 
 ### Web Client (`src/clients/web/`)
-
-The web client uses Next.js 16 App Router, React 19, Tailwind CSS 4, Radix UI/Shadcn components, React Query, and generated `openapi-fetch` types.
 
 `src/clients/web/src/app/` contains only routes, layouts, global CSS, and shell composition. Business domains, transport, and shared UI live in `src/clients/packages/`; Web routes import their public package entry points.
 
@@ -65,8 +57,8 @@ The Expo Router app root is `src/clients/mobile`. Follow the nested `src/clients
 ## Deeper Documentation
 
 - [`docs/2.Architecture.md`](docs/2.Architecture.md): module responsibilities, runtime boundaries, client packages, and domain relationships.
-- [`docs/6.Agentflow.md`](docs/6.Agentflow.md): graph routing, cycle constraints, editor history, and Chat attribution.
-- [`src/server/Agw.Agents/Execution/README.md`](src/server/Agw.Agents/Execution/README.md): SignalR commands, runtimes, turn lifecycle, and extension points.
+- [`docs/6.Agentflow.md`](docs/6.Agentflow.md): graph routing, cycle constraints, checkpoint branching, editor history, and Chat attribution.
+- [`src/server/Agw.Agents/Execution/README.md`](src/server/Agw.Agents/Execution/README.md): SignalR commands, in-process/distributed runtimes, turn lifecycle, and extension points.
 - [`src/server/Agw.Files/README.zh-CN.md`](src/server/Agw.Files/README.zh-CN.md): workspace resolution, path security, file APIs, and Git behavior.
 - [`src/clients/desktop/README.md`](src/clients/desktop/README.md): Desktop runtime, packaging, server profiles, and security boundaries.
 
@@ -86,11 +78,9 @@ dotnet test Agw.slnx
 dotnet csharpier format
 ```
 
-The development backend listens on `http://localhost:30816` by default through `src/server/Agw.Host/Properties/launchSettings.json`.
-
 Run a focused project with `dotnet test tests/Agw.Files.Tests` (or the matching `Agw.*.Tests` project), and use `--filter "FullyQualifiedName~MethodName"` for a specific test.
 
-Unit and composition tests for External Agents must not construct real `CodexAIAgent` or `ClaudeCodeAIAgent` instances. Their constructors may probe for locally installed `codex` or `claude` executables, which makes ordinary CI tests depend on developer-machine tools. Test Agw wrappers with fake `AIAgent` implementations and test SDK option normalization through pure helpers. Any test that exercises a real External Agent CLI must be an explicit integration test, gated by both an opt-in setting and an executable-availability check, and must not run as part of the default unit-test suite.
+Unit/composition tests must not construct real `CodexAIAgent` or `ClaudeCodeAIAgent` instances because their constructors may probe local CLIs. Use fake `AIAgent` implementations and pure option-normalization helpers. Real CLI tests must be explicit integration tests gated by opt-in configuration and executable availability, outside the default suite.
 
 Do not add or apply EF Core migrations automatically. Each model change needs matching SQLite and PostgreSQL migrations. When the user explicitly requests migrations, use:
 
@@ -118,13 +108,14 @@ dotnet ef database update \
   -- --provider postgres
 ```
 
-### Web and Desktop Clients
+### Clients
 
-Run pnpm commands from `src/clients/`. The single install covers Web, Desktop, and all packages under `src/clients/packages/`:
+Run pnpm commands from `src/clients/`; one install covers every client and package:
 
 ```bash
 pnpm install
 pnpm dev:web
+pnpm dev:desktop
 pnpm dev:mobile
 pnpm android:mobile
 pnpm ios:mobile
@@ -158,19 +149,22 @@ On the first backend run, open `http://localhost:30816/setup` to choose Standalo
 
 Remote web access uses the administrator session cookie. Desktop, mobile, and automation clients use named `Authorization: Bearer agw_...` API tokens. The legacy `X-API-Key` setting is not supported.
 
-Primary backend settings live in `src/server/Agw.Host/appsettings.json` under `Database`, `DistributedLock`, and `OpenTelemetry`.
+Bearer principals inherit the API Token creator's user ID. Execution ownership, audit fields, task-session bindings, checkpoints, and User Memory must use that stable user ID rather than a display name or authentication scheme label.
+
+Primary backend settings live in `src/server/Agw.Host/appsettings.json` under `Database`, `DistributedLock`, `Execution`, and `OpenTelemetry`.
 
 Configuration guidance:
 
 - `Database:Provider` supports `sqlite` and `postgres`.
 - `Database:ConnectionString` defaults to `Data Source=agw.db`.
-- An optional `Setup` section can perform unattended first-run initialization when `server-state.json` is absent. It uses the same structured fields as the Setup form; inject `Setup:AdminPassword` and `Setup:PostgresPassword` through environment variables or Secrets. Existing state always wins and Setup configuration must not overwrite credentials or runtime setup choices.
+- An optional `Setup` section initializes an absent `server-state.json`; inject its passwords through environment variables or Secrets. Existing state always wins and must not be overwritten.
 - `DistributedLock:Provider` supports `inmemory` and `postgres`; null or missing follows `Database:Provider`.
 - When `DistributedLock:ConnectionString` is empty, a PostgreSQL lock reuses `Database:ConnectionString`.
+- `Execution:Provider` supports `InProcess` and `Distributed`. Distributed execution requires PostgreSQL for both the database and distributed lock; its event stream defaults to PostgreSQL and may explicitly use Redis.
 - `OpenTelemetry:OtlpEndpoint` defaults to `http://localhost:4317`.
 - First-run configuration plus administrator password/session state live in `server-state.json` through the `Agw.Setup` persistence adapter. API Token hashes and audit metadata live in the `api_token` database table; do not reintroduce static `SystemInitialization` configuration.
 - Keep secrets out of `appsettings*.json` and frontend environment files; prefer environment-variable overrides.
-- All backend projects target `.NET 10.0` and use nullable reference types, implicit usings, central package management, and code-style enforcement during builds.
+- Backend projects target `.NET 10.0` with nullable types, implicit usings, central packages, and build-time style checks.
 
 ## Mandatory Repository Rules
 

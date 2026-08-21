@@ -35,7 +35,7 @@
 
 ```mermaid
 flowchart LR
-    Client["Web UI / API Client"] --> Endpoints["JobsEndpointRouteBuilderExtensions"]
+    Client["Web UI / API Client"] --> Endpoints["EndpointRouteBuilderExtensions"]
     Endpoints --> AppService["JobAppService"]
     AppService --> Repository["IRepository<Job>"]
     AppService --> Calculator["JobScheduleCalculator"]
@@ -61,7 +61,7 @@ flowchart LR
 
 ### 主要组件
 
-#### `JobsEndpointRouteBuilderExtensions`
+#### `EndpointRouteBuilderExtensions`
 
 通过 `MapJobsApi()` 注册 `/api/jobs` 下的 CRUD 和执行日志查询端点。所有响应都直接使用 `ApiResult`，因此客户端收到的是 Bens.Results 响应封装，而不是裸 JSON 模型。
 
@@ -69,7 +69,7 @@ flowchart LR
 
 负责创建、查询、更新和删除 Job。创建或更新时，它通过 `JobScheduleCalculator` 从当前 UTC 时间计算 `NextRunTime`。名称为空时，会生成 `job-{序号}-{yyyyMMdd}` 格式的名称。
 
-创建成功后会调用 `JobSchedulerWakeSignal.NotifyCreated`。当前只有已启用、状态为 `Pending` 且即将在一分钟内执行的 `Once` Job 会唤醒预取循环；其他任务和更新操作由周期性预取发现。这里使用的是模块内的调度协作信号，不是领域事件总线。
+创建成功后会调用 `JobSchedulerWakeSignal.NotifyCreated`。当前只有已启用、状态为 `Pending` 且即将在一分钟内执行的 `Once` Job 会唤醒预取循环。专用的启用状态更新在把 Job 设为启用时调用 `NotifyChanged`；其他完整更新仍由周期性预取发现。这里使用的是模块内的调度协作信号，不是领域事件总线。
 
 #### `JobHostedService`
 
@@ -147,7 +147,7 @@ stateDiagram-v2
 4. 创建操作通知 `JobSchedulerWakeSignal`；
 5. 已启用且近期执行的 `Once` Job 会唤醒预取循环，其他 Job 等待下一轮周期预取。
 
-更新和删除当前不会向调度器派发专用事件。仍位于预取窗口内的更新会在下一次预取时用版本号替换旧内存项；禁用、暂停或删除的 Job 会在执行前重新检查持久化状态并丢弃。但如果只是把 `NextRunTime` 移到预取窗口之外，旧内存项不会因此立即失效。因此不要把更新接口理解为对内存队列的同步修改；需要严格的即时改期或取消语义时，应先补充对应事件和队列失效机制。
+`PUT /api/jobs/enabled` 在启用 Job 时会唤醒预取循环，但完整更新和删除当前不会向调度器派发队列失效事件。仍位于预取窗口内的更新会在下一次预取时用版本号替换旧内存项；禁用、暂停或删除的 Job 会在执行前重新检查持久化状态并丢弃。但如果只是把 `NextRunTime` 移到预取窗口之外，旧内存项不会因此立即失效。因此不要把更新接口理解为对内存队列的同步修改；需要严格的即时改期或取消语义时，应先补充对应事件和队列失效机制。
 
 ### 2. 预取与到期派发
 
@@ -247,6 +247,7 @@ curl 'http://localhost:30816/api/jobs' \
 | `GET /api/jobs/{id}/logs` | 查询 Job 执行日志，按开始时间倒序返回 |
 | `POST /api/jobs` | 创建 Job |
 | `PUT /api/jobs/{id}` | 完整更新 Job 并重新计算下一次执行时间 |
+| `PUT /api/jobs/enabled` | 只更新一个 Job 的启用状态；启用时唤醒调度器 |
 | `DELETE /api/jobs/{id}` | 删除 Job |
 
 查询日志：
@@ -256,7 +257,7 @@ curl 'http://localhost:30816/api/jobs/33333333-3333-3333-3333-000000000001/logs'
   --header 'Authorization: Bearer agw_...'
 ```
 
-更新接口使用 `JobUpdateRequest`，除了创建字段还必须传入 `status`。恢复暂停任务时，通常需要同时设置 `status: 1`、`isEnabled: true`，并保证触发器仍能计算出未来时间。
+完整更新接口使用 `JobUpdateRequest`，除了创建字段还必须传入 `status`。恢复暂停任务时，通常需要同时设置 `status: 1`、`isEnabled: true`，并保证触发器仍能计算出未来时间。只切换总开关时应使用 `PUT /api/jobs/enabled`，请求体为 `jobId` 和 `isEnabled`；该接口不会覆盖调度、重试、状态或 Agent 配置。
 
 ### 触发器格式
 
@@ -272,7 +273,7 @@ curl 'http://localhost:30816/api/jobs/33333333-3333-3333-3333-000000000001/logs'
 
 ### 配置项目级锁
 
-默认配置位于 `Agw.Host/appsettings.json`：
+默认配置位于 `src/server/Agw.Host/appsettings.json`：
 
 ```json
 {

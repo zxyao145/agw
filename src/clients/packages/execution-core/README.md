@@ -1,6 +1,6 @@
 # @agw/execution-core
 
-Platform-neutral 执行消息处理核心，供 Web / Desktop（`@agw/chat`）与 Mobile（`shared/`）共享。
+Platform-neutral 执行消息处理核心，供 Web / Desktop（通过 `@agw/chat`）与 Mobile 共享。
 
 ## 职责
 
@@ -15,7 +15,7 @@ Platform-neutral 执行消息处理核心，供 Web / Desktop（`@agw/chat`）�
 传输层由两个 Adapter 各自实现：
 
 - Web / Desktop：SignalR（`@agw/chat` 的 `execution-hub.ts` / `execution-session-manager.ts`）
-- Mobile：官方 `@microsoft/signalr` React Native adapter（`mobile/shared` 的 `execution-ws.ts`）
+- Mobile：官方 `@microsoft/signalr` React Native adapter（`mobile/src/features/chat/execution-ws.ts`）
 
 ## 核心规则
 
@@ -48,7 +48,7 @@ streamingScopeId + messageId + role + author
 
 ## 消费方式
 
-### pnpm workspace（Web / Desktop）
+### pnpm Workspace
 
 ```jsonc
 // 依赖声明
@@ -59,14 +59,7 @@ streamingScopeId + messageId + role + author
 import { mergeStreamingMessages, processMessages } from "@agw/execution-core";
 ```
 
-### Mobile（独立 npm workspace）
-
-Mobile 不在 pnpm workspace 内，无法通过 node_modules 解析本包，因此直接引用源码（路径单一来源见 `mobile/shared/execution-core-alias.cjs`）：
-
-- `metro.config.js` / `jest.config.js`：引用 `execution-core-alias.cjs`
-- `tsconfig.json`：`paths` 指向本包 `src/index.ts`（JSON 无法 require CJS，需与 alias 文件同步）
-
-详见 `mobile/README.md` 的「跨 workspace 共享」一节。
+Web/Desktop 通过 `@agw/chat` 间接消费本包；`@agw/mobile` 作为同一 pnpm Workspace 的成员直接声明 `workspace:*` 依赖。Metro、Jest 和 TypeScript 都通过正常的 workspace package 解析，不维护源码 alias 或独立 lockfile。详见 [`mobile/README.md`](../../mobile/README.md) 的共享代码边界。
 
 ## 测试
 

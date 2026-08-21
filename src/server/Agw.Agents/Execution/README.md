@@ -36,13 +36,18 @@ Connection 生命周期、Command Handler 扩展方式与状态所有权的决�
 
 当前 `Distributed` provider 只接受 `ExecCommand.stream=true`。非流式缓冲若要跨多个 HITL segment 保持与进程内模式完全一致，需要另行定义持久缓冲语义；本实现选择明确拒绝，而不是静默丢失或提前发送缓冲消息。
 
-## 目录结构
+## 关键目录与入口
+
+下面列出主要扩展点；同目录的 DTO、状态对象和内部 helper 省略。
 
 ```text
 Execution/
 ├── Agentflows/
 │   ├── AgentflowRuntimeService.cs
 │   ├── AgentflowWorkflowCompiler.cs
+│   ├── AgentflowCheckpointStore.cs
+│   ├── AgentflowNodeScopedAgent.cs
+│   ├── AgentflowMessageTransforms.cs
 │   ├── HumanGateApproval.cs
 │   └── IAgentflowRuntimeService.cs
 ├── Agents/
@@ -50,12 +55,16 @@ Execution/
 │   ├── Middleware/
 │   ├── Utils/
 │   ├── AgentRuntimeService.*.cs
+│   ├── ExternalAgentChatHistoryAgent.cs
 │   ├── AgentSessionStateStore.cs
 │   └── IAgentRuntimeService.cs
 ├── Commands/
 │   ├── Abstracts/
 │   │   ├── AgentRunCommand.cs
 │   │   └── IExecutionCommandHandler.cs
+│   ├── Checkpoint/
+│   │   ├── ResumeCheckpointCommand.cs
+│   │   └── ResumeCheckpointCommandHandler.cs
 │   ├── Exec/
 │   │   ├── ExecCommand.cs
 │   │   └── ExecCommandHandler.cs
@@ -95,10 +104,13 @@ Execution/
 │   └── ExecutionTarget.cs
 ├── Durable/
 │   ├── DistributedExecutionWorker.cs
+│   ├── DurableExecutionCoordinator.cs
+│   ├── DurableAgentSegmentRunner.cs
 │   ├── DurableExecutionSegmentExecutor.cs
 │   ├── DurableExecutionSession.cs
 │   ├── DurableExecutionStore.cs
 │   ├── DurableAgentflowCheckpointStore.cs
+│   ├── ExecutionRuntimeOptions.cs
 │   ├── IExecutionEventStream.cs
 │   ├── PostgresExecutionEventStream.cs
 │   └── RedisExecutionEventStream.cs
@@ -126,7 +138,7 @@ Execution/
 
 这里按 command 垂直切片：每个子目录共置 transport contract 与对应 handler，修改一种 command 时不需要跨 `Contracts/` 和 `Commands/` 两棵目录跳转。`Abstracts/` 只保存所有切片共享的 `AgentRunCommand` 和 handler 接口；dispatcher 与注册 seam 留在 `Commands/` 根目录。
 
-`AgentRunCommand` 使用 `type` 作为 JSON discriminator，目前包含七种命令。派生类型映射不写在 contract 基类上，而由 command 的 DI 注册统一提供：
+`AgentRunCommand` 使用 `type` 作为 JSON discriminator，目前包含八种命令。派生类型映射不写在 contract 基类上，而由 command 的 DI 注册统一提供：
 
 | Command | 作用 | 是否改变 connection 状态 |
 | --- | --- | --- |
@@ -137,6 +149,7 @@ Execution/
 | `SetPermissionModeCommand` | 切换工具审批策略 | 是；立即更新 settings 和当前活动 turn，不重建 runtime |
 | `HumanResponseCommand` | 提交审批或用户信息交互响应 | 否；只转发给当前 turn 的协调器 |
 | `SubscribeExecutionCommand` | 按 `executionId` 和 event stream cursor 重新订阅集群执行 | 是；替换当前消息订阅，不启动新执行 |
+| `ResumeCheckpointCommand` | 从一个精确的 Agentflow checkpoint occurrence 创建新执行分支 | 是；校验并裁剪 checkpoint 之后的历史，再启动恢复 turn |
 
 `SettingCommand.Resume` 是服务端属性，带有 `[JsonIgnore]`。transport command 自身的等价性不包含 `Resume`；复制出的 `ExecutionSettings` 会包含它，因为 resume 变化需要使 connection-owned runtime 失效。
 
@@ -161,7 +174,7 @@ Execution/
 
 集群 provider 的持久 identity 与订阅生命周期不进入该状态内核，而由独立的 `DurableExecutionSession` 持有；Context 只在 provider seam 处调用 session。
 
-它通过 `ApplySettingsAsync`、`StartTurnAsync`、`InterruptTurnAsync` 和 `SubmitHumanDecisionAsync` 提供原子操作，并以只读属性共享 project/context/workspace/agent/task/user 数据；它不公开 `RuntimeBase`、`ActiveTurn` 或状态 setter。`ExecCommand` 启动后台 turn 后会很快返回，command gate 随即释放，后续 interrupt 和 HumanGate response 才能进入。
+它通过 `ApplySettingsAsync`、`StartTurnAsync`、`InterruptTurnAsync`、`SubmitHumanDecisionAsync`、checkpoint 查询和 checkpoint 恢复提供原子操作，并以只读属性共享 project/context/workspace/agent/task/user 数据；它不公开 `RuntimeBase`、`ActiveTurn` 或状态 setter。`ExecCommand` 启动后台 turn 后会很快返回，command gate 随即释放，后续 interrupt 和 HumanGate response 才能进入。
 
 `Messaging` 定义 transport-neutral 的 `IExecutionMessageSink`。Connection 和 runtime 只面向该接口输出消息，SignalR adapter 提供具体实现。
 
@@ -171,6 +184,8 @@ Execution/
 
 `AgentRuntime` 持有实际 `AIAgent`、SDK `AgentSession`、session key 和独立取消源。`AgentRuntimeService` 负责从持久化定义构造 Agent、加载技能和工具、创建外部 Agent，并在执行结束后保存 session state。
 
+Definition Agent 的 Skill provider 明确把 Skill 内容与 Project Workspace 分开：模型通过 `load_skill`、`read_skill_resource` 和 `run_skill_script` 访问 Skill，不应使用 Shell 或 Project 文件工具寻找 Skill 文件。只读的 load/read Tool 自动批准；脚本执行仍受 Tool 审批策略控制。Local Skill 只发现 `.py`、`.js` 和 `.cs` 脚本，`Agw.Skills.Execution.LocalSkillScriptRunner` 在 Skill 根目录内校验路径，以无 Shell 的 `ArgumentList` 传递字符串参数，并使用两分钟超时。Plugin Skill 不允许执行脚本。
+
 `AgentflowRuntime` 保存 Agentflow id、task、settings 和 `AgentflowRuntimeService`。每个 Agentflow turn 都会创建新的 `HumanGateApprovalCoordinator`，workflow 本身由 `AgentflowWorkflowCompiler` 生成。
 
 `RuntimeFactory` 负责把已解析好的 execution/turn 输入对应到具体 runtime，并将 runtime 输出接入统一的 `TurnPipeline`。task 与 workspace 的解析由 `ExecutionConnectionContext` 统一完成。Agent runtime 只有在 project 和 context 仍兼容时才会复用；settings 或 target 变化会先释放旧 runtime。
@@ -178,6 +193,8 @@ Execution/
 ### `Turns`
 
 turn 是一次用户输入到执行结束的完整过程。`RuntimeTurnContext` 是不可变快照，包含 settings、task、target、project/context/agent 标识、当前用户、绝对 workspace、消息 sink 和 HumanGate 状态回调。`RuntimeTurnContextAccessor` 使用 `AsyncLocal` 在执行任务内部暴露该快照，作用域在 turn 结束后恢复；connection 级可变状态不会进入 `AsyncLocal`。
+
+`AgwUserInput` 会按原顺序转换文字、URI 和图片 DataContent。服务端只接受 JPEG、PNG、GIF、WebP；每条消息最多 5 张、单张最多 5 MB、总计最多 10 MB。客户端执行同一组前置校验，但服务端仍是最终边界。
 
 `IRuntimeTurnContextAccessor` 只公开 `Current`。`Push` 仅在 Agents 模块内部由 `RuntimeBase` 使用，Jobs 等 runtime skill 只能读取当前 turn，不能伪造或覆盖执行上下文。
 
@@ -197,13 +214,14 @@ turn 是一次用户输入到执行结束的完整过程。`RuntimeTurnContext` 
 
 ### `Transport/SignalR`
 
-SignalR Hub 路由为 `/api/hubs/exec`，公开命令入口和一个只读能力探测方法：
+SignalR Hub 路由为 `/api/hubs/exec`，公开命令入口、执行 Provider 探测和 Agentflow checkpoint 查询：
 
 客户端固定使用 WebSocket 并跳过 negotiate，避免负载均衡把协商和握手分配到不同 Server。Desktop 的 Bearer Token 在 WebSocket 握手中按 SignalR 约定通过 `access_token` 查询参数传递；服务端只在该 Hub 的 WebSocket 请求中接受此参数，其他 HTTP 或 WebSocket 路径仍只接受 `Authorization` Header。反向代理访问日志不得记录查询参数。
 
 ```text
 DispatchCommand(AgentRunCommand)
 GetExecutionProvider() -> "InProcess" | "Distributed"
+GetAgentflowCheckpoints(agentflowId) -> AgentflowCheckpointAvailability[]
 ```
 
 服务端通过 typed client callback 返回消息：
@@ -212,7 +230,7 @@ GetExecutionProvider() -> "InProcess" | "Distributed"
 ReceiveMessage(AgwMessage)
 ```
 
-`ExecutionConnectionRegistry` 是 singleton，只负责把 SignalR `connectionId` 映射到 `ExecutionConnection`。每条 connection 拥有独立的异步 DI scope；`SignalRExecutionMessageSink` 通过 `IHubContext` 向指定客户端发送消息，不捕获短生命周期的 Hub 实例。
+`ExecutionConnectionRegistry` 是 singleton，只负责把 SignalR `connectionId` 映射到 `ExecutionConnection`，并在每次调用时校验当前认证用户 ID 与连接所有者一致。Bearer Token 使用 Token 创建者的用户 ID；durable execution、checkpoint、task session 和审计归属都使用该稳定 ID，而不是 Token 的显示名称。每条 connection 拥有独立的异步 DI scope；`SignalRExecutionMessageSink` 通过 `IHubContext` 向指定客户端发送消息，不捕获短生命周期的 Hub 实例。
 
 ## 总体架构
 
@@ -229,6 +247,8 @@ flowchart TB
     Dispatcher --> Mode["SetModeCommandHandler"]
     Dispatcher --> Permission["SetPermissionModeCommandHandler"]
     Dispatcher --> Human["HumanResponseCommandHandler"]
+    Dispatcher --> Subscribe["SubscribeExecutionCommandHandler"]
+    Dispatcher --> Checkpoint["ResumeCheckpointCommandHandler"]
 
     Setting --> Context["ExecutionConnectionContext"]
     Exec --> Context
@@ -236,6 +256,8 @@ flowchart TB
     Mode --> Context
     Permission --> Context
     Human --> Context
+    Subscribe --> Context
+    Checkpoint --> Context
     Context --> ProjectService["IProjectAppService"]
     Context --> TaskService["ITaskAppService"]
     Context --> Factory["RuntimeFactory"]
@@ -314,6 +336,12 @@ sequenceDiagram
 9. turn 结束后，runtime 清理 `ActiveTurn`；runtime 本身仍留在 connection context 中，供下一轮复用。
 
 Agent 执行结束时，`AgentRuntimeService` 会在 `finally` 中保存 SDK session state。External Agent 不持久化通用 SDK session state；Claude Code 与 Codex 通过 project conversation 作用域内的 task-session binding 保存 provider session id。Codex 从 `OnThreadStartedAsync` 获取 thread id，并以 `ThreadId + IsResume` 恢复；Claude Code 首次运行使用 `SessionId + IsResume=false`，从 `subtype=init` 消息确认真实 `session_id` 后保存，后续以 `Resume=<session_id> + IsResume=true` 恢复。
+
+External Agent SDK 自带的通用 ChatHistoryProvider 会被禁用，避免与 Agw 历史重复写入。`ExternalAgentChatHistoryAgent` 先立即持久化请求，再按 20 条响应或 1 秒窗口刷新流式更新；正常结束、取消、异常和消费方提前释放都会 flush 剩余内容。External Agent 返回的 System/User 展示消息会标记 `modelHistoryExcluded`，因此可在 UI 历史中显示，但不会重新进入模型上下文或跨目标 handoff。
+
+### 在执行目标之间交接 Conversation
+
+同一个 Project Conversation 从一个 Agent/Agentflow 切换到另一个目标时，`IConversationHandoffProvider` 只提取其他目标新增的公开文字，并从候选尾部选取总计最多 32,000 个字符。Tool 协议、控制消息、私有 reasoning、`modelHistoryExcluded` 展示记录和已经注入过的 handoff 都不会进入候选；相同 `messageId` 只保留最后一条。Handoff 消息只作为本次请求的 AI Context Provider 输入，不会再次持久化。当前用户消息保存 `conversationHandoffThroughSequence` cursor，后续切回同一目标时只注入 cursor 之后的新内容。
 
 ### Definition Agent 自动 Compaction
 
@@ -570,7 +598,7 @@ Execution__Distributed__EventStream__Redis__ConnectionString=<redis-connection-s
 1. 所有 Server 连接同一个 PostgreSQL；选择 Redis event stream 时还必须连接同一个 Redis。
 2. 所有 Server 共享 Data Protection key ring；否则新 Server 无法解密 manifest、checkpoint、pending、response 和 PostgreSQL stream payload。
 3. `Project.Workspace` 对所有可能执行 segment 的 Server 可见，并具有相同语义的挂载路径。
-4. 为 `durable_execution` 和 `execution_stream_entry` 两个实体生成、审核并应用 EF Core migration；本改造不会自动创建或应用 migration。
+4. 在启动副本前应用当前 PostgreSQL migration，确保 `durable_execution`、`execution_stream_entry` 和 Agentflow checkpoint 表存在；只有后续模型变更才需要生成新的双 Provider migration。
 5. 配置足够的 graceful termination 时间，并让有副作用的 Tool 实现业务幂等。
 6. 制定 PostgreSQL execution/stream 记录的清理策略；选择 Redis 时配置 Stream TTL。清理消息只影响中间回放，不会丢失 execution 状态、checkpoint 或 pending request。
 
