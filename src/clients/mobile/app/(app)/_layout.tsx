@@ -11,6 +11,7 @@ export default function AppLayout(): React.JSX.Element {
         options={{
           presentation: "card",
           animation: "slide_from_left",
+          animationMatchesGesture: true,
           animationTypeForReplace: "pop",
           fullScreenGestureEnabled: true,
         }}
