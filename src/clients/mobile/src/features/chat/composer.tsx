@@ -3,7 +3,6 @@ import { Image as ExpoImage } from "expo-image";
 import {
   ArrowUp,
   ChevronDown,
-  Eraser,
   ImagePlus,
   Lightbulb,
   Plus,
@@ -12,13 +11,11 @@ import {
   Square,
   Wrench,
   X,
-  Zap,
   type LucideIcon,
 } from "lucide-react-native";
 import React from "react";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -69,18 +66,6 @@ export function Composer({
     (composer.text.trim() || composer.attachments.length > 0),
   );
 
-  const clearConversation = () => {
-    if (!workspace.selectedContextId || workspace.isExecuting) return;
-    Alert.alert("Clear conversation?", "Messages and execution records will be removed.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Clear",
-        style: "destructive",
-        onPress: () => void workspace.clearCurrentContext(),
-      },
-    ]);
-  };
-
   return (
     <View style={[styles.container, { paddingBottom: Math.max(8, safeBottom) }]}>
       <View style={styles.topToolbar}>
@@ -107,18 +92,6 @@ export function Composer({
             divided={false}
             disabled={workspace.isExecuting}
             onPress={() => void composer.pickImages()}
-          />
-          <UtilityButton
-            icon={Zap}
-            label="Open quick text"
-            disabled={workspace.isExecuting}
-            onPress={composer.openQuickText}
-          />
-          <UtilityButton
-            icon={Eraser}
-            label="Clear conversation"
-            disabled={!workspace.selectedContextId || workspace.isExecuting}
-            onPress={clearConversation}
           />
           <UtilityButton
             icon={ArrowUp}
