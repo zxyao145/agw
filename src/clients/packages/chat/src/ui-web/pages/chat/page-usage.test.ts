@@ -8,7 +8,7 @@ const CHAT_ASIDE_COMPONENT_URL = new URL(
   "../../components/message/chat-aside.tsx",
   import.meta.url,
 );
-const TASK_CLIENT_URL = new URL("projects/src/services/task-client.ts", PACKAGES_URL);
+const TASK_CLIENT_URL = new URL("projects-core/src/task-client.ts", PACKAGES_URL);
 
 test("task client preserves normalized usage in context details", async () => {
   const taskClientSource = await readFile(TASK_CLIENT_URL, "utf8");

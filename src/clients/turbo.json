@@ -19,6 +19,10 @@
       "outputs": ["dist/**", "renderer/.next/**", "!renderer/.next/cache/**", "renderer/out/**"],
       "env": ["AGW_*", "CI"]
     },
+    "@agw/mobile#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"]
+    },
     "lint": {},
     "test": {
       "dependsOn": ["^build"],

@@ -17,7 +17,6 @@ export default function Explorer({
   recursiveMode,
   onOnlyDiffChange,
   onFileDeleted,
-  onLoadFileContent,
   onFileSelected,
   onFileReseted,
   onFileGitScopeChanged,
@@ -29,7 +28,6 @@ export default function Explorer({
   onOnlyDiffChange?: (value: boolean) => void;
 
   onFileDeleted: (filePath: string) => void;
-  onLoadFileContent: (filePath: string, scope?: GitDiffScope) => void;
   onFileSelected: (filePath: string | null, scope?: GitDiffScope) => void;
   onFileReseted: (filePath: string | null) => void;
   onFileGitScopeChanged: (path: string, targetScope: GitDiffScope) => void;
@@ -39,13 +37,18 @@ export default function Explorer({
   const [isLoading, setIsLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const reloadTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rootLoadGenerationRef = React.useRef(0);
 
   const loadRootDirectory = React.useCallback(async () => {
+    const generation = ++rootLoadGenerationRef.current;
     setIsLoading(true);
     setError(null);
 
     try {
       const data = await listFiles(projectId, "", onlyDiff, recursiveMode);
+      if (generation !== rootLoadGenerationRef.current) {
+        return;
+      }
       const items = data.items || [];
 
       if (recursiveMode && onlyDiff) {
@@ -56,12 +59,17 @@ export default function Explorer({
         setRootItems(items);
       }
     } catch (err) {
+      if (generation !== rootLoadGenerationRef.current) {
+        return;
+      }
       console.error("Error loading root directory:", err);
       setError((err as Error).message);
       setRootItems([]);
       setChangeGroups([]);
     } finally {
-      setIsLoading(false);
+      if (generation === rootLoadGenerationRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [projectId, onlyDiff, recursiveMode]);
 
@@ -96,7 +104,7 @@ export default function Explorer({
       loadRootDirectory();
       onFileDeleted(path);
     },
-    [loadRootDirectory],
+    [loadRootDirectory, onFileDeleted],
   );
 
   const handleFileReset = React.useCallback(
@@ -104,7 +112,7 @@ export default function Explorer({
       onFileReseted(path);
       loadRootDirectory();
     },
-    [onLoadFileContent, loadRootDirectory],
+    [onFileReseted, loadRootDirectory],
   );
 
   const handleFileSelect = React.useCallback(

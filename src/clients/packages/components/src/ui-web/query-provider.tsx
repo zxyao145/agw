@@ -9,7 +9,7 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
-function createQueryClient(): QueryClient {
+export function createQueryClient(): QueryClient {
   return new QueryClient({
     queryCache: new QueryCache({
       onError: (error) => {

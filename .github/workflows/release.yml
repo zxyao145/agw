@@ -96,6 +96,12 @@ jobs:
     with:
       version: ${{ needs.metadata.outputs.version }}
 
+  mobile-build:
+    needs: metadata
+    uses: ./.github/workflows/build-mobile.yml
+    with:
+      version: ${{ needs.metadata.outputs.version }}
+
   docker-build:
     needs: metadata
     strategy:
@@ -148,7 +154,7 @@ jobs:
           retention-days: 1
 
   docker-publish:
-    needs: [metadata, docker-build, desktop-build]
+    needs: [metadata, docker-build, desktop-build, mobile-build]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -197,7 +203,7 @@ jobs:
           "${{ needs.metadata.outputs.image_name }}:${{ needs.metadata.outputs.version }}"
 
   release:
-    needs: [metadata, docker-publish, desktop-build]
+    needs: [metadata, docker-publish, desktop-build, mobile-build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -207,7 +213,12 @@ jobs:
           pattern: agw-desktop-*
           path: artifacts
           merge-multiple: true
-      - name: Create GitHub Release and attach Desktop assets
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: agw-mobile-*
+          path: artifacts
+          merge-multiple: true
+      - name: Create GitHub Release and attach release assets
         env:
           GH_TOKEN: ${{ github.token }}
           PRERELEASE: ${{ needs.metadata.outputs.prerelease }}
@@ -217,12 +228,13 @@ jobs:
           set -euo pipefail
           mapfile -d '' files < <(
             find artifacts -type f \( \
-              -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.zip' \
+              -name '*.exe' -o -name '*.dmg' -o -name '*.deb' -o -name '*.zip' -o \
+              -name '*.apk' -o -name '*.ipa' \
             \) \
               -print0 | sort -z
           )
-          if [[ "${#files[@]}" -ne 9 ]]; then
-            echo "Expected 9 Desktop assets, found ${#files[@]}." >&2
+          if [[ "${#files[@]}" -ne 11 ]]; then
+            echo "Expected 9 Desktop and 2 Mobile assets, found ${#files[@]}." >&2
             exit 2
           fi
 

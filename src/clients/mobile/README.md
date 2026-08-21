@@ -1,108 +1,37 @@
 # Agw Mobile
 
-本目录包含 Agw 的 Expo 移动应用。`shared/` 是 Expo app 根目录，React Native 代码位于 `shared/src/rn/`。
+Agw Mobile 是基于 Expo SDK 57、Expo Router 和 React Native 的 iOS/Android 客户端。应用根目录就是本目录，并已加入 `src/clients` 的 pnpm Workspace 与 Turborepo。
 
-旧的顶层 SwiftUI/Kotlin 原生壳已废弃。需要原生工程时，通过 Expo prebuild 从 `shared/app.json` 重新生成 `shared/ios/` 和 `shared/android/`。
+## 开发
 
-## 环境要求
+在 `src/clients/` 运行：
 
-- Node.js `>= 22.11.0`
-- npm
-- Android Studio 或 Android SDK
-- Android Emulator 或真机，且 `adb` 可用
-- macOS + Xcode 运行 iOS 构建时需要
-
-## 首次安装
-
-```sh
-cd shared
-npm ci
+```bash
+pnpm install
+pnpm dev:mobile
+pnpm android:mobile
+pnpm ios:mobile
+pnpm --filter @agw/mobile typecheck
+pnpm --filter @agw/mobile test
+pnpm --filter @agw/mobile build
 ```
 
-## 本地开发
+`android/` 和 `ios/` 由 Expo Continuous Native Generation 生成并被 Git 忽略。需要检查原生配置时运行：
 
-启动 Expo：
-
-```sh
-cd shared
-npm start
+```bash
+pnpm --filter @agw/mobile native:generate -- --clean
 ```
 
-默认启动命令使用 development client，避免 Expo Go/launcher 多 Host 兼容问题影响 React Native DevTools 的 Network inspection。
+## 连接 Agw Server
 
-如需显式使用 Expo Go：
+在 Agw Web 的 Settings 中创建独立 API Token，并复制 Base64URL Mobile 配置。Mobile Settings 支持导入该 v2 配置，也支持手工输入 Profile 名称、根 Server URL 和 token。
 
-```sh
-cd shared
-npm run start:expo-go
-```
+- Profile 元数据保存在 AsyncStorage。
+- token 按 Profile 分别保存在 Expo SecureStore。
+- 旧版 `agw.localConfig` 会在首次启动时自动迁移。
+- HTTP 连接必须确认明文传输风险；公网使用仍建议 HTTPS。
+- 删除 Mobile Profile 不会撤销服务端 token，撤销操作需在 Agw Web 完成。
 
-运行 Android development build：
+## 共享代码边界
 
-```sh
-cd shared
-npm run android
-```
-
-运行 iOS development build：
-
-```sh
-cd shared
-npm run ios
-```
-
-生成原生工程：
-
-```sh
-cd shared
-npm run prebuild
-```
-
-`shared/android/` 和 `shared/ios/` 是 Expo prebuild 输出，默认不作为手写源码维护。优先通过 `shared/app.json`、Expo config plugins 和 npm 依赖表达原生配置。
-
-## React Native 代码
-
-常用文件：
-
-- `shared/index.js`：Expo 入口，使用 `registerRootComponent(App)`。
-- `shared/app.json`：Expo app config，包含 bundle id、Android package 和插件配置。
-- `shared/src/rn/App.tsx`：React Native 页面入口。
-- `shared/src/rn/routes.ts`：页面 route 定义。
-- `shared/src/rn/config/config-store.ts`：通过 `expo-secure-store` 保存本地配置。
-
-本地配置使用版本 2，保存 Server 根 URL、API major version 和 Bearer API Token。Token 存在 Expo SecureStore 中，请求通过 `Authorization: Bearer agw_...` 发送。旧安装里的文件配置路径不再读取，也不做迁移；用户需要重新导入或保存配置。
-
-## 测试
-
-```sh
-cd shared
-npm test
-npm run typecheck
-npx expo config
-npx expo install --check
-```
-
-Jest 测试位于 `shared/__tests__/`，文件名使用 `*.test.ts`、`*.test.tsx` 或 `*.test.js`。
-
-## 常见问题
-
-如果依赖版本与 Expo SDK 不匹配：
-
-```sh
-cd shared
-npx expo install --check
-npx expo install --fix
-```
-
-如果需要重新生成原生目录：
-
-```sh
-cd shared
-npm run prebuild -- --clean
-```
-
-如果 Android 设备无法连接本机开发服务：
-
-```sh
-adb reverse tcp:8081 tcp:8081
-```
+Mobile 通过 workspace 依赖复用 `@agw/api`、`@agw/execution-core`、`@agw/chat-core` 和 `@agw/projects-core`，不再维护独立 OpenAPI 副本或 Metro 源码别名，也不导入 Web UI。

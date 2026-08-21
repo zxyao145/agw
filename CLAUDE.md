@@ -44,7 +44,7 @@ Api owns protocol adapters, Application owns use cases, Domain owns data-only en
 
 ### Client Workspace (`src/clients/`)
 
-`@agw/web`, `@agw/desktop`, and packages under `src/clients/packages/` share a pnpm Workspace and Turborepo. Run pnpm commands from `src/clients/`; Expo mobile remains a separate npm workspace.
+`@agw/web`, `@agw/desktop`, `@agw/mobile`, and packages under `src/clients/packages/` share a pnpm Workspace and Turborepo. Run pnpm commands from `src/clients/`.
 
 ### Web Client (`src/clients/web/`)
 
@@ -60,7 +60,7 @@ Electron entry points are under `src/clients/desktop/src/{main,preload}/`. Deskt
 
 ### Mobile Client (`src/clients/mobile/`)
 
-The Expo app root is `src/clients/mobile/shared`. Follow the nested `src/clients/mobile/AGENTS.md`, run mobile npm commands from `shared/`, and do not hand-maintain generated native projects.
+The Expo Router app root is `src/clients/mobile`. Follow the nested `src/clients/mobile/AGENTS.md`, run Mobile pnpm commands from `src/clients/`, and do not hand-maintain generated native projects.
 
 ## Deeper Documentation
 
@@ -125,6 +125,9 @@ Run pnpm commands from `src/clients/`. The single install covers Web, Desktop, a
 ```bash
 pnpm install
 pnpm dev:web
+pnpm dev:mobile
+pnpm android:mobile
+pnpm ios:mobile
 pnpm build
 pnpm lint
 pnpm test
@@ -198,6 +201,7 @@ Read [`docs/rules.md`](docs/rules.md) before coding. Its rules are mandatory.
 - Keep business code inside its owning `src/clients/packages/<domain>/` package; `@agw/web` routes should remain thin composition adapters.
 - Keep platform-neutral UI in `@agw/components`. Desktop-only Electron React adaptation belongs in `src/clients/desktop/renderer/src/runtime/`, and its cross-process data shapes belong in `src/clients/desktop/src/shared/contracts/`.
 - Web and Desktop must not import or depend on each other; application dependencies must resolve through root `src/clients/packages/` workspace packages.
+- Mobile imports only React Native-safe packages such as `@agw/chat-core` and `@agw/projects-core`; it must not import Web/Desktop applications or Web UI barrels.
 - Packages must not import `@agw/web`, `web/src`, or the Web `@/` alias. Run `pnpm test:boundaries` after changing package boundaries.
 
 ## Coding Conventions

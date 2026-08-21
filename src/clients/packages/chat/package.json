@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./core": "./src/core.ts",
     "./math.css": "./src/math.css"
   },
   "scripts": {
@@ -16,7 +17,9 @@
   },
   "dependencies": {
     "@agw/api": "workspace:*",
+    "@agw/chat-core": "workspace:*",
     "@agw/components": "workspace:*",
+    "@agw/execution-core": "workspace:*",
     "@agw/projects": "workspace:*",
     "@microsoft/signalr": "10.0.0",
     "fuse.js": "7.1.0",
@@ -30,14 +33,17 @@
   },
   "devDependencies": {
     "@types/node": "25.5.0",
+    "next": "16.2.1",
     "oxfmt": "0.41.0",
     "oxlint": "1.56.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
     "tsx": "4.21.0",
     "typescript": "5.9.3"
   },
   "peerDependencies": {
     "next": "16.2.1",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
   }
 }

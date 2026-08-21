@@ -21,7 +21,7 @@ const CONVERSATION_LIST_URL = new URL(
   "projects/src/ui-web/components/task/conversation-list.tsx",
   PACKAGES_URL,
 );
-const TASK_CLIENT_URL = new URL("projects/src/services/task-client.ts", PACKAGES_URL);
+const TASK_CLIENT_URL = new URL("projects-core/src/task-client.ts", PACKAGES_URL);
 
 test("Web and Desktop routes compose one shared Chat workspace", async () => {
   const [webPageSource, desktopPageSource, workspaceSource, boundarySource] = await Promise.all([

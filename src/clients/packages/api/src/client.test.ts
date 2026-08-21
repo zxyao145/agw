@@ -169,3 +169,37 @@ test("desktop DELETE refreshes stale antiforgery state and retries once", async 
     "csrf-2",
   );
 });
+
+test("Bearer API clients are isolated and never request antiforgery tokens", async (t) => {
+  const { createBearerApiClient } = await import("./client" + ".ts");
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({ url: String(input), init });
+    return Response.json({ code: 0, title: "OK", data: { saved: true } });
+  }) as typeof fetch;
+  t.after(() => (globalThis.fetch = originalFetch));
+
+  const client = createBearerApiClient({
+    baseUrl: "https://mobile.example.com/",
+    token: " agw_mobile-token ",
+  });
+  const result = await client.apiPut(
+    "/api/projects/{projectId}/contexts/{contextId}/title" as never,
+    {
+      params: { path: { projectId: "project-1", contextId: "context/1" } },
+      body: { title: "Mobile" },
+    } as never,
+  );
+
+  assert.deepEqual(result, { saved: true });
+  assert.equal(requests.length, 1);
+  assert.equal(
+    requests[0]?.url,
+    "https://mobile.example.com/api/projects/project-1/contexts/context%2F1/title",
+  );
+  const headers = requests[0]?.init?.headers as Record<string, string> | undefined;
+  assert.equal(headers?.Authorization, "Bearer agw_mobile-token");
+  assert.equal(headers?.["X-CSRF-TOKEN"], undefined);
+  assert.equal(requests[0]?.init?.credentials, "omit");
+});

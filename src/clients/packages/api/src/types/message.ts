@@ -19,11 +19,6 @@ export interface AiMessage {
   type?: string;
 }
 
-export type ProcessedMessageItem =
-  | { type: "accordion"; messages: AiMessage[]; toolName: string }
-  | { type: "normal"; message: AiMessage }
-  | { type: "result"; message: AiMessage };
-
 export const MessageContentType = {
   DataContent: "DataContent",
   ErrorContent: "ErrorContent",

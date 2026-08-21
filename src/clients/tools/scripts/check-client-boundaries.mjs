@@ -14,12 +14,14 @@ const requiredPackages = [
   "api",
   "auth",
   "chat",
+  "chat-core",
   "components",
   "http-client",
   "integrations",
   "jobs",
   "observability",
   "projects",
+  "projects-core",
   "providers",
   "settings",
   "skills",
@@ -113,6 +115,61 @@ assert.equal(
   undefined,
   "@agw/desktop must not depend on @agw/web",
 );
+
+const mobileRoot = join(clientsRoot, "mobile");
+const mobileManifest = readManifest(mobileRoot);
+assert.equal(mobileManifest.name, "@agw/mobile", "Mobile must be a pnpm workspace application");
+assert.equal(
+  existsSync(join(mobileRoot, "shared", "package.json")),
+  false,
+  "Mobile must use src/clients/mobile as its Expo root",
+);
+assert.equal(
+  existsSync(join(mobileRoot, "package-lock.json")),
+  false,
+  "Mobile must use the clients pnpm lockfile",
+);
+for (const dependency of ["@agw/web", "@agw/desktop", "@agw/components"]) {
+  assert.equal(
+    mobileManifest.dependencies?.[dependency] ?? mobileManifest.devDependencies?.[dependency],
+    undefined,
+    `@agw/mobile must not depend on ${dependency}`,
+  );
+}
+
+for (const filePath of [
+  ...sourceFiles(join(mobileRoot, "app")),
+  ...sourceFiles(join(mobileRoot, "src")),
+]) {
+  const source = readFileSync(filePath, "utf8");
+  const sourcePath = relative(clientsRoot, filePath);
+  assert.doesNotMatch(
+    source,
+    /["']@agw\/(?:web|desktop|components)(?:[\/"'])/u,
+    `${sourcePath} imports a Web or Desktop boundary`,
+  );
+  assert.doesNotMatch(source, /["']@agw\/chat["']/u, `${sourcePath} must import @agw/chat-core`);
+  assert.doesNotMatch(
+    source,
+    /["']@agw\/projects["']/u,
+    `${sourcePath} must import @agw/projects-core`,
+  );
+  assert.doesNotMatch(
+    source,
+    /(?:web|desktop)\/src/u,
+    `${sourcePath} imports another application source tree`,
+  );
+  assert.doesNotMatch(
+    source,
+    /mobile\/shared|shared\/src\/rn/u,
+    `${sourcePath} imports the removed Mobile architecture`,
+  );
+  assert.doesNotMatch(
+    source,
+    /\.\.\/(?:\.\.\/)*packages\//u,
+    `${sourcePath} bypasses workspace package exports`,
+  );
+}
 
 const forbiddenWebDirectories = ["api", "components", "features", "hooks", "lib", "types"];
 for (const directory of forbiddenWebDirectories) {
