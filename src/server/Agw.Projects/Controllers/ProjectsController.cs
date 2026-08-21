@@ -1,8 +1,8 @@
-using Agw.Shared;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Extensions;
 using Agw.Shared.Results;
 using Bens.Results;
 using Microsoft.AspNetCore.Mvc;
@@ -56,7 +56,7 @@ public class ProjectsController : ControllerBase
             );
         }
 
-        var user = User?.Identity?.Name ?? Constants.AdminUserName;
+        var user = User.GetUserId();
         var project = new Project
         {
             Name = request.Name,
@@ -100,7 +100,7 @@ public class ProjectsController : ControllerBase
             );
         }
 
-        var user = User?.Identity?.Name ?? Constants.AdminUserName;
+        var user = User.GetUserId();
 
         var updated = await _projectAppService.UpdateAsync(
             id,

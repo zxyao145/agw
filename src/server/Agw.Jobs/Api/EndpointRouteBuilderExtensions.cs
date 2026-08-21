@@ -1,9 +1,9 @@
 using System.Security.Claims;
 using Agw.Jobs.Application.Contracts;
 using Agw.Jobs.Application.Services;
-using Agw.Shared;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Extensions;
 using Agw.Shared.Results;
 using Bens.Results;
 using Microsoft.AspNetCore.Builder;
@@ -59,8 +59,8 @@ public static class EndpointRouteBuilderExtensions
         ClaimsPrincipal user
     )
     {
-        var userName = user.Identity?.Name ?? Constants.AdminUserName;
-        var job = await jobAppService.CreateAsync(request, userName);
+        var userId = user.GetUserId();
+        var job = await jobAppService.CreateAsync(request, userId);
         return ApiResult.Ok(job);
     }
 
@@ -71,8 +71,8 @@ public static class EndpointRouteBuilderExtensions
         ClaimsPrincipal user
     )
     {
-        var userName = user.Identity?.Name ?? Constants.AdminUserName;
-        var job = await jobAppService.UpdateAsync(id, request, userName);
+        var userId = user.GetUserId();
+        var job = await jobAppService.UpdateAsync(id, request, userId);
         return job == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(job);
     }
 
@@ -82,8 +82,8 @@ public static class EndpointRouteBuilderExtensions
         ClaimsPrincipal user
     )
     {
-        var userName = user.Identity?.Name ?? Constants.AdminUserName;
-        var job = await jobAppService.UpdateEnabledAsync(request, userName);
+        var userId = user.GetUserId();
+        var job = await jobAppService.UpdateEnabledAsync(request, userId);
         return job == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(job);
     }
 

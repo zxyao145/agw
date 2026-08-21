@@ -45,6 +45,7 @@ internal sealed class ExecutionConnectionContextFactory
     /// </summary>
     public ExecutionConnectionContext Create(
         string userName,
+        string userId,
         IExecutionMessageSink messageSink,
         CancellationToken hostToken
     )
@@ -53,6 +54,7 @@ internal sealed class ExecutionConnectionContextFactory
             _executionProvider == ExecutionProvider.Distributed
                 ? new DurableExecutionSession(
                     userName,
+                    userId,
                     messageSink,
                     hostToken,
                     _durableCoordinator
@@ -64,6 +66,7 @@ internal sealed class ExecutionConnectionContextFactory
                 : null;
         return new ExecutionConnectionContext(
             userName,
+            userId,
             messageSink,
             hostToken,
             _runtimeFactory,

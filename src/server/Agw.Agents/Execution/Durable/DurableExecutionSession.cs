@@ -17,6 +17,7 @@ namespace Agw.Agents.Execution.Durable;
 internal sealed class DurableExecutionSession : IAsyncDisposable
 {
     private readonly string _userName;
+    private readonly string _userId;
     private readonly IExecutionMessageSink _messageSink;
     private readonly CancellationToken _hostToken;
     private readonly DurableExecutionCoordinator _coordinator;
@@ -30,12 +31,14 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
     /// </summary>
     public DurableExecutionSession(
         string userName,
+        string userId,
         IExecutionMessageSink messageSink,
         CancellationToken hostToken,
         DurableExecutionCoordinator coordinator
     )
     {
         _userName = userName;
+        _userId = string.IsNullOrWhiteSpace(userId) ? Constants.AdminUserId : userId.Trim();
         _messageSink = messageSink;
         _hostToken = hostToken;
         _coordinator = coordinator;
@@ -76,7 +79,7 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
                 : Guid.CreateVersion7();
         command.ExecutionId = executionId;
         await _coordinator
-            .StartAsync(executionId, _userName, command, task, settings, cancellationToken)
+            .StartAsync(executionId, _userName, _userId, command, task, settings, cancellationToken)
             .ConfigureAwait(false);
         await AttachAsync(executionId, cursor: null, cancellationToken).ConfigureAwait(false);
     }

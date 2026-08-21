@@ -3,6 +3,7 @@ using Agw.Agents.Definitions.Contracts;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Extensions;
 using Agw.Shared.Results;
 using Bens.Results;
 using Microsoft.AspNetCore.Mvc;
@@ -58,7 +59,7 @@ public class McpToolServersController : ControllerBase
     [ProducesApiResult(typeof(McpServer))]
     public async Task<IActionResult> CreateAsync([FromBody] McpToolServerCreateRequest request)
     {
-        var user = User?.Identity?.Name ?? Constants.AdminUserName;
+        var user = User.GetUserId();
         var server = new McpServer
         {
             Name = request.Name,
@@ -81,7 +82,7 @@ public class McpToolServersController : ControllerBase
     [ProducesApiResult(typeof(McpServer))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] McpToolServerUpdateRequest request)
     {
-        var user = User?.Identity?.Name ?? Constants.AdminUserName;
+        var user = User.GetUserId();
         var updated = await _mcpToolServerAppService.UpdateMcpToolServerAsync(
             id,
             server =>

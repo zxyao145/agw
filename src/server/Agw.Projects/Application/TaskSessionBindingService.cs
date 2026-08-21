@@ -79,7 +79,7 @@ public class TaskSessionBindingService : ITaskSessionBindingService
         var normalizedAgentName = NormalizeExternalAgentName(externalAgentName);
         var normalizedContextId = NormalizeContextId(contextId);
         var normalizedProviderSessionId = NormalizeProviderSessionId(providerSessionId);
-        var normalizedUser = string.IsNullOrWhiteSpace(user) ? Constants.AdminUserName : user.Trim();
+        var normalizedUser = string.IsNullOrWhiteSpace(user) ? Constants.AdminUserId : user.Trim();
         var now = _timeProvider.GetUtcNow();
 
         if (string.IsNullOrWhiteSpace(normalizedAgentName))

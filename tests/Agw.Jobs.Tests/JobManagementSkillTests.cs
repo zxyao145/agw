@@ -84,7 +84,7 @@ public class JobManagementSkillTests
         var projectId = Guid.CreateVersion7();
         var agentId = Guid.CreateVersion7();
         var skill = fixture.CreateSkill(projectId);
-        using var context = fixture.PushInteractiveContext(projectId, "skill-user");
+        using var context = fixture.PushInteractiveContext(projectId, "display-name", "skill-user");
 
         var created = await RunScriptAsync<JobSkillResponse>(
             skill,
@@ -332,7 +332,7 @@ public class JobManagementSkillTests
 
         public AgentSkill CreateSkill(Guid projectId) => Registration.Create(projectId);
 
-        public IDisposable PushInteractiveContext(Guid projectId, string userName)
+        public IDisposable PushInteractiveContext(Guid projectId, string userName, string? userId = null)
         {
             var contextId = Guid.CreateVersion7().ToString("D");
             return TurnContextAccessor.Push(
@@ -351,6 +351,9 @@ public class JobManagementSkillTests
                     workspace: string.Empty,
                     messageSink: null!
                 )
+                {
+                    UserId = userId ?? userName,
+                }
             );
         }
 

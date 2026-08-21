@@ -172,6 +172,8 @@ internal sealed class DurableExecutionStore
         {
             Id = executionId,
             UserName = userName,
+            CreateBy = userId,
+            UpdateBy = userId,
             ManifestJson = manifestJson,
             Status = DurableExecutionStatus.Queued,
             SegmentIndex = 0,

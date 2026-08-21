@@ -1,11 +1,9 @@
-using System.Security.Claims;
 using System.Text.Json;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Turns;
-using Agw.Auth.Application;
 using Agw.Infrastructure.Data;
 using Agw.Shared;
 using Agw.Shared.AgwMsgVm;
@@ -83,11 +81,15 @@ public sealed class DurableExecutionStoreTests
         );
 
         Assert.Equal("stable-user-id", snapshot.Manifest.ResolveUserId());
+        var record = await database.Context.DurableExecutions.SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("user-name", record.UserName);
+        Assert.Equal("stable-user-id", record.CreateBy);
+        Assert.Equal("stable-user-id", record.UpdateBy);
         Assert.Equal(Constants.AdminUserId, CreateManifest().ResolveUserId());
     }
 
     [Fact]
-    public async Task Coordinator_StartAsync_CapturesAmbientUserIdOnceInManifest()
+    public async Task Coordinator_StartAsync_PersistsExplicitUserIdInManifest()
     {
         await using var database = await TestDatabase.CreateAsync();
         var store = database.CreateStore();
@@ -104,29 +106,18 @@ public sealed class DurableExecutionStoreTests
         );
         var executionId = Guid.CreateVersion7();
         var task = CreateTask();
-        var previous = UserInfoUtil.Current;
-        UserInfoUtil.Current = new ClaimsPrincipal(
-            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "ambient-user-id")], "test")
+        await coordinator.StartAsync(
+            executionId,
+            "display-name",
+            "explicit-user-id",
+            new ExecCommand(AgentRuntimeType.Agent, CreateInput("hello")) { AgentId = Guid.CreateVersion7() },
+            task,
+            CreateSettings(task.ProjectId, task.ContextId),
+            TestContext.Current.CancellationToken
         );
 
-        try
-        {
-            await coordinator.StartAsync(
-                executionId,
-                "display-name",
-                new ExecCommand(AgentRuntimeType.Agent, CreateInput("hello")) { AgentId = Guid.CreateVersion7() },
-                task,
-                CreateSettings(task.ProjectId, task.ContextId),
-                TestContext.Current.CancellationToken
-            );
-        }
-        finally
-        {
-            UserInfoUtil.Current = previous;
-        }
-
         var snapshot = await store.GetAsync(executionId, TestContext.Current.CancellationToken);
-        Assert.Equal("ambient-user-id", snapshot.Manifest.ResolveUserId());
+        Assert.Equal("explicit-user-id", snapshot.Manifest.ResolveUserId());
     }
 
     [Fact]

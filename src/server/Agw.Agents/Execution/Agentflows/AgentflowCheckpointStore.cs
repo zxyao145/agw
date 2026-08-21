@@ -45,6 +45,7 @@ public sealed class AgentflowCheckpointStore
         Guid taskId,
         Guid agentflowId,
         string userName,
+        string userId,
         bool isDurable,
         string definitionFingerprint,
         DurableAgentflowCheckpoint checkpoint,
@@ -56,6 +57,7 @@ public sealed class AgentflowCheckpointStore
         {
             return null;
         }
+        userId = string.IsNullOrWhiteSpace(userId) ? Constants.AdminUserId : userId.Trim();
 
         var occurrenceId = CreateDeterministicGuid(
             sourceExecutionId ?? taskId,
@@ -150,9 +152,9 @@ public sealed class AgentflowCheckpointStore
             DefinitionFingerprint = definitionFingerprint,
             MarkersJson = JsonSerializer.Serialize(markers, JsonOptions),
             CheckpointJson = DurableExecutionJson.Serialize(checkpoint),
-            CreateBy = userName,
+            CreateBy = userId,
             CreateTime = now,
-            UpdateBy = userName,
+            UpdateBy = userId,
             UpdateTime = now,
         };
         dbContext.Add(record);
@@ -475,6 +477,7 @@ public sealed class AgentflowCheckpointStore
                 .ToArray(),
         };
         var now = _timeProvider.GetUtcNow();
+        var userId = manifest.ResolveUserId();
         dbContext.Add(
             new DurableExecutionRecord
             {
@@ -486,9 +489,9 @@ public sealed class AgentflowCheckpointStore
                 CheckpointJson = checkpointRecord.CheckpointJson,
                 StateChangedAt = now,
                 StateVersion = Guid.CreateVersion7(),
-                CreateBy = userName,
+                CreateBy = userId,
                 CreateTime = now,
-                UpdateBy = userName,
+                UpdateBy = userId,
                 UpdateTime = now,
             }
         );

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Agw.Shared;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Extensions;
 
 namespace Agw.Auth.Application;
 
@@ -14,7 +15,7 @@ public static class UserInfoUtil
         set => CurrentUser.Value = value;
     }
 
-    public static string? UserId => Current?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Current?.Identity?.Name;
+    public static string? UserId => Current?.GetUserId();
 
     public static bool IsAuthenticated => Current?.Identity?.IsAuthenticated == true;
 

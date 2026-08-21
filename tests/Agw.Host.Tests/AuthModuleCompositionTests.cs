@@ -142,8 +142,15 @@ public sealed class AuthModuleCompositionTests
         public Task<bool> RevokeTokenAsync(Guid id, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public Task<bool> ValidateTokenAsync(string token, CancellationToken cancellationToken = default) =>
-            Task.FromResult(string.Equals(token, "agw_valid", StringComparison.Ordinal));
+        public Task<ApiTokenIdentity?> ValidateTokenAsync(
+            string token,
+            CancellationToken cancellationToken = default
+        ) =>
+            Task.FromResult(
+                string.Equals(token, "agw_valid", StringComparison.Ordinal)
+                    ? new ApiTokenIdentity("token-creator")
+                    : null
+            );
 
         public Task UpdatePasswordAsync(string passwordHash, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();

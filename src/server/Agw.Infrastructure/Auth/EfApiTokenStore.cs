@@ -3,6 +3,7 @@ using System.Text;
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
+using Agw.Shared;
 using Agw.Shared.Data.Entities.Auth;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -82,27 +83,27 @@ public sealed class EfApiTokenStore : IApiTokenStore
         return true;
     }
 
-    public async Task<bool> ValidateTokenAsync(string token, CancellationToken cancellationToken = default)
+    public async Task<ApiTokenIdentity?> ValidateTokenAsync(string token, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(token) || !token.StartsWith("agw_", StringComparison.Ordinal))
         {
-            return false;
+            return null;
         }
 
         var prefix = token[..Math.Min(token.Length, PrefixLength)];
-        var hashes = await _context
+        var candidates = await _context
             .ApiTokens.AsNoTracking()
             .Where(candidate => candidate.Prefix == prefix)
-            .Select(candidate => candidate.SecretHash)
+            .Select(candidate => new { candidate.SecretHash, candidate.CreateBy })
             .ToArrayAsync(cancellationToken);
         var candidateHash = Convert.FromHexString(Hash(token));
 
-        foreach (var hash in hashes)
+        foreach (var candidate in candidates)
         {
             byte[] storedHash;
             try
             {
-                storedHash = Convert.FromHexString(hash);
+                storedHash = Convert.FromHexString(candidate.SecretHash);
             }
             catch (FormatException)
             {
@@ -111,11 +112,14 @@ public sealed class EfApiTokenStore : IApiTokenStore
 
             if (CryptographicOperations.FixedTimeEquals(candidateHash, storedHash))
             {
-                return true;
+                var userId = string.IsNullOrWhiteSpace(candidate.CreateBy)
+                    ? Constants.AdminUserId
+                    : candidate.CreateBy.Trim();
+                return new ApiTokenIdentity(userId);
             }
         }
 
-        return false;
+        return null;
     }
 
     private static string CreateSecret()

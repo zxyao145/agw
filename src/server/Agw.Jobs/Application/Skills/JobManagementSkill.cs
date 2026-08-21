@@ -103,7 +103,7 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
         CancellationToken cancellationToken = default
     )
     {
-        var userName = RequireInteractiveUser();
+        var userId = RequireInteractiveUserId();
         if (string.IsNullOrWhiteSpace(prompt))
         {
             throw new AgwException(ErrorCodes.InvalidParam, "Job prompt is required.");
@@ -134,7 +134,7 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
                 MaxRetryCount = maxRetryCount,
                 IsEnabled = isEnabled,
             },
-            userName
+            userId
         );
         return Map(job);
     }
@@ -155,7 +155,7 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
         CancellationToken cancellationToken = default
     )
     {
-        var userName = RequireInteractiveUser();
+        var userId = RequireInteractiveUserId();
         ValidatePatch(
             name,
             prompt,
@@ -189,7 +189,7 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
                 IsEnabled = isEnabled ?? existing.IsEnabled,
                 Status = existing.Status,
             },
-            userName,
+            userId,
             recalculateSchedule: triggerType != null || triggerValue != null,
             cancellationToken: cancellationToken
         );
@@ -205,7 +205,7 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
         CancellationToken cancellationToken
     )
     {
-        _ = RequireInteractiveUser();
+        _ = RequireInteractiveUserId();
         if (!Guid.TryParse(confirmation, out var confirmedJobId) || confirmedJobId != jobId)
         {
             throw new AgwException(ErrorCodes.InvalidParam, "Delete confirmation must exactly match the job ID.");
@@ -217,7 +217,7 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
         return Map(deleted ?? throw new AgwException(ErrorCodes.JobNotFound));
     }
 
-    private string RequireInteractiveUser()
+    private string RequireInteractiveUserId()
     {
         var context = _turnContextAccessor.Current;
         if (context == null || ProjectDefaults.GetDefaultProjectIdentifier(context.ProjectId) != _projectId)
@@ -225,7 +225,7 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
             throw new AgwException(ErrorCodes.InteractiveAdminRequired);
         }
 
-        return string.IsNullOrWhiteSpace(context.UserName) ? Constants.AdminUserName : context.UserName;
+        return string.IsNullOrWhiteSpace(context.UserId) ? Constants.AdminUserId : context.UserId;
     }
 
     private static void ValidatePatch(

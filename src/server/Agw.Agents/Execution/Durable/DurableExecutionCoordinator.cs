@@ -3,7 +3,6 @@ using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Turns;
-using Agw.Auth.Application;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Contracts.Projects;
@@ -61,6 +60,7 @@ internal sealed class DurableExecutionCoordinator
     public async Task StartAsync(
         Guid executionId,
         string userName,
+        string userId,
         ExecCommand command,
         TaskProjection task,
         ExecutionSettings settings,
@@ -80,7 +80,7 @@ internal sealed class DurableExecutionCoordinator
             .RegisterAsync(
                 executionId,
                 userName,
-                ResolveCurrentUserId(),
+                userId,
                 agentId,
                 command.AgentType,
                 command.Input,
@@ -89,12 +89,6 @@ internal sealed class DurableExecutionCoordinator
                 cancellationToken
             )
             .ConfigureAwait(false);
-    }
-
-    private static string ResolveCurrentUserId()
-    {
-        var userId = UserInfoUtil.UserId;
-        return string.IsNullOrWhiteSpace(userId) ? Constants.AdminUserId : userId.Trim();
     }
 
     /// <summary>

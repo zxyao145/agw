@@ -32,7 +32,7 @@ public sealed class ExecutionConnectionRegistry : IAsyncDisposable
         _loggerFactory = loggerFactory;
     }
 
-    public void Connect(string connectionId, string userName)
+    public void Connect(string connectionId, string userName, string userId)
     {
         var scope = _scopeFactory.CreateAsyncScope();
         var logger = _loggerFactory.CreateLogger<ExecutionConnection>();
@@ -45,7 +45,7 @@ public sealed class ExecutionConnectionRegistry : IAsyncDisposable
         );
         var context = scope
             .ServiceProvider.GetRequiredService<ExecutionConnectionContextFactory>()
-            .Create(userName, sink, _hostToken);
+            .Create(userName, userId, sink, _hostToken);
         connection = new ExecutionConnection(
             connectionId,
             userName,

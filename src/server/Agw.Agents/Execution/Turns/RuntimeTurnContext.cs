@@ -45,6 +45,8 @@ public sealed record RuntimeTurnContext
 
     public string UserName { get; }
 
+    public string UserId { get; init; } = Constants.AdminUserId;
+
     public string Workspace { get; }
 
     public IExecutionMessageSink MessageSink { get; }

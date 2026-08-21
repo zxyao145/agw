@@ -80,6 +80,7 @@ public class ExecutionConnectionTests
         };
         var context = new ExecutionConnectionContext(
             "user",
+            "user-id",
             new NullSink(),
             CancellationToken.None,
             runtimeFactory,

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Agw.Auth.Api;
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;
+using Agw.Shared;
 using Agw.Shared.Exceptions;
 using Bens.Results;
 using Microsoft.AspNetCore.Authentication;
@@ -50,7 +51,11 @@ public sealed class AuthControllerTests
         await controller.Login(new LoginRequest("correct-password"));
 
         Assert.NotNull(authentication.SignedInPrincipal);
-        Assert.Equal("admin", authentication.SignedInPrincipal.Identity?.Name);
+        Assert.Equal(Constants.AdminUserName, authentication.SignedInPrincipal.Identity?.Name);
+        Assert.Equal(
+            Constants.AdminUserId,
+            authentication.SignedInPrincipal.FindFirst(ClaimTypes.NameIdentifier)?.Value
+        );
         Assert.Equal("7", authentication.SignedInPrincipal.FindFirst(AgwAuthDefaults.SessionVersionClaimType)?.Value);
     }
 
@@ -186,8 +191,10 @@ public sealed class AuthControllerTests
         public Task<bool> RevokeTokenAsync(Guid id, CancellationToken cancellationToken = default) =>
             Task.FromResult(true);
 
-        public Task<bool> ValidateTokenAsync(string token, CancellationToken cancellationToken = default) =>
-            Task.FromResult(false);
+        public Task<ApiTokenIdentity?> ValidateTokenAsync(
+            string token,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<ApiTokenIdentity?>(null);
 
         public Task UpdatePasswordAsync(string passwordHash, CancellationToken cancellationToken = default)
         {
