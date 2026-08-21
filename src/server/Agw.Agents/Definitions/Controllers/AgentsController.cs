@@ -4,6 +4,7 @@ using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Extensions;
 using Agw.Shared.Results;
 using Bens.Results;
 using Microsoft.AspNetCore.Mvc;
@@ -79,7 +80,7 @@ public class AgentsController : ControllerBase
             return ApiResult.BadRequest(toolsError, ErrorCodes.InvalidParam.Code);
         }
 
-        var user = User?.Identity?.Name ?? Constants.AdminUserName;
+        var user = User.GetUserId();
         var agent = new Agent
         {
             DisplayName = request.DisplayName,
@@ -115,7 +116,7 @@ public class AgentsController : ControllerBase
             return ApiResult.BadRequest(toolsError, ErrorCodes.InvalidParam.Code);
         }
 
-        var user = User?.Identity?.Name ?? Constants.AdminUserName;
+        var user = User.GetUserId();
         var updated = await _agentAppService.UpdateAgentAsync(id, request.ToCommand(), user);
 
         return updated == null

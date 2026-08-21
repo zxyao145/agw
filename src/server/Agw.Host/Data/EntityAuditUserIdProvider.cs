@@ -1,6 +1,7 @@
 using Agw.Auth.Application;
 using Agw.Shared;
 using Agw.Shared.Data.Abstractions;
+using Agw.Shared.Extensions;
 
 namespace Agw.Host.Data;
 
@@ -15,7 +16,6 @@ public class EntityAuditUserIdProvider : IEntityAuditUserIdProvider
 
     public string GetUserId()
     {
-        var userId = _userInfoService.UserId;
-        return string.IsNullOrWhiteSpace(userId) ? Constants.AdminUserId : userId;
+        return _userInfoService.Current?.GetUserId() ?? Constants.AdminUserId;
     }
 }

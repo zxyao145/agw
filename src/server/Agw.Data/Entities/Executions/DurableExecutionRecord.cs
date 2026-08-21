@@ -59,9 +59,9 @@ public sealed class DurableExecutionRecord : BaseEntity
     public Guid Id { get; set; }
 
     /// <summary>
-    /// 获取或设置拥有该执行的用户，用于所有恢复和控制操作的授权校验。
+    /// 获取或设置拥有该执行的稳定用户标识，用于所有恢复和控制操作的授权校验。
     /// </summary>
-    public string UserName { get; set; } = string.Empty;
+    public string UserId { get; set; } = string.Empty;
 
     /// <summary>
     /// 重建执行所需的不可变清单；可能包含输入和环境变量，必须加密落库。

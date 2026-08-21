@@ -2,6 +2,8 @@ using Agw.Auth.Contracts;
 
 namespace Agw.Auth.Application;
 
+public sealed record ApiTokenIdentity(string UserId);
+
 public interface IApiTokenStore
 {
     Task<IReadOnlyList<ApiTokenSummary>> ListTokensAsync(CancellationToken cancellationToken = default);
@@ -10,5 +12,5 @@ public interface IApiTokenStore
 
     Task<bool> RevokeTokenAsync(Guid id, CancellationToken cancellationToken = default);
 
-    Task<bool> ValidateTokenAsync(string token, CancellationToken cancellationToken = default);
+    Task<ApiTokenIdentity?> ValidateTokenAsync(string token, CancellationToken cancellationToken = default);
 }

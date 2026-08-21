@@ -1504,6 +1504,8 @@ public class EfCoreChatHistoryProviderTests
 
         await using var verificationContext = new AgwDbContext(options);
         var context = await verificationContext.ProjectConversations.SingleAsync(cancellationToken);
+        Assert.Equal(Constants.AdminUserId, context.CreateBy);
+        Assert.Equal(Constants.AdminUserId, context.UpdateBy);
         var sequences = await verificationContext
             .ProjectConversationChatHistories.Where(record => record.ConversationId == context.Id)
             .OrderBy(record => record.ConversationSequence)

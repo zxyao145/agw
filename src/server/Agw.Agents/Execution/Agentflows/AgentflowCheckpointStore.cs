@@ -44,7 +44,7 @@ public sealed class AgentflowCheckpointStore
         string contextId,
         Guid taskId,
         Guid agentflowId,
-        string userName,
+        string userId,
         bool isDurable,
         string definitionFingerprint,
         DurableAgentflowCheckpoint checkpoint,
@@ -56,6 +56,7 @@ public sealed class AgentflowCheckpointStore
         {
             return null;
         }
+        userId = string.IsNullOrWhiteSpace(userId) ? Constants.AdminUserId : userId.Trim();
 
         var occurrenceId = CreateDeterministicGuid(
             sourceExecutionId ?? taskId,
@@ -88,6 +89,10 @@ public sealed class AgentflowCheckpointStore
             .ConfigureAwait(false);
         if (existing != null)
         {
+            if (!string.Equals(existing.UserId, userId, StringComparison.Ordinal))
+            {
+                throw new AgwException(ErrorCodes.InvalidParam, "Agentflow checkpoint owner does not match.");
+            }
             return new RecordedAgentflowCheckpoint(ToSnapshot(existing), messages);
         }
 
@@ -144,15 +149,15 @@ public sealed class AgentflowCheckpointStore
             ContextId = contextId,
             TaskId = taskId,
             AgentflowId = agentflowId,
-            UserName = userName,
+            UserId = userId,
             IsDurable = isDurable,
             BoundarySequence = nextSequence,
             DefinitionFingerprint = definitionFingerprint,
             MarkersJson = JsonSerializer.Serialize(markers, JsonOptions),
             CheckpointJson = DurableExecutionJson.Serialize(checkpoint),
-            CreateBy = userName,
+            CreateBy = userId,
             CreateTime = now,
-            UpdateBy = userName,
+            UpdateBy = userId,
             UpdateTime = now,
         };
         dbContext.Add(record);
@@ -165,7 +170,7 @@ public sealed class AgentflowCheckpointStore
         Guid projectId,
         string contextId,
         Guid agentflowId,
-        string userName,
+        string userId,
         IReadOnlySet<Guid>? inProcessOccurrences,
         CancellationToken cancellationToken
     )
@@ -187,7 +192,7 @@ public sealed class AgentflowCheckpointStore
                 item.ProjectId == projectId
                 && item.ContextId == contextId
                 && item.AgentflowId == agentflowId
-                && item.UserName == userName
+                && item.UserId == userId
             )
             .OrderBy(item => item.BoundarySequence)
             .ToArrayAsync(cancellationToken)
@@ -221,7 +226,7 @@ public sealed class AgentflowCheckpointStore
         Guid projectId,
         string contextId,
         Guid agentflowId,
-        string userName,
+        string userId,
         CancellationToken cancellationToken
     ) =>
         await PrepareResumeAsync(
@@ -229,7 +234,7 @@ public sealed class AgentflowCheckpointStore
                 projectId,
                 contextId,
                 agentflowId,
-                userName,
+                userId,
                 resumeExecutionId: null,
                 cancellationToken
             )
@@ -241,7 +246,7 @@ public sealed class AgentflowCheckpointStore
         Guid projectId,
         string contextId,
         Guid agentflowId,
-        string userName,
+        string userId,
         CancellationToken cancellationToken
     ) =>
         await PrepareResumeAsync(
@@ -249,7 +254,7 @@ public sealed class AgentflowCheckpointStore
                 projectId,
                 contextId,
                 agentflowId,
-                userName,
+                userId,
                 resumeExecutionId,
                 cancellationToken
             )
@@ -257,7 +262,7 @@ public sealed class AgentflowCheckpointStore
 
     internal async Task<Guid?> GetSourceExecutionIdAsync(
         Guid occurrenceId,
-        string userName,
+        string userId,
         CancellationToken cancellationToken
     )
     {
@@ -266,7 +271,7 @@ public sealed class AgentflowCheckpointStore
         return await dbContext
             .Set<AgentflowCheckpointRecord>()
             .AsNoTracking()
-            .Where(item => item.Id == occurrenceId && item.UserName == userName)
+            .Where(item => item.Id == occurrenceId && item.UserId == userId)
             .Select(item => item.SourceExecutionId)
             .SingleOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -277,7 +282,7 @@ public sealed class AgentflowCheckpointStore
         Guid projectId,
         string contextId,
         Guid agentflowId,
-        string userName,
+        string userId,
         Guid? resumeExecutionId,
         CancellationToken cancellationToken
     )
@@ -300,7 +305,7 @@ public sealed class AgentflowCheckpointStore
             record.ProjectId != projectId
             || !string.Equals(record.ContextId, contextId, StringComparison.Ordinal)
             || record.AgentflowId != agentflowId
-            || !string.Equals(record.UserName, userName, StringComparison.Ordinal)
+            || !string.Equals(record.UserId, userId, StringComparison.Ordinal)
         )
         {
             throw new AgwException(
@@ -345,7 +350,7 @@ public sealed class AgentflowCheckpointStore
                     existingResume.ManifestJson,
                     "durable resume manifest"
                 );
-                if (existingResume.UserName == userName && existingManifest.ResumeCheckpointOccurrenceId == record.Id)
+                if (existingResume.UserId == userId && existingManifest.ResumeCheckpointOccurrenceId == record.Id)
                 {
                     return snapshot;
                 }
@@ -357,7 +362,7 @@ public sealed class AgentflowCheckpointStore
                 .Set<DurableExecutionRecord>()
                 .AsNoTracking()
                 .Where(item =>
-                    item.UserName == userName
+                    item.UserId == userId
                     && item.Status != DurableExecutionStatus.Completed
                     && item.Status != DurableExecutionStatus.Failed
                     && item.Status != DurableExecutionStatus.Interrupted
@@ -378,7 +383,7 @@ public sealed class AgentflowCheckpointStore
                 );
             }
 
-            await RegisterResumeExecutionAsync(dbContext, record, resumeExecutionId.Value, userName, cancellationToken)
+            await RegisterResumeExecutionAsync(dbContext, record, resumeExecutionId.Value, userId, cancellationToken)
                 .ConfigureAwait(false);
         }
 
@@ -407,7 +412,7 @@ public sealed class AgentflowCheckpointStore
         DbContext dbContext,
         AgentflowCheckpointRecord checkpointRecord,
         Guid resumeExecutionId,
-        string userName,
+        string userId,
         CancellationToken cancellationToken
     )
     {
@@ -431,7 +436,7 @@ public sealed class AgentflowCheckpointStore
                 existing.ManifestJson,
                 "durable resume manifest"
             );
-            if (existing.UserName == userName && existingManifest.ResumeCheckpointOccurrenceId == checkpointRecord.Id)
+            if (existing.UserId == userId && existingManifest.ResumeCheckpointOccurrenceId == checkpointRecord.Id)
             {
                 return;
             }
@@ -444,7 +449,7 @@ public sealed class AgentflowCheckpointStore
                 .Set<DurableExecutionRecord>()
                 .AsNoTracking()
                 .SingleOrDefaultAsync(
-                    item => item.Id == checkpointRecord.SourceExecutionId.Value && item.UserName == userName,
+                    item => item.Id == checkpointRecord.SourceExecutionId.Value && item.UserId == userId,
                     cancellationToken
                 )
                 .ConfigureAwait(false)
@@ -479,16 +484,16 @@ public sealed class AgentflowCheckpointStore
             new DurableExecutionRecord
             {
                 Id = resumeExecutionId,
-                UserName = userName,
+                UserId = userId,
                 ManifestJson = DurableExecutionJson.Serialize(manifest),
                 Status = DurableExecutionStatus.Resuming,
                 SegmentIndex = 1,
                 CheckpointJson = checkpointRecord.CheckpointJson,
                 StateChangedAt = now,
                 StateVersion = Guid.CreateVersion7(),
-                CreateBy = userName,
+                CreateBy = userId,
                 CreateTime = now,
-                UpdateBy = userName,
+                UpdateBy = userId,
                 UpdateTime = now,
             }
         );

@@ -1,4 +1,5 @@
 using Agw.Infrastructure.Data;
+using Agw.Shared;
 using Agw.Shared.Configuration;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -23,12 +24,13 @@ public sealed class InitialMigrationTests
         using var dbContext = new AgwDbContext(options.Options);
 
         var migrations = dbContext.Database.GetMigrations().ToArray();
-        Assert.Equal(5, migrations.Length);
+        Assert.Equal(6, migrations.Length);
         Assert.EndsWith("_Init", migrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", migrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", migrations[2], StringComparison.Ordinal);
         Assert.EndsWith("_AddAgentflowCheckpoints", migrations[3], StringComparison.Ordinal);
         Assert.EndsWith("_AddModelCompactionLimits", migrations[4], StringComparison.Ordinal);
+        Assert.EndsWith("_UseUserIdForExecutionOwnership", migrations[5], StringComparison.Ordinal);
 
         var script = dbContext
             .GetService<IMigrator>()
@@ -49,6 +51,9 @@ public sealed class InitialMigrationTests
         Assert.Contains("secret_hash", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("create_by", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("create_time", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("user_id", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("UPDATE durable_execution SET user_id = '1001'", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("UPDATE agentflow_checkpoint SET user_id = '1001'", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("tools", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("max_context_window_tokens", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("max_output_tokens", script, StringComparison.OrdinalIgnoreCase);
@@ -93,12 +98,13 @@ public sealed class InitialMigrationTests
         await dbContext.Database.MigrateAsync(cancellationToken);
 
         var appliedMigrations = (await dbContext.Database.GetAppliedMigrationsAsync(cancellationToken)).ToArray();
-        Assert.Equal(5, appliedMigrations.Length);
+        Assert.Equal(6, appliedMigrations.Length);
         Assert.EndsWith("_Init", appliedMigrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", appliedMigrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", appliedMigrations[2], StringComparison.Ordinal);
         Assert.EndsWith("_AddAgentflowCheckpoints", appliedMigrations[3], StringComparison.Ordinal);
         Assert.EndsWith("_AddModelCompactionLimits", appliedMigrations[4], StringComparison.Ordinal);
+        Assert.EndsWith("_UseUserIdForExecutionOwnership", appliedMigrations[5], StringComparison.Ordinal);
         Assert.True(await TableExistsAsync(connection, "integration_connection", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "plugin_installation", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "project_memory", cancellationToken));
@@ -112,6 +118,8 @@ public sealed class InitialMigrationTests
         Assert.True(await ColumnExistsAsync(connection, "api_token", "create_by", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "api_token", "create_time", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "api_token", "secret_hash", cancellationToken));
+        Assert.True(await ColumnExistsAsync(connection, "durable_execution", "user_id", cancellationToken));
+        Assert.True(await ColumnExistsAsync(connection, "agentflow_checkpoint", "user_id", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "agent", "tools", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "project", "tools", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "model", "max_context_window_tokens", cancellationToken));
@@ -149,7 +157,11 @@ public sealed class InitialMigrationTests
         await using var dbContext = new AgwDbContext(options);
         var migrations = dbContext.Database.GetMigrations().ToArray();
         var migrator = dbContext.GetService<IMigrator>();
-        await migrator.MigrateAsync(migrations[^2], cancellationToken);
+        var compactionMigration = migrations.Single(migration =>
+            migration.EndsWith("_AddModelCompactionLimits", StringComparison.Ordinal)
+        );
+        var compactionIndex = Array.IndexOf(migrations, compactionMigration);
+        await migrator.MigrateAsync(migrations[compactionIndex - 1], cancellationToken);
         var modelId = Guid.CreateVersion7();
         await using (var insert = connection.CreateCommand())
         {
@@ -163,7 +175,7 @@ public sealed class InitialMigrationTests
             await insert.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        await migrator.MigrateAsync(migrations[^1], cancellationToken);
+        await migrator.MigrateAsync(compactionMigration, cancellationToken);
 
         await using var select = connection.CreateCommand();
         select.CommandText = "SELECT max_context_window_tokens, max_output_tokens FROM model WHERE id = $id;";
@@ -172,6 +184,87 @@ public sealed class InitialMigrationTests
         Assert.True(await reader.ReadAsync(cancellationToken));
         Assert.Equal(128_000, reader.GetInt32(0));
         Assert.Equal(64_000, reader.GetInt32(1));
+    }
+
+    [Fact]
+    public async Task MigrateAsync_Sqlite_ExecutionOwnershipBackfillsAdminUserId()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(
+                connection,
+                migrations => migrations.MigrationsAssembly(AgwDbContextOptionsConfigurator.SqliteMigrationsAssembly)
+            )
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using var dbContext = new AgwDbContext(options);
+        var migrations = dbContext.Database.GetMigrations().ToArray();
+        var ownershipMigration = migrations.Single(migration =>
+            migration.EndsWith("_UseUserIdForExecutionOwnership", StringComparison.Ordinal)
+        );
+        var ownershipIndex = Array.IndexOf(migrations, ownershipMigration);
+        var migrator = dbContext.GetService<IMigrator>();
+        await migrator.MigrateAsync(migrations[ownershipIndex - 1], cancellationToken);
+
+        await using (var insert = connection.CreateCommand())
+        {
+            insert.CommandText = """
+                INSERT INTO project
+                    (id, name, type, tools, environment_variables, create_time)
+                VALUES
+                    ($projectId, 'Migration test', 0, '[]', '{}', $now);
+
+                INSERT INTO project_conversation
+                    (id, project_id, context_id, title, create_time)
+                VALUES
+                    ($conversationId, $projectId, 'context-1', 'Migration test', $now);
+
+                INSERT INTO durable_execution
+                    (id, user_name, manifest_json, status, segment_index, state_changed_at, state_version, create_time)
+                VALUES
+                    ($executionId, 'admin', '{}', 0, 0, $now, $stateVersion, $now);
+
+                INSERT INTO agentflow_checkpoint
+                    (id, project_id, project_conversation_id, context_id, task_id, agentflow_id, user_name,
+                     is_durable, boundary_sequence, definition_fingerprint, markers_json, checkpoint_json, create_time)
+                VALUES
+                    ($checkpointId, $projectId, $conversationId, 'context-1', $taskId, $agentflowId, 'admin',
+                     0, 0, $fingerprint, '[]', '{}', $now);
+                """;
+            insert.Parameters.AddWithValue("$executionId", Guid.CreateVersion7());
+            insert.Parameters.AddWithValue("$stateVersion", Guid.CreateVersion7());
+            insert.Parameters.AddWithValue("$checkpointId", Guid.CreateVersion7());
+            insert.Parameters.AddWithValue("$projectId", Guid.CreateVersion7());
+            insert.Parameters.AddWithValue("$conversationId", Guid.CreateVersion7());
+            insert.Parameters.AddWithValue("$taskId", Guid.CreateVersion7());
+            insert.Parameters.AddWithValue("$agentflowId", Guid.CreateVersion7());
+            insert.Parameters.AddWithValue("$fingerprint", new string('a', 64));
+            insert.Parameters.AddWithValue("$now", TimeProvider.System.GetUtcNow());
+            await insert.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await migrator.MigrateAsync(ownershipMigration, cancellationToken);
+
+        await using (var select = connection.CreateCommand())
+        {
+            select.CommandText =
+                "SELECT "
+                + "(SELECT user_id FROM durable_execution LIMIT 1), "
+                + "(SELECT user_id FROM agentflow_checkpoint LIMIT 1);";
+            await using var reader = await select.ExecuteReaderAsync(cancellationToken);
+            Assert.True(await reader.ReadAsync(cancellationToken));
+            Assert.Equal(Constants.AdminUserId, reader.GetString(0));
+            Assert.Equal(Constants.AdminUserId, reader.GetString(1));
+        }
+
+        await migrator.MigrateAsync(migrations[ownershipIndex - 1], cancellationToken);
+
+        Assert.True(await ColumnExistsAsync(connection, "durable_execution", "user_name", cancellationToken));
+        Assert.True(await ColumnExistsAsync(connection, "agentflow_checkpoint", "user_name", cancellationToken));
+        Assert.False(await ColumnExistsAsync(connection, "durable_execution", "user_id", cancellationToken));
+        Assert.False(await ColumnExistsAsync(connection, "agentflow_checkpoint", "user_id", cancellationToken));
     }
 
     private static async Task<bool> TableExistsAsync(

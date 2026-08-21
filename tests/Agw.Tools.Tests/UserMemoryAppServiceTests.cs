@@ -6,6 +6,7 @@ using Agw.Infrastructure.Repositories;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Extensions;
 using Agw.Tools.Application;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
@@ -172,7 +173,7 @@ public sealed class UserMemoryAppServiceTests
 
         public ClaimsPrincipal? Current { get; set; }
 
-        public string? UserId => Current?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? Current?.Identity?.Name;
+        public string? UserId => Current?.GetUserId();
 
         public bool IsAuthenticated => Current?.Identity?.IsAuthenticated == true;
 

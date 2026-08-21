@@ -109,7 +109,12 @@ public class ExecutionCommandHandlerTests
     public async Task DurableSession_InterruptWithoutActiveExecution_SendsInterruptedFinish()
     {
         var sink = new CapturingSink();
-        await using var session = new DurableExecutionSession("user", sink, CancellationToken.None, coordinator: null!);
+        await using var session = new DurableExecutionSession(
+            "user-id",
+            sink,
+            CancellationToken.None,
+            coordinator: null!
+        );
 
         await session.InterruptAsync(executionId: null, "nothing running", TestContext.Current.CancellationToken);
 
@@ -333,10 +338,13 @@ public class ExecutionCommandHandlerTests
     public async Task ExecCommand_ProjectWorkspaceWithTilde_AddsExpandedAbsoluteWorkspaceToTurnContext()
     {
         var runtimeFactory = new FakeRuntimeFactory();
+        var task = CreateTask("resolved");
+        var taskAppService = new FakeTaskAppService(task);
         const string configuredWorkspace = "~/.agw/runtime-context-test";
         await using var context = CreateContext(
             runtimeFactory,
-            CreateTask("resolved"),
+            task,
+            taskAppService: taskAppService,
             projectAppService: new FakeProjectAppService(configuredWorkspace)
         );
 
@@ -354,7 +362,9 @@ public class ExecutionCommandHandlerTests
         Assert.Equal(turnContext.ProjectId, context.ProjectId);
         Assert.Equal(turnContext.ProjectConversationId, context.ProjectConversationId);
         Assert.Equal(turnContext.AgentId, context.AgentId);
-        Assert.Equal("user", context.UserName);
+        Assert.Equal("user-id", context.UserId);
+        Assert.Equal("user-id", turnContext.UserId);
+        Assert.Equal("user-id", taskAppService.LastRequest?.User);
     }
 
     private static ExecutionConnectionContext CreateContext(
@@ -365,7 +375,7 @@ public class ExecutionCommandHandlerTests
         IProjectAppService? projectAppService = null
     ) =>
         new(
-            "user",
+            "user-id",
             sink ?? new CapturingSink(),
             CancellationToken.None,
             runtimeFactory,
@@ -440,12 +450,15 @@ public class ExecutionCommandHandlerTests
 
         public int ResolveCount { get; private set; }
 
+        public ExecutionTaskRequest? LastRequest { get; private set; }
+
         public Task<ExecutionTaskResolutionResult> ResolveTaskAsync(
             ExecutionTaskRequest request,
             CancellationToken cancellationToken
         )
         {
             ResolveCount++;
+            LastRequest = request;
             return Task.FromResult(new ExecutionTaskResolutionResult(_task, null));
         }
 

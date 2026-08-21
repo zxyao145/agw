@@ -44,7 +44,7 @@ internal sealed class ExecutionConnectionContextFactory
     /// 创建与当前用户、消息通道及连接生命周期绑定的执行上下文。
     /// </summary>
     public ExecutionConnectionContext Create(
-        string userName,
+        string userId,
         IExecutionMessageSink messageSink,
         CancellationToken hostToken
     )
@@ -52,7 +52,7 @@ internal sealed class ExecutionConnectionContextFactory
         var durableSession =
             _executionProvider == ExecutionProvider.Distributed
                 ? new DurableExecutionSession(
-                    userName,
+                    userId,
                     messageSink,
                     hostToken,
                     _durableCoordinator
@@ -63,7 +63,7 @@ internal sealed class ExecutionConnectionContextFactory
                 )
                 : null;
         return new ExecutionConnectionContext(
-            userName,
+            userId,
             messageSink,
             hostToken,
             _runtimeFactory,

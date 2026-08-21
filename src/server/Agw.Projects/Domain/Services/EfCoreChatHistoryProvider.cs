@@ -33,7 +33,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         ),
     };
 
-    private const string DefaultUser = Constants.AdminUserName;
+    private const string DefaultUserId = Constants.AdminUserId;
     private const string AgentNamePropertyName = "agentName";
     private const string HistoryScopeMetadataKey = "historyScope";
     private const string NodeNamePropertyName = "nodeName";
@@ -304,9 +304,9 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                 ProjectId = projectId,
                 ContextId = contextId,
                 Title = TaskTitleFactory.Create(firstUserText),
-                CreateBy = DefaultUser,
+                CreateBy = DefaultUserId,
                 CreateTime = now,
-                UpdateBy = DefaultUser,
+                UpdateBy = DefaultUserId,
                 UpdateTime = now,
             };
             dbContext.Set<ProjectConversation>().Add(projectConversation);
@@ -322,7 +322,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                 projectConversation.Title = titleFromUser;
             }
 
-            projectConversation.UpdateBy = DefaultUser;
+            projectConversation.UpdateBy = DefaultUserId;
             projectConversation.UpdateTime = now;
         }
 

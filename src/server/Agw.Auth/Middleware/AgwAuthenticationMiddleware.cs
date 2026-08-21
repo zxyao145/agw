@@ -39,11 +39,13 @@ public sealed class AgwAuthenticationMiddleware
         if (context.User.Identity?.IsAuthenticated != true)
         {
             var bearerToken = ResolveBearerToken(context);
-            if (bearerToken != null && await tokenStore.ValidateTokenAsync(bearerToken, context.RequestAborted))
+            var tokenIdentity =
+                bearerToken == null ? null : await tokenStore.ValidateTokenAsync(bearerToken, context.RequestAborted);
+            if (tokenIdentity != null)
             {
                 context.User = CreatePrincipal(
-                    Constants.AdminUserId,
-                    Constants.AdminUserName,
+                    tokenIdentity.UserId,
+                    Constants.ApiTokenUserName,
                     AgwAuthDefaults.BearerScheme,
                     stateStore.GetAuthenticationSnapshot().SessionVersion
                 );
@@ -58,6 +60,8 @@ public sealed class AgwAuthenticationMiddleware
                 );
             }
         }
+
+        EnsureDefaultIdentityClaims(context.User);
 
         var origin = context.Request.Headers.Origin.ToString();
         var isAuthenticatedDesktop =
@@ -75,6 +79,32 @@ public sealed class AgwAuthenticationMiddleware
         }
 
         await _next(context);
+    }
+
+    private static void EnsureDefaultIdentityClaims(ClaimsPrincipal principal)
+    {
+        if (principal.Identity is not ClaimsIdentity { IsAuthenticated: true } identity)
+        {
+            return;
+        }
+
+        EnsureDefaultClaim(identity, ClaimTypes.Name, Constants.AdminUserName);
+        EnsureDefaultClaim(identity, ClaimTypes.NameIdentifier, Constants.AdminUserId);
+    }
+
+    private static void EnsureDefaultClaim(ClaimsIdentity identity, string claimType, string defaultValue)
+    {
+        foreach (
+            var claim in identity.FindAll(claimType).Where(claim => string.IsNullOrWhiteSpace(claim.Value)).ToArray()
+        )
+        {
+            identity.RemoveClaim(claim);
+        }
+
+        if (!identity.HasClaim(claim => claim.Type == claimType))
+        {
+            identity.AddClaim(new Claim(claimType, defaultValue));
+        }
     }
 
     /// <summary>
@@ -104,13 +134,13 @@ public sealed class AgwAuthenticationMiddleware
     }
 
     /// <summary>
-    /// 创建代表 Agw 管理员的认证主体。
+    /// 创建代表 Agw 用户的认证主体。
     /// </summary>
-    /// <param name="userId">管理员用户标识。</param>
-    /// <param name="userName">管理员用户名。</param>
+    /// <param name="userId">用户标识。</param>
+    /// <param name="userName">用户名。</param>
     /// <param name="authenticationType">建立身份所使用的认证方式。</param>
     /// <param name="sessionVersion">当前认证会话版本。</param>
-    /// <returns>包含管理员身份声明的认证主体。</returns>
+    /// <returns>包含用户身份声明的认证主体。</returns>
     private static ClaimsPrincipal CreatePrincipal(
         string userId,
         string userName,

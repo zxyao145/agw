@@ -1,8 +1,10 @@
 using System.Linq.Expressions;
+using System.Security.Claims;
 using Agw.Projects.Controllers;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Tools;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Agw.Projects.Tests;
@@ -32,7 +34,21 @@ public class ProjectsControllerTests
     {
         var project = CreateProject();
         var service = new CapturingProjectAppService(project);
-        var controller = new ProjectsController(service);
+        var controller = new ProjectsController(service)
+        {
+            ControllerContext = new ControllerContext
+            {
+                HttpContext = new DefaultHttpContext
+                {
+                    User = new ClaimsPrincipal(
+                        new ClaimsIdentity(
+                            [new Claim(ClaimTypes.Name, "admin"), new Claim(ClaimTypes.NameIdentifier, "user-42")],
+                            "test"
+                        )
+                    ),
+                },
+            },
+        };
         var mcpToolServerId = Guid.CreateVersion7();
         var skillId = Guid.CreateVersion7();
         var appInstanceId = Guid.CreateVersion7();
@@ -59,6 +75,7 @@ public class ProjectsControllerTests
         Assert.Equal([mcpToolServerId], service.McpToolServerIds);
         Assert.Equal([skillId], service.SkillIds);
         Assert.Equal([appInstanceId], service.ConnectionIds);
+        Assert.Equal("user-42", service.User);
     }
 
     [Fact]
@@ -177,6 +194,7 @@ public class ProjectsControllerTests
         public IReadOnlyList<Guid>? McpToolServerIds { get; private set; }
         public IReadOnlyList<Guid>? SkillIds { get; private set; }
         public IReadOnlyList<Guid>? ConnectionIds { get; private set; }
+        public string? User { get; private set; }
 
         public Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null) =>
             Task.FromResult<IReadOnlyList<Project>>([_project]);
@@ -188,6 +206,7 @@ public class ProjectsControllerTests
         public Task<Project?> CreateAsync(Project project, string user)
         {
             CreatedProject = project;
+            User = user;
             return Task.FromResult<Project?>(_project);
         }
 
@@ -200,6 +219,7 @@ public class ProjectsControllerTests
         )
         {
             CreatedProject = project;
+            User = user;
             CaptureRelationIds(mcpToolServerIds, skillIds, connectionIds);
             return Task.FromResult<Project?>(_project);
         }
@@ -211,6 +231,7 @@ public class ProjectsControllerTests
         public Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction, string user)
         {
             updateAction(_project);
+            User = user;
             return Task.FromResult<Project?>(_project);
         }
 
@@ -224,6 +245,7 @@ public class ProjectsControllerTests
         )
         {
             updateAction(_project);
+            User = user;
             CaptureRelationIds(mcpToolServerIds, skillIds, connectionIds);
             return Task.FromResult<Project?>(_project);
         }

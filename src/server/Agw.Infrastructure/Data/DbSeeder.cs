@@ -143,9 +143,9 @@ public class DbSeeder
             Description = definition.Description,
             Workspace = workspace,
             ExtraSetting = definition.ExtraSetting,
-            CreateBy = Constants.AdminUserName,
+            CreateBy = Constants.AdminUserId,
             CreateTime = now,
-            UpdateBy = Constants.AdminUserName,
+            UpdateBy = Constants.AdminUserId,
             UpdateTime = now,
         };
     }
@@ -183,9 +183,9 @@ public class DbSeeder
             Description = definition.Description,
             Extra = definition.Extra,
 
-            CreateBy = Constants.AdminUserName,
+            CreateBy = Constants.AdminUserId,
             CreateTime = now,
-            UpdateBy = Constants.AdminUserName,
+            UpdateBy = Constants.AdminUserId,
             UpdateTime = now,
         };
     }
@@ -202,9 +202,9 @@ public class DbSeeder
                 ProviderType = ProviderType.OpenAIChatCompletions,
                 Endpoint = "https://api.deepseek.com",
                 Description = "DeepSeek OpenAI Compatible",
-                CreateBy = Constants.AdminUserName,
+                CreateBy = Constants.AdminUserId,
                 CreateTime = now,
-                UpdateBy = Constants.AdminUserName,
+                UpdateBy = Constants.AdminUserId,
                 UpdateTime = now,
             },
             new Provider
@@ -214,9 +214,9 @@ public class DbSeeder
                 ProviderType = ProviderType.Anthropic,
                 Endpoint = "https://api.deepseek.com/anthropic",
                 Description = "DeepSeek Anthropic Compatible",
-                CreateBy = Constants.AdminUserName,
+                CreateBy = Constants.AdminUserId,
                 CreateTime = now,
-                UpdateBy = Constants.AdminUserName,
+                UpdateBy = Constants.AdminUserId,
                 UpdateTime = now,
             },
         };
@@ -269,9 +269,9 @@ public class DbSeeder
                 Name = "deepseek-v4-pro",
                 MaxContextWindowTokens = AgwAiModel.DefaultMaxContextWindowTokens,
                 MaxOutputTokens = AgwAiModel.DefaultMaxOutputTokens,
-                CreateBy = Constants.AdminUserName,
+                CreateBy = Constants.AdminUserId,
                 CreateTime = now,
-                UpdateBy = Constants.AdminUserName,
+                UpdateBy = Constants.AdminUserId,
                 UpdateTime = now,
             };
             _context.Models.Add(model);
@@ -314,9 +314,9 @@ public class DbSeeder
             ModelId = modelId,
             ProviderId = providerId,
             RpsLimit = 60,
-            CreateBy = Constants.AdminUserName,
+            CreateBy = Constants.AdminUserId,
             CreateTime = now,
-            UpdateBy = Constants.AdminUserName,
+            UpdateBy = Constants.AdminUserId,
             UpdateTime = now,
         };
         _context.ModelProviders.Add(relation);
@@ -372,9 +372,9 @@ public class DbSeeder
                     new ToolValue { Definition = new BashToolDefinition() },
                     new ToolBlockValue { Definition = new FileAccessToolBlockDefinition() },
                 ],
-                CreateBy = Constants.AdminUserName,
+                CreateBy = Constants.AdminUserId,
                 CreateTime = now,
-                UpdateBy = Constants.AdminUserName,
+                UpdateBy = Constants.AdminUserId,
                 UpdateTime = now,
             },
             new Agent
@@ -498,9 +498,9 @@ public class DbSeeder
                     new ToolValue { Definition = new WebSearchToolDefinition() },
                     new ToolBlockValue { Definition = new TodoToolBlockDefinition() },
                 ],
-                CreateBy = Constants.AdminUserName,
+                CreateBy = Constants.AdminUserId,
                 CreateTime = now,
-                UpdateBy = Constants.AdminUserName,
+                UpdateBy = Constants.AdminUserId,
                 UpdateTime = now,
             },
             new Agent
@@ -529,9 +529,9 @@ public class DbSeeder
                     """,
                 ModelProviderId = modelProviderId,
                 Type = AgentType.System,
-                CreateBy = Constants.AdminUserName,
+                CreateBy = Constants.AdminUserId,
                 CreateTime = now,
-                UpdateBy = Constants.AdminUserName,
+                UpdateBy = Constants.AdminUserId,
                 UpdateTime = now,
             },
         ];
@@ -561,7 +561,7 @@ public class DbSeeder
         }
 
         agent.Tools = definition.Tools;
-        agent.UpdateBy = Constants.AdminUserName;
+        agent.UpdateBy = Constants.AdminUserId;
         agent.UpdateTime = now;
     }
 
@@ -581,9 +581,9 @@ public class DbSeeder
                 Kind = SkillKind.Local,
                 ContentPath = DefaultSkillContentPath,
                 RemoteUrl = null,
-                CreateBy = Constants.AdminUserName,
+                CreateBy = Constants.AdminUserId,
                 CreateTime = now,
-                UpdateBy = Constants.AdminUserName,
+                UpdateBy = Constants.AdminUserId,
                 UpdateTime = now,
             };
             _context.Skills.Add(skill);
@@ -602,7 +602,7 @@ public class DbSeeder
             skill.Kind = SkillKind.Local;
             skill.ContentPath = DefaultSkillContentPath;
             skill.RemoteUrl = null;
-            skill.UpdateBy = Constants.AdminUserName;
+            skill.UpdateBy = Constants.AdminUserId;
             skill.UpdateTime = _timeProvider.GetUtcNow();
         }
 
@@ -638,9 +638,9 @@ public class DbSeeder
                         Kind = SkillKind.BuiltIn,
                         ContentPath = string.Empty,
                         RemoteUrl = null,
-                        CreateBy = Constants.AdminUserName,
+                        CreateBy = Constants.AdminUserId,
                         CreateTime = now,
-                        UpdateBy = Constants.AdminUserName,
+                        UpdateBy = Constants.AdminUserId,
                         UpdateTime = now,
                     }
                 );
@@ -676,7 +676,7 @@ public class DbSeeder
             existingById.Kind = SkillKind.BuiltIn;
             existingById.ContentPath = string.Empty;
             existingById.RemoteUrl = null;
-            existingById.UpdateBy = Constants.AdminUserName;
+            existingById.UpdateBy = Constants.AdminUserId;
             existingById.UpdateTime = _timeProvider.GetUtcNow();
         }
     }
@@ -723,9 +723,9 @@ public class DbSeeder
                 4. 取搜索结果中的第一个 POI 作为最终结果。
                 5. 输出 POI 的名称、地址、经纬度（如有）以及与景点的关联。
                 """,
-            CreateBy = Constants.AdminUserName,
+            CreateBy = Constants.AdminUserId,
             CreateTime = now,
-            UpdateBy = Constants.AdminUserName,
+            UpdateBy = Constants.AdminUserId,
             UpdateTime = now,
             Nodes =
             [
@@ -735,9 +735,9 @@ public class DbSeeder
                     Kind = AgentflowNodeKind.Input,
                     Name = "Input",
                     PositionJson = "{\"x\":12,\"y\":10.9481361426256}",
-                    CreateBy = Constants.AdminUserName,
+                    CreateBy = Constants.AdminUserId,
                     CreateTime = now,
-                    UpdateBy = Constants.AdminUserName,
+                    UpdateBy = Constants.AdminUserId,
                     UpdateTime = now,
                 },
                 new AgentflowNode
@@ -754,9 +754,9 @@ public class DbSeeder
 
                         只需要返回正文，不要返回其他的任何信息。
                         """,
-                    CreateBy = Constants.AdminUserName,
+                    CreateBy = Constants.AdminUserId,
                     CreateTime = now,
-                    UpdateBy = Constants.AdminUserName,
+                    UpdateBy = Constants.AdminUserId,
                     UpdateTime = now,
                 },
                 new AgentflowNode
@@ -766,9 +766,9 @@ public class DbSeeder
                     RelateId = agents["location-extractor"].Id,
                     Name = "location-extractor",
                     PositionJson = "{\"x\":652,\"y\":12}",
-                    CreateBy = Constants.AdminUserName,
+                    CreateBy = Constants.AdminUserId,
                     CreateTime = now,
-                    UpdateBy = Constants.AdminUserName,
+                    UpdateBy = Constants.AdminUserId,
                     UpdateTime = now,
                 },
                 new AgentflowNode
@@ -778,9 +778,9 @@ public class DbSeeder
                     RelateId = agents["amap-poi-search"].Id,
                     Name = "amap-poi-search",
                     PositionJson = "{\"x\":972,\"y\":12}",
-                    CreateBy = Constants.AdminUserName,
+                    CreateBy = Constants.AdminUserId,
                     CreateTime = now,
-                    UpdateBy = Constants.AdminUserName,
+                    UpdateBy = Constants.AdminUserId,
                     UpdateTime = now,
                 },
             ],
@@ -792,9 +792,9 @@ public class DbSeeder
                     SourceNodeId = "input",
                     TargetNodeId = "0-1784023077088-4wxgi0",
                     Kind = AgentflowEdgeKind.FanOut,
-                    CreateBy = Constants.AdminUserName,
+                    CreateBy = Constants.AdminUserId,
                     CreateTime = now,
-                    UpdateBy = Constants.AdminUserName,
+                    UpdateBy = Constants.AdminUserId,
                     UpdateTime = now,
                 },
                 new AgentflowEdge
@@ -803,9 +803,9 @@ public class DbSeeder
                     SourceNodeId = "0-1784023077088-4wxgi0",
                     TargetNodeId = "0-1784023208474-g5q65g",
                     Kind = AgentflowEdgeKind.Direct,
-                    CreateBy = Constants.AdminUserName,
+                    CreateBy = Constants.AdminUserId,
                     CreateTime = now,
-                    UpdateBy = Constants.AdminUserName,
+                    UpdateBy = Constants.AdminUserId,
                     UpdateTime = now,
                 },
                 new AgentflowEdge
@@ -814,9 +814,9 @@ public class DbSeeder
                     SourceNodeId = "0-1784023208474-g5q65g",
                     TargetNodeId = "0-1784030849721-zid7yj",
                     Kind = AgentflowEdgeKind.Direct,
-                    CreateBy = Constants.AdminUserName,
+                    CreateBy = Constants.AdminUserId,
                     CreateTime = now,
-                    UpdateBy = Constants.AdminUserName,
+                    UpdateBy = Constants.AdminUserId,
                     UpdateTime = now,
                 },
             ],

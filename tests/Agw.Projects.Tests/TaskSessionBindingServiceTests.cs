@@ -1,6 +1,7 @@
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Projects.Application;
+using Agw.Shared;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -70,7 +71,7 @@ public class TaskSessionBindingServiceTests
             agentId,
             "codex",
             "11111111-1111-1111-1111-111111111111",
-            "tester",
+            string.Empty,
             cancellationToken
         );
         await service.UpsertAsync(
@@ -79,7 +80,7 @@ public class TaskSessionBindingServiceTests
             agentId,
             "codex",
             "22222222-2222-2222-2222-222222222222",
-            "tester",
+            string.Empty,
             cancellationToken
         );
 
@@ -92,6 +93,8 @@ public class TaskSessionBindingServiceTests
         Assert.Equal(agentId, binding.AgentId);
         Assert.Equal("codex", binding.ExternalAgentName);
         Assert.Equal("22222222-2222-2222-2222-222222222222", binding.ProviderSessionId);
+        Assert.Equal(Constants.AdminUserId, binding.CreateBy);
+        Assert.Equal(Constants.AdminUserId, binding.UpdateBy);
     }
 
     [Fact]

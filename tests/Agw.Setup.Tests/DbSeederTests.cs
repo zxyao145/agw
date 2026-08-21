@@ -1,4 +1,5 @@
 using Agw.Infrastructure.Data;
+using Agw.Shared;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Providers;
@@ -48,6 +49,8 @@ public class DbSeederTests
 
             var projects = await context.Projects.ToListAsync(TestContext.Current.CancellationToken);
             Assert.Equal(2, projects.Count);
+            Assert.All(projects, project => Assert.Equal(Constants.AdminUserId, project.CreateBy));
+            Assert.All(projects, project => Assert.Equal(Constants.AdminUserId, project.UpdateBy));
             Assert.DoesNotContain(projects, project => project.Name == "claude-code");
             Assert.DoesNotContain(projects, project => project.Name == "codex");
             Assert.Equal(5, await context.Agents.CountAsync(TestContext.Current.CancellationToken));
@@ -57,8 +60,12 @@ public class DbSeederTests
                 .SingleAsync(x => x.Name == "deepseek-v4-pro", TestContext.Current.CancellationToken);
             Assert.Equal(AgwAiModel.DefaultMaxContextWindowTokens, model.MaxContextWindowTokens);
             Assert.Equal(AgwAiModel.DefaultMaxOutputTokens, model.MaxOutputTokens);
+            Assert.Equal(Constants.AdminUserId, model.CreateBy);
+            Assert.Equal(Constants.AdminUserId, model.UpdateBy);
             Assert.Equal(2, model.Providers.Count);
             Assert.All(model.Providers, relation => Assert.Equal(60, relation.RpsLimit));
+            Assert.All(model.Providers, relation => Assert.Equal(Constants.AdminUserId, relation.CreateBy));
+            Assert.All(model.Providers, relation => Assert.Equal(Constants.AdminUserId, relation.UpdateBy));
 
             var providerTypes = await context
                 .Providers.OrderBy(x => x.ProviderType)
@@ -73,6 +80,8 @@ public class DbSeederTests
                 )
                 .ToListAsync(TestContext.Current.CancellationToken);
             Assert.Equal(3, agents.Count);
+            Assert.All(agents, agent => Assert.Equal(Constants.AdminUserId, agent.CreateBy));
+            Assert.All(agents, agent => Assert.Equal(Constants.AdminUserId, agent.UpdateBy));
             Assert.Equal(GeneralAgentId, agents.Single(x => x.Name == "general-agent").Id);
             Assert.Equal(LocationExtractorAgentId, agents.Single(x => x.Name == "location-extractor").Id);
             Assert.Equal(AmapPoiSearchAgentId, agents.Single(x => x.Name == "amap-poi-search").Id);
@@ -97,6 +106,8 @@ public class DbSeederTests
             );
             Assert.Equal(SkillId, skill.Id);
             Assert.Equal(SkillKind.Local, skill.Kind);
+            Assert.Equal(Constants.AdminUserId, skill.CreateBy);
+            Assert.Equal(Constants.AdminUserId, skill.UpdateBy);
             Assert.Equal("skills/xhs-explore", skill.ContentPath);
             Assert.Null(skill.RemoteUrl);
             Assert.True(
@@ -112,6 +123,8 @@ public class DbSeederTests
             );
             Assert.Equal("agw-job", builtInSkill.Name);
             Assert.Equal(SkillKind.BuiltIn, builtInSkill.Kind);
+            Assert.Equal(Constants.AdminUserId, builtInSkill.CreateBy);
+            Assert.Equal(Constants.AdminUserId, builtInSkill.UpdateBy);
             Assert.Equal(string.Empty, builtInSkill.ContentPath);
             Assert.Null(builtInSkill.RemoteUrl);
             Assert.Equal(
@@ -134,8 +147,14 @@ public class DbSeederTests
                 .Include(x => x.Edges)
                 .SingleAsync(x => x.Id == AgentflowId, TestContext.Current.CancellationToken);
             Assert.Equal("Xiaohongshu Address Extraction", agentflow.Name);
+            Assert.Equal(Constants.AdminUserId, agentflow.CreateBy);
+            Assert.Equal(Constants.AdminUserId, agentflow.UpdateBy);
             Assert.Equal(4, agentflow.Nodes.Count);
             Assert.Equal(3, agentflow.Edges.Count);
+            Assert.All(agentflow.Nodes, node => Assert.Equal(Constants.AdminUserId, node.CreateBy));
+            Assert.All(agentflow.Nodes, node => Assert.Equal(Constants.AdminUserId, node.UpdateBy));
+            Assert.All(agentflow.Edges, edge => Assert.Equal(Constants.AdminUserId, edge.CreateBy));
+            Assert.All(agentflow.Edges, edge => Assert.Equal(Constants.AdminUserId, edge.UpdateBy));
             Assert.Contains(agentflow.Nodes, node => node.Kind == AgentflowNodeKind.Input);
             Assert.Contains(agentflow.Nodes, node => node.RelateId == GeneralAgentId);
             Assert.Contains(agentflow.Nodes, node => node.RelateId == LocationExtractorAgentId);

@@ -14,8 +14,8 @@ public class RuntimeTurnContextAccessorTests
     public void Push_WhenScopeEnds_RestoresPreviousContext()
     {
         var accessor = new RuntimeTurnContextAccessor();
-        var outer = CreateContext("outer");
-        var inner = CreateContext("inner");
+        var outer = CreateContext();
+        var inner = CreateContext();
 
         using (accessor.Push(outer))
         {
@@ -35,8 +35,8 @@ public class RuntimeTurnContextAccessorTests
     public async Task Push_ConcurrentFlows_IsolatesContexts()
     {
         var accessor = new RuntimeTurnContextAccessor();
-        var first = CreateContext("first");
-        var second = CreateContext("second");
+        var first = CreateContext();
+        var second = CreateContext();
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         async Task<RuntimeTurnContext?> CaptureAsync(RuntimeTurnContext context)
@@ -55,7 +55,7 @@ public class RuntimeTurnContextAccessorTests
         Assert.Null(accessor.Current);
     }
 
-    private static RuntimeTurnContext CreateContext(string userName)
+    private static RuntimeTurnContext CreateContext()
     {
         var projectId = Guid.CreateVersion7();
         return new RuntimeTurnContext(
@@ -68,7 +68,6 @@ public class RuntimeTurnContextAccessorTests
                 CreateTime = TimeProvider.System.GetUtcNow(),
             },
             new ExecutionTarget(Guid.CreateVersion7(), AgentRuntimeType.Agent),
-            userName,
             "/workspace",
             new NullSink()
         );

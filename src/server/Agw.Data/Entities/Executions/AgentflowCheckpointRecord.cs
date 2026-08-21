@@ -26,7 +26,7 @@ public sealed class AgentflowCheckpointRecord : BaseEntity
 
     public Guid AgentflowId { get; set; }
 
-    public string UserName { get; set; } = string.Empty;
+    public string UserId { get; set; } = string.Empty;
 
     public bool IsDurable { get; set; }
 

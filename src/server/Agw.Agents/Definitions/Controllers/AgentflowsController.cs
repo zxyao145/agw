@@ -4,6 +4,7 @@ using Agw.Agents.Execution.Agentflows;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Extensions;
 using Agw.Shared.Results;
 using Bens.Results;
 using Microsoft.AspNetCore.Mvc;
@@ -94,7 +95,7 @@ public class AgentflowsController : ControllerBase
     [ProducesApiResult(typeof(Agentflow))]
     public async Task<IActionResult> CreateAsync([FromBody] AgentflowCreateRequest request)
     {
-        var user = User?.Identity?.Name ?? Constants.AdminUserName;
+        var user = User.GetUserId();
         var agentflow = new Agentflow
         {
             Name = request.Name,
@@ -140,7 +141,7 @@ public class AgentflowsController : ControllerBase
     [ProducesApiResult(typeof(Agentflow))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] AgentflowUpdateRequest request)
     {
-        var user = User?.Identity?.Name ?? Constants.AdminUserName;
+        var user = User.GetUserId();
         var nodes = request
             .Nodes.Select(x => new AgentflowNode
             {

@@ -195,7 +195,7 @@ public partial class AgentRuntimeService
                     agent.Id,
                     agent.Name,
                     providerSessionId,
-                    Constants.AdminUserName,
+                    _turnContextAccessor?.Current?.UserId ?? Constants.AdminUserId,
                     CancellationToken.None
                 );
             }

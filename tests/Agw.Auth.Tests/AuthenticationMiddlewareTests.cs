@@ -86,11 +86,12 @@ public sealed class AuthenticationMiddlewareTests
         context.Request.Headers.Authorization = "Bearer agw_desktop";
         var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask, false);
 
-        await InvokeAsync(middleware, context, new StateStoreStub("agw_desktop"));
+        await InvokeAsync(middleware, context, new StateStoreStub("agw_desktop", "creator-42"));
 
         Assert.True(context.User.Identity?.IsAuthenticated);
         Assert.Equal(AgwAuthDefaults.BearerScheme, context.User.Identity?.AuthenticationType);
-        Assert.Equal(Constants.AdminUserName, context.User.Identity?.Name);
+        Assert.Equal(Constants.ApiTokenUserName, context.User.Identity?.Name);
+        Assert.Equal("creator-42", context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
     }
 
     [Fact]
@@ -132,6 +133,48 @@ public sealed class AuthenticationMiddlewareTests
         await InvokeAsync(middleware, context, new StateStoreStub());
 
         Assert.Equal(AgwAuthDefaults.LocalTrustedScheme, context.User.Identity?.AuthenticationType);
+        Assert.Equal(Constants.AdminUserName, context.User.Identity?.Name);
+        Assert.Equal(Constants.AdminUserId, context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_AuthenticatedPrincipalWithMissingOrBlankClaims_AddsDefaults()
+    {
+        var context = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(
+                new ClaimsIdentity(
+                    [new Claim(ClaimTypes.Name, " "), new Claim(ClaimTypes.NameIdentifier, string.Empty)],
+                    AgwAuthDefaults.CookieScheme
+                )
+            ),
+        };
+        var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask, false);
+
+        await InvokeAsync(middleware, context, new StateStoreStub());
+
+        Assert.Equal(Constants.AdminUserName, context.User.Identity?.Name);
+        Assert.Equal(Constants.AdminUserId, context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_AuthenticatedPrincipalWithValidClaims_PreservesClaims()
+    {
+        var context = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(
+                new ClaimsIdentity(
+                    [new Claim(ClaimTypes.Name, "operator"), new Claim(ClaimTypes.NameIdentifier, "user-42")],
+                    AgwAuthDefaults.CookieScheme
+                )
+            ),
+        };
+        var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask, false);
+
+        await InvokeAsync(middleware, context, new StateStoreStub());
+
+        Assert.Equal("operator", context.User.Identity?.Name);
+        Assert.Equal("user-42", context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
     }
 
     [Fact]
@@ -213,6 +256,8 @@ public sealed class AuthenticationMiddlewareTests
         await InvokeAsync(middleware, context, new StateStoreStub("agw_desktop"));
 
         Assert.Equal(AgwAuthDefaults.BearerScheme, context.User.Identity?.AuthenticationType);
+        Assert.Equal(Constants.ApiTokenUserName, context.User.Identity?.Name);
+        Assert.Equal("token-creator", context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
         Assert.True(nextCalled);
     }
 
@@ -292,10 +337,12 @@ public sealed class AuthenticationMiddlewareTests
     private sealed class StateStoreStub : IAuthenticationStateStore, IApiTokenStore
     {
         private readonly string? _validToken;
+        private readonly string _tokenUserId;
 
-        public StateStoreStub(string? validToken = null)
+        public StateStoreStub(string? validToken = null, string tokenUserId = "token-creator")
         {
             _validToken = validToken;
+            _tokenUserId = tokenUserId;
         }
 
         public AuthenticationSnapshot GetAuthenticationSnapshot() => new("hash", 1);
@@ -309,8 +356,13 @@ public sealed class AuthenticationMiddlewareTests
         public Task<bool> RevokeTokenAsync(Guid id, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
 
-        public Task<bool> ValidateTokenAsync(string token, CancellationToken cancellationToken = default) =>
-            Task.FromResult(string.Equals(token, _validToken, StringComparison.Ordinal));
+        public Task<ApiTokenIdentity?> ValidateTokenAsync(
+            string token,
+            CancellationToken cancellationToken = default
+        ) =>
+            Task.FromResult(
+                string.Equals(token, _validToken, StringComparison.Ordinal) ? new ApiTokenIdentity(_tokenUserId) : null
+            );
 
         public Task UpdatePasswordAsync(string passwordHash, CancellationToken cancellationToken = default) =>
             throw new NotImplementedException();
