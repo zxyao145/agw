@@ -2,6 +2,12 @@ import type { ExecutionMessage, ExecutionMessageContent } from "./types";
 
 const TEXT_CONTENT_TYPES = new Set(["TextContent", "text"]);
 
+function isReasoningContent(
+  content: ExecutionMessageContent,
+): content is ExecutionMessageContent & { content: string } {
+  return content.type === "TextReasoningContent" && typeof content.content === "string";
+}
+
 export function isTextContent(
   content: ExecutionMessageContent,
 ): content is ExecutionMessageContent & { content: string } {
@@ -76,7 +82,11 @@ export function appendStreamingContents(
 ): void {
   for (const incomingContent of incoming.contents) {
     const previousContent = existing.contents.at(-1);
-    if (previousContent && isTextContent(previousContent) && isTextContent(incomingContent)) {
+    const canAppendText =
+      previousContent &&
+      ((isTextContent(previousContent) && isTextContent(incomingContent)) ||
+        (isReasoningContent(previousContent) && isReasoningContent(incomingContent)));
+    if (canAppendText) {
       previousContent.content += incomingContent.content;
       continue;
     }
@@ -85,12 +95,19 @@ export function appendStreamingContents(
   }
 }
 
+function cloneStreamingMessage<T extends ExecutionMessage>(message: T): T {
+  const cloned = cloneMessage(message);
+  cloned.contents = [];
+  appendStreamingContents(cloned, message);
+  return cloned;
+}
+
 export function scopeStreamingMessage<T extends ExecutionMessage>(
   message: T,
   streamingScopeId: string,
 ): T {
   return {
-    ...cloneMessage(message),
+    ...cloneStreamingMessage(message),
     streamingScopeId,
   };
 }
@@ -136,7 +153,7 @@ export function mergeStreamingMessages<T extends ExecutionMessage>(
           })();
     if (existingIndex === undefined) {
       const appendedIndex = updated.length;
-      updated.push(cloneMessage(incoming));
+      updated.push(cloneStreamingMessage(incoming));
       indexByIdentity?.set(getStreamingIdentity(incoming), appendedIndex);
       mutableIndexes.add(appendedIndex);
       continue;
@@ -147,7 +164,7 @@ export function mergeStreamingMessages<T extends ExecutionMessage>(
     }
 
     if (!mutableIndexes.has(existingIndex)) {
-      updated[existingIndex] = cloneMessage(updated[existingIndex]);
+      updated[existingIndex] = cloneStreamingMessage(updated[existingIndex]);
       mutableIndexes.add(existingIndex);
     }
     appendStreamingContents(updated[existingIndex], incoming);

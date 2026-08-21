@@ -17,11 +17,22 @@ import { useMarkdown } from "react-native-marked";
 import { useWorkspace } from "@/features/workspace/workspace-provider";
 import { WorkspaceShell } from "@/features/workspace/workspace-shell";
 import { colors, radius, typography } from "@/theme/tokens";
+import {
+  getRenderableMessageContents,
+  hasRenderableMessageContent,
+  stringifyContentValue,
+} from "./message-rendering";
 
 export function ChatScreen(): React.JSX.Element {
   const workspace = useWorkspace();
   const listRef = React.useRef<FlatList<ProcessedMessageItem<AiMessage>>>(null);
-  const items = React.useMemo(() => processMessages(workspace.messages), [workspace.messages]);
+  const items = React.useMemo(
+    () =>
+      processMessages(workspace.messages).filter(
+        (item) => item.type === "accordion" || hasRenderableMessageContent(item.message),
+      ),
+    [workspace.messages],
+  );
 
   React.useEffect(() => {
     if (items.length) requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
@@ -87,9 +98,7 @@ function MessageCard({
   result?: boolean;
 }): React.JSX.Element | null {
   const isUser = message.role === "user";
-  const visible = message.contents.filter(
-    (content) => content.type !== MessageContentType.UsageContent,
-  );
+  const visible = getRenderableMessageContents(message);
   if (visible.length === 0) return null;
   return (
     <View style={[styles.messageRow, isUser && styles.messageRowUser]}>
@@ -103,28 +112,17 @@ function MessageCard({
         ]}
       >
         {visible.map((content, index) => (
-          <Content key={`${message.messageId}-${index}`} content={content} isUser={isUser} />
+          <Content key={`${message.messageId}-${index}`} content={content} />
         ))}
       </View>
     </View>
   );
 }
 
-function Content({
-  content,
-  isUser,
-}: {
-  content: AiMessageContent;
-  isUser: boolean;
-}): React.JSX.Element | null {
-  const value =
-    typeof content.content === "string"
-      ? content.content
-      : content.content == null
-        ? ""
-        : JSON.stringify(content.content, null, 2);
+function Content({ content }: { content: AiMessageContent }): React.JSX.Element | null {
+  const value = stringifyContentValue(content.content);
   if (content.type === MessageContentType.TextContent || content.type === "text") {
-    return <MarkdownText value={value} inverted={isUser} />;
+    return <MarkdownText value={value} inverted={false} />;
   }
   if (content.type === MessageContentType.TextReasoningContent) {
     return <Reasoning value={value} />;
@@ -137,8 +135,8 @@ function Content({
   if (content.type === MessageContentType.UriContent && content.uri) {
     return (
       <Pressable onPress={() => void Linking.openURL(content.uri!)} style={styles.linkRow}>
-        <LinkIcon color={isUser ? colors.white : colors.primary} size={15} />
-        <Text numberOfLines={2} style={[styles.linkText, isUser && styles.userText]}>
+        <LinkIcon color={colors.primary} size={15} />
+        <Text numberOfLines={2} style={styles.linkText}>
           {content.name || content.uri}
         </Text>
       </Pressable>
@@ -148,7 +146,7 @@ function Content({
     return <Text style={styles.contentError}>{value || "Execution error"}</Text>;
   }
   if (!value) return null;
-  return <Text style={[styles.plainText, isUser && styles.userText]}>{value}</Text>;
+  return <Text style={styles.plainText}>{value}</Text>;
 }
 
 function MarkdownText({
@@ -223,8 +221,8 @@ function ToolGroup({
       {open
         ? item.messages.map((message, index) => (
             <View key={`${message.messageId}-${index}`} style={styles.toolBody}>
-              {message.contents.map((content, contentIndex) => (
-                <Content key={contentIndex} content={content} isUser={false} />
+              {getRenderableMessageContents(message).map((content, contentIndex) => (
+                <Content key={contentIndex} content={content} />
               ))}
             </View>
           ))
@@ -264,11 +262,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     overflow: "hidden",
   },
-  userBubble: { backgroundColor: colors.primary },
-  agentBubble: { backgroundColor: colors.receiver },
+  userBubble: { backgroundColor: "#f3f3f4" },
+  agentBubble: { backgroundColor: "transparent", paddingHorizontal: 0, paddingVertical: 0 },
   resultBubble: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   plainText: { color: colors.ink, fontFamily: typography.regular, fontSize: 14, lineHeight: 21 },
-  userText: { color: colors.white },
   contentError: {
     color: colors.danger,
     fontFamily: typography.medium,

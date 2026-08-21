@@ -151,6 +151,7 @@ export function FilesScreen(): React.JSX.Element {
         <View style={styles.changedControl}>
           <Text style={styles.changedLabel}>Changed</Text>
           <Switch
+            style={styles.changedSwitch}
             value={onlyChanged}
             onValueChange={setOnlyChanged}
             trackColor={{ false: colors.border, true: colors.primarySoft }}
@@ -358,8 +359,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 3,
   },
-  changedControl: { flexDirection: "row", alignItems: "center", gap: 4 },
+  changedControl: { flexDirection: "row", alignItems: "center", gap: 4,},
   changedLabel: { color: colors.muted, fontFamily: typography.medium, fontSize: 11 },
+  changedSwitch: { alignItems: "center", justifyContent: "center",  },
   list: { padding: 8, paddingBottom: 20 },
   fileRow: {
     minHeight: 52,

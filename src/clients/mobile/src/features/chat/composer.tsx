@@ -29,6 +29,7 @@ import {
 } from "react-native";
 
 import { IconButton } from "@/components/icon-button";
+import { groupChatTargets } from "@/features/chat/chat-targets";
 import { useWorkspace } from "@/features/workspace/workspace-provider";
 import { colors, radius, typography } from "@/theme/tokens";
 import { useComposer } from "./composer-provider";
@@ -430,34 +431,42 @@ function CapabilityRow({
 
 function TargetPicker({ open, onClose }: { open: boolean; onClose(): void }): React.JSX.Element {
   const workspace = useWorkspace();
+  const groups = groupChatTargets(workspace.targets);
   return (
     <Modal animationType="fade" transparent visible={open} onRequestClose={onClose}>
       <Pressable style={styles.modalBackdrop} onPress={onClose}>
         <View style={styles.sheet}>
           <Text style={styles.sheetTitle}>Choose an agent</Text>
-          {workspace.targets.map((target) => {
-            const value = `${target.type}:${target.id}`;
-            return (
-              <Pressable
-                key={value}
-                onPress={() => {
-                  workspace.selectTarget(value);
-                  onClose();
-                }}
-                style={styles.option}
-              >
-                <View>
-                  <Text style={styles.optionTitle}>{target.label}</Text>
-                  <Text style={styles.optionMeta}>
-                    {target.type === "agentflow" ? "Agentflow" : "Agent"}
-                  </Text>
-                </View>
-                {workspace.selectedTargetValue === value ? (
-                  <View style={styles.selectedDot} />
-                ) : null}
-              </Pressable>
-            );
-          })}
+          <ScrollView
+            bounces={false}
+            showsVerticalScrollIndicator
+            style={styles.targetList}
+            contentContainerStyle={styles.targetListContent}
+          >
+            {groups.map((group) => (
+              <View key={group.type} style={styles.targetGroup}>
+                <Text style={styles.targetGroupLabel}>{group.label}</Text>
+                {group.targets.map((target) => {
+                  const value = `${target.type}:${target.id}`;
+                  return (
+                    <Pressable
+                      key={value}
+                      onPress={() => {
+                        workspace.selectTarget(value);
+                        onClose();
+                      }}
+                      style={styles.option}
+                    >
+                      <Text style={styles.optionTitle}>{target.label}</Text>
+                      {workspace.selectedTargetValue === value ? (
+                        <View style={styles.selectedDot} />
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ))}
+          </ScrollView>
         </View>
       </Pressable>
     </Modal>
@@ -699,6 +708,16 @@ const styles = StyleSheet.create({
   },
   sheetHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   sheetTitle: { color: colors.ink, fontFamily: typography.semibold, fontSize: 18, marginBottom: 8 },
+  targetList: { flexShrink: 1 },
+  targetListContent: { paddingBottom: 4 },
+  targetGroup: { paddingTop: 8 },
+  targetGroupLabel: {
+    paddingHorizontal: 8,
+    paddingBottom: 4,
+    color: colors.muted,
+    fontFamily: typography.regular,
+    fontSize: 14,
+  },
   option: {
     minHeight: 54,
     paddingHorizontal: 8,
@@ -709,7 +728,6 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   optionTitle: { color: colors.ink, fontFamily: typography.medium, fontSize: 14 },
-  optionMeta: { color: colors.muted, fontFamily: typography.regular, fontSize: 11, marginTop: 2 },
   permissionOptionCopy: { flexDirection: "row", alignItems: "center", gap: 8 },
   selectedDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary },
   addBackdrop: {

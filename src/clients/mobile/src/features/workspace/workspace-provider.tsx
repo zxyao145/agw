@@ -27,6 +27,7 @@ import React from "react";
 
 import { getErrorMessage } from "@/lib/errors";
 import { useSession } from "@/features/servers/session-provider";
+import { getDefaultChatTargetValue } from "@/features/chat/chat-targets";
 import {
   type AgentMode,
   executeWithWebSocket,
@@ -195,7 +196,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
       return;
     }
     if (!targets.some((target) => getTargetValue(target) === selectedTargetValue)) {
-      setSelectedTargetValue(getTargetValue(targets[0]));
+      setSelectedTargetValue(getDefaultChatTargetValue(targets));
     }
   }, [selectedTargetValue, targets]);
 

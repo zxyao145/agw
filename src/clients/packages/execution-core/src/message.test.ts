@@ -132,6 +132,56 @@ test("text deltas merge only when scope, id, role, and author all match", () => 
   assert.equal(differentAuthor.length, 3);
 });
 
+test("reasoning deltas merge into one reasoning content", () => {
+  const merged = mergeStreamingMessages(
+    [
+      {
+        messageId: "reasoning-1",
+        role: "assistant",
+        author: "agent",
+        streamingScopeId: "user-1",
+        contents: [{ type: "TextReasoningContent", content: "The" }],
+      },
+    ],
+    [
+      {
+        messageId: "reasoning-1",
+        role: "assistant",
+        author: "agent",
+        streamingScopeId: "user-1",
+        contents: [{ type: "TextReasoningContent", content: " user" }],
+      },
+    ],
+  );
+
+  assert.equal(merged.length, 1);
+  assert.deepEqual(merged[0].contents, [
+    { type: "TextReasoningContent", content: "The user", additionalProperties: undefined },
+  ]);
+});
+
+test("adjacent reasoning contents in the first streamed message are normalized", () => {
+  const merged = mergeStreamingMessages(
+    [],
+    [
+      {
+        messageId: "reasoning-1",
+        role: "assistant",
+        author: "agent",
+        streamingScopeId: "user-1",
+        contents: [
+          { type: "TextReasoningContent", content: "Simple" },
+          { type: "TextReasoningContent", content: " math" },
+        ],
+      },
+    ],
+  );
+
+  assert.deepEqual(merged[0].contents, [
+    { type: "TextReasoningContent", content: "Simple math", additionalProperties: undefined },
+  ]);
+});
+
 test("a streaming batch builds one result while preserving untouched message references", () => {
   const untouched = textMessage({
     messageId: "untouched",
