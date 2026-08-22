@@ -106,6 +106,21 @@ test("shared Chat defaults agent mode to Execute without a persisted mode snapsh
   assert.match(source, /setAgentMode\(DEFAULT_AGENT_MODE\)/);
 });
 
+test("shared Chat clears records without replacing the active conversation", async () => {
+  const source = await readFile(CHAT_URL, "utf8");
+  const clearHandlerStart = source.indexOf("const handleClear = React.useCallback");
+  const clearHandlerEnd = source.indexOf("const handleClearPendingFileComments", clearHandlerStart);
+  const clearHandler = source.slice(clearHandlerStart, clearHandlerEnd);
+
+  assert.notEqual(clearHandlerStart, -1);
+  assert.notEqual(clearHandlerEnd, -1);
+  assert.match(clearHandler, /clearProjectContextRecords\(projectId, contextToClear\)/);
+  assert.doesNotMatch(clearHandler, /setContextId\(null\)/);
+  assert.doesNotMatch(clearHandler, /contextIdRef\.current = null/);
+  assert.doesNotMatch(clearHandler, /announcedContextIdRef\.current = null/);
+  assert.doesNotMatch(clearHandler, /onContextIdChange\?\.\(null\)/);
+});
+
 test("shared Chat keeps unmatched human interactions in the scrollable conversation footer", async () => {
   const source = await readFile(CHAT_URL, "utf8");
 

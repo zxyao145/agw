@@ -632,11 +632,20 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
   const clearCurrentContext = React.useCallback(async () => {
     if (!contextService || !selectedProjectId || !selectedContextId) return;
     ensureIdle();
-    await contextService.clearProjectContextRecords(selectedProjectId, selectedContextId);
+    const contextToClear = selectedContextId;
+    // Clearing records keeps the conversation identity; only New Chat replaces it.
+    selectedContextIdRef.current = contextToClear;
+    await contextService.clearProjectContextRecords(selectedProjectId, contextToClear);
+    if (selectedContextIdRef.current !== contextToClear) {
+      await contextsQuery.refetch();
+      return;
+    }
     executionGenerationRef.current += 1;
     modeChangeGenerationRef.current += 1;
     batcherRef.current?.discard();
     disposeExecutionSession();
+    hydratedContextRef.current = `${selectedProjectId}:${contextToClear}`;
+    setSelectedContextId(contextToClear);
     confirmedAgentModeRef.current = DEFAULT_AGENT_MODE;
     setMessages([]);
     setClaudeCommands([]);

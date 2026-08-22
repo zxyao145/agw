@@ -1085,11 +1085,7 @@ export function Chat({
     setMessages([]);
     setClaudeCommands([]);
     setConversationUsage(EMPTY_TOKEN_USAGE);
-    setContextId(null);
-    contextIdRef.current = null;
-    announcedContextIdRef.current = null;
     userInputRef.current?.setInput("");
-    onContextIdChange?.(null);
 
     if (projectId && contextToClear) {
       void clearProjectContextRecords(projectId, contextToClear)
@@ -1098,14 +1094,7 @@ export function Chat({
     } else {
       void onConversationChange?.();
     }
-  }, [
-    contextId,
-    interruptAndDispose,
-    notifyExecutionError,
-    onContextIdChange,
-    onConversationChange,
-    projectId,
-  ]);
+  }, [contextId, interruptAndDispose, notifyExecutionError, onConversationChange, projectId]);
 
   const handleClearPendingFileComments = React.useCallback(() => {
     if (pendingFileComments.length === 0) return;

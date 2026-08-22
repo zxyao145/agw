@@ -309,7 +309,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     overflow: "hidden",
   },
-  userBubble: { backgroundColor: "#f3f3f4", paddingVertical: 2},
+  userBubble: { backgroundColor: "#f3f3f4", paddingVertical: 2 },
   agentBubble: { backgroundColor: "transparent", paddingHorizontal: 0, paddingVertical: 0 },
   resultBubble: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   plainText: { color: colors.ink, fontFamily: typography.regular, fontSize: 14, lineHeight: 21 },
