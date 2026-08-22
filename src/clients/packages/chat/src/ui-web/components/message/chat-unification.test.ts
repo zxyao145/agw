@@ -56,6 +56,14 @@ test("auto-scroll state is shared through chat-core", async () => {
   assert.match(source, /shouldAutoScroll/);
 });
 
+test("scroll to bottom reaches the full conversation scroll extent", async () => {
+  const source = await readFile(CHAT_URL, "utf8");
+  assert.match(
+    source,
+    /scrollContainer\.scrollTo\(\{[\s\S]*?top: scrollContainer\.scrollHeight[\s\S]*?behavior: "smooth"/,
+  );
+});
+
 test("chat-runtime exports a reusable conversation controller", async () => {
   const source = await readFile(RUNTIME_PACKAGE_URL, "utf8");
   const hookSource = await readFile(RUNTIME_HOOK_URL, "utf8");

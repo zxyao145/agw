@@ -10,11 +10,13 @@ import type { WorkspaceTab } from "./workspace-types";
 export function WorkspaceShell({
   active,
   children,
+  onScrollToBottom,
   onScrollToTop,
   onTabChange,
 }: {
   active: WorkspaceTab;
   children: React.ReactNode;
+  onScrollToBottom?: () => void;
   onScrollToTop?: () => void;
   onTabChange(tab: WorkspaceTab): void;
 }): React.JSX.Element {
@@ -32,7 +34,11 @@ export function WorkspaceShell({
           onTabChange={onTabChange}
         />
         <View style={styles.content}>{children}</View>
-        <Composer safeBottom={insets.bottom} onScrollToTop={onScrollToTop} />
+        <Composer
+          safeBottom={insets.bottom}
+          onScrollToBottom={onScrollToBottom}
+          onScrollToTop={onScrollToTop}
+        />
       </KeyboardAvoidingView>
     </ScreenFrame>
   );

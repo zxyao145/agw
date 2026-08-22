@@ -55,7 +55,10 @@ export type NativeHumanResponse = {
   responseData?: unknown;
 };
 
-export type NativeConversationHistoryHandle = { scrollToTop(): void };
+export type NativeConversationHistoryHandle = {
+  scrollToBottom(): void;
+  scrollToTop(): void;
+};
 
 export type NativeConversationHistoryProps = {
   items: ConversationRenderItem[];
@@ -115,7 +118,16 @@ export const NativeConversationHistory = React.forwardRef<
 
   React.useImperativeHandle(
     ref,
-    () => ({ scrollToTop: () => listRef.current?.scrollToOffset({ offset: 0, animated: true }) }),
+    () => ({
+      scrollToBottom: () => {
+        autoScrollRef.current = {
+          ...autoScrollRef.current,
+          shouldAutoScroll: true,
+        };
+        listRef.current?.scrollToEnd({ animated: true });
+      },
+      scrollToTop: () => listRef.current?.scrollToOffset({ offset: 0, animated: true }),
+    }),
     [],
   );
 

@@ -1121,6 +1121,20 @@ export function Chat({
     });
   }, []);
 
+  const handleScrollToBottom = React.useCallback(() => {
+    const scrollContainer = conversationScrollRef.current;
+    if (!scrollContainer) return;
+
+    autoScrollStateRef.current = {
+      ...autoScrollStateRef.current,
+      shouldAutoScroll: true,
+    };
+    scrollContainer.scrollTo({
+      top: scrollContainer.scrollHeight,
+      behavior: "smooth",
+    });
+  }, []);
+
   const handleConversationScroll = React.useCallback((event: React.UIEvent<HTMLDivElement>) => {
     autoScrollStateRef.current = updateAutoScrollState(
       autoScrollStateRef.current,
@@ -1175,6 +1189,7 @@ export function Chat({
             }}
             onInterrupt={handleInterrupt}
             onClearSession={handleClear}
+            onScrollToBottom={handleScrollToBottom}
             onScrollToTop={handleScrollToTop}
             showResume={target?.type === "agentflow"}
             canResume={!checkpointResumeDisabled && latestAvailableCheckpoint !== null}

@@ -11,6 +11,7 @@ import { WorkspaceScreen } from "@/features/workspace/workspace-screen";
 let mockChatMounts = 0;
 let mockFilesMounts = 0;
 let mockShellMounts = 0;
+const mockChatScrollToBottom = jest.fn();
 const mockChatScrollToTop = jest.fn();
 const mockFilesScrollToTop = jest.fn();
 
@@ -44,7 +45,14 @@ jest.mock("@/features/chat/chat-screen", () => {
       mockReact.useEffect(() => {
         mockChatMounts += 1;
       }, []);
-      mockReact.useImperativeHandle(ref, () => ({ scrollToTop: mockChatScrollToTop }), []);
+      mockReact.useImperativeHandle(
+        ref,
+        () => ({
+          scrollToBottom: mockChatScrollToBottom,
+          scrollToTop: mockChatScrollToTop,
+        }),
+        [],
+      );
       return mockReact.createElement(
         View,
         null,
@@ -88,11 +96,13 @@ jest.mock("@/features/workspace/workspace-shell", () => {
     WorkspaceShell: ({
       active,
       children,
+      onScrollToBottom,
       onScrollToTop,
       onTabChange,
     }: {
       active: "chat" | "files";
       children: React.ReactNode;
+      onScrollToBottom?: () => void;
       onScrollToTop(): void;
       onTabChange(tab: "chat" | "files"): void;
     }) => {
@@ -115,6 +125,12 @@ jest.mock("@/features/workspace/workspace-shell", () => {
           accessibilityLabel: "Scroll to top",
           onPress: onScrollToTop,
         }),
+        onScrollToBottom
+          ? mockReact.createElement(Pressable, {
+              accessibilityLabel: "Scroll to bottom",
+              onPress: onScrollToBottom,
+            })
+          : null,
         children,
       );
     },
@@ -159,6 +175,16 @@ test("switches workspace content without remounting visited panes or the shell",
   await fireEvent.press(view.getByLabelText("Scroll to top"));
   expect(mockFilesScrollToTop).toHaveBeenCalledTimes(1);
   expect(mockChatScrollToTop).not.toHaveBeenCalled();
+});
+
+test("scrolls conversation history to bottom only while Chat is active", async () => {
+  const view = await render(<WorkspaceScreen initialTab="chat" />);
+
+  await fireEvent.press(view.getByLabelText("Scroll to bottom"));
+  expect(mockChatScrollToBottom).toHaveBeenCalledTimes(1);
+
+  await fireEvent.press(view.getByLabelText("Show files"));
+  expect(view.queryByLabelText("Scroll to bottom")).toBeNull();
 });
 
 test("uses the route-provided initial tab without eagerly mounting the other pane", async () => {

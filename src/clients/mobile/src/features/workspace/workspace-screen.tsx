@@ -1,3 +1,4 @@
+import type { NativeConversationHistoryHandle } from "@agw/chat-native/conversation";
 import React from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -12,7 +13,7 @@ export function WorkspaceScreen({ initialTab }: { initialTab: WorkspaceTab }): R
     chat: initialTab === "chat",
     files: initialTab === "files",
   });
-  const chatRef = React.useRef<WorkspacePaneHandle>(null);
+  const chatRef = React.useRef<NativeConversationHistoryHandle>(null);
   const filesRef = React.useRef<WorkspacePaneHandle>(null);
 
   const selectTab = React.useCallback((tab: WorkspaceTab) => {
@@ -25,8 +26,17 @@ export function WorkspaceScreen({ initialTab }: { initialTab: WorkspaceTab }): R
     activeRef.current?.scrollToTop();
   }, [activeTab]);
 
+  const scrollToBottom = React.useCallback(() => {
+    chatRef.current?.scrollToBottom();
+  }, []);
+
   return (
-    <WorkspaceShell active={activeTab} onScrollToTop={scrollToTop} onTabChange={selectTab}>
+    <WorkspaceShell
+      active={activeTab}
+      onScrollToBottom={activeTab === "chat" ? scrollToBottom : undefined}
+      onScrollToTop={scrollToTop}
+      onTabChange={selectTab}
+    >
       {visitedTabs.chat ? (
         <WorkspacePane active={activeTab === "chat"}>
           <ChatScreen ref={chatRef} />

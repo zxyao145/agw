@@ -9,6 +9,7 @@ jest.mock("expo-image", () => ({ Image: () => null }));
 jest.mock("lucide-react-native", () => {
   const Icon = () => null;
   return {
+    ArrowDown: Icon,
     ArrowUp: Icon,
     ChevronDown: Icon,
     ImagePlus: Icon,
@@ -85,6 +86,20 @@ beforeEach(() => {
       selectQuickText: setText,
     } as never;
   });
+});
+
+test("exposes conversation bottom and top scroll actions", async () => {
+  const onScrollToBottom = jest.fn();
+  const onScrollToTop = jest.fn();
+  const view = await render(
+    <Composer safeBottom={0} onScrollToBottom={onScrollToBottom} onScrollToTop={onScrollToTop} />,
+  );
+
+  await fireEvent.press(view.getByLabelText("Scroll to bottom"));
+  await fireEvent.press(view.getByLabelText("Scroll to top"));
+
+  expect(onScrollToBottom).toHaveBeenCalledTimes(1);
+  expect(onScrollToTop).toHaveBeenCalledTimes(1);
 });
 
 test("shows slash suggestions and replaces the trigger at the active caret", async () => {

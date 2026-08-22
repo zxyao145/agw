@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ArrowUp, CornerDownRight, Eraser, RotateCcw, Square, X } from "lucide-react";
+import { ArrowDown, ArrowUp, CornerDownRight, Eraser, RotateCcw, Square, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { QuickTextDialog } from "@agw/projects";
@@ -25,6 +25,7 @@ interface ChatInputProps {
   onExecute: (value: string, imageAttachments: readonly ChatImageAttachment[]) => void;
   onInterrupt: () => void;
   onClearSession: () => void;
+  onScrollToBottom: () => void;
   onScrollToTop: () => void;
   showResume: boolean;
   canResume: boolean;
@@ -48,6 +49,7 @@ export function ChatInput({
   onExecute,
   onInterrupt,
   onClearSession,
+  onScrollToBottom,
   onScrollToTop,
   showResume,
   canResume,
@@ -245,7 +247,11 @@ export function ChatInput({
           <Eraser width={16} />
         </Button>
         <Separator orientation="vertical" />
-        <Button onClick={onScrollToTop} variant="ghost" size="sm">
+        <Button className="has-[>svg]:pl-2" onClick={onScrollToBottom} variant="ghost" size="sm">
+          <ArrowDown width={16} />
+        </Button>
+        <Separator className="data-[orientation=vertical]:h-[60%]" orientation="vertical" />
+        <Button className="has-[>svg]:pr-2" onClick={onScrollToTop} variant="ghost" size="sm">
           <ArrowUp width={16} />
         </Button>
       </UserInput.TopRight>

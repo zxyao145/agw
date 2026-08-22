@@ -7,6 +7,7 @@ import {
 import type { PermissionMode } from "@agw/execution-core";
 import { Image as ExpoImage } from "expo-image";
 import {
+  ArrowDown,
   ArrowUp,
   ChevronDown,
   ImagePlus,
@@ -79,9 +80,11 @@ const permissionLabels: Record<PermissionMode, string> = {
 
 export function NativeChatComposer({
   safeBottom,
+  onScrollToBottom,
   onScrollToTop,
 }: {
   safeBottom: number;
+  onScrollToBottom?: () => void;
   onScrollToTop?: () => void;
 }): React.JSX.Element {
   const workspace = useNativeChat();
@@ -214,6 +217,12 @@ export function NativeChatComposer({
             divided={false}
             disabled={workspace.isExecuting}
             onPress={() => void composer.pickImages()}
+          />
+          <UtilityButton
+            icon={ArrowDown}
+            label="Scroll to bottom"
+            disabled={!onScrollToBottom}
+            onPress={onScrollToBottom}
           />
           <UtilityButton
             icon={ArrowUp}
