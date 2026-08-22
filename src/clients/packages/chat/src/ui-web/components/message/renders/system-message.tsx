@@ -23,7 +23,7 @@ export default function SystemMessage({ node }: { node: MessageNode }) {
     return (
       <div className="msg-content text-muted-foreground ">
         <div className="flex justify-between items-start">
-          <div className="flex flex-1 flex-col text-xs">
+          <div className="flex min-w-0 flex-1 flex-col text-xs">
             <MdCard mdText={expanded ? renderContent : preview} />
           </div>
         </div>
@@ -48,7 +48,7 @@ export default function SystemMessage({ node }: { node: MessageNode }) {
           </Button>
         </div>
 
-        <div className="flex flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col">
           <MdCard mdText={expanded ? renderContent : preview} />
         </div>
       </div>
