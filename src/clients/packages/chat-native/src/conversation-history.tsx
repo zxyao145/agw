@@ -45,6 +45,7 @@ import {
 } from "@agw/chat-core";
 import type { PermissionMode } from "@agw/execution-core";
 
+import { padInlineCode } from "./native-markdown";
 import { defaultNativeChatTheme, type NativeChatTheme } from "./theme";
 
 export type NativeHumanResponse = {
@@ -261,7 +262,7 @@ function NativeRenderItem({
       </View>
     );
   }
-  return (
+  const message = (
     <NativeMessage
       message={item.message}
       result={item.type === "result"}
@@ -269,6 +270,7 @@ function NativeRenderItem({
       theme={theme}
     />
   );
+  return item.type === "result" ? <View style={styles.resultSection}>{message}</View> : message;
 }
 
 function NativeToolState({
@@ -401,7 +403,11 @@ function NativeMessage({
             {measurableText}
           </Text>
         ) : null}
-        {result ? <Text style={styles.resultTitle}>Result</Text> : null}
+        {result ? (
+          <View style={styles.resultHeading}>
+            <Text style={styles.resultTitle}>Result</Text>
+          </View>
+        ) : null}
         {message.contents.map((content, index) => (
           <NativeContent
             key={`${content.type}:${index}`}
@@ -471,6 +477,7 @@ function NativeContent({
 }
 
 function NativeMarkdown({ value, theme }: { value: string; theme: NativeChatTheme }) {
+  const markdown = React.useMemo(() => padInlineCode(normalizeMathDelimiters(value)), [value]);
   const markdownStyle = React.useMemo<MarkdownStyle>(
     () => ({
       paragraph: {
@@ -485,12 +492,12 @@ function NativeMarkdown({ value, theme }: { value: string; theme: NativeChatThem
       h3: { color: theme.ink, fontFamily: theme.fontSemibold, fontSize: 16 },
       strong: { color: theme.ink, fontFamily: theme.fontSemibold, fontWeight: "normal" },
       link: { color: theme.primary, underline: true },
-      code: { color: theme.ink, backgroundColor: theme.code, borderColor: theme.border },
+      code: { color: theme.ink, backgroundColor: theme.code, borderColor: "transparent" },
       codeBlock: {
         color: theme.ink,
         backgroundColor: theme.code,
-        borderColor: theme.border,
-        borderWidth: 1,
+        borderColor: "transparent",
+        borderWidth: 0,
         borderRadius: 9,
         padding: 10,
       },
@@ -508,7 +515,7 @@ function NativeMarkdown({ value, theme }: { value: string; theme: NativeChatThem
   );
   return (
     <EnrichedMarkdownText
-      markdown={normalizeMathDelimiters(value)}
+      markdown={markdown}
       flavor="github"
       containerStyle={markdownContainerStyle}
       markdownStyle={markdownStyle}
@@ -932,6 +939,14 @@ function createStyles(theme: NativeChatTheme) {
     messageRowAgent: { width: "88%", alignSelf: "flex-start" },
     messageRowUser: { maxWidth: "88%", alignSelf: "flex-end", alignItems: "flex-end" },
     messageRowFull: { width: "100%", alignSelf: "stretch" },
+    resultSection: {
+      width: "100%",
+      marginTop: 20,
+      paddingTop: 16,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+      borderStyle: "dashed",
+    },
     author: { color: theme.muted, fontFamily: theme.fontMedium, fontSize: 11, marginLeft: 4 },
     authorUser: { marginLeft: 0, marginRight: 4, textAlign: "right" },
     bubble: {
@@ -955,15 +970,23 @@ function createStyles(theme: NativeChatTheme) {
     agentBubble: { backgroundColor: "transparent", paddingHorizontal: 0, paddingVertical: 0 },
     resultBubble: {
       width: "100%",
-      backgroundColor: theme.surface,
+      backgroundColor: theme.white,
       borderWidth: 1,
       borderColor: theme.border,
+    },
+    resultHeading: {
+      alignSelf: "flex-start",
+      marginBottom: 16,
+      paddingBottom: 4,
+      paddingRight: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+      borderStyle: "dashed",
     },
     resultTitle: {
       color: theme.ink,
       fontFamily: theme.fontSemibold,
       fontSize: 16,
-      marginBottom: 10,
     },
     plainText: { color: theme.ink, fontFamily: theme.fontRegular, fontSize: 14, lineHeight: 21 },
     contentError: {
@@ -1001,13 +1024,14 @@ function createStyles(theme: NativeChatTheme) {
       width: "100%",
       borderWidth: 1,
       borderColor: theme.border,
-      borderRadius: 14,
+      borderRadius: 8,
       backgroundColor: theme.white,
       overflow: "hidden",
     },
     toolHeader: {
-      minHeight: 56,
-      paddingHorizontal: 14,
+      minHeight: 48,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
       flexDirection: "row",
       alignItems: "center",
       gap: 10,

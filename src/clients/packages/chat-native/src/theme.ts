@@ -23,7 +23,7 @@ export const defaultNativeChatTheme: NativeChatTheme = {
   muted: "#727680",
   primary: "#075fca",
   border: "#c8ccda",
-  code: "#f3f3f4",
+  code: "#f4f4f4",
   danger: "#b42318",
   dangerSoft: "#fef3f2",
   warning: "#b54708",
