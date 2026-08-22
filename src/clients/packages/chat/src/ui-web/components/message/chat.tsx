@@ -6,12 +6,14 @@ import { toast } from "sonner";
 
 import { apiGet } from "@agw/api";
 import {
+  DEFAULT_AGENT_MODE,
   getAgentMode,
   getAgentflowCheckpointMessage,
   hasPersistedDurableExecution,
   getMessageStreamingScopeId,
   getPendingHumanGate,
   getTurnFinishedStatus,
+  getLatestAgentMode,
   isModeControlMessage,
   type AgentMode,
   type AgentflowCheckpointAvailability,
@@ -87,7 +89,6 @@ export interface ChatProps {
   active?: boolean;
 }
 
-const DEFAULT_AGENT_MODE: AgentMode = "execute";
 const EMPTY_FILE_COMMENTS: readonly LineComment[] = [];
 
 function prepareChatHistory(messages: AiMessage[]) {
@@ -96,15 +97,6 @@ function prepareChatHistory(messages: AiMessage[]) {
     ...preparedHistory,
     messages: scopeMessagesByUserTurn(preparedHistory.messages),
   };
-}
-
-function getLatestAgentMode(messages: AiMessage[]): AgentMode {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const mode = getAgentMode(messages[index]);
-    if (mode) return mode;
-  }
-
-  return DEFAULT_AGENT_MODE;
 }
 
 function calculateConversationUsage(messages: AiMessage[]): TokenUsage {

@@ -18,10 +18,15 @@ import {
   type CommandSource,
 } from "@agw/chat-core";
 import {
+  DEFAULT_AGENT_MODE,
   createStreamingMessageBatcher,
+  getAgentMode,
+  getLatestAgentMode,
+  isModeControlMessage,
   mergeStreamingMessages,
   scopeMessagesByUserTurn,
   scopeStreamingMessage,
+  type AgentMode,
   type PermissionMode,
   type StreamingMessageBatcher,
 } from "@agw/execution-core";
@@ -38,12 +43,7 @@ import React from "react";
 import { getErrorMessage } from "@/lib/errors";
 import { useSession } from "@/features/servers/session-provider";
 import { getDefaultChatTargetValue } from "@/features/chat/chat-targets";
-import {
-  type AgentMode,
-  executeWithWebSocket,
-  type ExecutionReconnectState,
-  type MobileExecutionHandle,
-} from "@/features/chat/execution-ws";
+import { type ExecutionReconnectState, MobileExecutionSession } from "@/features/chat/execution-ws";
 
 export type Project = components["schemas"]["ProjectResponse"];
 export type Agent = components["schemas"]["AgentResponse"];
@@ -107,17 +107,28 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
   const [selectedProjectId, setSelectedProjectId] = React.useState<string | null>(null);
   const [selectedTargetValue, setSelectedTargetValue] = React.useState<string | null>(null);
   const [selectedContextId, setSelectedContextId] = React.useState<string | null>(null);
-  const [permissionMode, setPermissionMode] = React.useState<PermissionMode>("fullAccess");
-  const [agentMode, setAgentMode] = React.useState<AgentMode>("execute");
+  const [permissionMode, setPermissionModeState] = React.useState<PermissionMode>("fullAccess");
+  const [agentMode, setAgentModeState] = React.useState<AgentMode>(DEFAULT_AGENT_MODE);
   const [claudeCommands, setClaudeCommands] = React.useState<string[]>([]);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [reconnectState, setReconnectState] = React.useState<ExecutionReconnectState | null>(null);
   const [operationError, setOperationError] = React.useState<string | null>(null);
-  const executionHandleRef = React.useRef<MobileExecutionHandle | null>(null);
+  const executionSessionRef = React.useRef<MobileExecutionSession | null>(null);
+  const executionSessionKeyRef = React.useRef<string | null>(null);
+  const configuredSessionKeyRef = React.useRef<string | null>(null);
+  const sessionConfigurationRef = React.useRef<{
+    key: string;
+    permissionMode: PermissionMode;
+    promise: Promise<void>;
+  } | null>(null);
   const executionGenerationRef = React.useRef(0);
+  const modeChangeGenerationRef = React.useRef(0);
   const stopTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const hydratedContextRef = React.useRef<string | null>(null);
+  const selectedContextIdRef = React.useRef<string | null>(null);
+  const activeStreamingScopeRef = React.useRef<string | null>(null);
+  const confirmedAgentModeRef = React.useRef<AgentMode>(DEFAULT_AGENT_MODE);
   const batcherRef = React.useRef<StreamingMessageBatcher<AiMessage> | null>(null);
 
   if (!batcherRef.current) {
@@ -199,6 +210,141 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
   const agentSuggestions = commandSource.mode === "system" ? commandSource.suggestions : [];
   const supportsAgentMode = agentSuggestions.some((suggestion) => suggestion.text === "/mode_set");
 
+  const applyExecutionMessage = React.useCallback((incoming: AiMessage) => {
+    const generation = executionGenerationRef.current;
+    if (incoming.additionalProperties?.type === "mode-change-failed") {
+      batcherRef.current?.flush(generation);
+      modeChangeGenerationRef.current += 1;
+      setAgentModeState(confirmedAgentModeRef.current);
+      const detail = incoming.contents.find(
+        (content) => typeof content.content === "string" && content.content.trim(),
+      )?.content;
+      setOperationError(typeof detail === "string" ? detail : "Failed to change agent mode.");
+      return;
+    }
+
+    const nextAgentMode = getAgentMode(incoming);
+    if (nextAgentMode) {
+      batcherRef.current?.flush(generation);
+      confirmedAgentModeRef.current = nextAgentMode;
+      setAgentModeState(nextAgentMode);
+      if (isModeControlMessage(incoming)) return;
+    }
+
+    const initCommands = getClaudeInitCommands(incoming);
+    if (initCommands !== null) {
+      batcherRef.current?.flush(generation);
+      setClaudeCommands(initCommands);
+      return;
+    }
+    if (incoming.role === "user") return;
+
+    batcherRef.current?.enqueue(
+      scopeStreamingMessage(
+        incoming,
+        activeStreamingScopeRef.current ?? incoming.streamingScopeId ?? incoming.messageId,
+      ),
+      generation,
+    );
+  }, []);
+
+  const disposeExecutionSession = React.useCallback((resetReconnectState = true) => {
+    const session = executionSessionRef.current;
+    executionSessionRef.current = null;
+    executionSessionKeyRef.current = null;
+    configuredSessionKeyRef.current = null;
+    sessionConfigurationRef.current = null;
+    activeStreamingScopeRef.current = null;
+    if (resetReconnectState) setReconnectState(null);
+    if (session) void session.dispose().catch(() => undefined);
+  }, []);
+
+  const ensureContextId = React.useCallback(() => {
+    const contextId = selectedContextIdRef.current ?? createUuidV7();
+    if (selectedContextIdRef.current === null) {
+      selectedContextIdRef.current = contextId;
+      setSelectedContextId(contextId);
+    }
+    return contextId;
+  }, []);
+
+  const ensureConfiguredSession = React.useCallback(
+    async (
+      contextId: string,
+      nextPermissionMode: PermissionMode,
+    ): Promise<{
+      session: MobileExecutionSession;
+      configuredWithRequestedPermission: boolean;
+    } | null> => {
+      if (!verifiedServer || !selectedProjectId) {
+        throw new Error("Please select a project.");
+      }
+
+      const sessionKey = JSON.stringify([profileId, selectedProjectId, contextId]);
+      let session = executionSessionRef.current;
+      if (!session || executionSessionKeyRef.current !== sessionKey) {
+        disposeExecutionSession();
+        let nextSession!: MobileExecutionSession;
+        nextSession = new MobileExecutionSession({
+          serverUrl: verifiedServer.profile.serverUrl,
+          token: verifiedServer.token,
+          onMessage: (incoming) => {
+            if (executionSessionRef.current === nextSession) applyExecutionMessage(incoming);
+          },
+          onClose: () => {
+            if (executionSessionRef.current === nextSession) disposeExecutionSession();
+          },
+          onReconnecting: (state) => {
+            if (executionSessionRef.current === nextSession) setReconnectState(state);
+          },
+        });
+        session = nextSession;
+        executionSessionRef.current = session;
+        executionSessionKeyRef.current = sessionKey;
+      }
+
+      if (configuredSessionKeyRef.current !== sessionKey) {
+        let configuration = sessionConfigurationRef.current;
+        if (!configuration || configuration.key !== sessionKey) {
+          configuration = {
+            key: sessionKey,
+            permissionMode: nextPermissionMode,
+            promise: session.configure({
+              projectId: selectedProjectId,
+              contextId,
+              permissionMode: nextPermissionMode,
+            }),
+          };
+          sessionConfigurationRef.current = configuration;
+        }
+
+        try {
+          await configuration.promise;
+        } catch (error) {
+          if (executionSessionRef.current !== session) return null;
+          disposeExecutionSession();
+          throw error;
+        } finally {
+          if (sessionConfigurationRef.current === configuration) {
+            sessionConfigurationRef.current = null;
+          }
+        }
+
+        if (executionSessionRef.current !== session) return null;
+        configuredSessionKeyRef.current = sessionKey;
+        return {
+          session,
+          configuredWithRequestedPermission: configuration.permissionMode === nextPermissionMode,
+        };
+      }
+
+      return executionSessionRef.current === session
+        ? { session, configuredWithRequestedPermission: false }
+        : null;
+    },
+    [applyExecutionMessage, disposeExecutionSession, profileId, selectedProjectId, verifiedServer],
+  );
+
   React.useEffect(() => {
     if (projects.length === 0) {
       setSelectedProjectId(null);
@@ -220,7 +366,9 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
   }, [selectedTargetValue, targets]);
 
   React.useEffect(() => {
-    setAgentMode("execute");
+    modeChangeGenerationRef.current += 1;
+    confirmedAgentModeRef.current = DEFAULT_AGENT_MODE;
+    setAgentModeState(DEFAULT_AGENT_MODE);
     setClaudeCommands([]);
   }, [profileId, selectedTargetValue]);
 
@@ -235,16 +383,26 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
     }
     if (contextDetailsQuery.data && hydratedContextRef.current !== key) {
       hydratedContextRef.current = key;
-      setMessages(scopeMessagesByUserTurn(contextDetailsQuery.data.messages));
+      const nextAgentMode = getLatestAgentMode(contextDetailsQuery.data.messages);
+      confirmedAgentModeRef.current = nextAgentMode;
+      setAgentModeState(nextAgentMode);
+      setMessages(
+        scopeMessagesByUserTurn(
+          contextDetailsQuery.data.messages.filter(
+            (message) => message.additionalProperties?.presentation !== "control",
+          ),
+        ),
+      );
       setClaudeCommands(getClaudeHistoryCommands(contextDetailsQuery.data.messages));
     }
   }, [contextDetailsQuery.data, selectedContextId, selectedProjectId]);
 
   React.useEffect(() => {
     executionGenerationRef.current += 1;
+    modeChangeGenerationRef.current += 1;
     batcherRef.current?.discard();
-    executionHandleRef.current?.close();
-    executionHandleRef.current = null;
+    disposeExecutionSession();
+    selectedContextIdRef.current = null;
     setSelectedProjectId(null);
     setSelectedTargetValue(null);
     setSelectedContextId(null);
@@ -254,10 +412,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
     setReconnectState(null);
     setOperationError(null);
     return () => {
-      executionHandleRef.current?.close();
+      disposeExecutionSession(false);
       batcherRef.current?.discard();
     };
-  }, [profileId]);
+  }, [disposeExecutionSession, profileId]);
 
   const ensureIdle = React.useCallback(() => {
     if (isExecuting) throw new Error("Stop the current execution before switching context.");
@@ -266,35 +424,130 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
   const newChat = React.useCallback(() => {
     ensureIdle();
     executionGenerationRef.current += 1;
+    modeChangeGenerationRef.current += 1;
     batcherRef.current?.discard();
+    disposeExecutionSession();
     hydratedContextRef.current = null;
+    selectedContextIdRef.current = null;
+    confirmedAgentModeRef.current = DEFAULT_AGENT_MODE;
     setSelectedContextId(null);
     setMessages([]);
     setClaudeCommands([]);
+    setAgentModeState(DEFAULT_AGENT_MODE);
     setOperationError(null);
-  }, [ensureIdle]);
+  }, [disposeExecutionSession, ensureIdle]);
 
   const selectProject = React.useCallback(
     (projectId: string) => {
       ensureIdle();
+      executionGenerationRef.current += 1;
+      modeChangeGenerationRef.current += 1;
+      batcherRef.current?.discard();
+      disposeExecutionSession();
+      selectedContextIdRef.current = null;
+      confirmedAgentModeRef.current = DEFAULT_AGENT_MODE;
       setSelectedProjectId(projectId);
       setSelectedContextId(null);
       setMessages([]);
       setClaudeCommands([]);
+      setAgentModeState(DEFAULT_AGENT_MODE);
       hydratedContextRef.current = null;
       setOperationError(null);
     },
-    [ensureIdle],
+    [disposeExecutionSession, ensureIdle],
   );
   const selectContext = React.useCallback(
     (contextId: string) => {
       ensureIdle();
+      executionGenerationRef.current += 1;
+      modeChangeGenerationRef.current += 1;
+      batcherRef.current?.discard();
+      disposeExecutionSession();
       hydratedContextRef.current = null;
+      selectedContextIdRef.current = contextId;
+      confirmedAgentModeRef.current = DEFAULT_AGENT_MODE;
       setSelectedContextId(contextId);
+      setMessages([]);
       setClaudeCommands([]);
+      setAgentModeState(DEFAULT_AGENT_MODE);
       setOperationError(null);
     },
-    [ensureIdle],
+    [disposeExecutionSession, ensureIdle],
+  );
+
+  const setPermissionMode = React.useCallback(
+    (nextPermissionMode: PermissionMode) => {
+      const previousPermissionMode = permissionMode;
+      setPermissionModeState(nextPermissionMode);
+      setOperationError(null);
+      if (!selectedProjectId) return;
+
+      const contextId = ensureContextId();
+      const generation = executionGenerationRef.current;
+      void ensureConfiguredSession(contextId, nextPermissionMode)
+        .then((configured) => {
+          if (
+            !configured ||
+            generation !== executionGenerationRef.current ||
+            configured.configuredWithRequestedPermission
+          ) {
+            return;
+          }
+          return configured.session.setPermissionMode(nextPermissionMode);
+        })
+        .catch((error) => {
+          if (generation !== executionGenerationRef.current) return;
+          setPermissionModeState(previousPermissionMode);
+          setOperationError(getErrorMessage(error));
+        });
+    },
+    [ensureConfiguredSession, ensureContextId, permissionMode, selectedProjectId],
+  );
+
+  const setAgentMode = React.useCallback(
+    (nextAgentMode: AgentMode) => {
+      if (!selectedProjectId || !selectedTarget || selectedTarget.type !== "agent") {
+        setOperationError("Please select a mode-capable agent.");
+        return;
+      }
+
+      const previousAgentMode = agentMode;
+      const changeGeneration = modeChangeGenerationRef.current + 1;
+      modeChangeGenerationRef.current = changeGeneration;
+      setAgentModeState(nextAgentMode);
+      setOperationError(null);
+      const contextId = ensureContextId();
+      const executionGeneration = executionGenerationRef.current;
+      void ensureConfiguredSession(contextId, permissionMode)
+        .then((configured) => {
+          if (
+            !configured ||
+            executionGeneration !== executionGenerationRef.current ||
+            changeGeneration !== modeChangeGenerationRef.current
+          ) {
+            return;
+          }
+          return configured.session.setMode(selectedTarget.id, nextAgentMode);
+        })
+        .catch((error) => {
+          if (
+            executionGeneration !== executionGenerationRef.current ||
+            changeGeneration !== modeChangeGenerationRef.current
+          ) {
+            return;
+          }
+          setAgentModeState(previousAgentMode);
+          setOperationError(getErrorMessage(error));
+        });
+    },
+    [
+      agentMode,
+      ensureConfiguredSession,
+      ensureContextId,
+      permissionMode,
+      selectedProjectId,
+      selectedTarget,
+    ],
   );
 
   const sendMessage = React.useCallback(
@@ -308,68 +561,49 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
       ) {
         return;
       }
-      const contextId = selectedContextId ?? createUuidV7();
+      const contextId = ensureContextId();
       const executionId = createUuidV7();
       const userMessage = createUserMessage(text, attachments);
       const scopedUserMessage = scopeStreamingMessage(userMessage, userMessage.messageId);
       const generation = executionGenerationRef.current + 1;
       executionGenerationRef.current = generation;
       hydratedContextRef.current = `${selectedProjectId}:${contextId}`;
-      setSelectedContextId(contextId);
+      activeStreamingScopeRef.current = userMessage.messageId;
       setMessages((current) => [...current, scopedUserMessage]);
       setIsExecuting(true);
       setOperationError(null);
 
-      const handle = executeWithWebSocket({
-        serverUrl: verifiedServer.profile.serverUrl,
-        token: verifiedServer.token,
-        request: {
-          projectId: selectedProjectId,
-          contextId,
+      try {
+        const configured = await ensureConfiguredSession(contextId, permissionMode);
+        if (!configured || generation !== executionGenerationRef.current) return;
+        await configured.session.execute({
           agentId: selectedTarget.id,
           agentType: selectedTarget.type === "agentflow" ? 1 : 0,
           executionId,
-          permissionMode,
-          agentMode,
           input: toExecutionUserInput(userMessage),
-        },
-        onMessage: (incoming) => {
-          if (generation !== executionGenerationRef.current) return;
-          const initCommands = getClaudeInitCommands(incoming);
-          if (initCommands !== null) {
-            setClaudeCommands(initCommands);
-            return;
-          }
-          if (incoming.role === "user") return;
-          batcherRef.current?.enqueue(
-            scopeStreamingMessage(incoming, userMessage.messageId),
-            generation,
-          );
-        },
-        onReconnecting: setReconnectState,
-      });
-      executionHandleRef.current = handle;
-
-      try {
-        await handle.promise;
+        });
+        if (generation !== executionGenerationRef.current) return;
         batcherRef.current?.flush(generation);
         await contextsQuery.refetch();
       } catch (caught) {
+        if (generation !== executionGenerationRef.current) return;
         batcherRef.current?.flush(generation);
         setOperationError(getErrorMessage(caught));
       } finally {
-        if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
-        stopTimerRef.current = null;
-        if (executionHandleRef.current === handle) executionHandleRef.current = null;
-        setIsExecuting(false);
-        setReconnectState(null);
+        if (generation === executionGenerationRef.current) {
+          if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
+          stopTimerRef.current = null;
+          activeStreamingScopeRef.current = null;
+          setIsExecuting(false);
+          setReconnectState(null);
+        }
       }
     },
     [
       contextsQuery,
-      agentMode,
+      ensureConfiguredSession,
+      ensureContextId,
       isExecuting,
-      selectedContextId,
       permissionMode,
       selectedProjectId,
       selectedTarget,
@@ -378,33 +612,49 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
   );
 
   const stopExecution = React.useCallback(() => {
-    const handle = executionHandleRef.current;
-    if (!handle) return;
+    const session = executionSessionRef.current;
+    if (!session) return;
     if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
     stopTimerRef.current = setTimeout(() => {
-      if (executionHandleRef.current === handle) executionHandleRef.current = null;
       batcherRef.current?.flush(executionGenerationRef.current);
-      handle.close();
+      executionGenerationRef.current += 1;
+      activeStreamingScopeRef.current = null;
+      if (executionSessionRef.current === session) disposeExecutionSession();
       setIsExecuting(false);
       setOperationError("Disconnected from the server; the execution may still be running.");
     }, 3_000);
-    void handle.interrupt("Stop requested by user.").catch(() => {
+    void session.interrupt("Stop requested by user.").catch(() => {
       if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
       stopTimerRef.current = null;
-      handle.close();
+      executionGenerationRef.current += 1;
+      activeStreamingScopeRef.current = null;
+      if (executionSessionRef.current === session) disposeExecutionSession();
       setIsExecuting(false);
       setOperationError("Failed to stop the current execution.");
     });
-  }, []);
+  }, [disposeExecutionSession]);
 
   const clearCurrentContext = React.useCallback(async () => {
     if (!contextService || !selectedProjectId || !selectedContextId) return;
     ensureIdle();
     await contextService.clearProjectContextRecords(selectedProjectId, selectedContextId);
+    executionGenerationRef.current += 1;
+    modeChangeGenerationRef.current += 1;
+    batcherRef.current?.discard();
+    disposeExecutionSession();
+    confirmedAgentModeRef.current = DEFAULT_AGENT_MODE;
     setMessages([]);
     setClaudeCommands([]);
+    setAgentModeState(DEFAULT_AGENT_MODE);
     await contextsQuery.refetch();
-  }, [contextService, contextsQuery, ensureIdle, selectedContextId, selectedProjectId]);
+  }, [
+    contextService,
+    contextsQuery,
+    disposeExecutionSession,
+    ensureIdle,
+    selectedContextId,
+    selectedProjectId,
+  ]);
 
   const renameContext = React.useCallback(
     async (contextId: string, title: string) => {
@@ -506,6 +756,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
       filesService,
       selectProject,
       selectContext,
+      setPermissionMode,
+      setAgentMode,
       newChat,
       sendMessage,
       stopExecution,

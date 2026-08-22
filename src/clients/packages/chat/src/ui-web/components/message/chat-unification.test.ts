@@ -100,8 +100,8 @@ test("shared Chat reattaches managed execution after history hydration", async (
 test("shared Chat defaults agent mode to Execute without a persisted mode snapshot", async () => {
   const source = await readFile(CHAT_URL, "utf8");
 
-  assert.match(source, /const DEFAULT_AGENT_MODE: AgentMode = "execute"/);
-  assert.match(source, /return DEFAULT_AGENT_MODE;/);
+  assert.match(source, /DEFAULT_AGENT_MODE/);
+  assert.match(source, /getLatestAgentMode\(sessionSeed\.messages\)/);
   assert.match(source, /confirmedAgentModeRef\.current = DEFAULT_AGENT_MODE/);
   assert.match(source, /setAgentMode\(DEFAULT_AGENT_MODE\)/);
 });

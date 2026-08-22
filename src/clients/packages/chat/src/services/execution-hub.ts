@@ -11,12 +11,19 @@ import type { AiMessage } from "@agw/api";
 import {
   buildExecCommand as buildCoreExecCommand,
   buildInterruptCommand,
+  buildSetModeCommand,
+  buildSetPermissionModeCommand,
   buildSettingCommand as buildCoreSettingCommand,
   buildSubscribeExecutionCommand as buildCoreSubscribeExecutionCommand,
+  DEFAULT_AGENT_MODE,
   executionReconnectDelaysMs,
+  getAgentMode,
   getExecutionReconnectDelay,
+  getLatestAgentMode,
   getMessageStreamingScopeId,
   getTurnFinishedStatus,
+  isModeControlMessage,
+  type AgentMode,
   type ExecutionUserInput as CoreExecutionUserInput,
   type PermissionMode as CorePermissionMode,
   type TurnFinishedStatus,
@@ -61,7 +68,15 @@ export function configureExecutionRuntime(config: ExecutionRuntimeConfig): void 
 export type ExecutionUserInput = CoreExecutionUserInput<AiMessage>;
 
 export type PermissionMode = CorePermissionMode;
-export type AgentMode = "plan" | "execute";
+export {
+  buildSetModeCommand,
+  buildSetPermissionModeCommand,
+  DEFAULT_AGENT_MODE,
+  getAgentMode,
+  getLatestAgentMode,
+  isModeControlMessage,
+};
+export type { AgentMode };
 
 export type ExecutionSetting = {
   projectId: string;
@@ -154,33 +169,6 @@ export function buildExecutionHubOptions(runtime: ExecutionRuntimeConfig = execu
 
 export function buildSettingCommand(setting: ExecutionSetting) {
   return buildCoreSettingCommand(setting);
-}
-
-export function buildSetModeCommand(agentId: string, mode: AgentMode) {
-  return {
-    type: "SetModeCommand" as const,
-    agentId,
-    mode,
-  };
-}
-
-export function buildSetPermissionModeCommand(permissionMode: PermissionMode) {
-  return {
-    type: "SetPermissionModeCommand" as const,
-    permissionMode,
-  };
-}
-
-export function getAgentMode(message: AiMessage): AgentMode | null {
-  const type = message.additionalProperties?.type;
-  if (type !== "mode-status" && type !== "tool-mode-status") return null;
-  const mode = message.additionalProperties?.mode;
-  return mode === "plan" || mode === "execute" ? mode : null;
-}
-
-export function isModeControlMessage(message: AiMessage): boolean {
-  const type = message.additionalProperties?.type;
-  return type === "mode-status" || type === "mode-change-failed";
 }
 
 export function buildExecCommand(request: ExecutionRequest) {
