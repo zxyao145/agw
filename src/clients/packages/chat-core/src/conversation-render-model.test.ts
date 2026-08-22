@@ -49,6 +49,28 @@ test("visible messages remove usage and controls before collapsing ordinary syst
   );
 });
 
+test("visible messages hide system-injected AI context without matching its text", () => {
+  const visible = prepareVisibleMessages([
+    message("todo-context", "user", "Current todo list", {
+      _attribution: {
+        sourceType: { value: "AIContextProvider" },
+        sourceId: "TodoProvider",
+      },
+    }),
+    message("memory-context", "user", "arbitrary private context", {
+      _attribution: "AIContextProvider:UserMemoryProvider",
+    }),
+    message("real-user", "user", "keep me", {
+      _attribution: { sourceType: { value: "External" }, sourceId: null },
+    }),
+  ]);
+
+  assert.deepEqual(
+    visible.map((item) => item.messageId),
+    ["real-user"],
+  );
+});
+
 test("render model emits plan, full result, right user, image, and red error semantics", () => {
   const items = buildConversationRenderModel([
     message("user-1", "user", "hello"),

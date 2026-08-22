@@ -93,6 +93,27 @@ test("history removes Claude init metadata before system messages are collapsed"
   assert.deepEqual(collapseConsecutiveSystemMessages([hook, init]), [hook]);
 });
 
+test("history removes AI context provider messages before turn scoping", () => {
+  const injected: AiMessage = {
+    messageId: "tool-block-context",
+    role: "user",
+    contents: [{ type: "TextContent", content: "internal context" }],
+    additionalProperties: {
+      _attribution: {
+        sourceType: { value: "AIContextProvider" },
+        sourceId: "ProjectMemoryProvider",
+      },
+    },
+  };
+  const user: AiMessage = {
+    messageId: "user",
+    role: "user",
+    contents: [{ type: "TextContent", content: "visible" }],
+  };
+
+  assert.deepEqual(prepareClaudeHistory([injected, user]), { messages: [user], commands: [] });
+});
+
 test("keeps the Desktop nested hook output format", () => {
   const content = JSON.stringify({
     output: JSON.stringify({

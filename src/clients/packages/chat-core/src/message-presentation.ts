@@ -1,5 +1,6 @@
 import type { AiMessage } from "@agw/api";
 import { parseClaudeInitCommands } from "./claude-commands";
+import { isInjectedContextMessage } from "./message-source";
 
 export type MessageMeta = {
   name: string | null;
@@ -101,6 +102,7 @@ export function prepareClaudeHistory(messages: readonly AiMessage[]): {
     if (!init.isInit) {
       if (
         !isReadOnlyModeSnapshot(message) &&
+        !isInjectedContextMessage(message) &&
         !HISTORY_CONTROL_MESSAGE_TYPES.has(String(message.additionalProperties?.type)) &&
         message.additionalProperties?.presentation !== "control"
       ) {

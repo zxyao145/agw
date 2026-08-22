@@ -24,6 +24,7 @@ import {
   getMessagePreview,
   type MessageMeta,
 } from "./message-presentation";
+import { isInjectedContextMessage } from "./message-source";
 import { parseMessageProposedPlan, type ProposedPlanPresentation } from "./proposed-plan";
 
 const HIDDEN_CONTROL_TYPES = new Set([
@@ -104,6 +105,7 @@ export function isHiddenControlMessage(message: AiMessage): boolean {
   const type = String(message.additionalProperties?.type ?? "");
   return (
     HIDDEN_CONTROL_TYPES.has(type) ||
+    isInjectedContextMessage(message) ||
     message.additionalProperties?.presentation === "control" ||
     (type === "tool-mode-status" && message.additionalProperties?.toolName === "mode_get") ||
     parseClaudeInitCommands(message).isInit
