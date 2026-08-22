@@ -12,7 +12,9 @@ test("native renderer consumes the shared render-item union and native markdown"
   assert.match(source, /EnrichedMarkdownText/);
   assert.match(source, /flavor="github"/);
   assert.match(source, /messageRowAgent: \{ width: "88%"/);
-  assert.match(source, /messageRowUser: \{ width: "88%"/);
+  assert.match(source, /messageRowUser: \{ maxWidth: "88%"/);
+  assert.match(source, /maximumUserBubbleWidth/);
+  assert.match(source, /onTextLayout=\{handleUserTextLayout\}/);
   assert.match(source, /toolCard:\s*\{[\s\S]*?width: "100%"/);
   assert.match(source, /containerStyle=\{markdownContainerStyle\}/);
   assert.match(source, /markdownContainerStyle = \{[\s\S]*?width: "100%"/);

@@ -20,9 +20,11 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  type TextLayoutEventData,
 } from "react-native";
 import { EnrichedMarkdownText, type MarkdownStyle } from "react-native-enriched-markdown";
 
@@ -347,6 +349,29 @@ function NativeMessage({
   const hasPlan = message.contents.some((content) => content.type === "plan");
   const full = compact || result || hasPlan || message.width === "full";
   const meta = [message.meta?.name, message.meta?.author].filter(Boolean).join(" / ");
+  const { width: viewportWidth } = useWindowDimensions();
+  const maximumUserBubbleWidth = Math.max(80, Math.floor((viewportWidth - 32) * 0.88));
+  const maximumUserContentWidth = Math.max(1, maximumUserBubbleWidth - 26);
+  const measurableText = getMeasurableText(message.contents);
+  const imageContentWidth = message.contents.some((content) => content.type === "image") ? 220 : 0;
+  const estimatedContentWidth = Math.max(
+    imageContentWidth,
+    estimateTextWidth(measurableText, maximumUserContentWidth),
+  );
+  const [measuredContentWidth, setMeasuredContentWidth] = React.useState(estimatedContentWidth);
+
+  React.useEffect(() => {
+    setMeasuredContentWidth(estimatedContentWidth);
+  }, [estimatedContentWidth, message.identity]);
+
+  const handleUserTextLayout = (event: NativeSyntheticEvent<TextLayoutEventData>) => {
+    const measuredWidth = Math.ceil(
+      event.nativeEvent.lines.reduce((width, line) => Math.max(width, line.width), 0),
+    );
+    const nextWidth = Math.max(imageContentWidth, Math.min(maximumUserContentWidth, measuredWidth));
+    setMeasuredContentWidth((current) => (current === nextWidth ? current : nextWidth));
+  };
+  const userBubbleWidth = Math.min(maximumUserBubbleWidth, measuredContentWidth + 26);
   return (
     <View
       style={[
@@ -361,9 +386,21 @@ function NativeMessage({
         style={[
           styles.bubble,
           isUser ? styles.userBubble : result ? styles.resultBubble : styles.agentBubble,
+          isUser && { width: userBubbleWidth },
           compact && styles.compactBubble,
         ]}
       >
+        {isUser && measurableText ? (
+          <Text
+            accessible={false}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            onTextLayout={handleUserTextLayout}
+            style={[styles.userMeasureText, { width: maximumUserContentWidth }]}
+          >
+            {measurableText}
+          </Text>
+        ) : null}
         {result ? <Text style={styles.resultTitle}>Result</Text> : null}
         {message.contents.map((content, index) => (
           <NativeContent
@@ -893,7 +930,7 @@ function createStyles(theme: NativeChatTheme) {
     dateText: { color: theme.muted, fontFamily: theme.fontMedium, fontSize: 11 },
     messageRow: { gap: 4 },
     messageRowAgent: { width: "88%", alignSelf: "flex-start" },
-    messageRowUser: { width: "88%", alignSelf: "flex-end", alignItems: "flex-end" },
+    messageRowUser: { maxWidth: "88%", alignSelf: "flex-end", alignItems: "flex-end" },
     messageRowFull: { width: "100%", alignSelf: "stretch" },
     author: { color: theme.muted, fontFamily: theme.fontMedium, fontSize: 11, marginLeft: 4 },
     authorUser: { marginLeft: 0, marginRight: 4, textAlign: "right" },
@@ -907,6 +944,14 @@ function createStyles(theme: NativeChatTheme) {
     },
     compactBubble: { paddingHorizontal: 0, paddingVertical: 0 },
     userBubble: { backgroundColor: "#f3f3f4", paddingVertical: 5 },
+    userMeasureText: {
+      position: "absolute",
+      opacity: 0,
+      color: theme.ink,
+      fontFamily: theme.fontRegular,
+      fontSize: 14,
+      lineHeight: 21,
+    },
     agentBubble: { backgroundColor: "transparent", paddingHorizontal: 0, paddingVertical: 0 },
     resultBubble: {
       width: "100%",
@@ -1146,3 +1191,31 @@ const markdownContainerStyle = {
   width: "100%",
   alignSelf: "stretch",
 } as const;
+
+function getMeasurableText(contents: PresentedContent[]): string {
+  return contents
+    .flatMap((content) => {
+      if (content.type === "markdown" || content.type === "reasoning") return [content.markdown];
+      if (content.type === "plain" || content.type === "error") return [content.text];
+      if (content.type === "uri") return [content.name || content.uri];
+      if (content.type === "plan") {
+        return [content.leadingMarkdown, content.markdown, content.trailingMarkdown];
+      }
+      return [];
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function estimateTextWidth(value: string, maximumWidth: number): number {
+  if (!value) return 0;
+  const longestLine = value.split(/\r?\n/u).reduce((longest, line) => {
+    const width = Array.from(line).reduce(
+      (total, character) =>
+        total + (/\p{Script=Han}/u.test(character) ? 14 : character === " " ? 4 : 7.5),
+      0,
+    );
+    return Math.max(longest, width);
+  }, 0);
+  return Math.min(maximumWidth, Math.ceil(longestLine));
+}
