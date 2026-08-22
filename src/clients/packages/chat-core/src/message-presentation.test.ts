@@ -110,8 +110,29 @@ test("history removes AI context provider messages before turn scoping", () => {
     role: "user",
     contents: [{ type: "TextContent", content: "visible" }],
   };
+  const skillSidecar: AiMessage = {
+    messageId: "skill-sidecar",
+    role: "user",
+    contents: [{ type: "TextContent", content: "internal skill contents" }],
+    additionalProperties: { modelHistoryExcluded: true },
+  };
+  const toolResult: AiMessage = {
+    messageId: "tool-result",
+    role: "user",
+    contents: [
+      {
+        type: "FunctionResultContent",
+        content: "result",
+        additionalProperties: { callId: "call-1" },
+      },
+    ],
+    additionalProperties: { modelHistoryExcluded: true },
+  };
 
-  assert.deepEqual(prepareClaudeHistory([injected, user]), { messages: [user], commands: [] });
+  assert.deepEqual(prepareClaudeHistory([injected, skillSidecar, toolResult, user]), {
+    messages: [toolResult, user],
+    commands: [],
+  });
 });
 
 test("keeps the Desktop nested hook output format", () => {

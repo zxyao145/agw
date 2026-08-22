@@ -24,7 +24,7 @@ import {
   getMessagePreview,
   type MessageMeta,
 } from "./message-presentation";
-import { isInjectedContextMessage } from "./message-source";
+import { isSystemInjectedMessage } from "./message-source";
 import { parseMessageProposedPlan, type ProposedPlanPresentation } from "./proposed-plan";
 
 const HIDDEN_CONTROL_TYPES = new Set([
@@ -38,6 +38,56 @@ const HIDDEN_CONTROL_TYPES = new Set([
 ]);
 
 const supportedImageDataUrl = /^data:image\/(?:jpeg|png|gif|webp);base64,/i;
+const HIDDEN_SYSTEM_TOOL_NAMES = new Set(["Skill", "load_skill", "read_skill_resource"]);
+
+function getToolGroupKey(message: AiMessage, content: AiMessageContent): string | null {
+  const callId = content.additionalProperties?.callId;
+  return typeof callId === "string" && callId.length > 0
+    ? JSON.stringify([message.streamingScopeId ?? null, callId])
+    : null;
+}
+
+function getHiddenSystemToolKeys(messages: readonly AiMessage[]): Set<string> {
+  const keys = new Set<string>();
+  for (const message of messages) {
+    for (const content of message.contents) {
+      if (
+        content.type !== MessageContentType.FunctionCallContent ||
+        !HIDDEN_SYSTEM_TOOL_NAMES.has(String(content.additionalProperties?.toolName ?? ""))
+      ) {
+        continue;
+      }
+
+      const key = getToolGroupKey(message, content);
+      if (key) keys.add(key);
+    }
+  }
+  return keys;
+}
+
+function isHiddenSystemToolFragment(
+  message: AiMessage,
+  hiddenToolKeys: ReadonlySet<string>,
+): boolean {
+  return message.contents.some((content) => {
+    if (
+      content.type !== MessageContentType.FunctionCallContent &&
+      content.type !== MessageContentType.FunctionResultContent
+    ) {
+      return false;
+    }
+
+    if (
+      content.type === MessageContentType.FunctionCallContent &&
+      HIDDEN_SYSTEM_TOOL_NAMES.has(String(content.additionalProperties?.toolName ?? ""))
+    ) {
+      return true;
+    }
+
+    const key = getToolGroupKey(message, content);
+    return key !== null && hiddenToolKeys.has(key);
+  });
+}
 
 export type ConversationAlignment = "left" | "right";
 export type ConversationWidth = "normal" | "full";
@@ -105,7 +155,7 @@ export function isHiddenControlMessage(message: AiMessage): boolean {
   const type = String(message.additionalProperties?.type ?? "");
   return (
     HIDDEN_CONTROL_TYPES.has(type) ||
-    isInjectedContextMessage(message) ||
+    isSystemInjectedMessage(message) ||
     message.additionalProperties?.presentation === "control" ||
     (type === "tool-mode-status" && message.additionalProperties?.toolName === "mode_get") ||
     parseClaudeInitCommands(message).isInit
@@ -177,7 +227,9 @@ export function buildConversationRenderModel(
   messages: readonly AiMessage[],
   options: BuildConversationRenderModelOptions = {},
 ): ConversationRenderItem[] {
-  const processed = processMessages(prepareVisibleMessages(messages));
+  const visibleMessages = prepareVisibleMessages(messages);
+  const hiddenSystemToolKeys = getHiddenSystemToolKeys(visibleMessages);
+  const processed = processMessages(visibleMessages);
   const availability = new Map(
     (options.checkpointAvailability ?? []).map((item) => [item.occurrenceId, item]),
   );
@@ -193,6 +245,8 @@ export function buildConversationRenderModel(
 
   for (const item of processed) {
     if (item.type === "accordion") {
+      if (HIDDEN_SYSTEM_TOOL_NAMES.has(item.toolName)) continue;
+
       const interactionResult =
         item.toolName === "ask_user_question"
           ? getHumanInteractionQuestionResult(item.messages)
@@ -231,6 +285,8 @@ export function buildConversationRenderModel(
     }
 
     const message = item.message;
+    if (isHiddenSystemToolFragment(message, hiddenSystemToolKeys)) continue;
+
     const toolState = getToolStatePresentationType(message);
     if (toolState) {
       items.push({

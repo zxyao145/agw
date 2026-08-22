@@ -16,8 +16,19 @@ function getAttributionSourceType(value: unknown): string | null {
   return typeof sourceTypeValue === "string" ? sourceTypeValue.trim() || null : null;
 }
 
-export function isInjectedContextMessage(message: AiMessage): boolean {
+function isInjectedContextMessage(message: AiMessage): boolean {
   return (
     getAttributionSourceType(message.additionalProperties?._attribution) === "AIContextProvider"
+  );
+}
+
+export function isSystemInjectedMessage(message: AiMessage): boolean {
+  return (
+    isInjectedContextMessage(message) ||
+    // Claude persists internal Skill/subagent context as pseudo-user sidecars. Hide those sidecars,
+    // but keep pseudo-user FunctionResultContent so Tool Call/Result pairing remains intact.
+    (message.role === "user" &&
+      message.additionalProperties?.modelHistoryExcluded === true &&
+      !message.contents.some((content) => content.type === "FunctionResultContent"))
   );
 }

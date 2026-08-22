@@ -71,6 +71,88 @@ test("visible messages hide system-injected AI context without matching its text
   );
 });
 
+test("render model hides Skill loaders and their model-excluded display sidecars", () => {
+  const items = buildConversationRenderModel([
+    message("user", "user", "review this"),
+    {
+      messageId: "skill-call",
+      role: "assistant",
+      author: "agent",
+      streamingScopeId: "user-1",
+      contents: [
+        {
+          type: "FunctionCallContent",
+          content: '{"skill":"commit"}',
+          additionalProperties: { callId: "skill-1", toolName: "Skill" },
+        },
+      ],
+    },
+    {
+      messageId: "skill-result",
+      role: "user",
+      streamingScopeId: "user-1",
+      additionalProperties: { modelHistoryExcluded: true },
+      contents: [
+        {
+          type: "FunctionResultContent",
+          content: '{"success":true}',
+          additionalProperties: { callId: "skill-1" },
+        },
+      ],
+    },
+    {
+      ...message("skill-sidecar", "user", "internal skill instructions"),
+      additionalProperties: { modelHistoryExcluded: true },
+    },
+    message("assistant", "assistant", "review complete"),
+  ]);
+
+  assert.deepEqual(
+    items.map((item) => (item.type === "message" ? item.message.source.messageId : item.type)),
+    ["user", "assistant"],
+  );
+});
+
+test("render model hides shared skill loader tools but keeps ordinary tool accordions", () => {
+  const toolPair = (toolName: string, callId: string): AiMessage[] => [
+    {
+      messageId: `${callId}-call`,
+      role: "assistant",
+      streamingScopeId: "user-1",
+      contents: [
+        {
+          type: "FunctionCallContent",
+          content: "{}",
+          additionalProperties: { callId, toolName },
+        },
+      ],
+    },
+    {
+      messageId: `${callId}-result`,
+      role: "tool",
+      streamingScopeId: "user-1",
+      contents: [
+        {
+          type: "FunctionResultContent",
+          content: "done",
+          additionalProperties: { callId },
+        },
+      ],
+    },
+  ];
+
+  const items = buildConversationRenderModel([
+    ...toolPair("load_skill", "load"),
+    ...toolPair("read_skill_resource", "read"),
+    ...toolPair("command_execution", "command"),
+  ]);
+
+  assert.deepEqual(
+    items.map((item) => (item.type === "tool-accordion" ? item.toolName : item.type)),
+    ["command_execution"],
+  );
+});
+
 test("render model emits plan, full result, right user, image, and red error semantics", () => {
   const items = buildConversationRenderModel([
     message("user-1", "user", "hello"),
