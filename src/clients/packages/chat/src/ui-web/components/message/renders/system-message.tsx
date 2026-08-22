@@ -1,20 +1,13 @@
 import { useMemo, useState } from "react";
+import { getMessagePreview, MESSAGE_PREVIEW_MAX_LENGTH } from "@agw/chat-core";
 import { MessageNode } from "../types";
 import MdCard from "./md-card";
 import { Button } from "@agw/components";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { formatContent } from "./parser";
 
-const maxLength = 72;
-
 export function getPreview(content: string): string {
-  const firstLine = content.split(/\r?\n/, 1)[0] || "thinking";
-
-  if (firstLine.length <= maxLength) {
-    return firstLine;
-  }
-
-  return `${firstLine.slice(0, maxLength - 1).trimEnd()}…`;
+  return getMessagePreview(content, MESSAGE_PREVIEW_MAX_LENGTH);
 }
 
 export default function SystemMessage({ node }: { node: MessageNode }) {
@@ -26,7 +19,7 @@ export default function SystemMessage({ node }: { node: MessageNode }) {
   }, [node]);
   const preview = getPreview(renderContent);
 
-  if (renderContent.length < maxLength) {
+  if (renderContent.length < MESSAGE_PREVIEW_MAX_LENGTH) {
     return (
       <div className="msg-content text-muted-foreground ">
         <div className="flex justify-between items-start">

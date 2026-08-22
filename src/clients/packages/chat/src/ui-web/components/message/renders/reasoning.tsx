@@ -1,18 +1,12 @@
 import { Button } from "@agw/components";
+import { getMessagePreview } from "@agw/chat-core";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import MdCard from "./md-card";
 import { useState } from "react";
 import { MessageNode } from "../types";
 
 export function getReasoningPreview(content: string): string {
-  const firstLine = content.split(/\r?\n/, 1)[0] || "thinking";
-  const maxLength = 72;
-
-  if (firstLine.length <= maxLength) {
-    return firstLine;
-  }
-
-  return `${firstLine.slice(0, maxLength - 1).trimEnd()}…`;
+  return getMessagePreview(content);
 }
 
 const Reasoning = ({ node }: { node: MessageNode }) => {

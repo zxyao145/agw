@@ -9,8 +9,8 @@ import {
 import {
   createUserMessage,
   getAgentSuggestionQueryParams,
-  getClaudeHistoryCommands,
   getClaudeInitCommands,
+  prepareClaudeHistory,
   toCommandSource,
   toExecutionUserInput,
   type AgentSuggestionsResponse,
@@ -384,16 +384,11 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }): 
     if (contextDetailsQuery.data && hydratedContextRef.current !== key) {
       hydratedContextRef.current = key;
       const nextAgentMode = getLatestAgentMode(contextDetailsQuery.data.messages);
+      const claudeHistory = prepareClaudeHistory(contextDetailsQuery.data.messages);
       confirmedAgentModeRef.current = nextAgentMode;
       setAgentModeState(nextAgentMode);
-      setMessages(
-        scopeMessagesByUserTurn(
-          contextDetailsQuery.data.messages.filter(
-            (message) => message.additionalProperties?.presentation !== "control",
-          ),
-        ),
-      );
-      setClaudeCommands(getClaudeHistoryCommands(contextDetailsQuery.data.messages));
+      setMessages(scopeMessagesByUserTurn(claudeHistory.messages));
+      setClaudeCommands(claudeHistory.commands);
     }
   }, [contextDetailsQuery.data, selectedContextId, selectedProjectId]);
 

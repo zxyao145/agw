@@ -1,4 +1,11 @@
 import { MessageContentType, type AiMessage, type AiMessageContent } from "@agw/api";
+import {
+  collapseConsecutiveSystemMessages,
+  getMessageMeta,
+  getMessagePreview,
+  isResultMessage,
+  MESSAGE_PREVIEW_MAX_LENGTH,
+} from "@agw/chat-core";
 import { processMessages, type ProcessedMessageItem } from "@agw/execution-core";
 import { Image as ExpoImage } from "expo-image";
 import { ChevronDown, ChevronRight, Link as LinkIcon, Wrench } from "lucide-react-native";
@@ -18,9 +25,9 @@ import { useWorkspace } from "@/features/workspace/workspace-provider";
 import type { WorkspacePaneHandle } from "@/features/workspace/workspace-types";
 import { colors, radius, typography } from "@/theme/tokens";
 import {
+  getDisplayContentValue,
   getRenderableMessageContents,
   hasRenderableMessageContent,
-  stringifyContentValue,
 } from "./message-rendering";
 
 export const ChatScreen = React.forwardRef<WorkspacePaneHandle>(function ChatScreen(_, ref) {
@@ -28,7 +35,7 @@ export const ChatScreen = React.forwardRef<WorkspacePaneHandle>(function ChatScr
   const listRef = React.useRef<FlatList<ProcessedMessageItem<AiMessage>>>(null);
   const items = React.useMemo(
     () =>
-      processMessages(workspace.messages).filter(
+      processMessages(collapseConsecutiveSystemMessages(workspace.messages)).filter(
         (item) => item.type === "accordion" || hasRenderableMessageContent(item.message),
       ),
     [workspace.messages],
@@ -103,39 +110,51 @@ function MessageCard({
   result?: boolean;
 }): React.JSX.Element | null {
   const isUser = message.role === "user";
+  const isResult = result || isResultMessage(message);
+  const messageMeta = getMessageMeta(message);
+  const messageMetaLabel = isResult
+    ? "Result"
+    : [messageMeta?.name, messageMeta?.author].filter(Boolean).join(" / ");
   const visible = getRenderableMessageContents(message);
   if (visible.length === 0) return null;
   return (
-    <View style={[styles.messageRow, isUser && styles.messageRowUser]}>
-      {!isUser ? (
-        <Text style={styles.author}>{message.author || (result ? "Result" : "Agw")}</Text>
-      ) : null}
+    <View style={[styles.messageRow, isUser ? styles.messageRowUser : styles.messageRowAgent]}>
+      {messageMetaLabel ? <Text style={styles.author}>{messageMetaLabel}</Text> : null}
       <View
         style={[
           styles.bubble,
-          isUser ? styles.userBubble : result ? styles.resultBubble : styles.agentBubble,
+          isUser ? styles.userBubble : isResult ? styles.resultBubble : styles.agentBubble,
         ]}
       >
         {visible.map((content, index) => (
-          <Content key={`${message.messageId}-${index}`} content={content} />
+          <Content key={`${message.messageId}-${index}`} message={message} content={content} />
         ))}
       </View>
     </View>
   );
 }
 
-function Content({ content }: { content: AiMessageContent }): React.JSX.Element | null {
-  const value = stringifyContentValue(content.content);
+function Content({
+  message,
+  content,
+}: {
+  message: AiMessage;
+  content: AiMessageContent;
+}): React.JSX.Element | null {
+  const value = getDisplayContentValue(message, content);
+  if (content.type === MessageContentType.DataContent && content.uri?.startsWith("data:image/")) {
+    return (
+      <ExpoImage source={{ uri: content.uri }} contentFit="cover" style={styles.messageImage} />
+    );
+  }
+  if (message.role === "system" && !isResultMessage(message)) {
+    return <SystemContent value={value} />;
+  }
   if (content.type === MessageContentType.TextContent || content.type === "text") {
     return <MarkdownText value={value} inverted={false} />;
   }
   if (content.type === MessageContentType.TextReasoningContent) {
     return <Reasoning value={value} />;
-  }
-  if (content.type === MessageContentType.DataContent && content.uri?.startsWith("data:image/")) {
-    return (
-      <ExpoImage source={{ uri: content.uri }} contentFit="cover" style={styles.messageImage} />
-    );
   }
   if (content.type === MessageContentType.UriContent && content.uri) {
     return (
@@ -157,11 +176,13 @@ function Content({ content }: { content: AiMessageContent }): React.JSX.Element 
 function MarkdownText({
   value,
   inverted,
+  muted = false,
 }: {
   value: string;
   inverted: boolean;
+  muted?: boolean;
 }): React.JSX.Element {
-  const foreground = inverted ? colors.white : colors.ink;
+  const foreground = muted ? colors.muted : inverted ? colors.white : colors.ink;
   const nodes = useMarkdown(value, {
     styles: {
       text: { color: foreground, fontFamily: typography.regular, fontSize: 14, lineHeight: 21 },
@@ -187,20 +208,40 @@ function MarkdownText({
   return <View>{nodes}</View>;
 }
 
+function SystemContent({ value }: { value: string }): React.JSX.Element | null {
+  const [open, setOpen] = React.useState(false);
+  if (!value) return null;
+  if (value.length < MESSAGE_PREVIEW_MAX_LENGTH) {
+    return <MarkdownText value={value} inverted={false} muted />;
+  }
+
+  return (
+    <Pressable onPress={() => setOpen((current) => !current)} style={styles.reasoningHeader}>
+      {open ? (
+        <ChevronDown color={colors.muted} size={15} />
+      ) : (
+        <ChevronRight color={colors.muted} size={15} />
+      )}
+      <View style={styles.collapsibleContent}>
+        <MarkdownText value={open ? value : getMessagePreview(value)} inverted={false} muted />
+      </View>
+    </Pressable>
+  );
+}
+
 function Reasoning({ value }: { value: string }): React.JSX.Element {
   const [open, setOpen] = React.useState(false);
   return (
-    <View style={styles.reasoning}>
-      <Pressable onPress={() => setOpen((current) => !current)} style={styles.reasoningHeader}>
-        {open ? (
-          <ChevronDown color={colors.muted} size={15} />
-        ) : (
-          <ChevronRight color={colors.muted} size={15} />
-        )}
-        <Text style={styles.reasoningTitle}>Reasoning</Text>
-      </Pressable>
-      {open ? <MarkdownText value={value} inverted={false} /> : null}
-    </View>
+    <Pressable onPress={() => setOpen((current) => !current)} style={styles.reasoningHeader}>
+      {open ? (
+        <ChevronDown color={colors.muted} size={15} />
+      ) : (
+        <ChevronRight color={colors.muted} size={15} />
+      )}
+      <View style={styles.collapsibleContent}>
+        <MarkdownText value={open ? value : getMessagePreview(value)} inverted={false} muted />
+      </View>
+    </Pressable>
   );
 }
 
@@ -227,7 +268,7 @@ function ToolGroup({
         ? item.messages.map((message, index) => (
             <View key={`${message.messageId}-${index}`} style={styles.toolBody}>
               {getRenderableMessageContents(message).map((content, contentIndex) => (
-                <Content key={contentIndex} content={content} />
+                <Content key={contentIndex} message={message} content={content} />
               ))}
             </View>
           ))
@@ -258,8 +299,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   dateText: { color: colors.muted, fontFamily: typography.medium, fontSize: 11 },
-  messageRow: { maxWidth: "88%", alignSelf: "flex-start", gap: 4 },
-  messageRowUser: { alignSelf: "flex-end", alignItems: "flex-end" },
+  messageRow: { gap: 4 },
+  messageRowAgent: { width: "88%", alignSelf: "flex-start" },
+  messageRowUser: { maxWidth: "88%", alignSelf: "flex-end", alignItems: "flex-end" },
   author: { color: colors.muted, fontFamily: typography.medium, fontSize: 11, marginLeft: 4 },
   bubble: {
     paddingHorizontal: 13,
@@ -267,7 +309,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     overflow: "hidden",
   },
-  userBubble: { backgroundColor: "#f3f3f4" },
+  userBubble: { backgroundColor: "#f3f3f4", paddingVertical: 2},
   agentBubble: { backgroundColor: "transparent", paddingHorizontal: 0, paddingVertical: 0 },
   resultBubble: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   plainText: { color: colors.ink, fontFamily: typography.regular, fontSize: 14, lineHeight: 21 },
@@ -286,9 +328,8 @@ const styles = StyleSheet.create({
   },
   linkRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   linkText: { flex: 1, color: colors.primary, fontFamily: typography.medium, fontSize: 13 },
-  reasoning: { gap: 6 },
-  reasoningHeader: { flexDirection: "row", alignItems: "center", gap: 5 },
-  reasoningTitle: { color: colors.muted, fontFamily: typography.semibold, fontSize: 12 },
+  reasoningHeader: { flexDirection: "row", alignItems: "flex-start", gap: 5 },
+  collapsibleContent: { flex: 1 },
   toolCard: {
     borderWidth: 1,
     borderColor: colors.border,

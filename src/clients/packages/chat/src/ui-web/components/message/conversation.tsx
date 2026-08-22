@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Badge } from "@agw/components";
 import { Accordion, AccordionContent, AccordionItem } from "@agw/components";
+import { getMessageMeta } from "@agw/chat-core";
 import { AiMessageComponent, isResultMessage } from "./message";
 import { MessageContentType, type AiMessage } from "@agw/api";
 import { processMessages, type ProcessedMessageItem } from "@agw/execution-core";
@@ -35,50 +36,6 @@ export interface ChatSessionProps {
   checkpointResumeDisabled?: boolean;
   onCheckpointResume?: (occurrenceId: string) => void;
   footer?: React.ReactNode;
-}
-
-type MessageMeta = {
-  name: string | null;
-  author: string | null;
-};
-
-const AGENT_NAME_KEYS = ["nodeName", "name", "agentName", "displayName", "agentDisplayName"];
-const AGENT_AUTHOR_KEYS = ["agentName"];
-
-function readStringProperty(message: AiMessage, keys: string[]): string | null {
-  const messageRecord = message as unknown as Record<string, unknown>;
-
-  for (const key of keys) {
-    const value = message.additionalProperties?.[key] ?? messageRecord[key];
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-
-  return null;
-}
-
-function getMessageMeta(message: AiMessage): MessageMeta | null {
-  if (isResultMessage(message)) {
-    return null;
-  }
-
-  const agentAuthor = message.author?.trim() || readStringProperty(message, AGENT_AUTHOR_KEYS);
-  if (message.role === "user") {
-    return agentAuthor ? { name: null, author: agentAuthor } : null;
-  }
-
-  const agentName = readStringProperty(message, AGENT_NAME_KEYS);
-  const displayName = agentName && agentName !== agentAuthor ? agentName : null;
-
-  if (!displayName && !agentAuthor) {
-    return null;
-  }
-
-  return {
-    name: displayName,
-    author: agentAuthor,
-  };
 }
 
 function getFunctionToolName(message: AiMessage): string | null {

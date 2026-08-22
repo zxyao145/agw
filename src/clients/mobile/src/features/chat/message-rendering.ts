@@ -1,9 +1,26 @@
 import { MessageContentType, type AiMessage, type AiMessageContent } from "@agw/api";
+import {
+  formatSystemMessageContent,
+  getClaudeHookEventName,
+  isResultMessage,
+} from "@agw/chat-core";
 
 export function stringifyContentValue(value: unknown): string {
   if (typeof value === "string") return value;
   if (value == null) return "";
   return JSON.stringify(value, null, 2) ?? "";
+}
+
+export function getDisplayContentValue(message: AiMessage, content: AiMessageContent): string {
+  const value = stringifyContentValue(content.content);
+  const hookEventName = getClaudeHookEventName(value);
+  if (hookEventName) return hookEventName;
+
+  if (message.role === "system" && !isResultMessage(message)) {
+    return formatSystemMessageContent(value);
+  }
+
+  return value;
 }
 
 export function isRenderableContent(content: AiMessageContent): boolean {

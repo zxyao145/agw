@@ -1,53 +1,20 @@
 import type { AiMessage } from "@agw/api";
-import { getClaudeInitCommands, parseClaudeInitCommands } from "@agw/chat-core";
+import {
+  collapseConsecutiveSystemMessages,
+  getClaudeInitCommands,
+  isResultMessage,
+  prepareClaudeHistory,
+} from "@agw/chat-core";
 
-export { getClaudeInitCommands } from "@agw/chat-core";
+export {
+  collapseConsecutiveSystemMessages,
+  getClaudeInitCommands,
+  isResultMessage,
+  prepareClaudeHistory,
+};
 
 const ErrorContent = "ErrorContent";
 const TextContent = "TextContent";
-const ResultType = "result";
-const ControlMessageTypes = new Set([
-  "turn-start",
-  "turn-finished",
-  "human-gate-request",
-  "tool-approval-request",
-  "human-interaction-request",
-]);
-const ToolMessageTypes = new Set([
-  "tool-todo-snapshot",
-  "tool-mode-status",
-  "tool-background-task-status",
-  "tool-warning",
-]);
-const StandaloneSystemMessageTypes = new Set([...ToolMessageTypes, "turn.started"]);
-
-export function isResultMessage(message: AiMessage): boolean {
-  return (
-    message.additionalProperties?.type === ResultType ||
-    message.contents.some((content) => content.additionalProperties?.type === ResultType)
-  );
-}
-
-export function collapseConsecutiveSystemMessages(messages: AiMessage[]): AiMessage[] {
-  const visibleMessages = messages.filter((message) => !isReadOnlyModeSnapshot(message));
-  return visibleMessages.filter(
-    (message, index) =>
-      message.role !== "system" ||
-      StandaloneSystemMessageTypes.has(String(message.additionalProperties?.type)) ||
-      visibleMessages[index + 1]?.role !== "system" ||
-      StandaloneSystemMessageTypes.has(
-        String(visibleMessages[index + 1]?.additionalProperties?.type),
-      ),
-  );
-}
-
-function isReadOnlyModeSnapshot(message: AiMessage): boolean {
-  return (
-    message.additionalProperties?.type === "tool-mode-status" &&
-    message.additionalProperties?.toolName === "mode_get"
-  );
-}
-
 export type AiMessageAction =
   | { type: "append"; message: AiMessage }
   | { type: "setClaudeCommands"; commands: string[] }
@@ -100,37 +67,4 @@ export function handleAiMessage(message: AiMessage): AiMessageAction[] {
   }
 
   return [];
-}
-
-export function prepareClaudeHistory(messages: AiMessage[]): {
-  messages: AiMessage[];
-  commands: string[];
-} {
-  const visibleMessages: AiMessage[] = [];
-  let commands: string[] = [];
-  let foundValidInit = false;
-
-  for (const message of messages) {
-    const init = parseClaudeInitCommands(message);
-    if (!init.isInit) {
-      if (
-        !isReadOnlyModeSnapshot(message) &&
-        !ControlMessageTypes.has(String(message.additionalProperties?.type)) &&
-        message.additionalProperties?.presentation !== "control"
-      ) {
-        visibleMessages.push(message);
-      }
-      continue;
-    }
-
-    if (init.isValid) {
-      commands = init.commands;
-      foundValidInit = true;
-    }
-  }
-
-  return {
-    messages: visibleMessages,
-    commands: foundValidInit ? commands : [],
-  };
 }

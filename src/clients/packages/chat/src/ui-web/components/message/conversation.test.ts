@@ -1,35 +1,12 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import ts from "typescript";
 
 import type { AiMessage } from "@agw/api";
+import { getMessageMeta } from "@agw/chat-core";
 import { processMessages } from "@agw/execution-core";
 
 const CONVERSATION_URL = new URL("./conversation.tsx", import.meta.url);
-
-async function loadMessageMeta() {
-  const source = await readFile(CONVERSATION_URL, "utf8");
-  const start = source.indexOf("type MessageMeta");
-  const end = source.indexOf("\nfunction getFunctionToolName");
-  const messageMetaSource = source
-    .slice(start, end)
-    .replace("function getMessageMeta", "export function getMessageMeta");
-  const javascript = ts.transpileModule(
-    `
-const isResultMessage = (message) => message.additionalProperties?.type === "result";
-${messageMetaSource}
-`,
-    {
-      compilerOptions: {
-        module: ts.ModuleKind.ES2022,
-        target: ts.ScriptTarget.ES2022,
-      },
-    },
-  ).outputText;
-
-  return import(`data:text/javascript;base64,${Buffer.from(javascript).toString("base64")}`);
-}
 
 function toolMessage(type: string, scope: string, callId = "item_1"): AiMessage {
   return toolContentsMessage(type, scope, [callId]);
@@ -55,17 +32,13 @@ function toolContentsMessage(type: string, scope: string, callIds: string[]): Ai
 test("conversation renders agent name and author metadata above agent messages", async () => {
   const source = await readFile(CONVERSATION_URL, "utf8");
 
-  assert.match(source, /function getMessageMeta/);
-  assert.match(source, /agentName/);
-  assert.match(source, /agentAuthor/);
+  assert.match(source, /import \{ getMessageMeta \} from "@agw\/chat-core"/);
   assert.match(source, /\{messageMeta\.name\}/);
   assert.match(source, /\{messageMeta\.author\}/);
   assert.match(source, /AiMessageComponent message=\{item\.message\}/);
 });
 
-test("conversation restores the agentflow node and agent names from persisted metadata", async () => {
-  const { getMessageMeta } = await loadMessageMeta();
-
+test("conversation restores the agentflow node and agent names from persisted metadata", () => {
   assert.deepEqual(
     getMessageMeta({
       messageId: "message-1",
@@ -146,8 +119,15 @@ test("conversation reuses preprocessing for unchanged messages only", () => {
 test("conversation renders user author metadata above and aligned with user messages", async () => {
   const source = await readFile(CONVERSATION_URL, "utf8");
 
-  assert.doesNotMatch(source, /message\.role === "user" \|\| isResultMessage\(message\)/);
-  assert.match(source, /if \(message\.role === "user"\)[\s\S]*?name: null,[\s\S]*?author:/);
+  assert.deepEqual(
+    getMessageMeta({
+      messageId: "user-1",
+      author: "$agw",
+      role: "user",
+      contents: [],
+    }),
+    { name: null, author: "$agw" },
+  );
   assert.match(source, /const isUserMessage = item\.message\.role === "user";/);
   assert.match(source, /isUserMessage \? "ml-auto justify-end" : ""/);
 });
