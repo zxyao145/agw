@@ -4,14 +4,17 @@ This document gives coding agents the repository context and mandatory constrain
 
 ## Project Overview
 
-Agw is a modular-monolith AaaS platform and agent gateway for system and external Agents, scheduled Jobs, multi-agent Agentflows, and project-scoped Chat execution. Its ASP.NET Core and EF Core backend targets `.NET 10.0` and integrates Microsoft.Agents.AI/MAF, MCP, A2A, and external-agent SDKs from `src/server/Agw.Host/Program.cs`; Next.js, Electron, and Expo provide the clients.
+Agw is a modular-monolith AaaS platform and agent gateway for system and external Agents, scheduled Jobs, multi-agent Agentflows, and project-scoped Chat execution. Its ASP.NET Core and EF Core backend targets `.NET 10.0` and integrates Microsoft.Agents.AI/MAF, MCP, A2A, and external-agent SDKs through the shared `Agw.Host` Hosting Module and the Control Plane, Data Plane, and Standalone Host entry points; Next.js, Electron, and Expo provide the clients.
 
 ## Repository Map
 
 ### Backend (`src/server/`)
 
 ```text
-Agw.Host/            # ASP.NET Core entry point and composition root
+Agw.Host/            # Shared ASP.NET Core Hosting Module and Host composition
+Agw.ControlPlane.Host/ # Web UI, setup, management endpoints, and Job scheduling entry point
+Agw.DataPlane.Host/  # SignalR Execution, A2A, and distributed worker entry point
+Agw.Standalone.Host/ # Combined Control/Data entry point; produces agw-server
 Agw.Data/            # Entities, EF mappings, and repository/unit-of-work contracts
 Agw.Infrastructure/  # DbContext, repositories, provider adapters, and seeding
 Agw.Migrations.Sqlite/   # SQLite migrations and provider-specific model snapshot
@@ -72,8 +75,10 @@ Run backend commands from the repository root:
 dotnet restore Agw.slnx
 dotnet tool restore
 dotnet build Agw.slnx
-dotnet run --project src/server/Agw.Host
-dotnet watch --project src/server/Agw.Host
+dotnet run --project src/server/Agw.Standalone.Host
+dotnet watch --project src/server/Agw.Standalone.Host
+dotnet run --project src/server/Agw.ControlPlane.Host
+dotnet run --project src/server/Agw.DataPlane.Host
 dotnet test Agw.slnx
 dotnet csharpier format
 ```
@@ -87,24 +92,24 @@ Do not add or apply EF Core migrations automatically. Each model change needs ma
 ```bash
 dotnet ef migrations add <MigrationName> \
   -p src/server/Agw.Migrations.Sqlite \
-  -s src/server/Agw.Host \
+  -s src/server/Agw.Standalone.Host \
   -- --provider sqlite
 
 dotnet ef migrations add <MigrationName> \
   -p src/server/Agw.Migrations.Postgres \
-  -s src/server/Agw.Host \
+  -s src/server/Agw.Standalone.Host \
   -- --provider postgres
 
 dotnet ef database update \
   --connection "<sqlite-connection-string>" \
   -p src/server/Agw.Migrations.Sqlite \
-  -s src/server/Agw.Host \
+  -s src/server/Agw.Standalone.Host \
   -- --provider sqlite
 
 dotnet ef database update \
   --connection "<postgres-connection-string>" \
   -p src/server/Agw.Migrations.Postgres \
-  -s src/server/Agw.Host \
+  -s src/server/Agw.Standalone.Host \
   -- --provider postgres
 ```
 
@@ -178,7 +183,7 @@ Read [`docs/rules.md`](docs/rules.md) before coding. Its rules are mandatory.
 
 ### A2A
 
-- `Agw.Host/Program.cs` registers A2A through `.AddA2A(builder.Configuration)`, maps it through `app.MapAgwA2A(a2AServerOptions.Prefix)`, and requires authentication at the host boundary.
+- `Agw.DataPlane.Host` and `Agw.Standalone.Host` register and map A2A through the Data Plane Host Module and require authentication at the host seam. `Agw.ControlPlane.Host` must not map A2A routes.
 
 ### Project Workspaces
 

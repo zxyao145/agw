@@ -1,3 +1,4 @@
+using Agw.Agents.Execution.Turns;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
@@ -159,10 +160,7 @@ internal sealed class RedisExecutionEventStream : IExecutionEventStream
     /// <summary>
     /// 判断消息是否应使用 terminal 保留 sequence。
     /// </summary>
-    private static bool IsTerminal(AgwMessage message) =>
-        message.AdditionalProperties != null
-        && message.AdditionalProperties.TryGetValue("type", out var type)
-        && string.Equals(type as string, "turn-finished", StringComparison.Ordinal);
+    private static bool IsTerminal(AgwMessage message) => TurnMessageProtocol.IsFinished(message);
 
     /// <summary>
     /// 从 Redis Stream entry 中读取指定字段。

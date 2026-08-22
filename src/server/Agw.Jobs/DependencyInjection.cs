@@ -12,13 +12,32 @@ namespace Agw.Jobs;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddJobs(this IServiceCollection services, IConfiguration configuration)
+    public sealed record RegistrationOptions(bool AddScheduler = true, bool UseDurableExecution = false);
+
+    public static IServiceCollection AddJobs(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        RegistrationOptions? registrationOptions = null
+    )
     {
-        services.AddHostedService<JobHostedService>();
-        services.AddScoped<IJobAgentExecutor, JobAgentExecutor>();
-        services.AddScoped<JobAttemptRunner>();
-        services.AddSingleton<JobSchedulerWakeSignal>();
-        services.AddSingleton<JobScheduleCalculator>();
+        registrationOptions ??= new RegistrationOptions();
+        if (registrationOptions.AddScheduler)
+        {
+            services.AddHostedService<JobHostedService>();
+            if (registrationOptions.UseDurableExecution)
+            {
+                services.AddScoped<IJobAgentExecutor, DurableJobAgentExecutor>();
+                services.AddHostedService<DurableJobRecoveryHostedService>();
+            }
+            else
+            {
+                services.AddScoped<IJobAgentExecutor, JobAgentExecutor>();
+            }
+            services.AddScoped<JobAttemptRunner>();
+            services.AddScoped<IJobAttemptOutcomeRecorder, JobAttemptOutcomeRecorder>();
+            services.AddSingleton<JobSchedulerWakeSignal>();
+            services.AddSingleton<JobScheduleCalculator>();
+        }
         services.AddSingleton<IAgentSkillRegistration, JobManagementSkillRegistration>();
         services.AddScoped<JobAppService>();
         return services;

@@ -5,6 +5,7 @@ using Agw.Jobs.Scheduling.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Jobs.Application.Services;
@@ -186,6 +187,15 @@ public class JobAppService
         CancellationToken cancellationToken = default
     )
     {
+        EnsureMutable(entity);
+        if (request.Status == JobStatus.Running)
+        {
+            throw new AgwException(
+                ErrorCodes.JobActiveAttemptConflict,
+                "Job Running status is owned by the scheduler."
+            );
+        }
+
         var now = _timeProvider.GetUtcNow();
         var nextRunTime = entity.NextRunTime;
         entity.ProjectId = request.ProjectId;
@@ -238,6 +248,8 @@ public class JobAppService
             return false;
         }
 
+        EnsureMutable(entity);
+
         _jobTaskRepository.Remove(entity);
         await _unitOfWork.SaveChangesAsync();
         return true;
@@ -250,6 +262,8 @@ public class JobAppService
         {
             return null;
         }
+
+        EnsureMutable(entity);
 
         _jobTaskRepository.Remove(entity);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -265,6 +279,14 @@ public class JobAppService
 
         var count = await _jobTaskRepository.Queryable.CountAsync();
         return $"job-{count + 1}-{now.ToString("yyyyMMdd", CultureInfo.InvariantCulture)}";
+    }
+
+    private static void EnsureMutable(Job job)
+    {
+        if (job.Status == JobStatus.Running || job.ActiveExecutionId.HasValue)
+        {
+            throw new AgwException(ErrorCodes.JobActiveAttemptConflict);
+        }
     }
 
     private DateTimeOffset ResolveNextRunTime(Job entity, DateTimeOffset now)

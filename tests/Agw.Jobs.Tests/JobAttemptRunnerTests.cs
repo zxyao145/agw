@@ -4,7 +4,6 @@ using Agw.Jobs.Scheduling.Attempts;
 using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
-using Agw.Testing;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Jobs.Tests;
@@ -16,44 +15,49 @@ public class JobAttemptRunnerTests
     [Fact]
     public async Task RunAsync_RecurringJobSucceeds_ReturnsRescheduleAndWritesSuccessLog()
     {
-        var store = new RecordingJobStore { MarkRunningResult = true };
-        var taskId = Guid.CreateVersion7();
-        var executor = new StubJobAgentExecutor(taskId);
-        var runner = CreateRunner(store, executor);
+        var store = new RecordingJobStore { CanClaim = true };
+        var executor = new StubJobAgentExecutor();
         var scheduledJob = CreateScheduledJob(TriggerType.Interval, "00:15:00");
+        var expected = new JobAttemptResult.Reschedule(
+            scheduledJob with
+            {
+                NextRunTime = UtcNow.AddMinutes(15),
+                RetryCount = 0,
+            }
+        );
+        var recorder = new RecordingOutcomeRecorder(expected);
+        var runner = CreateRunner(store, executor, recorder);
 
         var result = await runner.RunAsync(scheduledJob, TestContext.Current.CancellationToken);
 
         var reschedule = Assert.IsType<JobAttemptResult.Reschedule>(result);
         Assert.Equal(UtcNow.AddMinutes(15), reschedule.Job.NextRunTime);
         Assert.Equal(0, reschedule.Job.RetryCount);
-        Assert.Equal(UtcNow.AddMinutes(15), store.SucceededNextRunTime);
-        Assert.Equal(taskId, store.LastLog?.TaskId);
-        Assert.True(store.LastLog?.Success);
-        Assert.Equal(1, store.LastLog?.Attempt);
+        Assert.Equal(store.ExecutionId, executor.ExecutionId);
+        Assert.Equal((scheduledJob.JobId, store.ExecutionId, true, null), recorder.LastCall);
     }
 
     [Fact]
     public async Task RunAsync_OnceJobSucceeds_ReturnsDropAndMarksSucceededWithoutNextRun()
     {
-        var store = new RecordingJobStore { MarkRunningResult = true };
-        var runner = CreateRunner(store, new StubJobAgentExecutor(Guid.CreateVersion7()));
+        var store = new RecordingJobStore { CanClaim = true };
+        var recorder = new RecordingOutcomeRecorder(new JobAttemptResult.Drop());
+        var runner = CreateRunner(store, new StubJobAgentExecutor(), recorder);
         var scheduledJob = CreateScheduledJob(TriggerType.Once, UtcNow.ToString("O"));
 
         var result = await runner.RunAsync(scheduledJob, TestContext.Current.CancellationToken);
 
         Assert.IsType<JobAttemptResult.Drop>(result);
-        Assert.True(store.MarkSucceededCalled);
-        Assert.Null(store.SucceededNextRunTime);
-        Assert.True(store.LastLog?.Success);
+        Assert.True(recorder.LastCall?.Success);
     }
 
     [Fact]
     public async Task RunAsync_JobCannotBeClaimed_ReturnsDropWithoutExecutingOrLogging()
     {
-        var store = new RecordingJobStore { MarkRunningResult = false };
-        var executor = new StubJobAgentExecutor(Guid.CreateVersion7());
-        var runner = CreateRunner(store, executor);
+        var store = new RecordingJobStore { CanClaim = false };
+        var executor = new StubJobAgentExecutor();
+        var recorder = new RecordingOutcomeRecorder(new JobAttemptResult.Drop());
+        var runner = CreateRunner(store, executor, recorder);
 
         var result = await runner.RunAsync(
             CreateScheduledJob(TriggerType.Interval, "00:15:00"),
@@ -62,48 +66,53 @@ public class JobAttemptRunnerTests
 
         Assert.IsType<JobAttemptResult.Drop>(result);
         Assert.Equal(0, executor.ExecuteCount);
-        Assert.Null(store.LastLog);
+        Assert.Null(recorder.LastCall);
     }
 
     [Fact]
     public async Task RunAsync_FirstFailure_ReturnsRetryAndWritesFailedLog()
     {
-        var store = new RecordingJobStore { MarkRunningResult = true };
-        var runner = CreateRunner(store, new StubJobAgentExecutor(new InvalidOperationException("boom")));
+        var store = new RecordingJobStore { CanClaim = true };
         var scheduledJob = CreateScheduledJob(TriggerType.Interval, "00:15:00", retryCount: 0, maxRetryCount: 3);
+        var expected = new JobAttemptResult.Reschedule(
+            scheduledJob with
+            {
+                NextRunTime = UtcNow.AddSeconds(30),
+                RetryCount = 1,
+            }
+        );
+        var recorder = new RecordingOutcomeRecorder(expected);
+        var runner = CreateRunner(store, new StubJobAgentExecutor(new InvalidOperationException("boom")), recorder);
 
         var result = await runner.RunAsync(scheduledJob, TestContext.Current.CancellationToken);
 
         var reschedule = Assert.IsType<JobAttemptResult.Reschedule>(result);
         Assert.Equal(UtcNow.AddSeconds(30), reschedule.Job.NextRunTime);
         Assert.Equal(1, reschedule.Job.RetryCount);
-        Assert.Equal((1, UtcNow.AddSeconds(30), "boom"), store.Retry);
-        Assert.Equal(Guid.Empty, store.LastLog?.TaskId);
-        Assert.False(store.LastLog?.Success);
-        Assert.Equal(1, store.LastLog?.Attempt);
+        Assert.Equal((scheduledJob.JobId, store.ExecutionId, false, "boom"), recorder.LastCall);
     }
 
     [Fact]
     public async Task RunAsync_RetriesExhausted_ReturnsDropAndMarksFailed()
     {
-        var store = new RecordingJobStore { MarkRunningResult = true };
-        var runner = CreateRunner(store, new StubJobAgentExecutor(new InvalidOperationException("boom")));
+        var store = new RecordingJobStore { CanClaim = true };
+        var recorder = new RecordingOutcomeRecorder(new JobAttemptResult.Drop());
+        var runner = CreateRunner(store, new StubJobAgentExecutor(new InvalidOperationException("boom")), recorder);
         var scheduledJob = CreateScheduledJob(TriggerType.Interval, "00:15:00", retryCount: 3, maxRetryCount: 3);
 
         var result = await runner.RunAsync(scheduledJob, TestContext.Current.CancellationToken);
 
         Assert.IsType<JobAttemptResult.Drop>(result);
-        Assert.Equal((4, "boom"), store.Failure);
-        Assert.False(store.LastLog?.Success);
-        Assert.Equal(4, store.LastLog?.Attempt);
+        Assert.Equal((scheduledJob.JobId, store.ExecutionId, false, "boom"), recorder.LastCall);
     }
 
     [Fact]
     public async Task RunAsync_JobNoLongerExists_ReturnsDropWithoutBookkeeping()
     {
-        var store = new RecordingJobStore { MarkRunningException = new AgwException(ErrorCodes.JobNotFound) };
-        var executor = new StubJobAgentExecutor(Guid.CreateVersion7());
-        var runner = CreateRunner(store, executor);
+        var store = new RecordingJobStore { StartException = new AgwException(ErrorCodes.JobNotFound) };
+        var executor = new StubJobAgentExecutor();
+        var recorder = new RecordingOutcomeRecorder(new JobAttemptResult.Drop());
+        var runner = CreateRunner(store, executor, recorder);
 
         var result = await runner.RunAsync(
             CreateScheduledJob(TriggerType.Interval, "00:15:00"),
@@ -112,20 +121,16 @@ public class JobAttemptRunnerTests
 
         Assert.IsType<JobAttemptResult.Drop>(result);
         Assert.Equal(0, executor.ExecuteCount);
-        Assert.Null(store.Retry);
-        Assert.Null(store.Failure);
-        Assert.Null(store.LastLog);
+        Assert.Null(recorder.LastCall);
     }
 
-    private static JobAttemptRunner CreateRunner(RecordingJobStore store, IJobAgentExecutor executor)
+    private static JobAttemptRunner CreateRunner(
+        RecordingJobStore store,
+        IJobAgentExecutor executor,
+        IJobAttemptOutcomeRecorder recorder
+    )
     {
-        return new JobAttemptRunner(
-            store,
-            executor,
-            new JobScheduleCalculator(),
-            new TestTimeProvider(UtcNow),
-            NullLogger<JobAttemptRunner>.Instance
-        );
+        return new JobAttemptRunner(store, executor, recorder, NullLogger<JobAttemptRunner>.Instance);
     }
 
     private static ScheduledJob CreateScheduledJob(
@@ -154,13 +159,9 @@ public class JobAttemptRunnerTests
 
     private sealed class StubJobAgentExecutor : IJobAgentExecutor
     {
-        private readonly Guid _taskId;
         private readonly Exception? _exception;
 
-        public StubJobAgentExecutor(Guid taskId)
-        {
-            _taskId = taskId;
-        }
+        public StubJobAgentExecutor() { }
 
         public StubJobAgentExecutor(Exception exception)
         {
@@ -168,28 +169,26 @@ public class JobAttemptRunnerTests
         }
 
         public int ExecuteCount { get; private set; }
+        public Guid? ExecutionId { get; private set; }
 
-        public Task<Guid> ExecuteAsync(Job job, CancellationToken cancellationToken)
+        public Task ExecuteAsync(Job job, Guid executionId, CancellationToken cancellationToken)
         {
             ExecuteCount++;
+            ExecutionId = executionId;
             if (_exception != null)
             {
                 throw _exception;
             }
 
-            return Task.FromResult(_taskId);
+            return Task.CompletedTask;
         }
     }
 
     private sealed class RecordingJobStore : IJobStore
     {
-        public bool MarkRunningResult { get; init; }
-        public Exception? MarkRunningException { get; init; }
-        public bool MarkSucceededCalled { get; private set; }
-        public DateTimeOffset? SucceededNextRunTime { get; private set; }
-        public (int RetryCount, DateTimeOffset NextRunTime, string Error)? Retry { get; private set; }
-        public (int RetryCount, string Error)? Failure { get; private set; }
-        public ExecutionLogCall? LastLog { get; private set; }
+        public bool CanClaim { get; init; }
+        public Exception? StartException { get; init; }
+        public Guid ExecutionId { get; } = Guid.CreateVersion7();
 
         public Task<IReadOnlyList<Job>> PrefetchAsync(
             DateTimeOffset now,
@@ -200,61 +199,41 @@ public class JobAttemptRunnerTests
             return Task.FromResult<IReadOnlyList<Job>>([]);
         }
 
-        public Task<bool> MarkRunningAsync(Guid jobId, CancellationToken cancellationToken)
+        public Task<JobAttemptClaim?> TryStartAttemptAsync(Guid jobId, CancellationToken cancellationToken)
         {
-            if (MarkRunningException != null)
+            if (StartException != null)
             {
-                throw MarkRunningException;
+                throw StartException;
             }
 
-            return Task.FromResult(MarkRunningResult);
+            JobAttemptClaim? claim = CanClaim
+                ? new JobAttemptClaim(new Job { Id = jobId, Status = JobStatus.Running }, ExecutionId, UtcNow, 1)
+                : null;
+            return Task.FromResult(claim);
         }
+    }
 
-        public Task MarkSucceededAsync(Guid jobId, DateTimeOffset? nextRunTime, CancellationToken cancellationToken)
+    private sealed class RecordingOutcomeRecorder : IJobAttemptOutcomeRecorder
+    {
+        private readonly JobAttemptResult _result;
+
+        public RecordingOutcomeRecorder(JobAttemptResult result)
         {
-            MarkSucceededCalled = true;
-            SucceededNextRunTime = nextRunTime;
-            return Task.CompletedTask;
+            _result = result;
         }
 
-        public Task MarkRetryAsync(
-            Guid jobId,
-            DateTimeOffset nextRunTime,
-            int retryCount,
-            string errorMessage,
-            CancellationToken cancellationToken
-        )
-        {
-            Retry = (retryCount, nextRunTime, errorMessage);
-            return Task.CompletedTask;
-        }
+        public (Guid JobId, Guid ExecutionId, bool Success, string? Error)? LastCall { get; private set; }
 
-        public Task MarkFailedAsync(
+        public Task<JobAttemptResult> RecordAsync(
             Guid jobId,
-            int retryCount,
-            string errorMessage,
-            CancellationToken cancellationToken
-        )
-        {
-            Failure = (retryCount, errorMessage);
-            return Task.CompletedTask;
-        }
-
-        public Task AddExecutionLogAsync(
-            Guid jobId,
-            Guid taskId,
-            DateTimeOffset startTime,
-            DateTimeOffset endTime,
+            Guid executionId,
             bool success,
-            int attempt,
             string? errorMessage,
             CancellationToken cancellationToken
         )
         {
-            LastLog = new ExecutionLogCall(taskId, success, attempt, errorMessage);
-            return Task.CompletedTask;
+            LastCall = (jobId, executionId, success, errorMessage);
+            return Task.FromResult(_result);
         }
     }
-
-    private sealed record ExecutionLogCall(Guid TaskId, bool Success, int Attempt, string? ErrorMessage);
 }

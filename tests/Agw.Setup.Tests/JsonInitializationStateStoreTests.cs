@@ -1,10 +1,13 @@
 using Agw.Auth.Application;
+using Agw.Auth.Extensions;
 using Agw.Setup.Contracts;
 using Agw.Setup.Services;
 using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
+using Agw.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Xunit;
 
 namespace Agw.Setup.Tests;
@@ -191,6 +194,122 @@ public class JsonInitializationStateStoreTests
 
             Assert.Same(setupState, authenticationState);
             Assert.Same(setupState, serverState);
+        }
+        finally
+        {
+            Directory.Delete(paths.Root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task RefreshAsync_WhenAnotherProcessUpdatesState_RefreshesCachedSnapshot()
+    {
+        var paths = CreatePaths();
+        try
+        {
+            var now = new DateTimeOffset(2026, 8, 22, 0, 0, 0, TimeSpan.Zero);
+            var writerClock = new TestTimeProvider(now);
+            var writer = new JsonInitializationStateStore(paths, writerClock);
+            await writer.PersistAsync(
+                CreateStandaloneConfiguration(),
+                "initial-hash",
+                TestContext.Current.CancellationToken
+            );
+            var reader = new JsonInitializationStateStore(paths, new TestTimeProvider(now));
+
+            await writer.UpdatePasswordAsync("updated-hash", TestContext.Current.CancellationToken);
+            Assert.Equal("initial-hash", reader.GetAuthenticationSnapshot().PasswordHash);
+
+            await reader.RefreshAsync(TestContext.Current.CancellationToken);
+            Assert.Equal("updated-hash", reader.GetAuthenticationSnapshot().PasswordHash);
+        }
+        finally
+        {
+            Directory.Delete(paths.Root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task AuthenticationSnapshot_WhenStateFileIsExclusivelyLocked_UsesCachedState()
+    {
+        var paths = CreatePaths();
+        try
+        {
+            var store = new JsonInitializationStateStore(paths);
+            await store.PersistAsync(
+                CreateStandaloneConfiguration(),
+                "cached-hash",
+                TestContext.Current.CancellationToken
+            );
+            using var lockedFile = new FileStream(paths.StateFile, FileMode.Open, FileAccess.Read, FileShare.None);
+
+            var snapshot = store.GetAuthenticationSnapshot();
+
+            Assert.Equal("cached-hash", snapshot.PasswordHash);
+            Assert.True(store.IsInitialized);
+        }
+        finally
+        {
+            Directory.Delete(paths.Root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task UpdatePasswordAsync_OnWindows_RetriesUntilConflictingReaderCloses()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        var paths = CreatePaths();
+        try
+        {
+            var store = new JsonInitializationStateStore(paths);
+            await store.PersistAsync(
+                CreateStandaloneConfiguration(),
+                "initial-hash",
+                TestContext.Current.CancellationToken
+            );
+            using var lockedFile = new FileStream(paths.StateFile, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+            var update = store.UpdatePasswordAsync("updated-hash", TestContext.Current.CancellationToken);
+            await Task.Delay(TimeSpan.FromMilliseconds(150), TestContext.Current.CancellationToken);
+            Assert.False(update.IsCompleted);
+
+            lockedFile.Dispose();
+            await update.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            Assert.Equal("updated-hash", store.GetAuthenticationSnapshot().PasswordHash);
+        }
+        finally
+        {
+            Directory.Delete(paths.Root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void AddSetup_ReadOnly_ExposesOnlyStateReaders()
+    {
+        var paths = CreatePaths();
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.AddSingleton(paths);
+            services.AddAuth();
+            services.AddSetup(new ConfigurationBuilder().Build(), readOnly: true);
+            using var provider = services.BuildServiceProvider();
+
+            var readers = provider.GetServices<IAuthenticationStateReader>().ToArray();
+            Assert.Single(readers);
+            Assert.IsType<JsonInitializationStateStore>(readers[0]);
+            Assert.NotNull(provider.GetRequiredService<IServerInitializationState>());
+            Assert.Contains(
+                provider.GetServices<IHostedService>(),
+                service => service.GetType().Name == "JsonInitializationStateRefreshHostedService"
+            );
+            Assert.Null(provider.GetService<IAuthenticationStateStore>());
+            Assert.Null(provider.GetService<IInitializationStateStore>());
         }
         finally
         {

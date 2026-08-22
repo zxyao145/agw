@@ -13,13 +13,15 @@ internal static class TurnMessageFactory
     /// 创建 Turn 已启动消息，并在 durable 模式下携带稳定的 executionId 与渲染作用域。
     /// </summary>
     public static AgwMessage CreateStarted(Guid? executionId = null, string? streamingScopeId = null) =>
-        CreateState("turn-start", status: null, executionId, streamingScopeId);
+        CreateState(TurnMessageProtocol.StartedType, status: null, executionId, streamingScopeId);
 
     /// <summary>
     /// 创建 Turn 已结束消息，并在 durable 模式下携带最终状态和 executionId。
     /// </summary>
-    public static AgwMessage CreateFinished(string status = "completed", Guid? executionId = null) =>
-        CreateState("turn-finished", status, executionId, streamingScopeId: null);
+    public static AgwMessage CreateFinished(
+        string status = TurnMessageProtocol.CompletedStatus,
+        Guid? executionId = null
+    ) => CreateState(TurnMessageProtocol.FinishedType, status, executionId, streamingScopeId: null);
 
     /// <summary>
     /// 按统一协议构造 Turn 状态消息，避免启动与结束消息的字段发生漂移。

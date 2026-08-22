@@ -46,7 +46,7 @@ public static class DependencyInjection
                         OnValidatePrincipal = context =>
                         {
                             var store =
-                                context.HttpContext.RequestServices.GetRequiredService<IAuthenticationStateStore>();
+                                context.HttpContext.RequestServices.GetRequiredService<IAuthenticationStateReader>();
                             var expected = store.GetAuthenticationSnapshot().SessionVersion.ToString();
                             if (
                                 !string.Equals(

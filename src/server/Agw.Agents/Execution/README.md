@@ -19,7 +19,7 @@ Connection 生命周期、Command Handler 扩展方式与状态所有权的决�
 
 ## 两套执行提供者
 
-实时执行现在保留两套实现，并通过 `Execution:Provider` 在进程启动时二选一。它不是按请求动态切换；同一套部署中的所有 Pod 必须使用相同配置。
+实时执行保留两套实现，并通过 `Execution:Provider` 在进程启动时二选一。它不是按请求动态切换；同一套部署中的所有 Host 必须使用相同配置。拆分部署中，Data Plane 映射 SignalR/A2A 并运行 worker，Control Plane 只为 Jobs 注册 durable client，Standalone 同时组合两者。
 
 | 能力 | `InProcess`（默认） | `Distributed`（集群） |
 | --- | --- | --- |
@@ -34,7 +34,7 @@ Connection 生命周期、Command Handler 扩展方式与状态所有权的决�
 
 默认值仍为 `InProcess`，因此没有配置集群依赖的现有部署行为不变。选择 `Distributed` 时会在启动阶段校验 PostgreSQL 与 PostgreSQL DistributedLock，不会静默降级到进程内实现。消息回放默认也使用 PostgreSQL；只有显式选择 Redis provider 时才要求 Redis connection string。
 
-当前 `Distributed` provider 只接受 `ExecCommand.stream=true`。非流式缓冲若要跨多个 HITL segment 保持与进程内模式完全一致，需要另行定义持久缓冲语义；本实现选择明确拒绝，而不是静默丢失或提前发送缓冲消息。
+当前 `Distributed` provider 只接受 `ExecCommand.stream=true`。非流式缓冲若要跨多个 HITL segment 保持与进程内模式完全一致，需要另行定义持久缓冲语义；本实现选择明确拒绝，而不是静默丢失或提前发送缓冲消息。Distributed Jobs 与 A2A 通过 transport-neutral durable request Interface 登记同一状态机；Jobs 和 A2A 不支持 HITL，遇到等待状态会失败或中断。
 
 ## 关键目录与入口
 
@@ -424,6 +424,8 @@ Execution.Provider
 - 乐观并发字段 `StateVersion`，用于保护终态不被迟到结果覆盖。
 
 PostgreSQL event stream 另使用一张 `execution_stream_entry` append-only 表，保存 `ExecutionId + SegmentIndex + Sequence + 加密 PayloadJson`。这张表不能与状态行合并：流式 token 数量无界且写入频繁，把它们放入 `durable_execution` 会持续放大单行、制造状态更新冲突。它也不能复用对话历史表，因为对话历史不具备 execution cursor 和逐条传输消息语义。
+
+无人值守的 Durable Job 不消费 event stream。Control Plane 通过轻量 outcome 投影每秒检查一次状态，只在失败终态额外读取加密错误；A2A 和交互式连接仍按 cursor 消费消息流。这样 Job 完成等待不会按运行时长持续加载 manifest 或回放输出。
 
 因此新增实体严格保持为两张表：一张有界状态快照，一张可选的 PostgreSQL 消息流。单行状态快照保证一次 segment 的 checkpoint、pending 和状态一起成功或一起失败；任意 event stream 实现都不保存执行事实。消息流完全不可用时，执行仍能等待、回答、恢复，并根据 PostgreSQL 状态合成 pending/terminal 消息。
 

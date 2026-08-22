@@ -203,6 +203,38 @@ internal sealed class DurableExecutionStore
     }
 
     /// <summary>
+    /// Loads the authorized execution status without materializing the encrypted execution manifest.
+    /// The encrypted error is loaded only for failed executions.
+    /// </summary>
+    internal async Task<DurableExecutionOutcome> GetAuthorizedOutcomeAsync(
+        Guid executionId,
+        string userId,
+        CancellationToken cancellationToken
+    )
+    {
+        var state = await _dbContext
+            .Set<DurableExecutionRecord>()
+            .AsNoTracking()
+            .Where(item => item.Id == executionId && item.UserId == userId)
+            .Select(item => new { item.Id, item.Status })
+            .SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (state == null)
+        {
+            throw new AgwException(ErrorCodes.DurableExecutionNotFound);
+        }
+
+        string? errorMessage = null;
+        if (state.Status == DurableExecutionStatus.Failed)
+        {
+            var record = await FindAsync(executionId, userId, tracking: false, cancellationToken).ConfigureAwait(false);
+            errorMessage = record?.ErrorMessage;
+        }
+
+        return new DurableExecutionOutcome(state.Id, state.Status, errorMessage);
+    }
+
+    /// <summary>
     /// 查询等待执行、等待恢复或可能因 Server 退出而遗留的 Running execution。
     /// </summary>
     internal async Task<IReadOnlyList<Guid>> GetRunnableExecutionIdsAsync(

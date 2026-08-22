@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using A2A;
 using Agw.A2A.Extensions;
+using Agw.Agents.Execution.Turns;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -276,7 +277,10 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
             {
                 try
                 {
-                    await ApplyEventAsync(response, context!, cancellationToken).ConfigureAwait(false);
+                    if (!await ApplyEventAsync(response, context!, cancellationToken).ConfigureAwait(false))
+                    {
+                        continue;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -351,6 +355,19 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
             throw new AgwException(ErrorCodes.A2ATaskNotCancelable, "Task is already in a terminal state.");
         }
 
+        await using (var scope = _serviceScopeFactory.CreateAsyncScope())
+        {
+            var durableBridge = scope.ServiceProvider.GetService<IDurableA2AExecutionBridge>();
+            if (durableBridge != null)
+            {
+                var interrupted = await durableBridge.CancelAsync(request.Id, cancellationToken).ConfigureAwait(false);
+                if (!interrupted)
+                {
+                    throw new AgwException(ErrorCodes.A2ATaskNotCancelable, "Task is no longer cancelable.");
+                }
+            }
+        }
+
         // Signal any background return-immediately work to stop.
         // Don't dispose the CTS here — the drain's finally block owns disposal.
         if (_backgroundCancellations.TryRemove(request.Id, out var backgroundCts))
@@ -412,6 +429,70 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
     {
         using var activity = AgwA2ADiagnostics.Source.StartActivity("A2AServer.SubscribeToTask", ActivityKind.Internal);
         activity?.SetTag("a2a.task.id", request.Id);
+
+        await using var durableScope = _serviceScopeFactory.CreateAsyncScope();
+        var durableBridge = durableScope.ServiceProvider.GetService<IDurableA2AExecutionBridge>();
+        if (durableBridge != null)
+        {
+            var durableTask =
+                await _taskStore.GetTaskAsync(request.Id, cancellationToken).ConfigureAwait(false)
+                ?? throw new AgwException(ErrorCodes.A2ATaskNotFound, $"Task '{request.Id}' not found.");
+            if (durableTask.Status.State.IsTerminal())
+            {
+                throw new AgwException(
+                    ErrorCodes.A2ATerminalTaskCannotBeSubscribed,
+                    "Task is in a terminal state and cannot be subscribed to."
+                );
+            }
+
+            yield return new StreamResponse { Task = durableTask };
+            var durableContext = new RequestContext
+            {
+                Message =
+                    durableTask.History?.LastOrDefault()
+                    ?? new Message
+                    {
+                        Role = Role.User,
+                        MessageId = string.Empty,
+                        Parts = [],
+                    },
+                Task = durableTask,
+                TaskId = durableTask.Id,
+                ContextId = durableTask.ContextId,
+                StreamingResponse = true,
+            };
+            await foreach (
+                var message in durableBridge
+                    .SubscribeAsync(request.Id, cursor: null, cancellationToken)
+                    .ConfigureAwait(false)
+            )
+            {
+                var eventQueue = new AgentEventQueue();
+                var updater = new TaskUpdater(eventQueue, request.Id, durableTask.ContextId);
+                if (TurnMessageProtocol.TryGetFinishedStatus(message, out var status))
+                {
+                    await CommonAgentHandler
+                        .ApplyTerminalStatusAsync(updater, durableContext, status, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                else
+                {
+                    await CommonAgentHandler
+                        .PublishArtifactsAsync(updater, message, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                eventQueue.Complete();
+                await foreach (var response in eventQueue.WithCancellation(cancellationToken).ConfigureAwait(false))
+                {
+                    if (!await ApplyEventAsync(response, durableContext, cancellationToken).ConfigureAwait(false))
+                    {
+                        continue;
+                    }
+                    yield return response;
+                }
+            }
+            yield break;
+        }
 
         AgentTask currentTask;
         Channel<StreamResponse> channel;
@@ -542,7 +623,7 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         }
     }
 
-    private async Task ApplyEventAsync(
+    private async Task<bool> ApplyEventAsync(
         StreamResponse response,
         RequestContext context,
         CancellationToken cancellationToken
@@ -552,13 +633,30 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         {
             var currentTask = await _taskStore.GetTaskAsync(context.TaskId, cancellationToken).ConfigureAwait(false);
 
+            var incomingState = response.StatusUpdate?.Status.State ?? response.Task?.Status.State;
+            if (currentTask?.Status.State.IsTerminal() == true && incomingState?.IsTerminal() == true)
+            {
+                if (currentTask.Status.State != incomingState.Value)
+                {
+                    _logger.LogWarning(
+                        "Ignoring conflicting terminal transition for A2A task {TaskId}: {CurrentState} -> {IncomingState}.",
+                        context.TaskId,
+                        currentTask.Status.State,
+                        incomingState.Value
+                    );
+                    return false;
+                }
+
+                return true;
+            }
+
             var updatedTask = global::A2A.TaskProjection.Apply(currentTask, response);
 
             // Message-only responses with no existing task have nothing to persist.
             if (updatedTask is null)
             {
                 _notifier.Notify(context.TaskId, response);
-                return;
+                return true;
             }
 
             if (currentTask is null)
@@ -569,6 +667,7 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
             await _taskStore.SaveTaskAsync(context.TaskId, updatedTask, cancellationToken).ConfigureAwait(false);
 
             _notifier.Notify(context.TaskId, response);
+            return true;
         }
     }
 
@@ -596,7 +695,10 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
 
         await foreach (var response in eventQueue.WithCancellation(cancellationToken).ConfigureAwait(false))
         {
-            await ApplyEventAsync(response, context, CancellationToken.None).ConfigureAwait(false);
+            if (!await ApplyEventAsync(response, context, CancellationToken.None).ConfigureAwait(false))
+            {
+                continue;
+            }
 
             if (result is null)
             {
@@ -700,7 +802,10 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
 
         await foreach (var response in eventQueue.WithCancellation(cancellationToken).ConfigureAwait(false))
         {
-            await ApplyEventAsync(response, context, cancellationToken).ConfigureAwait(false);
+            if (!await ApplyEventAsync(response, context, cancellationToken).ConfigureAwait(false))
+            {
+                continue;
+            }
 
             // Capture the first Task or Message as the synchronous response
             if (result is null)

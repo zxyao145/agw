@@ -20,4 +20,20 @@ public sealed record ScheduledJob
     public int RetryCount { get; init; }
     public int MaxRetryCount { get; init; }
     public long Version { get; init; }
+
+    public static ScheduledJob FromJob(Job job) =>
+        new()
+        {
+            JobId = job.Id,
+            ProjectId = job.ProjectId,
+            AgentType = job.AgentType,
+            AgentId = job.AgentId,
+            Name = job.Name,
+            Prompt = job.Prompt,
+            TriggerType = job.TriggerType,
+            TriggerValue = job.TriggerValue,
+            NextRunTime = job.NextRunTime,
+            RetryCount = job.RetryCount,
+            MaxRetryCount = job.MaxRetryCount,
+        };
 }

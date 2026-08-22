@@ -170,6 +170,59 @@ public sealed class DurableExecutionStoreTests
     }
 
     [Fact]
+    public async Task GetAuthorizedOutcomeAsync_RunningState_DoesNotDeserializeManifest()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var store = database.CreateStore();
+        var executionId = await RegisterExecutionAsync(store);
+        var record = await database.Context.DurableExecutions.SingleAsync(TestContext.Current.CancellationToken);
+        record.ManifestJson = "not-a-valid-manifest";
+        await database.Context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var outcome = await store.GetAuthorizedOutcomeAsync(
+            executionId,
+            "user-id",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(executionId, outcome.ExecutionId);
+        Assert.Equal(DurableExecutionStatus.Queued, outcome.Status);
+        Assert.Null(outcome.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task GetAuthorizedOutcomeAsync_FailedState_LoadsDecryptedError()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var store = database.CreateStore();
+        var executionId = await RegisterExecutionAsync(store);
+        await store.TryBeginSegmentAsync(
+            executionId,
+            TimeProvider.System.GetUtcNow(),
+            TestContext.Current.CancellationToken
+        );
+        await store.SaveSegmentResultAsync(
+            new DurableExecutionSegmentResult
+            {
+                ExecutionId = executionId,
+                SegmentIndex = 0,
+                Status = DurableExecutionSegmentStatus.Failed,
+                ErrorMessage = "boom",
+            },
+            TestContext.Current.CancellationToken
+        );
+
+        var outcome = await store.GetAuthorizedOutcomeAsync(
+            executionId,
+            "user-id",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(DurableExecutionStatus.Failed, outcome.Status);
+        Assert.Equal("boom", outcome.ErrorMessage);
+    }
+
+    [Fact]
     public async Task SegmentState_WaitingAndResponse_RestoresNextSegmentInput()
     {
         await using var database = await TestDatabase.CreateAsync();

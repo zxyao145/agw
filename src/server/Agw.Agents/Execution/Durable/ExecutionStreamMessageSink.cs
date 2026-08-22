@@ -102,6 +102,6 @@ internal sealed class ExecutionStreamMessageSink : IExecutionMessageSink
             is "human-interaction-request"
                 or "tool-approval-request"
                 or "human-gate-request"
-                or "turn-finished";
+                or TurnMessageProtocol.FinishedType;
     }
 }

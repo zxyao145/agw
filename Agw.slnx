@@ -4,6 +4,7 @@
     <File Path=".editorconfig" />
     <File Path=".gitignore" />
     <File Path="CLAUDE.md" />
+    <File Path="CONTEXT.md" />
     <File Path="Dockerfile" />
     <File Path="format.sh" />
     <File Path="publish.sh" />
@@ -13,7 +14,10 @@
     <File Path="src/server/Directory.Packages.props" />
   </Folder>
   <Folder Name="/1.Host/">
+    <Project Path="src/server/Agw.ControlPlane.Host/Agw.ControlPlane.Host.csproj" />
+    <Project Path="src/server/Agw.DataPlane.Host/Agw.DataPlane.Host.csproj" />
     <Project Path="src/server/Agw.Host/Agw.Host.csproj" />
+    <Project Path="src/server/Agw.Standalone.Host/Agw.Standalone.Host.csproj" />
   </Folder>
   <Folder Name="/2.Api/">
     <Project Path="src/server/Agw.A2A/Agw.A2A.csproj" Id="82aa4560-620a-47a2-848c-f05093bc7251" />

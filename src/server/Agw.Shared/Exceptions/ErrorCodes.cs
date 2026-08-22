@@ -479,6 +479,11 @@ public static class ErrorCodes
         "A user memory with this name already exists.",
         HttpStatusCode.Conflict
     );
+    public static readonly ErrorCode JobActiveAttemptConflict = new(
+        409_0017,
+        "A Job with an active attempt cannot be updated or deleted.",
+        HttpStatusCode.Conflict
+    );
 
     public static readonly ErrorCode TooManyAuthenticationAttempts = new(
         429_0001,

@@ -101,7 +101,7 @@ Desktop:
 
 ```bash
 dotnet restore Agw.slnx
-dotnet run --project src/server/Agw.Host
+dotnet run --project src/server/Agw.Standalone.Host
 ```
 
 开发环境后端默认监听 `http://localhost:30816`。首次运行时，打开 `http://localhost:30816/setup`，选择部署模式、填写结构化数据库设置并创建管理员密码。Standalone 支持 SQLite 和 PostgreSQL；Cluster 需要 PostgreSQL，并在浏览器 Setup 完成后重启 Server 才会生效。无人值守部署可在不存在 `server-state.json` 时通过 `Setup` 配置节提供相同字段，密码应使用环境变量或 Secret 注入。运行数据统一保存在当前用户主目录下的 `agw`；通过域名初始化还需要 Server 启动日志中的一次性 Setup Code。
@@ -116,7 +116,7 @@ pnpm dev:web
 
 `src/clients` 是 Web、Desktop、Mobile 和 `src/clients/packages/` 下共享包的 pnpm Workspace，由 Turborepo 统一编排任务；一次 `pnpm install` 即可安装整个 Workspace。Web 与 Desktop 各自拥有独立的 Next.js 应用，不会互相导入、构建或消费对方的产物，业务和基础设施模块通过根目录下的 `packages/*` 复用；Mobile 只消费其中兼容 React Native 的核心包。后端和 Web 都启动后，打开 `http://localhost:3001`。Web 会将 `/api/*` 和 `/openapi/*` 代理到后端，代理目标按顺序读取 `BACKEND_API_BASE_URL`、`NEXT_PUBLIC_API_BASE_URL`，默认使用 `http://localhost:30816`。
 
-生产发布包会把静态 Web UI 嵌入 ASP.NET Core，由单一 Server 进程提供服务，详见下方部署指南。
+生产发布包含组合式 Standalone 镜像，以及独立的 Control Plane、Data Plane 镜像。Standalone 与 Control Plane 嵌入静态 Web UI；Data Plane 只暴露 Execution、A2A 与健康检查路由，详见部署指南。
 
 Agw Desktop 在 `src/clients/desktop/` 下拥有独立的 Electron main/preload 实现和 React renderer。Renderer 复用与 Web 相同的业务包，Electron bridge contract 则保留在 Desktop 内部的 `src/shared/contracts/`。Desktop 会自行构建静态导出，不依赖 `web/` 的产物。运行模型、安装包类型和发布流程详见 [`src/clients/desktop/README.md`](src/clients/desktop/README.md)。
 
@@ -152,7 +152,7 @@ pnpm install
 在仓库根目录以热重载模式运行后端，再在另一个终端从 `src/clients` 启动 Web：
 
 ```bash
-dotnet watch --project src/server/Agw.Host
+dotnet watch --project src/server/Agw.Standalone.Host
 ```
 
 ```bash
@@ -183,7 +183,7 @@ pnpm fmt:check
 
 ## 调试
 
-- **后端：** 在 .NET 调试器中使用 `http` 或 `https` launch profile 启动 `src/server/Agw.Host`。两个 profile 都会设置 `ASPNETCORE_ENVIRONMENT=Development`，此时可以访问仅在开发环境开放的 OpenAPI 和 Scalar 端点。Server 日志同时输出到控制台和 `$AGW_DATA_DIR/logs/application-*.log`；未设置 `AGW_DATA_DIR` 时位于 `~/agw/logs/`。
+- **后端：** 在 .NET 调试器中使用 launch profile 启动 `src/server/Agw.Standalone.Host`。它会设置 `ASPNETCORE_ENVIRONMENT=Development`，此时可以访问仅在开发环境开放的 OpenAPI 和 Scalar 端点。Server 日志同时输出到控制台和 `$AGW_DATA_DIR/logs/` 下按 Host 角色区分的文件；未设置 `AGW_DATA_DIR` 时位于 `~/agw/logs/`。
 - **Web：** 执行 `pnpm dev:web`，通过浏览器开发者工具调试客户端代码和网络请求，并在 Next.js 终端查看服务端输出。需要连接其他后端时，可执行 `BACKEND_API_BASE_URL=http://host:port pnpm dev:web`。
 - **Desktop：** 执行 `pnpm dev:desktop`。Electron main process 和构建输出显示在启动终端，preload 与 renderer 代码可通过 Electron DevTools 检查；开发环境 renderer 使用 `http://localhost:3000`。
 - **聚焦测试：** 后端可执行 `dotnet test tests/<Project> --filter "FullyQualifiedName~MethodName"`；客户端可在 `src/clients` 下执行 `pnpm exec turbo run test --filter=@agw/web`，并按需替换 package filter。
@@ -234,7 +234,7 @@ Agw-Desktop-0.2.0-preview.1-client-windows-x64-Portable.zip
 Agw-Desktop-0.2.0-preview.1-client-macos-arm64.dmg
 ```
 
-同一个 Release 还会发布 `linux/amd64` 和 `linux/arm64` 的 Server 镜像，名称为 `ghcr.io/zxyao145/agw:{version}`。
+同一个 Release 还会发布 `linux/amd64` 和 `linux/arm64` 的 Standalone、Control Plane、Data Plane 镜像，名称分别为 `ghcr.io/zxyao145/agw:{version}`、`ghcr.io/zxyao145/agw-control-plane:{version}`、`ghcr.io/zxyao145/agw-data-plane:{version}`。
 
 正式稳定版通过 `vX.Y.Z` tag 发布，例如：
 
@@ -285,7 +285,7 @@ git push origin v0.1.0
 
 ## 架构
 
-Agw 采用基于领域的模块化单体架构。`src/server/Agw.Host` 是 ASP.NET Core 程序入口，负责组装各个模块；`src/clients` pnpm Workspace 包含 Web、Electron Desktop、Expo Mobile 以及共享业务和基础设施 package。
+Agw 采用基于领域的模块化单体架构。`src/server/Agw.Host` 是共享 Hosting Module，`Agw.ControlPlane.Host`、`Agw.DataPlane.Host`、`Agw.Standalone.Host` 是三个可执行组合根；`src/clients` pnpm Workspace 包含 Web、Electron Desktop、Expo Mobile 以及共享业务和基础设施 package。
 
 典型的后端流程如下：
 

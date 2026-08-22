@@ -26,11 +26,22 @@ namespace Agw.Agents;
 /// </summary>
 public static class DependencyInjection
 {
+    public sealed record RegistrationOptions(
+        bool AddExecutionTransport = true,
+        bool AddDistributedWorker = true,
+        bool AddTraceCollector = true
+    );
+
     /// <summary>
     /// 根据配置注册 InProcess 或 Distributed execution 实现。
     /// </summary>
-    public static IServiceCollection AddAgents(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddAgents(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        RegistrationOptions? registrationOptions = null
+    )
     {
+        registrationOptions ??= new RegistrationOptions();
         var executionOptions =
             configuration.GetSection(ExecutionRuntimeOptions.SectionName).Get<ExecutionRuntimeOptions>()
             ?? new ExecutionRuntimeOptions();
@@ -57,10 +68,13 @@ public static class DependencyInjection
         services.AddScoped<ISummaryChatClientFactory, SummaryChatClientFactory>();
         services.AddScoped<IAgentTurnSummaryService, AgentTurnSummaryService>();
         services.AddScoped<IRuntimeFactory, RuntimeFactory>();
-        services.AddExecutionCommands();
-        services.AddScoped<ExecutionCommandDispatcher>();
-        services.AddScoped<ExecutionConnectionContextFactory>();
-        services.AddSingleton<ExecutionConnectionRegistry>();
+        if (registrationOptions.AddExecutionTransport)
+        {
+            services.AddExecutionCommands();
+            services.AddScoped<ExecutionCommandDispatcher>();
+            services.AddScoped<ExecutionConnectionContextFactory>();
+            services.AddSingleton<ExecutionConnectionRegistry>();
+        }
         services.AddSingleton<RuntimeTurnContextAccessor>();
         services.AddSingleton<IRuntimeTurnContextAccessor, RuntimeTurnContextAccessor>();
         services.AddSingleton<HumanInteractionContextAccessor>();
@@ -70,10 +84,13 @@ public static class DependencyInjection
         services.AddSingleton<ObservabilityMiddleware>();
         services.AddSingleton<UsageTrackingMiddleware>();
         services.AddSingleton<IAgentflowNodeExecutionTraceStore, AgentflowNodeExecutionTraceStore>();
-        services.AddSingleton<AgentflowNodeExecutionTraceCollector>();
-        services.AddHostedService(serviceProvider =>
-            serviceProvider.GetRequiredService<AgentflowNodeExecutionTraceCollector>()
-        );
+        if (registrationOptions.AddTraceCollector)
+        {
+            services.AddSingleton<AgentflowNodeExecutionTraceCollector>();
+            services.AddHostedService(serviceProvider =>
+                serviceProvider.GetRequiredService<AgentflowNodeExecutionTraceCollector>()
+            );
+        }
 
         if (executionOptions.Provider == ExecutionProvider.Distributed)
         {
@@ -83,7 +100,11 @@ public static class DependencyInjection
             services.AddScoped<DurableExecutionSegmentExecutor>();
             AddExecutionEventStream(services, executionOptions);
             services.AddSingleton<DurableExecutionCoordinator>();
-            services.AddHostedService<DistributedExecutionWorker>();
+            services.AddSingleton<IDurableExecutionClient, DurableExecutionClient>();
+            if (registrationOptions.AddDistributedWorker)
+            {
+                services.AddHostedService<DistributedExecutionWorker>();
+            }
         }
 
         return services;

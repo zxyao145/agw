@@ -6,6 +6,7 @@ using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Exceptions;
 using Agw.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -120,6 +121,32 @@ public class JobAppServiceTests
         await wait.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
     }
 
+    [Fact]
+    public async Task UpdateAsync_ActiveAttempt_ThrowsConflict()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var fixture = await JobAppServiceFixture.CreateAsync(1, cancellationToken);
+        await fixture.SetActiveAttemptAsync(fixture.FirstJobId, cancellationToken);
+
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            fixture.Service.UpdateAsync(fixture.FirstJobId, CreateUpdateRequest(), "test-user")
+        );
+
+        Assert.Equal(ErrorCodes.JobActiveAttemptConflict.Code, exception.Code);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ActiveAttempt_ThrowsConflict()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var fixture = await JobAppServiceFixture.CreateAsync(1, cancellationToken);
+        await fixture.SetActiveAttemptAsync(fixture.FirstJobId, cancellationToken);
+
+        var exception = await Assert.ThrowsAsync<AgwException>(() => fixture.Service.DeleteAsync(fixture.FirstJobId));
+
+        Assert.Equal(ErrorCodes.JobActiveAttemptConflict.Code, exception.Code);
+    }
+
     private static JobCreateRequest CreateRequest(string name)
     {
         return new JobCreateRequest
@@ -132,6 +159,18 @@ public class JobAppServiceTests
             IsEnabled = true,
         };
     }
+
+    private static JobUpdateRequest CreateUpdateRequest() =>
+        new()
+        {
+            ProjectId = Guid.CreateVersion7(),
+            Name = "updated",
+            TriggerType = TriggerType.Interval,
+            TriggerValue = "00:01:00",
+            MaxRetryCount = 3,
+            IsEnabled = true,
+            Status = JobStatus.Pending,
+        };
 
     private sealed class JobAppServiceFixture : IAsyncDisposable
     {
@@ -164,6 +203,15 @@ public class JobAppServiceTests
         {
             _dbContext.ChangeTracker.Clear();
             return await _dbContext.Jobs.AsNoTracking().SingleAsync(job => job.Id == id, cancellationToken);
+        }
+
+        public async Task SetActiveAttemptAsync(Guid id, CancellationToken cancellationToken)
+        {
+            var job = await _dbContext.Jobs.SingleAsync(item => item.Id == id, cancellationToken);
+            job.Status = JobStatus.Running;
+            job.ActiveExecutionId = Guid.CreateVersion7();
+            job.ActiveAttemptStartedAt = UtcNow;
+            await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
         public static async Task<JobAppServiceFixture> CreateAsync(int jobCount, CancellationToken cancellationToken)

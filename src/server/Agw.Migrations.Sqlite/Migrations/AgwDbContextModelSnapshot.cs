@@ -1120,6 +1120,14 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("id");
 
+                    b.Property<DateTimeOffset?>("ActiveAttemptStartedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("active_attempt_started_at");
+
+                    b.Property<Guid?>("ActiveExecutionId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("active_execution_id");
+
                     b.Property<Guid?>("AgentId")
                         .HasColumnType("TEXT")
                         .HasColumnName("agent_id");
@@ -1203,13 +1211,20 @@ namespace Agw.Migrations.Sqlite.Migrations
                     b.HasKey("Id")
                         .HasName("pk_job");
 
+                    b.HasIndex("ActiveExecutionId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_job_active_execution_id");
+
                     b.HasIndex("ProjectId")
                         .HasDatabaseName("ix_task_project");
 
                     b.HasIndex("IsEnabled", "Status", "NextRunTime")
                         .HasDatabaseName("ix_task_next_run_time");
 
-                    b.ToTable("job", (string)null);
+                    b.ToTable("job", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_job_active_attempt", "(status = 2 AND active_execution_id IS NOT NULL AND active_attempt_started_at IS NOT NULL) OR (status <> 2 AND active_execution_id IS NULL AND active_attempt_started_at IS NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Jobs.JobLog", b =>

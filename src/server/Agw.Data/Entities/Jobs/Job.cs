@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 using Agw.Shared.Data.Abstractions;
 using Microsoft.EntityFrameworkCore;
 
@@ -27,6 +28,12 @@ public class Job : BaseEntity, IAggregateRoot
     public int RetryCount { get; set; }
     public int MaxRetryCount { get; set; } = 3;
     public string? LastError { get; set; }
+
+    [JsonIgnore]
+    public Guid? ActiveExecutionId { get; set; }
+
+    [JsonIgnore]
+    public DateTimeOffset? ActiveAttemptStartedAt { get; set; }
 
     public byte[] RowVersion { get; set; } = Array.Empty<byte>();
 }

@@ -96,6 +96,9 @@ public sealed class AuthModuleCompositionTests
         builder.Services.AddSingleton<IAuthenticationStateStore>(provider =>
             provider.GetRequiredService<AuthenticationStateStoreStub>()
         );
+        builder.Services.AddSingleton<IAuthenticationStateReader>(provider =>
+            provider.GetRequiredService<AuthenticationStateStoreStub>()
+        );
         builder.Services.AddSingleton<IApiTokenStore>(provider =>
             provider.GetRequiredService<AuthenticationStateStoreStub>()
         );

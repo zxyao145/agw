@@ -24,13 +24,14 @@ public sealed class InitialMigrationTests
         using var dbContext = new AgwDbContext(options.Options);
 
         var migrations = dbContext.Database.GetMigrations().ToArray();
-        Assert.Equal(6, migrations.Length);
+        Assert.Equal(7, migrations.Length);
         Assert.EndsWith("_Init", migrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", migrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", migrations[2], StringComparison.Ordinal);
         Assert.EndsWith("_AddAgentflowCheckpoints", migrations[3], StringComparison.Ordinal);
         Assert.EndsWith("_AddModelCompactionLimits", migrations[4], StringComparison.Ordinal);
         Assert.EndsWith("_UseUserIdForExecutionOwnership", migrations[5], StringComparison.Ordinal);
+        Assert.EndsWith("_AddJobActiveAttempt", migrations[6], StringComparison.Ordinal);
 
         var script = dbContext
             .GetService<IMigrator>()
@@ -58,6 +59,10 @@ public sealed class InitialMigrationTests
         Assert.Contains("max_context_window_tokens", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("max_output_tokens", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("ck_model_token_limits", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("active_execution_id", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("active_attempt_started_at", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ix_job_active_execution_id", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ck_job_active_attempt", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("DEFAULT 256000", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("DEFAULT 64000", script, StringComparison.OrdinalIgnoreCase);
         if (usePostgres)
@@ -98,13 +103,14 @@ public sealed class InitialMigrationTests
         await dbContext.Database.MigrateAsync(cancellationToken);
 
         var appliedMigrations = (await dbContext.Database.GetAppliedMigrationsAsync(cancellationToken)).ToArray();
-        Assert.Equal(6, appliedMigrations.Length);
+        Assert.Equal(7, appliedMigrations.Length);
         Assert.EndsWith("_Init", appliedMigrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", appliedMigrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", appliedMigrations[2], StringComparison.Ordinal);
         Assert.EndsWith("_AddAgentflowCheckpoints", appliedMigrations[3], StringComparison.Ordinal);
         Assert.EndsWith("_AddModelCompactionLimits", appliedMigrations[4], StringComparison.Ordinal);
         Assert.EndsWith("_UseUserIdForExecutionOwnership", appliedMigrations[5], StringComparison.Ordinal);
+        Assert.EndsWith("_AddJobActiveAttempt", appliedMigrations[6], StringComparison.Ordinal);
         Assert.True(await TableExistsAsync(connection, "integration_connection", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "plugin_installation", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "project_memory", cancellationToken));
@@ -120,6 +126,9 @@ public sealed class InitialMigrationTests
         Assert.True(await ColumnExistsAsync(connection, "api_token", "secret_hash", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "durable_execution", "user_id", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "agentflow_checkpoint", "user_id", cancellationToken));
+        Assert.True(await ColumnExistsAsync(connection, "job", "active_execution_id", cancellationToken));
+        Assert.True(await ColumnExistsAsync(connection, "job", "active_attempt_started_at", cancellationToken));
+        Assert.True(await IndexIsUniqueAsync(connection, "job", "ix_job_active_execution_id", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "agent", "tools", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "project", "tools", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "model", "max_context_window_tokens", cancellationToken));
@@ -133,6 +142,11 @@ public sealed class InitialMigrationTests
         Assert.Contains(
             "ck_model_token_limits",
             await TableSqlAsync(connection, "model", cancellationToken),
+            StringComparison.OrdinalIgnoreCase
+        );
+        Assert.Contains(
+            "ck_job_active_attempt",
+            await TableSqlAsync(connection, "job", cancellationToken),
             StringComparison.OrdinalIgnoreCase
         );
         Assert.False(await ColumnExistsAsync(connection, "agent", "building_blocks", cancellationToken));
@@ -317,5 +331,19 @@ public sealed class InitialMigrationTests
         command.CommandText = "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = $tableName;";
         command.Parameters.AddWithValue("$tableName", tableName);
         return Convert.ToString(await command.ExecuteScalarAsync(cancellationToken)) ?? string.Empty;
+    }
+
+    private static async Task<bool> IndexIsUniqueAsync(
+        SqliteConnection connection,
+        string tableName,
+        string indexName,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT [unique] FROM pragma_index_list($tableName) WHERE name = $indexName;";
+        command.Parameters.AddWithValue("$tableName", tableName);
+        command.Parameters.AddWithValue("$indexName", indexName);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) == 1;
     }
 }

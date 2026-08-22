@@ -247,6 +247,52 @@ public class AgentHandlerFactoryTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_WhenTurnIsInterrupted_CancelsWithoutCompleting()
+    {
+        var bridge = new FakeAgentExecutionBridge
+        {
+            ExecuteStreamingAsyncImpl = (_, _, _, _) =>
+                ToAsyncEnumerable(CreateTextMessage("partial"), CreateTurnFinishedMessage("interrupted")),
+        };
+        var handler = CreateHandler("alpha", bridge);
+        var queue = new AgentEventQueue(capacity: 32);
+
+        await handler.ExecuteAsync(
+            CreateRequestContext(streamingResponse: true, parts: [Part.FromText("hello")]),
+            queue,
+            TestContext.Current.CancellationToken
+        );
+
+        var events = await DrainAsync(queue, TestContext.Current.CancellationToken);
+
+        Assert.Contains(events, response => response.StatusUpdate?.Status?.State == TaskState.Canceled);
+        Assert.DoesNotContain(events, response => response.StatusUpdate?.Status?.State == TaskState.Completed);
+        Assert.DoesNotContain(events, response => response.StatusUpdate?.Status?.State == TaskState.Failed);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenTurnReportsFailure_FailsWithoutCompleting()
+    {
+        var bridge = new FakeAgentExecutionBridge
+        {
+            ExecuteStreamingAsyncImpl = (_, _, _, _) => ToAsyncEnumerable(CreateTurnFinishedMessage("failed")),
+        };
+        var handler = CreateHandler("alpha", bridge);
+        var queue = new AgentEventQueue(capacity: 32);
+
+        await handler.ExecuteAsync(
+            CreateRequestContext(streamingResponse: true, parts: [Part.FromText("hello")]),
+            queue,
+            TestContext.Current.CancellationToken
+        );
+
+        var events = await DrainAsync(queue, TestContext.Current.CancellationToken);
+
+        Assert.Contains(events, response => response.StatusUpdate?.Status?.State == TaskState.Failed);
+        Assert.DoesNotContain(events, response => response.StatusUpdate?.Status?.State == TaskState.Completed);
+    }
+
+    [Fact]
     public async Task ListTasksAsync_WhenAgentDoesNotExist_ThrowsAgwInvalidAgentResponse()
     {
         var requestHandler = CreateRequestHandler(CreateFactory(new InMemoryRepository<Agent>()));
@@ -260,6 +306,107 @@ public class AgentHandlerFactoryTests
         );
 
         Assert.Equal(ErrorCodes.A2AInvalidAgentResponse.Code, exception.Code);
+    }
+
+    [Fact]
+    public async Task CancelTaskAsync_WhenDurableInterruptLosesTerminalRace_DoesNotWriteCanceled()
+    {
+        var taskId = Guid.CreateVersion7().ToString("D");
+        var taskStore = new FakeTaskStore(
+            new AgentTask
+            {
+                Id = taskId,
+                ContextId = "ctx-cancel",
+                Status = new global::A2A.TaskStatus
+                {
+                    State = TaskState.Working,
+                    Timestamp = TimeProvider.System.GetUtcNow(),
+                },
+            }
+        );
+        var durableBridge = new FakeDurableA2AExecutionBridge(interrupted: false);
+        var services = new ServiceCollection()
+            .AddSingleton<IDurableA2AExecutionBridge>(durableBridge)
+            .BuildServiceProvider();
+        var handler = new AgwA2ARequestHandler(
+            taskStore,
+            new AgwChannelEventNotifier(),
+            NullLogger<A2AServer>.Instance,
+            services.GetRequiredService<IServiceScopeFactory>()
+        );
+
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            handler.CancelTaskAsync(
+                "alpha",
+                new CancelTaskRequest { Id = taskId },
+                TestContext.Current.CancellationToken
+            )
+        );
+
+        Assert.Equal(ErrorCodes.A2ATaskNotCancelable.Code, exception.Code);
+        Assert.True(durableBridge.CancelCalled);
+        Assert.Equal(0, taskStore.SaveCount);
+    }
+
+    [Fact]
+    public async Task ApplyEventAsync_WhenTerminalTransitionConflicts_PreservesFirstTerminalState()
+    {
+        var taskId = Guid.CreateVersion7().ToString("D");
+        var currentTask = new AgentTask
+        {
+            Id = taskId,
+            ContextId = "ctx-terminal",
+            Status = new global::A2A.TaskStatus
+            {
+                State = TaskState.Canceled,
+                Timestamp = TimeProvider.System.GetUtcNow(),
+            },
+        };
+        var taskStore = new FakeTaskStore(currentTask);
+        var services = new ServiceCollection().BuildServiceProvider();
+        var handler = new AgwA2ARequestHandler(
+            taskStore,
+            new AgwChannelEventNotifier(),
+            NullLogger<A2AServer>.Instance,
+            services.GetRequiredService<IServiceScopeFactory>()
+        );
+        var method = typeof(AgwA2ARequestHandler).GetMethod(
+            "ApplyEventAsync",
+            BindingFlags.Instance | BindingFlags.NonPublic
+        );
+        var response = new StreamResponse
+        {
+            StatusUpdate = new TaskStatusUpdateEvent
+            {
+                TaskId = taskId,
+                ContextId = currentTask.ContextId,
+                Status = new global::A2A.TaskStatus
+                {
+                    State = TaskState.Completed,
+                    Timestamp = TimeProvider.System.GetUtcNow(),
+                },
+            },
+        };
+        var context = new RequestContext
+        {
+            TaskId = taskId,
+            ContextId = currentTask.ContextId,
+            Task = currentTask,
+            StreamingResponse = false,
+            Message = new Message
+            {
+                Role = Role.User,
+                MessageId = "message",
+                Parts = [Part.FromText("hello")],
+            },
+        };
+
+        var invocation = method!.Invoke(handler, [response, context, TestContext.Current.CancellationToken]);
+        var accepted = await Assert.IsType<Task<bool>>(invocation);
+
+        Assert.False(accepted);
+        Assert.Equal(0, taskStore.SaveCount);
+        Assert.Equal(TaskState.Canceled, taskStore.CurrentTask?.Status.State);
     }
 
     private static AgentHandlerFactory CreateFactory(params Agent[] agents)
@@ -336,13 +483,15 @@ public class AgentHandlerFactoryTests
     private static AgwMessage CreateTextMessage(string text) =>
         new(Guid.CreateVersion7().ToString("N"), "$agent", AiRole.System, [new AgwTextContent { Content = text }]);
 
-    private static AgwMessage CreateTurnFinishedMessage() =>
+    private static AgwMessage CreateTurnFinishedMessage(string? status = null) =>
         new(
             Guid.CreateVersion7().ToString("N"),
             "$agw",
             AiRole.System,
             [new AgwTextContent { Content = string.Empty }],
-            new AdditionalPropertiesDictionary { ["type"] = "turn-finished" }
+            status == null
+                ? new AdditionalPropertiesDictionary { ["type"] = "turn-finished" }
+                : new AdditionalPropertiesDictionary { ["type"] = "turn-finished", ["status"] = status }
         );
 
     private static async Task<List<StreamResponse>> DrainAsync(
@@ -515,6 +664,16 @@ public class AgentHandlerFactoryTests
 
     private sealed class FakeTaskStore : ITaskStore
     {
+        private AgentTask? _task;
+
+        public FakeTaskStore(AgentTask? task = null)
+        {
+            _task = task;
+        }
+
+        public int SaveCount { get; private set; }
+        public AgentTask? CurrentTask => _task;
+
         public Task DeleteTaskAsync(string taskId, CancellationToken cancellationToken = default)
         {
             return Task.CompletedTask;
@@ -522,7 +681,7 @@ public class AgentHandlerFactoryTests
 
         public Task<AgentTask?> GetTaskAsync(string taskId, CancellationToken cancellationToken = default)
         {
-            return Task.FromResult<AgentTask?>(null);
+            return Task.FromResult(_task);
         }
 
         public Task<ListTasksResponse> ListTasksAsync(
@@ -535,7 +694,40 @@ public class AgentHandlerFactoryTests
 
         public Task SaveTaskAsync(string taskId, AgentTask task, CancellationToken cancellationToken = default)
         {
+            SaveCount++;
+            _task = task;
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeDurableA2AExecutionBridge(bool interrupted) : IDurableA2AExecutionBridge
+    {
+        public bool CancelCalled { get; private set; }
+
+        public Task<AgentExecutionResult?> ExecuteAsync(
+            string agentName,
+            RequestContext context,
+            AgwUserInput input,
+            CancellationToken cancellationToken
+        ) => throw new NotSupportedException();
+
+        public IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
+            string agentName,
+            RequestContext context,
+            AgwUserInput input,
+            CancellationToken cancellationToken
+        ) => ToAsyncEnumerable();
+
+        public IAsyncEnumerable<AgwMessage> SubscribeAsync(
+            string taskId,
+            string? cursor,
+            CancellationToken cancellationToken
+        ) => ToAsyncEnumerable();
+
+        public Task<bool> CancelAsync(string taskId, CancellationToken cancellationToken)
+        {
+            CancelCalled = true;
+            return Task.FromResult(interrupted);
         }
     }
 }

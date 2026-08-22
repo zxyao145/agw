@@ -84,6 +84,29 @@ public class A2ADependencyInjectionTests
         Assert.Equal(agentId, runtime.CapturedRequest!.AgentId);
     }
 
+    [Fact]
+    public void AddA2A_WithDistributedExecution_RegistersDurableBridge()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Execution:Provider"] = "Distributed" })
+            .Build();
+        var services = new ServiceCollection();
+
+        services.AddA2A(configuration);
+
+        Assert.Contains(
+            services,
+            descriptor =>
+                descriptor.ServiceType == typeof(IDurableA2AExecutionBridge) && descriptor.ImplementationFactory != null
+        );
+        Assert.DoesNotContain(
+            services,
+            descriptor =>
+                descriptor.ServiceType == typeof(IAgentExecutionBridge)
+                && descriptor.ImplementationType == typeof(A2AAgentExecutionBridge)
+        );
+    }
+
     private static ServiceCollection CreateA2AServices()
     {
         var services = new ServiceCollection();

@@ -20,6 +20,9 @@
     var hasModelError = ViewData.ModelState.TryGetValue(string.Empty, out var modelEntry) &&
         modelEntry.Errors.Count > 0;
     var initialStep = hasAdministratorError ? 2 : hasDatabaseError || hasModelError ? 1 : 0;
+    var requiredDeploymentMode = ViewData["RequiredDeploymentMode"] is DeploymentMode mode
+        ? mode
+        : (DeploymentMode?)null;
 }
 
 <div class="page-intro">
@@ -90,7 +93,9 @@
 
         <fieldset class="choice-grid">
             <legend class="sr-only">Deployment mode</legend>
-            <label class="choice-card">
+            @if (requiredDeploymentMode != DeploymentMode.Cluster)
+            {
+                <label class="choice-card">
                 <input asp-for="DeploymentMode" type="radio" value="Standalone" />
                 <span class="choice-card__panel">
                     <span class="choice-card__top">
@@ -101,9 +106,12 @@
                     <small>One Server process with a fast, connection-bound execution runtime.</small>
                     <span class="choice-card__meta">SQLite or PostgreSQL</span>
                 </span>
-            </label>
+                </label>
+            }
 
-            <label class="choice-card">
+            @if (requiredDeploymentMode != DeploymentMode.Standalone)
+            {
+                <label class="choice-card">
                 <input asp-for="DeploymentMode" type="radio" value="Cluster" />
                 <span class="choice-card__panel">
                     <span class="choice-card__top">
@@ -114,7 +122,8 @@
                     <small>Durable execution and recovery across multiple Server replicas.</small>
                     <span class="choice-card__meta">PostgreSQL required</span>
                 </span>
-            </label>
+                </label>
+            }
         </fieldset>
         <span asp-validation-for="DeploymentMode" class="field-error"></span>
     </section>

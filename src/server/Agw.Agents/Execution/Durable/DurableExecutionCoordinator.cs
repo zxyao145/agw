@@ -3,7 +3,6 @@ using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Turns;
-using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Executions;
@@ -73,20 +72,67 @@ internal sealed class DurableExecutionCoordinator
             throw new AgwException(ErrorCodes.InvalidParam, "Distributed execution requires ExecCommand.stream=true.");
         }
 
+        await StartAsync(
+                new DurableExecutionRequest(
+                    executionId,
+                    userId,
+                    agentId,
+                    command.AgentType,
+                    command.Input,
+                    task,
+                    settings
+                ),
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+    }
+
+    public async Task StartAsync(DurableExecutionRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
         await using var scope = _scopeFactory.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
         await store
             .RegisterAsync(
-                executionId,
-                userId,
-                agentId,
-                command.AgentType,
-                command.Input,
-                task,
-                settings,
+                request.ExecutionId,
+                request.UserId,
+                request.AgentId,
+                request.AgentType,
+                request.Input,
+                request.Task,
+                request.Settings,
                 cancellationToken
             )
             .ConfigureAwait(false);
+    }
+
+    public async Task<DurableExecutionOutcome> GetOutcomeAsync(
+        Guid executionId,
+        string userId,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
+        return await store.GetAuthorizedOutcomeAsync(executionId, userId, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<DurableExecutionOutcome> WaitForActionableOutcomeAsync(
+        Guid executionId,
+        string userId,
+        CancellationToken cancellationToken
+    )
+    {
+        while (true)
+        {
+            var outcome = await GetOutcomeAsync(executionId, userId, cancellationToken).ConfigureAwait(false);
+            if (IsActionable(outcome.Status))
+            {
+                return outcome;
+            }
+
+            await Task.Delay(StatusPollingInterval, _timeProvider, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -241,7 +287,7 @@ internal sealed class DurableExecutionCoordinator
             {
                 cursor = entry.Cursor;
                 yield return entry;
-                if (IsTerminalMessage(entry.Message))
+                if (TurnMessageProtocol.IsFinished(entry.Message))
                 {
                     yield break;
                 }
@@ -330,11 +376,6 @@ internal sealed class DurableExecutionCoordinator
                 or DurableExecutionStatus.Failed
                 or DurableExecutionStatus.Interrupted;
 
-    /// <summary>
-    /// 判断回放消息是否为终止当前 turn 的控制消息。
-    /// </summary>
-    private static bool IsTerminalMessage(AgwMessage message) =>
-        message.AdditionalProperties != null
-        && message.AdditionalProperties.TryGetValue("type", out var type)
-        && string.Equals(type as string, "turn-finished", StringComparison.Ordinal);
+    private static bool IsActionable(DurableExecutionStatus status) =>
+        status == DurableExecutionStatus.WaitingForHuman || IsTerminal(status);
 }

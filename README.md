@@ -98,7 +98,7 @@ Start the backend from the repository root:
 
 ```bash
 dotnet restore Agw.slnx
-dotnet run --project src/server/Agw.Host
+dotnet run --project src/server/Agw.Standalone.Host
 ```
 
 The development backend listens on `http://localhost:30816` by default. On the first run, open `http://localhost:30816/setup` to choose Standalone or Cluster deployment, enter structured SQLite or PostgreSQL settings, and create the administrator password. Unattended deployments may provide the same fields under the `Setup` configuration section when no `server-state.json` exists; inject passwords through environment variables or Secrets. Cluster deployment requires PostgreSQL and a Server restart after setup. All runtime data is stored in an `agw` directory under the current user's home directory. Setup through a domain name also requires the one-time setup code printed in the server startup logs.
@@ -113,7 +113,7 @@ pnpm dev:web
 
 The `src/clients` pnpm Workspace contains independent `@agw/web`, `@agw/desktop`, and `@agw/mobile` applications plus shared infrastructure and business domains under `src/clients/packages/`, with Turborepo orchestrating their tasks. Web and Desktop do not import, build, or consume artifacts from each other; each owns a thin Next.js route shell and composes reusable business UI from `packages/*`. Mobile consumes only React Native-safe core packages from the same workspace. After the backend and Web are running, open `http://localhost:3001`. Web proxies `/api/*` and `/openapi/*` to the backend. The proxy target is resolved from `BACKEND_API_BASE_URL`, then `NEXT_PUBLIC_API_BASE_URL`, and defaults to `http://localhost:30816`.
 
-Production packages embed the static Web UI in ASP.NET Core and serve it from a single server process. See the deployment guide below for details.
+Production publishes a combined Standalone image plus separate Control Plane and Data Plane images. Standalone and Control Plane embed the static Web UI; Data Plane exposes only Execution, A2A, and health routes. See the deployment guide below for details.
 
 Agw Desktop owns a secure Electron main/preload implementation and an independent React renderer under `src/clients/desktop/renderer/`. The renderer composes the same business packages as Web, while the Electron bridge contracts remain internal to Desktop under `src/shared/contracts/`. Desktop builds and packages its own static export without locating `web/`. See [`src/clients/desktop/README.md`](src/clients/desktop/README.md) for its runtime model, package variants, and release workflow.
 
@@ -149,7 +149,7 @@ pnpm install
 Run the backend with hot reload from the repository root, then start Web from `src/clients` in another terminal:
 
 ```bash
-dotnet watch --project src/server/Agw.Host
+dotnet watch --project src/server/Agw.Standalone.Host
 ```
 
 ```bash
@@ -180,7 +180,7 @@ After changing a backend API contract, run `pnpm gen:api` from `src/clients` to 
 
 ## Debugging
 
-- **Backend:** Start `src/server/Agw.Host` with the `http` or `https` launch profile in a .NET debugger. Both profiles set `ASPNETCORE_ENVIRONMENT=Development`; the Development-only OpenAPI and Scalar endpoints are then available from the backend. Server logs are written to the console and to `$AGW_DATA_DIR/logs/application-*.log`, or `~/agw/logs/` when `AGW_DATA_DIR` is not set.
+- **Backend:** Start `src/server/Agw.Standalone.Host` with its launch profile in a .NET debugger. It sets `ASPNETCORE_ENVIRONMENT=Development`; the Development-only OpenAPI and Scalar endpoints are then available. Server logs are written to the console and to the role-specific files below `$AGW_DATA_DIR/logs/`, or `~/agw/logs/` when `AGW_DATA_DIR` is not set.
 - **Web:** Run `pnpm dev:web`, use the browser developer tools for client code and network requests, and inspect the Next.js terminal for server-side output. To target another backend, start Web with `BACKEND_API_BASE_URL=http://host:port pnpm dev:web`.
 - **Desktop:** Run `pnpm dev:desktop`. Main-process logs and build output appear in the terminal; preload and renderer code can be inspected with Electron DevTools. The development renderer uses `http://localhost:3000`.
 - **Focused tests:** Use `dotnet test tests/<Project> --filter "FullyQualifiedName~MethodName"` for a backend test, or `pnpm exec turbo run test --filter=@agw/web` (replace the package filter as needed) from `src/clients`.
@@ -231,7 +231,7 @@ Agw-Desktop-0.2.0-preview.1-client-windows-x64-Portable.zip
 Agw-Desktop-0.2.0-preview.1-client-macos-arm64.dmg
 ```
 
-The same release publishes the multi-platform Server image as `ghcr.io/zxyao145/agw:{version}` for `linux/amd64` and `linux/arm64`.
+The same release publishes Standalone, Control Plane, and Data Plane images for `linux/amd64` and `linux/arm64` as `ghcr.io/zxyao145/agw:{version}`, `ghcr.io/zxyao145/agw-control-plane:{version}`, and `ghcr.io/zxyao145/agw-data-plane:{version}`.
 
 For an official stable release, push a `vX.Y.Z` tag, for example:
 
@@ -282,7 +282,7 @@ The following screenshots show the main Agw interfaces:
 
 ## Architecture
 
-Agw uses a domain-based modular monolith architecture. `src/server/Agw.Host` is the ASP.NET Core application entry point and assembles the modules. The pnpm Workspace at `src/clients` contains the Web, Electron Desktop, and Expo Mobile applications plus shared business and infrastructure packages.
+Agw uses a domain-based modular monolith architecture. `src/server/Agw.Host` is the shared Hosting Module; `Agw.ControlPlane.Host`, `Agw.DataPlane.Host`, and `Agw.Standalone.Host` provide the executable composition roots. The pnpm Workspace at `src/clients` contains the Web, Electron Desktop, and Expo Mobile applications plus shared business and infrastructure packages.
 
 A typical backend flow is:
 

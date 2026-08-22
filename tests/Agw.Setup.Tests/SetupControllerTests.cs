@@ -61,6 +61,21 @@ public sealed class SetupControllerTests
     }
 
     [Fact]
+    public void Index_WhenControlPlaneRequiresCluster_PrefillsClusterPostgres()
+    {
+        var controller = CreateController(
+            isInitialized: false,
+            deploymentOptions: new SetupDeploymentOptions(DeploymentMode.Cluster)
+        );
+
+        var result = Assert.IsType<ViewResult>(controller.Index());
+        var model = Assert.IsType<SetupRequest>(result.Model);
+
+        Assert.Equal(DeploymentMode.Cluster, model.DeploymentMode);
+        Assert.Equal(DatabaseProvider.Postgres, model.Provider);
+    }
+
+    [Fact]
     public async Task IndexPost_WhenStandaloneInitializationSucceeds_RedirectsToRoot()
     {
         var initializationService = new StubSetupInitializationService();
@@ -89,6 +104,26 @@ public sealed class SetupControllerTests
     }
 
     [Fact]
+    public async Task IndexPost_WhenControlPlaneReceivesStandalone_ReturnsFormWithoutInitializing()
+    {
+        var initializationService = new StubSetupInitializationService();
+        var controller = CreateController(
+            isInitialized: false,
+            initializationService: initializationService,
+            deploymentOptions: new SetupDeploymentOptions(DeploymentMode.Cluster)
+        );
+
+        var result = await controller.Index(
+            CreateRequest(DeploymentMode.Standalone),
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.IsType<ViewResult>(result);
+        Assert.Null(initializationService.LastRequest);
+        Assert.True(controller.ModelState.ContainsKey(nameof(SetupRequest.DeploymentMode)));
+    }
+
+    [Fact]
     public async Task IndexPost_WhenRemoteSetupCodeIsMissing_ReturnsFormWithoutInitializing()
     {
         var initializationService = new StubSetupInitializationService();
@@ -109,7 +144,8 @@ public sealed class SetupControllerTests
     private static SetupController CreateController(
         bool isInitialized = true,
         StubSetupInitializationService? initializationService = null,
-        AgwDataPaths? paths = null
+        AgwDataPaths? paths = null,
+        SetupDeploymentOptions? deploymentOptions = null
     )
     {
         var httpContext = new DefaultHttpContext();
@@ -121,7 +157,8 @@ public sealed class SetupControllerTests
             new SetupCodeService("TEST-CODE"),
             new AuthenticationAttemptLimiter(),
             TimeProvider.System,
-            paths ?? CreatePaths()
+            paths ?? CreatePaths(),
+            deploymentOptions
         )
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },

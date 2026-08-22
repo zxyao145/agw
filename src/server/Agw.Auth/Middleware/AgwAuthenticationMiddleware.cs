@@ -34,7 +34,7 @@ public sealed class AgwAuthenticationMiddleware
     /// <param name="context">当前 HTTP 上下文。</param>
     /// <param name="stateStore">保存管理员密码和会话版本的状态存储。</param>
     /// <param name="tokenStore">保存并验证 API Token 的数据库存储。</param>
-    public async Task InvokeAsync(HttpContext context, IAuthenticationStateStore stateStore, IApiTokenStore tokenStore)
+    public async Task InvokeAsync(HttpContext context, IAuthenticationStateReader stateStore, IApiTokenStore tokenStore)
     {
         if (context.User.Identity?.IsAuthenticated != true)
         {

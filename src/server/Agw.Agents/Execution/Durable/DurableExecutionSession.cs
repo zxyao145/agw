@@ -240,7 +240,7 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
             )
             {
                 await _messageSink.WriteAsync(entry.Message, cancellationToken).ConfigureAwait(false);
-                if (IsTurnFinished(entry.Message))
+                if (TurnMessageProtocol.IsFinished(entry.Message))
                 {
                     if (ActiveExecutionId == executionId)
                     {
@@ -338,12 +338,4 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
             is DurableExecutionStatus.Completed
                 or DurableExecutionStatus.Failed
                 or DurableExecutionStatus.Interrupted;
-
-    /// <summary>
-    /// 判断消息是否为 turn-finished 控制消息。
-    /// </summary>
-    private static bool IsTurnFinished(AgwMessage message) =>
-        message.AdditionalProperties != null
-        && message.AdditionalProperties.TryGetValue("type", out var type)
-        && string.Equals(type as string, "turn-finished", StringComparison.Ordinal);
 }

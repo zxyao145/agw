@@ -20,6 +20,8 @@ COPY src/server/Agw.Agents/Agw.Agents.csproj ./src/server/Agw.Agents/
 COPY src/server/Agw.Auth/Agw.Auth.csproj ./src/server/Agw.Auth/
 COPY src/server/Agw.Data/Agw.Data.csproj ./src/server/Agw.Data/
 COPY src/server/Agw.Files/Agw.Files.csproj ./src/server/Agw.Files/
+COPY src/server/Agw.ControlPlane.Host/Agw.ControlPlane.Host.csproj ./src/server/Agw.ControlPlane.Host/
+COPY src/server/Agw.DataPlane.Host/Agw.DataPlane.Host.csproj ./src/server/Agw.DataPlane.Host/
 COPY src/server/Agw.Host/Agw.Host.csproj ./src/server/Agw.Host/
 COPY src/server/Agw.Infrastructure/Agw.Infrastructure.csproj ./src/server/Agw.Infrastructure/
 COPY src/server/Agw.Integrations/Agw.Integrations.csproj ./src/server/Agw.Integrations/
@@ -31,21 +33,39 @@ COPY src/server/Agw.Providers/Agw.Providers.csproj ./src/server/Agw.Providers/
 COPY src/server/Agw.Setup/Agw.Setup.csproj ./src/server/Agw.Setup/
 COPY src/server/Agw.Shared/Agw.Shared.csproj ./src/server/Agw.Shared/
 COPY src/server/Agw.Skills/Agw.Skills.csproj ./src/server/Agw.Skills/
+COPY src/server/Agw.Standalone.Host/Agw.Standalone.Host.csproj ./src/server/Agw.Standalone.Host/
 COPY src/server/Agw.Tools/Agw.Tools.csproj ./src/server/Agw.Tools/
-RUN dotnet restore src/server/Agw.Host/Agw.Host.csproj
+RUN dotnet restore src/server/Agw.Standalone.Host/Agw.Standalone.Host.csproj
 COPY src/server ./src/server
-RUN dotnet publish src/server/Agw.Host/Agw.Host.csproj -c Release -o /out --no-restore \
-    --self-contained false -p:Version="$APP_VERSION"
+RUN dotnet publish src/server/Agw.Standalone.Host/Agw.Standalone.Host.csproj -c Release \
+    -o /out/standalone --no-restore --self-contained false -p:Version="$APP_VERSION" && \
+    dotnet publish src/server/Agw.ControlPlane.Host/Agw.ControlPlane.Host.csproj -c Release \
+    -o /out/control-plane --no-restore --self-contained false -p:UseAppHost=true -p:Version="$APP_VERSION" && \
+    dotnet publish src/server/Agw.DataPlane.Host/Agw.DataPlane.Host.csproj -c Release \
+    -o /out/data-plane --no-restore --self-contained false -p:UseAppHost=true -p:Version="$APP_VERSION"
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime-base
 WORKDIR /app
 ENV ASPNETCORE_ENVIRONMENT=Production \
     ASPNETCORE_URLS=http://0.0.0.0:8080 \
     AGW_DATA_DIR=/data \
     DOTNET_RUNNING_IN_CONTAINER=true
 EXPOSE 8080
-COPY --from=server-build /out ./
-COPY --from=web-build /src/src/clients/web/out ./wwwroot
 RUN mkdir -p /data && chown -R $APP_UID:$APP_UID /app /data
 USER $APP_UID
+
+FROM runtime-base AS standalone
+COPY --from=server-build --chown=$APP_UID:$APP_UID /out/standalone ./
+COPY --from=web-build --chown=$APP_UID:$APP_UID /src/src/clients/web/out ./wwwroot
 ENTRYPOINT ["./agw-server", "serve"]
+
+FROM runtime-base AS control-plane
+COPY --from=server-build --chown=$APP_UID:$APP_UID /out/control-plane ./
+COPY --from=web-build --chown=$APP_UID:$APP_UID /src/src/clients/web/out ./wwwroot
+ENTRYPOINT ["./agw-control-plane", "serve"]
+
+FROM runtime-base AS data-plane
+COPY --from=server-build --chown=$APP_UID:$APP_UID /out/data-plane ./
+ENTRYPOINT ["./agw-data-plane", "serve"]
+
+FROM standalone AS runtime

@@ -111,6 +111,16 @@ public class TaskExecutionAppService
         return CreateAsync(projectId, request, user, TaskExecutionStatus.Running);
     }
 
+    public Task<ApplicationResult<TaskExecutionSnapshot>> CreateRunningForExecutionAsync(
+        Guid projectId,
+        Guid taskId,
+        TaskCreateRequest request,
+        string user
+    )
+    {
+        return CreateAsync(projectId, request, user, TaskExecutionStatus.Running, taskId);
+    }
+
     public Task<ApplicationResult<TaskExecutionSnapshot>> CreateForExecutionAsync(
         Guid projectId,
         Guid? taskId,

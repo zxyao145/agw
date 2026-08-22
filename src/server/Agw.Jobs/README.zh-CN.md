@@ -53,6 +53,9 @@ flowchart LR
     Lock --> Runner["JobAttemptRunner"]
     Runner --> Store
     Runner --> Executor["JobAgentExecutor"]
+    Runner --> Outcome["JobAttemptOutcomeRecorder"]
+    Outcome --> Store
+    Outcome --> Projects
     Executor --> Projects["TaskExecutionAppService"]
     Executor --> AgentRuntime["AgentRuntimeService"]
     Executor --> FlowRuntime["AgentflowRuntimeService"]
@@ -84,11 +87,11 @@ flowchart LR
 
 #### `JobAttemptRunner`
 
-负责一次 Job 尝试的完整状态迁移：认领 `Pending` Job、调用执行适配器、计算下一次运行时间、写入成功或失败日志，并返回“重新入队”或“丢弃”结果。`JobHostedService` 因此只保留调度和队列职责。
+负责认领 `Pending` Job 并调用执行适配器。认领会同时生成并持久化本次 `ActiveExecutionId` 和开始时间；成功或异常随后统一交给 `JobAttemptOutcomeRecorder`。后者标记项目 Task、计算下一次运行或重试，并在一次数据库保存中更新 Job、清除 active attempt 和写入 JobLog。正常执行与重启恢复因此使用同一套结算语义。
 
 #### `JobAgentExecutor`
 
-每次运行都会生成新的 `contextId`，并通过 `TaskExecutionAppService.CreateRunningAsync` 创建项目 Task。随后根据 `AgentType` 选择执行入口：
+每次运行都会生成新的 `contextId`，并通过 `TaskExecutionAppService.CreateRunningForExecutionAsync` 使用认领阶段生成的 executionId 创建项目 Task。随后根据 `AgentType` 选择执行入口：
 
 - `AgentRuntimeType.Agent`：调用 `IAgentRuntimeService.ExecuteByIdAsync`；
 - `AgentRuntimeType.Agentflow`：调用 `IAgentflowRuntimeService.ExecuteAsync`。
@@ -113,6 +116,7 @@ flowchart LR
 | `Status` / `IsEnabled` | 调度状态和总开关 |
 | `RetryCount` / `MaxRetryCount` | 当前失败重试次数和允许的最大重试次数 |
 | `LastError` | 上一次执行错误 |
+| `ActiveExecutionId` / `ActiveAttemptStartedAt` | 当前 Running attempt 的内部身份与起点；不进入 REST/OpenAPI |
 
 `JobStatus` 包含三个值：`Pending = 1`、`Running = 2`、`Paused = 3`。
 
@@ -121,7 +125,7 @@ flowchart LR
 ```mermaid
 stateDiagram-v2
     [*] --> Pending: 创建或恢复
-    Pending --> Running: 到期且 MarkRunning 成功
+    Pending --> Running: TryStartAttempt 原子认领
     Running --> Pending: 成功且存在下一次运行时间
     Running --> Paused: 一次性任务完成
     Running --> Pending: 失败但仍可重试
@@ -156,17 +160,17 @@ stateDiagram-v2
 3. 执行循环等待最早的 Job 到期；
 4. 同一项目已有 Job 运行时，新 Job 进入该项目的 backlog；
 5. 获得 `IProjectExecutionLock` 后，调度器调用 `JobAttemptRunner`；
-6. `JobAttemptRunner` 通过 `MarkRunningAsync` 再次确认持久化状态，确认成功后进入 Agent 执行流程。
+6. `JobAttemptRunner` 通过 `TryStartAttemptAsync` 再次确认持久化状态，同时保存 executionId 和 attempt 起点后进入执行流程。
 
 项目锁只保证同一项目的定时任务不会并发运行，不等同于持久化消息队列的 exactly-once 投递保证。需要严格一次性语义时，还需要基于数据库租约、幂等键或原子认领设计额外机制。
 
 ### 3. Agent 执行
 
 1. `JobAgentExecutor` 为本次运行生成独立 `contextId`；
-2. 在目标项目中创建状态为 Running 的逻辑 Task，执行用户记为 `job-executor`；
+2. 使用本次 active executionId 在目标项目中创建状态为 Running 的逻辑 Task，执行 owner 继承 Job 创建者；
 3. 根据 `AgentType` 调用 Agent 或 Agentflow runtime；
-4. runtime 成功后将项目 Task 标记为成功；
-5. runtime 抛出异常时将项目 Task 标记为失败，并把异常交回调度器。
+4. runtime 返回成功或抛出异常后，由共享 outcome recorder 标记项目 Task 并结算 Job；
+5. Control Plane 重启后，恢复服务直接使用 Job 上的 active executionId 查询 durable outcome，不从聊天历史猜测本次执行。
 
 所以 Job 执行历史既存在于 `JobLog` 中，也会以普通项目 Task 和 Context 的形式进入项目历史。`JobLog` 负责描述“第几次调度尝试”，项目记录负责保存实际对话和执行内容。
 
@@ -205,7 +209,7 @@ builder.Services
 
 ```bash
 # 仓库根目录
-dotnet run --project src/server/Agw.Host
+dotnet run --project src/server/Agw.Standalone.Host
 
 # 另一个终端，从客户端 Workspace 根目录运行
 cd src/clients
@@ -257,7 +261,7 @@ curl 'http://localhost:30816/api/jobs/33333333-3333-3333-3333-000000000001/logs'
   --header 'Authorization: Bearer agw_...'
 ```
 
-完整更新接口使用 `JobUpdateRequest`，除了创建字段还必须传入 `status`。恢复暂停任务时，通常需要同时设置 `status: 1`、`isEnabled: true`，并保证触发器仍能计算出未来时间。只切换总开关时应使用 `PUT /api/jobs/enabled`，请求体为 `jobId` 和 `isEnabled`；该接口不会覆盖调度、重试、状态或 Agent 配置。
+完整更新接口使用 `JobUpdateRequest`，除了创建字段还必须传入 `status`。`Running` 由调度器独占，客户端不能手工写入；存在 active attempt 时，完整更新和删除返回 409。只切换总开关时应使用 `PUT /api/jobs/enabled`：禁用不会中断当前 attempt，但其结算完成后不会再次入队。
 
 ### 触发器格式
 
@@ -316,7 +320,7 @@ PostgreSQL 模式的锁名是 `agw:jobs:project-lock:{projectId}`。连接字符
 | 更换持久化实现 | `IJobStore` |
 | 更换项目锁实现 | `IProjectExecutionLock` |
 | 改变 Agent 执行适配 | `IJobAgentExecutor` |
-| 修改单次执行、日志或重试流程 | `JobAttemptRunner` |
+| 修改单次执行、日志或重试流程 | `JobAttemptRunner` 与 `JobAttemptOutcomeRecorder` |
 | 修改创建后的预取唤醒条件 | `JobSchedulerWakeSignal` |
 | 让更新、删除即时影响调度队列 | `JobHostedService` 的队列失效协议（当前尚未实现） |
 
