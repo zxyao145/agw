@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const source = readFileSync(
-  resolve(process.cwd(), "src/features/workspace/workspace-provider.tsx"),
+  resolve(process.cwd(), "../packages/chat-native/src/native-workspace-provider.tsx"),
   "utf8",
 );
 

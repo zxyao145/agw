@@ -15,6 +15,8 @@ const requiredPackages = [
   "auth",
   "chat",
   "chat-core",
+  "chat-native",
+  "chat-runtime",
   "components",
   "http-client",
   "integrations",
@@ -129,7 +131,14 @@ assert.equal(
   false,
   "Mobile must use the clients pnpm lockfile",
 );
-for (const dependency of ["@agw/web", "@agw/desktop", "@agw/components"]) {
+for (const dependency of [
+  "@agw/web",
+  "@agw/desktop",
+  "@agw/components",
+  "@agw/chat",
+  "@agw/chat-core",
+  "@agw/chat-runtime",
+]) {
   assert.equal(
     mobileManifest.dependencies?.[dependency] ?? mobileManifest.devDependencies?.[dependency],
     undefined,
@@ -148,7 +157,7 @@ for (const filePath of [
     /["']@agw\/(?:web|desktop|components)(?:[\/"'])/u,
     `${sourcePath} imports a Web or Desktop boundary`,
   );
-  assert.doesNotMatch(source, /["']@agw\/chat["']/u, `${sourcePath} must import @agw/chat-core`);
+  assert.doesNotMatch(source, /["']@agw\/chat["']/u, `${sourcePath} must import @agw/chat-native`);
   assert.doesNotMatch(
     source,
     /["']@agw\/projects["']/u,
@@ -185,7 +194,10 @@ function sourceFiles(directory) {
   if (!existsSync(directory)) return [];
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const entryPath = join(directory, entry.name);
-    if (entry.isDirectory()) return sourceFiles(entryPath);
+    if (entry.isDirectory()) {
+      if (entry.name === "node_modules" || entry.name === "dist") return [];
+      return sourceFiles(entryPath);
+    }
     if (!entry.isFile() || !/\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs)$/u.test(entry.name)) return [];
     return [entryPath];
   });
@@ -200,7 +212,8 @@ for (const filePath of sourceFiles(packagesRoot)) {
     `${packagePath} imports Web alias`,
   );
   assert.doesNotMatch(source, /["']@agw\/web(?:[\/"'])/u, `${packagePath} imports @agw/web`);
-  if (relative(packagesRoot, filePath).split(sep)[0] !== "components") {
+  const owningPackage = relative(packagesRoot, filePath).split(sep)[0];
+  if (owningPackage !== "components" && owningPackage !== "chat-native") {
     assert.doesNotMatch(
       source,
       /["']@tanstack\/react-query["']/u,
@@ -218,6 +231,50 @@ for (const filePath of sourceFiles(packagesRoot)) {
     `${packagePath} imports the removed Desktop renderer package`,
   );
   assert.doesNotMatch(source, /web\/src/u, `${packagePath} imports web/src`);
+}
+
+for (const filePath of [
+  ...sourceFiles(join(packagesRoot, "chat-core", "src")),
+  ...sourceFiles(join(packagesRoot, "chat-runtime", "src")),
+]) {
+  const source = readFileSync(filePath, "utf8");
+  const packagePath = relative(clientsRoot, filePath);
+  assert.doesNotMatch(
+    source,
+    /["'](?:next|react-dom|react-native|expo(?:-[^"']*)?|@agw\/components)(?:[\/"'])/u,
+    `${packagePath} imports a platform renderer dependency`,
+  );
+}
+
+for (const filePath of sourceFiles(join(packagesRoot, "chat", "src"))) {
+  const source = readFileSync(filePath, "utf8");
+  const packagePath = relative(clientsRoot, filePath);
+  assert.doesNotMatch(
+    source,
+    /["'](?:react-native|expo(?:-[^"']*)?)(?:[\/"'])/u,
+    `${packagePath} imports a Native renderer dependency`,
+  );
+}
+
+for (const filePath of sourceFiles(join(packagesRoot, "chat-native", "src"))) {
+  const source = readFileSync(filePath, "utf8");
+  const packagePath = relative(clientsRoot, filePath);
+  assert.doesNotMatch(
+    source,
+    /["'](?:next|react-dom|@agw\/components|@agw\/chat)(?:[\/"'])/u,
+    `${packagePath} imports a DOM renderer dependency`,
+  );
+}
+
+for (const forbiddenImplementation of [
+  join(mobileRoot, "src", "features", "chat", "message-rendering.ts"),
+  join(mobileRoot, "src", "features", "chat", "image-picker.ts"),
+]) {
+  assert.equal(
+    existsSync(forbiddenImplementation),
+    false,
+    `${relative(clientsRoot, forbiddenImplementation)} must live in @agw/chat-native`,
+  );
 }
 
 for (const filePath of sourceFiles(join(clientsRoot, "web", "src"))) {

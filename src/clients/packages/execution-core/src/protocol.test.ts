@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildHumanResponseCommand,
   buildSetModeCommand,
   buildSetPermissionModeCommand,
   buildExecCommand,
   buildInterruptCommand,
+  buildResumeCheckpointCommand,
   buildSettingCommand,
   buildSubscribeExecutionCommand,
   DEFAULT_AGENT_MODE,
@@ -70,6 +72,36 @@ test("shared execution commands match the server contract", () => {
     executionId: "execution-1",
     cursor: "3-9",
   });
+  assert.deepEqual(
+    buildHumanResponseCommand({
+      executionId: "execution-1",
+      requestId: "request-1",
+      approved: true,
+      approvalScope: "once",
+      responseData: { answers: { Choice: "A" } },
+    }),
+    {
+      type: "HumanResponseCommand",
+      executionId: "execution-1",
+      requestId: "request-1",
+      approved: true,
+      approvalScope: "once",
+      responseData: { answers: { Choice: "A" } },
+    },
+  );
+  assert.deepEqual(
+    buildResumeCheckpointCommand({
+      checkpointOccurrenceId: "checkpoint-1",
+      resumeExecutionId: "execution-2",
+      agentflowId: "agentflow-1",
+    }),
+    {
+      type: "ResumeCheckpointCommand",
+      checkpointOccurrenceId: "checkpoint-1",
+      resumeExecutionId: "execution-2",
+      agentflowId: "agentflow-1",
+    },
+  );
 });
 
 test("shared agent mode helpers read live and persisted status messages", () => {

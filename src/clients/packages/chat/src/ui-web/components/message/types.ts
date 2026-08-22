@@ -1,9 +1,6 @@
-export type ProposedPlanPresentation = {
-  leadingMarkdown: string;
-  markdown: string;
-  trailingMarkdown: string;
-  isClosed: boolean;
-};
+export type { ProposedPlanPresentation } from "@agw/chat-core";
+
+import type { ProposedPlanPresentation } from "@agw/chat-core";
 
 export type MessageNode = {
   type: string;

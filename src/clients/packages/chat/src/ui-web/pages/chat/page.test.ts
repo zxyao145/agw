@@ -111,7 +111,7 @@ test("shared chat preserves streamed messages after an execution completes", asy
   const chatSource = await readFile(CHAT_COMPONENT_URL, "utf8");
   const terminalBranchStart = chatSource.indexOf("const terminalStatus =");
   const nextMessageBranchStart = chatSource.indexOf(
-    'if (message.role !== "user")',
+    "if (!isUserTurnMessage(message))",
     terminalBranchStart,
   );
 

@@ -110,11 +110,8 @@ test("markdown math uses remark-math and KaTeX", () => {
   assert.match(mathCss, /@import "katex\/dist\/katex\.min\.css"/);
 });
 
-test("reasoning disables KaTeX rendering", () => {
-  assert.match(
-    reasoningSource,
-    /<MdCard mdText=\{expanded \? node\.content : preview\} enableMath=\{false\} \/>/,
-  );
+test("reasoning uses the shared Markdown renderer with math support", () => {
+  assert.match(reasoningSource, /<MdCard mdText=\{expanded \? node\.content : preview\} \/>/);
 });
 
 test("markdown math remains enabled by default", async () => {

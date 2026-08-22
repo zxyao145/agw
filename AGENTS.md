@@ -48,7 +48,7 @@ Backend modules use `Api → Application → Domain ← Infrastructure`. Api own
 
 ### Desktop Client (`src/clients/desktop/`)
 
-Electron entry points are under `src/clients/desktop/src/{main,preload}/`. Desktop owns `renderer/`, keeps its bridge adapter in `renderer/src/runtime/` and cross-process contracts in `src/shared/contracts/`, and shares business modules with Web only through root `src/clients/packages/`. Web and Desktop never import or build each other. Chat owns execution status.
+Electron entry points are under `src/clients/desktop/src/{main,preload}/`. Desktop owns `renderer/`, keeps its bridge adapter in `renderer/src/runtime/` and cross-process contracts in `src/shared/contracts/`, and shares business modules with Web only through root `src/clients/packages/`. Web and Desktop never import or build each other. `@agw/chat-runtime` owns platform-neutral execution and session state; `@agw/chat` owns the DOM renderer and Web/Desktop compatibility surface.
 
 ### Mobile Client (`src/clients/mobile/`)
 
@@ -191,11 +191,11 @@ Read [`docs/rules.md`](docs/rules.md) before coding. Its rules are mandatory.
 
 - Prefer the typed helpers exported by `@agw/api` from `src/clients/packages/api/src/client.ts` for REST calls. That client unwraps Bens.Results envelopes before data reaches domain packages.
 - Use `@agw/projects` for project tasks, contexts, histories, and file-management flows.
-- Use `@agw/chat` for SignalR execution, Chat state, and reusable React renderer UI.
+- Use `@agw/chat-core` for platform-neutral message and presentation semantics, `@agw/chat-runtime` for SignalR execution, session/activity state, and Conversation control, `@agw/chat` for the Web/Desktop renderer, and `@agw/chat-native` for the React Native Chat vertical slice.
 - Keep business code inside its owning `src/clients/packages/<domain>/` package; `@agw/web` routes should remain thin composition adapters.
 - Keep platform-neutral UI in `@agw/components`. Desktop-only Electron React adaptation belongs in `src/clients/desktop/renderer/src/runtime/`, and its cross-process data shapes belong in `src/clients/desktop/src/shared/contracts/`.
 - Web and Desktop must not import or depend on each other; application dependencies must resolve through root `src/clients/packages/` workspace packages.
-- Mobile imports only React Native-safe packages such as `@agw/chat-core` and `@agw/projects-core`; it must not import Web/Desktop applications or Web UI barrels.
+- Mobile imports `@agw/chat-native` as its Chat host plus other React Native-safe domain packages such as `@agw/projects-core`. `@agw/mobile` must not depend on `@agw/chat-core` or `@agw/chat-runtime` directly; `@agw/chat-native` owns those transitive dependencies and the React Native Chat implementation. Mobile must not import `@agw/chat`, Web/Desktop applications, or DOM UI barrels.
 - Packages must not import `@agw/web`, `web/src`, or the Web `@/` alias. Run `pnpm test:boundaries` after changing package boundaries.
 
 ## Coding Conventions

@@ -168,7 +168,11 @@ test("sets mode only when requested and reuses the connection across turns", asy
     { type: "SetModeCommand", agentId: "agent-1", mode: "plan" },
   ]);
   expect(fake.commands.filter((command) => command.type === "ExecCommand")).toHaveLength(2);
-  expect(messages.map((message) => message.messageId)).toEqual(["mode-1"]);
+  expect(messages.map((message) => message.messageId)).toEqual([
+    "mode-1",
+    "finished-1",
+    "finished-2",
+  ]);
   expect(fake.connection.stop).not.toHaveBeenCalled();
 
   await session.dispose();

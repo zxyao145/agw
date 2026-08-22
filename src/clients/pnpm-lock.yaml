@@ -153,12 +153,9 @@ importers:
       '@agw/api':
         specifier: workspace:*
         version: link:../packages/api
-      '@agw/chat-core':
+      '@agw/chat-native':
         specifier: workspace:*
-        version: link:../packages/chat-core
-      '@agw/execution-core':
-        specifier: workspace:*
-        version: link:../packages/execution-core
+        version: link:../packages/chat-native
       '@agw/projects-core':
         specifier: workspace:*
         version: link:../packages/projects-core
@@ -231,12 +228,12 @@ importers:
       react-native:
         specifier: 0.86.2
         version: 0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2)
+      react-native-enriched-markdown:
+        specifier: 0.7.0
+        version: 0.7.0(@expo/config-plugins@57.0.8(typescript@6.0.3))(katex@0.18.1)(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
       react-native-gesture-handler:
         specifier: ~2.32.0
         version: 2.32.0(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
-      react-native-marked:
-        specifier: 8.1.1
-        version: 8.1.1(react-native-svg@15.15.4(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
       react-native-reanimated:
         specifier: 4.5.1
         version: 4.5.1(react-native-worklets@0.10.1(@babel/core@7.29.7)(@react-native/metro-config@0.86.2(supports-color@10.2.2))(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
@@ -415,6 +412,9 @@ importers:
       '@agw/chat-core':
         specifier: workspace:*
         version: link:../chat-core
+      '@agw/chat-runtime':
+        specifier: workspace:*
+        version: link:../chat-runtime
       '@agw/components':
         specifier: workspace:*
         version: link:../components
@@ -424,9 +424,6 @@ importers:
       '@agw/projects':
         specifier: workspace:*
         version: link:../projects
-      '@microsoft/signalr':
-        specifier: 10.0.0
-        version: 10.0.0(encoding@0.1.13)
       katex:
         specifier: 0.18.1
         version: 0.18.1
@@ -485,6 +482,77 @@ importers:
       fuse.js:
         specifier: 7.1.0
         version: 7.1.0
+    devDependencies:
+      '@types/node':
+        specifier: 25.5.0
+        version: 25.5.0
+      oxfmt:
+        specifier: 0.41.0
+        version: 0.41.0
+      oxlint:
+        specifier: 1.56.0
+        version: 1.56.0
+      tsx:
+        specifier: 4.21.0
+        version: 4.21.0
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
+  packages/chat-native:
+    dependencies:
+      '@agw/api':
+        specifier: workspace:*
+        version: link:../api
+      '@agw/chat-core':
+        specifier: workspace:*
+        version: link:../chat-core
+      '@agw/chat-runtime':
+        specifier: workspace:*
+        version: link:../chat-runtime
+      '@agw/execution-core':
+        specifier: workspace:*
+        version: link:../execution-core
+      '@agw/projects-core':
+        specifier: workspace:*
+        version: link:../projects-core
+      lucide-react-native:
+        specifier: 1.33.0
+        version: 1.33.0(react-native-svg@15.15.4(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2)(@types/react@19.2.14)(react@19.2.3))(react@19.2.3))(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2)(@types/react@19.2.14)(react@19.2.3))(react@19.2.3)
+    devDependencies:
+      '@types/node':
+        specifier: 25.5.0
+        version: 25.5.0
+      '@types/react':
+        specifier: ~19.2.2
+        version: 19.2.14
+      oxfmt:
+        specifier: 0.41.0
+        version: 0.41.0
+      oxlint:
+        specifier: 1.56.0
+        version: 1.56.0
+      tsx:
+        specifier: 4.21.0
+        version: 4.21.0
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+
+  packages/chat-runtime:
+    dependencies:
+      '@agw/api':
+        specifier: workspace:*
+        version: link:../api
+      '@agw/chat-core':
+        specifier: workspace:*
+        version: link:../chat-core
+      '@agw/execution-core':
+        specifier: workspace:*
+        version: link:../execution-core
+      '@microsoft/signalr':
+        specifier: 10.0.0
+        version: 10.0.0(encoding@0.1.13)
     devDependencies:
       '@types/node':
         specifier: 25.5.0
@@ -2666,16 +2734,6 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
-
-  '@jsamr/counter-style@2.0.2':
-    resolution: {integrity: sha512-2mXudGVtSzVxWEA7B9jZLKjoXUeUFYDDtFrQoC0IFX9/Dszz4t1vZOmafi3JSw/FxD+udMQ+4TAFR8Qs0J3URQ==}
-
-  '@jsamr/react-native-li@2.3.1':
-    resolution: {integrity: sha512-Qbo4NEj48SQ4k8FZJHFE2fgZDKTWaUGmVxcIQh3msg5JezLdTMMHuRRDYctfdHI6L0FZGObmEv3haWbIvmol8w==}
-    peerDependencies:
-      '@jsamr/counter-style': ^1.0.0 || ^2.0.0
-      react: '*'
-      react-native: '*'
 
   '@listr2/prompt-adapter-inquirer@2.0.22':
     resolution: {integrity: sha512-hV36ZoY+xKL6pYOt1nPNnkciFkn89KZwqLhAFzJvYysAvL5uBQdiADZx/8bIDXIukzzwG0QlPYolgMzQUtKgpQ==}
@@ -6548,9 +6606,6 @@ packages:
     resolution: {integrity: sha512-VilgtJj/ALgGY77fiLam5iD336eSWi96Q15JSAG1zi8NRBysm3LXKdGnHb4m5cuyxvOLQQKWpBZAT6ni4FI2iQ==}
     engines: {node: '>=6'}
 
-  github-slugger@2.0.0:
-    resolution: {integrity: sha512-IaOQ9puYtjrkq7Y0Ygl9KDZnrf/aiUJYUpVf89y8kyaxbRG7Y1SrX/jaumrv81vc61+kiMempujsM3Yw7w5qcw==}
-
   glob-parent@5.1.2:
     resolution: {integrity: sha512-AOIgSQCepiJYwP3ARnGx+5VnTu2HBYdzbGP45eLw1vr3zB3vZLeyed1sC9hnbcOc9/SrMyM5RPQrkGz4aS9Zow==}
     engines: {node: '>= 6'}
@@ -6685,9 +6740,6 @@ packages:
   html-encoding-sniffer@3.0.0:
     resolution: {integrity: sha512-oWv4T4yJ52iKrufjnyZPkrN0CH3QnrUqdB6In1g5Fe1mia8GmF36gnfNySxoZtxD5+NmYw1EElVXiBk93UeskA==}
     engines: {node: '>=12'}
-
-  html-entities@2.6.0:
-    resolution: {integrity: sha512-kig+rMn/QOVRvr7c86gQ8lWXq+Hkv6CbAH1hLu+RG338StTpE8Z0b44SDVaqVu7HGKf27frdmUYEs9hTUX/cLQ==}
 
   html-escaper@2.0.2:
     resolution: {integrity: sha512-H2iMtd0I4Mt5eYiapRdIDjp+XzelXQ0tFE4JS7YFwFevXXMmOp9myNrUvCg0D6ws8iqkRPBfKHgbwig1SmlLfg==}
@@ -7489,11 +7541,6 @@ packages:
 
   marked@16.4.2:
     resolution: {integrity: sha512-TI3V8YYWvkVf3KJe1dRkpnjs68JUPyEa5vjKrp1XEEJUAOaQc+Qj+L1qWbPd0SJuAdQkFU0h73sXXqwDYxsiDA==}
-    engines: {node: '>= 20'}
-    hasBin: true
-
-  marked@18.0.6:
-    resolution: {integrity: sha512-MrV5puXBfuiy6wl6DLaq3BtIJQAJToAd5zt/ZKhRfGRAuFPALE7/4Y7jnxRQoEgK/pBgurGqLyAuRgZ2xOjr6w==}
     engines: {node: '>= 20'}
     hasBin: true
 
@@ -8547,6 +8594,19 @@ packages:
       react-native-gesture-handler: '>= 2.0.0'
       react-native-reanimated: '>= 2.0.0'
 
+  react-native-enriched-markdown@0.7.0:
+    resolution: {integrity: sha512-PC3bH7M2KVKbVzxzq2kfEQ1hQ+gjkFHTN53kgvEJNMIpILBRYxfxRcCaEk1h176+66x7yvqlD+T0jwTidjqJgw==}
+    peerDependencies:
+      '@expo/config-plugins': '>=50.0.0'
+      katex: '>=0.16.0'
+      react: '*'
+      react-native: '*'
+    peerDependenciesMeta:
+      '@expo/config-plugins':
+        optional: true
+      katex:
+        optional: true
+
   react-native-gesture-handler@2.32.0:
     resolution: {integrity: sha512-uYIMOKlKENORq2SABE+jIjbPU+h5I/sQKcq2v16zRq848nwEp1fWRVwML4QWqijc8UcXJC25o54S8GQd4Mf2OA==}
     peerDependencies:
@@ -8558,20 +8618,6 @@ packages:
     peerDependencies:
       react: '*'
       react-native: '*'
-
-  react-native-marked@8.1.1:
-    resolution: {integrity: sha512-J1f5oB6oq/REYlOXoYUDWGCS++MFjk2dXfiFS7CxolQW14WiMqM/J5A1GKdCrOiRGayRD41sEs9q/rRtAG0kPQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      react: '>=16.8.6'
-      react-native: '>=0.76.0'
-      react-native-svg: '>=12.3.0'
-
-  react-native-reanimated-table@0.0.2:
-    resolution: {integrity: sha512-OeuqfU1AFEmHNTJlEOLWrV78JgAXnM0/ZrCm0Ab+9e5nwYJ+xab/UFXkNKz3Gyf08ZfLSNzwMQRjt3eZWPWoGA==}
-    peerDependencies:
-      react: '>=16.8.0'
-      react-native: '>=0.6.0'
 
   react-native-reanimated@4.5.1:
     resolution: {integrity: sha512-RnMvtDuR+68ig864gAvZCOdZehqhC5rFmMo0kn+ARfgVSTvFeF6IFLBVgMPUu0KwihaapEyW24WRi6nEyy1kSA==}
@@ -9223,9 +9269,6 @@ packages:
   supports-preserve-symlinks-flag@1.0.0:
     resolution: {integrity: sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==}
     engines: {node: '>= 0.4'}
-
-  svg-parser@2.0.4:
-    resolution: {integrity: sha512-e4hG1hRwoOdRb37cIMSgzNsxyzKfayW6VOflrwvR+/bzrkyxY/31WkbgnQpgtrNp1SdpJvpUAGTa/ZoiPNDuRQ==}
 
   symbol-tree@3.2.4:
     resolution: {integrity: sha512-9QNk5KwDF+Bvz+PyObkmSYjI5ksVUYtjW7AU22r2NKcfLJcXp96hkDWU3+XndOsUb+AQ9QhfzfCT2O+CNWT5Tw==}
@@ -11944,14 +11987,6 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@jsamr/counter-style@2.0.2': {}
-
-  '@jsamr/react-native-li@2.3.1(@jsamr/counter-style@2.0.2)(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)':
-    dependencies:
-      '@jsamr/counter-style': 2.0.2
-      react: 19.2.3
-      react-native: 0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2)
-
   '@listr2/prompt-adapter-inquirer@2.0.22(@inquirer/prompts@6.0.1)':
     dependencies:
       '@inquirer/prompts': 6.0.1
@@ -13564,6 +13599,15 @@ snapshots:
       nullthrows: 1.1.1
       react: 19.2.3
       react-native: 0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2)
+    optionalDependencies:
+      '@types/react': 19.2.14
+
+  '@react-native/virtualized-lists@0.86.2(@types/react@19.2.14)(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2)(@types/react@19.2.14)(react@19.2.3))(react@19.2.3)':
+    dependencies:
+      invariant: 2.2.4
+      nullthrows: 1.1.1
+      react: 19.2.3
+      react-native: 0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2)(@types/react@19.2.14)(react@19.2.3)
     optionalDependencies:
       '@types/react': 19.2.14
 
@@ -16141,8 +16185,6 @@ snapshots:
 
   getenv@2.0.0: {}
 
-  github-slugger@2.0.0: {}
-
   glob-parent@5.1.2:
     dependencies:
       is-glob: 4.0.3
@@ -16357,8 +16399,6 @@ snapshots:
   html-encoding-sniffer@3.0.0:
     dependencies:
       whatwg-encoding: 2.0.0
-
-  html-entities@2.6.0: {}
 
   html-escaper@2.0.2: {}
 
@@ -17383,6 +17423,12 @@ snapshots:
       react-native: 0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2)
       react-native-svg: 15.15.4(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
 
+  lucide-react-native@1.33.0(react-native-svg@15.15.4(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2)(@types/react@19.2.14)(react@19.2.3))(react@19.2.3))(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2)(@types/react@19.2.14)(react@19.2.3))(react@19.2.3):
+    dependencies:
+      react: 19.2.3
+      react-native: 0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2)(@types/react@19.2.14)(react@19.2.3)
+      react-native-svg: 15.15.4(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2)(@types/react@19.2.14)(react@19.2.3))(react@19.2.3)
+
   lucide-react@0.577.0(react@19.2.3):
     dependencies:
       react: 19.2.3
@@ -17429,8 +17475,6 @@ snapshots:
   marked@14.0.0: {}
 
   marked@16.4.2: {}
-
-  marked@18.0.6: {}
 
   marky@1.3.0: {}
 
@@ -18990,6 +19034,14 @@ snapshots:
       react-native-reanimated: 4.5.1(react-native-worklets@0.10.1(@babel/core@7.29.7)(@react-native/metro-config@0.86.2(supports-color@10.2.2))(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
       use-latest-callback: 0.2.4(react@19.2.3)
 
+  react-native-enriched-markdown@0.7.0(@expo/config-plugins@57.0.8(typescript@6.0.3))(katex@0.18.1)(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3):
+    dependencies:
+      react: 19.2.3
+      react-native: 0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2)
+    optionalDependencies:
+      '@expo/config-plugins': 57.0.8(typescript@6.0.3)
+      katex: 0.18.1
+
   react-native-gesture-handler@2.32.0(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3):
     dependencies:
       '@egjs/hammerjs': 2.0.17
@@ -19000,24 +19052,6 @@ snapshots:
       react-native: 0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2)
 
   react-native-is-edge-to-edge@1.3.1(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3):
-    dependencies:
-      react: 19.2.3
-      react-native: 0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2)
-
-  react-native-marked@8.1.1(react-native-svg@15.15.4(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3))(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3):
-    dependencies:
-      '@jsamr/counter-style': 2.0.2
-      '@jsamr/react-native-li': 2.3.1(@jsamr/counter-style@2.0.2)(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
-      github-slugger: 2.0.0
-      html-entities: 2.6.0
-      marked: 18.0.6
-      react: 19.2.3
-      react-native: 0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2)
-      react-native-reanimated-table: 0.0.2(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
-      react-native-svg: 15.15.4(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
-      svg-parser: 2.0.4
-
-  react-native-reanimated-table@0.0.2(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3):
     dependencies:
       react: 19.2.3
       react-native: 0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2)
@@ -19050,6 +19084,14 @@ snapshots:
       react-native: 0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2)
       warn-once: 0.1.1
 
+  react-native-svg@15.15.4(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2)(@types/react@19.2.14)(react@19.2.3))(react@19.2.3):
+    dependencies:
+      css-select: 5.1.0
+      css-tree: 1.1.3
+      react: 19.2.3
+      react-native: 0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2)(@types/react@19.2.14)(react@19.2.3)
+      warn-once: 0.1.1
+
   react-native-worklets@0.10.1(@babel/core@7.29.7)(@react-native/metro-config@0.86.2(supports-color@10.2.2))(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3):
     dependencies:
       '@babel/core': 7.29.7
@@ -19080,6 +19122,51 @@ snapshots:
       '@react-native/js-polyfills': 0.86.2
       '@react-native/normalize-colors': 0.86.2
       '@react-native/virtualized-lists': 0.86.2(@types/react@19.2.14)(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2(supports-color@10.2.2))(@types/react@19.2.14)(react@19.2.3)(supports-color@10.2.2))(react@19.2.3)
+      abort-controller: 3.0.0
+      anser: 1.4.9
+      ansi-regex: 5.0.1
+      babel-plugin-syntax-hermes-parser: 0.36.0
+      base64-js: 1.5.1
+      commander: 12.0.0
+      flow-enums-runtime: 0.0.6
+      hermes-compiler: 250829098.0.16
+      invariant: 2.2.4
+      memoize-one: 5.2.1
+      metro-runtime: 0.84.5
+      metro-source-map: 0.84.5
+      nullthrows: 1.1.1
+      pretty-format: 29.7.0
+      promise: 8.3.0
+      react: 19.2.3
+      react-devtools-core: 6.1.5
+      react-refresh: 0.14.0
+      regenerator-runtime: 0.13.11
+      scheduler: 0.27.0
+      semver: 7.7.4
+      stacktrace-parser: 0.1.11
+      tinyglobby: 0.2.17
+      whatwg-fetch: 3.6.20
+      ws: 7.5.11
+      yargs: 17.7.3
+    optionalDependencies:
+      '@react-native/jest-preset': 0.86.2(@babel/core@7.29.7)(react@19.2.3)
+      '@types/react': 19.2.14
+    transitivePeerDependencies:
+      - '@react-native-community/cli'
+      - '@react-native/metro-config'
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+
+  react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2)(@types/react@19.2.14)(react@19.2.3):
+    dependencies:
+      '@react-native/assets-registry': 0.86.2
+      '@react-native/codegen': 0.86.2
+      '@react-native/community-cli-plugin': 0.86.2(@react-native/metro-config@0.86.2(supports-color@10.2.2))(supports-color@10.2.2)
+      '@react-native/gradle-plugin': 0.86.2
+      '@react-native/js-polyfills': 0.86.2
+      '@react-native/normalize-colors': 0.86.2
+      '@react-native/virtualized-lists': 0.86.2(@types/react@19.2.14)(react-native@0.86.2(@react-native/jest-preset@0.86.2(@babel/core@7.29.7)(react@19.2.3))(@react-native/metro-config@0.86.2)(@types/react@19.2.14)(react@19.2.3))(react@19.2.3)
       abort-controller: 3.0.0
       anser: 1.4.9
       ansi-regex: 5.0.1
@@ -19756,8 +19843,6 @@ snapshots:
       supports-color: 7.2.0
 
   supports-preserve-symlinks-flag@1.0.0: {}
-
-  svg-parser@2.0.4: {}
 
   symbol-tree@3.2.4: {}
 

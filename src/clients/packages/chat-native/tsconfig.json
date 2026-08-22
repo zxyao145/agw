@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.react.json",
+  "compilerOptions": {
+    "moduleSuffixes": [".native", ""],
+    "paths": {
+      "@tanstack/react-query": ["../../mobile/node_modules/@tanstack/react-query"],
+      "expo-file-system": ["../../mobile/node_modules/expo-file-system"],
+      "expo-image": ["../../mobile/node_modules/expo-image"],
+      "expo-image-picker": ["../../mobile/node_modules/expo-image-picker"],
+      "react-native": ["../../mobile/node_modules/react-native"],
+      "react-native/*": ["../../mobile/node_modules/react-native/*"],
+      "react-native-enriched-markdown": [
+        "../../mobile/node_modules/react-native-enriched-markdown"
+      ],
+      "react-native-svg": ["../../mobile/node_modules/react-native-svg"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}

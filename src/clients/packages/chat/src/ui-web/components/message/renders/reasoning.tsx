@@ -31,7 +31,7 @@ const Reasoning = ({ node }: { node: MessageNode }) => {
         </div>
 
         <div className="flex flex-1 flex-col">
-          <MdCard mdText={expanded ? node.content : preview} enableMath={false} />
+          <MdCard mdText={expanded ? node.content : preview} />
         </div>
       </div>
     </div>

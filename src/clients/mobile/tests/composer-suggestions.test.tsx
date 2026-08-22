@@ -104,6 +104,25 @@ test("shows slash suggestions and replaces the trigger at the active caret", asy
   expect(view.queryByLabelText("Suggestions")).toBeNull();
 });
 
+test("releases the one-shot suggestion selection when the user moves to the end", async () => {
+  initialText = "Please /dep later";
+  const view = await render(<Composer safeBottom={0} />);
+  let input = view.getByLabelText("Message");
+
+  await fireEvent(input, "selectionChange", {
+    nativeEvent: { selection: { start: 11, end: 11 } },
+  });
+  await fireEvent.press(await view.findByLabelText("Use suggestion /deploy"));
+
+  input = view.getByLabelText("Message");
+  expect(input.props.selection).toEqual({ start: 15, end: 15 });
+  await fireEvent(input, "selectionChange", {
+    nativeEvent: { selection: { start: 20, end: 20 } },
+  });
+
+  expect(view.getByLabelText("Message").props.selection).toBeUndefined();
+});
+
 test("searches project files for an at trigger and applies the mapped result", async () => {
   const searchFiles = jest.fn(async () => ({
     results: [

@@ -8,7 +8,6 @@ export type MessageMeta = {
 
 export const MESSAGE_PREVIEW_MAX_LENGTH = 72;
 const AGENT_NAME_KEYS = ["nodeName", "name", "agentName", "displayName", "agentDisplayName"];
-const AGENT_AUTHOR_KEYS = ["agentName"];
 const HISTORY_CONTROL_MESSAGE_TYPES = new Set([
   "turn-start",
   "turn-finished",
@@ -22,6 +21,7 @@ const STANDALONE_SYSTEM_MESSAGE_TYPES = new Set([
   "tool-background-task-status",
   "tool-warning",
   "turn.started",
+  "agentflow-checkpoint",
 ]);
 
 function readString(value: unknown): string | null {
@@ -48,20 +48,18 @@ export function isResultMessage(message: AiMessage): boolean {
 }
 
 export function getMessageMeta(message: AiMessage): MessageMeta | null {
-  if (message.additionalProperties?.type === "result") return null;
+  if (isResultMessage(message)) return null;
 
-  const agentAuthor = readString(message.author) ?? readStringProperty(message, AGENT_AUTHOR_KEYS);
+  const agentAuthor = readString(message.author);
   if (message.role === "user") {
     return agentAuthor ? { name: null, author: agentAuthor } : null;
   }
 
   const agentName = readStringProperty(message, AGENT_NAME_KEYS);
-  const displayName = agentName && agentName !== agentAuthor ? agentName : null;
-
-  if (!displayName && !agentAuthor) return null;
+  if (!agentName && !agentAuthor) return null;
 
   return {
-    name: displayName,
+    name: agentName,
     author: agentAuthor,
   };
 }
@@ -80,8 +78,10 @@ export function collapseConsecutiveSystemMessages(messages: readonly AiMessage[]
   return visibleMessages.filter(
     (message, index) =>
       message.role !== "system" ||
+      isResultMessage(message) ||
       STANDALONE_SYSTEM_MESSAGE_TYPES.has(String(message.additionalProperties?.type)) ||
       visibleMessages[index + 1]?.role !== "system" ||
+      (visibleMessages[index + 1] ? isResultMessage(visibleMessages[index + 1]) : false) ||
       STANDALONE_SYSTEM_MESSAGE_TYPES.has(
         String(visibleMessages[index + 1]?.additionalProperties?.type),
       ),

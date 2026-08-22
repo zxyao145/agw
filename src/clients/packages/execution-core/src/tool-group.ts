@@ -23,7 +23,10 @@ type ToolGroup<T extends ExecutionMessage> = {
 };
 
 export function isResultMessage(message: ExecutionMessage): boolean {
-  return message.additionalProperties?.type === "result";
+  return (
+    message.additionalProperties?.type === "result" ||
+    message.contents.some((content) => content.additionalProperties?.type === "result")
+  );
 }
 
 function isFunctionCall(content: ExecutionMessageContent): boolean {
@@ -69,7 +72,8 @@ export function createMessageFragments<T extends ExecutionMessage>(
     return fragments;
   }
 
-  if ((message.role === "user" && !message.author) || message.contents.length === 0) {
+  if (message.contents.length === 0) {
+    fragments.push({ type: "normal", message, groupKey: null, toolName: "" });
     messageFragmentCache.set(message, fragments);
     return fragments;
   }

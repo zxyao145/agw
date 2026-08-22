@@ -1,6 +1,7 @@
 import type { ExecutionMessage, ExecutionMessageContent } from "./types";
 
 const TEXT_CONTENT_TYPES = new Set(["TextContent", "text"]);
+const FUNCTION_RESULT_CONTENT_TYPE = "FunctionResultContent";
 
 function isReasoningContent(
   content: ExecutionMessageContent,
@@ -76,6 +77,14 @@ export function getMessageTextContent(message: ExecutionMessage): string {
   return getFirstTextContent(message.contents)?.content ?? "";
 }
 
+export function isUserTurnMessage(message: ExecutionMessage): boolean {
+  return (
+    message.role === "user" &&
+    message.additionalProperties?.modelHistoryExcluded !== true &&
+    !message.contents.some((content) => content.type === FUNCTION_RESULT_CONTENT_TYPE)
+  );
+}
+
 export function appendStreamingContents(
   existing: ExecutionMessage,
   incoming: ExecutionMessage,
@@ -116,11 +125,15 @@ export function scopeMessagesByUserTurn<T extends ExecutionMessage>(messages: T[
   let currentScopeId: string | null = null;
 
   return messages.map((message, index) => {
-    if (message.role === "user") {
-      currentScopeId = message.messageId || `history-user-${index}`;
+    if (isUserTurnMessage(message)) {
+      currentScopeId =
+        getMessageStreamingScopeId(message) || message.messageId || `history-user-${index}`;
     }
 
-    return scopeStreamingMessage(message, currentScopeId ?? `history-prelude-${index}`);
+    return scopeStreamingMessage(
+      message,
+      getMessageStreamingScopeId(message) ?? currentScopeId ?? `history-prelude-${index}`,
+    );
   });
 }
 

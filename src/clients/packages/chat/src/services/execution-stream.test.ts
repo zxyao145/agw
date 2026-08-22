@@ -37,13 +37,11 @@ function textMessage({
   };
 }
 
-test("execution stream re-exports platform-neutral helpers from execution-core", async () => {
+test("execution stream delegates platform-neutral helpers to chat-runtime", async () => {
   const source = await readFile(EXECUTION_STREAM_URL, "utf8");
 
-  assert.match(source, /from "@agw\/execution-core"/);
+  assert.match(source, /from "@agw\/chat-runtime\/execution-stream"/);
   assert.doesNotMatch(source, /execution-ws|WebSocket|parseExecutionWsMessage/);
-  assert.match(source, /mergeStreamingMessages,/);
-  assert.match(source, /scopeMessagesByUserTurn,/);
 });
 
 test("streamed proposed plan tags merge into one restorable Plan Card payload", () => {

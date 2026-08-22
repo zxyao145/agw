@@ -27,6 +27,21 @@ export type ExecutionCommandRequest<TInput = ExecutionUserInput> = {
 
 export type TurnFinishedStatus = "completed" | "interrupted" | "failed";
 
+export type HumanResponseCommandInput = {
+  executionId?: string;
+  requestId: string;
+  approved: boolean;
+  responseText?: string | null;
+  approvalScope?: "once" | "always-tool" | "always-arguments";
+  responseData?: unknown;
+};
+
+export type ResumeCheckpointCommandInput = {
+  checkpointOccurrenceId: string;
+  resumeExecutionId: string;
+  agentflowId: string;
+};
+
 /** SignalR 断线后的共享重试间隔；数组耗尽后结束自动重试。 */
 export const executionReconnectDelaysMs = [0, 2_000, 5_000, 7_000, 10_000, 20_000, 30_000] as const;
 
@@ -85,6 +100,27 @@ export function buildSubscribeExecutionCommand(executionId: string, cursor?: str
     type: "SubscribeExecutionCommand" as const,
     executionId,
     ...(cursor ? { cursor } : {}),
+  };
+}
+
+export function buildHumanResponseCommand(input: HumanResponseCommandInput) {
+  return {
+    type: "HumanResponseCommand" as const,
+    ...(input.executionId ? { executionId: input.executionId } : {}),
+    requestId: input.requestId,
+    approved: input.approved,
+    ...(input.responseText === undefined ? {} : { responseText: input.responseText }),
+    ...(input.approvalScope === undefined ? {} : { approvalScope: input.approvalScope }),
+    ...(input.responseData === undefined ? {} : { responseData: input.responseData }),
+  };
+}
+
+export function buildResumeCheckpointCommand(input: ResumeCheckpointCommandInput) {
+  return {
+    type: "ResumeCheckpointCommand" as const,
+    checkpointOccurrenceId: input.checkpointOccurrenceId,
+    resumeExecutionId: input.resumeExecutionId,
+    agentflowId: input.agentflowId,
   };
 }
 

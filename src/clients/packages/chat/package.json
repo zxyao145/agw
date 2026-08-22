@@ -18,10 +18,10 @@
   "dependencies": {
     "@agw/api": "workspace:*",
     "@agw/chat-core": "workspace:*",
+    "@agw/chat-runtime": "workspace:*",
     "@agw/components": "workspace:*",
     "@agw/execution-core": "workspace:*",
     "@agw/projects": "workspace:*",
-    "@microsoft/signalr": "10.0.0",
     "katex": "0.18.1",
     "lucide-react": "0.577.0",
     "react-markdown": "10.1.0",

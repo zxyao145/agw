@@ -11,7 +11,7 @@ This directory is the Expo Router root for `@agw/mobile`.
 - `assets/`: committed app icons and visual assets.
 - `android/`, `ios/`, `.expo/`, and `dist/`: generated output; do not hand-edit or commit.
 
-Mobile may consume `@agw/api`, `@agw/execution-core`, `@agw/chat-core`, and `@agw/projects-core`. It must not import Web/Desktop applications, Web UI barrels, DOM APIs, or source files through relative monorepo paths.
+Mobile may consume `@agw/api`, `@agw/chat-native`, and `@agw/projects-core`. Chat messages, execution, Composer, and Context History belong behind `@agw/chat-native`, which owns the `chat-core`/`chat-runtime` dependencies. Mobile files should only adapt Session, routes, safe areas, and the surrounding Workspace shell. Mobile must not import `@agw/chat`, `@agw/chat-core`, `@agw/chat-runtime`, Web/Desktop applications, DOM APIs, or source files through relative monorepo paths.
 
 ## Commands
 

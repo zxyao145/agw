@@ -1,213 +1,145 @@
 "use client";
 
 import * as React from "react";
-import { Badge } from "@agw/components";
-import { Accordion, AccordionContent, AccordionItem } from "@agw/components";
-import { getMessageMeta } from "@agw/chat-core";
-import { AiMessageComponent, isResultMessage } from "./message";
-import { MessageContentType, type AiMessage } from "@agw/api";
-import { processMessages, type ProcessedMessageItem } from "@agw/execution-core";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "@agw/components";
-import { collapseConsecutiveSystemMessages } from "../../../lib/chat/ai-message-handlers";
-import { cn } from "@agw/components";
-import { MessageTrigger } from "../message-trigger";
+
+import type { ConversationRenderItem } from "@agw/chat-core";
+import type { PermissionMode } from "@agw/execution-core";
 import {
-  getAgentflowCheckpointMessage,
-  type AgentflowCheckpointAvailability,
-  type PendingHumanGate,
-} from "../../../services/execution-hub";
-import { matchesHumanInteractionCall } from "../../../services/human-interaction-call";
-import { getHumanInteractionQuestionResult } from "../../../services/human-interaction";
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  Badge,
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+  cn,
+} from "@agw/components";
+
+import { MessageTrigger } from "../message-trigger";
+import { AgentflowCheckpointCard } from "./agentflow-checkpoint-card";
+import { HumanGateApproval } from "./human-gate-approval";
 import { HumanInteractionPanel } from "./human-interaction-panel";
 import { HumanInteractionQuestionResultView } from "./human-interaction-question-result";
-import { AgentflowCheckpointCard } from "./agentflow-checkpoint-card";
+import { PresentedMessageComponent } from "./presented-message";
+import { ToolState } from "./tool-state";
+
+export type HumanResponseInput = {
+  approved: boolean;
+  responseText?: string;
+  approvalScope?: "once" | "always-tool" | "always-arguments";
+  responseData?: unknown;
+};
 
 export interface ChatSessionProps {
-  messages: AiMessage[];
+  items: ConversationRenderItem[];
   messagesStartRef?: React.RefObject<HTMLDivElement>;
   messagesEndRef: React.RefObject<HTMLDivElement>;
-  processMessages?: (msgs: AiMessage[]) => ProcessedMessageItem<AiMessage>[];
   scrollable?: boolean;
-  pendingHumanInteraction?: (PendingHumanGate & { requestType: "human-interaction" }) | null;
-  onHumanInteractionSubmit?: (responseData: unknown) => void;
-  onHumanInteractionCancel?: () => void;
-  checkpointAvailability?: AgentflowCheckpointAvailability[];
+  permissionMode?: PermissionMode;
   showCheckpointResume?: boolean;
   checkpointResumeDisabled?: boolean;
   onCheckpointResume?: (occurrenceId: string) => void;
-  footer?: React.ReactNode;
-}
-
-function getFunctionToolName(message: AiMessage): string | null {
-  const functionCall = message.contents.find(
-    (content) => content.type === MessageContentType.FunctionCallContent,
-  );
-  const toolName = functionCall?.additionalProperties?.toolName;
-  return typeof toolName === "string" && toolName.trim() ? toolName.trim() : null;
-}
-
-const defaultProcessMessages = processMessages;
-
-function getMessageKey(message: AiMessage): string {
-  return JSON.stringify([
-    message.streamingScopeId ?? null,
-    message.messageId,
-    message.role ?? null,
-    message.author ?? null,
-  ]);
-}
-
-function getItemBaseKey(item: ProcessedMessageItem<AiMessage>): string {
-  if (item.type === "accordion") {
-    const callId = item.messages[0]?.contents[0]?.additionalProperties?.callId;
-    return `accordion:${getMessageKey(item.messages[0])}:${String(callId ?? item.toolName)}`;
-  }
-
-  const contentType = item.message.contents[0]?.type ?? "empty";
-  return `${item.type}:${getMessageKey(item.message)}:${contentType}`;
-}
-
-function addStableKeys(items: ProcessedMessageItem<AiMessage>[]) {
-  const occurrences = new Map<string, number>();
-  return items.map((item) => {
-    const baseKey = getItemBaseKey(item);
-    const occurrence = occurrences.get(baseKey) ?? 0;
-    occurrences.set(baseKey, occurrence + 1);
-    return { item, key: `${baseKey}:${occurrence}` };
-  });
+  onHumanResponse?: (response: HumanResponseInput) => void;
 }
 
 export function Conversation({
-  messages,
+  items,
   messagesStartRef,
   messagesEndRef,
-  processMessages = defaultProcessMessages,
   scrollable = true,
-  pendingHumanInteraction = null,
-  onHumanInteractionSubmit,
-  onHumanInteractionCancel,
-  checkpointAvailability = [],
+  permissionMode,
   showCheckpointResume = false,
   checkpointResumeDisabled = false,
   onCheckpointResume,
-  footer,
+  onHumanResponse,
 }: ChatSessionProps) {
-  const processedMessages = React.useMemo(
-    () => processMessages(collapseConsecutiveSystemMessages(messages)),
-    [messages, processMessages],
-  );
-  const keyedMessages = React.useMemo(() => addStableKeys(processedMessages), [processedMessages]);
-  const checkpointsByOccurrence = React.useMemo(
-    () => new Map(checkpointAvailability.map((item) => [item.occurrenceId, item])),
-    [checkpointAvailability],
-  );
-
-  if ((!messages || messages.length == 0) && !footer) {
+  if (items.length === 0) {
     return (
       <Empty>
         <EmptyHeader>
           <EmptyTitle>No Message Yet</EmptyTitle>
           <EmptyDescription>There are currently no messages.</EmptyDescription>
         </EmptyHeader>
-        <EmptyContent className="flex-row justify-center gap-2"></EmptyContent>
+        <EmptyContent className="flex-row justify-center gap-2" />
       </Empty>
     );
-  }
-
-  let humanInteractionItemIndex = -1;
-  if (pendingHumanInteraction && onHumanInteractionSubmit && onHumanInteractionCancel) {
-    for (let index = 0; index < processedMessages.length; index += 1) {
-      const item = processedMessages[index];
-      if (
-        item?.type === "normal" &&
-        matchesHumanInteractionCall(item.message, pendingHumanInteraction)
-      ) {
-        humanInteractionItemIndex = index;
-      }
-    }
   }
 
   return (
     <div className={cn("min-h-full w-full flex-1", scrollable && "overflow-y-auto agw-scrollbar")}>
       <div className="mx-auto w-full max-w-225 space-y-4 pb-36">
         {messagesStartRef ? <div ref={messagesStartRef} /> : null}
-
-        {(messages?.length ?? 0) === 0 && (
-          <div className="flex items-center justify-center h-40">
-            <div className="text-center text-muted-foreground ">
-              <p className="text-lg mb-2">No messages yet</p>
-              <p className="text-sm">Start a conversation by typing a message below</p>
-            </div>
-          </div>
-        )}
-
-        {keyedMessages.map(({ item, key }, index) => {
-          const checkpoint =
-            item.type === "normal" ? getAgentflowCheckpointMessage(item.message) : null;
-          if (checkpoint) {
-            const availability = checkpointsByOccurrence.get(checkpoint.occurrenceId);
+        {items.map((item) => {
+          if (item.type === "checkpoint") {
             return (
               <AgentflowCheckpointCard
-                key={key}
-                name={checkpoint.name}
+                key={item.key}
+                name={item.checkpoint.name}
                 showResume={showCheckpointResume}
-                available={availability?.available === true}
+                available={item.availability?.available === true}
                 disabled={checkpointResumeDisabled || !onCheckpointResume}
-                onResume={() => onCheckpointResume?.(checkpoint.occurrenceId)}
+                onResume={() => onCheckpointResume?.(item.checkpoint.occurrenceId)}
               />
             );
           }
 
-          if (
-            index === humanInteractionItemIndex &&
-            item.type === "normal" &&
-            pendingHumanInteraction &&
-            onHumanInteractionSubmit &&
-            onHumanInteractionCancel
-          ) {
-            const toolName = pendingHumanInteraction.toolName ?? getFunctionToolName(item.message);
+          if (item.type === "human-interaction-result") {
             return (
-              <div
-                className="mx-4 max-w-full"
-                key={key}
-                data-msg-id={item.message.messageId}
-                data-function-call-id={pendingHumanInteraction.callId}
-              >
-                <div className="mb-2 flex items-center gap-2 px-1">
-                  <Badge variant="secondary" className="text-xs">
-                    {toolName ?? "Function"}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">Waiting for your input</span>
-                </div>
-                <HumanInteractionPanel
-                  request={pendingHumanInteraction}
-                  embedded
-                  onSubmit={onHumanInteractionSubmit}
-                  onCancel={onHumanInteractionCancel}
-                />
+              <div className="mx-4 max-w-full" key={item.key}>
+                <HumanInteractionQuestionResultView result={item.result} />
               </div>
             );
           }
 
-          // function call / tool use
-          if (item.type === "accordion") {
-            const questionResult =
-              item.toolName === "ask_user_question"
-                ? getHumanInteractionQuestionResult(item.messages)
-                : null;
-            if (questionResult) {
+          if (item.type === "human-interaction") {
+            if (item.request.requestType === "human-interaction") {
               return (
-                <div className="mx-4 max-w-[90%]" key={key}>
-                  <HumanInteractionQuestionResultView result={questionResult} />
+                <div className="mx-4 max-w-full" key={item.key}>
+                  <div className="mb-2 flex items-center gap-2 px-1">
+                    <Badge variant="secondary" className="text-xs">
+                      {item.request.toolName ?? "Function"}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">Waiting for your input</span>
+                  </div>
+                  <HumanInteractionPanel
+                    request={{ ...item.request, requestType: "human-interaction" }}
+                    embedded={item.embedded}
+                    onSubmit={(responseData) =>
+                      onHumanResponse?.({ approved: true, approvalScope: "once", responseData })
+                    }
+                    onCancel={() => onHumanResponse?.({ approved: false })}
+                  />
                 </div>
               );
             }
 
             return (
-              <div className="mx-4 max-w-[80%]" key={key}>
+              <div className="mx-4 max-w-full" key={item.key}>
+                <HumanGateApproval
+                  request={item.request}
+                  permissionMode={permissionMode}
+                  onApprove={(approvalScope, responseText, responseData) =>
+                    onHumanResponse?.({
+                      approved: true,
+                      approvalScope,
+                      responseText,
+                      responseData,
+                    })
+                  }
+                  onReject={(responseText) => onHumanResponse?.({ approved: false, responseText })}
+                />
+              </div>
+            );
+          }
+
+          if (item.type === "tool-accordion") {
+            return (
+              <div className="mx-4 max-w-[80%]" key={item.key}>
                 <Accordion type="single" collapsible className="w-full">
-                  <AccordionItem value="item-1">
-                    <MessageTrigger className="py-0 cursor-pointer">
+                  <AccordionItem value="tool">
+                    <MessageTrigger className="cursor-pointer py-0">
                       <div className="flex flex-2 items-center gap-2">
                         <Badge variant="secondary" className="text-xs">
                           {item.toolName}
@@ -216,8 +148,12 @@ export function Conversation({
                     </MessageTrigger>
                     <AccordionContent>
                       <div className="space-y-4">
-                        {item.messages.map((msg) => (
-                          <AiMessageComponent key={getMessageKey(msg)} message={msg} />
+                        {item.messages.map((message) => (
+                          <PresentedMessageComponent
+                            key={message.identity}
+                            message={message}
+                            embedded
+                          />
                         ))}
                       </div>
                     </AccordionContent>
@@ -225,49 +161,52 @@ export function Conversation({
                 </Accordion>
               </div>
             );
-          } else {
-            const isResult = isResultMessage(item.message);
-            const isUserMessage = item.message.role === "user";
-            const messageMeta = getMessageMeta(item.message);
+          }
 
+          if (item.type === "tool-state") {
             return (
-              <div
-                className={cn(
-                  "mx-4 max-w-full",
-                  isResult ? "border-t border-dashed pt-4 mt-8" : "",
-                )}
-                key={key}
-                data-msg-id={item.message.messageId}
-              >
-                {messageMeta ? (
-                  <div
-                    className={cn(
-                      "mb-1 flex max-w-[80%] items-center gap-1.5 text-xs text-muted-foreground",
-                      isUserMessage ? "ml-auto justify-end" : "",
-                    )}
-                  >
-                    {messageMeta.name ? (
-                      <span className="min-w-0 truncate font-medium text-foreground/70">
-                        {messageMeta.name}
-                      </span>
-                    ) : null}
-                    {messageMeta.name && messageMeta.author ? (
-                      <span className="shrink-0 text-muted-foreground/60">/</span>
-                    ) : null}
-                    {messageMeta.author ? (
-                      <span className="min-w-0 truncate font-mono text-[11px]">
-                        {messageMeta.author}
-                      </span>
-                    ) : null}
-                  </div>
-                ) : null}
-                <AiMessageComponent message={item.message} />
+              <div className="mx-4 max-w-[80%]" key={item.key}>
+                <ToolState message={item.message} />
               </div>
             );
           }
-        })}
 
-        {footer}
+          const message = item.message;
+          return (
+            <div
+              className={cn(
+                "mx-4 max-w-full",
+                item.type === "result" && "mt-8 border-t border-dashed pt-4",
+              )}
+              key={item.key}
+              data-msg-id={message.source.messageId}
+            >
+              {message.meta ? (
+                <div
+                  className={cn(
+                    "mb-1 flex max-w-[80%] items-center gap-1.5 text-xs text-muted-foreground",
+                    message.alignment === "right" && "ml-auto justify-end",
+                  )}
+                >
+                  {message.meta.name ? (
+                    <span className="min-w-0 truncate font-medium text-foreground/70">
+                      {message.meta.name}
+                    </span>
+                  ) : null}
+                  {message.meta.name && message.meta.author ? (
+                    <span className="shrink-0 text-muted-foreground/60">/</span>
+                  ) : null}
+                  {message.meta.author ? (
+                    <span className="min-w-0 truncate font-mono text-[11px]">
+                      {message.meta.author}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+              <PresentedMessageComponent message={message} />
+            </div>
+          );
+        })}
         <div ref={messagesEndRef} />
       </div>
     </div>

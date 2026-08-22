@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { AiMessage } from "@agw/api";
-import {
-  hasMatchingHumanInteractionCall,
-  matchesHumanInteractionCall,
-} from "./human-interaction-call";
+import { hasMatchingHumanInteractionCall, matchesHumanInteractionCall } from "./human-interaction";
 
 function functionCallMessage(callId: string, streamingScopeId: string): AiMessage {
   return {

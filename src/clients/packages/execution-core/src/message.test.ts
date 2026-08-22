@@ -53,6 +53,60 @@ test("history assigns a reconstructable scope per user turn", () => {
   );
 });
 
+test("history preserves explicit persisted scopes before inferring a user turn", () => {
+  const history = scopeMessagesByUserTurn([
+    textMessage({ messageId: "user-1", role: "user", author: "$agw", content: "one" }),
+    textMessage({
+      messageId: "item_0",
+      role: "assistant",
+      author: "agent",
+      content: "restored",
+      additionalProperties: { streamingScopeId: "persisted-scope" },
+    }),
+  ]);
+
+  assert.deepEqual(
+    history.map((message) => message.streamingScopeId),
+    ["user-1", "persisted-scope"],
+  );
+});
+
+test("Claude tool results persisted as pseudo-user messages stay in the active user turn", () => {
+  const history = scopeMessagesByUserTurn([
+    textMessage({ messageId: "user-1", role: "user", author: "$agw", content: "run" }),
+    {
+      messageId: "call-1",
+      role: "assistant",
+      author: "agent",
+      contents: [
+        {
+          type: "FunctionCallContent",
+          content: "{}",
+          additionalProperties: { callId: "Bash_0", toolName: "Bash" },
+        },
+      ],
+    },
+    {
+      messageId: "result-1",
+      role: "user",
+      author: null,
+      additionalProperties: { modelHistoryExcluded: true },
+      contents: [
+        {
+          type: "FunctionResultContent",
+          content: "{}",
+          additionalProperties: { callId: "Bash_0" },
+        },
+      ],
+    },
+  ]);
+
+  assert.deepEqual(
+    history.map((message) => message.streamingScopeId),
+    ["user-1", "user-1", "user-1"],
+  );
+});
+
 test("repeated message ids remain independent across turns", () => {
   const history = scopeMessagesByUserTurn([
     textMessage({ messageId: "user-1", role: "user", author: "$agw", content: "one" }),

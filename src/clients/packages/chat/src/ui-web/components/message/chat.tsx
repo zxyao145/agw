@@ -6,6 +6,11 @@ import { toast } from "sonner";
 
 import { apiGet } from "@agw/api";
 import {
+  buildConversationRenderModel,
+  updateAutoScrollState,
+  type AutoScrollState,
+} from "@agw/chat-core";
+import {
   DEFAULT_AGENT_MODE,
   getAgentMode,
   getAgentflowCheckpointMessage,
@@ -14,6 +19,7 @@ import {
   getPendingHumanGate,
   getTurnFinishedStatus,
   getLatestAgentMode,
+  isUserTurnMessage,
   isModeControlMessage,
   type AgentMode,
   type AgentflowCheckpointAvailability,
@@ -25,7 +31,6 @@ import { clearProjectContextRecords, type LineComment } from "@agw/projects";
 import { ChatAside } from "./chat-aside";
 import { ChatInput } from "./chat-input";
 import { Conversation } from "./conversation";
-import { HumanGateApproval } from "./human-gate-approval";
 import type { UserInputRef } from "./user-input";
 import {
   getAgentSuggestionQueryParams,
@@ -33,7 +38,6 @@ import {
   type AgentSuggestionsResponse,
 } from "../../../lib/chat/agent-suggestions";
 import { getClaudeInitCommands, prepareClaudeHistory } from "../../../lib/chat/ai-message-handlers";
-import { updateAutoScrollState, type AutoScrollState } from "../../../lib/chat/auto-scroll";
 import {
   createStreamingMessageBatcher,
   createUserMessage,
@@ -43,13 +47,7 @@ import {
   toExecutionUserInput,
   type StreamingMessageBatcher,
 } from "../../../services/execution-stream";
-import {
-  addTokenUsage,
-  EMPTY_TOKEN_USAGE,
-  getMessageTokenUsage,
-  stripUsageContents,
-  type TokenUsage,
-} from "@agw/api";
+import { addTokenUsage, EMPTY_TOKEN_USAGE, getMessageTokenUsage, type TokenUsage } from "@agw/api";
 import { createUuidV7 } from "@agw/api";
 import { cn } from "@agw/components";
 import { useExecutionPlatform } from "../../execution-platform";
@@ -59,7 +57,6 @@ import {
 } from "../../../services/execution-session-manager";
 import type { AiMessage } from "@agw/api";
 import type { ChatTargetOption } from "@agw/api";
-import { hasMatchingHumanInteractionCall } from "../../../services/human-interaction-call";
 import { buildFileCommentPrompt } from "../../../lib/chat/file-comment-prompt";
 import type { ChatImageAttachment } from "../../../lib/chat/image-attachments";
 
@@ -109,7 +106,7 @@ function calculateConversationUsage(messages: AiMessage[]): TokenUsage {
 function truncateAtCheckpoint(
   messages: AiMessage[],
   occurrenceId: string,
-  resumedStreamingScopeId: string,
+  resumedMessages: AiMessage[],
 ): AiMessage[] {
   let boundaryIndex = -1;
   for (let index = 0; index < messages.length; index += 1) {
@@ -119,12 +116,7 @@ function truncateAtCheckpoint(
   }
   if (boundaryIndex < 0) return messages;
 
-  return [
-    ...messages.slice(0, boundaryIndex + 1),
-    ...messages
-      .slice(boundaryIndex + 1)
-      .filter((message) => message.streamingScopeId === resumedStreamingScopeId),
-  ];
+  return [...messages.slice(0, boundaryIndex + 1), ...resumedMessages];
 }
 
 /**
@@ -181,6 +173,7 @@ export function Chat({
   const durableRestoreAttemptRef = React.useRef<string | null>(null);
   const executionGenerationRef = React.useRef(0);
   const streamingMessageBatcherRef = React.useRef<StreamingMessageBatcher | null>(null);
+  const checkpointResumeBufferRef = React.useRef<AiMessage[] | null>(null);
   const pendingTeardownCountRef = React.useRef(0);
   const activeStreamingScopeRef = React.useRef<string | null>(null);
   const confirmedAgentModeRef = React.useRef<AgentMode>(agentMode);
@@ -196,6 +189,14 @@ export function Chat({
     streamingMessageBatcherRef.current = createStreamingMessageBatcher(
       (incomingMessages, generation) => {
         if (generation !== executionGenerationRef.current) {
+          return;
+        }
+
+        if (checkpointResumeBufferRef.current) {
+          checkpointResumeBufferRef.current = mergeStreamingMessages(
+            checkpointResumeBufferRef.current,
+            incomingMessages,
+          );
           return;
         }
 
@@ -238,7 +239,14 @@ export function Chat({
     () => toCommandSource(agentSuggestionsQuery.data, claudeCommands),
     [agentSuggestionsQuery.data, claudeCommands],
   );
-  const visibleMessages = React.useMemo(() => stripUsageContents(messages), [messages]);
+  const renderItems = React.useMemo(
+    () =>
+      buildConversationRenderModel(messages, {
+        pendingHumanGate,
+        checkpointAvailability,
+      }),
+    [checkpointAvailability, messages, pendingHumanGate],
+  );
   const latestAvailableCheckpoint = React.useMemo(
     () =>
       checkpointAvailability
@@ -251,16 +259,6 @@ export function Chat({
     [checkpointAvailability],
   );
   const checkpointResumeDisabled = isExecuting || isTransitioning || reconnectState !== null;
-  const pendingHumanInteraction =
-    pendingHumanGate?.requestType === "human-interaction"
-      ? { ...pendingHumanGate, requestType: "human-interaction" as const }
-      : null;
-  const floatingHumanGate =
-    pendingHumanGate &&
-    (!pendingHumanInteraction ||
-      !hasMatchingHumanInteractionCall(visibleMessages, pendingHumanInteraction))
-      ? pendingHumanGate
-      : null;
 
   const notifyExecutionError = React.useCallback(
     (error: unknown) => {
@@ -374,7 +372,7 @@ export function Chat({
       scrollHeight: scrollContainer.scrollHeight,
       scrollTop: scrollContainer.scrollTop,
     };
-  }, [floatingHumanGate?.requestId, messages]);
+  }, [messages, pendingHumanGate?.requestId]);
 
   const refreshAgentflowCheckpoints = React.useCallback(
     async (client: ManagedExecutionHandle, generation: number) => {
@@ -431,7 +429,9 @@ export function Chat({
         streamingMessageBatcherRef.current?.flush(generation);
         const scopedMessage = scopeStreamingMessage(
           message,
-          activeStreamingScopeRef.current ?? message.messageId,
+          getMessageStreamingScopeId(message) ??
+            activeStreamingScopeRef.current ??
+            message.messageId,
         );
         streamingMessageBatcherRef.current?.enqueue(scopedMessage, generation);
         const client = executionClientRef.current;
@@ -458,8 +458,10 @@ export function Chat({
 
       if (message.additionalProperties?.type === "turn-start") {
         streamingMessageBatcherRef.current?.flush(generation);
-        activeStreamingScopeRef.current ??=
-          getMessageStreamingScopeId(message) ?? message.messageId;
+        activeStreamingScopeRef.current =
+          getMessageStreamingScopeId(message) ??
+          activeStreamingScopeRef.current ??
+          message.messageId;
         setIsExecuting(true);
         return;
       }
@@ -481,10 +483,12 @@ export function Chat({
         return;
       }
 
-      if (message.role !== "user") {
+      if (!isUserTurnMessage(message)) {
         const scopedMessage = scopeStreamingMessage(
           message,
-          activeStreamingScopeRef.current ?? message.messageId,
+          getMessageStreamingScopeId(message) ??
+            activeStreamingScopeRef.current ??
+            message.messageId,
         );
         streamingMessageBatcherRef.current?.enqueue(scopedMessage, generation);
       }
@@ -967,7 +971,8 @@ export function Chat({
       const generation = executionGenerationRef.current;
       const resumeExecutionId = globalThis.crypto.randomUUID();
       streamingMessageBatcherRef.current?.flush(generation);
-      activeStreamingScopeRef.current = resumeExecutionId;
+      checkpointResumeBufferRef.current = [];
+      activeStreamingScopeRef.current = null;
       setPendingHumanGate(null);
       setIsTransitioning(true);
 
@@ -988,10 +993,13 @@ export function Chat({
             return;
           }
 
+          streamingMessageBatcherRef.current?.flush(generation);
+          const resumedMessages = checkpointResumeBufferRef.current ?? [];
+          checkpointResumeBufferRef.current = null;
           const retainedMessages = truncateAtCheckpoint(
             messagesRef.current,
             selectedCheckpoint.occurrenceId,
-            resumeExecutionId,
+            resumedMessages,
           );
           messagesRef.current = retainedMessages;
           setMessages(retainedMessages);
@@ -1007,6 +1015,7 @@ export function Chat({
         })
         .catch((error) => {
           if (generation !== executionGenerationRef.current) return;
+          checkpointResumeBufferRef.current = null;
           activeStreamingScopeRef.current = null;
           setIsExecuting(false);
           notifyExecutionError(error);
@@ -1132,37 +1141,21 @@ export function Chat({
           <div className="relative flex min-h-full min-w-0 max-w-5xl flex-1">
             {/* 对话列表 */}
             <Conversation
-              messages={visibleMessages}
+              items={renderItems}
               messagesStartRef={messagesStartRef}
               messagesEndRef={messagesEndRef}
               scrollable={false}
-              pendingHumanInteraction={pendingHumanInteraction}
-              onHumanInteractionSubmit={(responseData) =>
-                submitHumanGateResponse(true, undefined, "once", responseData)
+              permissionMode={permissionMode}
+              onHumanResponse={({ approved, responseText, approvalScope = "once", responseData }) =>
+                submitHumanGateResponse(approved, responseText, approvalScope, responseData)
               }
-              onHumanInteractionCancel={() => submitHumanGateResponse(false)}
-              checkpointAvailability={checkpointAvailability}
               showCheckpointResume={target?.type === "agentflow"}
               checkpointResumeDisabled={checkpointResumeDisabled}
               onCheckpointResume={handleResumeCheckpoint}
-              footer={
-                floatingHumanGate ? (
-                  <div className="mx-4">
-                    <HumanGateApproval
-                      request={floatingHumanGate}
-                      permissionMode={permissionMode}
-                      onApprove={(approvalScope, responseText, responseData) =>
-                        submitHumanGateResponse(true, responseText, approvalScope, responseData)
-                      }
-                      onReject={(responseText) => submitHumanGateResponse(false, responseText)}
-                    />
-                  </div>
-                ) : null
-              }
             />
           </div>
 
-          {visibleMessages.length > 0 ? <ChatAside usage={conversationUsage} /> : null}
+          {renderItems.length > 0 ? <ChatAside usage={conversationUsage} /> : null}
         </div>
       </div>
 
@@ -1176,7 +1169,7 @@ export function Chat({
           <ChatInput
             isExecuting={isExecuting}
             isTransitioning={isTransitioning}
-            hasMessages={visibleMessages.length > 0}
+            hasMessages={renderItems.length > 0}
             onExecute={(value, imageAttachments) => {
               void handleExecute(value, imageAttachments);
             }}
@@ -1198,7 +1191,7 @@ export function Chat({
             userInputRef={userInputRef}
           />
         </div>
-        {visibleMessages.length > 0 ? (
+        {renderItems.length > 0 ? (
           <div className="hidden w-75 shrink-0 @min-[64rem]:block" aria-hidden="true" />
         ) : null}
       </div>

@@ -215,15 +215,15 @@ test("createMessageFragments returns stable fragment references for the same mes
   assert.equal(first, second);
 });
 
-test("processMessages hides injected user messages without an author", () => {
-  const injectedUser: ExecutionMessage = {
-    messageId: "injected-user",
+test("processMessages renders authorless user messages unless presentation filtering hides them", () => {
+  const userMessage: ExecutionMessage = {
+    messageId: "user-1",
     role: "user",
-    contents: [{ type: "TextContent", content: "hidden" }],
+    contents: [{ type: "TextContent", content: "visible" }],
   };
-  const items = processMessages([injectedUser]);
+  const items = processMessages([userMessage]);
 
-  assert.equal(items.length, 0);
+  assert.deepEqual(items, [{ type: "normal", message: userMessage }]);
 });
 
 test("processMessages renders authorless system messages instead of skipping all system messages", () => {

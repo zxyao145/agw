@@ -1,0 +1,51 @@
+{
+  "name": "@agw/chat-native",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "react-native": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./composer": "./src/composer.tsx",
+    "./conversation": "./src/conversation-history.tsx",
+    "./execution": "./src/native-execution-session.ts",
+    "./history": "./src/native-context-history.tsx",
+    "./provider": "./src/native-chat-provider.tsx",
+    "./targets": "./src/chat-targets.ts",
+    "./workspace": "./src/native-workspace-provider.tsx"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "oxlint ./src",
+    "test": "tsx --test \"src/**/*.test.ts\"",
+    "format": "oxfmt ./src *.json",
+    "format:check": "oxfmt --check ./src *.json"
+  },
+  "dependencies": {
+    "@agw/api": "workspace:*",
+    "@agw/chat-core": "workspace:*",
+    "@agw/chat-runtime": "workspace:*",
+    "@agw/execution-core": "workspace:*",
+    "@agw/projects-core": "workspace:*",
+    "lucide-react-native": "1.33.0"
+  },
+  "devDependencies": {
+    "@types/node": "25.5.0",
+    "@types/react": "~19.2.2",
+    "oxfmt": "0.41.0",
+    "oxlint": "1.56.0",
+    "tsx": "4.21.0",
+    "typescript": "~6.0.3"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "5.94.5",
+    "expo-file-system": "~57.0.5",
+    "expo-image": "~57.0.3",
+    "expo-image-picker": "~57.0.12",
+    "react": "19.2.3",
+    "react-native": "0.86.2",
+    "react-native-enriched-markdown": "0.7.0",
+    "react-native-svg": "15.15.4"
+  }
+}

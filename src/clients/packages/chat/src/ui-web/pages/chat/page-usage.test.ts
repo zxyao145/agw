@@ -44,11 +44,9 @@ test("shared chat hides usage messages and renders compact token usage metrics",
     readFile(CHAT_ASIDE_COMPONENT_URL, "utf8").catch(() => ""),
   ]);
 
-  assert.match(
-    chatSource,
-    /const visibleMessages = React\.useMemo\(\(\) => stripUsageContents\(messages\), \[messages\]\)/,
-  );
-  assert.match(chatSource, /<Conversation\s+messages=\{visibleMessages\}/);
+  assert.match(chatSource, /const renderItems = React\.useMemo\(/);
+  assert.match(chatSource, /buildConversationRenderModel\(messages,/);
+  assert.match(chatSource, /<Conversation\s+items=\{renderItems\}/);
   assert.match(chatSource, /import \{ ChatAside \} from "\.\/chat-aside"/);
   assert.match(chatSource, /<ChatAside usage=\{conversationUsage\} \/>/);
   assert.match(chatAsideSource, /<aside[\s\S]*?>[\s\S]*?Token usage/);
@@ -100,6 +98,6 @@ test("shared chat does not render the usage panel without visible messages", asy
 
   assert.match(
     chatSource,
-    /\{visibleMessages\.length > 0 \? \(?\s*<ChatAside usage=\{conversationUsage\} \/>\s*\)? : null\}/,
+    /\{renderItems\.length > 0 \? \(?\s*<ChatAside usage=\{conversationUsage\} \/>\s*\)? : null\}/,
   );
 });

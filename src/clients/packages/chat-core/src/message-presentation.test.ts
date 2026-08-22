@@ -33,6 +33,21 @@ test("collapses consecutive system messages with the same rules as Desktop", () 
   ]);
 });
 
+test("system result cards form a boundary between ordinary system runs", () => {
+  const first = systemMessage("first", "first");
+  const result: AiMessage = {
+    ...systemMessage("result", "done"),
+    additionalProperties: { type: "result" },
+  };
+  const latest = systemMessage("latest", "latest");
+
+  assert.deepEqual(collapseConsecutiveSystemMessages([first, result, latest]), [
+    first,
+    result,
+    latest,
+  ]);
+});
+
 test("formats a Claude Code hook event without exposing its JSON envelope", () => {
   const content = JSON.stringify({
     type: "system",
