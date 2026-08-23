@@ -18,6 +18,16 @@ test("conversation is a thin host over the shared render model union", async () 
   assert.match(source, /item\.type === "checkpoint"/);
 });
 
+test("conversation virtualizes dynamically measured message rows", async () => {
+  const source = await readFile(CONVERSATION_URL, "utf8");
+
+  assert.match(source, /useVirtualizer\(/);
+  assert.match(source, /ref=\{virtualizer\.measureElement\}/);
+  assert.match(source, /getItemKey/);
+  assert.match(source, /overscan: 6/);
+  assert.match(source, /Loading earlier messages/);
+});
+
 test("agent metadata keeps name priority and independent author", () => {
   assert.deepEqual(
     getMessageMeta({

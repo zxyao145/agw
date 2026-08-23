@@ -3,16 +3,17 @@ import * as React from "react";
 import type { ChatTargetOption, components } from "@agw/api";
 import type { ChatImageAttachment, CommandSource } from "@agw/chat-core";
 import type { AgentMode, PermissionMode } from "@agw/execution-core";
-import type { ContextSummary, ProjectFilesService } from "@agw/projects-core";
+import type { ConversationSummary, ProjectFilesService } from "@agw/projects-core";
 
 import { pickChatImages } from "./image-picker";
 
 export type NativeAgentSuggestion = components["schemas"]["AgentSuggestionResponse"];
 export type NativeChatBindings = {
   projects: Array<{ id: string; name: string }>;
-  contexts: ContextSummary[];
+  conversations: ConversationSummary[];
   targets: ChatTargetOption[];
   selectedProjectId: string | null;
+  selectedConversationId: string | null;
   selectedContextId: string | null;
   selectedTargetValue: string | null;
   selectedTarget: ChatTargetOption | null;
@@ -28,14 +29,14 @@ export type NativeChatBindings = {
   filesService: ProjectFilesService | null;
   selectTarget(value: string): void;
   selectProject(projectId: string): void;
-  selectContext(contextId: string): void;
+  selectConversation(conversationId: string): void;
   setPermissionMode(mode: PermissionMode): void;
   setAgentMode(mode: AgentMode): void;
   sendMessage(text: string, attachments: readonly ChatImageAttachment[]): Promise<void>;
   stopExecution(): void;
-  renameContext(contextId: string, title: string): Promise<void>;
-  deleteContext(contextId: string): Promise<void>;
-  refreshContexts(): Promise<void>;
+  renameConversation(conversationId: string, title: string): Promise<void>;
+  deleteConversation(conversationId: string): Promise<void>;
+  refreshConversations(): Promise<void>;
 };
 
 export type NativeComposerState = {

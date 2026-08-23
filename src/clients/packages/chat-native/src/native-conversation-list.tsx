@@ -10,13 +10,13 @@ import {
   TextInput,
   View,
 } from "react-native";
-import type { ContextSummary } from "@agw/projects-core";
+import type { ConversationSummary } from "@agw/projects-core";
 
 import { IconButton } from "./icon-button";
 import { useNativeChat } from "./native-chat-provider";
 import { defaultNativeChatTheme as theme } from "./theme";
 
-export type NativeContextHistoryProps = {
+export type NativeConversationListProps = {
   safeTop: number;
   safeBottom: number;
   onClose(): void;
@@ -24,36 +24,36 @@ export type NativeContextHistoryProps = {
   onOpenSettings(): void;
 };
 
-export function NativeContextHistory({
+export function NativeConversationList({
   safeTop,
   safeBottom,
   onClose,
   onOpenChat,
   onOpenSettings,
-}: NativeContextHistoryProps) {
+}: NativeConversationListProps) {
   const chat = useNativeChat();
   const [projectPickerOpen, setProjectPickerOpen] = React.useState(false);
-  const [editing, setEditing] = React.useState<ContextSummary | null>(null);
+  const [editing, setEditing] = React.useState<ConversationSummary | null>(null);
 
-  const selectContext = (contextId: string) => {
+  const selectConversation = (conversationId: string) => {
     try {
-      chat.selectContext(contextId);
+      chat.selectConversation(conversationId);
       onOpenChat();
     } catch (error) {
       Alert.alert("Execution in progress", toMessage(error));
     }
   };
 
-  const remove = (context: ContextSummary) => {
+  const remove = (conversation: ConversationSummary) => {
     Alert.alert(
-      `Delete “${context.title}”?`,
+      `Delete “${conversation.title}”?`,
       "This permanently removes the conversation history.",
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Delete",
           style: "destructive",
-          onPress: () => void chat.deleteContext(context.contextId),
+          onPress: () => void chat.deleteConversation(conversation.conversationId),
         },
       ],
     );
@@ -81,22 +81,22 @@ export function NativeContextHistory({
           label="Refresh conversations"
           color={theme.primary}
           size={18}
-          onPress={() => void chat.refreshContexts()}
+          onPress={() => void chat.refreshConversations()}
         />
       </View>
       <ScrollView contentContainerStyle={styles.list}>
-        {chat.contexts.length === 0 ? (
+        {chat.conversations.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>No conversations yet</Text>
             <Text style={styles.emptyText}>Start a new chat to create one.</Text>
           </View>
         ) : (
-          chat.contexts.map((context) => {
-            const active = context.contextId === chat.selectedContextId;
+          chat.conversations.map((conversation) => {
+            const active = conversation.conversationId === chat.selectedConversationId;
             return (
               <Pressable
-                key={context.contextId}
-                onPress={() => selectContext(context.contextId)}
+                key={conversation.conversationId}
+                onPress={() => selectConversation(conversation.conversationId)}
                 style={({ pressed }) => [
                   styles.row,
                   active && styles.rowActive,
@@ -105,32 +105,32 @@ export function NativeContextHistory({
               >
                 <View style={styles.rowCopy}>
                   <Text numberOfLines={1} style={styles.rowTitle}>
-                    {context.title}
+                    {conversation.title}
                   </Text>
                   <Text numberOfLines={1} style={styles.rowMeta}>
-                    {formatContextMeta(context)}
+                    {formatConversationMeta(conversation)}
                   </Text>
                 </View>
                 <View style={styles.rowActions}>
                   <IconButton
                     icon={Pencil}
-                    label={`Rename ${context.title}`}
+                    label={`Rename ${conversation.title}`}
                     size={17}
                     disabled={chat.isExecuting}
                     onPress={(event) => {
                       event.stopPropagation();
-                      setEditing(context);
+                      setEditing(conversation);
                     }}
                   />
                   <IconButton
                     icon={Trash2}
-                    label={`Delete ${context.title}`}
+                    label={`Delete ${conversation.title}`}
                     size={17}
                     color={theme.danger}
                     disabled={chat.isExecuting}
                     onPress={(event) => {
                       event.stopPropagation();
-                      remove(context);
+                      remove(conversation);
                     }}
                   />
                 </View>
@@ -158,7 +158,7 @@ export function NativeContextHistory({
           }
         }}
       />
-      <RenameDialog context={editing} onClose={() => setEditing(null)} />
+      <RenameDialog conversation={editing} onClose={() => setEditing(null)} />
     </View>
   );
 }
@@ -193,21 +193,32 @@ function ProjectPicker({
   );
 }
 
-function RenameDialog({ context, onClose }: { context: ContextSummary | null; onClose(): void }) {
+function RenameDialog({
+  conversation,
+  onClose,
+}: {
+  conversation: ConversationSummary | null;
+  onClose(): void;
+}) {
   const chat = useNativeChat();
   const [title, setTitle] = React.useState("");
-  React.useEffect(() => setTitle(context?.title ?? ""), [context]);
+  React.useEffect(() => setTitle(conversation?.title ?? ""), [conversation]);
   const save = async () => {
-    if (!context || !title.trim()) return;
+    if (!conversation || !title.trim()) return;
     try {
-      await chat.renameContext(context.contextId, title);
+      await chat.renameConversation(conversation.conversationId, title);
       onClose();
     } catch (error) {
       Alert.alert("Unable to rename", toMessage(error));
     }
   };
   return (
-    <Modal transparent animationType="fade" visible={Boolean(context)} onRequestClose={onClose}>
+    <Modal
+      transparent
+      animationType="fade"
+      visible={Boolean(conversation)}
+      onRequestClose={onClose}
+    >
       <View style={[styles.backdrop, styles.centerBackdrop]}>
         <View style={styles.dialog}>
           <Text style={styles.dialogTitle}>Rename conversation</Text>
@@ -232,17 +243,17 @@ function RenameDialog({ context, onClose }: { context: ContextSummary | null; on
   );
 }
 
-function formatContextMeta(context: ContextSummary): string {
-  const date = new Date(context.updateTime ?? context.createTime);
+function formatConversationMeta(conversation: ConversationSummary): string {
+  const date = new Date(conversation.updateTime ?? conversation.createTime);
   const time = Number.isNaN(date.getTime())
-    ? (context.updateTime ?? context.createTime)
+    ? (conversation.updateTime ?? conversation.createTime)
     : new Intl.DateTimeFormat(undefined, {
         month: "short",
         day: "numeric",
         hour: "numeric",
         minute: "2-digit",
       }).format(date);
-  return `${time} · ${context.messageCount} messages`;
+  return `${time} · ${conversation.messageCount} messages`;
 }
 
 function toMessage(error: unknown): string {

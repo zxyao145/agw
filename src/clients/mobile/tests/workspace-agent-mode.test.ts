@@ -39,7 +39,7 @@ test("Mobile consumes direct mode controls and restores persisted mode history",
   expect(messageHandler).toMatch(/setAgentModeState\(confirmedAgentModeRef\.current\)/);
   expect(messageHandler).toMatch(/const nextAgentMode = getAgentMode\(incoming\)/);
   expect(messageHandler).toMatch(/if \(isModeControlMessage\(incoming\)\) return/);
-  expect(source).toMatch(/getLatestAgentMode\(contextDetailsQuery\.data\.messages\)/);
-  expect(source).toMatch(/prepareClaudeHistory\(contextDetailsQuery\.data\.messages\)/);
+  expect(source).toMatch(/getLatestAgentMode\(conversationDetailsQuery\.data\.messages\)/);
+  expect(source).toMatch(/prepareClaudeHistory\(conversationDetailsQuery\.data\.messages\)/);
   expect(source).toMatch(/scopeMessagesByUserTurn\(claudeHistory\.messages\)/);
 });

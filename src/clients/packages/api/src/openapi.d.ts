@@ -70,109 +70,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/.well-known/agents.json": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/a2a/{agentName}/.well-known/agent-card.json": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          agentName: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/a2a/{agentName}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path: {
-          agentName: string;
-        };
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content?: never;
-        };
-      };
-    };
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/api/jobs": {
     parameters: {
       query?: never;
@@ -390,44 +287,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/api/dashboard/stats": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: never;
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfDashboardStatsResponse"];
-            "application/json": components["schemas"]["ApiResultOfDashboardStatsResponse"];
-            "text/json": components["schemas"]["ApiResultOfDashboardStatsResponse"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/api/server-info": {
+  "/.well-known/agents.json": {
     parameters: {
       query?: never;
       header?: never;
@@ -454,6 +314,76 @@ export interface paths {
     };
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/a2a/{agentName}/.well-known/agent-card.json": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          agentName: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/a2a/{agentName}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          agentName: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
+    };
     delete?: never;
     options?: never;
     head?: never;
@@ -2181,6 +2111,76 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/dashboard/stats": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfDashboardStatsResponse"];
+            "application/json": components["schemas"]["ApiResultOfDashboardStatsResponse"];
+            "text/json": components["schemas"]["ApiResultOfDashboardStatsResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/server-info": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/integrations/connections": {
     parameters: {
       query?: never;
@@ -2611,7 +2611,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/api/projects/{projectId}/contexts": {
+  "/api/projects/{projectId}/conversations": {
     parameters: {
       query?: never;
       header?: never;
@@ -2635,9 +2635,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ApiResultOfProjectContextSummaryResponse[]"];
-            "application/json": components["schemas"]["ApiResultOfProjectContextSummaryResponse[]"];
-            "text/json": components["schemas"]["ApiResultOfProjectContextSummaryResponse[]"];
+            "text/plain": components["schemas"]["ApiResultOfProjectConversationSummaryResponse[]"];
+            "application/json": components["schemas"]["ApiResultOfProjectConversationSummaryResponse[]"];
+            "text/json": components["schemas"]["ApiResultOfProjectConversationSummaryResponse[]"];
           };
         };
       };
@@ -2673,7 +2673,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/api/projects/{projectId}/contexts/{contextId}": {
+  "/api/projects/{projectId}/conversations/{conversationId}": {
     parameters: {
       query?: never;
       header?: never;
@@ -2686,7 +2686,7 @@ export interface paths {
         header?: never;
         path: {
           projectId: string;
-          contextId: string;
+          conversationId: string;
         };
         cookie?: never;
       };
@@ -2698,9 +2698,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ApiResultOfProjectContextResponse"];
-            "application/json": components["schemas"]["ApiResultOfProjectContextResponse"];
-            "text/json": components["schemas"]["ApiResultOfProjectContextResponse"];
+            "text/plain": components["schemas"]["ApiResultOfProjectConversationResponse"];
+            "application/json": components["schemas"]["ApiResultOfProjectConversationResponse"];
+            "text/json": components["schemas"]["ApiResultOfProjectConversationResponse"];
           };
         };
       };
@@ -2713,7 +2713,7 @@ export interface paths {
         header?: never;
         path: {
           projectId: string;
-          contextId: string;
+          conversationId: string;
         };
         cookie?: never;
       };
@@ -2737,7 +2737,51 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/api/projects/{projectId}/contexts/{contextId}/clear-records": {
+  "/api/projects/{projectId}/conversations/{conversationId}/messages": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          direction?: components["schemas"]["ProjectConversationMessageDirection"];
+          cursor?: string;
+          pageSize?: number;
+        };
+        header?: never;
+        path: {
+          projectId: string;
+          conversationId: string;
+        };
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfProjectConversationMessagePageResponse"];
+            "application/json": components["schemas"]["ApiResultOfProjectConversationMessagePageResponse"];
+            "text/json": components["schemas"]["ApiResultOfProjectConversationMessagePageResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/projects/{projectId}/conversations/{conversationId}/clear-records": {
     parameters: {
       query?: never;
       header?: never;
@@ -2753,7 +2797,7 @@ export interface paths {
         header?: never;
         path: {
           projectId: string;
-          contextId: string;
+          conversationId: string;
         };
         cookie?: never;
       };
@@ -2777,7 +2821,7 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/api/projects/{projectId}/contexts/{contextId}/title": {
+  "/api/projects/{projectId}/conversations/{conversationId}/title": {
     parameters: {
       query?: never;
       header?: never;
@@ -2791,15 +2835,15 @@ export interface paths {
         header?: never;
         path: {
           projectId: string;
-          contextId: string;
+          conversationId: string;
         };
         cookie?: never;
       };
       requestBody: {
         content: {
-          "application/json": components["schemas"]["ProjectContextTitleUpdateRequest"];
-          "text/json": components["schemas"]["ProjectContextTitleUpdateRequest"];
-          "application/*+json": components["schemas"]["ProjectContextTitleUpdateRequest"];
+          "application/json": components["schemas"]["ProjectConversationTitleUpdateRequest"];
+          "text/json": components["schemas"]["ProjectConversationTitleUpdateRequest"];
+          "application/*+json": components["schemas"]["ProjectConversationTitleUpdateRequest"];
         };
       };
       responses: {
@@ -4614,15 +4658,22 @@ export interface components {
       title: string;
       detail: null | string;
     };
-    ApiResultOfProjectContextResponse: {
-      data?: null | components["schemas"]["ProjectContextResponse"];
+    ApiResultOfProjectConversationMessagePageResponse: {
+      data?: null | components["schemas"]["ProjectConversationMessagePageResponse"];
       /** Format: int32 */
       code: number;
       title: string;
       detail: null | string;
     };
-    "ApiResultOfProjectContextSummaryResponse[]": {
-      data?: null | components["schemas"]["ProjectContextSummaryResponse"][];
+    ApiResultOfProjectConversationResponse: {
+      data?: null | components["schemas"]["ProjectConversationResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
+    "ApiResultOfProjectConversationSummaryResponse[]": {
+      data?: null | components["schemas"]["ProjectConversationSummaryResponse"][];
       /** Format: int32 */
       code: number;
       title: string;
@@ -5299,11 +5350,21 @@ export interface components {
       /** Format: uuid */
       connectionId: string;
     };
-    ProjectContextResponse: {
+    /** @enum {unknown} */
+    ProjectConversationMessageDirection: "newer" | "older";
+    ProjectConversationMessagePageResponse: {
+      items: components["schemas"]["AgwMessage"][];
+      nextCursor: null | string;
+      hasMore: boolean;
+    };
+    ProjectConversationResponse: {
       projectId: string;
+      /** Format: uuid */
+      conversationId: string;
       contextId: string;
       /** Format: uuid */
       jobId: null | string;
+      title: string;
       latestStatus: null | components["schemas"]["TaskExecutionStatus"];
       /** Format: int32 */
       executionCount: number;
@@ -5314,11 +5375,18 @@ export interface components {
       /** Format: date-time */
       updateTime: null | string;
       errorMessage: null | string;
-      usage: components["schemas"]["ProjectContextUsage"];
-      messages: null | components["schemas"]["AgwMessage"][];
+      usage: components["schemas"]["ProjectConversationUsage"];
+      resumeState: null | components["schemas"]["ProjectConversationResumeStateResponse"];
     };
-    ProjectContextSummaryResponse: {
+    ProjectConversationResumeStateResponse: {
+      targetType: null | string;
+      targetId: null | string;
+      agentMode: null | string;
+    };
+    ProjectConversationSummaryResponse: {
       projectId: string;
+      /** Format: uuid */
+      conversationId: string;
       contextId: string;
       /** Format: uuid */
       jobId: null | string;
@@ -5334,10 +5402,10 @@ export interface components {
       updateTime: null | string;
       errorMessage: null | string;
     };
-    ProjectContextTitleUpdateRequest: {
+    ProjectConversationTitleUpdateRequest: {
       title: string;
     };
-    ProjectContextUsage: {
+    ProjectConversationUsage: {
       /** Format: int64 */
       inputTokenCount: number | string;
       /** Format: int64 */

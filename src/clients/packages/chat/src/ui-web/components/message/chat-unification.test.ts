@@ -56,11 +56,38 @@ test("auto-scroll state is shared through chat-core", async () => {
   assert.match(source, /shouldAutoScroll/);
 });
 
+test("shared Chat prepends cursor pages without losing the visible scroll anchor", async () => {
+  const source = await readFile(CHAT_URL, "utf8");
+
+  assert.match(source, /getProjectConversationMessages/);
+  assert.match(source, /direction: "older"/);
+  assert.match(source, /pendingPrependAnchorRef/);
+  assert.match(source, /scrollContainer\.scrollHeight - prependAnchor\.scrollHeight/);
+  assert.match(source, /prependUniqueMessages/);
+});
+
+test("scroll-to-top exhausts older cursor pages before moving to the first message", async () => {
+  const source = await readFile(CHAT_URL, "utf8");
+
+  assert.match(source, /const handleScrollToTop = React\.useCallback\(async \(\) =>/);
+  assert.match(source, /while \(hasMore && cursor\)/);
+  assert.match(source, /pages\.reverse\(\)\.flat\(\)/);
+  assert.match(source, /setMessages\(\(current\) =>/);
+  assert.match(
+    source,
+    /requestAnimationFrame\(\(\) => \{[\s\S]*?requestAnimationFrame\(\(\) => \{[\s\S]*?scrollTo\(\{ top: 0, behavior: "auto" \}\)/,
+  );
+});
+
 test("scroll to bottom reaches the full conversation scroll extent", async () => {
   const source = await readFile(CHAT_URL, "utf8");
   assert.match(
     source,
-    /scrollContainer\.scrollTo\(\{[\s\S]*?top: scrollContainer\.scrollHeight[\s\S]*?behavior: "smooth"/,
+    /currentScrollContainer\?\.scrollTo\(\{[\s\S]*?top: currentScrollContainer\.scrollHeight[\s\S]*?behavior: "auto"/,
+  );
+  assert.match(
+    source,
+    /scrollToLatestMessage\(\);[\s\S]*?requestAnimationFrame\(\(\) => \{[\s\S]*?requestAnimationFrame\(scrollToLatestMessage\)/,
   );
 });
 

@@ -157,10 +157,10 @@ public class TaskSessionBindingService : ITaskSessionBindingService
         return binding;
     }
 
-    public async Task DeleteByContextAsync(Guid projectConversationId, CancellationToken cancellationToken = default)
+    public async Task DeleteByConversationAsync(Guid conversationId, CancellationToken cancellationToken = default)
     {
         await _bindingRepository
-            .Queryable.Where(binding => binding.ProjectConversationId == projectConversationId)
+            .Queryable.Where(binding => binding.ProjectConversationId == conversationId)
             .ExecuteDeleteAsync(cancellationToken);
 
         await _unitOfWork.SaveChangesAsync();

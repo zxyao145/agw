@@ -10,7 +10,7 @@
     "./composer": "./src/composer.tsx",
     "./conversation": "./src/conversation-history.tsx",
     "./execution": "./src/native-execution-session.ts",
-    "./history": "./src/native-context-history.tsx",
+    "./history": "./src/native-conversation-list.tsx",
     "./provider": "./src/native-chat-provider.tsx",
     "./targets": "./src/chat-targets.ts",
     "./workspace": "./src/native-workspace-provider.tsx"

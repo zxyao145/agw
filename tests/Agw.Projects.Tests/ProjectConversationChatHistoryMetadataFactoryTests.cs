@@ -48,6 +48,19 @@ public class ProjectConversationChatHistoryMetadataFactoryTests
     }
 
     [Fact]
+    public void FromMessage_CopiesSupportedAgentMode()
+    {
+        var message = new ChatMessage(ChatRole.System, string.Empty)
+        {
+            AdditionalProperties = new AdditionalPropertiesDictionary { ["mode"] = "execute" },
+        };
+
+        var metadata = ProjectConversationChatHistoryMetadataFactory.FromMessage(message);
+
+        Assert.Equal("execute", metadata!["agentMode"].GetString());
+    }
+
+    [Fact]
     public void Create_UsesTrimmedInputPrefix()
     {
         var title = TaskTitleFactory.Create("  this is a chat title  ");

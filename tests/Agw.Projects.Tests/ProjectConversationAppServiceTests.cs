@@ -1,7 +1,7 @@
+using System.Text.Json;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Projects.Application;
-using Agw.Projects.Domain.Services;
 using Agw.Shared;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Agents;
@@ -9,6 +9,7 @@ using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
 using Microsoft.Data.Sqlite;
@@ -17,7 +18,7 @@ using Microsoft.Extensions.AI;
 
 namespace Agw.Projects.Tests;
 
-public class ProjectContextAppServiceTests
+public class ProjectConversationAppServiceTests
 {
     [Fact]
     public async Task ListResponsesAsync_GroupsTasksFromRecordsByContext()
@@ -52,6 +53,7 @@ public class ProjectContextAppServiceTests
 
         var context = Assert.Single(contexts);
         Assert.Equal(projectId.Normalize(), context.ProjectId);
+        Assert.Equal(contextId, context.ConversationId);
         Assert.Equal("context-1", context.ContextId);
         Assert.Equal(jobId, context.JobId);
         Assert.Equal("Trip", context.Title);
@@ -112,11 +114,12 @@ public class ProjectContextAppServiceTests
         var contexts = await service.ListResponsesAsync(projectId);
 
         var context = Assert.Single(contexts);
+        Assert.Equal(persistedContextId, context.ConversationId);
         Assert.Equal("persisted-context", context.ContextId);
     }
 
     [Fact]
-    public async Task GetResponseAsync_ReturnsMessagesForRequestedContextOnly()
+    public async Task GetResponseAsync_ReturnsMetadataAndMessagePageForRequestedConversationOnly()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -132,7 +135,7 @@ public class ProjectContextAppServiceTests
         var firstTaskId = Guid.CreateVersion7();
         var secondTaskId = Guid.CreateVersion7();
         var otherTaskId = Guid.CreateVersion7();
-        var expectedUsage = new ProjectContextUsage
+        var expectedUsage = new ProjectConversationUsage
         {
             InputTokenCount = 10,
             OutputTokenCount = 20,
@@ -155,7 +158,7 @@ public class ProjectContextAppServiceTests
             );
             seedContext.ProjectConversationChatHistories.AddRange(
                 CreateRecord(contextId, firstTaskId, 0, "Tokyo trip", TaskExecutionStatus.Succeeded),
-                CreateRecord(contextId, secondTaskId, 0, "Hotels", TaskExecutionStatus.Succeeded),
+                CreateRecord(contextId, secondTaskId, 1, "Hotels", TaskExecutionStatus.Succeeded),
                 CreateRecord(otherContextId, otherTaskId, 0, "Wrong context", TaskExecutionStatus.Succeeded)
             );
             await seedContext.SaveChangesAsync(cancellationToken);
@@ -164,17 +167,63 @@ public class ProjectContextAppServiceTests
         await using var dbContext = new AgwDbContext(options);
         var service = CreateService(dbContext);
 
-        var context = await service.GetResponseAsync(projectId, "context-1");
+        var context = await service.GetResponseAsync(projectId, contextId, cancellationToken);
 
         Assert.NotNull(context);
         Assert.Equal(jobId, context.JobId);
+        Assert.Equal(contextId, context.ConversationId);
+        Assert.Equal("context-1", context.ContextId);
+        Assert.Equal("Trip", context.Title);
         Assert.Equal(2, context.ExecutionCount);
         Assert.Equal(expectedUsage, context.Usage);
-        Assert.Equal(["Tokyo trip", "Hotels"], context.Messages!.Select(GetMessageText));
+
+        var page = await service.GetMessagePageAsync(
+            projectId,
+            contextId,
+            new ProjectConversationMessagesQuery(),
+            cancellationToken
+        );
+
+        Assert.NotNull(page);
+        Assert.Equal(["Tokyo trip", "Hotels"], page.Items.Select(GetMessageText));
     }
 
     [Fact]
-    public async Task GetResponseAsync_WhenContextContainsToolBlockState_ReturnsStateMessage()
+    public async Task GetResponseAsync_ConversationIdNeverFallsBackToContextId()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        var contextId = Guid.CreateVersion7();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            seedContext.ProjectConversations.Add(
+                CreateContext(conversationId, projectId, contextId.ToString("D"), "Distinct IDs")
+            );
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+
+        var response = await service.GetResponseAsync(projectId, conversationId, cancellationToken);
+        var contextIdLookup = await service.GetResponseAsync(projectId, contextId, cancellationToken);
+
+        Assert.NotNull(response);
+        Assert.Equal(conversationId, response.ConversationId);
+        Assert.Equal(contextId.ToString("D"), response.ContextId);
+        Assert.Null(contextIdLookup);
+    }
+
+    [Fact]
+    public async Task GetMessagePageAsync_WhenConversationContainsToolBlockState_ReturnsStateMessage()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -209,15 +258,77 @@ public class ProjectContextAppServiceTests
         await using var dbContext = new AgwDbContext(options);
         var service = CreateService(dbContext);
 
-        var context = await service.GetResponseAsync(projectId, "context-1");
+        var page = await service.GetMessagePageAsync(
+            projectId,
+            contextId,
+            new ProjectConversationMessagesQuery(),
+            cancellationToken
+        );
 
-        var message = Assert.Single(context!.Messages!);
+        var message = Assert.Single(page!.Items);
         Assert.Equal("tools", message.Author);
         Assert.Equal(ToolMessageTypes.TodoSnapshot, message.AdditionalProperties!["type"]?.ToString());
     }
 
     [Fact]
-    public async Task GetResponseAsync_OrdersMessagesByContextConversationSequenceAcrossExecutions()
+    public async Task GetResponseAsync_ReturnsResumeTargetAndAgentModeWithoutReturningMessages()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        var targetId = Guid.CreateVersion7();
+        var targetRecord = CreateRecord(
+            conversationId,
+            Guid.CreateVersion7(),
+            0,
+            "hello",
+            TaskExecutionStatus.Succeeded
+        );
+        targetRecord.Metadata = new Dictionary<string, JsonElement>
+        {
+            ["targetType"] = JsonSerializer.SerializeToElement("agent"),
+            ["targetId"] = JsonSerializer.SerializeToElement(targetId.ToString("D")),
+        };
+        var modeRecord = CreateRecord(
+            conversationId,
+            Guid.CreateVersion7(),
+            1,
+            new ChatMessage(ChatRole.System, [new TextContent(string.Empty)])
+            {
+                MessageId = Guid.CreateVersion7().ToString(),
+                AdditionalProperties = new AdditionalPropertiesDictionary { ["mode"] = "plan" },
+            },
+            TaskExecutionStatus.Succeeded
+        );
+
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            seedContext.ProjectConversations.Add(CreateContext(conversationId, projectId, "conversation-1", "History"));
+            seedContext.ProjectConversationChatHistories.AddRange(targetRecord, modeRecord);
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+
+        var response = await service.GetResponseAsync(projectId, conversationId, cancellationToken);
+
+        Assert.NotNull(response);
+        Assert.Equal("agent", response.ResumeState?.TargetType);
+        Assert.Equal(targetId.ToString("D"), response.ResumeState?.TargetId);
+        Assert.Equal("plan", response.ResumeState?.AgentMode);
+        Assert.Null(typeof(ProjectConversationResponse).GetProperty("Messages"));
+    }
+
+    [Fact]
+    public async Task GetMessagePageAsync_OrdersMessagesByConversationSequenceAcrossExecutions()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -246,12 +357,205 @@ public class ProjectContextAppServiceTests
         await using var dbContext = new AgwDbContext(options);
         var service = CreateService(dbContext);
 
-        var context = await service.GetResponseAsync(projectId, "context-1");
+        var context = await service.GetResponseAsync(projectId, contextId, cancellationToken);
+        var page = await service.GetMessagePageAsync(
+            projectId,
+            contextId,
+            new ProjectConversationMessagesQuery(),
+            cancellationToken
+        );
 
         Assert.NotNull(context);
         Assert.Equal(2, context.ExecutionCount);
-        Assert.Equal(new ProjectContextUsage(), context.Usage);
-        Assert.Equal(["first", "second", "third"], context.Messages!.Select(GetMessageText));
+        Assert.Equal(new ProjectConversationUsage(), context.Usage);
+        Assert.Equal(["first", "second", "third"], page!.Items.Select(GetMessageText));
+    }
+
+    [Fact]
+    public async Task GetMessagePageAsync_NewerDirectionPaginatesWithoutOverlap()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            seedContext.ProjectConversations.Add(CreateContext(conversationId, projectId, "conversation-1", "History"));
+            seedContext.ProjectConversationChatHistories.AddRange(
+                Enumerable
+                    .Range(0, 7)
+                    .Select(index =>
+                        CreateRecord(
+                            conversationId,
+                            Guid.CreateVersion7(),
+                            index,
+                            $"message-{index}",
+                            TaskExecutionStatus.Succeeded
+                        )
+                    )
+            );
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+        var first = await service.GetMessagePageAsync(
+            projectId,
+            conversationId,
+            new ProjectConversationMessagesQuery
+            {
+                Direction = ProjectConversationMessageDirection.Newer,
+                PageSize = 3,
+            },
+            cancellationToken
+        );
+        var second = await service.GetMessagePageAsync(
+            projectId,
+            conversationId,
+            new ProjectConversationMessagesQuery
+            {
+                Direction = ProjectConversationMessageDirection.Newer,
+                Cursor = first!.NextCursor,
+                PageSize = 3,
+            },
+            cancellationToken
+        );
+        var third = await service.GetMessagePageAsync(
+            projectId,
+            conversationId,
+            new ProjectConversationMessagesQuery
+            {
+                Direction = ProjectConversationMessageDirection.Newer,
+                Cursor = second!.NextCursor,
+                PageSize = 3,
+            },
+            cancellationToken
+        );
+
+        Assert.Equal(["message-0", "message-1", "message-2"], first.Items.Select(GetMessageText));
+        Assert.Equal(["message-3", "message-4", "message-5"], second.Items.Select(GetMessageText));
+        Assert.Equal(["message-6"], third!.Items.Select(GetMessageText));
+        Assert.True(first.HasMore);
+        Assert.True(second.HasMore);
+        Assert.False(third.HasMore);
+        Assert.Null(third.NextCursor);
+    }
+
+    [Fact]
+    public async Task GetMessagePageAsync_OlderDirectionStartsAtLatestAndRemainsStableAfterAppend()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            seedContext.ProjectConversations.Add(CreateContext(conversationId, projectId, "conversation-1", "History"));
+            seedContext.ProjectConversationChatHistories.AddRange(
+                Enumerable
+                    .Range(0, 6)
+                    .Select(index =>
+                        CreateRecord(
+                            conversationId,
+                            Guid.CreateVersion7(),
+                            index,
+                            $"message-{index}",
+                            TaskExecutionStatus.Succeeded
+                        )
+                    )
+            );
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+        var first = await service.GetMessagePageAsync(
+            projectId,
+            conversationId,
+            new ProjectConversationMessagesQuery
+            {
+                Direction = ProjectConversationMessageDirection.Older,
+                PageSize = 2,
+            },
+            cancellationToken
+        );
+
+        dbContext.ProjectConversationChatHistories.Add(
+            CreateRecord(conversationId, Guid.CreateVersion7(), 6, "message-6", TaskExecutionStatus.Succeeded)
+        );
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var second = await service.GetMessagePageAsync(
+            projectId,
+            conversationId,
+            new ProjectConversationMessagesQuery
+            {
+                Direction = ProjectConversationMessageDirection.Older,
+                Cursor = first!.NextCursor,
+                PageSize = 2,
+            },
+            cancellationToken
+        );
+
+        Assert.Equal(["message-4", "message-5"], first.Items.Select(GetMessageText));
+        Assert.Equal(["message-2", "message-3"], second!.Items.Select(GetMessageText));
+        Assert.DoesNotContain("message-6", second.Items.Select(GetMessageText));
+        Assert.True(second.HasMore);
+    }
+
+    [Theory]
+    [InlineData("not-a-cursor", 50)]
+    [InlineData(null, 0)]
+    [InlineData(null, 101)]
+    public async Task GetMessagePageAsync_InvalidQueryThrowsAgwException(string? cursor, int pageSize)
+    {
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite("Data Source=:memory:")
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+
+        await Assert.ThrowsAsync<AgwException>(() =>
+            service.GetMessagePageAsync(
+                Guid.CreateVersion7(),
+                Guid.Empty,
+                new ProjectConversationMessagesQuery { Cursor = cursor, PageSize = pageSize },
+                TestContext.Current.CancellationToken
+            )
+        );
+    }
+
+    [Fact]
+    public async Task GetMessagePageAsync_UndefinedDirectionThrowsAgwException()
+    {
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite("Data Source=:memory:")
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+
+        await Assert.ThrowsAsync<AgwException>(() =>
+            service.GetMessagePageAsync(
+                Guid.CreateVersion7(),
+                Guid.Empty,
+                new ProjectConversationMessagesQuery { Direction = (ProjectConversationMessageDirection)int.MaxValue },
+                TestContext.Current.CancellationToken
+            )
+        );
     }
 
     [Fact]
@@ -285,7 +589,7 @@ public class ProjectContextAppServiceTests
         await using (var dbContext = new AgwDbContext(options))
         {
             var service = CreateService(dbContext);
-            var deleted = await service.DeleteAsync(projectId, "context-1");
+            var deleted = await service.DeleteAsync(projectId, contextId);
             Assert.True(deleted);
         }
 
@@ -320,10 +624,10 @@ public class ProjectContextAppServiceTests
         await using var dbContext = new AgwDbContext(options);
         var service = CreateService(dbContext, bindingService);
 
-        var deleted = await service.DeleteAsync(projectId, "context-1");
+        var deleted = await service.DeleteAsync(projectId, contextId);
 
         Assert.True(deleted);
-        Assert.Equal([contextId], bindingService.DeletedContextIds);
+        Assert.Equal([contextId], bindingService.DeletedConversationIds);
     }
 
     [Fact]
@@ -359,7 +663,7 @@ public class ProjectContextAppServiceTests
         Assert.Equal(ApplicationResultType.Success, result.Type);
         Assert.Equal(
             new[] { firstContextId, secondContextId }.OrderBy(id => id),
-            bindingService.DeletedContextIds.OrderBy(id => id)
+            bindingService.DeletedConversationIds.OrderBy(id => id)
         );
         Assert.Single(await dbContext.AgentUsages.ToListAsync(cancellationToken));
     }
@@ -420,7 +724,7 @@ public class ProjectContextAppServiceTests
         await using var dbContext = new AgwDbContext(options);
         var service = CreateService(dbContext);
 
-        var result = await service.ClearRecordsAsync(projectId, "context-1");
+        var result = await service.ClearRecordsAsync(projectId, contextId);
 
         Assert.Equal(ApplicationResultType.Success, result.Type);
         Assert.Empty(await dbContext.ProjectConversationChatHistories.ToListAsync(cancellationToken));
@@ -455,11 +759,12 @@ public class ProjectContextAppServiceTests
         await using var dbContext = new AgwDbContext(options);
         var service = CreateService(dbContext);
 
-        var clearResult = await service.ClearRecordsAsync(projectId, "context-1");
+        var clearResult = await service.ClearRecordsAsync(projectId, contextId);
         var contexts = await service.ListResponsesAsync(projectId);
 
         Assert.Equal(ApplicationResultType.Success, clearResult.Type);
         var context = Assert.Single(contexts);
+        Assert.Equal(contextId, context.ConversationId);
         Assert.Equal("context-1", context.ContextId);
         Assert.Equal(0, context.ExecutionCount);
         Assert.Equal(0, context.MessageCount);
@@ -586,14 +891,14 @@ public class ProjectContextAppServiceTests
 
     private static string? GetMessageText(AgwMessage message) => (message.Contents[0] as AgwTextContent)?.Content;
 
-    private static ProjectContextAppService CreateService(
+    private static ProjectConversationAppService CreateService(
         AgwDbContext dbContext,
         ITaskSessionBindingService? taskSessionBindingService = null
     )
     {
         var projectRepository = new EfRepository<Project>(dbContext);
 
-        return new ProjectContextAppService(
+        return new ProjectConversationAppService(
             new EfRepository<ProjectConversation>(dbContext),
             new EfRepository<ProjectConversationChatHistory>(dbContext),
             new EfRepository<AgentflowCheckpointRecord>(dbContext),
@@ -601,7 +906,6 @@ public class ProjectContextAppServiceTests
             new EfRepository<AgentUsage>(dbContext),
             dbContext,
             new ProjectResolver(projectRepository),
-            new ProjectConversationChatHistoryDomainService(),
             taskSessionBindingService
                 ?? new TaskSessionBindingService(
                     new EfRepository<TaskSessionBinding>(dbContext),
@@ -615,7 +919,7 @@ public class ProjectContextAppServiceTests
 
     private sealed class CapturingTaskSessionBindingService : ITaskSessionBindingService
     {
-        public List<Guid> DeletedContextIds { get; } = [];
+        public List<Guid> DeletedConversationIds { get; } = [];
 
         public Task<TaskSessionBinding?> GetAsync(
             Guid projectId,
@@ -635,9 +939,9 @@ public class ProjectContextAppServiceTests
             CancellationToken cancellationToken = default
         ) => throw new NotSupportedException();
 
-        public Task DeleteByContextAsync(Guid projectConversationId, CancellationToken cancellationToken = default)
+        public Task DeleteByConversationAsync(Guid conversationId, CancellationToken cancellationToken = default)
         {
-            DeletedContextIds.Add(projectConversationId);
+            DeletedConversationIds.Add(conversationId);
             return Task.CompletedTask;
         }
     }

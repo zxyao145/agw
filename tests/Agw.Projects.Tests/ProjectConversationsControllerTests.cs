@@ -3,7 +3,6 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Projects.Application;
 using Agw.Projects.Controllers;
-using Agw.Projects.Domain.Services;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Executions;
@@ -14,14 +13,14 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Projects.Tests;
 
-public class ProjectContextsControllerTests
+public class ProjectConversationsControllerTests
 {
     [Fact]
-    public void ProjectContextsController_UsesProjectContextsRoute()
+    public void ProjectConversationsController_UsesProjectConversationsRoute()
     {
-        var attribute = Assert.Single(typeof(ProjectContextsController).GetCustomAttributes<RouteAttribute>());
+        var attribute = Assert.Single(typeof(ProjectConversationsController).GetCustomAttributes<RouteAttribute>());
 
-        Assert.Equal("api/projects/{projectId}/contexts", attribute.Template);
+        Assert.Equal("api/projects/{projectId}/conversations", attribute.Template);
     }
 
     [Fact]
@@ -30,13 +29,26 @@ public class ProjectContextsControllerTests
         var method = GetGetMethod();
         var attribute = Assert.Single(method.GetCustomAttributes<HttpGetAttribute>());
 
-        Assert.Equal("{contextId}", attribute.Template);
+        Assert.Equal("{conversationId}", attribute.Template);
     }
 
     [Fact]
-    public void ProjectContextsController_DoesNotExposeTaskIdRoute()
+    public void GetMessagesAsync_UsesConversationMessagesRoute()
     {
-        var taskIdRoutes = typeof(ProjectContextsController)
+        var method = typeof(ProjectConversationsController).GetMethod(
+            "GetMessagesAsync",
+            [typeof(Guid), typeof(Guid), typeof(ProjectConversationMessagesQuery), typeof(CancellationToken)]
+        );
+        Assert.NotNull(method);
+        var attribute = Assert.Single(method.GetCustomAttributes<HttpGetAttribute>());
+
+        Assert.Equal("{conversationId}/messages", attribute.Template);
+    }
+
+    [Fact]
+    public void ProjectConversationsController_DoesNotExposeTaskIdRoute()
+    {
+        var taskIdRoutes = typeof(ProjectConversationsController)
             .GetMethods()
             .SelectMany(method => method.GetCustomAttributes<HttpGetAttribute>())
             .Select(attribute => attribute.Template)
@@ -52,7 +64,7 @@ public class ProjectContextsControllerTests
         var method = GetClearRecordsMethod();
         var attribute = Assert.Single(method.GetCustomAttributes<HttpDeleteAttribute>());
 
-        Assert.Equal("{contextId}/clear-records", attribute.Template);
+        Assert.Equal("{conversationId}/clear-records", attribute.Template);
     }
 
     [Fact]
@@ -61,7 +73,7 @@ public class ProjectContextsControllerTests
         var method = GetUpdateTitleMethod();
         var attribute = Assert.Single(method.GetCustomAttributes<HttpPutAttribute>());
 
-        Assert.Equal("{contextId}/title", attribute.Template);
+        Assert.Equal("{conversationId}/title", attribute.Template);
     }
 
     [Fact]
@@ -79,7 +91,7 @@ public class ProjectContextsControllerTests
         var method = GetDeleteMethod();
         var attribute = Assert.Single(method.GetCustomAttributes<HttpDeleteAttribute>());
 
-        Assert.Equal("{contextId}", attribute.Template);
+        Assert.Equal("{conversationId}", attribute.Template);
     }
 
     [Fact]
@@ -109,7 +121,7 @@ public class ProjectContextsControllerTests
         }
 
         await using var dbContext = new AgwDbContext(options);
-        var controller = new ProjectContextsController(CreateService(dbContext));
+        var controller = new ProjectConversationsController(CreateService(dbContext));
 
         var result = await controller.ListAsync(projectId);
 
@@ -143,9 +155,9 @@ public class ProjectContextsControllerTests
         }
 
         await using var dbContext = new AgwDbContext(options);
-        var controller = new ProjectContextsController(CreateService(dbContext));
+        var controller = new ProjectConversationsController(CreateService(dbContext));
 
-        var result = await controller.ClearRecordsAsync(projectId, "missing-context");
+        var result = await controller.ClearRecordsAsync(projectId, Guid.CreateVersion7());
 
         Assert.StartsWith("Bens.Results.ApiResult", result.GetType().FullName);
     }
@@ -177,9 +189,9 @@ public class ProjectContextsControllerTests
         }
 
         await using var dbContext = new AgwDbContext(options);
-        var controller = new ProjectContextsController(CreateService(dbContext));
+        var controller = new ProjectConversationsController(CreateService(dbContext));
 
-        var result = await controller.DeleteAsync(projectId, "missing-context");
+        var result = await controller.DeleteAsync(projectId, Guid.CreateVersion7());
 
         Assert.StartsWith("Bens.Results.ApiResult", result.GetType().FullName);
     }
@@ -211,12 +223,12 @@ public class ProjectContextsControllerTests
         }
 
         await using var dbContext = new AgwDbContext(options);
-        var controller = new ProjectContextsController(CreateService(dbContext));
+        var controller = new ProjectConversationsController(CreateService(dbContext));
 
         var result = await controller.UpdateTitleAsync(
             projectId,
-            "context-1",
-            new ProjectContextTitleUpdateRequest("   ")
+            Guid.CreateVersion7(),
+            new ProjectConversationTitleUpdateRequest("   ")
         );
 
         Assert.StartsWith("Bens.Results.ApiResult", result.GetType().FullName);
@@ -249,16 +261,19 @@ public class ProjectContextsControllerTests
         }
 
         await using var dbContext = new AgwDbContext(options);
-        var controller = new ProjectContextsController(CreateService(dbContext));
+        var controller = new ProjectConversationsController(CreateService(dbContext));
 
-        var result = await controller.GetAsync(projectId, "missing-context");
+        var result = await controller.GetAsync(projectId, Guid.CreateVersion7(), cancellationToken);
 
         Assert.StartsWith("Bens.Results.ApiResult", result.GetType().FullName);
     }
 
     private static MethodInfo GetGetMethod()
     {
-        var method = typeof(ProjectContextsController).GetMethod("GetAsync", [typeof(Guid), typeof(string)]);
+        var method = typeof(ProjectConversationsController).GetMethod(
+            "GetAsync",
+            [typeof(Guid), typeof(Guid), typeof(CancellationToken)]
+        );
 
         Assert.NotNull(method);
         return method;
@@ -266,7 +281,10 @@ public class ProjectContextsControllerTests
 
     private static MethodInfo GetClearRecordsMethod()
     {
-        var method = typeof(ProjectContextsController).GetMethod("ClearRecordsAsync", [typeof(Guid), typeof(string)]);
+        var method = typeof(ProjectConversationsController).GetMethod(
+            "ClearRecordsAsync",
+            [typeof(Guid), typeof(Guid)]
+        );
 
         Assert.NotNull(method);
         return method;
@@ -274,9 +292,9 @@ public class ProjectContextsControllerTests
 
     private static MethodInfo GetUpdateTitleMethod()
     {
-        var method = typeof(ProjectContextsController).GetMethod(
+        var method = typeof(ProjectConversationsController).GetMethod(
             "UpdateTitleAsync",
-            [typeof(Guid), typeof(string), typeof(ProjectContextTitleUpdateRequest)]
+            [typeof(Guid), typeof(Guid), typeof(ProjectConversationTitleUpdateRequest)]
         );
 
         Assert.NotNull(method);
@@ -285,7 +303,7 @@ public class ProjectContextsControllerTests
 
     private static MethodInfo GetDeleteAllMethod()
     {
-        var method = typeof(ProjectContextsController).GetMethod("DeleteAllAsync", [typeof(Guid)]);
+        var method = typeof(ProjectConversationsController).GetMethod("DeleteAllAsync", [typeof(Guid)]);
 
         Assert.NotNull(method);
         return method;
@@ -293,7 +311,7 @@ public class ProjectContextsControllerTests
 
     private static MethodInfo GetDeleteMethod()
     {
-        var method = typeof(ProjectContextsController).GetMethod("DeleteAsync", [typeof(Guid), typeof(string)]);
+        var method = typeof(ProjectConversationsController).GetMethod("DeleteAsync", [typeof(Guid), typeof(Guid)]);
 
         Assert.NotNull(method);
         return method;
@@ -311,11 +329,11 @@ public class ProjectContextsControllerTests
         await setupContext.Database.EnsureCreatedAsync(cancellationToken);
     }
 
-    private static ProjectContextAppService CreateService(AgwDbContext dbContext)
+    private static ProjectConversationAppService CreateService(AgwDbContext dbContext)
     {
         var projectRepository = new EfRepository<Project>(dbContext);
 
-        return new ProjectContextAppService(
+        return new ProjectConversationAppService(
             new EfRepository<ProjectConversation>(dbContext),
             new EfRepository<ProjectConversationChatHistory>(dbContext),
             new EfRepository<AgentflowCheckpointRecord>(dbContext),
@@ -323,7 +341,6 @@ public class ProjectContextsControllerTests
             new EfRepository<AgentUsage>(dbContext),
             dbContext,
             new ProjectResolver(projectRepository),
-            new ProjectConversationChatHistoryDomainService(),
             new TaskSessionBindingService(
                 new EfRepository<TaskSessionBinding>(dbContext),
                 new EfRepository<ProjectConversation>(dbContext),

@@ -8,7 +8,12 @@ import { toast } from "sonner";
 
 import { getFileDiff, readFile, type GitDiffResponse, type GitDiffScope } from "@agw/projects";
 import { apiGet } from "@agw/api";
-import { getProjectContextDetails, type ContextSummary } from "@agw/projects";
+import {
+  getProjectConversationDetails,
+  getProjectConversationMessages,
+  type ConversationResumeState,
+  type ConversationSummary,
+} from "@agw/projects";
 import { AgentSelector, type AgentSelection } from "../../components/agent-selector";
 import { Explorer, FileContent } from "@agw/projects";
 import type { LineComment } from "@agw/projects";
@@ -35,7 +40,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@agw/components";
 import { EMPTY_TOKEN_USAGE } from "@agw/api";
 import { buildChatHref, type ChatRouteBasePath } from "../../../lib/chat-route";
 import { cn } from "@agw/components";
-import type { AiMessage } from "@agw/api";
 import { chatSettingsStorage } from "./settings-storage";
 import ColResizeSplit from "./components/split-layout";
 import {
@@ -44,7 +48,7 @@ import {
 } from "./lib/chat-settings";
 import {
   getChatRouteSessionAction,
-  getContextHydrationKey,
+  getConversationHydrationKey,
   getRouteHydrationKey,
 } from "./lib/session-routing";
 import {
@@ -84,27 +88,12 @@ export type ChatWorkspaceProps = {
   compactToolbar?: boolean;
 };
 
-function getRestoredTargetValue(messages: AiMessage[]): string | null {
-  for (let messageIndex = messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
-    const message = messages[messageIndex];
-    if (message.role !== "user") {
-      continue;
-    }
+function getResumeTargetValue(resumeState: ConversationResumeState | null): string | null {
+  return getTargetValueFromMetadata(resumeState?.targetType, resumeState?.targetId);
+}
 
-    for (let contentIndex = message.contents.length - 1; contentIndex >= 0; contentIndex -= 1) {
-      const content = message.contents[contentIndex];
-      const restoredValue = getTargetValueFromMetadata(
-        content.additionalProperties?.targetType,
-        content.additionalProperties?.targetId,
-      );
-
-      if (restoredValue) {
-        return restoredValue;
-      }
-    }
-  }
-
-  return null;
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
 }
 
 function clearLegacyChatSettingsUrl(): void {
@@ -311,7 +300,7 @@ export function ChatWorkspace({
   const searchParams = useSearchParams();
   const executionServerId = useExecutionPlatform().serverId;
   const queryProjectId = searchParams.get("projectId");
-  const queryContextId = searchParams.get("contextId");
+  const queryConversationId = searchParams.get("conversationId");
 
   React.useEffect(() => {
     clearLegacyChatSettingsUrl();
@@ -326,12 +315,16 @@ export function ChatWorkspace({
   const [selectedTargetValue, setSelectedTargetValue] = React.useState<string | null>(null);
   const [showChatHistory, setShowChatHistory] = React.useState(true);
   const [showFileExplorer, setShowFileExplorer] = React.useState(true);
-  const [contextId, setContextId] = React.useState<string | null>(queryContextId);
+  const [conversationId, setConversationId] = React.useState<string | null>(queryConversationId);
+  const [contextId, setContextId] = React.useState<string | null>(null);
   const [chatSessionSeed, setChatSessionSeed] = React.useState<ChatSessionSeed>({
     revision: 0,
-    contextId: queryContextId,
+    contextId: null,
     messages: [],
     usage: EMPTY_TOKEN_USAGE,
+    olderMessagesCursor: null,
+    hasOlderMessages: false,
+    agentMode: null,
   });
   const [conversationListRefreshSignal, setConversationListRefreshSignal] = React.useState(0);
   const [drawerContent, setDrawerContent] = React.useState<"chat" | "files" | null>(null);
@@ -346,8 +339,16 @@ export function ChatWorkspace({
   const [comments, setComments] = React.useState<LineComment[]>([]);
   const [envVars, setEnvVars] = React.useState<EnvVar[]>([]);
 
-  const hydratedContextKeyRef = React.useRef<string | null>(null);
+  const hydratedConversationKeyRef = React.useRef<string | null>(null);
+  const conversationLoadAbortRef = React.useRef<AbortController | null>(null);
   const fileLoadGenerationRef = React.useRef(0);
+
+  React.useEffect(
+    () => () => {
+      conversationLoadAbortRef.current?.abort();
+    },
+    [],
+  );
 
   const projectsQuery = useQuery({
     queryKey: ["projects"],
@@ -394,10 +395,10 @@ export function ChatWorkspace({
   const hasProjectFileSystem = selectedProjectId !== null;
 
   const syncRoute = React.useCallback(
-    (projectId: string | null, contextIdValue: string | null = null) => {
+    (projectId: string | null, conversationIdValue: string | null = null) => {
       const nextHref = buildChatHref(routeBasePath, {
         projectId,
-        contextId: contextIdValue,
+        conversationId: conversationIdValue,
       });
 
       if (
@@ -566,12 +567,18 @@ export function ChatWorkspace({
   );
 
   const clearLocalSessionState = React.useCallback(() => {
-    hydratedContextKeyRef.current = null;
+    conversationLoadAbortRef.current?.abort();
+    conversationLoadAbortRef.current = null;
+    hydratedConversationKeyRef.current = null;
+    setConversationId(null);
     setContextId(null);
     replaceChatSession({
       contextId: null,
       messages: [],
       usage: EMPTY_TOKEN_USAGE,
+      olderMessagesCursor: null,
+      hasOlderMessages: false,
+      agentMode: null,
     });
   }, [replaceChatSession]);
 
@@ -585,24 +592,61 @@ export function ChatWorkspace({
     syncRoute(selectedProjectId, null);
   }, [clearLocalSessionState, selectedProjectId, syncRoute]);
 
-  const loadContextHistory = React.useCallback(
-    async (projectId: string, nextContextIdValue: string) => {
-      const details = await getProjectContextDetails(projectId, nextContextIdValue);
-      const restoredTargetValue = getRestoredTargetValue(details.messages ?? []);
+  const loadConversationHistory = React.useCallback(
+    async (projectId: string, nextConversationId: string, signal?: AbortSignal) => {
+      conversationLoadAbortRef.current?.abort();
+      const abortController = new AbortController();
+      conversationLoadAbortRef.current = abortController;
+      const abortFromCaller = () => abortController.abort();
+      signal?.addEventListener("abort", abortFromCaller, { once: true });
 
-      hydratedContextKeyRef.current = getContextHydrationKey(projectId, details.contextId);
-      setSelectedProjectId(projectId);
-      setContextId(details.contextId);
-      replaceChatSession({
-        contextId: details.contextId,
-        messages: details.messages ?? [],
-        usage: details.usage,
-      });
-      if (restoredTargetValue) {
-        setSelectedTargetValue(restoredTargetValue);
+      try {
+        const [details, messagePage] = await Promise.all([
+          getProjectConversationDetails(
+            projectId,
+            nextConversationId,
+            undefined,
+            abortController.signal,
+          ),
+          getProjectConversationMessages(projectId, nextConversationId, {
+            direction: "older",
+            pageSize: 50,
+            signal: abortController.signal,
+          }),
+        ]);
+        abortController.signal.throwIfAborted();
+        const restoredTargetValue = getResumeTargetValue(details.resumeState);
+
+        hydratedConversationKeyRef.current = getConversationHydrationKey(
+          projectId,
+          details.conversationId,
+        );
+        setSelectedProjectId(projectId);
+        setConversationId(details.conversationId);
+        setContextId(details.contextId);
+        replaceChatSession({
+          contextId: details.contextId,
+          messages: messagePage.items,
+          usage: details.usage,
+          olderMessagesCursor: messagePage.nextCursor,
+          hasOlderMessages: messagePage.hasMore,
+          agentMode:
+            details.resumeState?.agentMode === "plan" ||
+            details.resumeState?.agentMode === "execute"
+              ? details.resumeState.agentMode
+              : null,
+        });
+        if (restoredTargetValue) {
+          setSelectedTargetValue(restoredTargetValue);
+        }
+        syncRoute(projectId, details.conversationId);
+        return details;
+      } finally {
+        signal?.removeEventListener("abort", abortFromCaller);
+        if (conversationLoadAbortRef.current === abortController) {
+          conversationLoadAbortRef.current = null;
+        }
       }
-      syncRoute(projectId, details.contextId);
-      return details;
     },
     [replaceChatSession, syncRoute],
   );
@@ -701,8 +745,8 @@ export function ChatWorkspace({
   React.useEffect(() => {
     const routeAction = getChatRouteSessionAction({
       queryProjectId,
-      queryContextId,
-      hydratedRouteKey: hydratedContextKeyRef.current,
+      queryConversationId,
+      hydratedRouteKey: hydratedConversationKeyRef.current,
     });
 
     if (routeAction.type === "clearLocal") {
@@ -723,41 +767,32 @@ export function ChatWorkspace({
 
     const hydrationKey = getRouteHydrationKey(routeAction);
     if (hydrationKey) {
-      hydratedContextKeyRef.current = hydrationKey;
+      hydratedConversationKeyRef.current = hydrationKey;
     }
 
     let cancelled = false;
+    const abortController = new AbortController();
 
     void (async () => {
       try {
-        if (routeAction.type === "hydrateContext") {
-          const details = await getProjectContextDetails(
+        if (routeAction.type === "hydrateConversation") {
+          const details = await loadConversationHistory(
             routeAction.projectId,
-            routeAction.contextId,
+            routeAction.conversationId,
+            abortController.signal,
           );
-          const restoredTargetValue = getRestoredTargetValue(details.messages ?? []);
           if (cancelled) {
             return;
           }
 
-          hydratedContextKeyRef.current = routeAction.hydrateKey;
-          setSelectedProjectId(routeAction.projectId);
-          setContextId(details.contextId);
-          replaceChatSession({
-            contextId: details.contextId,
-            messages: details.messages ?? [],
-            usage: details.usage,
-          });
-          if (restoredTargetValue) {
-            setSelectedTargetValue(restoredTargetValue);
-          }
-          syncRoute(routeAction.projectId, details.contextId);
+          hydratedConversationKeyRef.current = routeAction.hydrateKey;
+          syncRoute(routeAction.projectId, details.conversationId);
           return;
         }
       } catch (error) {
-        if (!cancelled) {
-          if (hydrationKey && hydratedContextKeyRef.current === hydrationKey) {
-            hydratedContextKeyRef.current = null;
+        if (!cancelled && !isAbortError(error)) {
+          if (hydrationKey && hydratedConversationKeyRef.current === hydrationKey) {
+            hydratedConversationKeyRef.current = null;
           }
           toast.error(`Failed to load chat history: ${getApiErrorMessage(error)}`);
         }
@@ -766,8 +801,15 @@ export function ChatWorkspace({
 
     return () => {
       cancelled = true;
+      abortController.abort();
     };
-  }, [clearLocalSessionState, queryContextId, queryProjectId, replaceChatSession, syncRoute]);
+  }, [
+    clearLocalSessionState,
+    loadConversationHistory,
+    queryConversationId,
+    queryProjectId,
+    syncRoute,
+  ]);
 
   const handleProjectChange = React.useCallback(
     (nextProjectId: string) => {
@@ -775,14 +817,20 @@ export function ChatWorkspace({
         return;
       }
 
-      hydratedContextKeyRef.current = null;
+      conversationLoadAbortRef.current?.abort();
+      conversationLoadAbortRef.current = null;
+      hydratedConversationKeyRef.current = null;
       setSelectedProjectId(nextProjectId);
       setSelectedTargetValue(null);
+      setConversationId(null);
       setContextId(null);
       replaceChatSession({
         contextId: null,
         messages: [],
         usage: EMPTY_TOKEN_USAGE,
+        olderMessagesCursor: null,
+        hasOlderMessages: false,
+        agentMode: null,
       });
       syncRoute(nextProjectId, null);
     },
@@ -817,41 +865,49 @@ export function ChatWorkspace({
 
   const handleChatContextIdChange = React.useCallback(
     (nextContextId: string | null) => {
-      hydratedContextKeyRef.current = nextContextId
-        ? getContextHydrationKey(selectedProjectId, nextContextId)
-        : null;
       setContextId(nextContextId);
-      syncRoute(selectedProjectId, nextContextId);
+      if (nextContextId == null) {
+        hydratedConversationKeyRef.current = null;
+        setConversationId(null);
+        syncRoute(selectedProjectId, null);
+      }
     },
     [selectedProjectId, syncRoute],
   );
 
-  const handleContextSelect = React.useCallback(
-    async (context: ContextSummary) => {
+  const handleConversationSelect = React.useCallback(
+    async (conversation: ConversationSummary) => {
       if (!selectedProjectId) {
         toast.error("Please select a project");
         return;
       }
 
       try {
-        await loadContextHistory(selectedProjectId, context.contextId);
+        await loadConversationHistory(selectedProjectId, conversation.conversationId);
         setIsDrawerOpen(false);
       } catch (error) {
+        if (isAbortError(error)) {
+          return;
+        }
         toast.error(`Failed to load conversation: ${getApiErrorMessage(error)}`);
       }
     },
-    [loadContextHistory, selectedProjectId],
+    [loadConversationHistory, selectedProjectId],
   );
 
-  const handleActiveContextResolved = React.useCallback(
-    (context: ContextSummary) => {
+  const handleActiveConversationResolved = React.useCallback(
+    (conversation: ConversationSummary) => {
       if (!selectedProjectId) {
         return;
       }
 
-      hydratedContextKeyRef.current = getContextHydrationKey(selectedProjectId, context.contextId);
-      setContextId(context.contextId);
-      syncRoute(selectedProjectId, context.contextId);
+      hydratedConversationKeyRef.current = getConversationHydrationKey(
+        selectedProjectId,
+        conversation.conversationId,
+      );
+      setConversationId(conversation.conversationId);
+      setContextId(conversation.contextId);
+      syncRoute(selectedProjectId, conversation.conversationId);
     },
     [selectedProjectId, syncRoute],
   );
@@ -925,11 +981,12 @@ export function ChatWorkspace({
       <ConversationList
         projectId={selectedProjectId ?? ""}
         currentContextId={contextId}
+        currentConversationId={conversationId}
         refreshSignal={conversationListRefreshSignal}
-        onContextSelect={(nextContext) => {
-          void handleContextSelect(nextContext);
+        onConversationSelect={(nextConversation) => {
+          void handleConversationSelect(nextConversation);
         }}
-        onActiveContextResolved={handleActiveContextResolved}
+        onActiveConversationResolved={handleActiveConversationResolved}
         onNewConversation={handleNewConversation}
         onAllConversationsDeleted={handleAllConversationsDeleted}
         headerActions={
@@ -944,10 +1001,11 @@ export function ChatWorkspace({
     [
       getActiveSettingsDraft,
       contextId,
+      conversationId,
       conversationListRefreshSignal,
-      handleActiveContextResolved,
+      handleActiveConversationResolved,
       handleAllConversationsDeleted,
-      handleContextSelect,
+      handleConversationSelect,
       handleNewConversation,
       handleSaveChatSettings,
       selectedProjectId,
@@ -1103,11 +1161,12 @@ export function ChatWorkspace({
                   <Chat
                     target={selectedTarget}
                     projectId={selectedProjectId}
+                    conversationId={conversationId}
                     sessionSeed={chatSessionSeed}
                     restoreDurableExecution={
                       Number(chatSessionSeed.revision) > 0 &&
                       queryProjectId === selectedProjectId &&
-                      queryContextId === contextId &&
+                      queryConversationId === conversationId &&
                       chatSessionSeed.contextId === contextId
                     }
                     environmentVariables={environmentVariables}

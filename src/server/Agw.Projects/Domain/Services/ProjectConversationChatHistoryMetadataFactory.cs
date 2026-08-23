@@ -41,6 +41,16 @@ public static class ProjectConversationChatHistoryMetadataFactory
             );
         }
 
+        if (message.AdditionalProperties?.TryGetValue("mode", out var mode) == true)
+        {
+            var modeValue = mode?.ToString();
+            if (modeValue is "plan" or "execute")
+            {
+                metadata ??= [];
+                metadata["agentMode"] = JsonSerializer.SerializeToElement(modeValue);
+            }
+        }
+
         return metadata;
     }
 }

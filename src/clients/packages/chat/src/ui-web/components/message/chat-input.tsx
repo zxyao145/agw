@@ -1,7 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { ArrowDown, ArrowUp, CornerDownRight, Eraser, RotateCcw, Square, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  CornerDownRight,
+  Eraser,
+  LoaderCircle,
+  RotateCcw,
+  Square,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { QuickTextDialog } from "@agw/projects";
@@ -21,6 +30,7 @@ import { UserInput, type UserInputRef } from "./user-input";
 interface ChatInputProps {
   isExecuting: boolean;
   isTransitioning: boolean;
+  isLoadingHistory: boolean;
   hasMessages: boolean;
   onExecute: (value: string, imageAttachments: readonly ChatImageAttachment[]) => void;
   onInterrupt: () => void;
@@ -45,6 +55,7 @@ interface ChatInputProps {
 export function ChatInput({
   isExecuting,
   isTransitioning,
+  isLoadingHistory,
   hasMessages,
   onExecute,
   onInterrupt,
@@ -247,12 +258,34 @@ export function ChatInput({
           <Eraser width={16} />
         </Button>
         <Separator orientation="vertical" />
-        <Button className="has-[>svg]:pl-2" onClick={onScrollToBottom} variant="ghost" size="sm">
+        <Button
+          className="has-[>svg]:pl-2"
+          onClick={onScrollToBottom}
+          disabled={!hasMessages || isLoadingHistory}
+          title="Go to latest message"
+          aria-label="Go to latest message"
+          variant="ghost"
+          size="sm"
+        >
           <ArrowDown width={16} />
         </Button>
         <Separator className="data-[orientation=vertical]:h-[60%]" orientation="vertical" />
-        <Button className="has-[>svg]:pr-2" onClick={onScrollToTop} variant="ghost" size="sm">
-          <ArrowUp width={16} />
+        <Button
+          className="has-[>svg]:pr-2"
+          onClick={onScrollToTop}
+          disabled={!hasMessages || isLoadingHistory}
+          title={isLoadingHistory ? "Loading complete conversation history" : "Go to first message"}
+          aria-label={
+            isLoadingHistory ? "Loading complete conversation history" : "Go to first message"
+          }
+          variant="ghost"
+          size="sm"
+        >
+          {isLoadingHistory ? (
+            <LoaderCircle className="animate-spin" width={16} />
+          ) : (
+            <ArrowUp width={16} />
+          )}
         </Button>
       </UserInput.TopRight>
       {isExecuting && !isTransitioning ? (

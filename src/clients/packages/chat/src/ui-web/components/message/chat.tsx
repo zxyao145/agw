@@ -27,7 +27,11 @@ import {
   type PendingHumanGate,
   type PermissionMode,
 } from "../../../services/execution-hub";
-import { clearProjectContextRecords, type LineComment } from "@agw/projects";
+import {
+  clearProjectConversationRecords,
+  getProjectConversationMessages,
+  type LineComment,
+} from "@agw/projects";
 import { ChatAside } from "./chat-aside";
 import { ChatInput } from "./chat-input";
 import { Conversation } from "./conversation";
@@ -65,11 +69,15 @@ export interface ChatSessionSeed {
   contextId: string | null;
   messages: AiMessage[];
   usage: TokenUsage;
+  olderMessagesCursor: string | null;
+  hasOlderMessages: boolean;
+  agentMode: AgentMode | null;
 }
 
 export interface ChatProps {
   target: Pick<ChatTargetOption, "id" | "type"> | null;
   projectId: string | null;
+  conversationId: string | null;
   sessionSeed: ChatSessionSeed;
   environmentVariables?: Record<string, string>;
   placeholder?: string;
@@ -119,6 +127,21 @@ function truncateAtCheckpoint(
   return [...messages.slice(0, boundaryIndex + 1), ...resumedMessages];
 }
 
+function prependUniqueMessages(
+  olderMessages: AiMessage[],
+  currentMessages: AiMessage[],
+): AiMessage[] {
+  const currentMessageIds = new Set(
+    currentMessages.map((message) => message.messageId).filter((messageId) => Boolean(messageId)),
+  );
+  return [
+    ...olderMessages.filter(
+      (message) => !message.messageId || !currentMessageIds.has(message.messageId),
+    ),
+    ...currentMessages,
+  ];
+}
+
 /**
  * Shared chat container that owns session state, execution, message rendering, and input.
  * 共享聊天容器，拥有会话状态、执行、消息渲染和输入。
@@ -126,6 +149,7 @@ function truncateAtCheckpoint(
 export function Chat({
   target,
   projectId,
+  conversationId,
   sessionSeed,
   environmentVariables,
   placeholder = "Type your message...",
@@ -155,17 +179,19 @@ export function Chat({
     sessionSeed.revision,
   );
   const [permissionMode, setPermissionMode] = React.useState<PermissionMode>("fullAccess");
-  const [agentMode, setAgentMode] = React.useState<AgentMode>(() =>
-    getLatestAgentMode(sessionSeed.messages),
+  const [agentMode, setAgentMode] = React.useState<AgentMode>(
+    () => sessionSeed.agentMode ?? getLatestAgentMode(sessionSeed.messages),
   );
+  const [hasOlderMessages, setHasOlderMessages] = React.useState(sessionSeed.hasOlderMessages);
+  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = React.useState(false);
+  const [isJumpingToTop, setIsJumpingToTop] = React.useState(false);
   const [pendingHumanGate, setPendingHumanGate] = React.useState<PendingHumanGate | null>(null);
   const [checkpointAvailability, setCheckpointAvailability] = React.useState<
     AgentflowCheckpointAvailability[]
   >([]);
   const contextIdRef = React.useRef<string | null>(sessionSeed.contextId);
   const announcedContextIdRef = React.useRef<string | null>(sessionSeed.contextId);
-  const messagesEndRef = React.useRef<HTMLDivElement>(null!);
-  const messagesStartRef = React.useRef<HTMLDivElement>(null!);
+  const conversationIdRef = React.useRef<string | null>(conversationId);
   const conversationScrollRef = React.useRef<HTMLDivElement>(null);
   const userInputRef = React.useRef<UserInputRef | null>(null);
   const executionClientRef = React.useRef<ManagedExecutionHandle | null>(null);
@@ -176,6 +202,14 @@ export function Chat({
   const checkpointResumeBufferRef = React.useRef<AiMessage[] | null>(null);
   const pendingTeardownCountRef = React.useRef(0);
   const activeStreamingScopeRef = React.useRef<string | null>(null);
+  const olderMessagesAbortRef = React.useRef<AbortController | null>(null);
+  const olderMessagesCursorRef = React.useRef<string | null>(sessionSeed.olderMessagesCursor);
+  const hasOlderMessagesRef = React.useRef(sessionSeed.hasOlderMessages);
+  const isLoadingOlderMessagesRef = React.useRef(false);
+  const pendingPrependAnchorRef = React.useRef<{
+    scrollHeight: number;
+    scrollTop: number;
+  } | null>(null);
   const confirmedAgentModeRef = React.useRef<AgentMode>(agentMode);
   const autoScrollStateRef = React.useRef<AutoScrollState>({
     shouldAutoScroll: true,
@@ -212,6 +246,10 @@ export function Chat({
   React.useEffect(() => {
     onReconnectStateChange?.(reconnectState);
   }, [onReconnectStateChange, reconnectState]);
+
+  React.useEffect(() => {
+    conversationIdRef.current = conversationId;
+  }, [conversationId]);
 
   const suggestionQueryParams = React.useMemo(
     () => getAgentSuggestionQueryParams(projectId, target),
@@ -329,6 +367,8 @@ export function Chat({
 
   React.useEffect(() => {
     const preparedHistory = prepareChatHistory(sessionSeed.messages);
+    olderMessagesAbortRef.current?.abort();
+    olderMessagesAbortRef.current = null;
     detachExecution();
     setPendingHumanGate(null);
     setCheckpointAvailability([]);
@@ -344,7 +384,14 @@ export function Chat({
     setContextId(sessionSeed.contextId);
     contextIdRef.current = sessionSeed.contextId;
     announcedContextIdRef.current = sessionSeed.contextId;
-    const nextAgentMode = getLatestAgentMode(sessionSeed.messages);
+    setHasOlderMessages(sessionSeed.hasOlderMessages);
+    setIsLoadingOlderMessages(false);
+    setIsJumpingToTop(false);
+    olderMessagesCursorRef.current = sessionSeed.olderMessagesCursor;
+    hasOlderMessagesRef.current = sessionSeed.hasOlderMessages;
+    isLoadingOlderMessagesRef.current = false;
+    pendingPrependAnchorRef.current = null;
+    const nextAgentMode = sessionSeed.agentMode ?? getLatestAgentMode(sessionSeed.messages);
     confirmedAgentModeRef.current = nextAgentMode;
     setAgentMode(nextAgentMode);
     userInputRef.current?.setInput("");
@@ -353,6 +400,7 @@ export function Chat({
 
   React.useEffect(() => {
     return () => {
+      olderMessagesAbortRef.current?.abort();
       detachExecution(false);
     };
   }, [detachExecution]);
@@ -360,6 +408,20 @@ export function Chat({
   React.useEffect(() => {
     const scrollContainer = conversationScrollRef.current;
     if (!scrollContainer) {
+      return;
+    }
+
+    const prependAnchor = pendingPrependAnchorRef.current;
+    if (prependAnchor) {
+      pendingPrependAnchorRef.current = null;
+      scrollContainer.scrollTop =
+        prependAnchor.scrollTop + (scrollContainer.scrollHeight - prependAnchor.scrollHeight);
+      autoScrollStateRef.current = {
+        ...autoScrollStateRef.current,
+        shouldAutoScroll: false,
+        scrollHeight: scrollContainer.scrollHeight,
+        scrollTop: scrollContainer.scrollTop,
+      };
       return;
     }
 
@@ -1086,7 +1148,9 @@ export function Chat({
   );
 
   const handleClear = React.useCallback(() => {
-    const contextToClear = contextId;
+    const conversationToClear = conversationId;
+    olderMessagesAbortRef.current?.abort();
+    olderMessagesAbortRef.current = null;
     void interruptAndDispose("Conversation cleared.");
     setPendingHumanGate(null);
     setCheckpointAvailability([]);
@@ -1094,32 +1158,215 @@ export function Chat({
     setMessages([]);
     setClaudeCommands([]);
     setConversationUsage(EMPTY_TOKEN_USAGE);
+    setHasOlderMessages(false);
+    setIsLoadingOlderMessages(false);
+    setIsJumpingToTop(false);
+    olderMessagesCursorRef.current = null;
+    hasOlderMessagesRef.current = false;
+    isLoadingOlderMessagesRef.current = false;
     userInputRef.current?.setInput("");
 
-    if (projectId && contextToClear) {
-      void clearProjectContextRecords(projectId, contextToClear)
+    if (projectId && conversationToClear) {
+      void clearProjectConversationRecords(projectId, conversationToClear)
         .then(() => onConversationChange?.())
         .catch(notifyExecutionError);
     } else {
       void onConversationChange?.();
     }
-  }, [contextId, interruptAndDispose, notifyExecutionError, onConversationChange, projectId]);
+  }, [conversationId, interruptAndDispose, notifyExecutionError, onConversationChange, projectId]);
 
   const handleClearPendingFileComments = React.useCallback(() => {
     if (pendingFileComments.length === 0) return;
     onPendingFileCommentsRemove?.(pendingFileComments.map((comment) => comment.id));
   }, [onPendingFileCommentsRemove, pendingFileComments]);
 
-  const handleScrollToTop = React.useCallback(() => {
+  const loadOlderMessages = React.useCallback(async () => {
+    const activeProjectId = projectId;
+    const activeConversationId = conversationIdRef.current;
+    const activeContextId = contextIdRef.current;
+    if (
+      !activeProjectId ||
+      !activeConversationId ||
+      !activeContextId ||
+      !hasOlderMessagesRef.current ||
+      !olderMessagesCursorRef.current ||
+      isLoadingOlderMessagesRef.current ||
+      isJumpingToTop
+    ) {
+      return;
+    }
+
+    const abortController = new AbortController();
+    olderMessagesAbortRef.current?.abort();
+    olderMessagesAbortRef.current = abortController;
+    isLoadingOlderMessagesRef.current = true;
+    setIsLoadingOlderMessages(true);
+
+    try {
+      const page = await getProjectConversationMessages(activeProjectId, activeConversationId, {
+        direction: "older",
+        cursor: olderMessagesCursorRef.current,
+        pageSize: 50,
+        signal: abortController.signal,
+      });
+      if (
+        abortController.signal.aborted ||
+        conversationIdRef.current !== activeConversationId ||
+        contextIdRef.current !== activeContextId
+      ) {
+        return;
+      }
+
+      if (page.items.length > 0) {
+        const scrollContainer = conversationScrollRef.current;
+        if (scrollContainer) {
+          pendingPrependAnchorRef.current = {
+            scrollHeight: scrollContainer.scrollHeight,
+            scrollTop: scrollContainer.scrollTop,
+          };
+        }
+        const pageCommands = prepareClaudeHistory(page.items).commands;
+        setMessages((current) => {
+          const prepared = prepareChatHistory(prependUniqueMessages(page.items, current));
+          messagesRef.current = prepared.messages;
+          return prepared.messages;
+        });
+        if (pageCommands.length > 0) {
+          setClaudeCommands((current) => (current.length === 0 ? pageCommands : current));
+        }
+      } else {
+        pendingPrependAnchorRef.current = null;
+      }
+
+      setHasOlderMessages(page.hasMore);
+      olderMessagesCursorRef.current = page.nextCursor;
+      hasOlderMessagesRef.current = page.hasMore;
+    } catch (error) {
+      pendingPrependAnchorRef.current = null;
+      if (!abortController.signal.aborted) {
+        notifyExecutionError(error);
+      }
+    } finally {
+      if (olderMessagesAbortRef.current === abortController) {
+        olderMessagesAbortRef.current = null;
+        isLoadingOlderMessagesRef.current = false;
+        setIsLoadingOlderMessages(false);
+      }
+    }
+  }, [isJumpingToTop, notifyExecutionError, projectId]);
+
+  React.useEffect(() => {
+    const scrollContainer = conversationScrollRef.current;
+    if (!scrollContainer || !hasOlderMessages || isLoadingOlderMessages) {
+      return;
+    }
+
+    const frame = requestAnimationFrame(() => {
+      if (scrollContainer.scrollHeight <= scrollContainer.clientHeight + 1) {
+        void loadOlderMessages();
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [hasOlderMessages, isLoadingOlderMessages, loadOlderMessages, renderItems.length]);
+
+  const handleScrollToTop = React.useCallback(async () => {
+    const scrollContainer = conversationScrollRef.current;
+    if (!scrollContainer) return;
+
     autoScrollStateRef.current = {
       ...autoScrollStateRef.current,
       shouldAutoScroll: false,
     };
-    messagesStartRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-  }, []);
+
+    if (!hasOlderMessagesRef.current || !olderMessagesCursorRef.current) {
+      scrollContainer.scrollTo({ top: 0, behavior: "auto" });
+      return;
+    }
+
+    const activeProjectId = projectId;
+    const activeConversationId = conversationIdRef.current;
+    const activeContextId = contextIdRef.current;
+    if (
+      !activeProjectId ||
+      !activeConversationId ||
+      !activeContextId ||
+      isLoadingOlderMessagesRef.current
+    ) {
+      return;
+    }
+
+    const abortController = new AbortController();
+    olderMessagesAbortRef.current?.abort();
+    olderMessagesAbortRef.current = abortController;
+    isLoadingOlderMessagesRef.current = true;
+    setIsLoadingOlderMessages(true);
+    setIsJumpingToTop(true);
+
+    let cursor: string | null = olderMessagesCursorRef.current;
+    let hasMore: boolean = hasOlderMessagesRef.current;
+    const pages: AiMessage[][] = [];
+
+    try {
+      while (hasMore && cursor) {
+        const page = await getProjectConversationMessages(activeProjectId, activeConversationId, {
+          direction: "older",
+          cursor,
+          pageSize: 50,
+          signal: abortController.signal,
+        });
+        if (
+          abortController.signal.aborted ||
+          conversationIdRef.current !== activeConversationId ||
+          contextIdRef.current !== activeContextId
+        ) {
+          return;
+        }
+
+        pages.push(page.items);
+        cursor = page.nextCursor;
+        hasMore = page.hasMore && cursor !== null;
+      }
+
+      const olderMessages = pages.reverse().flat();
+      if (olderMessages.length > 0) {
+        const historyCommands = prepareClaudeHistory(olderMessages).commands;
+        setMessages((current) => {
+          const prepared = prepareChatHistory(prependUniqueMessages(olderMessages, current));
+          messagesRef.current = prepared.messages;
+          return prepared.messages;
+        });
+        if (historyCommands.length > 0) {
+          setClaudeCommands((current) => (current.length === 0 ? historyCommands : current));
+        }
+      }
+
+      olderMessagesCursorRef.current = cursor;
+      hasOlderMessagesRef.current = hasMore;
+      setHasOlderMessages(hasMore);
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (
+            conversationIdRef.current === activeConversationId &&
+            contextIdRef.current === activeContextId
+          ) {
+            conversationScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+          }
+        });
+      });
+    } catch (error) {
+      if (!abortController.signal.aborted) {
+        notifyExecutionError(error);
+      }
+    } finally {
+      if (olderMessagesAbortRef.current === abortController) {
+        olderMessagesAbortRef.current = null;
+        isLoadingOlderMessagesRef.current = false;
+        setIsLoadingOlderMessages(false);
+        setIsJumpingToTop(false);
+      }
+    }
+  }, [notifyExecutionError, projectId]);
 
   const handleScrollToBottom = React.useCallback(() => {
     const scrollContainer = conversationScrollRef.current;
@@ -1129,18 +1376,32 @@ export function Chat({
       ...autoScrollStateRef.current,
       shouldAutoScroll: true,
     };
-    scrollContainer.scrollTo({
-      top: scrollContainer.scrollHeight,
-      behavior: "smooth",
+    const scrollToLatestMessage = () => {
+      const currentScrollContainer = conversationScrollRef.current;
+      currentScrollContainer?.scrollTo({
+        top: currentScrollContainer.scrollHeight,
+        behavior: "auto",
+      });
+    };
+
+    scrollToLatestMessage();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(scrollToLatestMessage);
     });
   }, []);
 
-  const handleConversationScroll = React.useCallback((event: React.UIEvent<HTMLDivElement>) => {
-    autoScrollStateRef.current = updateAutoScrollState(
-      autoScrollStateRef.current,
-      event.currentTarget,
-    );
-  }, []);
+  const handleConversationScroll = React.useCallback(
+    (event: React.UIEvent<HTMLDivElement>) => {
+      autoScrollStateRef.current = updateAutoScrollState(
+        autoScrollStateRef.current,
+        event.currentTarget,
+      );
+      if (event.currentTarget.scrollTop <= 320) {
+        void loadOlderMessages();
+      }
+    },
+    [loadOlderMessages],
+  );
 
   return (
     <div className={cn("@container relative h-full min-h-0 w-full overflow-hidden", className)}>
@@ -1156,9 +1417,10 @@ export function Chat({
             {/* 对话列表 */}
             <Conversation
               items={renderItems}
-              messagesStartRef={messagesStartRef}
-              messagesEndRef={messagesEndRef}
-              scrollable={false}
+              scrollElementRef={conversationScrollRef}
+              hasOlderMessages={hasOlderMessages}
+              isLoadingOlderMessages={isLoadingOlderMessages}
+              onLoadOlderMessages={() => void loadOlderMessages()}
               permissionMode={permissionMode}
               onHumanResponse={({ approved, responseText, approvalScope = "once", responseData }) =>
                 submitHumanGateResponse(approved, responseText, approvalScope, responseData)
@@ -1183,6 +1445,7 @@ export function Chat({
           <ChatInput
             isExecuting={isExecuting}
             isTransitioning={isTransitioning}
+            isLoadingHistory={isLoadingOlderMessages || isJumpingToTop}
             hasMessages={renderItems.length > 0}
             onExecute={(value, imageAttachments) => {
               void handleExecute(value, imageAttachments);

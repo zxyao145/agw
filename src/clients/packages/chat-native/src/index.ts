@@ -2,7 +2,7 @@ export * from "./chat-targets";
 export * from "./composer";
 export * from "./conversation-history";
 export * from "./image-picker";
-export * from "./native-context-history";
+export * from "./native-conversation-list";
 export * from "./native-execution-session";
 export * from "./native-chat-provider";
 export * from "./native-workspace-provider";

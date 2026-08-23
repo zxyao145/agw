@@ -51,7 +51,7 @@ export function WorkspaceHeader({
                     {
                       text: "Clear",
                       style: "destructive",
-                      onPress: () => void workspace.clearCurrentContext(),
+                      onPress: () => void workspace.clearCurrentConversation(),
                     },
                   ],
                 ),

@@ -10,6 +10,7 @@ import React from "react";
 
 const context = {
   projectId: "project-1",
+  conversationId: "11111111-1111-1111-1111-000000000001",
   contextId: "context-1",
   title: "Conversation",
   executionCount: 1,
@@ -33,10 +34,12 @@ test("selecting the active conversation again preserves its loaded history", asy
         return [];
       case "/api/agents/suggestions":
         return { mode: "unsupported", suggestions: [] };
-      case "/api/projects/{projectId}/contexts":
+      case "/api/projects/{projectId}/conversations":
         return [context];
-      case "/api/projects/{projectId}/contexts/{contextId}":
-        return { ...context, messages: [historyMessage], usage: null };
+      case "/api/projects/{projectId}/conversations/{conversationId}":
+        return { ...context, usage: null, resumeState: null };
+      case "/api/projects/{projectId}/conversations/{conversationId}/messages":
+        return { items: [historyMessage], nextCursor: null, hasMore: false };
       default:
         throw new Error(`Unexpected GET ${path}`);
     }
@@ -56,11 +59,13 @@ test("selecting the active conversation again preserves its loaded history", asy
   );
   const { result } = await renderHook(() => useNativeWorkspace(), { wrapper });
 
-  await waitFor(() => expect(result.current.contexts).toHaveLength(1));
-  await act(() => result.current.selectContext("context-1"));
+  await waitFor(() => expect(result.current.conversations).toHaveLength(1));
+  await act(() => result.current.selectConversation(context.conversationId));
   await waitFor(() => expect(result.current.messages).toHaveLength(1));
+  expect(result.current.selectedConversationId).toBe(context.conversationId);
+  expect(result.current.selectedContextId).toBe(context.contextId);
 
-  await act(() => result.current.selectContext("context-1"));
+  await act(() => result.current.selectConversation(context.conversationId));
 
   expect(result.current.messages).toHaveLength(1);
   expect(result.current.messages[0]).toMatchObject(historyMessage);

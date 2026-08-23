@@ -141,7 +141,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
   const activeProjectId = searchParams.get("projectId") ?? DEFAULT_PROJECT_ID;
   const chatReturnHref = buildChatHref("/desktop/chat", {
     projectId: activeProjectId,
-    contextId: searchParams.get("contextId"),
+    conversationId: searchParams.get("conversationId"),
   });
   const settingsHref = buildSettingsHref("/dashboard/", chatReturnHref);
   const serverId = desktop.activeProfile?.id ?? "browser";
@@ -221,7 +221,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
     persistTabs(nextTabs);
     if (activeProjectId === projectId) {
       router.push(
-        buildChatHref("/desktop/chat", { projectId: DEFAULT_PROJECT_ID, contextId: null }),
+        buildChatHref("/desktop/chat", { projectId: DEFAULT_PROJECT_ID, conversationId: null }),
       );
     }
   };
@@ -229,14 +229,14 @@ function ChatShell({ children }: { children: React.ReactNode }) {
   const openProject = (projectId: string) => {
     const nextTabs = normalizeProjectTabs(tabs, projectIds, projectId);
     persistTabs(nextTabs);
-    router.push(buildChatHref("/desktop/chat", { projectId, contextId: null }));
+    router.push(buildChatHref("/desktop/chat", { projectId, conversationId: null }));
   };
 
   const switchServer = (nextServerId: string) => {
     setServerPickerOpen(false);
     if (!runtimeSettings || nextServerId === runtimeSettings.activeServerId) return;
     router.replace(
-      buildChatHref("/desktop/chat", { projectId: DEFAULT_PROJECT_ID, contextId: null }),
+      buildChatHref("/desktop/chat", { projectId: DEFAULT_PROJECT_ID, conversationId: null }),
     );
     void desktop.saveSettings({ ...runtimeSettings, activeServerId: nextServerId });
   };
@@ -256,7 +256,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
                   key={projectId}
                   className={cn("agw-project-tab", activeProjectId === projectId && "is-active")}
                 >
-                  <Link href={buildChatHref("/desktop/chat", { projectId, contextId: null })}>
+                  <Link href={buildChatHref("/desktop/chat", { projectId, conversationId: null })}>
                     <StatusDot status={status} />
                     <span>{projectById.get(projectId)?.name ?? projectId}</span>
                   </Link>
@@ -299,7 +299,12 @@ function ChatShell({ children }: { children: React.ReactNode }) {
                 .filter((id) => activity.getProjectStatus(id) !== "idle")
                 .map((id) => (
                   <DropdownMenuItem key={id} asChild>
-                    <Link href={buildChatHref("/desktop/chat", { projectId: id, contextId: null })}>
+                    <Link
+                      href={buildChatHref("/desktop/chat", {
+                        projectId: id,
+                        conversationId: null,
+                      })}
+                    >
                       <StatusDot status={activity.getProjectStatus(id)} />
                       <span className="flex-1 truncate">{projectById.get(id)?.name ?? id}</span>
                       <span className="text-xs text-muted-foreground">

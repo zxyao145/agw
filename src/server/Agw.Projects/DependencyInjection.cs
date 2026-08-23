@@ -20,7 +20,7 @@ public static class DependencyInjection
         services.AddScoped<IProjectFileSystemConfigurationProvider, ProjectFileSystemConfigurationProvider>();
         services.AddScoped<ITaskSessionBindingService, TaskSessionBindingService>();
         services.AddScoped<TaskExecutionAppService>();
-        services.AddScoped<ProjectContextAppService>();
+        services.AddScoped<ProjectConversationAppService>();
         services.AddScoped<ProjectResolver>();
         services.AddScoped<ProjectConversationChatHistoryDomainService>();
         services.AddScoped<IConversationHandoffProvider, ConversationHandoffProvider>();

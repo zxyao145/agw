@@ -9,23 +9,26 @@ const source = readFileSync(
 );
 
 test("Mobile clears records while preserving the active conversation id", () => {
-  const clearHandlerStart = source.indexOf("const clearCurrentContext = React.useCallback");
+  const clearHandlerStart = source.indexOf("const clearCurrentConversation = React.useCallback");
   const clearHandlerEnd = source.indexOf(
-    "const renameContext = React.useCallback",
+    "const renameConversation = React.useCallback",
     clearHandlerStart,
   );
   const clearHandler = source.slice(clearHandlerStart, clearHandlerEnd);
 
   expect(clearHandlerStart).toBeGreaterThan(-1);
   expect(clearHandlerEnd).toBeGreaterThan(-1);
-  expect(clearHandler).toMatch(/clearProjectContextRecords\(selectedProjectId, contextToClear\)/);
+  expect(clearHandler).toMatch(
+    /clearProjectConversationRecords\([\s\S]*?selectedProjectId,[\s\S]*?conversationToClear/,
+  );
+  expect(clearHandler).toMatch(/selectedConversationIdRef\.current !== conversationToClear/);
   expect(clearHandler).toMatch(/selectedContextIdRef\.current = contextToClear/);
   expect(clearHandler).toMatch(/setSelectedContextId\(contextToClear\)/);
   expect(clearHandler).not.toMatch(/selectedContextIdRef\.current = null/);
   expect(clearHandler).not.toMatch(/setSelectedContextId\(null\)/);
 });
 
-test("Mobile sends the next message through the preserved conversation id", () => {
+test("Mobile sends the next message through the preserved execution context id", () => {
   const sendHandlerStart = source.indexOf("const sendMessage = React.useCallback");
   const sendHandlerEnd = source.indexOf(
     "const stopExecution = React.useCallback",

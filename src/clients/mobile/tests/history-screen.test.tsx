@@ -29,9 +29,10 @@ jest.mock("@/features/workspace/workspace-provider", () => ({
   useWorkspace: jest.fn(),
 }));
 
-const contexts = [
+const conversations = [
   {
     projectId: "project-1",
+    conversationId: "11111111-1111-1111-1111-000000000001",
     contextId: "context-1",
     title: "Active conversation",
     executionCount: 1,
@@ -40,6 +41,7 @@ const contexts = [
   },
   {
     projectId: "project-1",
+    conversationId: "11111111-1111-1111-1111-000000000002",
     contextId: "context-2",
     title: "Inactive conversation",
     executionCount: 1,
@@ -52,16 +54,17 @@ describe("HistoryScreen conversation actions", () => {
   test("shows rename and delete actions for inactive conversations", async () => {
     jest.mocked(useWorkspace).mockReturnValue({
       projects: [{ id: "project-1", name: "Agw" }],
-      contexts,
+      conversations,
       selectedProjectId: "project-1",
       selectedProject: { id: "project-1", name: "Agw" },
+      selectedConversationId: "11111111-1111-1111-1111-000000000001",
       selectedContextId: "context-1",
       isExecuting: false,
-      selectContext: jest.fn(),
+      selectConversation: jest.fn(),
       selectProject: jest.fn(),
-      refreshContexts: jest.fn(),
-      renameContext: jest.fn(),
-      deleteContext: jest.fn(),
+      refreshConversations: jest.fn(),
+      renameConversation: jest.fn(),
+      deleteConversation: jest.fn(),
     } as never);
 
     const view = await render(<HistoryScreen />);
@@ -71,19 +74,20 @@ describe("HistoryScreen conversation actions", () => {
   });
 
   test("opens the rename dialog without selecting the conversation", async () => {
-    const selectContext = jest.fn();
+    const selectConversation = jest.fn();
     jest.mocked(useWorkspace).mockReturnValue({
       projects: [{ id: "project-1", name: "Agw" }],
-      contexts,
+      conversations,
       selectedProjectId: "project-1",
       selectedProject: { id: "project-1", name: "Agw" },
+      selectedConversationId: null,
       selectedContextId: null,
       isExecuting: false,
-      selectContext,
+      selectConversation,
       selectProject: jest.fn(),
-      refreshContexts: jest.fn(),
-      renameContext: jest.fn(),
-      deleteContext: jest.fn(),
+      refreshConversations: jest.fn(),
+      renameConversation: jest.fn(),
+      deleteConversation: jest.fn(),
     } as never);
 
     const view = await render(<HistoryScreen />);
@@ -92,6 +96,6 @@ describe("HistoryScreen conversation actions", () => {
     });
 
     expect(view.getByText("Rename conversation")).toBeTruthy();
-    expect(selectContext).not.toHaveBeenCalled();
+    expect(selectConversation).not.toHaveBeenCalled();
   });
 });

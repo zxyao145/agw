@@ -150,12 +150,14 @@ test("desktop DELETE refreshes stale antiforgery state and retries once", async 
     resetApiRuntime();
   });
 
-  await apiDelete(
-    "/api/projects/{projectId}/contexts/{contextId}" as never,
-    {
-      params: { path: { projectId: "project-1", contextId: "context-1" } },
-    } as never,
-  );
+  await apiDelete("/api/projects/{projectId}/conversations/{conversationId}", {
+    params: {
+      path: {
+        projectId: "project-1",
+        conversationId: "11111111-1111-1111-1111-000000000001",
+      },
+    },
+  });
 
   assert.equal(antiforgeryRequestCount, 2);
   assert.equal(deleteRequestCount, 2);
@@ -185,18 +187,23 @@ test("Bearer API clients are isolated and never request antiforgery tokens", asy
     token: " agw_mobile-token ",
   });
   const result = await client.apiPut(
-    "/api/projects/{projectId}/contexts/{contextId}/title" as never,
+    "/api/projects/{projectId}/conversations/{conversationId}/title",
     {
-      params: { path: { projectId: "project-1", contextId: "context/1" } },
+      params: {
+        path: {
+          projectId: "project-1",
+          conversationId: "11111111-1111-1111-1111-000000000002",
+        },
+      },
       body: { title: "Mobile" },
-    } as never,
+    },
   );
 
   assert.deepEqual(result, { saved: true });
   assert.equal(requests.length, 1);
   assert.equal(
     requests[0]?.url,
-    "https://mobile.example.com/api/projects/project-1/contexts/context%2F1/title",
+    "https://mobile.example.com/api/projects/project-1/conversations/11111111-1111-1111-1111-000000000002/title",
   );
   const headers = requests[0]?.init?.headers as Record<string, string> | undefined;
   assert.equal(headers?.Authorization, "Bearer agw_mobile-token");
