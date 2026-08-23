@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { HubConnectionBuilder, HubConnectionState } from "@microsoft/signalr";
+import type { AiMessage } from "@agw/api";
 
 test("buildSettingCommand keeps target data out of settings", async () => {
   const { buildSettingCommand } = await import("./execution-hub" + ".ts");
@@ -144,6 +145,149 @@ test("checkpoint commands preserve the exact occurrence identity", async () => {
       name: "Review saved",
     },
   );
+});
+
+test("execution session keeps tool rendering scope across handler replacement and terminal turns", async () => {
+  const { ExecutionHubClient } = await import("./execution-hub" + ".ts");
+  const { buildConversationRenderModel } = await import("@agw/chat-core");
+  const originalBuild = HubConnectionBuilder.prototype.build;
+  let receiveMessage: ((message: AiMessage) => void) | undefined;
+  const connection = {
+    state: HubConnectionState.Disconnected,
+    on: (eventName: string, handler: (message: AiMessage) => void) => {
+      if (eventName === "ReceiveMessage") receiveMessage = handler;
+    },
+    onreconnecting: () => undefined,
+    onclose: () => undefined,
+    onreconnected: () => undefined,
+    start: async () => {
+      connection.state = HubConnectionState.Connected;
+    },
+    stop: async () => {
+      connection.state = HubConnectionState.Disconnected;
+    },
+    invoke: async (methodName: string) =>
+      methodName === "GetExecutionProvider" ? "InProcess" : undefined,
+  };
+  HubConnectionBuilder.prototype.build = () => connection as never;
+
+  const transportMessages: AiMessage[] = [];
+  const attachHandler = () => ({
+    onMessage: (message: AiMessage) => transportMessages.push(message),
+  });
+  const emit = (message: AiMessage) => {
+    assert.ok(receiveMessage);
+    receiveMessage(message);
+  };
+  const toolCall = (messageId: string, callId: string, toolName: string) => ({
+    messageId,
+    role: "assistant",
+    author: "agent",
+    contents: [
+      {
+        type: "FunctionCallContent",
+        content: "{}",
+        additionalProperties: { callId, toolName },
+      },
+    ],
+  });
+  const toolResult = (messageId: string, callId: string) => ({
+    messageId,
+    role: "tool",
+    author: "agent",
+    contents: [
+      {
+        type: "FunctionResultContent",
+        content: "done",
+        additionalProperties: { callId },
+      },
+    ],
+  });
+  const turnState = (
+    messageId: string,
+    type: "turn-start" | "turn-finished",
+    additionalProperties: Record<string, unknown> = {},
+  ) => ({
+    messageId,
+    role: "system",
+    author: "$agw",
+    contents: [],
+    additionalProperties: {
+      type,
+      ...(type === "turn-finished" ? { status: "completed" } : {}),
+      ...additionalProperties,
+    },
+  });
+
+  const client = new ExecutionHubClient(attachHandler(), {
+    baseUrl: "https://agw.example.test",
+    token: null,
+    attachmentStore: null,
+  });
+
+  try {
+    await client.configure({ projectId: "project-1", contextId: "context-1" });
+    await client.execute({
+      agentId: "agent-1",
+      agentType: 0,
+      input: { messageId: "user-1", author: "$agw", contents: [] },
+    });
+    emit(turnState("start-1", "turn-start"));
+    emit(toolCall("call-read-1", "Read_1", "Read"));
+    emit(toolCall("call-bash-1", "Bash_1", "Bash"));
+
+    client.setHandlers(attachHandler());
+    emit(toolResult("result-bash-1", "Bash_1"));
+    emit(toolResult("result-read-1", "Read_1"));
+    emit(turnState("finished-1", "turn-finished"));
+
+    assert.deepEqual(
+      transportMessages.slice(0, 6).map((message) => message.streamingScopeId),
+      Array(6).fill("user-1"),
+    );
+    assert.deepEqual(
+      buildConversationRenderModel(transportMessages).map((item) =>
+        item.type === "tool-accordion" ? item.toolName : item.type,
+      ),
+      ["Read", "Bash"],
+    );
+
+    emit({
+      messageId: "late-message",
+      role: "assistant",
+      author: "agent",
+      contents: [{ type: "TextContent", content: "late" }],
+    });
+    assert.equal(transportMessages.at(-1)?.streamingScopeId, "late-message");
+
+    await client.execute({
+      agentId: "agent-1",
+      agentType: 0,
+      input: { messageId: "user-2", author: "$agw", contents: [] },
+    });
+    emit(
+      turnState("start-2", "turn-start", {
+        streamingScopeId: "server-user-2",
+      }),
+    );
+    emit(toolCall("call-read-2", "Read_1", "Read"));
+    emit(toolResult("result-read-2", "Read_1"));
+    emit(turnState("finished-2", "turn-finished"));
+
+    assert.deepEqual(
+      transportMessages.slice(-4).map((message) => message.streamingScopeId),
+      Array(4).fill("server-user-2"),
+    );
+    assert.deepEqual(
+      buildConversationRenderModel(transportMessages)
+        .filter((item) => item.type === "tool-accordion")
+        .map((item) => item.toolName),
+      ["Read", "Bash", "Read"],
+    );
+  } finally {
+    await client.dispose();
+    HubConnectionBuilder.prototype.build = originalBuild;
+  }
 });
 
 test("durable attachment detection connects only for a valid persisted execution", async () => {

@@ -27,6 +27,7 @@ import {
   getTurnFinishedStatus,
   isModeControlMessage,
   isUserTurnMessage,
+  scopeStreamingMessage,
   type AgentMode,
   type ExecutionUserInput as CoreExecutionUserInput,
   type PermissionMode as CorePermissionMode,
@@ -278,6 +279,8 @@ export class ExecutionSession {
   private handlers: ExecutionHubHandlers;
   private disposed = false;
   private hasActiveTurn = false;
+  /** 当前用户轮次的稳定渲染作用域，确保实时 Tool Call/Result 可跨 UI 重附着配对。 */
+  private activeStreamingScopeId: string | null = null;
   private readonly turnFinishedWaiters = new Set<() => void>();
   /** 重连后必须先恢复的服务端执行设置。 */
   private setting: ExecutionSetting | null = null;
@@ -328,14 +331,15 @@ export class ExecutionSession {
       .build();
 
     this.connection.on("ReceiveMessage", (message: AiMessage) => {
-      this.updateDurableProgress(message);
-      if (message.additionalProperties?.type === "turn-start") {
+      const scopedMessage = this.scopeIncomingMessage(message);
+      this.updateDurableProgress(scopedMessage);
+      if (scopedMessage.additionalProperties?.type === "turn-start") {
         this.hasActiveTurn = true;
-      } else if (getTurnFinishedStatus(message)) {
+      } else if (getTurnFinishedStatus(scopedMessage)) {
         this.finishActiveTurn();
       }
 
-      if (!this.disposed) this.handlers.onMessage(message);
+      if (!this.disposed) this.handlers.onMessage(scopedMessage);
     });
     this.connection.onreconnecting(() => {
       this.reconnecting = true;
@@ -414,6 +418,7 @@ export class ExecutionSession {
   public async execute(request: ExecutionRequest): Promise<void> {
     const executionId = request.executionId ?? globalThis.crypto.randomUUID();
     this.activeExecutionId = executionId;
+    this.activeStreamingScopeId = request.input.messageId;
     this.streamCursor = null;
     this.durableConfirmed = this.executionProvider === "distributed";
     this.hasActiveTurn = true;
@@ -760,9 +765,19 @@ export class ExecutionSession {
     );
   }
 
+  private scopeIncomingMessage(message: AiMessage): AiMessage {
+    const explicitScopeId = getMessageStreamingScopeId(message);
+    const scopeId = explicitScopeId ?? this.activeStreamingScopeId ?? message.messageId;
+    if (explicitScopeId || message.additionalProperties?.type === "turn-start") {
+      this.activeStreamingScopeId = scopeId;
+    }
+    return scopeStreamingMessage(message, scopeId);
+  }
+
   private finishActiveTurn(): void {
     this.hasActiveTurn = false;
     this.activeExecutionId = null;
+    this.activeStreamingScopeId = null;
     this.streamCursor = null;
     this.durableConfirmed = false;
     writePersistedDurableExecution(this.durableStorageKey, null, this.runtime);
