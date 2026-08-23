@@ -49,6 +49,127 @@ test("visible messages remove usage and controls before collapsing ordinary syst
   );
 });
 
+test("visible messages keep Claude SessionStart and results while hiding other Claude system messages", () => {
+  const claudeSystemMessage = (
+    messageId: string,
+    content: string,
+    additionalProperties: Record<string, unknown> = {},
+    contentType = "TextContent",
+  ): AiMessage => ({
+    messageId,
+    role: "system",
+    streamingScopeId: "user-1",
+    contents: [{ type: contentType, content }],
+    additionalProperties: { agentName: "claude-code", ...additionalProperties },
+  });
+  const sessionStart = claudeSystemMessage(
+    "session-start",
+    JSON.stringify({
+      type: "system",
+      hook_id: "hook-1",
+      hook_event: "SessionStart",
+    }),
+  );
+  const taskProgress = claudeSystemMessage(
+    "task-progress",
+    JSON.stringify({
+      type: "system",
+      tool_use_id: "Agent_4",
+      description: "Reading files",
+    }),
+  );
+  const otherHook = claudeSystemMessage(
+    "other-hook",
+    JSON.stringify({ type: "system", hook_event: "PreToolUse" }),
+  );
+  const apiRetry = claudeSystemMessage(
+    "api-retry",
+    "Claude Code API retry 1/3",
+    { subtype: "api_retry" },
+    "ErrorContent",
+  );
+  const successResult = claudeSystemMessage("success-result", "done", { type: "result" });
+  const errorResult = claudeSystemMessage(
+    "error-result",
+    "failed",
+    { type: "result" },
+    "ErrorContent",
+  );
+  const agwSystem = message("agw-system", "system", "keep server status", {
+    agentName: "Agw",
+  });
+
+  const visible = prepareVisibleMessages([
+    sessionStart,
+    taskProgress,
+    otherHook,
+    apiRetry,
+    successResult,
+    errorResult,
+    agwSystem,
+  ]);
+
+  assert.deepEqual(
+    visible.map((item) => item.messageId),
+    ["session-start", "success-result", "error-result", "agw-system"],
+  );
+
+  const rendered = buildConversationRenderModel([sessionStart]);
+  assert.deepEqual(rendered[0]?.type === "message" ? rendered[0].message.contents : [], [
+    { type: "plain", text: "SessionStart", sourceType: "TextContent" },
+  ]);
+});
+
+test("visible messages keep the legacy nested Claude SessionStart before hiding later progress", () => {
+  const sessionStart: AiMessage = {
+    messageId: "legacy-session-start",
+    role: "system",
+    streamingScopeId: "user-1",
+    contents: [
+      {
+        type: "TextContent",
+        content: JSON.stringify({
+          output: JSON.stringify({
+            hookSpecificOutput: JSON.stringify({ hookEventName: "SessionStart" }),
+          }),
+        }),
+      },
+    ],
+    additionalProperties: { agentName: "CLAUDE-CODE" },
+  };
+  const taskProgress: AiMessage = {
+    ...sessionStart,
+    messageId: "task-progress",
+    contents: [
+      {
+        type: "TextContent",
+        content: JSON.stringify({ type: "system", tool_use_id: "Agent_4" }),
+      },
+    ],
+  };
+
+  assert.deepEqual(
+    prepareVisibleMessages([sessionStart, taskProgress]).map((item) => item.messageId),
+    ["legacy-session-start"],
+  );
+});
+
+test("visible messages do not infer Claude source without the agent marker", () => {
+  const unmarkedSystem = message(
+    "unmarked-system",
+    "system",
+    JSON.stringify({ type: "system", tool_use_id: "Agent_4" }),
+  );
+  const claudeAssistant = message("claude-assistant", "assistant", "keep response", {
+    agentName: "claude-code",
+  });
+
+  assert.deepEqual(
+    prepareVisibleMessages([unmarkedSystem, claudeAssistant]).map((item) => item.messageId),
+    ["unmarked-system", "claude-assistant"],
+  );
+});
+
 test("visible messages hide system-injected AI context without matching its text", () => {
   const visible = prepareVisibleMessages([
     message("todo-context", "user", "Current todo list", {

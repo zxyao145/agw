@@ -20,6 +20,7 @@ import {
   collapseConsecutiveSystemMessages,
   formatSystemMessageContent,
   getClaudeHookEventName,
+  getClaudeSystemEventName,
   getMessageMeta,
   getMessagePreview,
   type MessageMeta,
@@ -39,6 +40,8 @@ const HIDDEN_CONTROL_TYPES = new Set([
 
 const supportedImageDataUrl = /^data:image\/(?:jpeg|png|gif|webp);base64,/i;
 const HIDDEN_SYSTEM_TOOL_NAMES = new Set(["Skill", "load_skill", "read_skill_resource"]);
+const CLAUDE_CODE_AGENT_NAME = "claude-code";
+const CLAUDE_SESSION_START_EVENT = "SessionStart";
 
 function getToolGroupKey(message: AiMessage, content: AiMessageContent): string | null {
   const callId = content.additionalProperties?.callId;
@@ -162,9 +165,30 @@ export function isHiddenControlMessage(message: AiMessage): boolean {
   );
 }
 
+function isClaudeCodeSystemMessage(message: AiMessage): boolean {
+  const agentName = message.additionalProperties?.agentName;
+  return (
+    message.role === "system" &&
+    typeof agentName === "string" &&
+    agentName.trim().toLowerCase() === CLAUDE_CODE_AGENT_NAME
+  );
+}
+
+function shouldShowClaudeCodeSystemMessage(message: AiMessage): boolean {
+  if (!isClaudeCodeSystemMessage(message) || isResultMessage(message)) return true;
+
+  return message.contents.some(
+    (content) =>
+      getClaudeSystemEventName(stringifyContentValue(content.content)) ===
+      CLAUDE_SESSION_START_EVENT,
+  );
+}
+
 export function prepareVisibleMessages(messages: readonly AiMessage[]): AiMessage[] {
   return collapseConsecutiveSystemMessages(
-    stripUsageContents([...messages]).filter((message) => !isHiddenControlMessage(message)),
+    stripUsageContents([...messages]).filter(
+      (message) => !isHiddenControlMessage(message) && shouldShowClaudeCodeSystemMessage(message),
+    ),
   );
 }
 

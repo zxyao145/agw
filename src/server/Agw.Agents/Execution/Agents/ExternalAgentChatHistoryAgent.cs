@@ -411,12 +411,12 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
     }
 
     /// <summary>
-    /// 将仅用于界面展示的 System 或 User 响应标记为不参与模型历史和跨 Agent 交接。
+    /// 将仅用于界面展示的 System、User 或 Tool 响应标记为不参与模型历史和跨 Agent 交接。
     /// </summary>
     /// <param name="message">要检查并按需标记的响应消息。</param>
     private static void MarkDisplayOnlyMessage(ChatMessage message)
     {
-        if (message.Role == ChatRole.System || message.Role == ChatRole.User)
+        if (message.Role == ChatRole.System || message.Role == ChatRole.User || message.Role == ChatRole.Tool)
         {
             ConversationHistoryMetadata.ExcludeFromModelHistory(message);
         }

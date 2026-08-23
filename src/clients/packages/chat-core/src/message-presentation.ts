@@ -182,6 +182,34 @@ export function getClaudeHookEventName(content: string): string | null {
   return findClaudeHookEventName(content, 0);
 }
 
+function parseNestedJsonValue(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+
+  const parsed = tryParseJson(value);
+  return parsed.parsed ? parsed.value : value;
+}
+
+function readNestedJsonString(input: unknown, keys: readonly string[]): string | null {
+  let current = input;
+  for (const key of keys) {
+    current = parseNestedJsonValue(current);
+    if (!isRecord(current) || !(key in current)) return null;
+    current = current[key];
+  }
+
+  return readString(parseNestedJsonValue(current));
+}
+
+export function getClaudeSystemEventName(content: string): string | null {
+  const directHookEvent = getClaudeHookEventName(content);
+  if (directHookEvent) return directHookEvent;
+
+  const parsed = tryParseJson(content);
+  if (!parsed.parsed) return null;
+
+  return readNestedJsonString(parsed.value, ["output", "hookSpecificOutput", "hookEventName"]);
+}
+
 function formatNestedJson(input: unknown, keys: readonly string[]): string {
   let jsonObject: Record<string, unknown>;
   if (typeof input === "string") {
@@ -207,8 +235,8 @@ function formatNestedJson(input: unknown, keys: readonly string[]): string {
 }
 
 export function formatSystemMessageContent(content: string): string {
-  const directHookEvent = getClaudeHookEventName(content);
-  if (directHookEvent) return directHookEvent;
+  const eventName = getClaudeSystemEventName(content);
+  if (eventName) return eventName;
 
   const parsed = tryParseJson(content);
   if (!parsed.parsed) return content;

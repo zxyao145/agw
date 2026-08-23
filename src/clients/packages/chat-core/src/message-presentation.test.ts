@@ -6,6 +6,7 @@ import {
   collapseConsecutiveSystemMessages,
   formatSystemMessageContent,
   getClaudeHookEventName,
+  getClaudeSystemEventName,
   getMessageMeta,
   getMessagePreview,
   prepareClaudeHistory,
@@ -59,6 +60,7 @@ test("formats a Claude Code hook event without exposing its JSON envelope", () =
 
   assert.equal(formatSystemMessageContent(content), "SessionStart");
   assert.equal(getClaudeHookEventName(JSON.stringify(content)), "SessionStart");
+  assert.equal(getClaudeSystemEventName(content), "SessionStart");
 });
 
 test("extracts a hook event from concatenated historical JSON contents", () => {
@@ -73,7 +75,9 @@ test("extracts a hook event from concatenated historical JSON contents", () => {
     hook_event: "SessionStart",
   });
 
-  assert.equal(getClaudeHookEventName(`${first}${second}`), "SessionStart");
+  const content = `${first}${second}`;
+  assert.equal(getClaudeHookEventName(content), "SessionStart");
+  assert.equal(getClaudeSystemEventName(content), "SessionStart");
 });
 
 test("history removes Claude init metadata before system messages are collapsed", () => {
@@ -143,6 +147,7 @@ test("keeps the Desktop nested hook output format", () => {
   });
 
   assert.equal(formatSystemMessageContent(content), "SessionStart");
+  assert.equal(getClaudeSystemEventName(content), "SessionStart");
 });
 
 test("restores Desktop agent name and author metadata", () => {

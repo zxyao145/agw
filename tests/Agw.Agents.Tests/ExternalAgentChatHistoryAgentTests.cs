@@ -242,6 +242,37 @@ public class ExternalAgentChatHistoryAgentTests
     }
 
     [Fact]
+    public async Task RunStreamingAsync_ToolResponse_IsMarkedDisplayOnly()
+    {
+        var provider = new RecordingChatHistoryProvider();
+        var innerAgent = new PausableExternalAgent();
+        var agent = CreateAgent(innerAgent, provider);
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        innerAgent.Emit(
+            new AgentResponseUpdate(
+                ChatRole.Tool,
+                [new FunctionResultContent("tool-1", new Dictionary<string, object> { ["detail"] = "boom" })]
+            )
+        );
+        innerAgent.Complete();
+
+        await CollectAsync(
+            agent.RunStreamingAsync(
+                [new ChatMessage(ChatRole.User, "request")],
+                session,
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        );
+
+        var message = Assert.Single(
+            Assert.Single(provider.Calls, call => call.ResponseMessages.Count > 0).ResponseMessages
+        );
+        Assert.Equal(ChatRole.Tool, message.Role);
+        Assert.True(ConversationHistoryMetadata.IsModelHistoryExcluded(message));
+        Assert.Equal("tool-1", Assert.IsType<FunctionResultContent>(Assert.Single(message.Contents)).CallId);
+    }
+
+    [Fact]
     public async Task RunStreamingAsync_ClaudeInit_CapturesProviderSessionOnceWithoutChangingUpdates()
     {
         var provider = new RecordingChatHistoryProvider();
