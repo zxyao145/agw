@@ -1,3 +1,4 @@
+using Agw.Auth.Application;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
@@ -41,6 +42,7 @@ public class AgentAppService
     private readonly IRepository<AgentSkillRelation> _agentSkillRelationRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly AgentDomainService _agentDomainService;
+    private readonly IUserInfoService _userInfoService;
 
     public AgentAppService(
         IRepository<Agent> agentRepository,
@@ -54,7 +56,8 @@ public class AgentAppService
         IRepository<Skill> skillRepository,
         IRepository<AgentSkillRelation> agentSkillRelationRepository,
         IUnitOfWork unitOfWork,
-        AgentDomainService agentDomainService
+        AgentDomainService agentDomainService,
+        IUserInfoService userInfoService
     )
     {
         _agentRepository = agentRepository;
@@ -69,17 +72,18 @@ public class AgentAppService
         _agentSkillRelationRepository = agentSkillRelationRepository;
         _unitOfWork = unitOfWork;
         _agentDomainService = agentDomainService;
+        _userInfoService = userInfoService;
     }
 
     public async Task<IReadOnlyList<Agent>> ListAgentsAsync()
     {
-        var agents = await _agentRepository.ListAsync(
-            null,
-            null,
-            x => x.AgentMcpToolServers,
-            x => x.AgentSkillRelations,
-            x => x.AgentConnectionRelations
-        );
+        var agents = await CreateAgentQuery().ToListAsync();
+        return agents.OrderBy(x => x.Name).ThenByDescending(x => x.CreateTime).ToList();
+    }
+
+    public async Task<IReadOnlyList<Agent>> ListAgentsForCurrentUserAsync()
+    {
+        var agents = await CreateAgentQuery(_userInfoService.RequiredUserId).ToListAsync();
         return agents.OrderBy(x => x.Name).ThenByDescending(x => x.CreateTime).ToList();
     }
 
@@ -89,14 +93,23 @@ public class AgentAppService
         CancellationToken cancellationToken = default
     )
     {
-        var queryable = _agentRepository
-            .Queryable.Include(agent => agent.AgentMcpToolServers)
-            .Include(agent => agent.AgentSkillRelations)
-            .Include(agent => agent.AgentConnectionRelations)
-            .AsSplitQuery();
-
         return UpdatedTimePagination.ToPagedResultAsync(
-            queryable,
+            CreateAgentQuery(),
+            agent => agent.Id,
+            pageIndex,
+            pageSize,
+            cancellationToken
+        );
+    }
+
+    public Task<PagedResult<Agent>> ListAgentPageForCurrentUserAsync(
+        int pageIndex,
+        int pageSize,
+        CancellationToken cancellationToken = default
+    )
+    {
+        return UpdatedTimePagination.ToPagedResultAsync(
+            CreateAgentQuery(_userInfoService.RequiredUserId),
             agent => agent.Id,
             pageIndex,
             pageSize,
@@ -106,15 +119,11 @@ public class AgentAppService
 
     public async Task<Agent?> GetAgentAsync(Guid id)
     {
-        var matches = await _agentRepository.ListAsync(
-            x => x.Id == id,
-            null,
-            x => x.AgentMcpToolServers,
-            x => x.AgentSkillRelations,
-            x => x.AgentConnectionRelations
-        );
-        return matches.FirstOrDefault();
+        return await CreateAgentQuery().FirstOrDefaultAsync(agent => agent.Id == id);
     }
+
+    public Task<Agent?> GetAgentForCurrentUserAsync(Guid id) =>
+        CreateAgentQuery(_userInfoService.RequiredUserId).FirstOrDefaultAsync(agent => agent.Id == id);
 
     public async Task<AgentModelRuntimeConfiguration?> GetModelRuntimeConfigurationAsync(Guid modelProviderId)
     {
@@ -171,10 +180,10 @@ public class AgentAppService
         Agent agent,
         IEnumerable<Guid>? mcpToolServerIds,
         IEnumerable<Guid>? skillIds,
-        IEnumerable<Guid>? connectionIds,
-        string user
+        IEnumerable<Guid>? connectionIds
     )
     {
+        var user = _userInfoService.RequiredUserId;
         if (
             await HasInvalidModelProviderAsync(agent.ModelProviderId)
             || await HasInvalidModelProviderAsync(agent.SummaryModelProviderId)
@@ -192,9 +201,10 @@ public class AgentAppService
         return agent;
     }
 
-    public async Task<Agent?> UpdateAgentAsync(Guid id, AgentUpdateCommand command, string user)
+    public async Task<Agent?> UpdateAgentAsync(Guid id, AgentUpdateCommand command)
     {
         ArgumentNullException.ThrowIfNull(command);
+        var user = _userInfoService.RequiredUserId;
 
         var existing = await _agentRepository.GetByIdAsync(id);
         if (existing == null)
@@ -226,7 +236,10 @@ public class AgentAppService
         {
             await SyncAgentMcpToolServerRelationsAsync(existing.Id, command.McpToolServerIds);
             await SyncAgentSkillRelationsAsync(existing.Id, command.SkillIds);
-            await SyncAgentConnectionRelationsAsync(existing.Id, command.ConnectionIds);
+            if (command.IsSpecified(AgentUpdateField.ConnectionIds))
+            {
+                await SyncAgentConnectionRelationsAsync(existing.Id, command.ConnectionIds);
+            }
         }
 
         await _unitOfWork.SaveChangesAsync();
@@ -417,10 +430,31 @@ public class AgentAppService
         }
     }
 
+    private IQueryable<Agent> CreateAgentQuery(string? connectionOwnerUserId = null)
+    {
+        IQueryable<Agent> query = _agentRepository
+            .Queryable.Include(agent => agent.AgentMcpToolServers)
+            .Include(agent => agent.AgentSkillRelations);
+        query =
+            connectionOwnerUserId == null
+                ? query.Include(agent => agent.AgentConnectionRelations)
+                : query.Include(agent =>
+                    agent.AgentConnectionRelations.Where(relation =>
+                        relation.Connection.CreateBy == connectionOwnerUserId
+                    )
+                );
+        return connectionOwnerUserId == null ? query.AsSplitQuery() : query.AsNoTracking().AsSplitQuery();
+    }
+
     private async Task SyncAgentConnectionRelationsAsync(Guid agentId, IEnumerable<Guid>? connectionIds)
     {
-        var existingLinks = await _agentConnectionRelationRepository.ListAsync(x => x.AgentId == agentId);
-        foreach (var link in existingLinks)
+        var user = _userInfoService.RequiredUserId;
+        var existingLinks = await _agentConnectionRelationRepository.ListAsync(
+            link => link.AgentId == agentId,
+            null,
+            link => link.Connection
+        );
+        foreach (var link in existingLinks.Where(link => link.Connection.CreateBy == user))
         {
             _agentConnectionRelationRepository.Remove(link);
         }
@@ -431,7 +465,7 @@ public class AgentAppService
             return;
         }
 
-        var connections = await _connectionRepository.ListAsync(x => requestedIds.Contains(x.Id));
+        var connections = await _connectionRepository.ListAsync(x => requestedIds.Contains(x.Id) && x.CreateBy == user);
         foreach (var connectionId in connections.Select(x => x.Id))
         {
             await _agentConnectionRelationRepository.AddAsync(

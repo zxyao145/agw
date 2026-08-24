@@ -19,6 +19,7 @@ public sealed class OAuthStateProtectorTests
 
         var protectedState = service.Protect(
             connectionId,
+            "test-user",
             "verifier-secret",
             "/integrations/callback?from=settings",
             CallbackUri,
@@ -31,6 +32,7 @@ public sealed class OAuthStateProtectorTests
         Assert.True(service.TryUnprotect(protectedState, out var state));
         Assert.NotNull(state);
         Assert.Equal(connectionId, state.ConnectionId);
+        Assert.Equal("test-user", state.UserId);
         Assert.Equal("verifier-secret", state.PkceVerifier);
         Assert.Equal("/integrations/callback?from=settings", state.ReturnPath);
         Assert.Equal(CallbackUri, state.CallbackUri);
@@ -43,6 +45,7 @@ public sealed class OAuthStateProtectorTests
         var service = CreateService(new TestTimeProvider(DateTimeOffset.UtcNow));
         var protectedState = service.Protect(
             Guid.CreateVersion7(),
+            "test-user",
             "verifier",
             "/integrations",
             CallbackUri,
@@ -62,6 +65,7 @@ public sealed class OAuthStateProtectorTests
         var service = CreateService(timeProvider);
         var protectedState = service.Protect(
             Guid.CreateVersion7(),
+            "test-user",
             "verifier",
             "/integrations",
             CallbackUri,
@@ -87,7 +91,14 @@ public sealed class OAuthStateProtectorTests
         var service = CreateService(new TestTimeProvider(DateTimeOffset.UtcNow));
 
         var exception = Assert.Throws<AgwException>(() =>
-            service.Protect(Guid.CreateVersion7(), "verifier", returnPath, CallbackUri, OAuthCompletionTarget.Web)
+            service.Protect(
+                Guid.CreateVersion7(),
+                "test-user",
+                "verifier",
+                returnPath,
+                CallbackUri,
+                OAuthCompletionTarget.Web
+            )
         );
 
         Assert.Equal(ErrorCodes.OAuthReturnPathInvalid.Code, exception.Code);

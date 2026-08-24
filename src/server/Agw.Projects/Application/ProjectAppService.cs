@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Agw.Auth.Application;
 using Agw.Files.Utils;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Contracts.Projects;
@@ -25,6 +26,7 @@ public class ProjectAppService : IProjectAppService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ProjectDomainService _projectDomainService;
     private readonly ProjectResolver _projectResolver;
+    private readonly IUserInfoService _userInfoService;
 
     public ProjectAppService(
         IRepository<Project> projectRepository,
@@ -37,7 +39,8 @@ public class ProjectAppService : IProjectAppService
         IRepository<AgentflowTrace> traceRepository,
         IUnitOfWork unitOfWork,
         ProjectDomainService projectDomainService,
-        ProjectResolver projectResolver
+        ProjectResolver projectResolver,
+        IUserInfoService userInfoService
     )
     {
         _projectRepository = projectRepository;
@@ -51,42 +54,44 @@ public class ProjectAppService : IProjectAppService
         _unitOfWork = unitOfWork;
         _projectDomainService = projectDomainService;
         _projectResolver = projectResolver;
+        _userInfoService = userInfoService;
     }
 
     public async Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null)
     {
-        var projects = await _projectRepository.ListAsync(
-            predicate,
-            null,
-            project => project.ProjectMcpToolServers,
-            project => project.ProjectSkillRelations,
-            project => project.ProjectConnectionRelations
-        );
+        var query = CreateProjectQuery();
+        if (predicate != null)
+        {
+            query = query.Where(predicate);
+        }
+        var projects = await query.ToListAsync();
+        return projects.OrderByDescending(project => project.CreateTime).ThenBy(project => project.Name).ToList();
+    }
+
+    public async Task<IReadOnlyList<Project>> ListForCurrentUserAsync()
+    {
+        var projects = await CreateProjectQuery(_userInfoService.RequiredUserId).ToListAsync();
         return projects.OrderByDescending(project => project.CreateTime).ThenBy(project => project.Name).ToList();
     }
 
     public async Task<Project?> GetAsync(Guid id)
     {
-        var projects = await _projectRepository.ListAsync(
-            project => project.Id == id,
-            null,
-            project => project.ProjectMcpToolServers,
-            project => project.ProjectSkillRelations,
-            project => project.ProjectConnectionRelations
-        );
-        return projects.FirstOrDefault();
+        return await CreateProjectQuery().FirstOrDefaultAsync(project => project.Id == id);
     }
 
-    public Task<Project?> CreateAsync(Project project, string user) => CreateAsync(project, null, null, null, user);
+    public Task<Project?> GetForCurrentUserAsync(Guid id) =>
+        CreateProjectQuery(_userInfoService.RequiredUserId).FirstOrDefaultAsync(project => project.Id == id);
+
+    public Task<Project?> CreateAsync(Project project) => CreateAsync(project, null, null, null);
 
     public async Task<Project?> CreateAsync(
         Project project,
         IEnumerable<Guid>? mcpToolServerIds,
         IEnumerable<Guid>? skillIds,
-        IEnumerable<Guid>? connectionIds,
-        string user
+        IEnumerable<Guid>? connectionIds
     )
     {
+        var user = _userInfoService.RequiredUserId;
         if (!_projectDomainService.TryPrepareForCreate(project, user))
         {
             return null;
@@ -98,21 +103,21 @@ public class ProjectAppService : IProjectAppService
         await SyncProjectSkillRelationsAsync(project.Id, skillIds);
         await SyncProjectConnectionRelationsAsync(project.Id, connectionIds);
         await _unitOfWork.SaveChangesAsync();
-        return await GetAsync(project.Id);
+        return await GetForCurrentUserAsync(project.Id);
     }
 
-    public Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction, string user) =>
-        UpdateAsync(id, updateAction, null, null, null, user);
+    public Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction) =>
+        UpdateAsync(id, updateAction, null, null, null);
 
     public async Task<Project?> UpdateAsync(
         Guid id,
         Action<Project> updateAction,
         IEnumerable<Guid>? mcpToolServerIds,
         IEnumerable<Guid>? skillIds,
-        IEnumerable<Guid>? connectionIds,
-        string user
+        IEnumerable<Guid>? connectionIds
     )
     {
+        var user = _userInfoService.RequiredUserId;
         var existing = await _projectRepository.GetByIdAsync(id);
         if (existing == null)
         {
@@ -139,7 +144,7 @@ public class ProjectAppService : IProjectAppService
             await SyncProjectConnectionRelationsAsync(existing.Id, connectionIds);
         }
         await _unitOfWork.SaveChangesAsync();
-        return await GetAsync(existing.Id);
+        return await GetForCurrentUserAsync(existing.Id);
     }
 
     public async Task<bool> DeleteAsync(Guid id)
@@ -248,10 +253,27 @@ public class ProjectAppService : IProjectAppService
         }
     }
 
+    private IQueryable<Project> CreateProjectQuery(string? connectionOwnerUserId = null)
+    {
+        IQueryable<Project> query = _projectRepository
+            .Queryable.Include(project => project.ProjectMcpToolServers)
+            .Include(project => project.ProjectSkillRelations);
+        query =
+            connectionOwnerUserId == null
+                ? query.Include(project => project.ProjectConnectionRelations)
+                : query.Include(project =>
+                    project.ProjectConnectionRelations.Where(relation =>
+                        relation.Connection.CreateBy == connectionOwnerUserId
+                    )
+                );
+        return connectionOwnerUserId == null ? query.AsSplitQuery() : query.AsNoTracking().AsSplitQuery();
+    }
+
     private async Task SyncProjectConnectionRelationsAsync(Guid projectId, IEnumerable<Guid>? connectionIds)
     {
+        var user = _userInfoService.RequiredUserId;
         var currentIds = await _projectConnectionRelationRepository
-            .Queryable.Where(relation => relation.ProjectId == projectId)
+            .Queryable.Where(relation => relation.ProjectId == projectId && relation.Connection.CreateBy == user)
             .Select(relation => relation.ConnectionId)
             .ToListAsync();
 
@@ -259,7 +281,11 @@ public class ProjectAppService : IProjectAppService
         var validIds =
             requestedIds.Count == 0
                 ? []
-                : (await _connectionRepository.ListAsync(connection => requestedIds.Contains(connection.Id)))
+                : (
+                    await _connectionRepository.ListAsync(connection =>
+                        requestedIds.Contains(connection.Id) && connection.CreateBy == user
+                    )
+                )
                     .Select(connection => connection.Id)
                     .ToList();
         var removedIds = currentIds.Except(validIds).ToList();
@@ -267,7 +293,9 @@ public class ProjectAppService : IProjectAppService
         {
             var removedRelations = await _projectConnectionRelationRepository
                 .Queryable.Where(relation =>
-                    relation.ProjectId == projectId && removedIds.Contains(relation.ConnectionId)
+                    relation.ProjectId == projectId
+                    && relation.Connection.CreateBy == user
+                    && removedIds.Contains(relation.ConnectionId)
                 )
                 .ToListAsync();
             foreach (var relation in removedRelations)

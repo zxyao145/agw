@@ -16,12 +16,18 @@ import {
 import type { IntegrationSelection, PluginDefinition } from "../types";
 
 type PluginCardProps = {
+  canConfigureInstallation: boolean;
   plugin: PluginDefinition;
   onConfigure: (selection: IntegrationSelection) => void;
   onCreateConnection: (selection: IntegrationSelection) => void;
 };
 
-export function PluginCard({ plugin, onConfigure, onCreateConnection }: PluginCardProps) {
+export function PluginCard({
+  canConfigureInstallation,
+  plugin,
+  onConfigure,
+  onCreateConnection,
+}: PluginCardProps) {
   return (
     <Card className="gap-0 overflow-hidden py-0">
       <CardHeader className="border-b border-dashed bg-muted/20 p-5 [.border-b]:pb-5">
@@ -45,19 +51,21 @@ export function PluginCard({ plugin, onConfigure, onCreateConnection }: PluginCa
                     <span className="font-medium">{connector.displayName}</span>
                     <Badge variant="secondary">{authScheme.displayName}</Badge>
                     <Badge variant={authScheme.installation?.enabled ? "default" : "outline"}>
-                      {authScheme.installation?.enabled ? "Installed" : "Needs setup"}
+                      {authScheme.installation?.enabled ? "Ready" : "Needs setup"}
                     </Badge>
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">{connector.description}</p>
                 </div>
                 <div className="w-full flex flex-wrap gap-2 justify-end">
-                  <Button variant="outline" size="sm" onClick={() => onConfigure(selection)}>
-                    <Settings2 className="size-4" />
-                    Configure
-                  </Button>
+                  {canConfigureInstallation ? (
+                    <Button variant="outline" size="sm" onClick={() => onConfigure(selection)}>
+                      <Settings2 className="size-4" />
+                      Configure
+                    </Button>
+                  ) : null}
                   <Button size="sm" onClick={() => onCreateConnection(selection)}>
                     <Cable className="size-4" />
-                    New connection
+                    New integration
                   </Button>
                 </div>
               </div>

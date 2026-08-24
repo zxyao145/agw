@@ -11,7 +11,7 @@ public partial class AgentRuntimeService
 {
     public async Task<AIAgent?> CreateAiAgentAsync(Guid agentId, CancellationToken cancellationToken = default)
     {
-        var agent = await _agentAppService.GetAgentAsync(agentId);
+        var agent = await _agentAppService.GetAgentForCurrentUserAsync(agentId);
         if (agent == null)
         {
             return null;
@@ -38,7 +38,7 @@ public partial class AgentRuntimeService
         CancellationToken cancellationToken = default
     )
     {
-        var agent = await _agentAppService.GetAgentAsync(agentId);
+        var agent = await _agentAppService.GetAgentForCurrentUserAsync(agentId);
         if (agent == null)
         {
             return null;
@@ -63,7 +63,7 @@ public partial class AgentRuntimeService
         CancellationToken cancellationToken = default
     )
     {
-        var agent = await _agentAppService.GetAgentAsync(agentId);
+        var agent = await _agentAppService.GetAgentForCurrentUserAsync(agentId);
         if (agent == null)
         {
             return null;
@@ -112,7 +112,7 @@ public partial class AgentRuntimeService
         CancellationToken cancellationToken = default
     )
     {
-        var agent = await _agentAppService.GetAgentAsync(agentId);
+        var agent = await _agentAppService.GetAgentForCurrentUserAsync(agentId);
         if (agent == null)
         {
             return null;
@@ -140,7 +140,9 @@ public partial class AgentRuntimeService
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Agent);
-        Project? project = await _projectAppService.GetAsync(request.ProjectId ?? ProjectDefaults.DefaultBuiltInId);
+        Project? project = await _projectAppService.GetForCurrentUserAsync(
+            request.ProjectId ?? ProjectDefaults.DefaultBuiltInId
+        );
         ArgumentNullException.ThrowIfNull(project);
         var environmentVariables = AgentRuntimeServiceUtil.MergeEnvironmentVariables(
             request.Agent.EnvironmentVariables,

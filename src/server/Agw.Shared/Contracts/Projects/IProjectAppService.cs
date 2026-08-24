@@ -7,32 +7,34 @@ public interface IProjectAppService
 {
     Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null);
 
+    Task<IReadOnlyList<Project>> ListForCurrentUserAsync();
+
     Task<string?> GetProjectExtraSettingAsync(Guid? projectId);
 
     Task<Guid?> ResolveProjectIdAsync(Guid? projectId);
 
-    Task<Project?> CreateAsync(Project project, string user);
+    Task<Project?> CreateAsync(Project project);
 
     Task<Project?> CreateAsync(
         Project project,
         IEnumerable<Guid>? mcpToolServerIds,
         IEnumerable<Guid>? skillIds,
-        IEnumerable<Guid>? connectionIds,
-        string user
-    ) => CreateAsync(project, user);
+        IEnumerable<Guid>? connectionIds
+    ) => CreateAsync(project);
 
     Task<bool> DeleteAsync(Guid id);
 
     Task<Project?> GetAsync(Guid id);
 
-    Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction, string user);
+    Task<Project?> GetForCurrentUserAsync(Guid id);
+
+    Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction);
 
     Task<Project?> UpdateAsync(
         Guid id,
         Action<Project> updateAction,
         IEnumerable<Guid>? mcpToolServerIds,
         IEnumerable<Guid>? skillIds,
-        IEnumerable<Guid>? connectionIds,
-        string user
-    ) => UpdateAsync(id, updateAction, user);
+        IEnumerable<Guid>? connectionIds
+    ) => UpdateAsync(id, updateAction);
 }

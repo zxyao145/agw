@@ -219,7 +219,7 @@ public partial class AgentRuntimeService
         {
             foreach (var agentId in agentIds.Where(id => id != parentAgentId).Distinct())
             {
-                var definition = await _agentAppService.GetAgentAsync(agentId);
+                var definition = await _agentAppService.GetAgentForCurrentUserAsync(agentId);
                 if (definition == null)
                 {
                     continue;

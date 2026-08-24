@@ -68,7 +68,7 @@ test("Project form has the 360px metadata column and one combined Tools tab", as
   assert.match(source, /<TabsTrigger value="skills">Skills<\/TabsTrigger>/);
   assert.match(source, /<TabsTrigger value="tools">Tools<\/TabsTrigger>/);
   assert.match(source, /<TabsTrigger value="mcp-tool-servers">MCP Tool Server<\/TabsTrigger>/);
-  assert.match(source, /<TabsTrigger value="connections">Connections<\/TabsTrigger>/);
+  assert.match(source, /<TabsTrigger value="connections">Integrations<\/TabsTrigger>/);
   assert.match(
     source,
     /<TabsTrigger value="environment-variables">Environment Variables<\/TabsTrigger>/,

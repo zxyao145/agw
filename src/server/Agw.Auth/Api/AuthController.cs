@@ -23,6 +23,7 @@ public sealed class AuthController : ControllerBase
     private readonly IAntiforgery _antiforgery;
     private readonly AuthenticationAttemptLimiter _attemptLimiter;
     private readonly TimeProvider _timeProvider;
+    private readonly IUserInfoService _userInfoService;
 
     public AuthController(
         IAuthenticationStateStore stateStore,
@@ -30,7 +31,8 @@ public sealed class AuthController : ControllerBase
         IPasswordHasher<object> passwordHasher,
         IAntiforgery antiforgery,
         AuthenticationAttemptLimiter attemptLimiter,
-        TimeProvider timeProvider
+        TimeProvider timeProvider,
+        IUserInfoService userInfoService
     )
     {
         _stateStore = stateStore;
@@ -39,6 +41,7 @@ public sealed class AuthController : ControllerBase
         _antiforgery = antiforgery;
         _attemptLimiter = attemptLimiter;
         _timeProvider = timeProvider;
+        _userInfoService = userInfoService;
     }
 
     [HttpGet("session")]
@@ -47,9 +50,10 @@ public sealed class AuthController : ControllerBase
     public IActionResult Session()
     {
         var identity = User.Identity;
+        var authenticated = identity?.IsAuthenticated == true;
         return ApiResult.Ok(
             new SessionResponse(
-                identity?.IsAuthenticated == true,
+                authenticated,
                 identity?.AuthenticationType switch
                 {
                     AgwAuthDefaults.LocalTrustedScheme => "localTrusted",
@@ -57,7 +61,8 @@ public sealed class AuthController : ControllerBase
                     AgwAuthDefaults.BearerScheme => "bearer",
                     _ => "anonymous",
                 },
-                1
+                1,
+                authenticated ? _userInfoService.RequiredUserId : null
             )
         );
     }

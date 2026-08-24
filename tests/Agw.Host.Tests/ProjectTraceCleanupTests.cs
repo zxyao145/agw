@@ -1,3 +1,4 @@
+using Agw.Auth.Application;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Projects.Application;
@@ -208,7 +209,8 @@ public class ProjectTraceCleanupTests
             new EfRepository<AgentflowTrace>(dbContext),
             dbContext,
             new ProjectDomainService(TimeProvider.System),
-            new ProjectResolver(projectRepository)
+            new ProjectResolver(projectRepository),
+            new UserInfoService()
         );
     }
 }

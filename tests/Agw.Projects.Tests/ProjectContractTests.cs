@@ -43,7 +43,6 @@ public class ProjectContractTests
             typeof(IEnumerable<Guid>),
             typeof(IEnumerable<Guid>),
             typeof(IEnumerable<Guid>),
-            typeof(string),
         };
         var updateParameterTypes = new[]
         {
@@ -52,7 +51,6 @@ public class ProjectContractTests
             typeof(IEnumerable<Guid>),
             typeof(IEnumerable<Guid>),
             typeof(IEnumerable<Guid>),
-            typeof(string),
         };
 
         Assert.NotNull(typeof(ProjectAppService).GetMethod("CreateAsync", createParameterTypes));

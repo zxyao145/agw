@@ -81,6 +81,7 @@ public class DefinitionPaginationTests
             AuthSchemeId = "test-auth",
             DisplayName = "Paged Connection",
             Alias = "paged-connection",
+            CreateBy = "tester",
             CreateTime = now,
         };
 
@@ -162,7 +163,8 @@ public class DefinitionPaginationTests
             new EfRepository<Skill>(dbContext),
             new EfRepository<AgentSkillRelation>(dbContext),
             dbContext,
-            new AgentDomainService(TimeProvider.System)
+            new AgentDomainService(TimeProvider.System),
+            new TestUserInfoService()
         );
     }
 

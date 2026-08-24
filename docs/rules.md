@@ -110,6 +110,16 @@ Direct `new HttpClient()` causes socket exhaustion and DNS staleness. `IHttpClie
 - Register new backend services in the relevant module `DependencyInjection.cs` or extension method and ensure `Agw.Host/Program.cs` composes the module.
 - `Agw.Integrations` treats `IPluginCatalog` as the source of truth for plugin, connector, authentication, capability-source, and bundled Skill definitions; definitions are code/content assets and are not EF entities.
 - Persist platform-level configuration in `PluginInstallation`, Agent-selectable accounts or endpoints in `Connection`, and protected or environment-referenced secrets in their dedicated credential entities.
-- Agent and Project integration bindings must reference concrete `ConnectionId` values. Only `Ready` Connections may contribute runtime tools or bundled Plugin Skills.
+- User-facing surfaces call catalog definitions Available integrations and Connection instances Configured integrations. Developer contracts retain `PluginDefinition`, `PluginInstallation`, `Connection`, and `ConnectionId`.
+- `Connection.CreateBy` is the stable owner user ID. Alias values are immutable and unique within `(CreateBy, Alias)`. CRUD, OAuth, credential reads, binding projection, and every Native/MCP invocation scope must reject foreign Connection IDs without disclosing ownership.
+- Agent and Project integration bindings reference concrete `ConnectionId` values and form per-user overlays on shared definitions. Updating one user's overlay must preserve other users' relations. Only owner-matched `Ready` Connections may contribute runtime tools or bundled Plugin Skills.
+- Only the stable administrator user ID `1001` may mutate platform-wide `PluginInstallation` setup. A setup change still invalidates affected Connections across all owners.
 - Never return or log plaintext installation secrets, access or refresh tokens, API keys, AK/SK values, protected credential payloads, or complete OAuth token responses.
 - Plugin MCP sources that inject credentials into HTTP or SSE requests must use HTTPS endpoints. Materialize them with invocation-scoped credentials and dispose the client and transport after the invocation.
+
+## 8. Current User ID Access
+
+- Read the current authenticated user's stable ID from `UserInfoUtil.UserId` / `UserInfoUtil.RequiredUserId`, or from the corresponding properties on an injected `IUserInfoService`.
+- Use `RequiredUserId` when authentication is mandatory. Use nullable `UserId` only when an unauthenticated context is explicitly supported.
+- Do not add `user` or `userId` parameters merely to pass the current user through Controllers, Application services, runtime composition, credential readers, or tool invokers.
+- An explicit user ID is allowed when it is domain data or must cross an authentication-context boundary, such as a protected OAuth state, a persisted execution manifest, a queued background operation, or an administrator acting on a specified owner. Resolve the current user before crossing that boundary and restore `UserInfoUtil.Current` after temporarily switching execution context.

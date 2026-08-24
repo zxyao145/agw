@@ -862,6 +862,7 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnName("connector_id");
 
                     b.Property<string>("CreateBy")
+                        .IsRequired()
                         .HasColumnType("TEXT")
                         .HasColumnName("create_by");
 
@@ -921,15 +922,15 @@ namespace Agw.Migrations.Sqlite.Migrations
                     b.HasKey("Id")
                         .HasName("pk_integration_connection");
 
-                    b.HasIndex("Alias")
-                        .IsUnique()
-                        .HasDatabaseName("ix_integration_connection_alias");
-
                     b.HasIndex("PluginId")
                         .HasDatabaseName("ix_integration_connection_plugin_id");
 
                     b.HasIndex("Status")
                         .HasDatabaseName("ix_integration_connection_status");
+
+                    b.HasIndex("CreateBy", "Alias")
+                        .IsUnique()
+                        .HasDatabaseName("ix_integration_connection_create_by_alias");
 
                     b.ToTable("integration_connection", null, t =>
                         {

@@ -1,3 +1,4 @@
+using Agw.Auth.Application;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
@@ -9,14 +10,17 @@ public sealed class ConnectionCredentialReader : IConnectionCredentialReader
 {
     private readonly IRepository<PluginInstallationCredential> _installationCredentialRepository;
     private readonly IRepository<ConnectionCredential> _connectionCredentialRepository;
+    private readonly IUserInfoService _userInfoService;
 
     public ConnectionCredentialReader(
         IRepository<PluginInstallationCredential> installationCredentialRepository,
-        IRepository<ConnectionCredential> connectionCredentialRepository
+        IRepository<ConnectionCredential> connectionCredentialRepository,
+        IUserInfoService userInfoService
     )
     {
         _installationCredentialRepository = installationCredentialRepository;
         _connectionCredentialRepository = connectionCredentialRepository;
+        _userInfoService = userInfoService;
     }
 
     public async Task<ResolvedCredential?> ReadConnectionAsync(
@@ -25,8 +29,9 @@ public sealed class ConnectionCredentialReader : IConnectionCredentialReader
         CancellationToken cancellationToken
     )
     {
+        var userId = _userInfoService.RequiredUserId;
         var credential = await _connectionCredentialRepository.Queryable.FirstOrDefaultAsync(
-            item => item.ConnectionId == connectionId && item.Slot == slot,
+            item => item.ConnectionId == connectionId && item.Connection.CreateBy == userId && item.Slot == slot,
             cancellationToken
         );
         return credential == null ? null : Resolve(credential.Value, credential.ExpiresAtUtc);

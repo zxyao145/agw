@@ -476,7 +476,8 @@ public class AgentRuntimeServiceSystemCompositionTests
             new EfRepository<Skill>(dbContext),
             new EfRepository<AgentSkillRelation>(dbContext),
             dbContext,
-            new AgentDomainService(TimeProvider.System)
+            new AgentDomainService(TimeProvider.System),
+            new TestUserInfoService()
         );
     }
 
@@ -798,17 +799,20 @@ public class AgentRuntimeServiceSystemCompositionTests
         public Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null) =>
             Task.FromResult<IReadOnlyList<Project>>([_project]);
 
+        public Task<IReadOnlyList<Project>> ListForCurrentUserAsync() => ListAsync();
+
         public Task<string?> GetProjectExtraSettingAsync(Guid? projectId) => Task.FromResult(_project.ExtraSetting);
 
         public Task<Guid?> ResolveProjectIdAsync(Guid? projectId) => Task.FromResult<Guid?>(_project.Id);
 
-        public Task<Project?> CreateAsync(Project project, string user) => Task.FromResult<Project?>(project);
+        public Task<Project?> CreateAsync(Project project) => Task.FromResult<Project?>(project);
 
         public Task<bool> DeleteAsync(Guid id) => Task.FromResult(false);
 
         public Task<Project?> GetAsync(Guid id) => Task.FromResult<Project?>(_project);
 
-        public Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction, string user) =>
-            Task.FromResult<Project?>(_project);
+        public Task<Project?> GetForCurrentUserAsync(Guid id) => GetAsync(id);
+
+        public Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction) => Task.FromResult<Project?>(_project);
     }
 }

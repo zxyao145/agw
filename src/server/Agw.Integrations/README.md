@@ -6,6 +6,17 @@
 
 The built-in catalog currently contains GitHub only.
 
+## Terminology and ownership
+
+Product surfaces intentionally use Integration terminology: catalog definitions are **Available integrations**, while a user's configured accounts or service endpoints are **Configured integrations**. The implementation keeps the more precise developer model:
+
+- `PluginDefinition` is the system-provided Integration definition.
+- `PluginInstallation` is deployment-wide setup, such as an OAuth Client ID and Client Secret, and only administrator user `1001` may change it.
+- `Connection` is one configured Integration instance owned by the stable user ID in `CreateBy`; a user may create several Connections from the same definition.
+- `Connector` is a service or protocol variant within a Plugin and is not a synonym for Connection.
+
+Connection CRUD, OAuth, credential reads, Agent/Project binding views, and every Native/MCP invocation enforce the owner ID. Alias values are immutable and unique per owner. Shared Agent and Project definitions retain independent Connection-binding overlays for each user.
+
 ## Design goals
 
 The module follows these principles:
@@ -137,7 +148,7 @@ PluginDefinition
 | Capability Source `Id` | A stable identity within a Connector. MCP wrapper tools retain this ID so the source can be found again when an operation is invoked. It is not a semantic capability taxonomy. |
 | `PluginSkillDefinition` | Stores only a safe relative `ContentPath`. Skill ID and description are read from the `name` and `description` frontmatter fields in `SKILL.md`. |
 | `PluginInstallation` | One platform-wide row per plugin. A row is required and must be enabled before a Connection can contribute runtime capabilities. |
-| `Connection` | One Agent-selectable external account or endpoint. It fixes the Plugin, Connector, Auth Scheme, display name, immutable alias, status, subject, and non-secret configuration. |
+| `Connection` | One user-owned, Agent-selectable external account or endpoint. It fixes the Plugin, Connector, Auth Scheme, display name, immutable per-owner alias, status, subject, and non-secret configuration. |
 | Credential | An encrypted value owned by either a Plugin Installation or a Connection and addressed by a stable slot. |
 
 ### Why Connection is the selection unit
@@ -245,12 +256,14 @@ Important storage rules:
 - Installation secret slots use `field:{connectorId}:{authSchemeId}:{fieldId}`.
 - Connection secret slots use `field:{fieldId}`.
 - OAuth tokens use `oauth.access-token`, `oauth.refresh-token`, and `oauth.id-token`.
-- `integration_connection.alias` is globally unique and immutable after creation.
+- `(integration_connection.create_by, integration_connection.alias)` is unique, and Alias is immutable after creation.
 - Credential owners have a unique `(owner_id, slot)` pair.
 - Agent and Project relation tables use composite keys, preventing duplicate bindings.
 - `ValidationMetadataJson` and credential `MetadataJson` are reserved internal fields and are not part of the management API.
 
 The EF model declares ownership/navigation relationships, while the current integration migration intentionally creates these integration tables without database foreign-key constraints. `AgwDbContext` therefore removes dependent credentials and Agent/Project relations explicitly when an Installation, Connection, Agent, or Project is deleted.
+
+Upgrade note: `EnforceUserOwnedConnections` preserves every non-null `create_by`; Connections created through the management API already recorded the caller's stable User ID. Only legacy or out-of-band rows whose owner is NULL fall back to administrator `1001`, because their original ownership cannot be reconstructed from the row. Before upgrading a multi-user deployment, audit `SELECT id, alias FROM integration_connection WHERE create_by IS NULL` and backfill those rows from an external ownership mapping when one exists.
 
 ## Connection status model
 
@@ -491,6 +504,8 @@ For the built-in GitHub plugin:
 7. Run the in-process Agent. The model sees tools such as `work-github__list_repositories` and the bundled GitHub Skill.
 
 Binding a Connection at Project level makes it available to every in-process Agent executed in that Project. Binding it directly to an Agent makes it available to that Agent. If both bind the same Connection, only one tool set is created.
+
+Binding updates are owner-scoped. A requested `ConnectionId` that is missing or belongs to another user is treated as unavailable and omitted without revealing ownership. Clients should refresh the caller's available Integrations before submitting a complete binding list.
 
 ### REST API example
 

@@ -1,3 +1,4 @@
+using Agw.Auth.Application;
 using Agw.Integrations.Application.Credentials;
 using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.Management;
@@ -24,6 +25,7 @@ public sealed class ConnectionAppService
     private readonly CredentialMutationService _credentialMutations;
     private readonly IConnectionCredentialReader _credentialReader;
     private readonly TimeProvider _timeProvider;
+    private readonly IUserInfoService _userInfoService;
 
     public ConnectionAppService(
         IRepository<Connection> connectionRepository,
@@ -32,7 +34,8 @@ public sealed class ConnectionAppService
         IPluginCatalog pluginCatalog,
         CredentialMutationService credentialMutations,
         IConnectionCredentialReader credentialReader,
-        TimeProvider timeProvider
+        TimeProvider timeProvider,
+        IUserInfoService userInfoService
     )
     {
         _connectionRepository = connectionRepository;
@@ -42,11 +45,15 @@ public sealed class ConnectionAppService
         _credentialMutations = credentialMutations;
         _credentialReader = credentialReader;
         _timeProvider = timeProvider;
+        _userInfoService = userInfoService;
     }
 
     public async Task<IReadOnlyList<ConnectionResponse>> ListAsync(Guid? id, CancellationToken cancellationToken)
     {
-        IQueryable<Connection> query = _connectionRepository.Queryable.Include(connection => connection.Credentials);
+        var user = _userInfoService.RequiredUserId;
+        IQueryable<Connection> query = _connectionRepository
+            .Queryable.Include(connection => connection.Credentials)
+            .Where(connection => connection.CreateBy == user);
         if (id.HasValue)
         {
             query = query.Where(connection => connection.Id == id.Value);
@@ -58,10 +65,10 @@ public sealed class ConnectionAppService
 
     public async Task<ConnectionResponse> CreateAsync(
         ConnectionCreateRequest request,
-        string user,
         CancellationToken cancellationToken
     )
     {
+        var user = _userInfoService.RequiredUserId;
         var definition = IntegrationDefinitionResolver.Resolve(
             _pluginCatalog,
             request.PluginId,
@@ -69,7 +76,12 @@ public sealed class ConnectionAppService
             request.AuthSchemeId
         );
         var alias = IntegrationInputValidator.NormalizeAlias(request.Alias);
-        if (await _connectionRepository.Queryable.AnyAsync(connection => connection.Alias == alias, cancellationToken))
+        if (
+            await _connectionRepository.Queryable.AnyAsync(
+                connection => connection.CreateBy == user && connection.Alias == alias,
+                cancellationToken
+            )
+        )
         {
             throw new AgwException(ErrorCodes.ConnectionAliasAlreadyExists);
         }
@@ -101,7 +113,7 @@ public sealed class ConnectionAppService
             CreateTime = _timeProvider.GetUtcNow(),
         };
         await _connectionRepository.AddAsync(connection);
-        await _credentialMutations.ApplyConnectionAsync(connection, input.SecretUpdates, user);
+        await _credentialMutations.ApplyConnectionAsync(connection, input.SecretUpdates);
         await SetInitialStatusAsync(connection, definition, cancellationToken);
         await _unitOfWork.SaveChangesAsync();
         return Map(connection);
@@ -109,10 +121,10 @@ public sealed class ConnectionAppService
 
     public async Task<ConnectionResponse> UpdateAsync(
         ConnectionUpdateRequest request,
-        string user,
         CancellationToken cancellationToken
     )
     {
+        var user = _userInfoService.RequiredUserId;
         var connection = await GetTrackedAsync(request.Id, cancellationToken);
         var alias = IntegrationInputValidator.NormalizeAlias(request.Alias);
         if (!string.Equals(alias, connection.Alias, StringComparison.Ordinal))
@@ -153,14 +165,15 @@ public sealed class ConnectionAppService
         connection.Enabled = request.Enabled;
         connection.UpdateBy = user;
         connection.UpdateTime = _timeProvider.GetUtcNow();
-        await _credentialMutations.ApplyConnectionAsync(connection, input.SecretUpdates, user);
+        await _credentialMutations.ApplyConnectionAsync(connection, input.SecretUpdates);
         await SetInitialStatusAsync(connection, definition, cancellationToken);
         await _unitOfWork.SaveChangesAsync();
         return Map(connection);
     }
 
-    public async Task<ConnectionResponse> ValidateAsync(Guid id, string user, CancellationToken cancellationToken)
+    public async Task<ConnectionResponse> ValidateAsync(Guid id, CancellationToken cancellationToken)
     {
+        var user = _userInfoService.RequiredUserId;
         var connection = await GetTrackedAsync(id, cancellationToken);
         var now = _timeProvider.GetUtcNow();
         connection.LastValidatedAtUtc = now;
@@ -218,8 +231,9 @@ public sealed class ConnectionAppService
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
+        var user = _userInfoService.RequiredUserId;
         var connection = await _connectionRepository.Queryable.FirstOrDefaultAsync(
-            item => item.Id == id,
+            item => item.Id == id && item.CreateBy == user,
             cancellationToken
         );
         if (connection == null)
@@ -328,9 +342,10 @@ public sealed class ConnectionAppService
 
     private async Task<Connection> GetTrackedAsync(Guid id, CancellationToken cancellationToken)
     {
+        var user = _userInfoService.RequiredUserId;
         var connection = await _connectionRepository
             .Queryable.Include(item => item.Credentials)
-            .FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+            .FirstOrDefaultAsync(item => item.Id == id && item.CreateBy == user, cancellationToken);
         return connection ?? throw new AgwException(ErrorCodes.ConnectionNotFound);
     }
 

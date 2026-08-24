@@ -8,6 +8,7 @@ using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.Management;
 using Agw.Integrations.Domain.Plugins;
 using Agw.Integrations.Infrastructure.Plugins;
+using Agw.Shared;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
@@ -39,7 +40,7 @@ public class IntegrationManagementAppServiceTests
                 Configuration = new Dictionary<string, string?> { ["client-id"] = "client-123" },
                 Secrets = new Dictionary<string, SecretFieldUpdateRequest> { ["client-secret"] = Encrypted(plaintext) },
             },
-            "tester",
+            Constants.AdminUserId,
             cancellationToken
         );
 
@@ -75,12 +76,65 @@ public class IntegrationManagementAppServiceTests
     }
 
     [Fact]
+    public async Task ConnectionOperations_UserScope_IsolatesDataAndAllowsAliasReuse()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scope = await ManagementTestScope.CreateAsync(cancellationToken);
+
+        var first = await scope.Connections.CreateAsync(ConnectionRequest("shared-alias"), "user-a", cancellationToken);
+        var second = await scope.Connections.CreateAsync(
+            ConnectionRequest("shared-alias"),
+            "user-b",
+            cancellationToken
+        );
+
+        Assert.Equal(first.Id, Assert.Single(await scope.Connections.ListAsync(null, "user-a", cancellationToken)).Id);
+        Assert.Equal(second.Id, Assert.Single(await scope.Connections.ListAsync(null, "user-b", cancellationToken)).Id);
+        Assert.Empty(await scope.Connections.ListAsync(first.Id, "user-b", cancellationToken));
+        Assert.Null(
+            await scope.Reader.ReadConnectionAsync(
+                first.Id,
+                "user-b",
+                IntegrationCredentialSlots.ConnectionField("api-key"),
+                cancellationToken
+            )
+        );
+        var duplicate = await Assert.ThrowsAsync<AgwException>(() =>
+            scope.Connections.CreateAsync(ConnectionRequest("shared-alias"), "user-a", cancellationToken)
+        );
+        Assert.Equal(ErrorCodes.ConnectionAliasAlreadyExists.Code, duplicate.Code);
+        var foreignValidation = await Assert.ThrowsAsync<AgwException>(() =>
+            scope.Connections.ValidateAsync(first.Id, "user-b", cancellationToken)
+        );
+        Assert.Equal(ErrorCodes.ConnectionNotFound.Code, foreignValidation.Code);
+        Assert.False(await scope.Connections.DeleteAsync(first.Id, "user-b", cancellationToken));
+        Assert.True(await scope.Connections.DeleteAsync(first.Id, "user-a", cancellationToken));
+    }
+
+    [Fact]
+    public async Task UpsertInstallation_NonAdministrator_ThrowsAdministratorRequired()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scope = await ManagementTestScope.CreateAsync(cancellationToken);
+
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            scope.Installations.UpsertAsync(
+                InstallationRequest(Encrypted("replacement"), null),
+                "user-a",
+                cancellationToken
+            )
+        );
+
+        Assert.Equal(ErrorCodes.AdministratorRequired.Code, exception.Code);
+    }
+
+    [Fact]
     public async Task UpsertInstallation_KeepSetAndClear_AppliesMutationSemantics()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await ManagementTestScope.CreateAsync(cancellationToken);
         var initial = InstallationRequest(Encrypted("initial-secret"), Encrypted("optional-secret"));
-        var created = await scope.Installations.UpsertAsync(initial, "tester", cancellationToken);
+        var created = await scope.Installations.UpsertAsync(initial, Constants.AdminUserId, cancellationToken);
 
         var credentialBeforeKeep = await scope.DbContext.PluginInstallationCredentials.SingleAsync(
             item => item.Slot.EndsWith("client-secret"),
@@ -102,7 +156,7 @@ public class IntegrationManagementAppServiceTests
                     ["optional-secret"] = Encrypted("optional-replacement"),
                 },
             },
-            "tester",
+            Constants.AdminUserId,
             cancellationToken
         );
 
@@ -135,7 +189,7 @@ public class IntegrationManagementAppServiceTests
                     ["optional-secret"] = new SecretFieldUpdateRequest { Action = SecretUpdateAction.Clear },
                 },
             },
-            "tester",
+            Constants.AdminUserId,
             cancellationToken
         );
 
@@ -164,7 +218,7 @@ public class IntegrationManagementAppServiceTests
                         ["client-secret"] = Encrypted("secret"),
                     },
                 },
-                "tester",
+                Constants.AdminUserId,
                 cancellationToken
             )
         );
@@ -173,7 +227,7 @@ public class IntegrationManagementAppServiceTests
         var unknown = InstallationRequest(Encrypted("secret"), null);
         unknown.Configuration["unknown"] = "value";
         var unknownError = await Assert.ThrowsAsync<AgwException>(() =>
-            scope.Installations.UpsertAsync(unknown, "tester", cancellationToken)
+            scope.Installations.UpsertAsync(unknown, Constants.AdminUserId, cancellationToken)
         );
         Assert.Equal(ErrorCodes.IntegrationConfigurationInvalid.Code, unknownError.Code);
 
@@ -182,7 +236,7 @@ public class IntegrationManagementAppServiceTests
             null
         );
         var sourceError = await Assert.ThrowsAsync<AgwException>(() =>
-            scope.Installations.UpsertAsync(invalidSource, "tester", cancellationToken)
+            scope.Installations.UpsertAsync(invalidSource, Constants.AdminUserId, cancellationToken)
         );
         Assert.Equal(ErrorCodes.IntegrationSecretMutationInvalid.Code, sourceError.Code);
     }
@@ -275,6 +329,7 @@ public class IntegrationManagementAppServiceTests
 
         var value = await scope.Reader.ReadConnectionAsync(
             connection.Id,
+            "tester",
             IntegrationCredentialSlots.ConnectionField("api-key"),
             cancellationToken
         );
@@ -420,7 +475,7 @@ public class IntegrationManagementAppServiceTests
                     ["client-secret"] = Encrypted("github-secret"),
                 },
             },
-            "tester",
+            Constants.AdminUserId,
             cancellationToken
         );
         request.Alias = "github-ready";
@@ -461,11 +516,11 @@ public class IntegrationManagementAppServiceTests
 
         await scope.Installations.UpsertAsync(
             InstallationRequest(new SecretFieldUpdateRequest { Action = SecretUpdateAction.Clear }, null),
-            "tester",
+            Constants.AdminUserId,
             cancellationToken
         );
 
-        var connection = Assert.Single(await scope.Connections.ListAsync(created.Id, cancellationToken));
+        var connection = Assert.Single(await scope.Connections.ListAsync(created.Id, "tester", cancellationToken));
         Assert.Equal(ConnectionStatusResponse.NeedsConfiguration, connection.Status);
         Assert.Null(connection.LastValidatedAtUtc);
         Assert.Equal("integration.needs_configuration", connection.LastValidationErrorCode);
@@ -488,7 +543,7 @@ public class IntegrationManagementAppServiceTests
         );
         await scope.Installations.UpsertAsync(
             InstallationRequest(new SecretFieldUpdateRequest { Action = SecretUpdateAction.Clear }, null),
-            "tester",
+            Constants.AdminUserId,
             cancellationToken
         );
 
@@ -500,12 +555,12 @@ public class IntegrationManagementAppServiceTests
                 AuthSchemeId = "api-key",
                 Enabled = false,
             },
-            "tester",
+            Constants.AdminUserId,
             cancellationToken
         );
 
         Assert.False(disabled.Enabled);
-        var response = Assert.Single(await scope.Connections.ListAsync(connection.Id, cancellationToken));
+        var response = Assert.Single(await scope.Connections.ListAsync(connection.Id, "tester", cancellationToken));
         Assert.Equal(ConnectionStatusResponse.NeedsConfiguration, response.Status);
     }
 
@@ -524,7 +579,7 @@ public class IntegrationManagementAppServiceTests
         };
 
         var unknown = await Assert.ThrowsAsync<AgwException>(() =>
-            scope.Installations.UpsertAsync(request, "tester", cancellationToken)
+            scope.Installations.UpsertAsync(request, Constants.AdminUserId, cancellationToken)
         );
         Assert.Equal(ErrorCodes.IntegrationConfigurationInvalid.Code, unknown.Code);
 
@@ -535,7 +590,7 @@ public class IntegrationManagementAppServiceTests
             SecretValue = " ",
         };
         var invalidSecret = await Assert.ThrowsAsync<AgwException>(() =>
-            scope.Installations.UpsertAsync(request, "tester", cancellationToken)
+            scope.Installations.UpsertAsync(request, Constants.AdminUserId, cancellationToken)
         );
         Assert.Equal(ErrorCodes.IntegrationSecretMutationInvalid.Code, invalidSecret.Code);
     }
@@ -573,9 +628,9 @@ public class IntegrationManagementAppServiceTests
             null
         );
         disableInstallation.Enabled = false;
-        await scope.Installations.UpsertAsync(disableInstallation, "tester", cancellationToken);
+        await scope.Installations.UpsertAsync(disableInstallation, Constants.AdminUserId, cancellationToken);
 
-        var connections = (await scope.Connections.ListAsync(null, cancellationToken)).ToDictionary(
+        var connections = (await scope.Connections.ListAsync(null, "tester", cancellationToken)).ToDictionary(
             connection => connection.Alias,
             StringComparer.Ordinal
         );
@@ -615,7 +670,7 @@ public class IntegrationManagementAppServiceTests
                 ["client-secret"] = Encrypted("github-secret"),
             },
         };
-        await scope.Installations.UpsertAsync(installation, "tester", cancellationToken);
+        await scope.Installations.UpsertAsync(installation, Constants.AdminUserId, cancellationToken);
 
         var pending = await scope.Connections.CreateAsync(
             new ConnectionCreateRequest
@@ -683,9 +738,9 @@ public class IntegrationManagementAppServiceTests
 
         installation.Configuration["client-id"] = "rotated-client";
         installation.Secrets["client-secret"] = Encrypted("rotated-secret");
-        await scope.Installations.UpsertAsync(installation, "tester", cancellationToken);
+        await scope.Installations.UpsertAsync(installation, Constants.AdminUserId, cancellationToken);
 
-        var connections = (await scope.Connections.ListAsync(null, cancellationToken)).ToDictionary(
+        var connections = (await scope.Connections.ListAsync(null, "tester", cancellationToken)).ToDictionary(
             connection => connection.Alias,
             StringComparer.Ordinal
         );
@@ -722,7 +777,7 @@ public class IntegrationManagementAppServiceTests
         await scope.DbContext.SaveChangesAsync(cancellationToken);
         scope.DbContext.ChangeTracker.Clear();
 
-        Assert.True(await scope.Connections.DeleteAsync(created.Id, cancellationToken));
+        Assert.True(await scope.Connections.DeleteAsync(created.Id, "tester", cancellationToken));
 
         Assert.False(await scope.DbContext.Connections.AnyAsync(item => item.Id == created.Id, cancellationToken));
         Assert.False(
@@ -823,9 +878,9 @@ public class IntegrationManagementAppServiceTests
             SqliteConnection connection,
             AgwDbContext dbContext,
             PluginCatalogAppService plugins,
-            PluginInstallationAppService installations,
-            ConnectionAppService connections,
-            IConnectionCredentialReader reader
+            TestPluginInstallationClient installations,
+            TestConnectionClient connections,
+            TestCredentialReader reader
         )
         {
             _connection = connection;
@@ -838,9 +893,9 @@ public class IntegrationManagementAppServiceTests
 
         public AgwDbContext DbContext { get; }
         public PluginCatalogAppService Plugins { get; }
-        public PluginInstallationAppService Installations { get; }
-        public ConnectionAppService Connections { get; }
-        public IConnectionCredentialReader Reader { get; }
+        public TestPluginInstallationClient Installations { get; }
+        public TestConnectionClient Connections { get; }
+        public TestCredentialReader Reader { get; }
 
         public static async Task<ManagementTestScope> CreateAsync(
             CancellationToken cancellationToken,
@@ -873,15 +928,18 @@ public class IntegrationManagementAppServiceTests
                 dbContext
             );
             IUnitOfWork unitOfWork = dbContext;
+            var userInfo = new TestUserInfoService(Constants.AdminUserId);
 
             var reader = new ConnectionCredentialReader(
                 installationCredentialRepository,
-                connectionCredentialRepository
+                connectionCredentialRepository,
+                userInfo
             );
             var credentialMutations = new CredentialMutationService(
                 installationCredentialRepository,
                 connectionCredentialRepository,
-                timeProvider
+                timeProvider,
+                userInfo
             );
             var installations = new PluginInstallationAppService(
                 installationRepository,
@@ -889,7 +947,8 @@ public class IntegrationManagementAppServiceTests
                 unitOfWork,
                 catalog,
                 credentialMutations,
-                timeProvider
+                timeProvider,
+                userInfo
             );
             var plugins = new PluginCatalogAppService(
                 catalog,
@@ -903,26 +962,150 @@ public class IntegrationManagementAppServiceTests
                 catalog,
                 credentialMutations,
                 reader,
-                timeProvider
+                timeProvider,
+                userInfo
             );
+            var installationClient = new TestPluginInstallationClient(installations, userInfo);
+            var connectionClient = new TestConnectionClient(connections, userInfo);
+            var credentialReader = new TestCredentialReader(reader, userInfo);
 
             if (catalog is TestPluginCatalog)
             {
-                await installations.UpsertAsync(
+                await installationClient.UpsertAsync(
                     InstallationRequest(Encrypted("seed-secret"), null),
-                    "seed",
+                    Constants.AdminUserId,
                     cancellationToken
                 );
                 dbContext.ChangeTracker.Clear();
             }
 
-            return new ManagementTestScope(connection, dbContext, plugins, installations, connections, reader);
+            return new ManagementTestScope(
+                connection,
+                dbContext,
+                plugins,
+                installationClient,
+                connectionClient,
+                credentialReader
+            );
         }
 
         public async ValueTask DisposeAsync()
         {
             await DbContext.DisposeAsync();
             await _connection.DisposeAsync();
+        }
+    }
+
+    private sealed class TestPluginInstallationClient
+    {
+        private readonly PluginInstallationAppService _service;
+        private readonly TestUserInfoService _userInfo;
+
+        public TestPluginInstallationClient(PluginInstallationAppService service, TestUserInfoService userInfo)
+        {
+            _service = service;
+            _userInfo = userInfo;
+        }
+
+        public Task<PluginInstallationResponse> UpsertAsync(
+            PluginInstallationUpsertRequest request,
+            string userId,
+            CancellationToken cancellationToken
+        )
+        {
+            _userInfo.UserId = userId;
+            return _service.UpsertAsync(request, cancellationToken);
+        }
+    }
+
+    private sealed class TestConnectionClient
+    {
+        private readonly ConnectionAppService _service;
+        private readonly TestUserInfoService _userInfo;
+
+        public TestConnectionClient(ConnectionAppService service, TestUserInfoService userInfo)
+        {
+            _service = service;
+            _userInfo = userInfo;
+        }
+
+        public Task<IReadOnlyList<ConnectionResponse>> ListAsync(
+            Guid? id,
+            string userId,
+            CancellationToken cancellationToken
+        )
+        {
+            SetUser(userId);
+            return _service.ListAsync(id, cancellationToken);
+        }
+
+        public Task<ConnectionResponse> CreateAsync(
+            ConnectionCreateRequest request,
+            string userId,
+            CancellationToken cancellationToken
+        )
+        {
+            SetUser(userId);
+            return _service.CreateAsync(request, cancellationToken);
+        }
+
+        public Task<ConnectionResponse> UpdateAsync(
+            ConnectionUpdateRequest request,
+            string userId,
+            CancellationToken cancellationToken
+        )
+        {
+            SetUser(userId);
+            return _service.UpdateAsync(request, cancellationToken);
+        }
+
+        public Task<ConnectionResponse> ValidateAsync(Guid id, string userId, CancellationToken cancellationToken)
+        {
+            SetUser(userId);
+            return _service.ValidateAsync(id, cancellationToken);
+        }
+
+        public Task<bool> DeleteAsync(Guid id, string userId, CancellationToken cancellationToken)
+        {
+            SetUser(userId);
+            return _service.DeleteAsync(id, cancellationToken);
+        }
+
+        private void SetUser(string userId)
+        {
+            _userInfo.UserId = userId;
+        }
+    }
+
+    private sealed class TestCredentialReader
+    {
+        private readonly IConnectionCredentialReader _reader;
+        private readonly TestUserInfoService _userInfo;
+
+        public TestCredentialReader(IConnectionCredentialReader reader, TestUserInfoService userInfo)
+        {
+            _reader = reader;
+            _userInfo = userInfo;
+        }
+
+        public Task<ResolvedCredential?> ReadConnectionAsync(
+            Guid connectionId,
+            string userId,
+            string slot,
+            CancellationToken cancellationToken
+        )
+        {
+            _userInfo.UserId = userId;
+            return _reader.ReadConnectionAsync(connectionId, slot, cancellationToken);
+        }
+
+        public Task<ResolvedCredential?> ReadPluginInstallationAsync(
+            Guid pluginInstallationId,
+            string slot,
+            CancellationToken cancellationToken
+        )
+        {
+            return _reader.ReadPluginInstallationAsync(pluginInstallationId, slot, cancellationToken);
         }
     }
 

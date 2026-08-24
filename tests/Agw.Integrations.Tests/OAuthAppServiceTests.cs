@@ -69,6 +69,30 @@ public sealed class OAuthAppServiceTests
         Assert.Equal(ConnectionStatus.PendingAuthorization, connection.Status);
     }
 
+    [Fact]
+    public async Task StartAsync_ForeignConnection_ThrowsConnectionNotFound()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scope = await OAuthTestScope.CreateAsync(
+            OAuth2ClientAuthenticationMethod.None,
+            OAuthSubjectSource.TokenResponse,
+            cancellationToken
+        );
+
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            scope.Authorization.StartAsync(
+                scope.ConnectionId,
+                CallbackUri,
+                "/integrations",
+                OAuthCompletionTarget.Web,
+                "other-user",
+                cancellationToken
+            )
+        );
+
+        Assert.Equal(ErrorCodes.ConnectionNotFound.Code, exception.Code);
+    }
+
     [Theory]
     [InlineData("//evil.example")]
     [InlineData("/%2Fevil.example")]
@@ -133,7 +157,6 @@ public sealed class OAuthAppServiceTests
             state,
             "authorization-code-sensitive",
             null,
-            "tester",
             cancellationToken
         );
 
@@ -157,6 +180,7 @@ public sealed class OAuthAppServiceTests
         );
         Assert.Equal(ConnectionStatus.Ready, connection.Status);
         Assert.Equal("octocat", connection.Subject);
+        Assert.Equal("tester", connection.UpdateBy);
         Assert.NotNull(connection.LastValidatedAtUtc);
         var credentials = await scope
             .DbContext.ConnectionCredentials.Where(item => item.ConnectionId == scope.ConnectionId)
@@ -186,7 +210,7 @@ public sealed class OAuthAppServiceTests
         scope.Handler.EnqueueJson(HttpStatusCode.OK, "{\"access_token\":\"token\",\"account\":{\"name\":\"user\"}}");
         var state = await StartAndReadStateAsync(scope, cancellationToken);
 
-        await scope.Authorization.HandleCallbackAsync(state, "code", null, "tester", cancellationToken);
+        await scope.Authorization.HandleCallbackAsync(state, "code", null, cancellationToken);
 
         var request = Assert.Single(scope.Handler.Requests);
         Assert.Equal("Basic", request.Authorization?.Scheme);
@@ -215,7 +239,7 @@ public sealed class OAuthAppServiceTests
         scope.Handler.EnqueueJson(HttpStatusCode.OK, "{\"access_token\":\"token\",\"account\":{\"name\":\"user\"}}");
         var state = await StartAndReadStateAsync(scope, cancellationToken);
 
-        await scope.Authorization.HandleCallbackAsync(state, "code", null, "tester", cancellationToken);
+        await scope.Authorization.HandleCallbackAsync(state, "code", null, cancellationToken);
 
         var request = Assert.Single(scope.Handler.Requests);
         var expectedCredentials = $"{WebUtility.UrlEncode(clientId)}:{WebUtility.UrlEncode(clientSecret)}";
@@ -251,7 +275,7 @@ public sealed class OAuthAppServiceTests
         scope.Handler.EnqueueJson(HttpStatusCode.OK, tokenResponse);
         var state = await StartAndReadStateAsync(scope, cancellationToken);
 
-        var result = await scope.Authorization.HandleCallbackAsync(state, "code", null, "tester", cancellationToken);
+        var result = await scope.Authorization.HandleCallbackAsync(state, "code", null, cancellationToken);
 
         Assert.True(result.Success);
         var connection = await scope.DbContext.Connections.SingleAsync(cancellationToken);
@@ -271,7 +295,7 @@ public sealed class OAuthAppServiceTests
         scope.Handler.EnqueueJson(HttpStatusCode.OK, "{\"account\":{\"name\":\"userinfo-user\"}}");
         var state = await StartAndReadStateAsync(scope, cancellationToken);
 
-        var result = await scope.Authorization.HandleCallbackAsync(state, "code", null, "tester", cancellationToken);
+        var result = await scope.Authorization.HandleCallbackAsync(state, "code", null, cancellationToken);
 
         Assert.True(result.Success);
         Assert.Equal(2, scope.Handler.Requests.Count);
@@ -316,11 +340,13 @@ public sealed class OAuthAppServiceTests
         scope.DbContext.ChangeTracker.Clear();
         var access = await scope.Reader.ReadConnectionAsync(
             scope.ConnectionId,
+            "tester",
             IntegrationCredentialSlots.OAuthAccessToken,
             cancellationToken
         );
         var refresh = await scope.Reader.ReadConnectionAsync(
             scope.ConnectionId,
+            "tester",
             IntegrationCredentialSlots.OAuthRefreshToken,
             cancellationToken
         );
@@ -345,7 +371,6 @@ public sealed class OAuthAppServiceTests
             state,
             "callback-code-secret",
             null,
-            "tester",
             cancellationToken
         );
 
@@ -373,7 +398,6 @@ public sealed class OAuthAppServiceTests
             state,
             null,
             "access_denied:secret-provider-description",
-            "tester",
             cancellationToken
         );
 
@@ -412,9 +436,9 @@ public sealed class OAuthAppServiceTests
             AgwDbContext dbContext,
             Guid connectionId,
             DateTimeOffset now,
-            IConnectionCredentialReader reader,
-            OAuthAuthorizationAppService authorization,
-            OAuthRefreshAppService refresh,
+            TestCredentialReader reader,
+            TestOAuthAuthorizationClient authorization,
+            TestOAuthRefreshClient refresh,
             QueueHttpMessageHandler handler,
             ListLogger<OAuthAuthorizationAppService> logger
         )
@@ -433,9 +457,9 @@ public sealed class OAuthAppServiceTests
         public AgwDbContext DbContext { get; }
         public Guid ConnectionId { get; }
         public DateTimeOffset Now { get; }
-        public IConnectionCredentialReader Reader { get; }
-        public OAuthAuthorizationAppService Authorization { get; }
-        public OAuthRefreshAppService Refresh { get; }
+        public TestCredentialReader Reader { get; }
+        public TestOAuthAuthorizationClient Authorization { get; }
+        public TestOAuthRefreshClient Refresh { get; }
         public QueueHttpMessageHandler Handler { get; }
         public ListLogger<OAuthAuthorizationAppService> Logger { get; }
 
@@ -476,9 +500,11 @@ public sealed class OAuthAppServiceTests
                 dbContext
             );
             IUnitOfWork unitOfWork = dbContext;
+            var userInfo = new TestUserInfoService();
             var reader = new ConnectionCredentialReader(
                 installationCredentialRepository,
-                connectionCredentialRepository
+                connectionCredentialRepository,
+                userInfo
             );
             var stateProtector = new OAuthStateProtector(new EphemeralDataProtectionProvider(), timeProvider);
             var authorization = new OAuthAuthorizationAppService(
@@ -491,9 +517,13 @@ public sealed class OAuthAppServiceTests
                 httpClientFactory,
                 stateProtector,
                 timeProvider,
-                logger
+                logger,
+                userInfo
             );
             var refresh = new OAuthRefreshAppService(authorization);
+            var credentialReader = new TestCredentialReader(reader, userInfo);
+            var authorizationClient = new TestOAuthAuthorizationClient(authorization, userInfo);
+            var refreshClient = new TestOAuthRefreshClient(refresh, userInfo);
 
             var installation = new PluginInstallation
             {
@@ -551,7 +581,7 @@ public sealed class OAuthAppServiceTests
                     Alias = $"oauth-{Guid.CreateVersion7():N}",
                     Enabled = true,
                     Status = ConnectionStatus.Unverified,
-                    CreateBy = "seed",
+                    CreateBy = "tester",
                     CreateTime = now,
                 }
             );
@@ -563,9 +593,9 @@ public sealed class OAuthAppServiceTests
                 dbContext,
                 connectionId,
                 now,
-                reader,
-                authorization,
-                refresh,
+                credentialReader,
+                authorizationClient,
+                refreshClient,
                 handler,
                 logger
             );
@@ -608,7 +638,7 @@ public sealed class OAuthAppServiceTests
                     Alias = $"oauth-{Guid.CreateVersion7():N}",
                     Enabled = true,
                     Status = ConnectionStatus.Unverified,
-                    CreateBy = "seed",
+                    CreateBy = "other-user",
                     CreateTime = Now,
                 }
             );
@@ -621,6 +651,86 @@ public sealed class OAuthAppServiceTests
         {
             await DbContext.DisposeAsync();
             await _connection.DisposeAsync();
+        }
+    }
+
+    private sealed class TestOAuthAuthorizationClient
+    {
+        private readonly OAuthAuthorizationAppService _service;
+        private readonly TestUserInfoService _userInfo;
+
+        public TestOAuthAuthorizationClient(OAuthAuthorizationAppService service, TestUserInfoService userInfo)
+        {
+            _service = service;
+            _userInfo = userInfo;
+        }
+
+        public Task<OAuthAuthorizeStartResponse> StartAsync(
+            Guid connectionId,
+            string callbackUri,
+            string returnPath,
+            OAuthCompletionTarget completionTarget,
+            string userId,
+            CancellationToken cancellationToken
+        )
+        {
+            _userInfo.UserId = userId;
+            return _service.StartAsync(connectionId, callbackUri, returnPath, completionTarget, cancellationToken);
+        }
+
+        public Task<OAuthCallbackResult> HandleCallbackAsync(
+            string? protectedState,
+            string? authorizationCode,
+            string? providerError,
+            CancellationToken cancellationToken
+        )
+        {
+            return _service.HandleCallbackAsync(protectedState, authorizationCode, providerError, cancellationToken);
+        }
+    }
+
+    private sealed class TestOAuthRefreshClient
+    {
+        private readonly OAuthRefreshAppService _service;
+        private readonly TestUserInfoService _userInfo;
+
+        public TestOAuthRefreshClient(OAuthRefreshAppService service, TestUserInfoService userInfo)
+        {
+            _service = service;
+            _userInfo = userInfo;
+        }
+
+        public Task<OAuthRefreshResponse> RefreshAsync(
+            Guid connectionId,
+            string userId,
+            CancellationToken cancellationToken
+        )
+        {
+            _userInfo.UserId = userId;
+            return _service.RefreshAsync(connectionId, cancellationToken);
+        }
+    }
+
+    private sealed class TestCredentialReader
+    {
+        private readonly IConnectionCredentialReader _reader;
+        private readonly TestUserInfoService _userInfo;
+
+        public TestCredentialReader(IConnectionCredentialReader reader, TestUserInfoService userInfo)
+        {
+            _reader = reader;
+            _userInfo = userInfo;
+        }
+
+        public Task<ResolvedCredential?> ReadConnectionAsync(
+            Guid connectionId,
+            string userId,
+            string slot,
+            CancellationToken cancellationToken
+        )
+        {
+            _userInfo.UserId = userId;
+            return _reader.ReadConnectionAsync(connectionId, slot, cancellationToken);
         }
     }
 

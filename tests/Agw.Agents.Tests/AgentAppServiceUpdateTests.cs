@@ -61,7 +61,7 @@ public class AgentAppServiceUpdateTests
             """
         );
 
-        var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester");
+        var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand());
 
         Assert.Same(agent, updated);
         Assert.Equal("", agent.DisplayName);
@@ -101,7 +101,7 @@ public class AgentAppServiceUpdateTests
             _ => throw new Xunit.Sdk.XunitException($"Unexpected field: {fieldName}"),
         };
 
-        var updated = await service.UpdateAgentAsync(agent.Id, Deserialize(json).ToCommand(), "tester");
+        var updated = await service.UpdateAgentAsync(agent.Id, Deserialize(json).ToCommand());
 
         Assert.Same(agent, updated);
         Assert.Equal(fieldName == "displayName" ? "Updated Agent" : "External Agent", agent.DisplayName);
@@ -120,7 +120,7 @@ public class AgentAppServiceUpdateTests
         var agent = CreateExternalAgent();
         var service = CreateService(agent);
 
-        var updated = await service.UpdateAgentAsync(agent.Id, Deserialize("{}").ToCommand(), "tester");
+        var updated = await service.UpdateAgentAsync(agent.Id, Deserialize("{}").ToCommand());
 
         Assert.Same(agent, updated);
         Assert.Equal("External Agent", agent.DisplayName);
@@ -147,7 +147,7 @@ public class AgentAppServiceUpdateTests
             """
         );
 
-        var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester");
+        var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand());
 
         Assert.Same(agent, updated);
         Assert.Null(agent.ModelProviderId);
@@ -165,7 +165,7 @@ public class AgentAppServiceUpdateTests
         var request = Deserialize($"{{\"{fieldName}\":null}}");
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester")
+            service.UpdateAgentAsync(agent.Id, request.ToCommand())
         );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
@@ -189,7 +189,7 @@ public class AgentAppServiceUpdateTests
         var request = Deserialize(json);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester")
+            service.UpdateAgentAsync(agent.Id, request.ToCommand())
         );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
@@ -227,7 +227,7 @@ public class AgentAppServiceUpdateTests
             """
         );
 
-        var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester");
+        var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand());
 
         Assert.Same(agent, updated);
         Assert.Equal("After", agent.DisplayName);
@@ -263,7 +263,7 @@ public class AgentAppServiceUpdateTests
         );
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester")
+            service.UpdateAgentAsync(agent.Id, request.ToCommand())
         );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
@@ -293,7 +293,7 @@ public class AgentAppServiceUpdateTests
         );
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester")
+            service.UpdateAgentAsync(agent.Id, request.ToCommand())
         );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
@@ -341,7 +341,8 @@ public class AgentAppServiceUpdateTests
             new TestRepository<Skill>(),
             skillRelationRepository ?? new TestRepository<AgentSkillRelation>(),
             unitOfWork ?? new TestUnitOfWork(),
-            new AgentDomainService(TimeProvider.System)
+            new AgentDomainService(TimeProvider.System),
+            new TestUserInfoService()
         );
     }
 

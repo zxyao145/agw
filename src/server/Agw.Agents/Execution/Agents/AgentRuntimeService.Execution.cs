@@ -196,7 +196,7 @@ public partial class AgentRuntimeService
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var agent = await _agentAppService.GetAgentAsync(request.AgentId);
+        var agent = await _agentAppService.GetAgentForCurrentUserAsync(request.AgentId);
         if (agent == null)
         {
             return null;

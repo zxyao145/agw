@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text.Json;
+using Agw.Auth.Application;
 using Agw.Integrations.Application.Credentials;
 using Agw.Integrations.Application.Management;
 using Agw.Integrations.Application.Plugins;
@@ -57,6 +58,7 @@ public sealed class OAuthAuthorizationAppService
     private readonly OAuthStateProtector _stateProtector;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<OAuthAuthorizationAppService> _logger;
+    private readonly IUserInfoService _userInfoService;
 
     public OAuthAuthorizationAppService(
         IRepository<IntegrationConnection> connectionRepository,
@@ -68,7 +70,8 @@ public sealed class OAuthAuthorizationAppService
         IHttpClientFactory httpClientFactory,
         OAuthStateProtector stateProtector,
         TimeProvider timeProvider,
-        ILogger<OAuthAuthorizationAppService> logger
+        ILogger<OAuthAuthorizationAppService> logger,
+        IUserInfoService userInfoService
     )
     {
         _connectionRepository = connectionRepository;
@@ -81,6 +84,7 @@ public sealed class OAuthAuthorizationAppService
         _stateProtector = stateProtector;
         _timeProvider = timeProvider;
         _logger = logger;
+        _userInfoService = userInfoService;
     }
 
     public async Task<OAuthAuthorizeStartResponse> StartAsync(
@@ -88,15 +92,15 @@ public sealed class OAuthAuthorizationAppService
         string callbackUri,
         string returnPath,
         OAuthCompletionTarget completionTarget,
-        string user,
         CancellationToken cancellationToken
     )
     {
+        var user = _userInfoService.RequiredUserId;
         OAuthStateProtector.ValidateReturnPath(returnPath);
         ValidateCallbackUri(callbackUri);
-        var context = await ResolveContextAsync(connectionId, cancellationToken);
+        var context = await ResolveContextAsync(connectionId, user, cancellationToken);
         var verifier = context.Settings.UsePkce ? CreatePkceVerifier() : null;
-        var state = _stateProtector.Protect(connectionId, verifier, returnPath, callbackUri, completionTarget);
+        var state = _stateProtector.Protect(connectionId, user, verifier, returnPath, callbackUri, completionTarget);
         var parameters = new Dictionary<string, string?>(
             context.Settings.AdditionalAuthorizeParameters.ToDictionary(item => item.Key, item => (string?)item.Value),
             StringComparer.Ordinal
@@ -140,7 +144,6 @@ public sealed class OAuthAuthorizationAppService
         string? protectedState,
         string? authorizationCode,
         string? providerError,
-        string user,
         CancellationToken cancellationToken
     )
     {
@@ -152,7 +155,7 @@ public sealed class OAuthAuthorizationAppService
         OAuthConnectionContext context;
         try
         {
-            context = await ResolveContextAsync(state.ConnectionId, cancellationToken);
+            context = await ResolveContextAsync(state.ConnectionId, state.UserId, cancellationToken);
         }
         catch (AgwException)
         {
@@ -165,7 +168,7 @@ public sealed class OAuthAuthorizationAppService
                 context.Connection,
                 ConnectionStatus.PendingAuthorization,
                 AuthorizationDeniedCode,
-                user
+                state.UserId
             );
             return FailedRedirect(state.ReturnPath, AuthorizationDeniedRedirectCode, state.CompletionTarget);
         }
@@ -182,27 +185,24 @@ public sealed class OAuthAuthorizationAppService
 
             var token = await RequestTokenAsync(context, form, cancellationToken);
             var subject = await ResolveSubjectAsync(context, token, required: true, cancellationToken);
-            await SaveTokensAsync(context.Connection, token, preserveMissingRefreshToken: false, user);
+            await SaveTokensAsync(context.Connection, token, preserveMissingRefreshToken: false, state.UserId);
             context.Connection.Subject = subject;
-            MarkReady(context.Connection, user);
+            MarkReady(context.Connection, state.UserId);
             await _unitOfWork.SaveChangesAsync();
             return SucceededRedirect(state.ReturnPath, state.CompletionTarget);
         }
         catch (Exception exception) when (IsProviderFailure(exception, cancellationToken))
         {
             _logger.LogWarning("OAuth authorization failed for connection {ConnectionId}.", context.Connection.Id);
-            await SetFailureAsync(context.Connection, ConnectionStatus.Invalid, TokenExchangeFailedCode, user);
+            await SetFailureAsync(context.Connection, ConnectionStatus.Invalid, TokenExchangeFailedCode, state.UserId);
             return FailedRedirect(state.ReturnPath, TokenExchangeFailedRedirectCode, state.CompletionTarget);
         }
     }
 
-    internal async Task<OAuthRefreshResponse> RefreshAsync(
-        Guid connectionId,
-        string user,
-        CancellationToken cancellationToken
-    )
+    internal async Task<OAuthRefreshResponse> RefreshAsync(Guid connectionId, CancellationToken cancellationToken)
     {
-        var context = await ResolveContextAsync(connectionId, cancellationToken);
+        var user = _userInfoService.RequiredUserId;
+        var context = await ResolveContextAsync(connectionId, user, cancellationToken);
         if (!context.Settings.SupportsRefresh)
         {
             throw new AgwException(ErrorCodes.IntegrationConfigurationInvalid);
@@ -244,13 +244,14 @@ public sealed class OAuthAuthorizationAppService
 
     private async Task<OAuthConnectionContext> ResolveContextAsync(
         Guid connectionId,
+        string user,
         CancellationToken cancellationToken
     )
     {
         var connection =
             await _connectionRepository
                 .Queryable.Include(item => item.Credentials)
-                .FirstOrDefaultAsync(item => item.Id == connectionId, cancellationToken)
+                .FirstOrDefaultAsync(item => item.Id == connectionId && item.CreateBy == user, cancellationToken)
             ?? throw new AgwException(ErrorCodes.ConnectionNotFound);
         if (!connection.Enabled)
         {

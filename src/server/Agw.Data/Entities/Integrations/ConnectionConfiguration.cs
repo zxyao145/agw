@@ -11,9 +11,10 @@ public class ConnectionConfiguration : IEntityTypeConfiguration<Connection>
             table.HasComment("Represents an external account or service endpoint available to agents.")
         );
         builder.HasKey(entity => entity.Id);
-        builder.HasIndex(entity => entity.Alias).IsUnique();
+        builder.HasIndex(entity => new { entity.CreateBy, entity.Alias }).IsUnique();
         builder.HasIndex(entity => entity.PluginId);
         builder.HasIndex(entity => entity.Status);
+        builder.Property(entity => entity.CreateBy).IsRequired();
         builder.Property(entity => entity.PluginId).IsRequired().HasMaxLength(128);
         builder.Property(entity => entity.ConnectorId).IsRequired().HasMaxLength(128);
         builder.Property(entity => entity.AuthSchemeId).IsRequired().HasMaxLength(128);

@@ -24,7 +24,7 @@ public sealed class InitialMigrationTests
         using var dbContext = new AgwDbContext(options.Options);
 
         var migrations = dbContext.Database.GetMigrations().ToArray();
-        Assert.Equal(7, migrations.Length);
+        Assert.Equal(8, migrations.Length);
         Assert.EndsWith("_Init", migrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", migrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", migrations[2], StringComparison.Ordinal);
@@ -32,6 +32,7 @@ public sealed class InitialMigrationTests
         Assert.EndsWith("_AddModelCompactionLimits", migrations[4], StringComparison.Ordinal);
         Assert.EndsWith("_UseUserIdForExecutionOwnership", migrations[5], StringComparison.Ordinal);
         Assert.EndsWith("_AddJobActiveAttempt", migrations[6], StringComparison.Ordinal);
+        Assert.EndsWith("_EnforceUserOwnedConnections", migrations[7], StringComparison.Ordinal);
 
         var script = dbContext
             .GetService<IMigrator>()
@@ -55,6 +56,11 @@ public sealed class InitialMigrationTests
         Assert.Contains("user_id", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("UPDATE durable_execution SET user_id = '1001'", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("UPDATE agentflow_checkpoint SET user_id = '1001'", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "UPDATE integration_connection SET create_by = '1001' WHERE create_by IS NULL",
+            script,
+            StringComparison.OrdinalIgnoreCase
+        );
         Assert.Contains("tools", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("max_context_window_tokens", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("max_output_tokens", script, StringComparison.OrdinalIgnoreCase);
@@ -62,6 +68,7 @@ public sealed class InitialMigrationTests
         Assert.Contains("active_execution_id", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("active_attempt_started_at", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("ix_job_active_execution_id", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ix_integration_connection_create_by_alias", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("ck_job_active_attempt", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("DEFAULT 256000", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("DEFAULT 64000", script, StringComparison.OrdinalIgnoreCase);
@@ -70,6 +77,12 @@ public sealed class InitialMigrationTests
             Assert.Contains("metadata jsonb", script, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("uuid", script, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("timestamp with time zone", script, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("ALTER COLUMN create_by SET NOT NULL", script, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(
+                "ALTER COLUMN create_by TYPE character varying",
+                script,
+                StringComparison.OrdinalIgnoreCase
+            );
         }
         else
         {
@@ -103,7 +116,7 @@ public sealed class InitialMigrationTests
         await dbContext.Database.MigrateAsync(cancellationToken);
 
         var appliedMigrations = (await dbContext.Database.GetAppliedMigrationsAsync(cancellationToken)).ToArray();
-        Assert.Equal(7, appliedMigrations.Length);
+        Assert.Equal(8, appliedMigrations.Length);
         Assert.EndsWith("_Init", appliedMigrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", appliedMigrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", appliedMigrations[2], StringComparison.Ordinal);
@@ -111,6 +124,7 @@ public sealed class InitialMigrationTests
         Assert.EndsWith("_AddModelCompactionLimits", appliedMigrations[4], StringComparison.Ordinal);
         Assert.EndsWith("_UseUserIdForExecutionOwnership", appliedMigrations[5], StringComparison.Ordinal);
         Assert.EndsWith("_AddJobActiveAttempt", appliedMigrations[6], StringComparison.Ordinal);
+        Assert.EndsWith("_EnforceUserOwnedConnections", appliedMigrations[7], StringComparison.Ordinal);
         Assert.True(await TableExistsAsync(connection, "integration_connection", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "plugin_installation", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "project_memory", cancellationToken));
@@ -279,6 +293,52 @@ public sealed class InitialMigrationTests
         Assert.True(await ColumnExistsAsync(connection, "agentflow_checkpoint", "user_name", cancellationToken));
         Assert.False(await ColumnExistsAsync(connection, "durable_execution", "user_id", cancellationToken));
         Assert.False(await ColumnExistsAsync(connection, "agentflow_checkpoint", "user_id", cancellationToken));
+    }
+
+    [Fact]
+    public async Task MigrateAsync_Sqlite_ConnectionOwnershipBackfillsAdminUserId()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(
+                connection,
+                migrations => migrations.MigrationsAssembly(AgwDbContextOptionsConfigurator.SqliteMigrationsAssembly)
+            )
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using var dbContext = new AgwDbContext(options);
+        var migrations = dbContext.Database.GetMigrations().ToArray();
+        var ownershipMigration = migrations.Single(migration =>
+            migration.EndsWith("_EnforceUserOwnedConnections", StringComparison.Ordinal)
+        );
+        var ownershipIndex = Array.IndexOf(migrations, ownershipMigration);
+        var migrator = dbContext.GetService<IMigrator>();
+        await migrator.MigrateAsync(migrations[ownershipIndex - 1], cancellationToken);
+        var connectionId = Guid.CreateVersion7();
+
+        await using (var insert = connection.CreateCommand())
+        {
+            insert.CommandText = """
+                INSERT INTO integration_connection
+                    (id, plugin_id, connector_id, auth_scheme_id, display_name, alias,
+                     configuration_json, enabled, status, create_time, create_by)
+                VALUES
+                    ($id, 'github', 'github-cloud', 'oauth2', 'Legacy GitHub', 'legacy-github',
+                     '{}', 1, 'Unverified', $now, NULL);
+                """;
+            insert.Parameters.AddWithValue("$id", connectionId);
+            insert.Parameters.AddWithValue("$now", TimeProvider.System.GetUtcNow());
+            await insert.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await migrator.MigrateAsync(ownershipMigration, cancellationToken);
+
+        await using var select = connection.CreateCommand();
+        select.CommandText = "SELECT create_by FROM integration_connection WHERE id = $id;";
+        select.Parameters.AddWithValue("$id", connectionId);
+        Assert.Equal(Constants.AdminUserId, Convert.ToString(await select.ExecuteScalarAsync(cancellationToken)));
     }
 
     private static async Task<bool> TableExistsAsync(

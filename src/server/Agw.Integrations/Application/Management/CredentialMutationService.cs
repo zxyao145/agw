@@ -1,3 +1,4 @@
+using Agw.Auth.Application;
 using Agw.Integrations.Contracts.Management;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;
@@ -10,26 +11,29 @@ public sealed class CredentialMutationService
     private readonly IRepository<PluginInstallationCredential> _installationCredentialRepository;
     private readonly IRepository<ConnectionCredential> _connectionCredentialRepository;
     private readonly TimeProvider _timeProvider;
+    private readonly IUserInfoService _userInfoService;
 
     public CredentialMutationService(
         IRepository<PluginInstallationCredential> installationCredentialRepository,
         IRepository<ConnectionCredential> connectionCredentialRepository,
-        TimeProvider timeProvider
+        TimeProvider timeProvider,
+        IUserInfoService userInfoService
     )
     {
         _installationCredentialRepository = installationCredentialRepository;
         _connectionCredentialRepository = connectionCredentialRepository;
         _timeProvider = timeProvider;
+        _userInfoService = userInfoService;
     }
 
     public async Task ApplyInstallationAsync(
         PluginInstallation installation,
         IReadOnlyDictionary<string, SecretFieldUpdateRequest> updates,
         string connectorId,
-        string authSchemeId,
-        string user
+        string authSchemeId
     )
     {
+        var user = _userInfoService.RequiredUserId;
         foreach (var item in updates)
         {
             var slot = IntegrationCredentialSlots.InstallationField(connectorId, authSchemeId, item.Key);
@@ -76,10 +80,10 @@ public sealed class CredentialMutationService
 
     public async Task ApplyConnectionAsync(
         Connection connection,
-        IReadOnlyDictionary<string, SecretFieldUpdateRequest> updates,
-        string user
+        IReadOnlyDictionary<string, SecretFieldUpdateRequest> updates
     )
     {
+        var user = _userInfoService.RequiredUserId;
         foreach (var item in updates)
         {
             var slot = IntegrationCredentialSlots.ConnectionField(item.Key);

@@ -2,7 +2,6 @@ using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Extensions;
 using Agw.Shared.Results;
 using Bens.Results;
 using Microsoft.AspNetCore.Mvc;
@@ -24,7 +23,7 @@ public class ProjectsController : ControllerBase
     [ProducesApiResult(typeof(ProjectResponse[]))]
     public async Task<IActionResult> ListAsync()
     {
-        var projects = await _projectAppService.ListAsync();
+        var projects = await _projectAppService.ListForCurrentUserAsync();
         return ApiResult.Ok(projects.Select(ProjectResponse.FromDomain).ToArray());
     }
 
@@ -32,7 +31,7 @@ public class ProjectsController : ControllerBase
     [ProducesApiResult(typeof(ProjectResponse))]
     public async Task<IActionResult> GetAsync(Guid id)
     {
-        var project = await _projectAppService.GetAsync(id);
+        var project = await _projectAppService.GetForCurrentUserAsync(id);
         return project == null
             ? ErrorCodes.ResourceNotFound.ToApiResult()
             : ApiResult.Ok(ProjectResponse.FromDomain(project));
@@ -56,7 +55,6 @@ public class ProjectsController : ControllerBase
             );
         }
 
-        var user = User.GetUserId();
         var project = new Project
         {
             Name = request.Name,
@@ -71,8 +69,7 @@ public class ProjectsController : ControllerBase
             project,
             request.McpToolServerIds,
             request.SkillIds,
-            request.ConnectionIds,
-            user
+            request.ConnectionIds
         );
         if (created == null)
         {
@@ -100,8 +97,6 @@ public class ProjectsController : ControllerBase
             );
         }
 
-        var user = User.GetUserId();
-
         var updated = await _projectAppService.UpdateAsync(
             id,
             project =>
@@ -121,8 +116,7 @@ public class ProjectsController : ControllerBase
             },
             request.McpToolServerIds,
             request.SkillIds,
-            request.ConnectionIds,
-            user
+            request.ConnectionIds
         );
 
         return updated == null

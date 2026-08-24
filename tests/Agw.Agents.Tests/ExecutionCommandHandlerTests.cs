@@ -611,19 +611,22 @@ public class ExecutionCommandHandlerTests
             return Task.FromResult<Project?>(new Project { Id = id, Workspace = _workspace });
         }
 
+        public Task<Project?> GetForCurrentUserAsync(Guid id) => GetAsync(id);
+
         public Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null) =>
             throw new NotSupportedException();
+
+        public Task<IReadOnlyList<Project>> ListForCurrentUserAsync() => throw new NotSupportedException();
 
         public Task<string?> GetProjectExtraSettingAsync(Guid? projectId) => throw new NotSupportedException();
 
         public Task<Guid?> ResolveProjectIdAsync(Guid? projectId) => throw new NotSupportedException();
 
-        public Task<Project?> CreateAsync(Project project, string user) => throw new NotSupportedException();
+        public Task<Project?> CreateAsync(Project project) => throw new NotSupportedException();
 
         public Task<bool> DeleteAsync(Guid id) => throw new NotSupportedException();
 
-        public Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction, string user) =>
-            throw new NotSupportedException();
+        public Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction) => throw new NotSupportedException();
     }
 
     private sealed class TestRuntime : RuntimeBase

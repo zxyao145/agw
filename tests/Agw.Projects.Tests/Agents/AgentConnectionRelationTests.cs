@@ -3,6 +3,7 @@ using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Definitions.Domain;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
+using Agw.Projects.Tests;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;
@@ -25,8 +26,7 @@ public class AgentConnectionRelationTests
             agent,
             mcpToolServerIds: null,
             skillIds: null,
-            connectionIds: [scope.FirstConnectionId, scope.FirstConnectionId, Guid.Empty, Guid.CreateVersion7()],
-            user: "tester"
+            connectionIds: [scope.FirstConnectionId, scope.FirstConnectionId, Guid.Empty, Guid.CreateVersion7()]
         );
 
         Assert.NotNull(created);
@@ -54,14 +54,57 @@ public class AgentConnectionRelationTests
                 SystemPrompt = "prompt",
                 ModelProviderId = scope.ModelProviderId,
                 ConnectionIds = [scope.SecondConnectionId],
-            }.ToCommand(),
-            "tester"
+            }.ToCommand()
         );
 
         Assert.NotNull(updated);
         await using var assertContext = scope.CreateDbContext();
         var relation = Assert.Single(await assertContext.AgentConnectionRelations.ToListAsync(cancellationToken));
         Assert.Equal(scope.SecondConnectionId, relation.ConnectionId);
+    }
+
+    [Fact]
+    public async Task UpdateAgentAsync_WhenConnectionIdsOmitted_PreservesOwnerOverlay()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scope = await TestScope.CreateAsync(cancellationToken, AgentType.System);
+
+        await scope.Service.UpdateAgentAsync(
+            scope.AgentId,
+            new AgentUpdateRequest
+            {
+                DisplayName = "Updated agent",
+                Description = "desc",
+                SystemPrompt = "prompt",
+                ModelProviderId = scope.ModelProviderId,
+            }.ToCommand()
+        );
+
+        await using var assertContext = scope.CreateDbContext();
+        var relation = Assert.Single(await assertContext.AgentConnectionRelations.ToListAsync(cancellationToken));
+        Assert.Equal(scope.FirstConnectionId, relation.ConnectionId);
+    }
+
+    [Fact]
+    public async Task UpdateAgentAsync_WhenConnectionIdsExplicitlyNull_ClearsOwnerOverlay()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scope = await TestScope.CreateAsync(cancellationToken, AgentType.System);
+
+        await scope.Service.UpdateAgentAsync(
+            scope.AgentId,
+            new AgentUpdateRequest
+            {
+                DisplayName = "Updated agent",
+                Description = "desc",
+                SystemPrompt = "prompt",
+                ModelProviderId = scope.ModelProviderId,
+                ConnectionIds = null,
+            }.ToCommand()
+        );
+
+        await using var assertContext = scope.CreateDbContext();
+        Assert.Empty(await assertContext.AgentConnectionRelations.ToListAsync(cancellationToken));
     }
 
     [Fact]
@@ -78,6 +121,53 @@ public class AgentConnectionRelationTests
         Assert.Equal(scope.FirstConnectionId, Assert.Single(fetched.AgentConnectionRelations).ConnectionId);
     }
 
+    [Fact]
+    public async Task UserScopedRelations_SharedAgent_PreservesOtherUsersBindings()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scope = await TestScope.CreateAsync(cancellationToken, AgentType.System);
+        var foreignConnectionId = Guid.CreateVersion7();
+        await using (var seedContext = scope.CreateDbContext())
+        {
+            seedContext.Connections.Add(CreateConnection(foreignConnectionId, "foreign-github", "other-user"));
+            seedContext.AgentConnectionRelations.Add(
+                new AgentConnectionRelation { AgentId = scope.AgentId, ConnectionId = foreignConnectionId }
+            );
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var ownView = await scope.Service.GetAgentForCurrentUserAsync(scope.AgentId);
+        scope.UserInfo.UserId = "other-user";
+        var foreignView = await scope.Service.GetAgentForCurrentUserAsync(scope.AgentId);
+        scope.UserInfo.UserId = "tester";
+        var updated = await scope.Service.UpdateAgentAsync(
+            scope.AgentId,
+            new AgentUpdateRequest
+            {
+                DisplayName = "Updated agent",
+                Description = "desc",
+                SystemPrompt = "prompt",
+                ModelProviderId = scope.ModelProviderId,
+                ConnectionIds = [scope.SecondConnectionId],
+            }.ToCommand()
+        );
+
+        Assert.NotNull(ownView);
+        Assert.Equal(scope.FirstConnectionId, Assert.Single(ownView.AgentConnectionRelations).ConnectionId);
+        Assert.NotNull(foreignView);
+        Assert.Equal(foreignConnectionId, Assert.Single(foreignView.AgentConnectionRelations).ConnectionId);
+        Assert.NotNull(updated);
+        await using var assertContext = scope.CreateDbContext();
+        Assert.Equal(
+            new[] { foreignConnectionId, scope.SecondConnectionId }.OrderBy(id => id),
+            (
+                await assertContext
+                    .AgentConnectionRelations.Select(relation => relation.ConnectionId)
+                    .ToListAsync(cancellationToken)
+            ).OrderBy(id => id)
+        );
+    }
+
     private static Agent CreateAgent(Guid id, AgentType type = AgentType.External, Guid? modelProviderId = null) =>
         new()
         {
@@ -90,7 +180,7 @@ public class AgentConnectionRelationTests
             ModelProviderId = modelProviderId,
         };
 
-    private static Connection CreateConnection(Guid id, string alias) =>
+    private static Connection CreateConnection(Guid id, string alias, string user = "tester") =>
         new()
         {
             Id = id,
@@ -100,6 +190,7 @@ public class AgentConnectionRelationTests
             DisplayName = alias,
             Alias = alias,
             Status = ConnectionStatus.Ready,
+            CreateBy = user,
         };
 
     private sealed class TestScope : IAsyncDisposable
@@ -112,16 +203,19 @@ public class AgentConnectionRelationTests
             SqliteConnection connection,
             DbContextOptions<AgwDbContext> options,
             AgwDbContext serviceContext,
-            AgentAppService service
+            AgentAppService service,
+            TestUserInfoService userInfo
         )
         {
             _connection = connection;
             _options = options;
             _serviceContext = serviceContext;
             Service = service;
+            UserInfo = userInfo;
         }
 
         public AgentAppService Service { get; }
+        public TestUserInfoService UserInfo { get; }
         public Guid AgentId { get; private init; }
         public Guid FirstConnectionId { get; private init; }
         public Guid SecondConnectionId { get; private init; }
@@ -180,7 +274,8 @@ public class AgentConnectionRelationTests
             }
 
             var serviceContext = new AgwDbContext(options);
-            return new TestScope(connection, options, serviceContext, CreateService(serviceContext))
+            var userInfo = new TestUserInfoService();
+            return new TestScope(connection, options, serviceContext, CreateService(serviceContext, userInfo), userInfo)
             {
                 AgentId = agentId,
                 FirstConnectionId = firstConnectionId,
@@ -197,7 +292,7 @@ public class AgentConnectionRelationTests
             await _connection.DisposeAsync();
         }
 
-        private static AgentAppService CreateService(AgwDbContext dbContext) =>
+        private static AgentAppService CreateService(AgwDbContext dbContext, TestUserInfoService userInfo) =>
             new(
                 new EfRepository<Agent>(dbContext),
                 new EfRepository<AgentConnectionRelation>(dbContext),
@@ -210,7 +305,8 @@ public class AgentConnectionRelationTests
                 new EfRepository<Skill>(dbContext),
                 new EfRepository<AgentSkillRelation>(dbContext),
                 dbContext,
-                new AgentDomainService(TimeProvider.System)
+                new AgentDomainService(TimeProvider.System),
+                userInfo
             );
     }
 }

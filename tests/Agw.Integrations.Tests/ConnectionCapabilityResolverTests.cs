@@ -55,6 +55,25 @@ public class ConnectionCapabilityResolverTests
     }
 
     [Fact]
+    public async Task Resolve_ForeignConnection_ReturnsNotFoundWarningWithoutTools()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scope = await ResolverTestScope.CreateAsync(cancellationToken, userId: "other-user");
+        var connection = await scope.AddReadyConnectionAsync("work", cancellationToken);
+
+        await using var resolution = await scope.Resolver.ResolveAsync(
+            Guid.CreateVersion7(),
+            [connection.Id],
+            cancellationToken
+        );
+
+        Assert.Empty(resolution.Tools);
+        var warning = Assert.Single(resolution.Warnings);
+        Assert.Equal(ConnectionCapabilityWarningCodes.ConnectionNotFound, warning.Code);
+        Assert.Equal("The integration was not found.", warning.Message);
+    }
+
+    [Fact]
     public async Task Resolve_DuplicateConnectionIds_DeduplicatesToolsAndPluginSkill()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -423,7 +442,8 @@ public class ConnectionCapabilityResolverTests
             DateTimeOffset? now = null,
             IPluginCatalog? catalog = null,
             IMcpToolMaterializer? mcpToolMaterializer = null,
-            string? pluginContentRoot = null
+            string? pluginContentRoot = null,
+            string userId = "test"
         )
         {
             var sqlite = new SqliteConnection("Data Source=:memory:;Foreign Keys=False");
@@ -460,7 +480,8 @@ public class ConnectionCapabilityResolverTests
                 new PluginSkillMetadataReader(
                     new FixedPluginContentRootProvider(pluginContentRoot ?? AppContext.BaseDirectory)
                 ),
-                new FixedTimeProvider(now ?? TimeProvider.System.GetUtcNow())
+                new FixedTimeProvider(now ?? TimeProvider.System.GetUtcNow()),
+                new TestUserInfoService(userId)
             );
             mcpToolInvoker.Resolver = resolver;
             return new ResolverTestScope(sqlite, dbContext, resolver, credentials, invocations);

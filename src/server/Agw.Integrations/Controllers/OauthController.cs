@@ -2,7 +2,6 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using Agw.Integrations.Application.OAuth;
 using Agw.Integrations.Contracts.OAuth;
-using Agw.Shared.Extensions;
 using Agw.Shared.Results;
 using Bens.Results;
 using Microsoft.AspNetCore.Http;
@@ -64,7 +63,6 @@ public sealed class OAuthController : ControllerBase
             _redirectUriResolver.ResolveCallbackUri(BuildRequestBaseUri()),
             request.ReturnPath,
             request.CompletionTarget,
-            User.GetUserId(),
             cancellationToken
         );
         return ApiResult.Ok(response);
@@ -78,7 +76,6 @@ public sealed class OAuthController : ControllerBase
             Request.Query["state"].ToString(),
             Request.Query["code"].ToString(),
             Request.Query["error"].ToString(),
-            User.GetUserId(),
             cancellationToken
         );
         if (result.CompletionTarget == OAuthCompletionTarget.Desktop)
@@ -149,7 +146,7 @@ public sealed class OAuthController : ControllerBase
         CancellationToken cancellationToken
     )
     {
-        var response = await _refreshService.RefreshAsync(request.ConnectionId, User.GetUserId(), cancellationToken);
+        var response = await _refreshService.RefreshAsync(request.ConnectionId, cancellationToken);
         return ApiResult.Ok(response);
     }
 

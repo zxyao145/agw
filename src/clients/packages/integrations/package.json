@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@agw/api": "workspace:*",
+    "@agw/auth": "workspace:*",
     "@agw/components": "workspace:*",
     "lucide-react": "0.577.0",
     "sonner": "2.0.7"

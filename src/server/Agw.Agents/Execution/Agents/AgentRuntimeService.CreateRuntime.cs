@@ -42,7 +42,7 @@ public partial class AgentRuntimeService
         CancellationToken cancellationToken
     )
     {
-        var agent = await _agentAppService.GetAgentAsync(agentId);
+        var agent = await _agentAppService.GetAgentForCurrentUserAsync(agentId);
         if (agent == null)
         {
             return null;

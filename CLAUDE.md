@@ -185,6 +185,15 @@ Read [`docs/rules.md`](docs/rules.md) before coding. Its rules are mandatory.
 
 - `Agw.DataPlane.Host` and `Agw.Standalone.Host` register and map A2A through the Data Plane Host Module and require authentication at the host seam. `Agw.ControlPlane.Host` must not map A2A routes.
 
+### Integrations Terminology and Ownership
+
+- User-facing surfaces call catalog definitions **Available integrations** and user-configured accounts or endpoints **Configured integrations**. Do not expose `Connection` or `PluginInstallation` as product terminology.
+- Developer contracts keep the precise model: `PluginDefinition` is code-defined, `PluginInstallation` is platform-wide shared setup, and `Connection` is one user-owned configured account or endpoint. `Connector` remains the service or protocol variant and is not a Connection synonym.
+- `Connection.CreateBy` is the stable owner user ID. Connection CRUD, OAuth, credential reads, Agent/Project binding projection, and runtime Native/MCP invocation must enforce that owner. Treat foreign Connection IDs as unavailable without disclosing ownership.
+- Connection Alias values are immutable and unique within `(CreateBy, Alias)`, not globally. Shared Agent/Project definitions keep each user's Connection bindings as independent overlays; editing one user's bindings must preserve every other user's bindings.
+- Only the stable administrator user ID `1001` may mutate `PluginInstallation` setup. Catalog definitions remain readable to authenticated users, and setup changes may invalidate Connections for every owner.
+- Keep real transport terminology such as database connections, SignalR `ExecutionConnection`, HTTP connections, and connection strings unchanged.
+
 ### Project Workspaces
 
 - `Project.Workspace` is the only file-root source. Files APIs and in-process consumers use `projectId` plus project-relative paths.

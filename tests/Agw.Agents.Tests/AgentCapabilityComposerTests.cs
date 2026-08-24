@@ -346,7 +346,8 @@ public class AgentCapabilityComposerTests
             new EfRepository<Skill>(dbContext),
             new EfRepository<AgentSkillRelation>(dbContext),
             dbContext,
-            new AgentDomainService(TimeProvider.System)
+            new AgentDomainService(TimeProvider.System),
+            new TestUserInfoService()
         );
     }
 

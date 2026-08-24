@@ -143,7 +143,7 @@ export function ProjectFormFields({
               <TabsTrigger value="tools">Tools</TabsTrigger>
               <TabsTrigger value="skills">Skills</TabsTrigger>
               <TabsTrigger value="mcp-tool-servers">MCP Tool Server</TabsTrigger>
-              <TabsTrigger value="connections">Connections</TabsTrigger>
+              <TabsTrigger value="connections">Integrations</TabsTrigger>
               <TabsTrigger value="environment-variables">Environment Variables</TabsTrigger>
             </TabsList>
           </div>

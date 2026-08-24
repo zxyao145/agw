@@ -494,7 +494,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         }
 
         var project =
-            await _projectAppService.GetAsync(_resolvedTask.ProjectId)
+            await _projectAppService.GetForCurrentUserAsync(_resolvedTask.ProjectId)
             ?? throw new AgwException(ErrorCodes.InvalidParam, $"Project '{_resolvedTask.ProjectId}' was not found.");
         _workspace = Path.GetFullPath(PathUtil.ExpandTilde(project.GetMustWorkspace().Trim()));
     }

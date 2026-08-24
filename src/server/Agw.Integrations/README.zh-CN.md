@@ -6,6 +6,17 @@
 
 当前内建 Catalog 只有 GitHub。
 
+## 术语与所有权
+
+产品界面统一使用 Integration 术语：Catalog 定义显示为 **Available integrations**，用户配置的账号或服务端点显示为 **Configured integrations**。实现层保留更精确的开发者模型：
+
+- `PluginDefinition` 是系统内置的 Integration 定义。
+- `PluginInstallation` 是整套部署共享的基础设置，例如 OAuth Client ID 和 Client Secret，只有管理员用户 `1001` 可以修改。
+- `Connection` 是由 `CreateBy` 中稳定用户 ID 拥有的一个 Integration 配置实例；同一用户可以基于同一定义创建多个 Connection。
+- `Connector` 是 Plugin 内的服务或协议变体，不是 Connection 的同义词。
+
+Connection CRUD、OAuth、凭据读取、Agent/Project 绑定视图以及每次 Native/MCP 调用都必须校验 Owner。Alias 创建后不可修改，并且只在同一 Owner 内唯一。共享 Agent 和 Project 会为每个用户分别保留自己的 Connection 绑定叠加层。
+
 ## 设计目标
 
 模块遵循以下原则：
@@ -137,7 +148,7 @@ PluginDefinition
 | Capability Source `Id` | Connector 内稳定且唯一的 Source 标识。MCP 包装工具会保留这个 ID，以便真正调用时重新找到对应 Source。它不是一套语义化 Capability 分类。 |
 | `PluginSkillDefinition` | 只保存安全的相对 `ContentPath`；Skill ID 和描述来自 `SKILL.md` Frontmatter 中的 `name`、`description`。 |
 | `PluginInstallation` | 每个 Plugin 一条平台级配置。Connection 想要在运行时提供能力，必须能找到启用的 Installation。 |
-| `Connection` | Agent 可以选择的一个具体外部账号或服务端点。它固定 Plugin、Connector、Auth Scheme、显示名、不可变 Alias、状态、Subject 和非敏感配置。 |
+| `Connection` | 用户拥有、Agent 可以选择的一个具体外部账号或服务端点。它固定 Plugin、Connector、Auth Scheme、显示名、Owner 内唯一且不可变的 Alias、状态、Subject 和非敏感配置。 |
 | Credential | 由 Plugin Installation 或 Connection 拥有的加密值，通过稳定的 Slot 定位。 |
 
 ### 为什么以 Connection 为选择单位
@@ -245,12 +256,14 @@ erDiagram
 - Installation Secret Slot 为 `field:{connectorId}:{authSchemeId}:{fieldId}`。
 - Connection Secret Slot 为 `field:{fieldId}`。
 - OAuth Token Slot 为 `oauth.access-token`、`oauth.refresh-token`、`oauth.id-token`。
-- `integration_connection.alias` 全局唯一，创建后不可修改。
+- `(integration_connection.create_by, integration_connection.alias)` 唯一，Alias 创建后不可修改。
 - 同一凭据所有者的 `(owner_id, slot)` 唯一。
 - Agent 和 Project 关系表使用复合主键，因此不会出现重复绑定。
 - `ValidationMetadataJson` 和 Credential 的 `MetadataJson` 是内部保留字段，不属于管理 API。
 
 EF Model 声明了导航与级联关系，但当前 Integration Migration 有意没有在数据库中创建这些外键约束。因此删除 Installation、Connection、Agent 或 Project 时，`AgwDbContext` 会显式清理相关 Credential 和 Agent/Project 关系。
+
+升级说明：`EnforceUserOwnedConnections` 会保留所有非 NULL 的 `create_by`；通过管理 API 创建的 Connection 原本就记录了调用者的稳定 User ID。只有 Owner 为 NULL 的历史或旁路写入记录会回退给管理员 `1001`，因为无法仅从该行还原原始归属。多用户部署升级前应执行 `SELECT id, alias FROM integration_connection WHERE create_by IS NULL` 做审计；如果有外部 Owner 映射，应先据此回填。
 
 ## Connection 状态模型
 
@@ -491,6 +504,8 @@ API SecretValue
 7. 运行进程内 Agent。模型会看到 `work-github__list_repositories` 等工具以及 GitHub Plugin Skill。
 
 Project 级绑定会让该 Project 中运行的所有进程内 Agent 都能使用 Connection；Agent 级绑定只影响该 Agent。Agent 和 Project 同时绑定同一个 Connection 时，只创建一套工具。
+
+绑定更新按 Owner 隔离。请求中的 `ConnectionId` 如果不存在或属于其他用户，会按不可用处理并直接忽略，不暴露其所有权。客户端提交完整绑定列表前应刷新当前用户可用的 Integrations。
 
 ### REST API 示例
 

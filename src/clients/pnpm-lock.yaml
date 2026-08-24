@@ -720,6 +720,9 @@ importers:
       '@agw/api':
         specifier: workspace:*
         version: link:../api
+      '@agw/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@agw/components':
         specifier: workspace:*
         version: link:../components

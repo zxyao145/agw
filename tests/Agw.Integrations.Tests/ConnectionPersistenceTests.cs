@@ -38,7 +38,7 @@ public class ConnectionPersistenceTests
         );
 
         AssertUniqueIndex(dbContext.Model, typeof(PluginInstallation), ["PluginId"]);
-        AssertUniqueIndex(dbContext.Model, typeof(IntegrationConnection), ["Alias"]);
+        AssertUniqueIndex(dbContext.Model, typeof(IntegrationConnection), ["CreateBy", "Alias"]);
         AssertUniqueIndex(dbContext.Model, typeof(PluginInstallationCredential), ["PluginInstallationId", "Slot"]);
         AssertUniqueIndex(dbContext.Model, typeof(ConnectionCredential), ["ConnectionId", "Slot"]);
         AssertIndex(dbContext.Model, typeof(AgentConnectionRelation), ["ConnectionId"]);
@@ -48,6 +48,13 @@ public class ConnectionPersistenceTests
         AssertCascadeRelations(dbContext.Model, typeof(ConnectionCredential));
         AssertCascadeRelations(dbContext.Model, typeof(AgentConnectionRelation));
         AssertCascadeRelations(dbContext.Model, typeof(ProjectConnectionRelation));
+
+        var connectionEntity = dbContext.Model.FindEntityType(typeof(IntegrationConnection));
+        Assert.NotNull(connectionEntity);
+        var createByProperty = connectionEntity.FindProperty(nameof(IntegrationConnection.CreateBy));
+        Assert.NotNull(createByProperty);
+        Assert.False(createByProperty.IsNullable);
+        Assert.Null(createByProperty.GetMaxLength());
 
         var connectionCredential = dbContext.Model.FindEntityType(typeof(ConnectionCredential));
         Assert.NotNull(connectionCredential);

@@ -290,11 +290,11 @@ export function AgentFormFields({
               <TabsTrigger value="tools">Tools</TabsTrigger>
               <TabsTrigger value="skills">Skills</TabsTrigger>
               <TabsTrigger value="mcp-tool-servers">MCP Tool Server</TabsTrigger>
-              <TabsTrigger value="connections">Connections</TabsTrigger>
+              <TabsTrigger value="connections">Integrations</TabsTrigger>
               <TabsTrigger value="environment-variables">Environment Variables</TabsTrigger>
             </TabsList>
             <p className="mt-2 max-w-4xl text-xs text-muted-foreground">
-              Agw recommends configuring Skills, Tools, MCP Tool Servers, Connections, and
+              Agw recommends configuring Skills, Tools, MCP Tool Servers, Integrations, and
               Environment Variables in the Project. When the agent runs, it merges the
               configurations from both the agent and the project.
             </p>
@@ -399,7 +399,7 @@ export function AgentFormFields({
               notice={
                 isExternalAgent ? (
                   <ExternalAgentNotice>
-                    External agents do not support connection configuration.
+                    External agents do not support integration configuration.
                   </ExternalAgentNotice>
                 ) : null
               }

@@ -160,6 +160,7 @@ public class AgwDbContextIntegrationTests
             AuthSchemeId = "oauth",
             DisplayName = alias,
             Alias = alias,
+            CreateBy = "tester",
         };
 
     private sealed class TestScope : IAsyncDisposable

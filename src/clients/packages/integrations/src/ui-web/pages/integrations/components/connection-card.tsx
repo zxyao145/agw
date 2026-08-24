@@ -35,7 +35,7 @@ export function ConnectionCard({
     connection.lastValidationErrorCode ??
     (connection.status === "Ready"
       ? null
-      : "This connection does not currently contribute tools or skills.");
+      : "This integration does not currently contribute tools or skills.");
 
   return (
     <Card className="gap-0 overflow-hidden py-0">

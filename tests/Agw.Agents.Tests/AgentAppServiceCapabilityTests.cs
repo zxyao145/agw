@@ -134,7 +134,8 @@ public class AgentAppServiceCapabilityTests
             new TestRepository<Skill>(skills),
             new TestRepository<AgentSkillRelation>(agentSkillRelations),
             new TestUnitOfWork(),
-            new AgentDomainService(TimeProvider.System)
+            new AgentDomainService(TimeProvider.System),
+            new TestUserInfoService()
         );
     }
 

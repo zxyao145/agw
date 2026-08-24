@@ -1,6 +1,8 @@
+using System.Security.Claims;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Dtos;
+using Agw.Auth.Application;
 using Agw.Projects.Application;
 using Agw.Projects.Domain.Services;
 using Agw.Shared;
@@ -54,22 +56,35 @@ public sealed class JobAgentExecutor : IJobAgentExecutor
             );
         }
 
-        object? execution = job.AgentType.Value switch
+        var previousUser = UserInfoUtil.Current;
+        UserInfoUtil.Current = CreateUserPrincipal(ownerUserId);
+        object? execution;
+        try
         {
-            AgentRuntimeType.Agent => await _agentRuntimeService.ExecuteByIdAsync(
-                new AgentExecuteByIdRequest(prompt, job.AgentId.Value, executionId, job.ProjectId, contextId),
-                cancellationToken
-            ),
-            AgentRuntimeType.Agentflow => await _agentflowRuntimeService.ExecuteAsync(
-                job.AgentId.Value,
-                executionId,
-                prompt,
-                cancellationToken,
-                job.ProjectId,
-                contextId
-            ),
-            _ => throw new AgwException(ErrorCodes.UnsupportedAgentType, $"Unsupported agent type: {job.AgentType}"),
-        };
+            execution = job.AgentType.Value switch
+            {
+                AgentRuntimeType.Agent => await _agentRuntimeService.ExecuteByIdAsync(
+                    new AgentExecuteByIdRequest(prompt, job.AgentId.Value, executionId, job.ProjectId, contextId),
+                    cancellationToken
+                ),
+                AgentRuntimeType.Agentflow => await _agentflowRuntimeService.ExecuteAsync(
+                    job.AgentId.Value,
+                    executionId,
+                    prompt,
+                    cancellationToken,
+                    job.ProjectId,
+                    contextId
+                ),
+                _ => throw new AgwException(
+                    ErrorCodes.UnsupportedAgentType,
+                    $"Unsupported agent type: {job.AgentType}"
+                ),
+            };
+        }
+        finally
+        {
+            UserInfoUtil.Current = previousUser;
+        }
 
         if (execution == null)
         {
@@ -107,4 +122,7 @@ public sealed class JobAgentExecutor : IJobAgentExecutor
 
     internal static string ResolveOwnerUserId(Job job) =>
         string.IsNullOrWhiteSpace(job.CreateBy) ? Constants.AdminUserId : job.CreateBy;
+
+    private static ClaimsPrincipal CreateUserPrincipal(string userId) =>
+        new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], "JobExecution"));
 }
