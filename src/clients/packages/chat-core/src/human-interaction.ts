@@ -229,7 +229,7 @@ export function parseHumanInteractionQuestionResult(
     if (!isRecord(questionValue)) return null;
     const question = readRequiredString(questionValue.question);
     if (!question || questionTexts.has(question)) return null;
-    const answer = cancelled ? null : readRequiredString(answers?.[question]);
+    const answer = cancelled ? null : readQuestionAnswer(answers?.[question]);
     if (!cancelled && !answer) return null;
     questionTexts.add(question);
     items.push({ question, answer });
@@ -298,4 +298,12 @@ function readRequiredString(value: unknown): string | null {
 
 function readOptionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function readQuestionAnswer(value: unknown): string | null {
+  const single = readRequiredString(value);
+  if (single) return single;
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const values = value.map(readRequiredString);
+  return values.every((item): item is string => item !== null) ? values.join(", ") : null;
 }

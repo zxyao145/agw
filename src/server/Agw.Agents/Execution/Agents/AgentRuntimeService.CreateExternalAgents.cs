@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.ExternalAgents;
+using Agw.Agents.ExternalAgents.ClaudeCode;
 using Agw.Files.Utils;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
@@ -38,7 +39,8 @@ public partial class AgentRuntimeService
                 project,
                 request.ProviderSessionId,
                 request.IsResume,
-                environmentVariables
+                environmentVariables,
+                isBackground
             ),
             AgentNames.Codex => CreateCodexAgent(
                 project,
@@ -99,7 +101,8 @@ public partial class AgentRuntimeService
         Project project,
         Guid? providerSessionId,
         bool isResume,
-        IReadOnlyDictionary<string, string>? environmentVariables
+        IReadOnlyDictionary<string, string>? environmentVariables,
+        bool isBackground
     )
     {
         string? extra = project.ExtraSetting;
@@ -123,7 +126,15 @@ public partial class AgentRuntimeService
             return null;
         }
 
-        return new ClaudeCodeAIAgent(options, _logger);
+        var interactionBridge = new ClaudeCodeAskUserQuestionBridge(
+            _humanInteractionContextAccessor,
+            allowInteraction: !isBackground
+        );
+        options = options with { CanUseTool = interactionBridge.HandleAsync };
+        return new ClaudeCodeAIAgent(options, _logger)
+            .AsBuilder()
+            .Use(runFunc: interactionBridge.BindRunAsync, runStreamingFunc: interactionBridge.BindRunStreamingAsync)
+            .Build();
     }
 
     private static ClaudeCodeAIAgentOptions? BuildClaudeCodeAIAgentOptions(

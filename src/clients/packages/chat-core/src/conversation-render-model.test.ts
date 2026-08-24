@@ -350,6 +350,50 @@ test("tool calls pair per scope and completed questions use a dedicated result i
   );
 });
 
+test("Claude AskUserQuestion calls use the dedicated result item and support array answers", () => {
+  const call: AiMessage = {
+    messageId: "claude-call",
+    role: "assistant",
+    author: "claude",
+    streamingScopeId: "user-claude",
+    contents: [
+      {
+        type: "FunctionCallContent",
+        content: { questions: [] },
+        additionalProperties: { callId: "call-claude", toolName: "AskUserQuestion" },
+      },
+    ],
+  };
+  const result: AiMessage = {
+    messageId: "claude-result",
+    role: "tool",
+    author: "claude",
+    streamingScopeId: "user-claude",
+    contents: [
+      {
+        type: "FunctionResultContent",
+        content: JSON.stringify({
+          questions: [{ question: "Choose sections" }],
+          answers: { "Choose sections": ["Intro", "Conclusion"] },
+        }),
+        additionalProperties: { callId: "call-claude" },
+      },
+    ],
+  };
+
+  const items = buildConversationRenderModel([call, result]);
+
+  assert.deepEqual(
+    items.map((item) => item.type),
+    ["human-interaction-result"],
+  );
+  const interaction = items[0];
+  assert.equal(
+    interaction.type === "human-interaction-result" ? interaction.result.items[0]?.answer : null,
+    "Intro, Conclusion",
+  );
+});
+
 test("Claude pseudo-user tool results pair with their assistant calls after history scoping", () => {
   const messages = scopeMessagesByUserTurn([
     {

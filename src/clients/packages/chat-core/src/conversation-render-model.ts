@@ -40,6 +40,7 @@ const HIDDEN_CONTROL_TYPES = new Set([
 
 const supportedImageDataUrl = /^data:image\/(?:jpeg|png|gif|webp);base64,/i;
 const HIDDEN_SYSTEM_TOOL_NAMES = new Set(["Skill", "load_skill", "read_skill_resource"]);
+const QUESTION_INTERACTION_TOOL_NAMES = new Set(["ask_user_question", "AskUserQuestion"]);
 const CLAUDE_CODE_AGENT_NAME = "claude-code";
 const CLAUDE_SESSION_START_EVENT = "SessionStart";
 
@@ -271,10 +272,9 @@ export function buildConversationRenderModel(
     if (item.type === "accordion") {
       if (HIDDEN_SYSTEM_TOOL_NAMES.has(item.toolName)) continue;
 
-      const interactionResult =
-        item.toolName === "ask_user_question"
-          ? getHumanInteractionQuestionResult(item.messages)
-          : null;
+      const interactionResult = QUESTION_INTERACTION_TOOL_NAMES.has(item.toolName)
+        ? getHumanInteractionQuestionResult(item.messages)
+        : null;
       const first = item.messages[0];
       const callId = first?.contents[0]?.additionalProperties?.callId;
       const base = `tool:${first ? getStreamingIdentity(first) : "unknown"}:${String(
