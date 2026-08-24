@@ -193,6 +193,7 @@ export function Chat({
   const announcedContextIdRef = React.useRef<string | null>(sessionSeed.contextId);
   const conversationIdRef = React.useRef<string | null>(conversationId);
   const conversationScrollRef = React.useRef<HTMLDivElement>(null);
+  const conversationContentRef = React.useRef<HTMLDivElement>(null);
   const userInputRef = React.useRef<UserInputRef | null>(null);
   const executionClientRef = React.useRef<ManagedExecutionHandle | null>(null);
   const configuredSessionRef = React.useRef<string | null>(null);
@@ -405,7 +406,7 @@ export function Chat({
     };
   }, [detachExecution]);
 
-  React.useEffect(() => {
+  const syncConversationScrollPosition = React.useCallback(() => {
     const scrollContainer = conversationScrollRef.current;
     if (!scrollContainer) {
       return;
@@ -434,7 +435,22 @@ export function Chat({
       scrollHeight: scrollContainer.scrollHeight,
       scrollTop: scrollContainer.scrollTop,
     };
-  }, [messages, pendingHumanGate?.requestId]);
+  }, []);
+
+  React.useEffect(() => {
+    syncConversationScrollPosition();
+  }, [messages, pendingHumanGate?.requestId, syncConversationScrollPosition]);
+
+  React.useEffect(() => {
+    const conversationContent = conversationContentRef.current;
+    if (!conversationContent || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(syncConversationScrollPosition);
+    resizeObserver.observe(conversationContent);
+    return () => resizeObserver.disconnect();
+  }, [syncConversationScrollPosition]);
 
   const refreshAgentflowCheckpoints = React.useCallback(
     async (client: ManagedExecutionHandle, generation: number) => {
@@ -1412,7 +1428,7 @@ export function Chat({
         className="h-full w-full overflow-y-auto agw-scrollbar"
         onScroll={handleConversationScroll}
       >
-        <div className="mx-auto flex min-h-full w-full justify-center">
+        <div ref={conversationContentRef} className="mx-auto flex min-h-full w-full justify-center">
           <div className="relative flex min-h-full min-w-0 max-w-5xl flex-1">
             {/* 对话列表 */}
             <Conversation

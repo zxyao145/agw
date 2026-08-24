@@ -1,5 +1,4 @@
 using System.Runtime.ExceptionServices;
-using System.Text.Json;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Extensions;
 using Microsoft.Agents.AI;
@@ -19,8 +18,6 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
     private readonly ChatHistoryProvider _chatHistoryProvider;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger _logger;
-    private readonly Func<string, CancellationToken, ValueTask>? _onProviderSessionStartedAsync;
-    private int _providerSessionCaptured;
 
     /// <summary>
     /// 创建负责持久化 External Agent 聊天历史的包装器。
@@ -29,20 +26,17 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
     /// <param name="chatHistoryProvider">用于读写聊天历史的 Provider。</param>
     /// <param name="timeProvider">用于控制定时刷新间隔的时间 Provider。</param>
     /// <param name="logger">用于记录持久化或释放异常的日志记录器。</param>
-    /// <param name="onProviderSessionStartedAsync">捕获到 External Agent provider session 后的回调。</param>
     internal ExternalAgentChatHistoryAgent(
         AIAgent innerAgent,
         ChatHistoryProvider chatHistoryProvider,
         TimeProvider timeProvider,
-        ILogger logger,
-        Func<string, CancellationToken, ValueTask>? onProviderSessionStartedAsync = null
+        ILogger logger
     )
         : base(innerAgent)
     {
         _chatHistoryProvider = chatHistoryProvider;
         _timeProvider = timeProvider;
         _logger = logger;
-        _onProviderSessionStartedAsync = onProviderSessionStartedAsync;
     }
 
     /// <summary>
@@ -67,10 +61,6 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
         var response = await InnerAgent
             .RunAsync(requestMessages, safeSession, options, cancellationToken)
             .ConfigureAwait(false);
-        foreach (var message in response.Messages)
-        {
-            await CaptureProviderSessionIdAsync(message.AdditionalProperties, message.Contents).ConfigureAwait(false);
-        }
 
         var responseMessages = response.Messages.Select(CreatePersistableMessage).OfType<ChatMessage>().ToList();
         await PersistAsync(safeSession, [], responseMessages, CancellationToken.None).ConfigureAwait(false);
@@ -141,8 +131,6 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
 
                     update = enumerator.Current;
                     moveNextTask = null;
-                    await CaptureProviderSessionIdAsync(update.AdditionalProperties, update.Contents)
-                        .ConfigureAwait(false);
                     var responseMessage = CreatePersistableMessage(update);
                     if (responseMessage != null)
                     {
@@ -293,71 +281,6 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
         );
 
     /// <summary>
-    /// 从 Claude Code init 消息捕获真实 provider session ID，并且每个包装器只通知一次。
-    /// </summary>
-    private async ValueTask CaptureProviderSessionIdAsync(
-        AdditionalPropertiesDictionary? additionalProperties,
-        IEnumerable<AIContent> contents
-    )
-    {
-        if (
-            _onProviderSessionStartedAsync == null
-            || Volatile.Read(ref _providerSessionCaptured) != 0
-            || !TryGetProviderSessionId(additionalProperties, contents, out var providerSessionId)
-            || Interlocked.CompareExchange(ref _providerSessionCaptured, 1, 0) != 0
-        )
-        {
-            return;
-        }
-
-        await _onProviderSessionStartedAsync(providerSessionId, CancellationToken.None).ConfigureAwait(false);
-    }
-
-    private static bool TryGetProviderSessionId(
-        AdditionalPropertiesDictionary? additionalProperties,
-        IEnumerable<AIContent> contents,
-        out string providerSessionId
-    )
-    {
-        providerSessionId = string.Empty;
-        if (
-            additionalProperties?.TryGetValue("subtype", out var subtype) != true
-            || !string.Equals(subtype?.ToString(), "init", StringComparison.OrdinalIgnoreCase)
-        )
-        {
-            return false;
-        }
-
-        var json = contents.OfType<TextContent>().FirstOrDefault()?.Text;
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return false;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(json);
-            if (
-                document.RootElement.ValueKind != JsonValueKind.Object
-                || !document.RootElement.TryGetProperty("session_id", out var sessionIdElement)
-                || sessionIdElement.ValueKind != JsonValueKind.String
-                || !Guid.TryParse(sessionIdElement.GetString(), out var sessionId)
-                || sessionId == Guid.Empty
-            )
-            {
-                return false;
-            }
-
-            providerSessionId = sessionId.Normalize();
-            return true;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-    }
-
-    /// <summary>
     /// 将非空且可展示的流式响应更新转换为可持久化的聊天消息。
     /// </summary>
     /// <param name="update">External Agent 返回的响应更新。</param>
@@ -390,7 +313,7 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
     /// </summary>
     /// <param name="message">External Agent 返回的完整响应消息。</param>
     /// <returns>可持久化的聊天消息；消息不包含有效内容时返回 <see langword="null" />。</returns>
-    private static ChatMessage? CreatePersistableMessage(ChatMessage message)
+    internal static ChatMessage? CreatePersistableMessage(ChatMessage message)
     {
         var contents = message.Contents.WithoutBlankTextualContent(message.AdditionalProperties);
         if (contents.Count == 0)

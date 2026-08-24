@@ -337,7 +337,7 @@ sequenceDiagram
 
 Agent 执行结束时，`AgentRuntimeService` 会在 `finally` 中保存 SDK session state。External Agent 不持久化通用 SDK session state；Claude Code 与 Codex 通过 project conversation 作用域内的 task-session binding 保存 provider session id。Codex 从 `OnThreadStartedAsync` 获取 thread id，并以 `ThreadId + IsResume` 恢复；Claude Code 首次运行使用 `SessionId + IsResume=false`，从 `subtype=init` 消息确认真实 `session_id` 后保存，后续以 `Resume=<session_id> + IsResume=true` 恢复。
 
-External Agent SDK 自带的通用 ChatHistoryProvider 会被禁用，避免与 Agw 历史重复写入。`ExternalAgentChatHistoryAgent` 先立即持久化请求，再按 20 条响应或 1 秒窗口刷新流式更新；正常结束、取消、异常和消费方提前释放都会 flush 剩余内容。External Agent 返回的 System/User 展示消息会标记 `modelHistoryExcluded`，因此可在 UI 历史中显示，但不会重新进入模型上下文或跨目标 handoff。
+Codex 的 SDK ChatHistoryProvider 会被禁用，改由 `ExternalAgentChatHistoryAgent` 先立即持久化请求，再按 20 条响应或 1 秒窗口刷新流式更新；正常结束、取消、异常和消费方提前释放都会 flush 剩余内容。Claude Code 则直接使用 `ClaudeCodeSdk.MAF` 的 ChatHistoryProvider；SDK 会在每个完整 Assistant 消息结束后聚合并分阶段写入 Agw 历史，不再经过外层历史包装器。External Agent 返回的 System/User 展示消息仍会标记 `modelHistoryExcluded`，因此可在 UI 历史中显示，但不会重新进入模型上下文或跨目标 handoff。
 
 ### 在执行目标之间交接 Conversation
 
@@ -383,6 +383,8 @@ Agentflow 不读取内部 Agent 节点的 `EnableSummary`。流程总结只发�
 Agentflow 进入 HumanGate、Tool 请求审批或 `HumanInteractionRequiredAIFunction` 请求用户输入后，`HumanGateApprovalCoordinator` 按 `requestId` 保存待处理响应。用户信息交互通过 `human-interaction-request` control message 携带来源 `toolName`/`callId`、`interactionKind` 和结构化 `payload`，客户端可将交互面板嵌入对应的 function call，并在 `HumanResponseCommand.responseData` 中返回结构化数据。`HumanResponseCommandHandler` 将响应转发给当前 `ActiveTurn`；request id 不匹配或已结束时返回 system message。
 
 Claude Code External Agent 的原生 `AskUserQuestion` 通过 SDK stdio `can_use_tool` 回调接入同一套 channel。Agw 在每次 Agent run 内显式绑定当前 channel，把原生 `tool_use_id` 作为 `callId` 发出问卷 control message，并将客户端提交的 `answers` 作为 `updatedInput` 返回 Claude Code。后台执行和没有活动 channel 的调用会被拒绝；External Agent 仍不进入 Distributed HITL 恢复流程。
+
+Claude Code External Agent 默认启用 SDK partial messages。`ClaudeCodeSdk.MAF` 将 Claude `stream_event` 转成共享 `ResponseId`/`MessageId` 的标准 `AgentResponseUpdate` 增量，因此既有 SignalR 和客户端渲染链路无需 Claude 专用逻辑。实时 update 原样下发；同一逻辑消息同时收到 `message_stop` 和完整 `AssistantMessage` 后，SDK 通过 MAF `ToAgentResponse()` 聚合并立即交给 ChatHistoryProvider。因此一个包含多轮 Tool Call 的 turn 可以分阶段持久化多次；若后续轮次被取消或以错误结束，已经完成的轮次保留，当前未完成的 partial Assistant 不写入历史。未收到 partial events 时回退为正常结束后的整轮聚合。Agw 只观察 init update 以保存 provider session ID，不收集或解析 partial 内容；其他 External Agent 仍使用原有一秒微批策略。
 
 ## Distributed HITL：`ask_user_question` 如何跨重启恢复
 

@@ -3,6 +3,7 @@ using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Utils;
 using Agw.Agents.ExternalAgents;
+using Agw.Agents.ExternalAgents.ClaudeCode;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
@@ -109,19 +110,48 @@ public class AgentRuntimeServiceCompositionTests
     }
 
     [Fact]
-    public void DisableExternalSdkChatHistoryPersistence_ForCodexAndClaude_ClearsProvider()
+    public void WrapClaudeCodeAgent_UsesSessionTrackerWithoutExternalHistoryAdapter()
+    {
+        var service = CreateRuntimeService(new InMemoryChatHistoryProvider());
+
+        var agent = service.WrapClaudeCodeAgent(
+            new StubAIAgent(),
+            isBackground: false,
+            (_, _) => ValueTask.CompletedTask
+        );
+
+        Assert.NotNull(agent.GetService<ClaudeCodeProviderSessionTrackingAgent>());
+        Assert.Null(agent.GetService<ExternalAgentChatHistoryAgent>());
+        Assert.NotNull(agent.GetService<StubAIAgent>());
+    }
+
+    [Fact]
+    public void DisableExternalSdkChatHistoryPersistence_ForCodex_ClearsProvider()
     {
         var historyProvider = new InMemoryChatHistoryProvider();
 
         var codexOptions = AgentRuntimeService.DisableExternalSdkChatHistoryPersistence(
             new CodexAIAgentOptions { ChatHistoryProvider = historyProvider }
         );
-        var claudeOptions = AgentRuntimeService.DisableExternalSdkChatHistoryPersistence(
-            new ClaudeCodeAIAgentOptions { ChatHistoryProvider = historyProvider }
-        );
 
         Assert.Null(codexOptions.ChatHistoryProvider);
-        Assert.Null(claudeOptions.ChatHistoryProvider);
+    }
+
+    [Fact]
+    public void BuildClaudeCodeAIAgentOptions_WhenHistoryProviderProvided_UsesSdkPersistence()
+    {
+        var historyProvider = new InMemoryChatHistoryProvider();
+
+        var options = BuildClaudeCodeAIAgentOptions(
+            "{}",
+            workspace: null,
+            providerSessionId: null,
+            isResume: false,
+            chatHistoryProvider: historyProvider
+        );
+
+        Assert.NotNull(options);
+        Assert.Same(historyProvider, options.ChatHistoryProvider);
     }
 
     [Theory]
@@ -144,6 +174,7 @@ public class AgentRuntimeServiceCompositionTests
 
         Assert.NotNull(options);
         Assert.False(options.ContinueConversation);
+        Assert.True(options.IncludePartialMessages);
         Assert.Equal("/source/workspace", options.WorkingDirectory);
         if (isResume)
         {
@@ -174,6 +205,7 @@ public class AgentRuntimeServiceCompositionTests
 
         Assert.NotNull(options);
         Assert.False(options.ContinueConversation);
+        Assert.True(options.IncludePartialMessages);
         Assert.Null(options.Resume);
         Assert.Null(options.SessionId);
     }
@@ -363,7 +395,8 @@ public class AgentRuntimeServiceCompositionTests
         string? workspace,
         Guid? providerSessionId,
         bool isResume,
-        IReadOnlyDictionary<string, string>? environmentVariables = null
+        IReadOnlyDictionary<string, string>? environmentVariables = null,
+        ChatHistoryProvider? chatHistoryProvider = null
     )
     {
         var method = typeof(AgentRuntimeService).GetMethod(
@@ -373,7 +406,10 @@ public class AgentRuntimeServiceCompositionTests
 
         Assert.NotNull(method);
         return Assert.IsType<ClaudeCodeAIAgentOptions>(
-            method.Invoke(null, [extra, workspace, providerSessionId, isResume, environmentVariables])
+            method.Invoke(
+                null,
+                [extra, workspace, providerSessionId, isResume, environmentVariables, chatHistoryProvider]
+            )
         );
     }
 

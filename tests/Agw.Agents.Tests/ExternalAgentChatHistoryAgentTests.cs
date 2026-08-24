@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Threading.Channels;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents;
+using Agw.Agents.ExternalAgents.ClaudeCode;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Extensions;
 using Microsoft.Agents.AI;
@@ -417,6 +418,84 @@ public class ExternalAgentChatHistoryAgentTests
     }
 
     [Fact]
+    public async Task ClaudeCodeChatHistoryProvider_Invoking_DelegatesWithoutDuplicatingRequest()
+    {
+        // Arrange
+        var innerProvider = new RecordingChatHistoryProvider
+        {
+            ProvidedMessages = [new ChatMessage(ChatRole.Assistant, "history")],
+        };
+        var provider = new ClaudeCodeChatHistoryProvider(innerProvider);
+        var agent = new PausableExternalAgent();
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var request = new ChatMessage(ChatRole.User, "request");
+
+        // Act
+        var messages = await provider.InvokingAsync(
+            new ChatHistoryProvider.InvokingContext(agent, session, [request]),
+            TestContext.Current.CancellationToken
+        );
+
+        // Assert
+        Assert.Equal(["history", "request"], messages.Select(message => message.Text));
+    }
+
+    [Fact]
+    public async Task ClaudeCodeChatHistoryProvider_Invoked_SanitizesCompletedResponseBeforeDelegating()
+    {
+        // Arrange
+        var innerProvider = new RecordingChatHistoryProvider();
+        var provider = new ClaudeCodeChatHistoryProvider(innerProvider);
+        var agent = new PausableExternalAgent();
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var request = new ChatMessage(ChatRole.User, "request");
+        var assistant = new ChatMessage(ChatRole.Assistant, "answer") { RawRepresentation = new object() };
+        var retry = new ChatMessage(ChatRole.System, [new ErrorContent("Claude Code API retry 10/10: rate_limit")])
+        {
+            MessageId = "api-retry-10",
+            RawRepresentation = new object(),
+            AdditionalProperties = new AdditionalPropertiesDictionary { ["subtype"] = "api_retry" },
+        };
+        var rateLimit = new ChatMessage(ChatRole.Assistant, [new ErrorContent("rate_limit")])
+        {
+            MessageId = "synthetic-rate-limit",
+            AuthorName = "<synthetic>",
+            RawRepresentation = new object(),
+            AdditionalProperties = new AdditionalPropertiesDictionary
+            {
+                ["agentName"] = "claude-code",
+                ["type"] = "assistant",
+            },
+        };
+
+        // Act
+        await provider.InvokedAsync(
+            new ChatHistoryProvider.InvokedContext(agent, session, [request], [assistant, retry, rateLimit]),
+            TestContext.Current.CancellationToken
+        );
+
+        // Assert
+        var call = Assert.Single(innerProvider.Calls);
+        Assert.Same(request, Assert.Single(call.RequestMessages));
+        Assert.Equal(3, call.ResponseMessages.Count);
+        Assert.All(call.ResponseMessages, message => Assert.Null(message.RawRepresentation));
+        Assert.False(ConversationHistoryMetadata.IsModelHistoryExcluded(call.ResponseMessages[0]));
+        Assert.True(ConversationHistoryMetadata.IsModelHistoryExcluded(call.ResponseMessages[1]));
+        Assert.True(ConversationHistoryMetadata.IsModelHistoryExcluded(call.ResponseMessages[2]));
+        Assert.Equal("api_retry", call.ResponseMessages[1].AdditionalProperties!["subtype"]?.ToString());
+        Assert.Equal(
+            "Claude Code API retry 10/10: rate_limit",
+            Assert.IsType<ErrorContent>(Assert.Single(call.ResponseMessages[1].Contents)).Message
+        );
+        Assert.Equal(ChatRole.Assistant, call.ResponseMessages[2].Role);
+        Assert.Equal("<synthetic>", call.ResponseMessages[2].AuthorName);
+        Assert.Equal(
+            "rate_limit",
+            Assert.IsType<ErrorContent>(Assert.Single(call.ResponseMessages[2].Contents)).Message
+        );
+    }
+
+    [Fact]
     public async Task RunStreamingAsync_WhenFinalPersistenceFailsDuringExecutionFailure_PreservesExecutionFailure()
     {
         var provider = new RecordingChatHistoryProvider { FailureCallNumber = 2 };
@@ -496,18 +575,22 @@ public class ExternalAgentChatHistoryAgentTests
         Assert.All(provider.Calls, call => Assert.Same(providerSessionState.Session, call.Session));
     }
 
-    private static ExternalAgentChatHistoryAgent CreateAgent(
+    private static AIAgent CreateAgent(
         AIAgent innerAgent,
         ChatHistoryProvider provider,
         Func<string, CancellationToken, ValueTask>? onProviderSessionStartedAsync = null
-    ) =>
-        new(
+    )
+    {
+        AIAgent agent = new ExternalAgentChatHistoryAgent(
             innerAgent,
             provider,
             TimeProvider.System,
-            NullLogger<ExternalAgentChatHistoryAgent>.Instance,
-            onProviderSessionStartedAsync
+            NullLogger<ExternalAgentChatHistoryAgent>.Instance
         );
+        return onProviderSessionStartedAsync == null
+            ? agent
+            : new ClaudeCodeProviderSessionTrackingAgent(agent, onProviderSessionStartedAsync);
+    }
 
     private static AgentResponseUpdate CreateClaudeInitUpdate(Guid sessionId) =>
         CreateClaudeInitUpdate(JsonSerializer.Serialize(new { session_id = sessionId }));
@@ -545,6 +628,8 @@ public class ExternalAgentChatHistoryAgentTests
 
         public int? FailureCallNumber { get; init; }
 
+        public IReadOnlyList<ChatMessage> ProvidedMessages { get; init; } = [];
+
         public async Task WaitForCallCountAsync(int count, TimeSpan timeout)
         {
             using var cancellationSource = new CancellationTokenSource(timeout);
@@ -557,7 +642,7 @@ public class ExternalAgentChatHistoryAgentTests
         protected override ValueTask<IEnumerable<ChatMessage>> ProvideChatHistoryAsync(
             InvokingContext context,
             CancellationToken cancellationToken
-        ) => ValueTask.FromResult<IEnumerable<ChatMessage>>([]);
+        ) => ValueTask.FromResult<IEnumerable<ChatMessage>>(ProvidedMessages);
 
         protected override ValueTask StoreChatHistoryAsync(InvokedContext context, CancellationToken cancellationToken)
         {

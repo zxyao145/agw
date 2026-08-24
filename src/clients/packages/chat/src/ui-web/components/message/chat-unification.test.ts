@@ -56,6 +56,15 @@ test("auto-scroll state is shared through chat-core", async () => {
   assert.match(source, /shouldAutoScroll/);
 });
 
+test("auto-scroll follows delayed virtual row measurements", async () => {
+  const source = await readFile(CHAT_URL, "utf8");
+
+  assert.match(source, /ref=\{conversationContentRef\}/);
+  assert.match(source, /new ResizeObserver\(syncConversationScrollPosition\)/);
+  assert.match(source, /resizeObserver\.observe\(conversationContent\)/);
+  assert.match(source, /resizeObserver\.disconnect\(\)/);
+});
+
 test("shared Chat prepends cursor pages without losing the visible scroll anchor", async () => {
   const source = await readFile(CHAT_URL, "utf8");
 
