@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Http;
 
-namespace Agw.Auth.Application;
+namespace Agw.Auth.Security;
 
 public sealed class AuthenticationAttemptLimiter
 {

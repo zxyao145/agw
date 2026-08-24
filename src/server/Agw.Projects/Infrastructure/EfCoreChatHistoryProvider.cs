@@ -15,7 +15,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace Agw.Domain.Services;
+namespace Agw.Projects.Infrastructure;
 
 [JsonSerializable(typeof(EfCoreChatHistoryProvider.State))]
 internal partial class ChatHistoryProviderStateJsonContext : JsonSerializerContext { }

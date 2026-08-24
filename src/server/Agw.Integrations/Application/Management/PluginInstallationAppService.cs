@@ -1,4 +1,4 @@
-using Agw.Auth.Application;
+using Agw.Auth.Contracts;
 using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.Management;
 using Agw.Integrations.Domain.Plugins;

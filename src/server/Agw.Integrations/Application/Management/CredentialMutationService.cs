@@ -1,4 +1,4 @@
-using Agw.Auth.Application;
+using Agw.Auth.Contracts;
 using Agw.Integrations.Contracts.Management;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;

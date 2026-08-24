@@ -1,8 +1,7 @@
 using System.Diagnostics;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents.AIContextProviders.AgwWorkspace;
-using Agw.Domain.Services;
-using Agw.Integrations.Application.Capabilities;
+using Agw.Integrations.Contracts.Capabilities;
 using Agw.Integrations.Mcp;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;

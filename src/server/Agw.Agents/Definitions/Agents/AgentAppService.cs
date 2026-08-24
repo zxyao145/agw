@@ -1,4 +1,4 @@
-using Agw.Auth.Application;
+using Agw.Auth.Contracts;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;

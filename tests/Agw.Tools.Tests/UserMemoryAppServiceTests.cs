@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using Agw.Auth.Application;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Infrastructure.Repositories;

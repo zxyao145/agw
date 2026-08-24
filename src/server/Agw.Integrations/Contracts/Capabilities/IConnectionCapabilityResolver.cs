@@ -1,4 +1,4 @@
-namespace Agw.Integrations.Application.Capabilities;
+namespace Agw.Integrations.Contracts.Capabilities;
 
 /// <summary>
 /// 解析指定 Connection 可向项目中的 Agent 提供的工具、Plugin Skill、Warning 和资源 Lease。

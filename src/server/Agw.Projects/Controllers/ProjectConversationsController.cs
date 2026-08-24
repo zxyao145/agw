@@ -1,4 +1,5 @@
 using Agw.Projects.Application;
+using Agw.Projects.Contracts;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;

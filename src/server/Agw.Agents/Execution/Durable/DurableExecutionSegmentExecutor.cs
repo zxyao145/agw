@@ -1,6 +1,6 @@
 using System.Security.Claims;
 using Agw.Agents.Execution.Agentflows;
-using Agw.Auth.Application;
+using Agw.Auth.Contracts;
 using Agw.Shared.Data;
 using Microsoft.Extensions.Logging;
 

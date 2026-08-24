@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;
+using Agw.Auth.Security;
 using Agw.Shared;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;

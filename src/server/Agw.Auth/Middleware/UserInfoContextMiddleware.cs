@@ -1,4 +1,4 @@
-using Agw.Auth.Application;
+using Agw.Auth.Contracts;
 using Microsoft.AspNetCore.Http;
 
 namespace Agw.Auth.Middleware;

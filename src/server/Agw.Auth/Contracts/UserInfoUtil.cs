@@ -3,7 +3,7 @@ using Agw.Shared;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 
-namespace Agw.Auth.Application;
+namespace Agw.Auth.Contracts;
 
 public static class UserInfoUtil
 {

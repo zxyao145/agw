@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Agw.Projects.Contracts;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
@@ -8,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Projects.Application;
 
-public class TaskExecutionAppService
+public class TaskExecutionAppService : ITaskExecutionService
 {
     private readonly IRepository<ProjectConversation> _contextRepository;
     private readonly IRepository<ProjectConversationChatHistory> _recordRepository;

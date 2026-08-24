@@ -1,4 +1,4 @@
-using Agw.Integrations.Application.Capabilities;
+using Agw.Integrations.Contracts.Capabilities;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 

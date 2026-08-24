@@ -1,6 +1,7 @@
 using Agw.Domain.Services.Skills;
 using Agw.Skills.Application;
 using Agw.Skills.Application.Remote;
+using Agw.Skills.Contracts.Remote;
 using Agw.Skills.Infrastructure.Remote;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

@@ -1,5 +1,5 @@
 using Agw.Jobs.Execution;
-using Agw.Projects.Application;
+using Agw.Projects.Contracts;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -27,7 +27,7 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
     private readonly IRepository<Job> _jobRepository;
     private readonly IRepository<JobLog> _jobLogRepository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly TaskExecutionAppService _taskExecutionAppService;
+    private readonly ITaskExecutionService _taskExecutionService;
     private readonly JobScheduleCalculator _scheduleCalculator;
     private readonly TimeProvider _timeProvider;
 
@@ -35,7 +35,7 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
         IRepository<Job> jobRepository,
         IRepository<JobLog> jobLogRepository,
         IUnitOfWork unitOfWork,
-        TaskExecutionAppService taskExecutionAppService,
+        ITaskExecutionService taskExecutionService,
         JobScheduleCalculator scheduleCalculator,
         TimeProvider timeProvider
     )
@@ -43,7 +43,7 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
         _jobRepository = jobRepository;
         _jobLogRepository = jobLogRepository;
         _unitOfWork = unitOfWork;
-        _taskExecutionAppService = taskExecutionAppService;
+        _taskExecutionService = taskExecutionService;
         _scheduleCalculator = scheduleCalculator;
         _timeProvider = timeProvider;
     }
@@ -74,11 +74,11 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
         var ownerUserId = JobAgentExecutor.ResolveOwnerUserId(job);
         if (success)
         {
-            _ = await _taskExecutionAppService.MarkSucceededAsync(executionId, ownerUserId).ConfigureAwait(false);
+            _ = await _taskExecutionService.MarkSucceededAsync(executionId, ownerUserId).ConfigureAwait(false);
         }
         else
         {
-            _ = await _taskExecutionAppService
+            _ = await _taskExecutionService
                 .MarkFailedAsync(executionId, normalizedError!, ownerUserId)
                 .ConfigureAwait(false);
         }

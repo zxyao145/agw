@@ -4,7 +4,7 @@ using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Runtimes;
-using Agw.Auth.Application;
+using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Jobs.Execution;

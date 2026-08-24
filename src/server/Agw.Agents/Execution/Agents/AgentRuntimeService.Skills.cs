@@ -1,4 +1,4 @@
-using Agw.Integrations.Application.Capabilities;
+using Agw.Integrations.Contracts.Capabilities;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Skills;

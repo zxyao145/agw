@@ -2,9 +2,9 @@ using System.Security.Claims;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Dtos;
-using Agw.Auth.Application;
-using Agw.Projects.Application;
-using Agw.Projects.Domain.Services;
+using Agw.Auth.Contracts;
+using Agw.Projects;
+using Agw.Projects.Contracts;
 using Agw.Shared;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
@@ -18,17 +18,17 @@ public sealed class JobAgentExecutor : IJobAgentExecutor
 {
     private readonly IAgentRuntimeService _agentRuntimeService;
     private readonly IAgentflowRuntimeService _agentflowRuntimeService;
-    private readonly TaskExecutionAppService _taskExecutionAppService;
+    private readonly ITaskExecutionService _taskExecutionService;
 
     public JobAgentExecutor(
         IAgentRuntimeService agentRuntimeService,
         IAgentflowRuntimeService agentflowRuntimeService,
-        TaskExecutionAppService taskExecutionAppService
+        ITaskExecutionService taskExecutionService
     )
     {
         _agentRuntimeService = agentRuntimeService;
         _agentflowRuntimeService = agentflowRuntimeService;
-        _taskExecutionAppService = taskExecutionAppService;
+        _taskExecutionService = taskExecutionService;
     }
 
     public async Task ExecuteAsync(Job job, Guid executionId, CancellationToken cancellationToken)
@@ -41,7 +41,7 @@ public sealed class JobAgentExecutor : IJobAgentExecutor
         var (prompt, title) = BuildPromptAndTitle(job);
         var contextId = ContextIdUtil.GenContextId();
         var ownerUserId = ResolveOwnerUserId(job);
-        var createResult = await _taskExecutionAppService.CreateRunningForExecutionAsync(
+        var createResult = await _taskExecutionService.CreateRunningForExecutionAsync(
             job.ProjectId,
             executionId,
             new TaskCreateRequest(JobId: job.Id, Input: prompt, Title: title, ContextId: contextId),

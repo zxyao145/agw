@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using A2A;
-using Agw.Projects.Application;
+using Agw.Projects;
 using Agw.Shared.Exceptions;
 using AgwTaskProjection = Agw.Shared.Contracts.Projects.TaskProjection;
 

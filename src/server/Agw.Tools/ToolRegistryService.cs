@@ -9,7 +9,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace Agw.Domain.Services;
+namespace Agw.Tools;
 
 /// <summary>
 /// Service for discovering, registering, and managing AI tools available to agents.

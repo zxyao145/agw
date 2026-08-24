@@ -1,4 +1,4 @@
-namespace Agw.Skills.Application.Remote;
+namespace Agw.Skills.Contracts.Remote;
 
 public interface IRemoteSkillContentResolver
 {

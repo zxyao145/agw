@@ -1,6 +1,5 @@
 using System.Security.Cryptography;
 using System.Text;
-using Agw.Auth.Application;
 using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
 using Agw.Shared;

@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Agw.Auth.Application;
 using Agw.Auth.Contracts;
 using Agw.Setup.Contracts;
 using Agw.Shared.Configuration;

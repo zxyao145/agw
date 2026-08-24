@@ -1,4 +1,9 @@
 global using System;
 global using System.Collections.Generic;
 global using Agw.Agents.Definitions.Domain;
+global using Agw.Auth.Contracts;
+global using Agw.Integrations.Contracts.Capabilities;
+global using Agw.Projects.Infrastructure;
+global using Agw.Skills.Contracts.Remote;
+global using Agw.Tools;
 global using Xunit;

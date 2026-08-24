@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace Agw.Skills.Application.Remote;
+namespace Agw.Skills.Contracts.Remote;
 
 public sealed record RemoteSkillDefinition(
     string Name,

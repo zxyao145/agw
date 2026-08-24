@@ -1,4 +1,4 @@
-using Agw.Skills.Application.Remote;
+using Agw.Skills.Contracts.Remote;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 

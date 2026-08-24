@@ -1,4 +1,4 @@
-namespace Agw.Projects.Domain.Services;
+namespace Agw.Projects;
 
 public static class TaskTitleFactory
 {

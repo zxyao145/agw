@@ -1,4 +1,4 @@
-using Agw.Auth.Application;
+using Agw.Auth.Contracts;
 using Agw.Shared;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Extensions;

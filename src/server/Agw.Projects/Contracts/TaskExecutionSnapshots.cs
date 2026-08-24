@@ -1,7 +1,7 @@
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data.Entities.Projects;
 
-namespace Agw.Projects.Application;
+namespace Agw.Projects.Contracts;
 
 public record TaskExecutionSummary(
     Guid TaskId,

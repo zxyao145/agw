@@ -2,7 +2,6 @@ using System.Net;
 using System.Net.WebSockets;
 using System.Text;
 using Agw.Auth.Api;
-using Agw.Auth.Application;
 using Agw.Auth.Contracts;
 using Agw.Auth.Extensions;
 using Agw.Shared.Configuration;

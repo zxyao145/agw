@@ -1,5 +1,5 @@
 using System.Net;
-using Agw.Auth.Application;
+using Agw.Auth.Security;
 using Agw.Setup.Contracts;
 using Agw.Setup.Controllers;
 using Agw.Setup.Services;

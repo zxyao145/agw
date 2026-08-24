@@ -10,6 +10,7 @@ using Agw.Shared.Pagination;
 using Agw.Shared.Runtime;
 using Agw.Skills.Application.Remote;
 using Agw.Skills.Contracts.Registration;
+using Agw.Skills.Contracts.Remote;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 

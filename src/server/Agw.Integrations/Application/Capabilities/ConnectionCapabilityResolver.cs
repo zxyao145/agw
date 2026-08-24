@@ -1,7 +1,8 @@
-using Agw.Auth.Application;
+using Agw.Auth.Contracts;
 using Agw.Integrations.Application.Credentials;
 using Agw.Integrations.Application.Management;
 using Agw.Integrations.Application.Plugins;
+using Agw.Integrations.Contracts.Capabilities;
 using Agw.Integrations.Domain.Plugins;
 using Agw.Integrations.Mcp;
 using Agw.Shared.Data.Entities.Integrations;

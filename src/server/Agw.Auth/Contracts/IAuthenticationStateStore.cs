@@ -1,6 +1,4 @@
-using Agw.Auth.Contracts;
-
-namespace Agw.Auth.Application;
+namespace Agw.Auth.Contracts;
 
 public interface IAuthenticationStateReader
 {

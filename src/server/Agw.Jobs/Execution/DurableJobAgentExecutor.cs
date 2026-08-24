@@ -1,7 +1,7 @@
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Durable;
-using Agw.Projects.Application;
+using Agw.Projects.Contracts;
 using Agw.Shared;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
@@ -15,15 +15,12 @@ namespace Agw.Jobs.Execution;
 public sealed class DurableJobAgentExecutor : IJobAgentExecutor
 {
     private readonly IDurableExecutionClient _executionClient;
-    private readonly TaskExecutionAppService _taskExecutionAppService;
+    private readonly ITaskExecutionService _taskExecutionService;
 
-    public DurableJobAgentExecutor(
-        IDurableExecutionClient executionClient,
-        TaskExecutionAppService taskExecutionAppService
-    )
+    public DurableJobAgentExecutor(IDurableExecutionClient executionClient, ITaskExecutionService taskExecutionService)
     {
         _executionClient = executionClient;
-        _taskExecutionAppService = taskExecutionAppService;
+        _taskExecutionService = taskExecutionService;
     }
 
     public async Task ExecuteAsync(Job job, Guid executionId, CancellationToken cancellationToken)
@@ -36,7 +33,7 @@ public sealed class DurableJobAgentExecutor : IJobAgentExecutor
         var (prompt, title) = JobAgentExecutor.BuildPromptAndTitle(job);
         var contextId = ContextIdUtil.GenContextId();
         var ownerUserId = JobAgentExecutor.ResolveOwnerUserId(job);
-        var createResult = await _taskExecutionAppService.CreateRunningForExecutionAsync(
+        var createResult = await _taskExecutionService.CreateRunningForExecutionAsync(
             job.ProjectId,
             executionId,
             new TaskCreateRequest(JobId: job.Id, Input: prompt, Title: title, ContextId: contextId),
@@ -51,7 +48,7 @@ public sealed class DurableJobAgentExecutor : IJobAgentExecutor
         }
 
         var task =
-            await _taskExecutionAppService.GetTaskAsync(executionId)
+            await _taskExecutionService.GetTaskAsync(executionId)
             ?? throw new AgwException(ErrorCodes.TaskCreationFailed, "Failed to resolve the created Job task.");
         var input = new AgwUserInput
         {

@@ -1,4 +1,3 @@
-using Agw.Auth.Application;
 using Agw.Auth.Security;
 using Agw.Setup.Contracts;
 using Agw.Setup.Services;

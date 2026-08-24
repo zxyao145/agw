@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
-using Agw.Projects.Infrastructure;
 using Agw.Shared;
 using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Projects;

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Agw.Auth.Application;
+using Agw.Auth.Contracts;
 using Agw.Auth.Security;
 using Agw.Shared;
 using Microsoft.AspNetCore.Http;

@@ -1,5 +1,5 @@
 using System.Linq.Expressions;
-using Agw.Auth.Application;
+using Agw.Auth.Contracts;
 using Agw.Files.Utils;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Contracts.Projects;

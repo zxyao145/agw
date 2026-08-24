@@ -1,4 +1,6 @@
 using Agw.Auth.Application;
+using Agw.Auth.Contracts;
+using Agw.Auth.Security;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;

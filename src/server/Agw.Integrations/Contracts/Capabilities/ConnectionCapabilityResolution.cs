@@ -1,7 +1,7 @@
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.AI;
 
-namespace Agw.Integrations.Application.Capabilities;
+namespace Agw.Integrations.Contracts.Capabilities;
 
 public sealed class ConnectionCapabilityResolution : IAsyncDisposable
 {

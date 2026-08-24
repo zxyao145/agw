@@ -1,4 +1,4 @@
-using Agw.Auth.Application;
+using Agw.Auth.Contracts;
 using Agw.Infrastructure.Auth;
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Coordination;
@@ -16,7 +16,7 @@ using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
-using Agw.Skills.Application.Remote;
+using Agw.Skills.Contracts.Remote;
 using Medallion.Threading;
 using Medallion.Threading.Postgres;
 using Microsoft.EntityFrameworkCore;

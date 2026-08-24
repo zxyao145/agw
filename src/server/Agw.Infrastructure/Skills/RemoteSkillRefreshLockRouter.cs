@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using Agw.Infrastructure.Configuration;
 using Agw.Shared.Runtime;
-using Agw.Skills.Application.Remote;
+using Agw.Skills.Contracts.Remote;
 using Medallion.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

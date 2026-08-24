@@ -5,7 +5,7 @@ using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Turns;
-using Agw.Auth.Application;
+using Agw.Auth.Contracts;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;

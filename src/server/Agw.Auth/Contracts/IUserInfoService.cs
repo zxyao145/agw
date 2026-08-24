@@ -1,6 +1,6 @@
 using System.Security.Claims;
 
-namespace Agw.Auth.Application;
+namespace Agw.Auth.Contracts;
 
 public interface IUserInfoService
 {

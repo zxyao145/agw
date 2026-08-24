@@ -1,4 +1,4 @@
-namespace Agw.Projects.Application;
+namespace Agw.Projects.Contracts;
 
 public enum ApplicationResultType
 {
