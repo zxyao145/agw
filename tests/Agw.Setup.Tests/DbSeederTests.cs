@@ -90,7 +90,7 @@ public class DbSeederTests
                 agents.Single(x => x.Name == "general-agent").Tools,
                 value => Assert.IsType<DiffToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
                 value => Assert.IsType<GitCloneToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
-                value => Assert.IsType<BashToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
+                value => Assert.IsType<RunShellToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
                 value => Assert.IsType<FileAccessToolBlockDefinition>(Assert.IsType<ToolBlockValue>(value).Definition)
             );
             Assert.Collection(
@@ -267,8 +267,12 @@ public class DbSeederTests
         }
     }
 
-    [Fact]
-    public async Task SeedAsync_DefaultToolRegression_BackfillsExactSignatureAndPreservesCustomization()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SeedAsync_DefaultToolRegression_BackfillsKnownSignaturesAndPreservesCustomization(
+        bool includesFileAccess
+    )
     {
         var paths = CreatePaths();
         try
@@ -286,12 +290,7 @@ public class DbSeederTests
                     Name = "general-agent",
                     DisplayName = "General Agent",
                     Type = AgentType.System,
-                    Tools =
-                    [
-                        new ToolValue { Definition = new DiffToolDefinition() },
-                        new ToolValue { Definition = new GitCloneToolDefinition() },
-                        new ToolValue { Definition = new BashToolDefinition() },
-                    ],
+                    Tools = CreateLegacyGeneralAgentTools(includesFileAccess),
                 },
                 new Agent
                 {
@@ -316,12 +315,19 @@ public class DbSeederTests
             );
 
             await seeder.SeedAsync();
+            await seeder.SeedAsync();
 
             var general = await context.Agents.SingleAsync(
                 agent => agent.Id == GeneralAgentId,
                 TestContext.Current.CancellationToken
             );
-            Assert.IsType<FileAccessToolBlockDefinition>(Assert.IsType<ToolBlockValue>(general.Tools[3]).Definition);
+            Assert.Collection(
+                general.Tools,
+                value => Assert.IsType<DiffToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
+                value => Assert.IsType<GitCloneToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
+                value => Assert.IsType<RunShellToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
+                value => Assert.IsType<FileAccessToolBlockDefinition>(Assert.IsType<ToolBlockValue>(value).Definition)
+            );
             var location = await context.Agents.SingleAsync(
                 agent => agent.Id == LocationExtractorAgentId,
                 TestContext.Current.CancellationToken
@@ -336,6 +342,22 @@ public class DbSeederTests
         {
             Directory.Delete(paths.Root, recursive: true);
         }
+    }
+
+    private static List<ToolValueObject> CreateLegacyGeneralAgentTools(bool includesFileAccess)
+    {
+        List<ToolValueObject> tools =
+        [
+            new ToolValue { Definition = new DiffToolDefinition() },
+            new ToolValue { Definition = new GitCloneToolDefinition() },
+            new ToolValue { Definition = new BashToolDefinition() },
+        ];
+        if (includesFileAccess)
+        {
+            tools.Add(new ToolBlockValue { Definition = new FileAccessToolBlockDefinition() });
+        }
+
+        return tools;
     }
 
     private static AgwDataPaths CreatePaths()

@@ -112,7 +112,7 @@ public class AgentCapabilityComposerTests
         var agent = new Agent
         {
             Type = AgentType.System,
-            Tools = [new ToolValue { Definition = new GenerateGuidToolDefinition() }],
+            Tools = [new ToolValue { Definition = new DiffToolDefinition() }],
             AgentConnectionRelations =
             [
                 new AgentConnectionRelation { ConnectionId = firstConnectionId },
@@ -136,10 +136,10 @@ public class AgentCapabilityComposerTests
             Assert.Single(resolver.Calls).ConnectionIds.OrderBy(id => id)
         );
         Assert.Equal(
-            ["generate_guid", "independent_tool", "personal__repo", "work__repo"],
+            ["diff", "independent_tool", "personal__repo", "work__repo"],
             composition.Tools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal)
         );
-        Assert.Equal(["generate_guid"], composition.PlanModeAllowedToolNames);
+        Assert.Equal(["diff"], composition.PlanModeAllowedToolNames);
         Assert.Single(composition.Warnings);
         var warningEvent = Assert.Single(activity.Events, item => item.Name == "agw.integration.warning");
         Assert.Contains(
@@ -254,7 +254,7 @@ public class AgentCapabilityComposerTests
         await using var database = await TestDatabase.CreateAsync(cancellationToken);
         var resource = new TrackingResource();
         var resolver = new StubConnectionCapabilityResolver(
-            (_, _, _) => CreateResolution(nativeTools: [CreateTool(ToolDefinitionNames.Bash)], resource: resource)
+            (_, _, _) => CreateResolution(nativeTools: [CreateTool(ToolDefinitionNames.Diff)], resource: resource)
         );
         var composer = CreateComposer(
             database.Context,
@@ -265,7 +265,7 @@ public class AgentCapabilityComposerTests
         var agent = new Agent
         {
             Type = AgentType.System,
-            Tools = [new ToolValue { Definition = new BashToolDefinition() }],
+            Tools = [new ToolValue { Definition = new DiffToolDefinition() }],
             AgentConnectionRelations = [new AgentConnectionRelation { ConnectionId = Guid.CreateVersion7() }],
         };
 

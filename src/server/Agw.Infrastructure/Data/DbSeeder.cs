@@ -369,7 +369,7 @@ public class DbSeeder
                 [
                     new ToolValue { Definition = new DiffToolDefinition() },
                     new ToolValue { Definition = new GitCloneToolDefinition() },
-                    new ToolValue { Definition = new BashToolDefinition() },
+                    new ToolValue { Definition = new RunShellToolDefinition() },
                     new ToolBlockValue { Definition = new FileAccessToolBlockDefinition() },
                 ],
                 CreateBy = Constants.AdminUserId,
@@ -544,18 +544,29 @@ public class DbSeeder
             return;
         }
 
-        IReadOnlyList<ToolValueObject>? obsoleteTools = agent.Id switch
+        IReadOnlyList<IReadOnlyList<ToolValueObject>> obsoleteToolSignatures = agent.Id switch
         {
             var id when id == GeneralAgentId =>
             [
-                new ToolValue { Definition = new DiffToolDefinition() },
-                new ToolValue { Definition = new GitCloneToolDefinition() },
-                new ToolValue { Definition = new BashToolDefinition() },
+                [
+                    new ToolValue { Definition = new DiffToolDefinition() },
+                    new ToolValue { Definition = new GitCloneToolDefinition() },
+                    new ToolValue { Definition = new BashToolDefinition() },
+                ],
+                [
+                    new ToolValue { Definition = new DiffToolDefinition() },
+                    new ToolValue { Definition = new GitCloneToolDefinition() },
+                    new ToolValue { Definition = new BashToolDefinition() },
+                    new ToolBlockValue { Definition = new FileAccessToolBlockDefinition() },
+                ],
             ],
-            var id when id == LocationExtractorAgentId => [new ToolValue { Definition = new WebFetchToolDefinition() }],
-            _ => null,
+            var id when id == LocationExtractorAgentId =>
+            [
+                [new ToolValue { Definition = new WebFetchToolDefinition() }],
+            ],
+            _ => [],
         };
-        if (obsoleteTools == null || !agent.Tools.SequenceEqual(obsoleteTools))
+        if (!obsoleteToolSignatures.Any(agent.Tools.SequenceEqual))
         {
             return;
         }

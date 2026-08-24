@@ -167,7 +167,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             Workspace = Path.Combine(root, "workspace"),
             Tools =
             [
-                new ToolValue { Definition = new GenerateGuidToolDefinition() },
+                new ToolValue { Definition = new DiffToolDefinition() },
                 new ToolValue { Definition = new WebFetchToolDefinition() },
             ],
             EnvironmentVariables = new Dictionary<string, string>
@@ -193,7 +193,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             ModelProviderId = modelProviderId,
             Tools =
             [
-                new ToolValue { Definition = new BashToolDefinition() },
+                new ToolValue { Definition = new GitCloneToolDefinition() },
                 new ToolValue { Definition = new WebFetchToolDefinition() },
             ],
             EnvironmentVariables = new Dictionary<string, string> { ["SHARED"] = "agent", ["AGENT_ONLY"] = "agent" },
@@ -271,7 +271,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             Assert.Equal(16_000, chatOptions.MaxOutputTokens);
             Assert.NotNull(chatOptions.Tools);
             Assert.Equal(
-                new[] { "bash", "agent_mcp", "generate_guid", "project_mcp", "web_fetch" }
+                new[] { "agent_mcp", "diff", "git_clone", "project_mcp", "web_fetch" }
                     .OrderBy(name => name, StringComparer.Ordinal)
                     .ToArray(),
                 chatOptions.Tools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray()

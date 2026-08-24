@@ -6,13 +6,21 @@ public sealed class ToolBlockRegistry
 {
     private readonly IReadOnlyDictionary<string, IToolBlock> _toolBlocks;
     private readonly IReadOnlyDictionary<string, string> _memberOwners;
+    private readonly IReadOnlySet<string> _obsoleteToolBlockNames;
 
     public ToolBlockRegistry(IEnumerable<IToolBlock> toolBlocks)
     {
         var entries = new Dictionary<string, IToolBlock>(StringComparer.OrdinalIgnoreCase);
         var memberOwners = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var obsoleteNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var toolBlock in toolBlocks)
         {
+            if (IsObsolete(toolBlock.GetType()))
+            {
+                obsoleteNames.Add(toolBlock.Descriptor.Name);
+                continue;
+            }
+
             if (!entries.TryAdd(toolBlock.Descriptor.Name, toolBlock))
             {
                 throw new AgwException(
@@ -46,7 +54,12 @@ public sealed class ToolBlockRegistry
 
         _toolBlocks = entries;
         _memberOwners = memberOwners;
+        _obsoleteToolBlockNames = obsoleteNames
+            .Except(entries.Keys, StringComparer.OrdinalIgnoreCase)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
+
+    internal IReadOnlySet<string> ObsoleteToolBlockNames => _obsoleteToolBlockNames;
 
     public IReadOnlyList<ToolBlockDescriptor> GetDescriptors() =>
         _toolBlocks
@@ -58,6 +71,11 @@ public sealed class ToolBlockRegistry
     {
         if (!_toolBlocks.TryGetValue(name, out var toolBlock))
         {
+            if (_obsoleteToolBlockNames.Contains(name))
+            {
+                throw new AgwException(ErrorCodes.InvalidParam, $"Tool Block '{name}' is obsolete and unavailable.");
+            }
+
             throw new AgwException(ErrorCodes.InvalidParam, $"Unknown Tool Block '{name}'.");
         }
 
@@ -101,6 +119,14 @@ public sealed class ToolBlockRegistry
                     throw new AgwException(
                         ErrorCodes.InvalidParam,
                         $"Tool Block name '{definitionName}' is empty or duplicated."
+                    );
+                }
+
+                if (_obsoleteToolBlockNames.Contains(definitionName))
+                {
+                    throw new AgwException(
+                        ErrorCodes.InvalidParam,
+                        $"Tool Block '{definitionName}' is obsolete and unavailable."
                     );
                 }
 
@@ -155,4 +181,6 @@ public sealed class ToolBlockRegistry
 
         destination.AddResource(contribution);
     }
+
+    private static bool IsObsolete(Type type) => type.IsDefined(typeof(ObsoleteAttribute), inherit: false);
 }
