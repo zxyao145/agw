@@ -26,6 +26,21 @@ function message(
   };
 }
 
+function claudeSystemMessage(
+  messageId: string,
+  content: string,
+  additionalProperties: Record<string, unknown> = {},
+  contentType = "TextContent",
+): AiMessage {
+  return {
+    messageId,
+    role: "system",
+    streamingScopeId: "user-1",
+    contents: [{ type: contentType, content }],
+    additionalProperties: { agentName: "claude-code", ...additionalProperties },
+  };
+}
+
 test("visible messages remove usage and controls before collapsing ordinary system runs", () => {
   const visible = prepareVisibleMessages([
     message("system-1", "system", "first"),
@@ -50,18 +65,6 @@ test("visible messages remove usage and controls before collapsing ordinary syst
 });
 
 test("visible messages keep Claude SessionStart and results while hiding other Claude system messages", () => {
-  const claudeSystemMessage = (
-    messageId: string,
-    content: string,
-    additionalProperties: Record<string, unknown> = {},
-    contentType = "TextContent",
-  ): AiMessage => ({
-    messageId,
-    role: "system",
-    streamingScopeId: "user-1",
-    contents: [{ type: contentType, content }],
-    additionalProperties: { agentName: "claude-code", ...additionalProperties },
-  });
   const sessionStart = claudeSystemMessage(
     "session-start",
     JSON.stringify({
@@ -82,12 +85,6 @@ test("visible messages keep Claude SessionStart and results while hiding other C
     "other-hook",
     JSON.stringify({ type: "system", hook_event: "PreToolUse" }),
   );
-  const apiRetry = claudeSystemMessage(
-    "api-retry",
-    "Claude Code API retry 1/3",
-    { subtype: "api_retry" },
-    "ErrorContent",
-  );
   const successResult = claudeSystemMessage("success-result", "done", { type: "result" });
   const errorResult = claudeSystemMessage(
     "error-result",
@@ -103,7 +100,6 @@ test("visible messages keep Claude SessionStart and results while hiding other C
     sessionStart,
     taskProgress,
     otherHook,
-    apiRetry,
     successResult,
     errorResult,
     agwSystem,
@@ -117,6 +113,51 @@ test("visible messages keep Claude SessionStart and results while hiding other C
   const rendered = buildConversationRenderModel([sessionStart]);
   assert.deepEqual(rendered[0]?.type === "message" ? rendered[0].message.contents : [], [
     { type: "plain", text: "SessionStart", sourceType: "TextContent" },
+  ]);
+});
+
+test("visible messages keep only the latest Claude API retry in each consecutive run", () => {
+  const retryMessage = (attempt: number) =>
+    claudeSystemMessage(
+      `api-retry-${attempt}`,
+      `Claude Code API retry ${attempt}/10`,
+      { subtype: "api_retry" },
+      "ErrorContent",
+    );
+  const sessionStart = claudeSystemMessage(
+    "session-start",
+    JSON.stringify({ type: "system", hook_event: "SessionStart" }),
+  );
+  const firstRetry = retryMessage(1);
+  const secondRetry = retryMessage(2);
+  const assistant = message("assistant", "assistant", "Working again", {
+    agentName: "claude-code",
+  });
+  const thirdRetry = retryMessage(3);
+  const fourthRetry = retryMessage(4);
+
+  assert.deepEqual(
+    prepareVisibleMessages([sessionStart, firstRetry, secondRetry]).map((item) => item.messageId),
+    ["session-start", "api-retry-2"],
+  );
+  assert.deepEqual(
+    prepareVisibleMessages([
+      sessionStart,
+      firstRetry,
+      secondRetry,
+      assistant,
+      thirdRetry,
+      fourthRetry,
+    ]).map((item) => item.messageId),
+    ["session-start", "api-retry-2", "assistant", "api-retry-4"],
+  );
+
+  const rendered = buildConversationRenderModel([sessionStart, firstRetry, secondRetry]);
+  const latestRetry = rendered.find(
+    (item) => item.type === "message" && item.message.source.messageId === "api-retry-2",
+  );
+  assert.deepEqual(latestRetry?.type === "message" ? latestRetry.message.contents : [], [
+    { type: "error", text: "Claude Code API retry 2/10" },
   ]);
 });
 

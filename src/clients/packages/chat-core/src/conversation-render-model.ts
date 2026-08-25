@@ -177,6 +177,7 @@ function isClaudeCodeSystemMessage(message: AiMessage): boolean {
 
 function shouldShowClaudeCodeSystemMessage(message: AiMessage): boolean {
   if (!isClaudeCodeSystemMessage(message) || isResultMessage(message)) return true;
+  if (message.additionalProperties?.subtype === "api_retry") return true;
 
   return message.contents.some(
     (content) =>

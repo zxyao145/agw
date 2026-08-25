@@ -72,21 +72,28 @@ function isReadOnlyModeSnapshot(message: AiMessage): boolean {
   );
 }
 
+function isApiRetrySystemMessage(message: AiMessage | undefined): boolean {
+  return message?.role === "system" && message.additionalProperties?.subtype === "api_retry";
+}
+
 export function collapseConsecutiveSystemMessages(messages: readonly AiMessage[]): AiMessage[] {
   const visibleMessages = messages.filter(
     (message) => !isReadOnlyModeSnapshot(message) && !parseClaudeInitCommands(message).isInit,
   );
-  return visibleMessages.filter(
-    (message, index) =>
+  return visibleMessages.filter((message, index) => {
+    const nextMessage = visibleMessages[index + 1];
+    if (isApiRetrySystemMessage(message)) return !isApiRetrySystemMessage(nextMessage);
+
+    return (
       message.role !== "system" ||
       isResultMessage(message) ||
       STANDALONE_SYSTEM_MESSAGE_TYPES.has(String(message.additionalProperties?.type)) ||
-      visibleMessages[index + 1]?.role !== "system" ||
-      (visibleMessages[index + 1] ? isResultMessage(visibleMessages[index + 1]) : false) ||
-      STANDALONE_SYSTEM_MESSAGE_TYPES.has(
-        String(visibleMessages[index + 1]?.additionalProperties?.type),
-      ),
-  );
+      nextMessage?.role !== "system" ||
+      (nextMessage ? isResultMessage(nextMessage) : false) ||
+      STANDALONE_SYSTEM_MESSAGE_TYPES.has(String(nextMessage?.additionalProperties?.type)) ||
+      isApiRetrySystemMessage(nextMessage)
+    );
+  });
 }
 
 export function prepareClaudeHistory(messages: readonly AiMessage[]): {
