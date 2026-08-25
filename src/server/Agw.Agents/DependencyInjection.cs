@@ -49,7 +49,6 @@ public static class DependencyInjection
             ?? new ExecutionRuntimeOptions();
         services.Configure<ExecutionRuntimeOptions>(configuration.GetSection(ExecutionRuntimeOptions.SectionName));
         services.AddSingleton<IAgentInstructionsSource, ProjectInstructionsSource>();
-        services.AddScoped<AgentflowDomainService>();
         services.AddScoped<AgentflowAppService>();
         services.AddScoped<AgentflowTraceAppService>();
         services.AddScoped<AgentflowRuntimeService>();

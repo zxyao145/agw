@@ -1,83 +1,63 @@
+using Agw.Agents.Definitions.Domain.Policies;
 using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Testing;
 
 namespace Agw.Agents.Tests;
 
-public class AgentflowDomainServiceTests
+/// <summary>Characterization tests for the pure Agentflow definition policy.</summary>
+public class AgentflowDefinitionPolicyTests
 {
-    private static readonly DateTimeOffset UtcNow = new(2026, 7, 13, 9, 0, 0, TimeSpan.Zero);
-    private readonly AgentflowDomainService _service = new(new TestTimeProvider(UtcNow));
+    private readonly AgentflowDefinitionPolicy _service = new();
 
     [Fact]
-    public void TryPrepareForCreate_BlankName_ReturnsFalse()
+    public void Evaluate_ValidGraph_ReturnsDataOnlyDecision()
     {
-        var agentflow = new Agentflow { Name = "  " };
+        // Arrange
+        var agentflowId = Guid.CreateVersion7();
+        var nodes = new[]
+        {
+            new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+            new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
+        };
+        var edges = new[]
+        {
+            new AgentflowEdge
+            {
+                EdgeId = "input-output",
+                SourceNodeId = "input",
+                TargetNodeId = "output",
+            },
+        };
 
-        var result = _service.TryPrepareForCreate(agentflow, "tester");
+        // Act
+        var decision = _service.Evaluate(nodes, edges, agentflowId, []);
 
-        Assert.False(result);
-        Assert.Equal(Guid.Empty, agentflow.Id);
-        Assert.Null(agentflow.CreateBy);
+        // Assert
+        Assert.NotNull(decision.Nodes);
+        Assert.NotNull(decision.Edges);
+        Assert.All(decision.Nodes, node => Assert.Equal(agentflowId, node.AgentflowId));
+        Assert.All(decision.Edges, edge => Assert.Equal(agentflowId, edge.AgentflowId));
     }
 
     [Fact]
-    public void TryPrepareForCreate_ValidName_AssignsMetadata()
+    public void Evaluate_NullCollections_ReturnsEmptyCollections()
     {
-        var agentflow = new Agentflow { Name = "workflow" };
-
-        var result = _service.TryPrepareForCreate(agentflow, "tester");
-
-        Assert.True(result);
-        Assert.NotEqual(Guid.Empty, agentflow.Id);
-        Assert.Equal("tester", agentflow.CreateBy);
-        Assert.Equal(UtcNow, agentflow.CreateTime);
-    }
-
-    [Fact]
-    public void TryApplyUpdate_BlankNameAfterUpdate_ReturnsFalse()
-    {
-        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "workflow" };
-
-        var result = _service.TryApplyUpdate(agentflow, current => current.Name = "  ", "tester");
-
-        Assert.False(result);
-        Assert.Null(agentflow.UpdateBy);
-        Assert.Null(agentflow.UpdateTime);
-    }
-
-    [Fact]
-    public void TryApplyUpdate_ValidUpdate_SetsMetadata()
-    {
-        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "workflow" };
-
-        var result = _service.TryApplyUpdate(agentflow, current => current.Description = "updated", "tester");
-
-        Assert.True(result);
-        Assert.Equal("updated", agentflow.Description);
-        Assert.Equal("tester", agentflow.UpdateBy);
-        Assert.Equal(UtcNow, agentflow.UpdateTime);
-    }
-
-    [Fact]
-    public void ValidateAndNormalizeGraph_NullCollections_ReturnsEmptyCollections()
-    {
-        var result = _service.ValidateAndNormalizeGraph(null, null, Guid.CreateVersion7(), []);
+        var result = _service.Evaluate(null, null, Guid.CreateVersion7(), []);
 
         Assert.Empty(result.Nodes!);
         Assert.Empty(result.Edges!);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_EmptyGraph_ReturnsNullCollections()
+    public void Evaluate_EmptyGraph_ReturnsNullCollections()
     {
-        var result = _service.ValidateAndNormalizeGraph([], [], Guid.CreateVersion7(), []);
+        var result = _service.Evaluate([], [], Guid.CreateVersion7(), []);
 
         Assert.Null(result.Nodes);
         Assert.Null(result.Edges);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_MissingRelatedAgent_ReturnsNullCollections()
+    public void Evaluate_MissingRelatedAgent_ReturnsNullCollections()
     {
         var nodes = new[]
         {
@@ -89,14 +69,14 @@ public class AgentflowDomainServiceTests
             },
         };
 
-        var result = _service.ValidateAndNormalizeGraph(nodes, [], Guid.CreateVersion7(), []);
+        var result = _service.Evaluate(nodes, [], Guid.CreateVersion7(), []);
 
         Assert.Null(result.Nodes);
         Assert.Null(result.Edges);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_DuplicateNodeIds_ReturnsNullCollections()
+    public void Evaluate_DuplicateNodeIds_ReturnsNullCollections()
     {
         var agentId = Guid.CreateVersion7();
         var nodes = new[]
@@ -110,14 +90,14 @@ public class AgentflowDomainServiceTests
             new AgentflowNode { NodeId = "node-a", Kind = AgentflowNodeKind.PromptAdapter },
         };
 
-        var result = _service.ValidateAndNormalizeGraph(nodes, [], Guid.CreateVersion7(), [agentId]);
+        var result = _service.Evaluate(nodes, [], Guid.CreateVersion7(), [agentId]);
 
         Assert.Null(result.Nodes);
         Assert.Null(result.Edges);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_DuplicateEdgeIds_ReturnsNullCollections()
+    public void Evaluate_DuplicateEdgeIds_ReturnsNullCollections()
     {
         var agentId = Guid.CreateVersion7();
         var nodes = new[]
@@ -146,14 +126,14 @@ public class AgentflowDomainServiceTests
             },
         };
 
-        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), [agentId]);
+        var result = _service.Evaluate(nodes, edges, Guid.CreateVersion7(), [agentId]);
 
         Assert.Null(result.Nodes);
         Assert.Null(result.Edges);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_EdgeReferencesMissingNode_ReturnsNullCollections()
+    public void Evaluate_EdgeReferencesMissingNode_ReturnsNullCollections()
     {
         var agentId = Guid.CreateVersion7();
         var nodes = new[]
@@ -175,14 +155,14 @@ public class AgentflowDomainServiceTests
             },
         };
 
-        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), [agentId]);
+        var result = _service.Evaluate(nodes, edges, Guid.CreateVersion7(), [agentId]);
 
         Assert.Null(result.Nodes);
         Assert.Null(result.Edges);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_CycleWithoutConditionalExit_ReturnsNullCollections()
+    public void Evaluate_CycleWithoutConditionalExit_ReturnsNullCollections()
     {
         var nodes = new[]
         {
@@ -212,14 +192,14 @@ public class AgentflowDomainServiceTests
             },
         };
 
-        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+        var result = _service.Evaluate(nodes, edges, Guid.CreateVersion7(), []);
 
         Assert.Null(result.Nodes);
         Assert.Null(result.Edges);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_CycleWithSwitchExitAndReusableInputBarrier_ReturnsGraph()
+    public void Evaluate_CycleWithSwitchExitAndReusableInputBarrier_ReturnsGraph()
     {
         var nodes = new[]
         {
@@ -276,7 +256,7 @@ public class AgentflowDomainServiceTests
             },
         };
 
-        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+        var result = _service.Evaluate(nodes, edges, Guid.CreateVersion7(), []);
 
         Assert.NotNull(result.Nodes);
         Assert.NotNull(result.Edges);
@@ -285,7 +265,7 @@ public class AgentflowDomainServiceTests
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_CyclicBarrierWithExternalNonInputSource_ReturnsNullCollections()
+    public void Evaluate_CyclicBarrierWithExternalNonInputSource_ReturnsNullCollections()
     {
         var nodes = new[]
         {
@@ -343,28 +323,28 @@ public class AgentflowDomainServiceTests
             },
         };
 
-        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+        var result = _service.Evaluate(nodes, edges, Guid.CreateVersion7(), []);
 
         Assert.Null(result.Nodes);
         Assert.Null(result.Edges);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_MissingInput_ReturnsNullCollections()
+    public void Evaluate_MissingInput_ReturnsNullCollections()
     {
         var nodes = new[]
         {
             new AgentflowNode { NodeId = "node-a", Kind = AgentflowNodeKind.PromptAdapter },
         };
 
-        var result = _service.ValidateAndNormalizeGraph(nodes, [], Guid.CreateVersion7(), []);
+        var result = _service.Evaluate(nodes, [], Guid.CreateVersion7(), []);
 
         Assert.Null(result.Nodes);
         Assert.Null(result.Edges);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_IncomingInputEdge_ReturnsNullCollections()
+    public void Evaluate_IncomingInputEdge_ReturnsNullCollections()
     {
         var nodes = new[]
         {
@@ -382,14 +362,14 @@ public class AgentflowDomainServiceTests
             },
         };
 
-        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+        var result = _service.Evaluate(nodes, edges, Guid.CreateVersion7(), []);
 
         Assert.Null(result.Nodes);
         Assert.Null(result.Edges);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_NonFanOutInputEdge_ReturnsGraph()
+    public void Evaluate_NonFanOutInputEdge_ReturnsGraph()
     {
         var nodes = new[]
         {
@@ -407,7 +387,7 @@ public class AgentflowDomainServiceTests
             },
         };
 
-        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+        var result = _service.Evaluate(nodes, edges, Guid.CreateVersion7(), []);
 
         Assert.NotNull(result.Nodes);
         Assert.NotNull(result.Edges);
@@ -424,7 +404,7 @@ public class AgentflowDomainServiceTests
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_ConditionalFanOutEdges_ReturnsGraph()
+    public void Evaluate_ConditionalFanOutEdges_ReturnsGraph()
     {
         var nodes = new[]
         {
@@ -451,14 +431,14 @@ public class AgentflowDomainServiceTests
             },
         };
 
-        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+        var result = _service.Evaluate(nodes, edges, Guid.CreateVersion7(), []);
 
         Assert.NotNull(result.Nodes);
         Assert.NotNull(result.Edges);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_UnreachableVisibleNode_ReturnsNullCollections()
+    public void Evaluate_UnreachableVisibleNode_ReturnsNullCollections()
     {
         var nodes = new[]
         {
@@ -477,14 +457,14 @@ public class AgentflowDomainServiceTests
             },
         };
 
-        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+        var result = _service.Evaluate(nodes, edges, Guid.CreateVersion7(), []);
 
         Assert.Null(result.Nodes);
         Assert.Null(result.Edges);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_InvalidConditionJson_ReturnsNullCollections()
+    public void Evaluate_InvalidConditionJson_ReturnsNullCollections()
     {
         var nodes = new[]
         {
@@ -503,14 +483,14 @@ public class AgentflowDomainServiceTests
             },
         };
 
-        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+        var result = _service.Evaluate(nodes, edges, Guid.CreateVersion7(), []);
 
         Assert.Null(result.Nodes);
         Assert.Null(result.Edges);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_UnknownConditionProperty_ReturnsNullCollections()
+    public void Evaluate_UnknownConditionProperty_ReturnsNullCollections()
     {
         var nodes = new[]
         {
@@ -529,14 +509,14 @@ public class AgentflowDomainServiceTests
             },
         };
 
-        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+        var result = _service.Evaluate(nodes, edges, Guid.CreateVersion7(), []);
 
         Assert.Null(result.Nodes);
         Assert.Null(result.Edges);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_MixedSourceRoutingStrategies_ReturnsNullCollections()
+    public void Evaluate_MixedSourceRoutingStrategies_ReturnsNullCollections()
     {
         var nodes = new[]
         {
@@ -562,14 +542,14 @@ public class AgentflowDomainServiceTests
             },
         };
 
-        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+        var result = _service.Evaluate(nodes, edges, Guid.CreateVersion7(), []);
 
         Assert.Null(result.Nodes);
         Assert.Null(result.Edges);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_OrderedSwitchWithDefault_ReturnsGraph()
+    public void Evaluate_OrderedSwitchWithDefault_ReturnsGraph()
     {
         var nodes = new[]
         {
@@ -591,14 +571,14 @@ public class AgentflowDomainServiceTests
             },
         };
 
-        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+        var result = _service.Evaluate(nodes, edges, Guid.CreateVersion7(), []);
 
         Assert.NotNull(result.Nodes);
         Assert.NotNull(result.Edges);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_SwitchWithoutDefault_ReturnsGraph()
+    public void Evaluate_SwitchWithoutDefault_ReturnsGraph()
     {
         var nodes = new[]
         {
@@ -607,14 +587,14 @@ public class AgentflowDomainServiceTests
         };
         var edges = new[] { SwitchCase("approved", "input", "approved", 0, "approved") };
 
-        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+        var result = _service.Evaluate(nodes, edges, Guid.CreateVersion7(), []);
 
         Assert.NotNull(result.Nodes);
         Assert.NotNull(result.Edges);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_DuplicateSwitchOrder_ReturnsNullCollections()
+    public void Evaluate_DuplicateSwitchOrder_ReturnsNullCollections()
     {
         var nodes = new[]
         {
@@ -628,14 +608,14 @@ public class AgentflowDomainServiceTests
             SwitchCase("case-2", "input", "second", 0, "review"),
         };
 
-        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+        var result = _service.Evaluate(nodes, edges, Guid.CreateVersion7(), []);
 
         Assert.Null(result.Nodes);
         Assert.Null(result.Edges);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_MultipleSwitchDefaults_ReturnsNullCollections()
+    public void Evaluate_MultipleSwitchDefaults_ReturnsNullCollections()
     {
         var nodes = new[]
         {
@@ -663,14 +643,14 @@ public class AgentflowDomainServiceTests
             },
         };
 
-        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+        var result = _service.Evaluate(nodes, edges, Guid.CreateVersion7(), []);
 
         Assert.Null(result.Nodes);
         Assert.Null(result.Edges);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_InputFanOutAndBarrierEdges_ReturnsGraph()
+    public void Evaluate_InputFanOutAndBarrierEdges_ReturnsGraph()
     {
         var nodes = new[]
         {
@@ -703,14 +683,14 @@ public class AgentflowDomainServiceTests
             },
         };
 
-        var result = _service.ValidateAndNormalizeGraph(nodes, edges, Guid.CreateVersion7(), []);
+        var result = _service.Evaluate(nodes, edges, Guid.CreateVersion7(), []);
 
         Assert.NotNull(result.Nodes);
         Assert.NotNull(result.Edges);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_ValidDag_ReturnsNormalizedNodesAndEdges()
+    public void Evaluate_ValidDag_ReturnsNormalizedNodesAndEdges()
     {
         var agentflowId = Guid.CreateVersion7();
         var agentId = Guid.CreateVersion7();
@@ -760,13 +740,15 @@ public class AgentflowDomainServiceTests
             },
         };
 
-        var (normalizedNodes, normalizedEdges) = _service.ValidateAndNormalizeGraph(
+        var decision = _service.Evaluate(
             nodes,
             edges,
             agentflowId,
             [agentId],
             existingAgentNames: new Dictionary<Guid, string> { [agentId] = "default-agent-name" }
         );
+        var normalizedNodes = decision.Nodes;
+        var normalizedEdges = decision.Edges;
 
         Assert.NotNull(normalizedNodes);
         Assert.NotNull(normalizedEdges);
@@ -785,7 +767,7 @@ public class AgentflowDomainServiceTests
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_AgentNodeWithoutName_DefaultsToAgentName()
+    public void Evaluate_AgentNodeWithoutName_DefaultsToAgentName()
     {
         var agentflowId = Guid.CreateVersion7();
         var agentId = Guid.CreateVersion7();
@@ -810,13 +792,15 @@ public class AgentflowDomainServiceTests
             },
         };
 
-        var (normalizedNodes, normalizedEdges) = _service.ValidateAndNormalizeGraph(
+        var decision = _service.Evaluate(
             nodes,
             edges,
             agentflowId,
             [agentId],
             existingAgentNames: new Dictionary<Guid, string> { [agentId] = "default-agent-name" }
         );
+        var normalizedNodes = decision.Nodes;
+        var normalizedEdges = decision.Edges;
 
         Assert.NotNull(normalizedNodes);
         Assert.NotNull(normalizedEdges);
@@ -824,30 +808,24 @@ public class AgentflowDomainServiceTests
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_SummaryEnabledWithoutModelProvider_ReturnsNullCollections()
+    public void Evaluate_SummaryEnabledWithoutModelProvider_ReturnsNullCollections()
     {
         var nodes = CreateSummaryOutputNodes(outputCount: 1);
         var edges = CreateSummaryOutputEdges(outputCount: 1);
 
-        var result = _service.ValidateAndNormalizeGraph(
-            nodes,
-            edges,
-            Guid.CreateVersion7(),
-            [],
-            summaryModelProviderId: null
-        );
+        var result = _service.Evaluate(nodes, edges, Guid.CreateVersion7(), [], summaryModelProviderId: null);
 
         Assert.Null(result.Nodes);
         Assert.Null(result.Edges);
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_SummaryEnabledWithMultipleOutputs_ReturnsNullCollections()
+    public void Evaluate_SummaryEnabledWithMultipleOutputs_ReturnsNullCollections()
     {
         var nodes = CreateSummaryOutputNodes(outputCount: 2);
         var edges = CreateSummaryOutputEdges(outputCount: 2);
 
-        var result = _service.ValidateAndNormalizeGraph(
+        var result = _service.Evaluate(
             nodes,
             edges,
             Guid.CreateVersion7(),
@@ -860,13 +838,13 @@ public class AgentflowDomainServiceTests
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_SummaryEnabledWithSingleOutputAndModelProvider_ReturnsGraph()
+    public void Evaluate_SummaryEnabledWithSingleOutputAndModelProvider_ReturnsGraph()
     {
         var summaryModelProviderId = Guid.CreateVersion7();
         var nodes = CreateSummaryOutputNodes(outputCount: 1);
         var edges = CreateSummaryOutputEdges(outputCount: 1);
 
-        var result = _service.ValidateAndNormalizeGraph(
+        var result = _service.Evaluate(
             nodes,
             edges,
             Guid.CreateVersion7(),
@@ -880,9 +858,9 @@ public class AgentflowDomainServiceTests
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_SummaryEnabledWithMissingModelProvider_ReturnsNullCollections()
+    public void Evaluate_SummaryEnabledWithMissingModelProvider_ReturnsNullCollections()
     {
-        var result = _service.ValidateAndNormalizeGraph(
+        var result = _service.Evaluate(
             CreateSummaryOutputNodes(outputCount: 1),
             CreateSummaryOutputEdges(outputCount: 1),
             Guid.CreateVersion7(),
@@ -896,12 +874,12 @@ public class AgentflowDomainServiceTests
     }
 
     [Fact]
-    public void ValidateAndNormalizeGraph_OutputWithInvalidSummaryConfig_ReturnsNullCollections()
+    public void Evaluate_OutputWithInvalidSummaryConfig_ReturnsNullCollections()
     {
         var nodes = CreateSummaryOutputNodes(outputCount: 1).ToArray();
         nodes[1].ConfigJson = """{"enableSummary":"yes"}""";
 
-        var result = _service.ValidateAndNormalizeGraph(
+        var result = _service.Evaluate(
             nodes,
             CreateSummaryOutputEdges(outputCount: 1),
             Guid.CreateVersion7(),
@@ -911,34 +889,6 @@ public class AgentflowDomainServiceTests
 
         Assert.Null(result.Nodes);
         Assert.Null(result.Edges);
-    }
-
-    [Fact]
-    public void OrderNodesByEdges_AcyclicDag_ReturnsTopologicallySortedNodes()
-    {
-        var first = new AgentflowNode { NodeId = "node-1" };
-        var second = new AgentflowNode { NodeId = "node-2" };
-        var third = new AgentflowNode { NodeId = "node-3" };
-
-        var result = _service.OrderNodesByEdges(
-            [third, second, first],
-            [
-                new AgentflowEdge
-                {
-                    EdgeId = "edge-1",
-                    SourceNodeId = "node-1",
-                    TargetNodeId = "node-2",
-                },
-                new AgentflowEdge
-                {
-                    EdgeId = "edge-2",
-                    SourceNodeId = "node-2",
-                    TargetNodeId = "node-3",
-                },
-            ]
-        );
-
-        Assert.Equal(["node-1", "node-2", "node-3"], result.Select(node => node.NodeId));
     }
 
     private static IReadOnlyList<AgentflowNode> CreateSummaryOutputNodes(int outputCount)

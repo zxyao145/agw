@@ -62,7 +62,7 @@ Behavior that a rich model would place on an entity MUST live in the owner Modul
 ### Behavior construction and lifetime
 
 - An entity-bound Behavior MUST be a concrete `<Entity>Behavior` class and MUST be created manually with `new` by Application code.
-- A Behavior constructor binds exactly one complete data root. Owned children MUST already be loaded into that consistency boundary.
+- A Behavior constructor binds exactly one data root. Root-local preconditions MAY run before owned children are loaded; Application MUST load the complete consistency boundary before invoking any Behavior method that inspects or mutates those children.
 - A Behavior MAY mutate the bound root and its owned children. It MUST NOT mutate foreign entities.
 - External facts, time, and actor identity MUST be resolved by Application and passed to Behavior methods as values or read-only context.
 - A Behavior MUST NEVER be registered with IoC, cached, serialized, shared across threads, or reused across use cases.
@@ -70,7 +70,7 @@ Behavior that a rich model would place on an entity MUST live in the owner Modul
 
 ### Behavior dependencies
 
-A Behavior MUST remain framework-free and MUST NOT depend on EF Core, ASP.NET Core, `DbContext`, repositories, `IServiceProvider`, `HttpClient`, files, MAF/MCP, current-user accessors, or Infrastructure Adapters. Audit stamping remains in the EF interceptors.
+A Behavior MUST remain framework-free and MUST NOT reference or construct a Policy, DomainService, EF Core, ASP.NET Core, `DbContext`, repositories, `IServiceProvider`, `HttpClient`, files, MAF/MCP, current-user accessors, or Infrastructure Adapters. Audit stamping remains in the EF interceptors.
 
 Application owns authorization, external queries, Behavior construction, use-case ordering, transactions, persistence, and boundary error mapping. If a Behavior returns a transition fact, Application handles it only after persistence succeeds; data objects never hold domain-event collections.
 
@@ -81,7 +81,32 @@ Application owns authorization, external queries, Behavior construction, use-cas
 - An IoC-managed DomainService MUST remain stateless and its constructor dependencies MUST be pure Domain components. It MUST NOT depend on persistence, transport, current-user, clock, filesystem, MAF/MCP, Application, or Infrastructure services.
 - A DomainService MUST NOT capture a Behavior or data root. Application passes domain data and external facts to its methods, then applies resulting decisions through the relevant Behaviors.
 
+### Policy, Decision, and Behavior orchestration
+
+- Application owns invocation order. It MAY construct and invoke Behavior first for root-local preconditions before performing external queries or Policy evaluation.
+- Policy independently evaluates domain data plus external facts and returns a data-only Decision.
+- Decision types MUST live in a neutral `Domain/Decisions` namespace and MUST remain anemic. They MUST NOT contain Policy references, mutation behavior, persistence state, or transport concerns.
+- Application passes a valid Decision to the root-bound Behavior. Behavior applies that Decision only to its root and owned children.
+- Behavior MUST NOT call, receive, inject, or construct a Policy or DomainService. This dependency direction is enforced by Architecture Tests.
+- Reusable read-only algorithms that are not themselves domain decisions belong in neutral `Domain/Topology`, `Domain/Rules`, or `Domain/Algorithms` components. Policy, compiler, and runtime may consume them without routing through Behavior.
+
+### EF-tracked consistency boundaries
+
+- Application MUST fully load the root and every owned navigation that Behavior may mutate before constructing or invoking Behavior.
+- Behavior MUST reconcile existing owned children in place by their stable keys. It MUST update matching instances, remove missing children, and add only genuinely new children.
+- Behavior MUST NOT replace a tracked navigation and then query the old rows. EF relationship fix-up would merge old tracked children into the replacement collection.
+- Application MUST NOT delete and re-add separate instances with the same tracked primary key in one unit of work.
+
 Do not create an empty Behavior for simple CRUD, settings, audit rows, or read models. Existing entity-specific `DomainService` classes and existing entity methods are migration debt protected by a decreasing architecture-test allowlist; new single-root DomainServices are forbidden.
+
+### Selective DDD scope
+
+- Agentflow is the current selective-DDD subdomain. Its `Agentflow` root and owned `AgentflowNode`/`AgentflowEdge` graph form the consistency boundary for graph invariants and normalization.
+- `AgentflowDefinitionPolicy` evaluates proposed graph data and external Agent/ModelProvider facts, returning `AgentflowDefinitionDecision`; `AgentflowBehavior` applies that Decision without referencing the Policy.
+- `AgentflowTopology` owns reusable read-only topology/configuration algorithms used by definition Policy, compiler, and runtime.
+- Agentflow update loads root, Nodes, and Edges together before Behavior invocation; Behavior reconciles NodeId/EdgeId collections in place so EF relationship fix-up and identity tracking remain correct.
+- Agentflow CRUD, list/read projections, API mapping, compiler/runtime execution, checkpoint persistence, trace recording, and durable orchestration remain Application or Infrastructure concerns.
+- Do not convert the whole `Agw.Agents` module, or simple CRUD portions of Auth, Jobs, Providers, Skills, Integrations, and Tools, into DDD aggregates or Behavior classes without a separate domain-complexity decision.
 
 ---
 

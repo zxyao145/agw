@@ -23,7 +23,11 @@ public sealed partial class BackendArchitectureTests
                     "Entity",
                     "Entities",
                     "ValueObject",
-                    "ValueObjects"
+                    "ValueObjects",
+                    "Decision",
+                    "Decisions",
+                    "Snapshot",
+                    "Snapshots"
                 )
             );
 
@@ -297,7 +301,7 @@ public sealed partial class BackendArchitectureTests
     private static partial Regex BehaviorInterfaceRegex();
 
     [GeneratedRegex(
-        @"\b(?:Microsoft\.(?:EntityFrameworkCore|AspNetCore|Agents)|ModelContextProtocol|System\.IO|DbContext|I?[A-Za-z_][A-Za-z0-9_]*Repository|IServiceProvider|HttpClient|TimeProvider|IUserInfoService|UserInfoUtil|File|Directory|FileInfo|DirectoryInfo|FileStream|Agw\.Infrastructure)\b",
+        @"\b(?:Microsoft\.(?:EntityFrameworkCore|AspNetCore|Agents)|ModelContextProtocol|System\.IO|Domain\.Policies|DbContext|I?[A-Za-z_][A-Za-z0-9_]*Repository|IServiceProvider|HttpClient|TimeProvider|IUserInfoService|UserInfoUtil|File|Directory|FileInfo|DirectoryInfo|FileStream|[A-Za-z_][A-Za-z0-9_]*(?:Policy|DomainService)|Agw\.Infrastructure)\b",
         RegexOptions.CultureInvariant
     )]
     private static partial Regex ForbiddenBehaviorDependencyRegex();

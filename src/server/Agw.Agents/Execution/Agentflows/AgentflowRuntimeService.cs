@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Agw.Agents.Definitions.Domain.Topology;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Store;
@@ -36,7 +37,6 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
     private readonly IRepository<Agentflow> _agentflowRepository;
     private readonly IRepository<AgentflowNode> _agentflowNodeRepository;
     private readonly IRepository<AgentflowEdge> _agentflowEdgeRepository;
-    private readonly AgentflowDomainService _agentflowDomainService;
     private readonly IAgentRuntimeService _agentRuntimeService;
     private readonly IProviderSessionState _providerSessionState;
     private readonly IAgentTurnSummaryService _summaryService;
@@ -53,7 +53,6 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         IRepository<Agentflow> agentflowRepository,
         IRepository<AgentflowNode> agentflowNodeRepository,
         IRepository<AgentflowEdge> agentflowEdgeRepository,
-        AgentflowDomainService agentflowDomainService,
         IAgentRuntimeService agentRuntimeService,
         IProviderSessionState providerSessionState,
         IAgentTurnSummaryService summaryService,
@@ -69,7 +68,6 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         _agentflowRepository = agentflowRepository;
         _agentflowNodeRepository = agentflowNodeRepository;
         _agentflowEdgeRepository = agentflowEdgeRepository;
-        _agentflowDomainService = agentflowDomainService;
         _agentRuntimeService = agentRuntimeService;
         _providerSessionState = providerSessionState;
         _summaryService = summaryService;
@@ -1118,7 +1116,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             return null;
         }
 
-        var orderedNodes = _agentflowDomainService.OrderNodesByEdges(agentflowNodes, agentflowEdges);
+        var orderedNodes = AgentflowTopology.OrderNodesByEdges(agentflowNodes, agentflowEdges);
         var nodeIdToAgent = new Dictionary<string, AIAgent>(StringComparer.Ordinal);
         var resources = new AgentResourceLease();
 

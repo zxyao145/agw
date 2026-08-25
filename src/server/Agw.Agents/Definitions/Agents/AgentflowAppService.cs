@@ -1,45 +1,33 @@
+using Agw.Agents.Application.Persistence;
+using Agw.Agents.Definitions.Domain.Behaviors;
+using Agw.Agents.Definitions.Domain.Policies;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Pagination;
 using Agw.Shared.Data.Repositories;
+using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Agents.Definitions.Agents;
 
 public class AgentflowAppService
 {
-    private readonly IRepository<Agentflow> _agentflowRepository;
-    private readonly IRepository<AgentflowNode> _agentflowNodeRepository;
-    private readonly IRepository<AgentflowEdge> _agentflowEdgeRepository;
-    private readonly IRepository<Agent> _agentRepository;
+    private readonly IAgentsDbContext _dbContext;
     private readonly IRepository<ModelProviderRelation> _modelProviderRepository;
-    private readonly IUnitOfWork _unitOfWork;
-    private readonly AgentflowDomainService _agentflowDomainService;
     private readonly TimeProvider _timeProvider;
 
     public AgentflowAppService(
-        IRepository<Agentflow> agentflowRepository,
-        IRepository<AgentflowNode> agentflowNodeRepository,
-        IRepository<AgentflowEdge> agentflowEdgeRepository,
-        IRepository<Agent> agentRepository,
+        IAgentsDbContext dbContext,
         IRepository<ModelProviderRelation> modelProviderRepository,
-        IUnitOfWork unitOfWork,
-        AgentflowDomainService agentflowDomainService,
         TimeProvider timeProvider
     )
     {
-        _agentflowRepository = agentflowRepository;
-        _agentflowNodeRepository = agentflowNodeRepository;
-        _agentflowEdgeRepository = agentflowEdgeRepository;
-        _agentRepository = agentRepository;
+        _dbContext = dbContext;
         _modelProviderRepository = modelProviderRepository;
-        _unitOfWork = unitOfWork;
-        _agentflowDomainService = agentflowDomainService;
         _timeProvider = timeProvider;
     }
 
-    public Task<IReadOnlyList<Agentflow>> ListAsync() => _agentflowRepository.ListAsync();
+    public async Task<IReadOnlyList<Agentflow>> ListAsync() => await _dbContext.Agentflows.ToListAsync();
 
     public Task<PagedResult<Agentflow>> ListPageAsync(
         int pageIndex,
@@ -47,20 +35,21 @@ public class AgentflowAppService
         CancellationToken cancellationToken = default
     ) =>
         UpdatedTimePagination.ToPagedResultAsync(
-            _agentflowRepository.Queryable,
+            _dbContext.Agentflows,
             agentflow => agentflow.Id,
             pageIndex,
             pageSize,
             cancellationToken
         );
 
-    public Task<Agentflow?> GetAsync(Guid id) => _agentflowRepository.GetByIdAsync(id);
+    public Task<Agentflow?> GetAsync(Guid id) =>
+        _dbContext.Agentflows.FirstOrDefaultAsync(agentflow => agentflow.Id == id);
 
-    public Task<IReadOnlyList<AgentflowNode>> ListNodesAsync(Guid agentflowId) =>
-        _agentflowNodeRepository.ListAsync(x => x.AgentflowId == agentflowId);
+    public async Task<IReadOnlyList<AgentflowNode>> ListNodesAsync(Guid agentflowId) =>
+        await _dbContext.AgentflowNodes.Where(x => x.AgentflowId == agentflowId).ToListAsync();
 
-    public Task<IReadOnlyList<AgentflowEdge>> ListEdgesAsync(Guid agentflowId) =>
-        _agentflowEdgeRepository.ListAsync(x => x.AgentflowId == agentflowId);
+    public async Task<IReadOnlyList<AgentflowEdge>> ListEdgesAsync(Guid agentflowId) =>
+        await _dbContext.AgentflowEdges.Where(x => x.AgentflowId == agentflowId).ToListAsync();
 
     public async Task<Agentflow?> CreateAsync(
         Agentflow agentflow,
@@ -69,43 +58,48 @@ public class AgentflowAppService
         string user
     )
     {
-        if (!_agentflowDomainService.TryPrepareForCreate(agentflow, user))
+        var behavior = new AgentflowBehavior(agentflow);
+        if (!behavior.HasValidName())
         {
             return null;
         }
 
+        var candidateId = agentflow.Id == Guid.Empty ? Guid.CreateVersion7() : agentflow.Id;
         var existingAgents = await ListExistingAgentsAsync(nodes);
         var existingModelProviderIds = await ListExistingModelProviderIdsAsync(agentflow.SummaryModelProviderId);
-        var (normalizedNodes, normalizedEdges) = _agentflowDomainService.ValidateAndNormalizeGraph(
+        var definitionPolicy = new AgentflowDefinitionPolicy();
+        var decision = definitionPolicy.Evaluate(
             nodes,
             edges,
-            agentflow.Id,
+            candidateId,
             existingAgents.Keys.ToList(),
             agentflow.SummaryModelProviderId,
             existingModelProviderIds,
             existingAgents
         );
-        if (normalizedNodes == null || normalizedEdges == null)
+        if (!behavior.TryApplyGraphDecision(decision))
         {
             return null;
         }
 
-        await _agentflowRepository.AddAsync(agentflow);
-        foreach (var node in normalizedNodes)
+        agentflow.Id = candidateId;
+        agentflow.CreateBy = user;
+        agentflow.CreateTime = _timeProvider.GetUtcNow();
+
+        foreach (var node in agentflow.Nodes)
         {
             node.CreateBy = user;
             node.CreateTime = agentflow.CreateTime;
-            await _agentflowNodeRepository.AddAsync(node);
         }
 
-        foreach (var edge in normalizedEdges)
+        foreach (var edge in agentflow.Edges)
         {
             edge.CreateBy = user;
             edge.CreateTime = agentflow.CreateTime;
-            await _agentflowEdgeRepository.AddAsync(edge);
         }
 
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.Agentflows.AddAsync(agentflow);
+        await _dbContext.SaveChangesAsync();
         return agentflow;
     }
 
@@ -117,22 +111,28 @@ public class AgentflowAppService
         string user
     )
     {
-        var existing = await _agentflowRepository.GetByIdAsync(id);
+        var existing = await _dbContext.Agentflows.FirstOrDefaultAsync(agentflow => agentflow.Id == id);
         if (existing == null)
         {
             return null;
         }
 
-        if (!_agentflowDomainService.TryApplyUpdate(existing, updateAction, user))
+        updateAction(existing);
+        var behavior = new AgentflowBehavior(existing);
+        if (!behavior.HasValidName())
         {
             return null;
         }
 
         if (nodes != null && edges != null)
         {
+            await _dbContext.AgentflowNodes.Where(node => node.AgentflowId == existing.Id).LoadAsync();
+            await _dbContext.AgentflowEdges.Where(edge => edge.AgentflowId == existing.Id).LoadAsync();
+
             var existingAgents = await ListExistingAgentsAsync(nodes);
             var existingModelProviderIds = await ListExistingModelProviderIdsAsync(existing.SummaryModelProviderId);
-            var (normalizedNodes, normalizedEdges) = _agentflowDomainService.ValidateAndNormalizeGraph(
+            var definitionPolicy = new AgentflowDefinitionPolicy();
+            var decision = definitionPolicy.Evaluate(
                 nodes,
                 edges,
                 existing.Id,
@@ -141,70 +141,61 @@ public class AgentflowAppService
                 existingModelProviderIds,
                 existingAgents
             );
-            if (normalizedNodes == null || normalizedEdges == null)
+            if (!behavior.TryApplyGraphDecision(decision))
             {
                 return null;
             }
 
-            var currentNodes = await _agentflowNodeRepository.ListAsync(x => x.AgentflowId == existing.Id);
-            foreach (var item in currentNodes)
-            {
-                _agentflowNodeRepository.Remove(item);
-            }
-
-            var currentEdges = await _agentflowEdgeRepository.ListAsync(x => x.AgentflowId == existing.Id);
-            foreach (var item in currentEdges)
-            {
-                _agentflowEdgeRepository.Remove(item);
-            }
-
             var now = _timeProvider.GetUtcNow();
-            foreach (var node in normalizedNodes)
+            foreach (var node in existing.Nodes)
             {
-                node.CreateBy ??= existing.CreateBy;
-                node.CreateTime = existing.CreateTime == default ? now : existing.CreateTime;
+                if (node.CreateTime == default)
+                {
+                    node.CreateBy ??= existing.CreateBy;
+                    node.CreateTime = existing.CreateTime == default ? now : existing.CreateTime;
+                }
                 node.UpdateBy = user;
                 node.UpdateTime = now;
-                await _agentflowNodeRepository.AddAsync(node);
             }
 
-            foreach (var edge in normalizedEdges)
+            foreach (var edge in existing.Edges)
             {
-                edge.CreateBy ??= existing.CreateBy;
-                edge.CreateTime = existing.CreateTime == default ? now : existing.CreateTime;
+                if (edge.CreateTime == default)
+                {
+                    edge.CreateBy ??= existing.CreateBy;
+                    edge.CreateTime = existing.CreateTime == default ? now : existing.CreateTime;
+                }
                 edge.UpdateBy = user;
                 edge.UpdateTime = now;
-                await _agentflowEdgeRepository.AddAsync(edge);
             }
         }
 
-        _agentflowRepository.Update(existing);
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync();
         return existing;
     }
 
     public async Task<bool> DeleteAsync(Guid id)
     {
-        var existing = await _agentflowRepository.GetByIdAsync(id);
+        var existing = await _dbContext.Agentflows.FirstOrDefaultAsync(agentflow => agentflow.Id == id);
         if (existing == null)
         {
             return false;
         }
 
-        var currentEdges = await _agentflowEdgeRepository.ListAsync(x => x.AgentflowId == existing.Id);
+        var currentEdges = await _dbContext.AgentflowEdges.Where(x => x.AgentflowId == existing.Id).ToListAsync();
         foreach (var edge in currentEdges)
         {
-            _agentflowEdgeRepository.Remove(edge);
+            _dbContext.AgentflowEdges.Remove(edge);
         }
 
-        var currentNodes = await _agentflowNodeRepository.ListAsync(x => x.AgentflowId == existing.Id);
+        var currentNodes = await _dbContext.AgentflowNodes.Where(x => x.AgentflowId == existing.Id).ToListAsync();
         foreach (var node in currentNodes)
         {
-            _agentflowNodeRepository.Remove(node);
+            _dbContext.AgentflowNodes.Remove(node);
         }
 
-        _agentflowRepository.Remove(existing);
-        await _unitOfWork.SaveChangesAsync();
+        _dbContext.Agentflows.Remove(existing);
+        await _dbContext.SaveChangesAsync();
         return true;
     }
 
@@ -222,7 +213,7 @@ public class AgentflowAppService
             return new Dictionary<Guid, string>();
         }
 
-        var existingAgents = await _agentRepository.ListAsync(x => agentIds.Contains(x.Id));
+        var existingAgents = await _dbContext.Agents.Where(x => agentIds.Contains(x.Id)).ToListAsync();
         return existingAgents.ToDictionary(x => x.Id, x => x.Name);
     }
 

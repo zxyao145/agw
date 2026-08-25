@@ -59,7 +59,6 @@ public class AgentflowRuntimeServiceTests
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(_ => new ApprovalRequestAgent()),
             new StubProviderSessionState(),
             new RecordingSummaryService()
@@ -119,7 +118,6 @@ public class AgentflowRuntimeServiceTests
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(_ => new ApprovalRequestAgent()),
             new StubProviderSessionState(),
             new RecordingSummaryService()
@@ -205,7 +203,6 @@ public class AgentflowRuntimeServiceTests
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(agentId => agentId == firstAgentId ? firstAgent : null),
             new StubProviderSessionState(),
             new RecordingSummaryService()
@@ -269,7 +266,6 @@ public class AgentflowRuntimeServiceTests
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(agentId),
             new StubProviderSessionState(),
             new RecordingSummaryService()
@@ -345,7 +341,6 @@ public class AgentflowRuntimeServiceTests
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(_ => worker),
             new StubProviderSessionState(),
             new RecordingSummaryService()
@@ -402,7 +397,6 @@ public class AgentflowRuntimeServiceTests
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             agentRuntimeService,
             new StubProviderSessionState(),
             new RecordingSummaryService()
@@ -502,7 +496,6 @@ public class AgentflowRuntimeServiceTests
             new TestRepository<Agentflow>([innerFlow, outerFlow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             agentRuntimeService,
             new StubProviderSessionState(),
             new RecordingSummaryService()
@@ -564,7 +557,6 @@ public class AgentflowRuntimeServiceTests
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             agentRuntimeService,
             new StubProviderSessionState(),
             new RecordingSummaryService()
@@ -640,7 +632,6 @@ public class AgentflowRuntimeServiceTests
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(agentId),
             new StubProviderSessionState(),
             new RecordingSummaryService()
@@ -724,7 +715,6 @@ public class AgentflowRuntimeServiceTests
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(agentId),
             new StubProviderSessionState(),
             summaryService
@@ -797,7 +787,6 @@ public class AgentflowRuntimeServiceTests
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(_ => new TrackingAIAgent(enableTodo: true)),
             new StubProviderSessionState(),
             new RecordingSummaryService(),

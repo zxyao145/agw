@@ -45,22 +45,23 @@ public sealed class AgentflowBehavior
         _agentflow = agentflow;
     }
 
-    public AgentflowValidationResult ValidateAndNormalize(
-        AgentflowBehaviorContext context,
-        DateTimeOffset now,
-        string actor
-    )
+    public bool HasValidName()
     {
-        // Validate and mutate _agentflow plus its owned Nodes and Edges.
+        // Root-local precondition; owned children are not needed.
+    }
+
+    public bool TryApplyGraphDecision(AgentflowDefinitionDecision decision)
+    {
+        // Reconcile fully loaded owned Nodes and Edges in place.
     }
 }
 ```
 
-Application 必须先完整加载 consistency boundary，再显式执行 `new AgentflowBehavior(agentflow)`。Behavior：
+Application 显式执行 `new AgentflowBehavior(agentflow)`。root-local precondition 可以立即调用；任何读取或修改 owned children 的 Behavior 方法执行前，Application 必须先完整加载 consistency boundary。Behavior：
 
 - 不注册到 `IServiceCollection`；
 - 不定义 `I<Entity>Behavior` Interface；
-- 不注入 Repository、DbContext、TimeProvider、当前用户、HTTP、文件、MAF/MCP、IServiceProvider 或 Infrastructure Adapter；
+- 不引用或注入 Policy、DomainService、Repository、DbContext、TimeProvider、当前用户、HTTP、文件、MAF/MCP、IServiceProvider 或 Infrastructure Adapter；
 - 不缓存、不序列化、不跨线程或 use case 复用；
 - 没有独立持久状态，其可观察状态完全来自被包装的数据。
 
@@ -76,6 +77,23 @@ Behavior、Policy 和 DomainService 不是同一种生命周期：
 
 一个只处理单个 root 的 `XxxDomainService` 是错置的 entity Behavior。IoC-managed DomainService 不得捕获 Behavior 或数据 root，也不得依赖 Repository、DbContext、TimeProvider、当前用户、HTTP、文件、MAF/MCP、Application Service 或 Infrastructure Adapter。Application 将领域数据和外部事实作为方法参数传入，并将 DomainService 返回的 data-only decision 交给相应 Behavior 应用。
 
+Behavior 不得引用、注入或手动构造 Policy/DomainService。依赖方向固定，但 Application 根据用例选择调用顺序；root-local 前置条件可以在外部查询和 Policy 求值之前执行：
+
+```text
+Application
+  → new XxxBehavior(completeRoot)
+  → optional root-local preconditions
+  → new XxxPolicy()
+  → Policy evaluates data + external facts
+  → data-only XxxDecision
+  → Behavior applies Decision
+  → persistence
+```
+
+Decision 放在中性的 `Domain/Decisions`，只能携带数据。Policy、compiler、runtime 共同需要的只读算法放在 `Domain/Topology`、`Domain/Rules` 或 `Domain/Algorithms`；它们不是 Policy，也不通过 Behavior 转发。
+
+对 EF tracked consistency boundary，Application 必须先加载完整 root 与 Behavior 会修改的 owned navigations。Behavior 按稳定 child key 原地 reconcile：更新同键实例、移除缺失 child、只添加新 child。禁止先替换 tracked navigation 再查询旧行，也禁止在一个 unit of work 中删除并重新添加同主键的两个实例。
+
 ### 5. Application 与 Infrastructure 职责不变
 
 Application 负责鉴权、外部事实查询、Behavior 构造、用例顺序、错误映射和 transaction。Infrastructure 负责 EF、加密、HTTP、文件和外部 Provider Adapter。审计字段继续由 EF interceptor 维护，不属于 Behavior。
@@ -86,6 +104,17 @@ Application 负责鉴权、外部事实查询、Behavior 构造、用例顺序�
 
 只有存在真实业务不变量或状态转换时才创建 Behavior。纯 list/get/create/update/delete、配置表、审计记录和 read model 保持简单 Application + `I<Module>DbContext`。
 
+### 7. Agentflow 采用选择性 DDD
+
+Agentflow 是当前明确采用选择性 DDD 的子域，但 `Agw.Agents` 不是整体 DDD 化：
+
+- `Agentflow` 及其 owned `AgentflowNode`、`AgentflowEdge` 构成图定义的一致性边界。
+- `AgentflowDefinitionPolicy` 根据 proposed graph 和 Agent/ModelProvider 外部事实产生 data-only `AgentflowDefinitionDecision`；`AgentflowBehavior` 只应用该 Decision，不引用 Policy。
+- `AgentflowTopology` 承担 definition Policy、compiler 和 runtime 共用的只读拓扑与配置解析算法。
+- Agentflow 更新先完整加载 root、Nodes、Edges，再由 Behavior 按 NodeId/EdgeId 原地 reconcile，避免 EF relationship fix-up 和 identity tracking 冲突。
+- Agentflow 的 list/get/create/update/delete、API DTO、compiler/runtime、checkpoint/history、trace 和 durable execution 仍由 Application/Infrastructure 编排。
+- Auth、Jobs、Providers、Skills、基础 Integrations/Tools 等简单 CRUD 模块不因为 Agentflow 的选择性 DDD 而整体引入 Aggregate、Behavior 或 Domain Event。
+
 ## 备选方案
 
 ### 行为丰富 entity/aggregate root
@@ -95,6 +124,10 @@ Application 负责鉴权、外部事实查询、Behavior 构造、用例顺序�
 ### 由 IoC 管理无状态 Behavior
 
 方便注入依赖，但会鼓励 Repository、clock、当前用户和外部 Adapter 进入领域行为，并模糊 Behavior 与 Application Service 的职责。拒绝。
+
+### Behavior 内部构造或调用 Policy
+
+虽然都位于 Domain，但这会把 Policy 编排隐藏在 Behavior 内，使 Behavior 退化为 Policy 的薄包装。采用 Application 显式协调 Policy、Decision 与 Behavior；调用顺序可因 root-local 前置校验调整，但 Behavior 永远不依赖 Policy。拒绝。
 
 ### Behavior 返回完整数据副本
 
@@ -111,4 +144,6 @@ Application 负责鉴权、外部事实查询、Behavior 构造、用例顺序�
 - Application 保持 use-case orchestration，Behavior 保持 framework-free；
 - Behavior 由构造函数绑定完整数据 boundary，调用方必须显式看见其生命周期；
 - 纯 Policy 默认显式构造；真正跨数据 boundary 的无状态 DomainService 可以通过 IoC 复用纯领域组件；
+- Policy 只产生 data-only Decision，Behavior 只应用 Decision；Architecture Tests 禁止 Behavior 引用 Policy/DomainService；
+- EF-tracked aggregate 通过完整加载和同键原地 reconcile 维持单实例 identity；
 - 现有 entity-specific `DomainService` 与实体方法通过递减 allowlist 渐进迁移，禁止新增 single-root DomainService 债务。
