@@ -2,7 +2,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.Json;
 using A2A;
-using Agw.Agents.Execution.Agents.Dtos;
+using Agw.Agents.Contracts.Catalog;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Repositories;
@@ -143,8 +143,8 @@ public class AgentHandlerFactoryTests
         {
             ExecuteAsyncImpl = (_, context, input, _) =>
             {
-                return Task.FromResult<AgentExecutionResult?>(
-                    new AgentExecutionResult(context.TaskId, [CreateTextMessage("final answer")])
+                return Task.FromResult(
+                    new AgentExecutionResult(context.TaskId, context.ContextId, [CreateTextMessage("final answer")])
                 );
             },
         };
@@ -349,6 +349,111 @@ public class AgentHandlerFactoryTests
     }
 
     [Fact]
+    public async Task CancelTaskAsync_InProcessBridge_UsesNonDurableFallback()
+    {
+        var taskId = Guid.CreateVersion7().ToString("D");
+        var taskStore = new FakeTaskStore(
+            new AgentTask
+            {
+                Id = taskId,
+                ContextId = "ctx-cancel",
+                Status = new global::A2A.TaskStatus
+                {
+                    State = TaskState.Working,
+                    Timestamp = TimeProvider.System.GetUtcNow(),
+                },
+            }
+        );
+        var durableBridge = new FakeDurableA2AExecutionBridge(interrupted: false, supportsDurableOperations: false);
+        var services = new ServiceCollection()
+            .AddSingleton<IDurableA2AExecutionBridge>(durableBridge)
+            .AddSingleton(
+                CreateFactory(
+                    new Agent
+                    {
+                        Id = Guid.CreateVersion7(),
+                        Name = "alpha",
+                        SystemPrompt = "Alpha prompt",
+                    }
+                )
+            )
+            .BuildServiceProvider();
+        var handler = new AgwA2ARequestHandler(
+            taskStore,
+            new AgwChannelEventNotifier(),
+            NullLogger<A2AServer>.Instance,
+            services.GetRequiredService<IServiceScopeFactory>()
+        );
+
+        var canceledTask = await handler.CancelTaskAsync(
+            "alpha",
+            new CancelTaskRequest { Id = taskId },
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.False(durableBridge.CancelCalled);
+        Assert.Equal(TaskState.Canceled, canceledTask.Status.State);
+        Assert.Equal(1, taskStore.SaveCount);
+    }
+
+    [Fact]
+    public async Task SubscribeToTaskAsync_InProcessBridge_UsesChannelFallback()
+    {
+        var taskId = Guid.CreateVersion7().ToString("D");
+        var currentTask = new AgentTask
+        {
+            Id = taskId,
+            ContextId = "ctx-subscribe",
+            Status = new global::A2A.TaskStatus
+            {
+                State = TaskState.Working,
+                Timestamp = TimeProvider.System.GetUtcNow(),
+            },
+        };
+        var taskStore = new FakeTaskStore(currentTask);
+        var durableBridge = new FakeDurableA2AExecutionBridge(interrupted: false, supportsDurableOperations: false);
+        var services = new ServiceCollection()
+            .AddSingleton<IDurableA2AExecutionBridge>(durableBridge)
+            .BuildServiceProvider();
+        var notifier = new AgwChannelEventNotifier();
+        var handler = new AgwA2ARequestHandler(
+            taskStore,
+            notifier,
+            NullLogger<A2AServer>.Instance,
+            services.GetRequiredService<IServiceScopeFactory>()
+        );
+        await using var subscription = handler
+            .SubscribeToTaskAsync(new SubscribeToTaskRequest { Id = taskId }, TestContext.Current.CancellationToken)
+            .GetAsyncEnumerator(TestContext.Current.CancellationToken);
+
+        Assert.True(await subscription.MoveNextAsync());
+        Assert.Same(currentTask, subscription.Current.Task);
+
+        var terminalEvent = new StreamResponse
+        {
+            StatusUpdate = new TaskStatusUpdateEvent
+            {
+                TaskId = taskId,
+                ContextId = currentTask.ContextId,
+                Status = new global::A2A.TaskStatus
+                {
+                    State = TaskState.Canceled,
+                    Timestamp = TimeProvider.System.GetUtcNow(),
+                },
+            },
+        };
+        using (await notifier.AcquireTaskLockAsync(taskId, TestContext.Current.CancellationToken))
+        {
+            notifier.Notify(taskId, terminalEvent);
+        }
+
+        Assert.True(await subscription.MoveNextAsync());
+        Assert.Same(terminalEvent, subscription.Current);
+        Assert.False(await subscription.MoveNextAsync());
+        Assert.False(durableBridge.SubscribeCalled);
+    }
+
+    [Fact]
     public async Task ApplyEventAsync_WhenTerminalTransitionConflicts_PreservesFirstTerminalState()
     {
         var taskId = Guid.CreateVersion7().ToString("D");
@@ -441,7 +546,7 @@ public class AgentHandlerFactoryTests
 
     private static A2AAgentService CreateA2AAgentService(InMemoryRepository<Agent> repository)
     {
-        return new A2AAgentService(repository);
+        return new A2AAgentService(new RepositoryAgentCatalog(repository));
     }
 
     private static AgwA2ARequestHandler CreateRequestHandler(AgentHandlerFactory agentHandlerFactory)
@@ -623,9 +728,9 @@ public class AgentHandlerFactoryTests
             RequestContext,
             AgwUserInput,
             CancellationToken,
-            Task<AgentExecutionResult?>
+            Task<AgentExecutionResult>
         > ExecuteAsyncImpl { get; set; } =
-            (_, context, _, _) => Task.FromResult<AgentExecutionResult?>(new AgentExecutionResult(context.TaskId, []));
+            (_, context, _, _) => Task.FromResult(new AgentExecutionResult(context.TaskId, context.ContextId, []));
 
         public Func<
             string,
@@ -635,7 +740,7 @@ public class AgentHandlerFactoryTests
             IAsyncEnumerable<AgwMessage>
         > ExecuteStreamingAsyncImpl { get; set; } = (_, _, _, _) => ToAsyncEnumerable();
 
-        public async Task<AgentExecutionResult?> ExecuteAsync(
+        public async Task<AgentExecutionResult> ExecuteAsync(
             string agentName,
             RequestContext context,
             AgwUserInput input,
@@ -660,6 +765,43 @@ public class AgentHandlerFactoryTests
             CapturedInput = input;
             return ExecuteStreamingAsyncImpl(agentName, context, input, cancellationToken);
         }
+    }
+
+    private sealed class RepositoryAgentCatalog : IAgentCatalogFacade
+    {
+        private readonly InMemoryRepository<Agent> _repository;
+
+        public RepositoryAgentCatalog(InMemoryRepository<Agent> repository)
+        {
+            _repository = repository;
+        }
+
+        public Task<IReadOnlyList<AgentDescriptor>> ListDiscoverableAsync(
+            CancellationToken cancellationToken = default
+        ) =>
+            Task.FromResult<IReadOnlyList<AgentDescriptor>>(
+                _repository
+                    .Queryable.Select(agent => new AgentDescriptor(
+                        agent.Id,
+                        agent.Name,
+                        agent.DisplayName,
+                        agent.SystemPrompt
+                    ))
+                    .ToArray()
+            );
+
+        public async Task<AgentDescriptor?> FindDiscoverableByNameAsync(
+            string name,
+            CancellationToken cancellationToken = default
+        ) => (await ListDiscoverableAsync(cancellationToken)).SingleOrDefault(agent => agent.Name == name);
+
+        public Task<IReadOnlySet<Guid>> FilterExistingMcpServerIdsAsync(
+            IReadOnlyCollection<Guid> serverIds,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
+
+        public Task<AgentCatalogMetrics> GetMetricsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(new AgentCatalogMetrics(_repository.Queryable.Count(), 0));
     }
 
     private sealed class FakeTaskStore : ITaskStore
@@ -700,11 +842,16 @@ public class AgentHandlerFactoryTests
         }
     }
 
-    private sealed class FakeDurableA2AExecutionBridge(bool interrupted) : IDurableA2AExecutionBridge
+    private sealed class FakeDurableA2AExecutionBridge(bool interrupted, bool supportsDurableOperations = true)
+        : IDurableA2AExecutionBridge
     {
         public bool CancelCalled { get; private set; }
 
-        public Task<AgentExecutionResult?> ExecuteAsync(
+        public bool SubscribeCalled { get; private set; }
+
+        public bool SupportsDurableOperations { get; } = supportsDurableOperations;
+
+        public Task<AgentExecutionResult> ExecuteAsync(
             string agentName,
             RequestContext context,
             AgwUserInput input,
@@ -722,7 +869,11 @@ public class AgentHandlerFactoryTests
             string taskId,
             string? cursor,
             CancellationToken cancellationToken
-        ) => ToAsyncEnumerable();
+        )
+        {
+            SubscribeCalled = true;
+            return ToAsyncEnumerable();
+        }
 
         public Task<bool> CancelAsync(string taskId, CancellationToken cancellationToken)
         {

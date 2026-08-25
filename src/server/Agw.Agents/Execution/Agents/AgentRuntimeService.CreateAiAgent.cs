@@ -1,5 +1,6 @@
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Utils;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
@@ -140,10 +141,12 @@ public partial class AgentRuntimeService
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Agent);
-        Project? project = await _projectAppService.GetForCurrentUserAsync(
-            request.ProjectId ?? ProjectDefaults.DefaultBuiltInId
+        var projectSnapshot = await _projectRuntimeFacade.GetForCurrentUserAsync(
+            request.ProjectId ?? ProjectDefaults.DefaultBuiltInId,
+            cancellationToken
         );
-        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(projectSnapshot);
+        var project = MapProject(projectSnapshot);
         var environmentVariables = AgentRuntimeServiceUtil.MergeEnvironmentVariables(
             request.Agent.EnvironmentVariables,
             project.EnvironmentVariables,
@@ -166,5 +169,36 @@ public partial class AgentRuntimeService
                 deferHumanInteractions: request.DeferHumanInteractions
             )
             .ConfigureAwait(false);
+    }
+
+    private static Project MapProject(ProjectRuntimeSnapshot project)
+    {
+        var mapped = new Project
+        {
+            Id = project.Id,
+            Name = project.Name,
+            Workspace = project.Workspace,
+            ExtraSetting = project.ExtraSetting,
+            Tools = project.Tools.ToList(),
+            EnvironmentVariables = project.EnvironmentVariables.ToDictionary(),
+        };
+        mapped.ProjectSkillRelations = project
+            .SkillIds.Select(skillId => new ProjectSkillRelation { ProjectId = mapped.Id, SkillId = skillId })
+            .ToList();
+        mapped.ProjectMcpToolServers = project
+            .McpServerIds.Select(serverId => new ProjectMcpServerRelation
+            {
+                ProjectId = mapped.Id,
+                McpToolServerId = serverId,
+            })
+            .ToList();
+        mapped.ProjectConnectionRelations = project
+            .ConnectionIds.Select(connectionId => new ProjectConnectionRelation
+            {
+                ProjectId = mapped.Id,
+                ConnectionId = connectionId,
+            })
+            .ToList();
+        return mapped;
     }
 }

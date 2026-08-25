@@ -1,6 +1,12 @@
+using Agw.Agents.Contracts.Catalog;
+using Agw.Agents.Definitions.Facades;
 using Agw.Host.Controllers;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
+using Agw.Jobs.Application.Facades;
+using Agw.Jobs.Contracts.Metrics;
+using Agw.Projects.Application.Facades;
+using Agw.Projects.Contracts.Metrics;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Jobs;
@@ -15,6 +21,22 @@ namespace Agw.Host.Tests;
 public class DashboardControllerTests
 {
     [Fact]
+    public async Task GetStats_SharedScopedDependencies_DoesNotOverlapCalls()
+    {
+        var tracker = new NonConcurrentCallTracker();
+        var controller = new DashboardController(
+            new TrackingJobMetricsFacade(tracker),
+            new TrackingProjectMetricsFacade(tracker),
+            new TrackingAgentCatalogFacade(tracker)
+        );
+
+        var result = await controller.GetStats(TestContext.Current.CancellationToken);
+
+        Assert.IsType<DashboardStatsResponse>(ReadStats(result));
+        Assert.Equal(3, tracker.CallCount);
+    }
+
+    [Fact]
     public async Task GetStats_MultipleAgentUsages_SumsAllTokenUsage()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -28,7 +50,7 @@ public class DashboardControllerTests
         await dbContext.SaveChangesAsync(cancellationToken);
         var controller = CreateController(dbContext);
 
-        var result = await controller.GetStats();
+        var result = await controller.GetStats(cancellationToken);
 
         var stats = ReadStats(result);
         Assert.Equal(15L, ReadLongProperty(stats, "UsageInputTokenCount"));
@@ -44,7 +66,7 @@ public class DashboardControllerTests
         await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
         var controller = CreateController(dbContext);
 
-        var result = await controller.GetStats();
+        var result = await controller.GetStats(cancellationToken);
 
         var stats = ReadStats(result);
         Assert.Equal(0L, ReadLongProperty(stats, "UsageInputTokenCount"));
@@ -85,7 +107,7 @@ public class DashboardControllerTests
 
         Assert.Empty(await dbContext.ProjectConversations.ToListAsync(cancellationToken));
         Assert.Single(await dbContext.AgentUsages.ToListAsync(cancellationToken));
-        var stats = ReadStats(await CreateController(dbContext).GetStats());
+        var stats = ReadStats(await CreateController(dbContext).GetStats(cancellationToken));
         Assert.Equal(30L, ReadLongProperty(stats, "UsageTotalTokenCount"));
     }
 
@@ -113,13 +135,20 @@ public class DashboardControllerTests
     private static DashboardController CreateController(AgwDbContext dbContext)
     {
         return new DashboardController(
-            new EfRepository<Job>(dbContext),
-            new EfRepository<Project>(dbContext),
-            new EfRepository<ProjectConversation>(dbContext),
-            new EfRepository<AgentUsage>(dbContext),
-            new EfRepository<ProjectConversationChatHistory>(dbContext),
-            new EfRepository<Agent>(dbContext),
-            new EfRepository<Agentflow>(dbContext)
+            new JobMetricsFacade(new EfRepository<Job>(dbContext)),
+            new ProjectMetricsFacade(
+                new EfRepository<Project>(dbContext),
+                new EfRepository<ProjectConversation>(dbContext),
+                new EfRepository<ProjectConversationChatHistory>(dbContext),
+                new EfRepository<AgentUsage>(dbContext)
+            ),
+            new AgentCatalogFacade(
+                new EfRepository<Agent>(dbContext),
+                new EfRepository<Agentflow>(dbContext),
+                new EfRepository<McpServer>(dbContext),
+                new EfRepository<AgentSkillRelation>(dbContext),
+                dbContext
+            )
         );
     }
 
@@ -155,5 +184,85 @@ public class DashboardControllerTests
         var property = typeof(DashboardStatsResponse).GetProperty(propertyName);
         Assert.NotNull(property);
         return Assert.IsType<long>(property!.GetValue(stats));
+    }
+
+    private sealed class NonConcurrentCallTracker
+    {
+        private int _activeCalls;
+        private int _callCount;
+
+        public int CallCount => Volatile.Read(ref _callCount);
+
+        public async Task<T> RunAsync<T>(T result)
+        {
+            if (Interlocked.CompareExchange(ref _activeCalls, 1, 0) != 0)
+            {
+                throw new InvalidOperationException("Dashboard metric calls overlapped on a shared request scope.");
+            }
+
+            try
+            {
+                Interlocked.Increment(ref _callCount);
+                await Task.Yield();
+                return result;
+            }
+            finally
+            {
+                Volatile.Write(ref _activeCalls, 0);
+            }
+        }
+    }
+
+    private sealed class TrackingJobMetricsFacade : IJobMetricsFacade
+    {
+        private readonly NonConcurrentCallTracker _tracker;
+
+        public TrackingJobMetricsFacade(NonConcurrentCallTracker tracker)
+        {
+            _tracker = tracker;
+        }
+
+        public Task<JobMetrics> GetAsync(CancellationToken cancellationToken = default) =>
+            _tracker.RunAsync(new JobMetrics(1));
+    }
+
+    private sealed class TrackingProjectMetricsFacade : IProjectMetricsFacade
+    {
+        private readonly NonConcurrentCallTracker _tracker;
+
+        public TrackingProjectMetricsFacade(NonConcurrentCallTracker tracker)
+        {
+            _tracker = tracker;
+        }
+
+        public Task<ProjectMetrics> GetAsync(CancellationToken cancellationToken = default) =>
+            _tracker.RunAsync(new ProjectMetrics(2, 3, 4, 5, 6, 11));
+    }
+
+    private sealed class TrackingAgentCatalogFacade : IAgentCatalogFacade
+    {
+        private readonly NonConcurrentCallTracker _tracker;
+
+        public TrackingAgentCatalogFacade(NonConcurrentCallTracker tracker)
+        {
+            _tracker = tracker;
+        }
+
+        public Task<AgentCatalogMetrics> GetMetricsAsync(CancellationToken cancellationToken = default) =>
+            _tracker.RunAsync(new AgentCatalogMetrics(7, 8));
+
+        public Task<IReadOnlyList<AgentDescriptor>> ListDiscoverableAsync(
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<AgentDescriptor?> FindDiscoverableByNameAsync(
+            string name,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<IReadOnlySet<Guid>> FilterExistingMcpServerIdsAsync(
+            IReadOnlyCollection<Guid> serverIds,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
     }
 }

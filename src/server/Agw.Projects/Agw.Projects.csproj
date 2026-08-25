@@ -3,8 +3,10 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Microsoft.Agents.AI" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <ProjectReference Include="..\Agw.Agents.Contracts\Agw.Agents.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
     <ProjectReference Include="..\Agw.Files\Agw.Files.csproj" />
+    <ProjectReference Include="..\Agw.Projects.Contracts\Agw.Projects.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
   </ItemGroup>
 </Project>

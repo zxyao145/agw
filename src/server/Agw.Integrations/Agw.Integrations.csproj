@@ -3,6 +3,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="ModelContextProtocol" />
     <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
+    <ProjectReference Include="..\Agw.Projects.Contracts\Agw.Projects.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
   </ItemGroup>
 

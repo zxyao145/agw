@@ -4,6 +4,9 @@ using Agw.Jobs.Application.Contracts;
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
+using Agw.Projects.Application;
+using Agw.Projects.Application.Facades;
+using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
@@ -254,11 +257,27 @@ public class JobAppServiceTests
 
             var timeProvider = new TestTimeProvider(UtcNow);
             var schedulerWakeSignal = new JobSchedulerWakeSignal(timeProvider);
+            var projectRepository = new EfRepository<Project>(dbContext);
+            var conversationRepository = new EfRepository<ProjectConversation>(dbContext);
+            var historyRepository = new EfRepository<ProjectConversationChatHistory>(dbContext);
+            var taskService = new TaskExecutionAppService(
+                conversationRepository,
+                historyRepository,
+                dbContext,
+                new ProjectConversationChatHistoryDomainService(),
+                new ProjectResolver(projectRepository),
+                timeProvider
+            );
+            var taskResolver = new TaskAppService(
+                conversationRepository,
+                historyRepository,
+                new ProjectResolver(projectRepository),
+                taskService
+            );
             var service = new JobAppService(
                 new JobRepo(dbContext, timeProvider),
                 new EfRepository<JobLog>(dbContext),
-                new EfRepository<ProjectConversationChatHistory>(dbContext),
-                new EfRepository<ProjectConversation>(dbContext),
+                new ProjectTaskFacade(taskService, conversationRepository, historyRepository, taskResolver),
                 dbContext,
                 new JobScheduleCalculator(),
                 schedulerWakeSignal,

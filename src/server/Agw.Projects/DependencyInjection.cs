@@ -1,6 +1,9 @@
 using Agw.Files.Abstracts;
 using Agw.Projects.Application;
-using Agw.Projects.Contracts;
+using Agw.Projects.Application.Facades;
+using Agw.Projects.Contracts.Execution;
+using Agw.Projects.Contracts.Metrics;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Projects.Domain.Services;
 using Agw.Projects.Infrastructure;
 using Agw.Shared.Contracts.Projects;
@@ -20,7 +23,11 @@ public static class DependencyInjection
         services.AddScoped<IProjectFileSystemConfigurationProvider, ProjectFileSystemConfigurationProvider>();
         services.AddScoped<ITaskSessionBindingService, TaskSessionBindingService>();
         services.AddScoped<TaskExecutionAppService>();
-        services.AddScoped<ITaskExecutionService>(provider => provider.GetRequiredService<TaskExecutionAppService>());
+        services.AddScoped<IProjectTaskFacade, ProjectTaskFacade>();
+        services.AddScoped<IProjectProviderSessionFacade, ProjectProviderSessionFacade>();
+        services.AddScoped<IExternalTaskSnapshotStore, ExternalTaskSnapshotStore>();
+        services.AddScoped<IProjectRuntimeFacade, ProjectRuntimeFacade>();
+        services.AddScoped<IProjectMetricsFacade, ProjectMetricsFacade>();
         services.AddScoped<ProjectConversationAppService>();
         services.AddScoped<ProjectResolver>();
         services.AddScoped<ProjectConversationChatHistoryDomainService>();

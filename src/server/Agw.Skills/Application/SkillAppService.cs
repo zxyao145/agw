@@ -1,8 +1,8 @@
 using System.IO.Compression;
 using System.Text;
+using Agw.Agents.Contracts.Catalog;
 using Agw.Domain.Services.Skills;
 using Agw.Shared.Contracts.Pagination;
-using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
@@ -21,8 +21,7 @@ public sealed record SkillDetails(Skill Skill, IReadOnlyList<Guid> AgentIds, boo
 public class SkillAppService
 {
     private readonly IRepository<Skill> _skillRepository;
-    private readonly IRepository<Agent> _agentRepository;
-    private readonly IRepository<AgentSkillRelation> _agentSkillRelationRepository;
+    private readonly IAgentReferenceFacade _agentReferences;
     private readonly IRepository<RemoteSkillCache> _remoteSkillCacheRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly SkillDomainService _skillDomainService;
@@ -35,8 +34,7 @@ public class SkillAppService
 
     public SkillAppService(
         IRepository<Skill> skillRepository,
-        IRepository<Agent> agentRepository,
-        IRepository<AgentSkillRelation> agentSkillRelationRepository,
+        IAgentReferenceFacade agentReferences,
         IRepository<RemoteSkillCache> remoteSkillCacheRepository,
         IUnitOfWork unitOfWork,
         SkillDomainService skillDomainService,
@@ -49,8 +47,7 @@ public class SkillAppService
     )
     {
         _skillRepository = skillRepository;
-        _agentRepository = agentRepository;
-        _agentSkillRelationRepository = agentSkillRelationRepository;
+        _agentReferences = agentReferences;
         _remoteSkillCacheRepository = remoteSkillCacheRepository;
         _unitOfWork = unitOfWork;
         _skillDomainService = skillDomainService;
@@ -361,11 +358,7 @@ public class SkillAppService
             _remoteSkillCacheRepository.Remove(cache);
         }
 
-        var relations = await _agentSkillRelationRepository.ListAsync(x => x.SkillId == existing.Id);
-        foreach (var relation in relations)
-        {
-            _agentSkillRelationRepository.Remove(relation);
-        }
+        await _agentReferences.RemoveSkillBindingsAsync(existing.Id, cancellationToken).ConfigureAwait(false);
 
         _skillRepository.Remove(existing);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -391,10 +384,7 @@ public class SkillAppService
         }
 
         var skillIds = skills.Select(x => x.Id).ToHashSet();
-        var relations = await _agentSkillRelationRepository.ListAsync(x => skillIds.Contains(x.SkillId));
-        var map = relations
-            .GroupBy(x => x.SkillId)
-            .ToDictionary(g => g.Key, g => (IReadOnlyList<Guid>)g.Select(x => x.AgentId).ToList());
+        var map = await _agentReferences.GetAgentIdsBySkillIdsAsync(skillIds).ConfigureAwait(false);
 
         return skills
             .Select(skill => new SkillDetails(skill, map.GetValueOrDefault(skill.Id, []), IsBuiltIn(skill)))
@@ -439,31 +429,8 @@ public class SkillAppService
 
     private async Task<IReadOnlyList<Guid>> GetSkillAgentIdsAsync(Guid skillId)
     {
-        var relations = await _agentSkillRelationRepository.ListAsync(x => x.SkillId == skillId);
-        return relations.Select(x => x.AgentId).ToList();
-    }
-
-    private async Task SyncAgentSkillRelationsAsync(Guid skillId, IEnumerable<Guid>? agentIds)
-    {
-        var existingLinks = await _agentSkillRelationRepository.ListAsync(x => x.SkillId == skillId);
-        foreach (var link in existingLinks)
-        {
-            _agentSkillRelationRepository.Remove(link);
-        }
-
-        var requestedAgentIds = _skillDomainService.NormalizeAgentIds(agentIds);
-        if (requestedAgentIds.Count == 0)
-        {
-            return;
-        }
-
-        var existingAgents = await _agentRepository.ListAsync(x => requestedAgentIds.Contains(x.Id));
-        foreach (var agentId in existingAgents.Select(x => x.Id))
-        {
-            await _agentSkillRelationRepository.AddAsync(
-                new AgentSkillRelation { AgentId = agentId, SkillId = skillId }
-            );
-        }
+        var map = await _agentReferences.GetAgentIdsBySkillIdsAsync([skillId]).ConfigureAwait(false);
+        return map.GetValueOrDefault(skillId, []);
     }
 
     private async Task<PreparedSkillDirectory> PrepareArchiveDirectoryAsync(

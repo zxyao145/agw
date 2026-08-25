@@ -435,7 +435,7 @@ public class ProjectAppServiceTests
         return new ProjectAppService(
             projectRepository,
             new EfRepository<ProjectMcpServerRelation>(dbContext),
-            new EfRepository<McpServer>(dbContext),
+            new TestAgentCatalogFacade(new EfRepository<McpServer>(dbContext)),
             new EfRepository<ProjectSkillRelation>(dbContext),
             new EfRepository<Skill>(dbContext),
             new EfRepository<ProjectConnectionRelation>(dbContext),

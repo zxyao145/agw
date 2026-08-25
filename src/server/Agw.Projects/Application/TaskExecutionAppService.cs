@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Projects.Application;
 
-public class TaskExecutionAppService : ITaskExecutionService
+public class TaskExecutionAppService
 {
     private readonly IRepository<ProjectConversation> _contextRepository;
     private readonly IRepository<ProjectConversationChatHistory> _recordRepository;

@@ -1,3 +1,4 @@
+using Agw.Agents.Definitions.Facades;
 using Agw.Auth.Application;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
@@ -201,7 +202,13 @@ public class ProjectTraceCleanupTests
         return new ProjectAppService(
             projectRepository,
             new EfRepository<ProjectMcpServerRelation>(dbContext),
-            new EfRepository<McpServer>(dbContext),
+            new AgentCatalogFacade(
+                new EfRepository<Agent>(dbContext),
+                new EfRepository<Agentflow>(dbContext),
+                new EfRepository<McpServer>(dbContext),
+                new EfRepository<AgentSkillRelation>(dbContext),
+                dbContext
+            ),
             new EfRepository<ProjectSkillRelation>(dbContext),
             new EfRepository<Skill>(dbContext),
             new EfRepository<ProjectConnectionRelation>(dbContext),

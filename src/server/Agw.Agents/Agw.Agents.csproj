@@ -16,10 +16,12 @@
     <PackageReference Include="Microsoft.Agents.AI.Anthropic" />
     <PackageReference Include="ModelContextProtocol" />
     <PackageReference Include="StackExchange.Redis" />
+    <ProjectReference Include="..\Agw.Agents.Contracts\Agw.Agents.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
     <ProjectReference Include="..\Agw.Files\Agw.Files.csproj" />
     <ProjectReference Include="..\Agw.Integrations\Agw.Integrations.csproj" />
     <ProjectReference Include="..\Agw.Providers\Agw.Providers.csproj" />
+    <ProjectReference Include="..\Agw.Projects.Contracts\Agw.Projects.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
     <ProjectReference Include="..\Agw.Skills\Agw.Skills.csproj" />
     <ProjectReference Include="..\Agw.Tools\Agw.Tools.csproj" />

@@ -1,3 +1,4 @@
+using Agw.Agents.Contracts.Execution;
 using Agw.Shared.AgwMsgVm;
 
 namespace Agw.Agents.Execution.Turns;
@@ -8,27 +9,16 @@ namespace Agw.Agents.Execution.Turns;
 public static class TurnMessageProtocol
 {
     public const string StartedType = "turn-start";
-    public const string FinishedType = "turn-finished";
+    public const string FinishedType = AgentExecutionMessageProtocol.FinishedType;
 
-    public const string CompletedStatus = "completed";
-    public const string FailedStatus = "failed";
-    public const string InterruptedStatus = "interrupted";
+    public const string CompletedStatus = AgentExecutionMessageProtocol.CompletedStatus;
+    public const string FailedStatus = AgentExecutionMessageProtocol.FailedStatus;
+    public const string InterruptedStatus = AgentExecutionMessageProtocol.InterruptedStatus;
 
-    public static string? GetMessageType(AgwMessage message) =>
-        message.AdditionalProperties?.TryGetValue("type", out var value) == true ? value as string : null;
+    public static string? GetMessageType(AgwMessage message) => AgentExecutionMessageProtocol.GetMessageType(message);
 
-    public static bool IsFinished(AgwMessage message) =>
-        string.Equals(GetMessageType(message), FinishedType, StringComparison.Ordinal);
+    public static bool IsFinished(AgwMessage message) => AgentExecutionMessageProtocol.IsFinished(message);
 
-    public static bool TryGetFinishedStatus(AgwMessage message, out string? status)
-    {
-        status = null;
-        if (!IsFinished(message))
-        {
-            return false;
-        }
-
-        status = message.AdditionalProperties?.TryGetValue("status", out var value) == true ? value as string : null;
-        return true;
-    }
+    public static bool TryGetFinishedStatus(AgwMessage message, out string? status) =>
+        AgentExecutionMessageProtocol.TryGetFinishedStatus(message, out status);
 }

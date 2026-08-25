@@ -1,8 +1,10 @@
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Controllers;
+using Agw.Agents.Definitions.Facades;
 using Agw.Domain.Services.Skills;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
+using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;
@@ -131,8 +133,13 @@ public class DefinitionPaginationTests
 
         var service = new SkillAppService(
             new EfRepository<Skill>(database.Context),
-            new EfRepository<Agent>(database.Context),
-            new EfRepository<AgentSkillRelation>(database.Context),
+            new AgentCatalogFacade(
+                new EfRepository<Agent>(database.Context),
+                new EfRepository<Agentflow>(database.Context),
+                new EfRepository<McpServer>(database.Context),
+                new EfRepository<AgentSkillRelation>(database.Context),
+                database.Context
+            ),
             new EfRepository<RemoteSkillCache>(database.Context),
             database.Context,
             new SkillDomainService(TimeProvider.System),

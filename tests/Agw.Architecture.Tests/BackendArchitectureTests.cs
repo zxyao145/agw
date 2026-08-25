@@ -19,6 +19,18 @@ public sealed partial class BackendArchitectureTests
         "Agw.Tools"
     );
 
+    private static readonly IReadOnlySet<string> AllowedRootNamespaceFacadeFiles = Set(
+        "Agw.Agents/DependencyInjection.cs",
+        "Agw.Files/DependencyInjection.cs",
+        "Agw.Jobs/DependencyInjection.cs",
+        "Agw.Projects/DependencyInjection.cs",
+        "Agw.Providers/DependencyInjection.cs",
+        "Agw.Skills/DependencyInjection.cs",
+        "Agw.Tools/Extensions/DependencyInjection.cs",
+        "Agw.Tools/ToolRegistryService.cs",
+        "Agw.Tools/ToolValueResolution.cs"
+    );
+
     private static readonly IReadOnlyDictionary<string, IReadOnlySet<string>> AllowedProjectDependencies =
         new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal)
         {
@@ -27,13 +39,16 @@ public sealed partial class BackendArchitectureTests
             ["Agw.DataPlane.Host"] = Set("Agw.Host"),
             ["Agw.Host"] = Set(
                 "Agw.A2A",
+                "Agw.Agents.Contracts",
                 "Agw.Auth",
                 "Agw.Infrastructure",
+                "Agw.Jobs.Contracts",
                 "Agw.Migrations.Postgres",
                 "Agw.Migrations.Sqlite",
+                "Agw.Projects.Contracts",
                 "Agw.Setup"
             ),
-            ["Agw.A2A"] = Set("Agw.Agents", "Agw.Projects"),
+            ["Agw.A2A"] = Set("Agw.Agents.Contracts", "Agw.Auth", "Agw.Projects.Contracts", "Agw.Shared"),
 
             ["Agw.Infrastructure"] = Set(
                 "Agw.Agents",
@@ -46,21 +61,39 @@ public sealed partial class BackendArchitectureTests
             ),
 
             ["Agw.Agents"] = Set(
+                "Agw.Agents.Contracts",
                 "Agw.Auth",
                 "Agw.Files",
                 "Agw.Integrations",
+                "Agw.Projects.Contracts",
                 "Agw.Providers",
                 "Agw.Shared",
                 "Agw.Skills",
                 "Agw.Tools"
             ),
+            ["Agw.Agents.Contracts"] = Set("Agw.Projects.Contracts", "Agw.Shared"),
             ["Agw.Files"] = Set(),
 
-            ["Agw.Integrations"] = Set("Agw.Auth", "Agw.Shared"),
-            ["Agw.Jobs"] = Set("Agw.Agents", "Agw.Auth", "Agw.Projects", "Agw.Shared", "Agw.Skills"),
-            ["Agw.Projects"] = Set("Agw.Auth", "Agw.Files", "Agw.Shared"),
-            ["Agw.Providers"] = Set("Agw.Shared"),
-            ["Agw.Skills"] = Set("Agw.Shared"),
+            ["Agw.Integrations"] = Set("Agw.Auth", "Agw.Projects.Contracts", "Agw.Shared"),
+            ["Agw.Jobs"] = Set(
+                "Agw.Agents.Contracts",
+                "Agw.Auth",
+                "Agw.Jobs.Contracts",
+                "Agw.Projects.Contracts",
+                "Agw.Shared",
+                "Agw.Skills"
+            ),
+            ["Agw.Jobs.Contracts"] = Set(),
+            ["Agw.Projects"] = Set(
+                "Agw.Agents.Contracts",
+                "Agw.Auth",
+                "Agw.Files",
+                "Agw.Projects.Contracts",
+                "Agw.Shared"
+            ),
+            ["Agw.Projects.Contracts"] = Set("Agw.Shared"),
+            ["Agw.Providers"] = Set("Agw.Agents.Contracts", "Agw.Shared"),
+            ["Agw.Skills"] = Set("Agw.Agents.Contracts", "Agw.Shared"),
             ["Agw.Tools"] = Set("Agw.Auth", "Agw.Files", "Agw.Shared"),
 
             ["Agw.Auth"] = Set("Agw.Shared"),
@@ -123,6 +156,27 @@ public sealed partial class BackendArchitectureTests
     }
 
     [Fact]
+    public void GuardedModuleRootNamespaces_ContainOnlyExplicitFacades()
+    {
+        // Arrange
+        var serverRoot = GetServerRoot();
+
+        // Act
+        var actualFacadeFiles = GetSourceFiles(serverRoot)
+            .Where(path => GuardedModules.Contains(GetOwningProject(serverRoot, path)))
+            .Where(path => DeclaresNamespace(path, GetOwningProject(serverRoot, path)))
+            .Select(path => NormalizePath(Path.GetRelativePath(serverRoot, path)))
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+
+        // Assert
+        Assert.Equal(
+            AllowedRootNamespaceFacadeFiles.OrderBy(static path => path, StringComparer.Ordinal),
+            actualFacadeFiles
+        );
+    }
+
+    [Fact]
     public void ModuleSource_ReferencingSiblingInternalLayer_HasNoViolations()
     {
         // Arrange
@@ -133,6 +187,47 @@ public sealed partial class BackendArchitectureTests
         // Act
         var violations = sourceFiles
             .SelectMany(path => FindSiblingInternalLayerReferences(serverRoot, path, namespaceOwners))
+            .OrderBy(static violation => violation, StringComparer.Ordinal)
+            .ToArray();
+
+        // Assert
+        Assert.Empty(violations);
+    }
+
+    [Fact]
+    public void ContractsProjects_ProjectReferences_DoNotDependOnImplementations()
+    {
+        // Arrange
+        var serverRoot = GetServerRoot();
+        var contractProjects = Directory.EnumerateFiles(serverRoot, "*.Contracts.csproj", SearchOption.AllDirectories);
+
+        // Act
+        var violations = contractProjects
+            .SelectMany(project =>
+                ReadProjectReferences(project)
+                    .Where(dependency =>
+                        dependency != "Agw.Shared" && !dependency.EndsWith(".Contracts", StringComparison.Ordinal)
+                    )
+                    .Select(dependency => $"{Path.GetFileNameWithoutExtension(project)} -> {dependency}")
+            )
+            .OrderBy(static violation => violation, StringComparer.Ordinal)
+            .ToArray();
+
+        // Assert
+        Assert.Empty(violations);
+    }
+
+    [Fact]
+    public void ModuleSource_CrossModuleConcreteServicesOrOwnedRepositories_HasNoViolations()
+    {
+        // Arrange
+        var serverRoot = GetServerRoot();
+        var sourceFiles = GetSourceFiles(serverRoot).ToArray();
+        var implementationOwners = BuildImplementationTypeOwners(serverRoot, sourceFiles);
+
+        // Act
+        var violations = sourceFiles
+            .SelectMany(path => FindConcreteServiceAndRepositoryViolations(serverRoot, path, implementationOwners))
             .OrderBy(static violation => violation, StringComparer.Ordinal)
             .ToArray();
 
@@ -188,6 +283,90 @@ public sealed partial class BackendArchitectureTests
             static pair => (IReadOnlySet<string>)pair.Value,
             StringComparer.Ordinal
         );
+    }
+
+    private static IReadOnlyDictionary<string, IReadOnlySet<string>> BuildImplementationTypeOwners(
+        string serverRoot,
+        IReadOnlyList<string> sourceFiles
+    )
+    {
+        var owners = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        foreach (var sourceFile in sourceFiles)
+        {
+            var project = GetOwningProject(serverRoot, sourceFile);
+            foreach (var line in File.ReadLines(sourceFile))
+            {
+                var match = ImplementationTypeDeclarationRegex().Match(line);
+                if (!match.Success)
+                {
+                    continue;
+                }
+                var type = match.Groups["type"].Value;
+                if (!owners.TryGetValue(type, out var projects))
+                {
+                    projects = new HashSet<string>(StringComparer.Ordinal);
+                    owners.Add(type, projects);
+                }
+                projects.Add(project);
+            }
+        }
+        return owners.ToDictionary(
+            static pair => pair.Key,
+            static pair => (IReadOnlySet<string>)pair.Value,
+            StringComparer.Ordinal
+        );
+    }
+
+    private static IEnumerable<string> FindConcreteServiceAndRepositoryViolations(
+        string serverRoot,
+        string sourceFile,
+        IReadOnlyDictionary<string, IReadOnlySet<string>> implementationOwners
+    )
+    {
+        var owningProject = GetOwningProject(serverRoot, sourceFile);
+        if (owningProject == "Agw.Infrastructure")
+        {
+            yield break;
+        }
+
+        var relativePath = NormalizePath(Path.GetRelativePath(serverRoot, sourceFile));
+        var lineNumber = 0;
+        foreach (var line in File.ReadLines(sourceFile))
+        {
+            lineNumber++;
+            foreach (Match match in ImplementationTypeReferenceRegex().Matches(line))
+            {
+                var type = match.Groups["type"].Value;
+                if (
+                    implementationOwners.TryGetValue(type, out var owners)
+                    && !owners.Contains(owningProject)
+                    && owners.Any(owner => owner is "Agw.Agents" or "Agw.Projects" or "Agw.Jobs")
+                )
+                {
+                    yield return $"{relativePath}:{lineNumber}: {owningProject} references concrete {type}";
+                }
+            }
+
+            foreach (Match match in LegacyCrossModuleServiceReferenceRegex().Matches(line))
+            {
+                var type = match.Groups["type"].Value;
+                var owner = LegacyCrossModuleServiceOwners.GetValueOrDefault(type);
+                if (owner != null && owningProject != owner && owningProject != "Agw.Shared")
+                {
+                    yield return $"{relativePath}:{lineNumber}: {owningProject} references legacy {type} owned by {owner}";
+                }
+            }
+
+            foreach (Match match in OwnedRepositoryRegex().Matches(line))
+            {
+                var entity = match.Groups["entity"].Value;
+                var owner = EntityOwners.GetValueOrDefault(entity);
+                if (owner != null && owner != owningProject)
+                {
+                    yield return $"{relativePath}:{lineNumber}: {owningProject} references IRepository<{entity}> owned by {owner}";
+                }
+            }
+        }
     }
 
     private static IEnumerable<string> FindSiblingInternalLayerReferences(
@@ -266,6 +445,14 @@ public sealed partial class BackendArchitectureTests
             .Where(path => !HasPathSegment(Path.GetRelativePath(serverRoot, path), "bin"))
             .Where(path => !HasPathSegment(Path.GetRelativePath(serverRoot, path), "obj"));
 
+    private static bool DeclaresNamespace(string sourceFile, string expectedNamespace) =>
+        File.ReadLines(sourceFile)
+            .Select(line => NamespaceDeclarationRegex().Match(line))
+            .Any(match =>
+                match.Success
+                && string.Equals(match.Groups["namespace"].Value, expectedNamespace, StringComparison.Ordinal)
+            );
+
     private static string GetOwningProject(string serverRoot, string sourceFile)
     {
         var relativePath = Path.GetRelativePath(serverRoot, sourceFile);
@@ -297,6 +484,32 @@ public sealed partial class BackendArchitectureTests
 
     private static HashSet<string> Set(params string[] values) => new(values, StringComparer.Ordinal);
 
+    private static readonly IReadOnlyDictionary<string, string> EntityOwners = new Dictionary<string, string>(
+        StringComparer.Ordinal
+    )
+    {
+        ["Agent"] = "Agw.Agents",
+        ["Agentflow"] = "Agw.Agents",
+        ["McpServer"] = "Agw.Agents",
+        ["AgentSkillRelation"] = "Agw.Agents",
+        ["Project"] = "Agw.Projects",
+        ["ProjectConversation"] = "Agw.Projects",
+        ["ProjectConversationChatHistory"] = "Agw.Projects",
+        ["AgentUsage"] = "Agw.Projects",
+        ["Job"] = "Agw.Jobs",
+        ["JobLog"] = "Agw.Jobs",
+    };
+
+    private static readonly IReadOnlyDictionary<string, string> LegacyCrossModuleServiceOwners = new Dictionary<
+        string,
+        string
+    >(StringComparer.Ordinal)
+    {
+        ["IProjectAppService"] = "Agw.Projects",
+        ["ITaskAppService"] = "Agw.Projects",
+        ["ITaskSessionBindingService"] = "Agw.Projects",
+    };
+
     [GeneratedRegex(@"\bMicrosoft\.(?:EntityFrameworkCore|AspNetCore)\b", RegexOptions.CultureInvariant)]
     private static partial Regex ForbiddenDomainFrameworkRegex();
 
@@ -311,4 +524,25 @@ public sealed partial class BackendArchitectureTests
 
     [GeneratedRegex(@"\b(?:global::)?(?<namespace>Agw(?:\.[A-Za-z_][A-Za-z0-9_]*)+)", RegexOptions.CultureInvariant)]
     private static partial Regex QualifiedAgwNameRegex();
+
+    [GeneratedRegex(
+        @"^\s*(?:public|internal|private|protected)?\s*(?:sealed\s+|abstract\s+|partial\s+)*(?:class|interface|record)\s+(?<type>[A-Za-z_][A-Za-z0-9_]*(?:AppService|RuntimeService))\b",
+        RegexOptions.CultureInvariant
+    )]
+    private static partial Regex ImplementationTypeDeclarationRegex();
+
+    [GeneratedRegex(@"\b(?<type>[A-Za-z_][A-Za-z0-9_]*(?:AppService|RuntimeService))\b", RegexOptions.CultureInvariant)]
+    private static partial Regex ImplementationTypeReferenceRegex();
+
+    [GeneratedRegex(
+        @"\b(?<type>IProjectAppService|ITaskAppService|ITaskSessionBindingService)\b",
+        RegexOptions.CultureInvariant
+    )]
+    private static partial Regex LegacyCrossModuleServiceReferenceRegex();
+
+    [GeneratedRegex(
+        @"\bIRepository\s*<\s*(?<entity>Agent|Agentflow|McpServer|AgentSkillRelation|Project|ProjectConversation|ProjectConversationChatHistory|AgentUsage|Job|JobLog)\s*>",
+        RegexOptions.CultureInvariant
+    )]
+    private static partial Regex OwnedRepositoryRegex();
 }

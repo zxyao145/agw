@@ -1,3 +1,5 @@
+using Agw.Agents.Contracts.Execution;
+
 namespace Agw.Agents.Execution.Turns;
 
 public interface IRuntimeTurnContextAccessor
@@ -5,11 +7,14 @@ public interface IRuntimeTurnContextAccessor
     RuntimeTurnContext? Current { get; }
 }
 
-public sealed class RuntimeTurnContextAccessor : IRuntimeTurnContextAccessor
+public sealed class RuntimeTurnContextAccessor : IRuntimeTurnContextAccessor, ICurrentAgentTurn
 {
     private readonly AsyncLocal<RuntimeTurnContext?> _current = new();
 
     public RuntimeTurnContext? Current => _current.Value;
+
+    AgentTurnSnapshot? ICurrentAgentTurn.Current =>
+        Current == null ? null : new AgentTurnSnapshot(Current.ProjectId, Current.UserId);
 
     internal IDisposable Push(RuntimeTurnContext context)
     {

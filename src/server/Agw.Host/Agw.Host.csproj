@@ -28,10 +28,13 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Agw.A2A\Agw.A2A.csproj" />
+    <ProjectReference Include="..\Agw.Agents.Contracts\Agw.Agents.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
     <ProjectReference Include="..\Agw.Infrastructure\Agw.Infrastructure.csproj" />
+    <ProjectReference Include="..\Agw.Jobs.Contracts\Agw.Jobs.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Migrations.Postgres\Agw.Migrations.Postgres.csproj" />
     <ProjectReference Include="..\Agw.Migrations.Sqlite\Agw.Migrations.Sqlite.csproj" />
+    <ProjectReference Include="..\Agw.Projects.Contracts\Agw.Projects.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Setup\Agw.Setup.csproj" />
   </ItemGroup>
 </Project>

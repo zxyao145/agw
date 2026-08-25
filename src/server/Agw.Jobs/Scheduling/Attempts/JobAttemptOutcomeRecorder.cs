@@ -1,5 +1,5 @@
 using Agw.Jobs.Execution;
-using Agw.Projects.Contracts;
+using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -27,7 +27,7 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
     private readonly IRepository<Job> _jobRepository;
     private readonly IRepository<JobLog> _jobLogRepository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly ITaskExecutionService _taskExecutionService;
+    private readonly IProjectTaskFacade _projectTasks;
     private readonly JobScheduleCalculator _scheduleCalculator;
     private readonly TimeProvider _timeProvider;
 
@@ -35,7 +35,7 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
         IRepository<Job> jobRepository,
         IRepository<JobLog> jobLogRepository,
         IUnitOfWork unitOfWork,
-        ITaskExecutionService taskExecutionService,
+        IProjectTaskFacade projectTasks,
         JobScheduleCalculator scheduleCalculator,
         TimeProvider timeProvider
     )
@@ -43,7 +43,7 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
         _jobRepository = jobRepository;
         _jobLogRepository = jobLogRepository;
         _unitOfWork = unitOfWork;
-        _taskExecutionService = taskExecutionService;
+        _projectTasks = projectTasks;
         _scheduleCalculator = scheduleCalculator;
         _timeProvider = timeProvider;
     }
@@ -74,12 +74,20 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
         var ownerUserId = JobAgentExecutor.ResolveOwnerUserId(job);
         if (success)
         {
-            _ = await _taskExecutionService.MarkSucceededAsync(executionId, ownerUserId).ConfigureAwait(false);
+            _ = await _projectTasks
+                .FinishAsync(
+                    new FinishProjectTaskRequest(executionId, ProjectTaskStatus.Succeeded, null, ownerUserId),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
         }
         else
         {
-            _ = await _taskExecutionService
-                .MarkFailedAsync(executionId, normalizedError!, ownerUserId)
+            _ = await _projectTasks
+                .FinishAsync(
+                    new FinishProjectTaskRequest(executionId, ProjectTaskStatus.Failed, normalizedError, ownerUserId),
+                    cancellationToken
+                )
                 .ConfigureAwait(false);
         }
 

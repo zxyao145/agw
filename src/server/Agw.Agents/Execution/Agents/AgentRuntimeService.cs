@@ -4,6 +4,8 @@ using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
 using Agw.Files.Abstracts;
+using Agw.Projects.Contracts.Execution;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Runtime;
 using Agw.Skills.Contracts.Registration;
@@ -19,11 +21,11 @@ public partial class AgentRuntimeService : IAgentRuntimeService
 {
     private readonly ILogger<AgentRuntimeService> _logger;
     private readonly AgentAppService _agentAppService;
-    private readonly IProjectAppService _projectAppService;
+    private readonly IProjectRuntimeFacade _projectRuntimeFacade;
     private readonly AgentCapabilityComposer _capabilityComposer;
     private readonly ChatHistoryProvider _chatHistoryProvider;
     private readonly IProviderSessionState _providerSessionState;
-    private readonly ITaskSessionBindingService _taskSessionBindingService;
+    private readonly IProjectProviderSessionFacade _providerSessions;
     private readonly AgwDataPaths _dataPaths;
     private readonly IAgwFileSystemResolver _fileSystemResolver;
     private readonly AgentSessionStateStore _sessionStateStore;
@@ -43,11 +45,11 @@ public partial class AgentRuntimeService : IAgentRuntimeService
 
     public AgentRuntimeService(
         AgentAppService agentAppService,
-        IProjectAppService projectAppService,
+        IProjectRuntimeFacade projectRuntimeFacade,
         AgentCapabilityComposer capabilityComposer,
         ChatHistoryProvider chatHistoryProvider,
         IProviderSessionState providerSessionState,
-        ITaskSessionBindingService taskSessionBindingService,
+        IProjectProviderSessionFacade providerSessions,
         AgwDataPaths dataPaths,
         IAgwFileSystemResolver fileSystemResolver,
         AgentSessionStateStore sessionStateStore,
@@ -67,11 +69,11 @@ public partial class AgentRuntimeService : IAgentRuntimeService
     )
     {
         _agentAppService = agentAppService;
-        _projectAppService = projectAppService;
+        _projectRuntimeFacade = projectRuntimeFacade;
         _capabilityComposer = capabilityComposer;
         _chatHistoryProvider = chatHistoryProvider;
         _providerSessionState = providerSessionState;
-        _taskSessionBindingService = taskSessionBindingService;
+        _providerSessions = providerSessions;
         _dataPaths = dataPaths;
         _fileSystemResolver = fileSystemResolver;
         _sessionStateStore = sessionStateStore;

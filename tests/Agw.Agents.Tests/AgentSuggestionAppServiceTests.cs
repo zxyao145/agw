@@ -4,6 +4,7 @@ using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Definitions.Controllers;
 using Agw.Agents.ExternalAgents;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Skills;
@@ -304,10 +305,47 @@ public class AgentSuggestionAppServiceTests
         );
         return new AgentSuggestionAppService(
             new TestRepository<Agent>(agents),
-            new TestRepository<Project>(projects),
+            new TestProjectRuntimeFacade(projects),
             new TestRepository<Skill>(skills),
             registry
         );
+    }
+
+    private sealed class TestProjectRuntimeFacade : IProjectRuntimeFacade
+    {
+        private readonly IReadOnlyDictionary<Guid, Project> _projects;
+
+        public TestProjectRuntimeFacade(IEnumerable<Project>? projects)
+        {
+            _projects = (projects ?? []).ToDictionary(project => project.Id);
+        }
+
+        public Task<ProjectRuntimeSnapshot?> GetForCurrentUserAsync(
+            Guid projectId,
+            CancellationToken cancellationToken = default
+        )
+        {
+            if (!_projects.TryGetValue(projectId, out var project))
+            {
+                return Task.FromResult<ProjectRuntimeSnapshot?>(null);
+            }
+            return Task.FromResult<ProjectRuntimeSnapshot?>(
+                new ProjectRuntimeSnapshot(
+                    project.Id,
+                    project.Name,
+                    project.Workspace,
+                    project.ExtraSetting,
+                    project.Tools,
+                    project.EnvironmentVariables,
+                    project.ProjectSkillRelations.Select(relation => relation.SkillId).ToArray(),
+                    project.ProjectMcpToolServers.Select(relation => relation.McpToolServerId).ToArray(),
+                    project.ProjectConnectionRelations.Select(relation => relation.ConnectionId).ToArray()
+                )
+            );
+        }
+
+        public Task<string?> GetWorkspaceAsync(Guid projectId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_projects.GetValueOrDefault(projectId)?.Workspace);
     }
 
     private sealed class TestRepository<TEntity> : IRepository<TEntity>

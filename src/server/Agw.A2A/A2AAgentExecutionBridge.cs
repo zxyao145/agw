@@ -1,19 +1,19 @@
+using System.Runtime.CompilerServices;
 using A2A;
-using Agw.Agents.Execution.Agents.Dtos;
-using Agw.Agents.Execution.Commands.Setting;
+using Agw.Agents.Contracts.Execution;
+using Agw.Auth.Contracts;
+using Agw.Projects.Contracts.Execution;
 using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
-using AgwTaskProjection = Agw.Shared.Contracts.Projects.TaskProjection;
-using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace Agw.A2A;
 
+public sealed record AgentExecutionResult(string TaskId, string ContextId, IReadOnlyList<AgwMessage> Messages);
+
 public interface IAgentExecutionBridge
 {
-    Task<AgentExecutionResult?> ExecuteAsync(
+    Task<AgentExecutionResult> ExecuteAsync(
         string agentName,
         RequestContext context,
         AgwUserInput input,
@@ -28,163 +28,132 @@ public interface IAgentExecutionBridge
     );
 }
 
-public sealed class A2AAgentExecutionBridge : IAgentExecutionBridge
+public interface IDurableA2AExecutionBridge : IAgentExecutionBridge
 {
-    private readonly IServiceScopeFactory _serviceScopeFactory;
-    private readonly TimeProvider _timeProvider;
+    bool SupportsDurableOperations { get; }
 
-    public A2AAgentExecutionBridge(IServiceScopeFactory serviceScopeFactory, TimeProvider timeProvider)
+    IAsyncEnumerable<AgwMessage> SubscribeAsync(string taskId, string? cursor, CancellationToken cancellationToken);
+
+    Task<bool> CancelAsync(string taskId, CancellationToken cancellationToken);
+}
+
+public sealed class A2AAgentExecutionBridge : IDurableA2AExecutionBridge
+{
+    private readonly IServiceScopeFactory _scopeFactory;
+
+    public A2AAgentExecutionBridge(IServiceScopeFactory scopeFactory, bool supportsDurableOperations)
     {
-        _serviceScopeFactory = serviceScopeFactory;
-        _timeProvider = timeProvider;
+        _scopeFactory = scopeFactory;
+        SupportsDurableOperations = supportsDurableOperations;
     }
 
-    public async Task<AgentExecutionResult?> ExecuteAsync(
+    public bool SupportsDurableOperations { get; }
+
+    public async Task<AgentExecutionResult> ExecuteAsync(
         string agentName,
         RequestContext context,
         AgwUserInput input,
         CancellationToken cancellationToken
     )
     {
-        using var scope = _serviceScopeFactory.CreateScope();
-        var agentRepository = scope.ServiceProvider.GetRequiredService<IRepository<Agent>>();
-        var agentRuntimeService = scope.ServiceProvider.GetRequiredService<IAgentRuntimeService>();
-
-        var agent = await agentRepository
-            .SingleOrDefaultAsync(a => a.Name == agentName, cancellationToken)
-            .ConfigureAwait(false);
-        if (agent is null)
+        var messages = new List<AgwMessage>();
+        await foreach (
+            var message in ExecuteStreamingAsync(agentName, context, input, cancellationToken).ConfigureAwait(false)
+        )
         {
-            return null;
+            messages.Add(message);
         }
-
-        return await agentRuntimeService
-            .ExecuteByIdAsync(
-                new AgentExecuteByIdRequest(
-                    [CreateChatMessage(input)],
-                    agent.Id,
-                    ParseRequiredTaskId(context.TaskId),
-                    ProjectDefaults.A2AId,
-                    context.ContextId
-                ),
-                cancellationToken
-            )
-            .ConfigureAwait(false);
+        return new AgentExecutionResult(context.TaskId, context.ContextId, messages);
     }
 
     public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         string agentName,
         RequestContext context,
         AgwUserInput input,
-        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken
+        [EnumeratorCancellation] CancellationToken cancellationToken
     )
     {
-        using var scope = _serviceScopeFactory.CreateScope();
-        var agentRepository = scope.ServiceProvider.GetRequiredService<IRepository<Agent>>();
-        var agentRuntimeService = scope.ServiceProvider.GetRequiredService<IAgentRuntimeService>();
-
-        var agent = await agentRepository
-            .SingleOrDefaultAsync(a => a.Name == agentName, cancellationToken)
+        var executionId = ParseRequiredTaskId(context.TaskId);
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var services = scope.ServiceProvider;
+        var ownerUserId = services.GetRequiredService<IUserInfoService>().RequiredUserId;
+        var task = await services
+            .GetRequiredService<IProjectTaskFacade>()
+            .GetOrCreateAsync(
+                new StartProjectTaskRequest(
+                    ProjectDefaults.A2AId,
+                    executionId,
+                    JobId: null,
+                    GetInputText(input),
+                    agentName,
+                    context.ContextId,
+                    ownerUserId,
+                    ProjectTaskStatus.Running
+                ),
+                cancellationToken
+            )
             .ConfigureAwait(false);
-        if (agent is null)
-        {
-            throw new AgwException(ErrorCodes.AgentNotFound, $"Agent '{agentName}' not found.");
-        }
-
-        var taskId = ParseRequiredTaskId(context.TaskId);
-        var taskProjection = new AgwTaskProjection
-        {
-            TaskId = taskId,
-            ProjectId = ProjectDefaults.A2AId,
-            ContextId = context.ContextId,
-            Title = agent.Name,
-            CreateTime = _timeProvider.GetUtcNow(),
-        };
-        var settings = new SettingCommand(ProjectDefaults.A2AId, contextId: context.ContextId)
-        {
-            Resume = context.IsContinuation,
-        };
-
-        await using var session = await agentRuntimeService
-            .CreateRuntimeAsync(agent.Id, taskProjection, settings, cancellationToken)
-            .ConfigureAwait(false);
-        if (session is null)
-        {
-            throw new AgwException(
-                ErrorCodes.UnableToCreateAgentSession,
-                $"Unable to create session for agent '{agentName}'."
-            );
-        }
-
+        var executions = services.GetRequiredService<IAgentExecutionFacade>();
         await foreach (
-            var message in agentRuntimeService
-                .ExecuteStreamingAsync(session, input, cancellationToken)
+            var executionEvent in executions
+                .ExecuteStreamingAsync(
+                    new Agw.Agents.Contracts.Execution.AgentExecutionRequest(
+                        executionId,
+                        ownerUserId,
+                        new AgentTarget(AgentTargetKind.Agent, Name: agentName),
+                        task,
+                        input,
+                        context.IsContinuation,
+                        HumanInteractionPolicy.Reject
+                    ),
+                    cancellationToken
+                )
                 .ConfigureAwait(false)
         )
         {
-            yield return message;
+            yield return executionEvent.Message;
         }
     }
 
-    private static Guid ParseRequiredTaskId(string taskId)
+    public async IAsyncEnumerable<AgwMessage> SubscribeAsync(
+        string taskId,
+        string? cursor,
+        [EnumeratorCancellation] CancellationToken cancellationToken
+    )
     {
-        if (!Guid.TryParse(taskId, out var taskGuid))
+        var executionId = ParseRequiredTaskId(taskId);
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var services = scope.ServiceProvider;
+        var ownerUserId = services.GetRequiredService<IUserInfoService>().RequiredUserId;
+        await foreach (
+            var executionEvent in services
+                .GetRequiredService<IDurableAgentExecutionFacade>()
+                .SubscribeAsync(executionId, ownerUserId, cursor, cancellationToken)
+                .ConfigureAwait(false)
+        )
         {
-            throw new AgwException(ErrorCodes.A2ATaskIdMustBeGuid);
+            yield return executionEvent.Message;
         }
-
-        return taskGuid;
     }
 
-    private static ChatMessage CreateChatMessage(AgwUserInput input)
+    public async Task<bool> CancelAsync(string taskId, CancellationToken cancellationToken)
     {
-        var message = new ChatMessage(ChatRole.User, ConvertToAIContents(input.Contents))
-        {
-            MessageId = input.MessageId,
-            AuthorName = string.IsNullOrWhiteSpace(input.Author) ? Constants.DefaultInputAuthor : input.Author,
-        };
-
-        return message;
+        var executionId = ParseRequiredTaskId(taskId);
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var services = scope.ServiceProvider;
+        var ownerUserId = services.GetRequiredService<IUserInfoService>().RequiredUserId;
+        return await services
+            .GetRequiredService<IDurableAgentExecutionFacade>()
+            .InterruptAsync(executionId, ownerUserId, "Canceled through A2A.", cancellationToken)
+            .ConfigureAwait(false);
     }
 
-    private static List<AIContent> ConvertToAIContents(List<AgwContent> contents)
-    {
-        var aiContents = new List<AIContent>();
+    private static Guid ParseRequiredTaskId(string taskId) =>
+        Guid.TryParse(taskId, out var value) ? value : throw new AgwException(ErrorCodes.A2ATaskIdMustBeGuid);
 
-        foreach (var item in contents)
-        {
-            switch (item)
-            {
-                case AgwTextContent textContent:
-                    aiContents.Add(new TextContent(textContent.Content));
-                    break;
-
-                case AgwTextReasoningContent reasoningContent:
-                    aiContents.Add(new TextContent(reasoningContent.Content));
-                    break;
-
-                case AgwUriContent uriContent:
-                    aiContents.Add(new UriContent(uriContent.Uri, uriContent.MediaType));
-                    break;
-
-                case AgwFunctionCallContent functionCallContent:
-                    aiContents.Add(new TextContent(functionCallContent.Content));
-                    break;
-
-                case AgwFunctionResultContent functionResultContent:
-                    aiContents.Add(new TextContent(functionResultContent.Content));
-                    break;
-
-                case AgwErrorContent errorContent:
-                    aiContents.Add(new TextContent(errorContent.Content));
-                    break;
-
-                case AgwUsageContent usageContent:
-                    aiContents.Add(new TextContent(System.Text.Json.JsonSerializer.Serialize(usageContent.Content)));
-                    break;
-            }
-        }
-
-        return aiContents;
-    }
+    private static string GetInputText(AgwUserInput input) =>
+        string.Join(
+            "\n",
+            input.Contents.OfType<AgwTextContent>().Select(content => content.Content).Where(value => value != null)
+        );
 }

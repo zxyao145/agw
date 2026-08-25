@@ -79,8 +79,10 @@ public class ModelProviderAppServiceTests
         await using (var deleteContext = new AgwDbContext(options))
         {
             var usageGuard = new ModelProviderUsageGuard(
-                new EfRepository<Agent>(deleteContext),
-                new EfRepository<Agentflow>(deleteContext)
+                new TestAgentReferenceFacade(
+                    new EfRepository<Agent>(deleteContext),
+                    new EfRepository<Agentflow>(deleteContext)
+                )
             );
             var service = new ModelProviderAppService(
                 new EfRepository<ModelProviderRelation>(deleteContext),

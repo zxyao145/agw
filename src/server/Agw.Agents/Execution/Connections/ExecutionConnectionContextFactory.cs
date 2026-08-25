@@ -1,8 +1,10 @@
+using Agw.Agents.Contracts.Execution;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Runtimes;
-using Agw.Shared.Contracts.Projects;
+using Agw.Projects.Contracts.Execution;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -15,8 +17,8 @@ namespace Agw.Agents.Execution.Connections;
 internal sealed class ExecutionConnectionContextFactory
 {
     private readonly IRuntimeFactory _runtimeFactory;
-    private readonly ITaskAppService _taskAppService;
-    private readonly IProjectAppService _projectAppService;
+    private readonly IProjectTaskFacade _projectTasks;
+    private readonly IProjectRuntimeFacade _projects;
     private readonly ExecutionProvider _executionProvider;
     private readonly DurableExecutionCoordinator? _durableCoordinator;
     private readonly AgentflowCheckpointStore _checkpointStore;
@@ -26,15 +28,15 @@ internal sealed class ExecutionConnectionContextFactory
     /// </summary>
     public ExecutionConnectionContextFactory(
         IRuntimeFactory runtimeFactory,
-        ITaskAppService taskAppService,
-        IProjectAppService projectAppService,
+        IProjectTaskFacade projectTasks,
+        IProjectRuntimeFacade projects,
         IOptions<ExecutionRuntimeOptions> executionOptions,
         IServiceProvider serviceProvider
     )
     {
         _runtimeFactory = runtimeFactory;
-        _taskAppService = taskAppService;
-        _projectAppService = projectAppService;
+        _projectTasks = projectTasks;
+        _projects = projects;
         _executionProvider = executionOptions.Value.Provider;
         _durableCoordinator = serviceProvider.GetService<DurableExecutionCoordinator>();
         _checkpointStore = serviceProvider.GetRequiredService<AgentflowCheckpointStore>();
@@ -67,8 +69,8 @@ internal sealed class ExecutionConnectionContextFactory
             messageSink,
             hostToken,
             _runtimeFactory,
-            _taskAppService,
-            _projectAppService,
+            _projectTasks,
+            _projects,
             durableSession,
             _checkpointStore
         );

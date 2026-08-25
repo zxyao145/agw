@@ -9,7 +9,7 @@ using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Mcp;
-using Agw.Shared.Contracts.Projects;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
@@ -231,7 +231,7 @@ public class AgentRuntimeServiceSystemCompositionTests
 
         var runtimeService = CreateRuntimeService(
             agentAppService,
-            new TestProjectAppService(project),
+            new TestProjectRuntimeFacade(project),
             toolRegistry,
             AgwDataPaths.Resolve(root, root),
             connectionResolver,
@@ -421,7 +421,7 @@ public class AgentRuntimeServiceSystemCompositionTests
         };
         var runtimeService = CreateRuntimeService(
             CreateAgentAppService(dbContext),
-            new TestProjectAppService(project),
+            new TestProjectRuntimeFacade(project),
             CreateToolRegistry(),
             AgwDataPaths.Resolve(root, root),
             new TestConnectionCapabilityResolver(CreateResolution([], new TrackingResource())),
@@ -480,7 +480,7 @@ public class AgentRuntimeServiceSystemCompositionTests
 
     private static AgentRuntimeService CreateRuntimeService(
         AgentAppService appService,
-        IProjectAppService projectAppService,
+        IProjectRuntimeFacade projectRuntimeFacade,
         ToolRegistryService toolRegistry,
         AgwDataPaths dataPaths,
         IConnectionCapabilityResolver connectionCapabilityResolver,
@@ -491,7 +491,7 @@ public class AgentRuntimeServiceSystemCompositionTests
     {
         return new AgentRuntimeService(
             appService,
-            projectAppService,
+            projectRuntimeFacade,
             new AgentCapabilityComposer(
                 appService,
                 toolRegistry,
@@ -503,7 +503,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             ),
             chatHistoryProvider: null!,
             providerSessionState: null!,
-            taskSessionBindingService: null!,
+            providerSessions: null!,
             dataPaths,
             fileSystemResolver: null!,
             sessionStateStore: null!,
@@ -784,32 +784,34 @@ public class AgentRuntimeServiceSystemCompositionTests
         public Task SaveChangesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
-    private sealed class TestProjectAppService : IProjectAppService
+    private sealed class TestProjectRuntimeFacade : IProjectRuntimeFacade
     {
         private readonly Project _project;
 
-        public TestProjectAppService(Project project)
+        public TestProjectRuntimeFacade(Project project)
         {
             _project = project;
         }
 
-        public Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null) =>
-            Task.FromResult<IReadOnlyList<Project>>([_project]);
+        public Task<ProjectRuntimeSnapshot?> GetForCurrentUserAsync(
+            Guid projectId,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<ProjectRuntimeSnapshot?>(Map(_project));
 
-        public Task<IReadOnlyList<Project>> ListForCurrentUserAsync() => ListAsync();
+        public Task<string?> GetWorkspaceAsync(Guid projectId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_project.Workspace);
 
-        public Task<string?> GetProjectExtraSettingAsync(Guid? projectId) => Task.FromResult(_project.ExtraSetting);
-
-        public Task<Guid?> ResolveProjectIdAsync(Guid? projectId) => Task.FromResult<Guid?>(_project.Id);
-
-        public Task<Project?> CreateAsync(Project project) => Task.FromResult<Project?>(project);
-
-        public Task<bool> DeleteAsync(Guid id) => Task.FromResult(false);
-
-        public Task<Project?> GetAsync(Guid id) => Task.FromResult<Project?>(_project);
-
-        public Task<Project?> GetForCurrentUserAsync(Guid id) => GetAsync(id);
-
-        public Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction) => Task.FromResult<Project?>(_project);
+        private static ProjectRuntimeSnapshot Map(Project project) =>
+            new(
+                project.Id,
+                project.Name,
+                project.Workspace,
+                project.ExtraSetting,
+                project.Tools,
+                project.EnvironmentVariables,
+                project.ProjectSkillRelations.Select(relation => relation.SkillId).ToArray(),
+                project.ProjectMcpToolServers.Select(relation => relation.McpToolServerId).ToArray(),
+                project.ProjectConnectionRelations.Select(relation => relation.ConnectionId).ToArray()
+            );
     }
 }

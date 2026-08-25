@@ -106,11 +106,11 @@ public class AgentRuntimeServiceSummaryTests
     private static AgentRuntimeService CreateService(IAgentTurnSummaryService summaryService) =>
         new(
             agentAppService: null!,
-            projectAppService: null!,
+            projectRuntimeFacade: null!,
             capabilityComposer: null!,
             chatHistoryProvider: null!,
             providerSessionState: null!,
-            taskSessionBindingService: null!,
+            providerSessions: null!,
             dataPaths: null!,
             fileSystemResolver: null!,
             sessionStateStore: null!,

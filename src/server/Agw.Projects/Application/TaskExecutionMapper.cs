@@ -6,7 +6,7 @@ using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
 using Microsoft.Extensions.AI;
 
-namespace Agw.Projects;
+namespace Agw.Projects.Application;
 
 public static class TaskExecutionMapper
 {

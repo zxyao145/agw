@@ -23,13 +23,16 @@ Agw.Shared/          # Cross-module contracts, errors, results, and utilities
 Agw.A2A/             # A2A discovery, protocol types, and endpoints
 Agw.Auth/            # Cookie/Bearer/LocalTrusted auth, CSRF, and guards
 Agw.Agents/          # Agent/Agentflow definitions, tools, and runtimes
+Agw.Agents.Contracts/ # Cross-module Agent catalog, execution, and turn contracts
 Agw.Files/           # Project file/Git APIs and path security
 Agw.Integrations/    # Plugin catalog, connections, credentials, OAuth, and MCP
 Agw.Jobs/            # Scheduling, project leases, and execution logs
+Agw.Jobs.Contracts/  # Cross-module Job metrics contracts
 Agw.Providers/       # Models, providers, links, and auth configuration
 Agw.Setup/           # First-run setup and server-state persistence
 Agw.Skills/          # Local/remote Skills and execution adapters
 Agw.Projects/        # Projects, tasks, contexts, and history
+Agw.Projects.Contracts/ # Cross-module Project runtime, task/session, snapshot, and metrics contracts
 Agw.Tools/           # Tool/ToolBlock catalog and materialization
 ```
 

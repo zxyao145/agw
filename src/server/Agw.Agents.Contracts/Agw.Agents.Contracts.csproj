@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\Agw.Projects.Contracts\Agw.Projects.Contracts.csproj" />
+    <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
+  </ItemGroup>
+</Project>

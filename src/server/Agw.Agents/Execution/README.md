@@ -258,8 +258,8 @@ flowchart TB
     Human --> Context
     Subscribe --> Context
     Checkpoint --> Context
-    Context --> ProjectService["IProjectAppService"]
-    Context --> TaskService["ITaskAppService"]
+    Context --> ProjectService["IProjectRuntimeFacade"]
+    Context --> TaskService["IProjectTaskFacade"]
     Context --> Factory["RuntimeFactory"]
     Factory --> AgentRuntime["AgentRuntime"]
     Factory --> AgentflowRuntime["AgentflowRuntime"]
@@ -327,7 +327,7 @@ sequenceDiagram
 
 1. `ExecCommandHandler` 校验 `agentId`，然后把命令交给 connection context。
 2. Context 拒绝同一条 connection 上的并发 turn；没有 settings 时创建内置 project 的默认快照。
-3. 首次执行通过 `ITaskAppService` 解析或创建 task，并通过 `IProjectAppService` 解析 workspace；后续 turn 复用两者。
+3. 首次执行通过 `IProjectTaskFacade` 解析或创建 task，并通过 `IProjectRuntimeFacade` 解析 workspace；后续 turn 复用两者。
 4. target 改变时释放旧 runtime；同一 target 则尝试复用。
 5. Context 从当前 connection 状态创建包含 settings、task、target、用户、workspace 和 message sink 的 `RuntimeTurnContext` 快照。
 6. `RuntimeFactory` 确保 workspace 存在，并创建 `AgentRuntime` 或 `AgentflowRuntime`。
@@ -753,7 +753,7 @@ services.AddExecutionCommand<StopCommand, StopCommandHandler>(nameof(StopCommand
 dotnet test tests/Agw.Agents.Tests/Agw.Agents.Tests.csproj
 ```
 
-如果修改了 `IAgentRuntimeService` 或跨模块 namespace，还需要运行：
+如果修改了 `IAgentExecutionFacade` 或跨模块 Contracts，还需要运行：
 
 ```bash
 dotnet test tests/Agw.A2A.Tests/Agw.A2A.Tests.csproj
@@ -762,10 +762,10 @@ dotnet test tests/Agw.Jobs.Tests/Agw.Jobs.Tests.csproj
 
 ## 非 SignalR 调用
 
-A2A 和 Jobs 不经过 `ExecutionHub`、connection registry 或 command dispatcher。它们直接调用 `IAgentRuntimeService` / `IAgentflowRuntimeService`：
+A2A 和 Jobs 不经过 `ExecutionHub`、connection registry 或 command dispatcher。它们只调用 `Agw.Agents.Contracts` 中的 `IAgentExecutionFacade`：
 
-- `IAgentRuntimeService.ExecuteByIdAsync` 用于按 Agent id 执行；
-- `IAgentRuntimeService.CreateRuntimeAsync` 可创建带 SDK session 的 `AgentRuntime`；
-- `IAgentflowRuntimeService.ExecuteAsync` 用于非实时 Agentflow 执行。
+- A2A 使用 streaming 方法并把统一执行事件映射为 A2A 协议事件；
+- Jobs 使用非 streaming 方法等待执行结果；
+- InProcess / Distributed 的选择以及 Agent / Agentflow runtime 的差异都留在 Agents 模块内部；恢复和中断仅通过独立的 `IDurableAgentExecutionFacade` 暴露。
 
-因此，修改 Agent/Agentflow 构造、session 持久化或公共 service 接口时，需要同时检查 SignalR、A2A 和 Jobs；只修改 connection command 时，影响范围通常局限在实时执行链路。
+因此，修改 Agent/Agentflow 构造或 session 持久化时，调用方不需要了解 runtime 实现；修改公开 Contracts 时才需要同时检查 A2A 和 Jobs。只修改 connection command 时，影响范围通常局限在实时执行链路。

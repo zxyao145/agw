@@ -1,5 +1,5 @@
 using System.ComponentModel;
-using Agw.Agents.Execution.Turns;
+using Agw.Agents.Contracts.Execution;
 using Agw.Jobs.Application.Contracts;
 using Agw.Jobs.Application.Services;
 using Agw.Shared;
@@ -18,12 +18,12 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
 {
     private readonly Guid _projectId;
     private readonly IServiceScopeFactory _serviceScopeFactory;
-    private readonly IRuntimeTurnContextAccessor _turnContextAccessor;
+    private readonly ICurrentAgentTurn _turnContextAccessor;
 
     public JobManagementSkill(
         Guid projectId,
         IServiceScopeFactory serviceScopeFactory,
-        IRuntimeTurnContextAccessor turnContextAccessor
+        ICurrentAgentTurn turnContextAccessor
     )
     {
         _projectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Agw.Agents.Contracts.Execution;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Turns;
@@ -9,6 +10,7 @@ using Agw.Jobs.Application.Services;
 using Agw.Jobs.Application.Skills;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
+using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Jobs;
@@ -370,6 +372,8 @@ public class JobManagementSkillTests
             var services = new ServiceCollection();
             services.AddSingleton<TimeProvider>(timeProvider);
             services.AddSingleton<IRuntimeTurnContextAccessor>(turnContextAccessor);
+            services.AddSingleton<ICurrentAgentTurn>(turnContextAccessor);
+            services.AddSingleton<IProjectTaskFacade, NoopProjectTaskFacade>();
             services.AddSingleton<JobScheduleCalculator>();
             services.AddSingleton<JobSchedulerWakeSignal>();
             services.AddScoped(_ => new AgwDbContext(options));
@@ -447,9 +451,12 @@ public class JobManagementSkillTests
             await _connection.DisposeAsync();
         }
 
-        private sealed class TestRuntimeTurnContextAccessor : IRuntimeTurnContextAccessor
+        private sealed class TestRuntimeTurnContextAccessor : IRuntimeTurnContextAccessor, ICurrentAgentTurn
         {
             public RuntimeTurnContext? Current { get; private set; }
+
+            AgentTurnSnapshot? ICurrentAgentTurn.Current =>
+                Current == null ? null : new AgentTurnSnapshot(Current.ProjectId, Current.UserId);
 
             public IDisposable Push(RuntimeTurnContext context)
             {
@@ -471,6 +478,32 @@ public class JobManagementSkillTests
 
                 public void Dispose() => _accessor.Current = _previous;
             }
+        }
+
+        private sealed class NoopProjectTaskFacade : IProjectTaskFacade
+        {
+            public Task<ProjectTaskSnapshot> ResolveAsync(
+                ResolveProjectTaskRequest request,
+                CancellationToken cancellationToken = default
+            ) => throw new NotSupportedException();
+
+            public Task<ProjectTaskSnapshot?> GetAsync(Guid taskId, CancellationToken cancellationToken = default) =>
+                Task.FromResult<ProjectTaskSnapshot?>(null);
+
+            public Task<ProjectTaskSnapshot> GetOrCreateAsync(
+                StartProjectTaskRequest request,
+                CancellationToken cancellationToken = default
+            ) => throw new NotSupportedException();
+
+            public Task<ProjectTaskSnapshot?> FinishAsync(
+                FinishProjectTaskRequest request,
+                CancellationToken cancellationToken = default
+            ) => Task.FromResult<ProjectTaskSnapshot?>(null);
+
+            public Task<IReadOnlyDictionary<Guid, string?>> ResolveContextIdsAsync(
+                IReadOnlyCollection<Guid> taskIds,
+                CancellationToken cancellationToken = default
+            ) => Task.FromResult<IReadOnlyDictionary<Guid, string?>>(new Dictionary<Guid, string?>());
         }
     }
 }

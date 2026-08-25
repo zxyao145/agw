@@ -1,184 +1,110 @@
-using System.Security.Claims;
-using Agw.Agents.Execution.Agentflows;
-using Agw.Agents.Execution.Agents;
-using Agw.Agents.Execution.Agents.Dtos;
-using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Runtimes;
-using Agw.Auth.Contracts;
-using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Repositories;
+using Agw.Agents.Contracts.Execution;
 using Agw.Jobs.Execution;
-using Agw.Projects.Application;
-using Agw.Projects.Domain.Services;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
+using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Jobs;
-using Agw.Shared.Data.Entities.Projects;
-using Microsoft.Agents.AI;
-using Microsoft.Data.Sqlite;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.AI;
 
 namespace Agw.Jobs.Tests;
 
 public sealed class JobAgentExecutorTests
 {
     [Fact]
-    public async Task ExecuteAsync_UsesJobOwnerForRuntimeAndRestoresPreviousUser()
+    public async Task ExecuteAsync_JobOwnerAndTarget_ArePassedThroughFacade()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var originalUser = UserInfoUtil.Current;
-        var previousUser = new ClaimsPrincipal(
-            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "caller")], "Test")
-        );
-        UserInfoUtil.Current = previousUser;
-
-        try
+        var executionId = Guid.CreateVersion7();
+        var agentId = Guid.CreateVersion7();
+        var projectId = Guid.CreateVersion7();
+        var agentExecutions = new RecordingAgentExecutionFacade();
+        var projectTasks = new RecordingProjectTaskFacade();
+        var executor = new JobAgentExecutor(agentExecutions, projectTasks);
+        var job = new Job
         {
-            await using var connection = new SqliteConnection("Data Source=:memory:");
-            await connection.OpenAsync(cancellationToken);
-            var options = new DbContextOptionsBuilder<AgwDbContext>()
-                .UseSqlite(connection)
-                .UseSnakeCaseNamingConvention()
-                .Options;
-            await using var dbContext = new AgwDbContext(options);
-            await dbContext.Database.EnsureCreatedAsync(cancellationToken);
-            var project = new Project
-            {
-                Id = Guid.CreateVersion7(),
-                Name = "Job project",
-                Type = ProjectType.UserDefined,
-                CreateBy = "job-owner",
-                CreateTime = TimeProvider.System.GetUtcNow(),
-            };
-            dbContext.Projects.Add(project);
-            await dbContext.SaveChangesAsync(cancellationToken);
+            Id = Guid.CreateVersion7(),
+            ProjectId = projectId,
+            AgentType = AgentRuntimeType.Agent,
+            AgentId = agentId,
+            Name = "Scheduled agent",
+            Prompt = "run",
+            CreateBy = "job-owner",
+        };
 
-            var taskExecution = new TaskExecutionAppService(
-                new EfRepository<ProjectConversation>(dbContext),
-                new EfRepository<ProjectConversationChatHistory>(dbContext),
-                dbContext,
-                new ProjectConversationChatHistoryDomainService(),
-                new ProjectResolver(new EfRepository<Project>(dbContext)),
-                TimeProvider.System
-            );
-            var runtime = new RecordingAgentRuntimeService();
-            var executor = new JobAgentExecutor(runtime, new ThrowingAgentflowRuntimeService(), taskExecution);
-            var job = new Job
-            {
-                Id = Guid.CreateVersion7(),
-                ProjectId = project.Id,
-                AgentType = AgentRuntimeType.Agent,
-                AgentId = Guid.CreateVersion7(),
-                Name = "Scheduled agent",
-                Prompt = "run",
-                CreateBy = "job-owner",
-            };
+        await executor.ExecuteAsync(job, executionId, cancellationToken);
 
-            await executor.ExecuteAsync(job, Guid.CreateVersion7(), cancellationToken);
-
-            Assert.Equal("job-owner", runtime.ObservedUserId);
-            Assert.Same(previousUser, UserInfoUtil.Current);
-        }
-        finally
-        {
-            UserInfoUtil.Current = originalUser;
-        }
+        Assert.NotNull(agentExecutions.Request);
+        Assert.Equal("job-owner", agentExecutions.Request.OwnerUserId);
+        Assert.Equal(executionId, agentExecutions.Request.ExecutionId);
+        Assert.Equal(agentId, agentExecutions.Request.Target.Id);
+        Assert.Equal(AgentTargetKind.Agent, agentExecutions.Request.Target.Kind);
+        Assert.Equal(projectId, projectTasks.Request?.ProjectId);
     }
 
-    private sealed class RecordingAgentRuntimeService : IAgentRuntimeService
+    private sealed class RecordingAgentExecutionFacade : IAgentExecutionFacade
     {
-        public string? ObservedUserId { get; private set; }
+        public AgentExecutionRequest? Request { get; private set; }
 
-        public Task<AIAgent?> CreateAiAgentAsync(Guid agentId, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
-
-        public Task<AIAgent?> CreateAiAgentAsync(
-            Guid agentId,
-            Guid? projectId,
-            bool resume,
-            CancellationToken cancellationToken = default
-        ) => throw new NotSupportedException();
-
-        public Task<AIAgent?> CreateAiAgentAsync(
-            Guid agentId,
-            Guid? projectId,
-            bool resume,
-            IReadOnlyDictionary<string, string>? environmentVariables,
-            CancellationToken cancellationToken = default
-        ) => throw new NotSupportedException();
-
-        public Task<AgentRuntime?> CreateRuntimeAsync(
-            Guid agentId,
-            TaskProjection task,
-            SettingCommand settings,
-            CancellationToken cancellationToken = default
-        ) => throw new NotSupportedException();
-
-        public IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
-            AgentRuntime session,
-            AgwUserInput input,
-            CancellationToken cancellationToken = default
-        ) => throw new NotSupportedException();
-
-        public Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
-            AgentRuntime session,
-            AgwUserInput input,
-            CancellationToken cancellationToken = default
-        ) => throw new NotSupportedException();
-
-        public Task<AgentExecutionResult?> ExecuteByIdAsync(
-            AgentExecuteByIdRequest request,
+        public Task<AgentExecutionResult> ExecuteAsync(
+            AgentExecutionRequest request,
             CancellationToken cancellationToken = default
         )
         {
-            ObservedUserId = UserInfoUtil.UserId;
-            return Task.FromResult<AgentExecutionResult?>(
-                new AgentExecutionResult(request.TaskId?.ToString("D") ?? "task", request.ContextId ?? "context", [])
-            );
+            Request = request;
+            return Task.FromResult(new AgentExecutionResult(request.ExecutionId, AgentExecutionState.Completed, []));
+        }
+
+        public async IAsyncEnumerable<AgentExecutionEvent> ExecuteStreamingAsync(
+            AgentExecutionRequest request,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
+        )
+        {
+            await Task.CompletedTask;
+            yield break;
         }
     }
 
-    private sealed class ThrowingAgentflowRuntimeService : IAgentflowRuntimeService
+    private sealed class RecordingProjectTaskFacade : IProjectTaskFacade
     {
-        public IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
-            Guid agentflowId,
-            string input,
-            CancellationToken cancellationToken = default,
-            Guid? projectId = null,
-            string? contextId = null,
-            Guid? taskId = null,
-            IHumanGateApprovalHandler? humanGateApprovalHandler = null,
-            IReadOnlyDictionary<string, string>? environmentVariables = null,
-            Guid? conversationId = null,
-            PermissionMode? permissionMode = null
-        ) => throw new NotSupportedException();
+        public StartProjectTaskRequest? Request { get; private set; }
 
-        public Task<AgentflowExecutionResult?> ExecuteAsync(
-            Guid agentflowId,
-            Guid taskId,
-            string input,
-            CancellationToken cancellationToken = default,
-            Guid? projectId = null,
-            string? contextId = null
-        ) => throw new NotSupportedException();
-
-        public Task<AgentflowExecutionResult?> ExecuteAsync(
-            Guid agentflowId,
-            Guid taskId,
-            List<ChatMessage> messages,
-            CancellationToken cancellationToken = default,
-            Guid? projectId = null,
-            string? contextId = null
-        ) => throw new NotSupportedException();
-
-        public Task<AgentflowWorkflowLease?> CreateAiWorkflow(
-            Guid agentflowId,
+        public Task<ProjectTaskSnapshot> ResolveAsync(
+            ResolveProjectTaskRequest request,
             CancellationToken cancellationToken = default
         ) => throw new NotSupportedException();
 
-        public Task<string?> GetMermaidAsync(Guid agentflowId, CancellationToken cancellationToken = default) =>
-            throw new NotSupportedException();
+        public Task<ProjectTaskSnapshot?> GetAsync(Guid taskId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<ProjectTaskSnapshot?>(null);
+
+        public Task<ProjectTaskSnapshot> GetOrCreateAsync(
+            StartProjectTaskRequest request,
+            CancellationToken cancellationToken = default
+        )
+        {
+            Request = request;
+            return Task.FromResult(
+                new ProjectTaskSnapshot(
+                    request.TaskId,
+                    Guid.CreateVersion7(),
+                    request.ProjectId,
+                    request.ContextId ?? request.TaskId.ToString("D"),
+                    request.JobId,
+                    request.Title ?? "Scheduled Job",
+                    request.InitialStatus,
+                    null,
+                    DateTimeOffset.UtcNow,
+                    null,
+                    null
+                )
+            );
+        }
+
+        public Task<ProjectTaskSnapshot?> FinishAsync(
+            FinishProjectTaskRequest request,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<ProjectTaskSnapshot?>(null);
+
+        public Task<IReadOnlyDictionary<Guid, string?>> ResolveContextIdsAsync(
+            IReadOnlyCollection<Guid> taskIds,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<IReadOnlyDictionary<Guid, string?>>(new Dictionary<Guid, string?>());
     }
 }

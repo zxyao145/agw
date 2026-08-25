@@ -416,11 +416,11 @@ public class AgentRuntimeServiceCompositionTests
     private static AgentRuntimeService CreateRuntimeService(ChatHistoryProvider historyProvider) =>
         new(
             agentAppService: null!,
-            projectAppService: null!,
+            projectRuntimeFacade: null!,
             capabilityComposer: null!,
             historyProvider,
             providerSessionState: null!,
-            taskSessionBindingService: null!,
+            providerSessions: null!,
             dataPaths: null!,
             fileSystemResolver: null!,
             sessionStateStore: null!,

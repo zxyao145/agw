@@ -91,10 +91,11 @@ flowchart LR
 
 #### `JobAgentExecutor`
 
-每次运行都会生成新的 `contextId`，并通过 `TaskExecutionAppService.CreateRunningForExecutionAsync` 使用认领阶段生成的 executionId 创建项目 Task。随后根据 `AgentType` 选择执行入口：
+每次运行都会生成新的 `contextId`，并通过 `IProjectTaskFacade` 使用认领阶段生成的 executionId 创建项目 Task。随后把目标类型和 ID 交给 `IAgentExecutionFacade`：
 
-- `AgentRuntimeType.Agent`：调用 `IAgentRuntimeService.ExecuteByIdAsync`；
-- `AgentRuntimeType.Agentflow`：调用 `IAgentflowRuntimeService.ExecuteAsync`。
+- Agents 模块内部根据目标类型选择 Agent 或 Agentflow runtime；
+- Agents 模块内部根据 `Execution:Provider` 选择 InProcess 或 Distributed；
+- Jobs 不再引用具体 RuntimeService、durable client 或 Projects AppService。
 
 执行成功后，项目 Task 标记为成功；发生异常时，项目 Task 标记为失败，异常继续交给调度器处理重试。Job 没有 `AgentId` 或 `AgentType` 时，创建接口仍可保存它，但真正执行时会失败。
 

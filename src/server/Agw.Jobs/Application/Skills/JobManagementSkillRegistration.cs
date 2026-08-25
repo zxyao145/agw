@@ -1,4 +1,4 @@
-using Agw.Agents.Execution.Turns;
+using Agw.Agents.Contracts.Execution;
 using Agw.Skills.Contracts.Registration;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,11 +13,11 @@ public sealed class JobManagementSkillRegistration : IAgentSkillRegistration
     public static readonly Guid SkillId = Guid.Parse("11111111-1111-1111-8888-000000000002");
 
     private readonly IServiceScopeFactory _serviceScopeFactory;
-    private readonly IRuntimeTurnContextAccessor _turnContextAccessor;
+    private readonly ICurrentAgentTurn _turnContextAccessor;
 
     public JobManagementSkillRegistration(
         IServiceScopeFactory serviceScopeFactory,
-        IRuntimeTurnContextAccessor turnContextAccessor
+        ICurrentAgentTurn turnContextAccessor
     )
     {
         _serviceScopeFactory = serviceScopeFactory;

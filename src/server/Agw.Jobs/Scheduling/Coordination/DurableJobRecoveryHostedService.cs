@@ -1,7 +1,6 @@
-using Agw.Agents.Execution.Durable;
+using Agw.Agents.Contracts.Execution;
 using Agw.Jobs.Execution;
 using Agw.Jobs.Scheduling.Attempts;
-using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
@@ -84,8 +83,8 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
 
         var executionId = currentJob.ActiveExecutionId.Value;
         var ownerUserId = JobAgentExecutor.ResolveOwnerUserId(currentJob);
-        var executionClient = scope.ServiceProvider.GetRequiredService<IDurableExecutionClient>();
-        DurableExecutionOutcome outcome;
+        var executionClient = scope.ServiceProvider.GetRequiredService<IDurableAgentExecutionFacade>();
+        AgentExecutionResult outcome;
         try
         {
             outcome = await executionClient.GetOutcomeAsync(executionId, ownerUserId, cancellationToken);
@@ -103,17 +102,12 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
             return;
         }
 
-        if (
-            outcome.Status
-            is DurableExecutionStatus.Queued
-                or DurableExecutionStatus.Running
-                or DurableExecutionStatus.Resuming
-        )
+        if (outcome.State is AgentExecutionState.Queued or AgentExecutionState.Running)
         {
             return;
         }
 
-        if (outcome.Status == DurableExecutionStatus.WaitingForHuman)
+        if (outcome.State == AgentExecutionState.WaitingForHuman)
         {
             await executionClient.InterruptAsync(
                 executionId,
@@ -132,7 +126,7 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
             return;
         }
 
-        if (outcome.Status == DurableExecutionStatus.Completed)
+        if (outcome.State == AgentExecutionState.Completed)
         {
             await RecordOutcomeAsync(
                 scope.ServiceProvider,

@@ -8,6 +8,7 @@ using Agw.Jobs.Api;
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
+using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Repositories;
 using Agw.Testing;
@@ -143,6 +144,7 @@ public class JobsApiTests
             );
             builder.Services.AddSingleton<JobScheduleCalculator>();
             builder.Services.AddSingleton<JobSchedulerWakeSignal>();
+            builder.Services.AddScoped<IProjectTaskFacade, NoopProjectTaskFacade>();
             builder.Services.AddScoped<JobAppService>();
 
             var app = builder.Build();
@@ -164,5 +166,31 @@ public class JobsApiTests
             await _app.DisposeAsync();
             await _connection.DisposeAsync();
         }
+    }
+
+    private sealed class NoopProjectTaskFacade : IProjectTaskFacade
+    {
+        public Task<ProjectTaskSnapshot> ResolveAsync(
+            ResolveProjectTaskRequest request,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<ProjectTaskSnapshot?> GetAsync(Guid taskId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<ProjectTaskSnapshot?>(null);
+
+        public Task<ProjectTaskSnapshot> GetOrCreateAsync(
+            StartProjectTaskRequest request,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<ProjectTaskSnapshot?> FinishAsync(
+            FinishProjectTaskRequest request,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<ProjectTaskSnapshot?>(null);
+
+        public Task<IReadOnlyDictionary<Guid, string?>> ResolveContextIdsAsync(
+            IReadOnlyCollection<Guid> taskIds,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<IReadOnlyDictionary<Guid, string?>>(new Dictionary<Guid, string?>());
     }
 }

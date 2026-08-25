@@ -1,12 +1,7 @@
-using System.Security.Claims;
-using Agw.Agents.Execution.Agentflows;
-using Agw.Agents.Execution.Agents;
-using Agw.Agents.Execution.Agents.Dtos;
-using Agw.Auth.Contracts;
-using Agw.Projects;
-using Agw.Projects.Contracts;
+using Agw.Agents.Contracts.Execution;
+using Agw.Projects.Contracts.Execution;
 using Agw.Shared;
-using Agw.Shared.Contracts.Projects;
+using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
@@ -16,19 +11,13 @@ namespace Agw.Jobs.Execution;
 
 public sealed class JobAgentExecutor : IJobAgentExecutor
 {
-    private readonly IAgentRuntimeService _agentRuntimeService;
-    private readonly IAgentflowRuntimeService _agentflowRuntimeService;
-    private readonly ITaskExecutionService _taskExecutionService;
+    private readonly IAgentExecutionFacade _agentExecutions;
+    private readonly IProjectTaskFacade _projectTasks;
 
-    public JobAgentExecutor(
-        IAgentRuntimeService agentRuntimeService,
-        IAgentflowRuntimeService agentflowRuntimeService,
-        ITaskExecutionService taskExecutionService
-    )
+    public JobAgentExecutor(IAgentExecutionFacade agentExecutions, IProjectTaskFacade projectTasks)
     {
-        _agentRuntimeService = agentRuntimeService;
-        _agentflowRuntimeService = agentflowRuntimeService;
-        _taskExecutionService = taskExecutionService;
+        _agentExecutions = agentExecutions;
+        _projectTasks = projectTasks;
     }
 
     public async Task ExecuteAsync(Job job, Guid executionId, CancellationToken cancellationToken)
@@ -41,59 +30,40 @@ public sealed class JobAgentExecutor : IJobAgentExecutor
         var (prompt, title) = BuildPromptAndTitle(job);
         var contextId = ContextIdUtil.GenContextId();
         var ownerUserId = ResolveOwnerUserId(job);
-        var createResult = await _taskExecutionService.CreateRunningForExecutionAsync(
-            job.ProjectId,
-            executionId,
-            new TaskCreateRequest(JobId: job.Id, Input: prompt, Title: title, ContextId: contextId),
-            ownerUserId
-        );
-
-        if (createResult.Type != ApplicationResultType.Success || createResult.Value == null)
-        {
-            throw new AgwException(
-                ErrorCodes.TaskCreationFailed,
-                createResult.Error ?? "Failed to create task for job execution."
-            );
-        }
-
-        var previousUser = UserInfoUtil.Current;
-        UserInfoUtil.Current = CreateUserPrincipal(ownerUserId);
-        object? execution;
-        try
-        {
-            execution = job.AgentType.Value switch
-            {
-                AgentRuntimeType.Agent => await _agentRuntimeService.ExecuteByIdAsync(
-                    new AgentExecuteByIdRequest(prompt, job.AgentId.Value, executionId, job.ProjectId, contextId),
-                    cancellationToken
-                ),
-                AgentRuntimeType.Agentflow => await _agentflowRuntimeService.ExecuteAsync(
-                    job.AgentId.Value,
-                    executionId,
-                    prompt,
-                    cancellationToken,
+        var task = await _projectTasks
+            .GetOrCreateAsync(
+                new StartProjectTaskRequest(
                     job.ProjectId,
-                    contextId
+                    executionId,
+                    job.Id,
+                    prompt,
+                    title,
+                    contextId,
+                    ownerUserId,
+                    ProjectTaskStatus.Running
                 ),
-                _ => throw new AgwException(
-                    ErrorCodes.UnsupportedAgentType,
-                    $"Unsupported agent type: {job.AgentType}"
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+        var input = new AgwUserInput
+        {
+            MessageId = executionId.ToString("D"),
+            Author = Constants.DefaultInputAuthor,
+            Contents = [new AgwTextContent { Content = prompt }],
+        };
+        _ = await _agentExecutions
+            .ExecuteAsync(
+                new AgentExecutionRequest(
+                    executionId,
+                    ownerUserId,
+                    new AgentTarget(Map(job.AgentType.Value), job.AgentId.Value),
+                    task,
+                    input,
+                    HumanInteractionPolicy: HumanInteractionPolicy.Reject
                 ),
-            };
-        }
-        finally
-        {
-            UserInfoUtil.Current = previousUser;
-        }
-
-        if (execution == null)
-        {
-            var targetText = job.AgentType == AgentRuntimeType.Agent ? "Agent" : "Agentflow";
-            throw new AgwException(
-                ErrorCodes.AgentExecutionFailed,
-                $"{targetText} execution failed (target disabled/missing or runtime unavailable)."
-            );
-        }
+                cancellationToken
+            )
+            .ConfigureAwait(false);
     }
 
     internal static (string Prompt, string Title) BuildPromptAndTitle(Job job)
@@ -107,7 +77,7 @@ public sealed class JobAgentExecutor : IJobAgentExecutor
         {
             var title = !string.IsNullOrWhiteSpace(trimmedName)
                 ? trimmedName
-                : TaskTitleFactory.Create(trimmedPrompt, "Scheduled Job");
+                : CreateTitle(trimmedPrompt, "Scheduled Job");
 
             return (trimmedPrompt, title);
         }
@@ -123,6 +93,17 @@ public sealed class JobAgentExecutor : IJobAgentExecutor
     internal static string ResolveOwnerUserId(Job job) =>
         string.IsNullOrWhiteSpace(job.CreateBy) ? Constants.AdminUserId : job.CreateBy;
 
-    private static ClaimsPrincipal CreateUserPrincipal(string userId) =>
-        new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], "JobExecution"));
+    private static AgentTargetKind Map(AgentRuntimeType type) =>
+        type switch
+        {
+            AgentRuntimeType.Agent => AgentTargetKind.Agent,
+            AgentRuntimeType.Agentflow => AgentTargetKind.Agentflow,
+            _ => throw new AgwException(ErrorCodes.UnsupportedAgentType, $"Unsupported agent type: {type}"),
+        };
+
+    private static string CreateTitle(string? text, string fallback)
+    {
+        var trimmed = text?.Trim();
+        return string.IsNullOrWhiteSpace(trimmed) ? fallback : trimmed[..Math.Min(trimmed.Length, 80)];
+    }
 }

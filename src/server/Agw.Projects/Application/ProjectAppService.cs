@@ -1,10 +1,10 @@
 using System.Linq.Expressions;
+using Agw.Agents.Contracts.Catalog;
 using Agw.Auth.Contracts;
 using Agw.Files.Utils;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Skills;
@@ -17,7 +17,7 @@ public class ProjectAppService : IProjectAppService
 {
     private readonly IRepository<Project> _projectRepository;
     private readonly IRepository<ProjectMcpServerRelation> _projectMcpToolServerRepository;
-    private readonly IRepository<McpServer> _mcpToolServerRepository;
+    private readonly IAgentCatalogFacade _agentCatalog;
     private readonly IRepository<ProjectSkillRelation> _projectSkillRelationRepository;
     private readonly IRepository<Skill> _skillRepository;
     private readonly IRepository<ProjectConnectionRelation> _projectConnectionRelationRepository;
@@ -31,7 +31,7 @@ public class ProjectAppService : IProjectAppService
     public ProjectAppService(
         IRepository<Project> projectRepository,
         IRepository<ProjectMcpServerRelation> projectMcpToolServerRepository,
-        IRepository<McpServer> mcpToolServerRepository,
+        IAgentCatalogFacade agentCatalog,
         IRepository<ProjectSkillRelation> projectSkillRelationRepository,
         IRepository<Skill> skillRepository,
         IRepository<ProjectConnectionRelation> projectConnectionRelationRepository,
@@ -45,7 +45,7 @@ public class ProjectAppService : IProjectAppService
     {
         _projectRepository = projectRepository;
         _projectMcpToolServerRepository = projectMcpToolServerRepository;
-        _mcpToolServerRepository = mcpToolServerRepository;
+        _agentCatalog = agentCatalog;
         _projectSkillRelationRepository = projectSkillRelationRepository;
         _skillRepository = skillRepository;
         _projectConnectionRelationRepository = projectConnectionRelationRepository;
@@ -194,9 +194,7 @@ public class ProjectAppService : IProjectAppService
         var validIds =
             requestedIds.Count == 0
                 ? []
-                : (await _mcpToolServerRepository.ListAsync(server => requestedIds.Contains(server.Id)))
-                    .Select(server => server.Id)
-                    .ToList();
+                : (await _agentCatalog.FilterExistingMcpServerIdsAsync(requestedIds).ConfigureAwait(false)).ToList();
         var removedIds = currentIds.Except(validIds).ToList();
         if (removedIds.Count > 0)
         {

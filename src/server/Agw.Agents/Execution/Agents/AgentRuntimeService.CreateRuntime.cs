@@ -2,6 +2,7 @@ using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Runtimes;
+using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Utils;
@@ -140,19 +141,16 @@ public partial class AgentRuntimeService
             return null;
         }
 
-        var binding = await _taskSessionBindingService.GetAsync(
-            projectId,
-            contextId,
-            agent.Id,
-            agent.Name,
+        var providerSessionId = await _providerSessions.GetProviderSessionIdAsync(
+            new ProjectProviderSessionReference(projectId, contextId, agent.Id, agent.Name),
             cancellationToken
         );
-        if (binding == null)
+        if (providerSessionId == null)
         {
             return null;
         }
 
-        return Guid.TryParse(binding.ProviderSessionId, out var providerSessionId) ? providerSessionId : null;
+        return Guid.TryParse(providerSessionId, out var parsedProviderSessionId) ? parsedProviderSessionId : null;
     }
 
     internal static (Guid? ProviderSessionId, bool IsResume) ResolveExternalProviderSession(
@@ -189,11 +187,8 @@ public partial class AgentRuntimeService
         {
             try
             {
-                await _taskSessionBindingService.UpsertAsync(
-                    task.ProjectId,
-                    contextId,
-                    agent.Id,
-                    agent.Name,
+                await _providerSessions.SaveProviderSessionIdAsync(
+                    new ProjectProviderSessionReference(task.ProjectId, contextId, agent.Id, agent.Name),
                     providerSessionId,
                     _turnContextAccessor?.Current?.UserId ?? Constants.AdminUserId,
                     CancellationToken.None

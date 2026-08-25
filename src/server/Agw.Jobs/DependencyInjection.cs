@@ -1,5 +1,7 @@
+using Agw.Jobs.Application.Facades;
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Application.Skills;
+using Agw.Jobs.Contracts.Metrics;
 using Agw.Jobs.Execution;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Attempts;
@@ -24,14 +26,10 @@ public static class DependencyInjection
         if (registrationOptions.AddScheduler)
         {
             services.AddHostedService<JobHostedService>();
+            services.AddScoped<IJobAgentExecutor, JobAgentExecutor>();
             if (registrationOptions.UseDurableExecution)
             {
-                services.AddScoped<IJobAgentExecutor, DurableJobAgentExecutor>();
                 services.AddHostedService<DurableJobRecoveryHostedService>();
-            }
-            else
-            {
-                services.AddScoped<IJobAgentExecutor, JobAgentExecutor>();
             }
             services.AddScoped<JobAttemptRunner>();
             services.AddScoped<IJobAttemptOutcomeRecorder, JobAttemptOutcomeRecorder>();
@@ -40,6 +38,7 @@ public static class DependencyInjection
         }
         services.AddSingleton<IAgentSkillRegistration, JobManagementSkillRegistration>();
         services.AddScoped<JobAppService>();
+        services.AddScoped<IJobMetricsFacade, JobMetricsFacade>();
         return services;
     }
 }

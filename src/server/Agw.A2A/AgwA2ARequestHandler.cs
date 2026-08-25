@@ -4,7 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using A2A;
 using Agw.A2A.Extensions;
-using Agw.Agents.Execution.Turns;
+using Agw.Agents.Contracts.Execution;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -358,7 +358,7 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         await using (var scope = _serviceScopeFactory.CreateAsyncScope())
         {
             var durableBridge = scope.ServiceProvider.GetService<IDurableA2AExecutionBridge>();
-            if (durableBridge != null)
+            if (durableBridge is { SupportsDurableOperations: true })
             {
                 var interrupted = await durableBridge.CancelAsync(request.Id, cancellationToken).ConfigureAwait(false);
                 if (!interrupted)
@@ -432,7 +432,7 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
 
         await using var durableScope = _serviceScopeFactory.CreateAsyncScope();
         var durableBridge = durableScope.ServiceProvider.GetService<IDurableA2AExecutionBridge>();
-        if (durableBridge != null)
+        if (durableBridge is { SupportsDurableOperations: true })
         {
             var durableTask =
                 await _taskStore.GetTaskAsync(request.Id, cancellationToken).ConfigureAwait(false)
@@ -469,7 +469,7 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
             {
                 var eventQueue = new AgentEventQueue();
                 var updater = new TaskUpdater(eventQueue, request.Id, durableTask.ContextId);
-                if (TurnMessageProtocol.TryGetFinishedStatus(message, out var status))
+                if (AgentExecutionMessageProtocol.TryGetFinishedStatus(message, out var status))
                 {
                     await CommonAgentHandler
                         .ApplyTerminalStatusAsync(updater, durableContext, status, cancellationToken)

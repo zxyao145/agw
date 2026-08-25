@@ -249,12 +249,12 @@ public class SkillAppServiceRemoteTests
             CacheRepository = new TestRepository<RemoteSkillCache>(caches ?? [], entity => entity.SkillId);
             RefreshLock = new TestRemoteSkillRefreshLock();
             Logger = new TestLogger<SkillAppService>();
+            var unitOfWork = new TestUnitOfWork();
             Service = new SkillAppService(
                 SkillRepository,
-                new TestRepository<Agent>([], entity => entity.Id),
-                new TestRepository<AgentSkillRelation>([], _ => Guid.Empty),
+                new TestAgentReferenceFacade(new TestRepository<AgentSkillRelation>([], _ => Guid.Empty), unitOfWork),
                 CacheRepository,
-                new TestUnitOfWork(),
+                unitOfWork,
                 new SkillDomainService(new TestTimeProvider(UtcNow)),
                 dataPaths,
                 Logger,

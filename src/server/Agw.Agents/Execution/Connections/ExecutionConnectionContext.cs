@@ -4,10 +4,13 @@ using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Durable;
+using Agw.Agents.Execution.Mapping;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Turns;
 using Agw.Files.Utils;
+using Agw.Projects.Contracts.Execution;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data;
@@ -27,8 +30,8 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     private readonly IExecutionMessageSink _messageSink;
     private readonly CancellationToken _hostToken;
     private readonly IRuntimeFactory _runtimeFactory;
-    private readonly ITaskAppService _taskAppService;
-    private readonly IProjectAppService _projectAppService;
+    private readonly IProjectTaskFacade _projectTasks;
+    private readonly IProjectRuntimeFacade _projects;
     private readonly DurableExecutionSession? _durableSession;
     private readonly AgentflowCheckpointStore? _checkpointStore;
     private RuntimeBase? _runtime;
@@ -44,8 +47,8 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         IExecutionMessageSink messageSink,
         CancellationToken hostToken,
         IRuntimeFactory runtimeFactory,
-        ITaskAppService taskAppService,
-        IProjectAppService projectAppService,
+        IProjectTaskFacade projectTasks,
+        IProjectRuntimeFacade projects,
         DurableExecutionSession? durableSession = null,
         AgentflowCheckpointStore? checkpointStore = null
     )
@@ -54,8 +57,8 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         _messageSink = messageSink;
         _hostToken = hostToken;
         _runtimeFactory = runtimeFactory;
-        _taskAppService = taskAppService;
-        _projectAppService = projectAppService;
+        _projectTasks = projectTasks;
+        _projects = projects;
         _durableSession = durableSession;
         _checkpointStore = checkpointStore;
     }
@@ -472,20 +475,18 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     {
         if (_resolvedTask == null)
         {
-            var resolution = await _taskAppService.ResolveTaskAsync(
-                new ExecutionTaskRequest(
+            var task = await _projectTasks.ResolveAsync(
+                new ResolveProjectTaskRequest(
                     TaskId: null,
                     ProjectId: Settings!.ProjectId,
                     ContextId: Settings.ContextId,
                     Input: AgwMessageUtil.ExtractInputText(command.Input),
                     Resume: Settings.Resume,
-                    User: _userId
+                    OwnerUserId: _userId
                 ),
                 cancellationToken
             );
-            _resolvedTask =
-                resolution.Task
-                ?? throw new AgwException(ErrorCodes.InvalidParam, "Execution task could not be resolved.");
+            _resolvedTask = ProjectTaskProjectionMapper.Map(task);
         }
 
         if (_workspace != null)
@@ -494,9 +495,10 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         }
 
         var project =
-            await _projectAppService.GetForCurrentUserAsync(_resolvedTask.ProjectId)
+            await _projects.GetForCurrentUserAsync(_resolvedTask.ProjectId, cancellationToken)
             ?? throw new AgwException(ErrorCodes.InvalidParam, $"Project '{_resolvedTask.ProjectId}' was not found.");
-        _workspace = Path.GetFullPath(PathUtil.ExpandTilde(project.GetMustWorkspace().Trim()));
+        var configuredWorkspace = string.IsNullOrEmpty(project.Workspace) ? "~/.agw/temp" : project.Workspace;
+        _workspace = Path.GetFullPath(PathUtil.ExpandTilde(configuredWorkspace.Trim()));
     }
 
     private async Task ReleaseRuntimeAsync()

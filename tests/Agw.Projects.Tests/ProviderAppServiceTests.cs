@@ -450,7 +450,9 @@ public class ProviderAppServiceTests
             new ProviderDomainService(TimeProvider.System),
             new ModelDomainService(TimeProvider.System),
             new ModelProviderDomainService(TimeProvider.System),
-            new ModelProviderUsageGuard(new EfRepository<Agent>(dbContext), new EfRepository<Agentflow>(dbContext))
+            new ModelProviderUsageGuard(
+                new TestAgentReferenceFacade(new EfRepository<Agent>(dbContext), new EfRepository<Agentflow>(dbContext))
+            )
         );
     }
 

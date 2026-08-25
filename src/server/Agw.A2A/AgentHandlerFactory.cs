@@ -1,9 +1,8 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using A2A;
-using Agw.Agents.Execution.Turns;
+using Agw.Agents.Contracts.Execution;
 using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Exceptions;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -81,7 +80,7 @@ public class CommonAgentHandler : IAgentHandler
                         .ConfigureAwait(false)
                 )
                 {
-                    if (TurnMessageProtocol.TryGetFinishedStatus(message, out var status))
+                    if (AgentExecutionMessageProtocol.TryGetFinishedStatus(message, out var status))
                     {
                         terminalStatus = status;
                         continue;
@@ -95,17 +94,10 @@ public class CommonAgentHandler : IAgentHandler
                 var result = await _executionBridge
                     .ExecuteAsync(_agentName, context, input, cancellationToken)
                     .ConfigureAwait(false);
-                if (result is null)
-                {
-                    throw new AgwException(
-                        ErrorCodes.AgentReturnedNoResult,
-                        $"Agent '{_agentName}' returned no result."
-                    );
-                }
 
                 foreach (var message in result.Messages)
                 {
-                    if (TurnMessageProtocol.TryGetFinishedStatus(message, out var status))
+                    if (AgentExecutionMessageProtocol.TryGetFinishedStatus(message, out var status))
                     {
                         terminalStatus = status;
                         continue;
@@ -183,7 +175,7 @@ public class CommonAgentHandler : IAgentHandler
         CancellationToken cancellationToken
     )
     {
-        if (TurnMessageProtocol.IsFinished(message))
+        if (AgentExecutionMessageProtocol.IsFinished(message))
         {
             return;
         }
@@ -256,17 +248,20 @@ public class CommonAgentHandler : IAgentHandler
         CancellationToken cancellationToken
     )
     {
-        if (status is null || string.Equals(status, TurnMessageProtocol.CompletedStatus, StringComparison.Ordinal))
+        if (
+            status is null
+            || string.Equals(status, AgentExecutionMessageProtocol.CompletedStatus, StringComparison.Ordinal)
+        )
         {
             return updater.CompleteAsync(CreateStatusMessage(context, "Completed"), cancellationToken).AsTask();
         }
 
-        if (string.Equals(status, TurnMessageProtocol.InterruptedStatus, StringComparison.Ordinal))
+        if (string.Equals(status, AgentExecutionMessageProtocol.InterruptedStatus, StringComparison.Ordinal))
         {
             return updater.CancelAsync(cancellationToken).AsTask();
         }
 
-        var message = string.Equals(status, TurnMessageProtocol.FailedStatus, StringComparison.Ordinal)
+        var message = string.Equals(status, AgentExecutionMessageProtocol.FailedStatus, StringComparison.Ordinal)
             ? "The agent execution failed."
             : $"The agent execution ended with unsupported status '{status}'.";
         return updater.FailAsync(CreateStatusMessage(context, message), cancellationToken).AsTask();

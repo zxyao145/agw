@@ -1,6 +1,6 @@
 using System.Linq.Expressions;
 using System.Reflection;
-using Agw.Agents.Execution.Durable;
+using Agw.Agents.Contracts.Execution;
 using Agw.Jobs.Scheduling.Attempts;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
@@ -30,7 +30,7 @@ public sealed class DurableJobRecoveryHostedServiceTests
         var recorder = new RecordingOutcomeRecorder();
         var services = new ServiceCollection()
             .AddSingleton<IRepository<Job>>(new InMemoryJobRepository(job))
-            .AddSingleton<IDurableExecutionClient>(new MissingDurableExecutionClient())
+            .AddSingleton<IDurableAgentExecutionFacade>(new MissingDurableExecutionFacade())
             .AddSingleton<IJobAttemptOutcomeRecorder>(recorder)
             .BuildServiceProvider();
         var timeProvider = TimeProvider.System;
@@ -55,28 +55,19 @@ public sealed class DurableJobRecoveryHostedServiceTests
         Assert.Contains("was not registered", recorder.ErrorMessage, StringComparison.Ordinal);
     }
 
-    private sealed class MissingDurableExecutionClient : IDurableExecutionClient
+    private sealed class MissingDurableExecutionFacade : IDurableAgentExecutionFacade
     {
-        public Task StartAsync(DurableExecutionRequest request, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
-
-        public Task<DurableExecutionOutcome> GetOutcomeAsync(
+        public Task<AgentExecutionResult> GetOutcomeAsync(
             Guid executionId,
-            string userId,
-            CancellationToken cancellationToken
+            string ownerUserId,
+            CancellationToken cancellationToken = default
         ) => throw new AgwException(ErrorCodes.DurableExecutionNotFound);
 
-        public Task<DurableExecutionOutcome> WaitForActionableOutcomeAsync(
+        public async IAsyncEnumerable<AgentExecutionEvent> SubscribeAsync(
             Guid executionId,
-            string userId,
-            CancellationToken cancellationToken
-        ) => throw new NotSupportedException();
-
-        public async IAsyncEnumerable<DurableExecutionEvent> ReadAsync(
-            Guid executionId,
-            string userId,
+            string ownerUserId,
             string? afterCursor,
-            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
         )
         {
             await Task.CompletedTask;
@@ -85,9 +76,9 @@ public sealed class DurableJobRecoveryHostedServiceTests
 
         public Task<bool> InterruptAsync(
             Guid executionId,
-            string userId,
-            string? reason,
-            CancellationToken cancellationToken
+            string ownerUserId,
+            string reason,
+            CancellationToken cancellationToken = default
         ) => throw new NotSupportedException();
     }
 
