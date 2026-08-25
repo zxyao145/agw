@@ -45,8 +45,8 @@ Api → Application → Domain ← Infrastructure
 ```
 
 - **Api**: Controllers, DTOs, routing, validation
-- **Application**: Use cases, workflows, service coordination
-- **Domain**: Entities, value objects, business rules (pure, framework-free)
+- **Application**: Use cases, workflows, service coordination, external-fact loading, and Domain rule invocation
+- **Domain**: Anemic entities/value objects plus framework-free Behaviors, Policies, and genuine cross-boundary DomainServices
 - **Infrastructure**: Repositories, DB access, external APIs
 
 Dependencies must always point **inward**. Domain never depends on anything else.
@@ -55,7 +55,33 @@ Dependencies must always point **inward**. Domain never depends on anything else
 
 ## 3. Anemic domain model
 
-Domain objects (entities, value objects) contain **only data** — no business behavior. All business behavior lives in **Application-layer services** (AppService / DomainService).
+Persisted entities, domain data objects, value objects, and state snapshots MUST remain anemic and contain data only. They MUST NEVER declare business methods, operator overloads, computed domain properties, state transitions, business validation or normalization, derived domain decisions, or domain-event collections.
+
+Behavior that a rich model would place on an entity MUST live in the owner Module at `Domain/Behaviors/<Entity>Behavior.cs`.
+
+### Behavior construction and lifetime
+
+- An entity-bound Behavior MUST be a concrete `<Entity>Behavior` class and MUST be created manually with `new` by Application code.
+- A Behavior constructor binds exactly one complete data root. Owned children MUST already be loaded into that consistency boundary.
+- A Behavior MAY mutate the bound root and its owned children. It MUST NOT mutate foreign entities.
+- External facts, time, and actor identity MUST be resolved by Application and passed to Behavior methods as values or read-only context.
+- A Behavior MUST NEVER be registered with IoC, cached, serialized, shared across threads, or reused across use cases.
+- A Behavior MUST NOT define an `I<Entity>Behavior` Interface unless two real Adapters exist and the architecture decision is explicitly approved.
+
+### Behavior dependencies
+
+A Behavior MUST remain framework-free and MUST NOT depend on EF Core, ASP.NET Core, `DbContext`, repositories, `IServiceProvider`, `HttpClient`, files, MAF/MCP, current-user accessors, or Infrastructure Adapters. Audit stamping remains in the EF interceptors.
+
+Application owns authorization, external queries, Behavior construction, use-case ordering, transactions, persistence, and boundary error mapping. If a Behavior returns a transition fact, Application handles it only after persistence succeeds; data objects never hold domain-event collections.
+
+### Policy and DomainService construction
+
+- A pure Domain Policy SHOULD be constructed manually at its call site by default. This is a simplicity default, not a prohibition on IoC when a real composition need exists.
+- A genuine DomainService MAY be managed by IoC only when its rule spans multiple data boundaries and does not belong to one root Behavior.
+- An IoC-managed DomainService MUST remain stateless and its constructor dependencies MUST be pure Domain components. It MUST NOT depend on persistence, transport, current-user, clock, filesystem, MAF/MCP, Application, or Infrastructure services.
+- A DomainService MUST NOT capture a Behavior or data root. Application passes domain data and external facts to its methods, then applies resulting decisions through the relevant Behaviors.
+
+Do not create an empty Behavior for simple CRUD, settings, audit rows, or read models. Existing entity-specific `DomainService` classes and existing entity methods are migration debt protected by a decreasing architecture-test allowlist; new single-root DomainServices are forbidden.
 
 ---
 

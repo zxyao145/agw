@@ -40,9 +40,19 @@ Agw.Tools/           # Tool/ToolBlock catalog and materialization
 
 ### Module Layering
 
-Backend modules use `Api → Application → Domain ← Infrastructure`. Api owns protocol adapters, Application owns use cases, Domain contains data-only entities/value objects, and Infrastructure implements persistence and external adapters. Dependencies point inward.
+Backend modules use `Api → Application → Domain ← Infrastructure`. Api owns protocol adapters, Application owns use cases, Domain contains data-only entities/value objects plus framework-free Behaviors, Policies, and genuine cross-boundary DomainServices, and Infrastructure implements persistence and external adapters. Dependencies point inward.
 
 Modules that own persisted entities expose an `I<Module>DbContext` persistence seam from `Application/Persistence`. The single scoped `AgwDbContext` implements all eight seams; module code may use only its own interface, while cross-module transactions remain explicit Infrastructure adapters.
+
+### Anemic Data and Behavior Pattern
+
+- Persisted entities, domain data objects, value objects, and state snapshots are permanently anemic and contain data only. Never add business validation, normalization, state transitions, derived domain decisions, or domain-event collections to data types.
+- Behavior that a rich model would place on an entity belongs in a concrete `Domain/Behaviors/<Entity>Behavior` class in the owner module.
+- Application must load the complete consistency boundary and manually construct the Behavior with `new <Entity>Behavior(entity)`. Never register a Behavior with IoC, create an `I<Entity>Behavior` interface, cache/serialize/reuse a Behavior, or use primary constructors.
+- A Behavior may mutate only the bound root and its owned children. External facts, time, and actor identity are method parameters; Repository, DbContext, HTTP, files, MAF/MCP, current-user accessors, IServiceProvider, and Infrastructure adapters are forbidden dependencies.
+- Construction depends on the domain component: Behavior must be constructed manually, pure Policy should be constructed manually by default, and a genuine DomainService spanning multiple data boundaries may be managed by IoC. An IoC-managed DomainService must remain stateless and may depend only on pure Domain components.
+- Application owns authorization, external queries, Behavior construction, transactions, persistence, and boundary error mapping. Audit stamping remains in EF interceptors.
+- Do not create empty Behavior classes for simple CRUD, settings, audit rows, or read models. Existing entity-specific `DomainService` classes and entity methods are migration debt in decreasing architecture-test allowlists; do not add new single-root DomainServices.
 
 ### Client Workspace (`src/clients/`)
 
