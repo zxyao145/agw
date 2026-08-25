@@ -30,7 +30,7 @@ export function updateAutoScrollState(
 
   return {
     shouldAutoScroll:
-      !isScrollingUp && (state.shouldAutoScroll || reachedCurrentBottom || reachedPreviousBottom),
+      reachedCurrentBottom || (!isScrollingUp && (state.shouldAutoScroll || reachedPreviousBottom)),
     scrollHeight: metrics.scrollHeight,
     scrollTop: metrics.scrollTop,
   };

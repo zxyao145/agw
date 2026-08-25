@@ -22,3 +22,12 @@ test("auto scroll pauses upward and resumes at the bottom", () => {
     scrollTop: 0,
   });
 });
+
+test("auto scroll stays enabled when initial row measurement clamps the view to the bottom", () => {
+  const adjusted = updateAutoScrollState(
+    { shouldAutoScroll: true, scrollHeight: 1_020, scrollTop: 20 },
+    { clientHeight: 1_000, scrollHeight: 1_000, scrollTop: 0 },
+  );
+
+  assert.equal(adjusted.shouldAutoScroll, true);
+});
