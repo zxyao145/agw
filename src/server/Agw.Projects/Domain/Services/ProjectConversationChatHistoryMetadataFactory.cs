@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Agw.Shared.Contracts.Projects;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Projects.Domain.Services;

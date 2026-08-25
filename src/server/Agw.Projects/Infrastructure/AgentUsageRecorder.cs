@@ -1,6 +1,4 @@
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Utils;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 

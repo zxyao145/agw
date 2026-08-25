@@ -1,4 +1,3 @@
-using Agw.Shared.Contracts.Agents;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Tools.HumanInteraction;

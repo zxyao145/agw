@@ -4,8 +4,6 @@ using System.Text.Json;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Domain.Services;
 using Agw.Shared;
-using Agw.Shared.Contracts.Agents;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;

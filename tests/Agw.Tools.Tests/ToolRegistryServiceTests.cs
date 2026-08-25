@@ -1,8 +1,6 @@
 using System.Text.Json;
-using Agw.Shared.Contracts.Tools;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
 using Agw.Tools.ContextualTools;
 using Agw.Tools.ContextualTools.Shell;

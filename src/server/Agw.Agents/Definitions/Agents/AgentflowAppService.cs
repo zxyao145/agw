@@ -2,8 +2,8 @@ using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Providers;
+using Agw.Shared.Data.Pagination;
 using Agw.Shared.Data.Repositories;
-using Agw.Shared.Pagination;
 
 namespace Agw.Agents.Definitions.Agents;
 

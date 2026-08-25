@@ -1,8 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Agents.Execution.Agentflows;
-using Agw.Shared.Contracts.Agents;
-using Agw.Shared.Contracts.Projects;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 

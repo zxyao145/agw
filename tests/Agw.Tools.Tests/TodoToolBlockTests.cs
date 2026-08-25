@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Entities.Tools;
 using Agw.Tools.ToolBlocks.Blocks.Mode;
 using Agw.Tools.ToolBlocks.Blocks.Todo;
 using Microsoft.Agents.AI;

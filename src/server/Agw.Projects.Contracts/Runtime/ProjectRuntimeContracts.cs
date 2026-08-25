@@ -1,4 +1,4 @@
-using Agw.Shared.Data.Entities.Tools;
+using Agw.Shared.Tooling;
 
 namespace Agw.Projects.Contracts.Runtime;
 

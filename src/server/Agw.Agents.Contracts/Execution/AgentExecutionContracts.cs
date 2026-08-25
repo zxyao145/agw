@@ -1,5 +1,5 @@
+using Agw.Agents.Contracts.Messages;
 using Agw.Projects.Contracts.Execution;
-using Agw.Shared.AgwMsgVm;
 
 namespace Agw.Agents.Contracts.Execution;
 

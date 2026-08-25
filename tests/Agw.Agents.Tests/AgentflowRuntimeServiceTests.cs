@@ -7,10 +7,6 @@ using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Summaries;
 using Agw.Shared;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Agents;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
@@ -19,6 +15,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
+using RuntimeAgentExecutionResult = Agw.Agents.Execution.Agents.Dtos.AgentExecutionResult;
 
 namespace Agw.Agents.Tests;
 
@@ -412,7 +409,7 @@ public class AgentflowRuntimeServiceTests
         );
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
-        var task = new TaskProjection
+        var task = new AgentExecutionTask
         {
             ProjectId = projectId,
             ProjectConversationId = conversationId,
@@ -1079,7 +1076,7 @@ public class AgentflowRuntimeServiceTests
 
         public Task<AgentRuntime?> CreateRuntimeAsync(
             Guid agentId,
-            TaskProjection task,
+            AgentExecutionTask task,
             SettingCommand settings,
             CancellationToken cancellationToken = default
         ) => throw new NotImplementedException();
@@ -1096,7 +1093,7 @@ public class AgentflowRuntimeServiceTests
             CancellationToken cancellationToken = default
         ) => throw new NotImplementedException();
 
-        public Task<AgentExecutionResult?> ExecuteByIdAsync(
+        public Task<RuntimeAgentExecutionResult?> ExecuteByIdAsync(
             AgentExecuteByIdRequest request,
             CancellationToken cancellationToken = default
         ) => throw new NotImplementedException();

@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Agents.Execution.Turns;
 using Agw.Agents.ExternalAgents.ClaudeCode;
-using Agw.Shared.Contracts.Agents;
 using ClaudeCodeSdk.Types;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;

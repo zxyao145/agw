@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using A2A;
 using Agw.Agents.Contracts.Execution;
-using Agw.Shared.AgwMsgVm;
+using Agw.Agents.Contracts.Messages;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 

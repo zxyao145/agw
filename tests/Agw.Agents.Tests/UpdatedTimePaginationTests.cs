@@ -1,8 +1,8 @@
 using Agw.Infrastructure.Data;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Pagination;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Pagination;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 

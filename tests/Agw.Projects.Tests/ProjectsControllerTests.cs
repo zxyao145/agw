@@ -1,9 +1,8 @@
 using System.Linq.Expressions;
 using System.Security.Claims;
 using Agw.Projects.Controllers;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Entities.Tools;
+using Agw.Shared.Tooling;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 

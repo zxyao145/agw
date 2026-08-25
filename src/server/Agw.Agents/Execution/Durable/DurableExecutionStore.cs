@@ -1,6 +1,4 @@
 using Agw.Agents.Execution.Connections;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -107,9 +105,9 @@ internal sealed class DurableExecutionStore
         Guid executionId,
         string userId,
         Guid agentId,
-        Agw.Shared.Data.AgentRuntimeType agentType,
+        Agw.Agents.Contracts.Execution.AgentRuntimeType agentType,
         AgwUserInput input,
-        TaskProjection task,
+        AgentExecutionTask task,
         ExecutionSettings settings,
         CancellationToken cancellationToken
     )

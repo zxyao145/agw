@@ -1,4 +1,3 @@
-using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Jobs;
 
 namespace Agw.Jobs.Scheduling;

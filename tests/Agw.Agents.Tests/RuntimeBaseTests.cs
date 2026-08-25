@@ -3,9 +3,6 @@ using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Turns;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
 
 namespace Agw.Agents.Tests;
 
@@ -118,7 +115,7 @@ public class RuntimeBaseTests
         var projectId = Guid.CreateVersion7();
         var context = new RuntimeTurnContext(
             ExecutionSettings.FromCommand(new SettingCommand(projectId)),
-            new TaskProjection
+            new AgentExecutionTask
             {
                 TaskId = Guid.CreateVersion7(),
                 ProjectId = projectId,

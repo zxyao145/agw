@@ -1,9 +1,8 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Agw.Shared.Contracts.Agents;
-using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Exceptions;
+using Agw.Tools.Contracts.Abstractions;
 using Agw.Tools.HumanInteraction;
 using Microsoft.Extensions.AI;
 

@@ -1,7 +1,7 @@
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Pagination;
 using Agw.Shared.Data.Repositories;
-using Agw.Shared.Pagination;
 using ModelContextProtocol.Client;
 
 namespace Agw.Agents.Definitions.Agents;

@@ -1,7 +1,4 @@
 using Agw.Agents.Execution.Connections;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Executions;
 
 namespace Agw.Agents.Execution.Durable;
@@ -12,7 +9,7 @@ public sealed record DurableExecutionRequest(
     Guid AgentId,
     AgentRuntimeType AgentType,
     AgwUserInput Input,
-    TaskProjection Task,
+    AgentExecutionTask Task,
     ExecutionSettings Settings
 );
 

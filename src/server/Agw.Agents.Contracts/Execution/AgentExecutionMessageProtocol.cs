@@ -1,4 +1,4 @@
-using Agw.Shared.AgwMsgVm;
+using Agw.Agents.Contracts.Messages;
 
 namespace Agw.Agents.Contracts.Execution;
 

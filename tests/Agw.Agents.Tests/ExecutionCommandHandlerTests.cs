@@ -14,9 +14,6 @@ using Agw.Agents.Execution.Turns;
 using Agw.Files.Utils;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -364,7 +361,7 @@ public class ExecutionCommandHandlerTests
 
     private static ExecutionConnectionContext CreateContext(
         IRuntimeFactory runtimeFactory,
-        TaskProjection task,
+        AgentExecutionTask task,
         IExecutionMessageSink? sink = null,
         IProjectTaskFacade? projectTasks = null,
         IProjectRuntimeFacade? projects = null
@@ -384,7 +381,7 @@ public class ExecutionCommandHandlerTests
             AgentId = agentId,
         };
 
-    private static TaskProjection CreateTask(string contextId) =>
+    private static AgentExecutionTask CreateTask(string contextId) =>
         new()
         {
             TaskId = Guid.CreateVersion7(),
@@ -438,7 +435,7 @@ public class ExecutionCommandHandlerTests
     {
         private readonly ProjectTaskSnapshot _task;
 
-        public FakeProjectTaskFacade(TaskProjection task)
+        public FakeProjectTaskFacade(AgentExecutionTask task)
         {
             _task = ToSnapshot(task);
         }
@@ -626,7 +623,7 @@ public class ExecutionCommandHandlerTests
             Task.FromResult<string?>(_workspace);
     }
 
-    private static ProjectTaskSnapshot ToSnapshot(TaskProjection task) =>
+    private static ProjectTaskSnapshot ToSnapshot(AgentExecutionTask task) =>
         new(
             task.TaskId,
             task.ProjectConversationId,

@@ -1,7 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using Agw.Agents.Contracts.Catalog;
-using Agw.Agents.Contracts.Execution;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Commands.Setting;
@@ -9,8 +8,6 @@ using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Mapping;
 using Agw.Auth.Contracts;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.DependencyInjection;

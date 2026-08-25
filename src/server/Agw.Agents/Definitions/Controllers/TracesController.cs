@@ -1,6 +1,5 @@
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Results;
 using Bens.Results;

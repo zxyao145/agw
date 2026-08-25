@@ -3,7 +3,6 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Infrastructure.Repositories;
 using Agw.Shared.Coordination;
-using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Agw.Tools.Application;

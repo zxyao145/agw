@@ -6,8 +6,6 @@ using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Tools;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Infrastructure.Data;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Compaction;

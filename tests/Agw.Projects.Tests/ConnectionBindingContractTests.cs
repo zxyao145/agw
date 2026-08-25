@@ -1,5 +1,4 @@
 using Agw.Agents.Definitions.Contracts;
-using Agw.Shared.Contracts.Projects;
 
 namespace Agw.Projects.Tests;
 

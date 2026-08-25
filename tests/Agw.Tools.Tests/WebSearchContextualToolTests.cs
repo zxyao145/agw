@@ -1,6 +1,5 @@
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Entities.Tools;
 using Agw.Tools.ContextualTools.WebSearch;
 using Microsoft.Extensions.AI;
 
@@ -44,7 +43,7 @@ public sealed class WebSearchContextualToolTests
         var descriptor = new WebSearchContextualTool().Descriptor;
 
         Assert.Equal("web_search", descriptor.Name);
-        Assert.Equal(Agw.Shared.Contracts.Tools.ToolCatalogItemKind.Tool, descriptor.Kind);
+        Assert.Equal(Agw.Tools.Contracts.ToolCatalogItemKind.Tool, descriptor.Kind);
         Assert.Empty(descriptor.MemberToolNames);
     }
 

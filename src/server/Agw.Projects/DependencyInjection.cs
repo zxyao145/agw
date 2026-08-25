@@ -1,12 +1,10 @@
 using Agw.Files.Abstracts;
-using Agw.Projects.Application;
 using Agw.Projects.Application.Facades;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Metrics;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Projects.Domain.Services;
 using Agw.Projects.Infrastructure;
-using Agw.Shared.Contracts.Projects;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

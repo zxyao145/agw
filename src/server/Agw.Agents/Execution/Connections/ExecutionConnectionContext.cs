@@ -11,11 +11,7 @@ using Agw.Agents.Execution.Turns;
 using Agw.Files.Utils;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Utils;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution.Connections;
@@ -35,7 +31,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     private readonly DurableExecutionSession? _durableSession;
     private readonly AgentflowCheckpointStore? _checkpointStore;
     private RuntimeBase? _runtime;
-    private TaskProjection? _resolvedTask;
+    private AgentExecutionTask? _resolvedTask;
     private string? _workspace;
     private ExecutionTarget? _target;
     private PendingModeChange? _pendingModeChange;
@@ -73,7 +69,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     public string? ContextId => _resolvedTask?.ContextId ?? Settings?.ContextId;
 
-    public TaskProjection? ResolvedTask => _resolvedTask;
+    public AgentExecutionTask? ResolvedTask => _resolvedTask;
 
     public string? Workspace => _workspace;
 

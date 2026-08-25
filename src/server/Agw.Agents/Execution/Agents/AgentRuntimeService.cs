@@ -6,7 +6,6 @@ using Agw.Agents.Execution.Turns;
 using Agw.Files.Abstracts;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Runtime;
 using Agw.Skills.Contracts.Registration;
 using Agw.Skills.Contracts.Remote;

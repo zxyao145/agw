@@ -2,7 +2,6 @@ using System.Text.Json;
 using Agw.Files.Abstracts;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Entities.Tools;
 using Agw.Tools.ToolBlocks.Blocks.ProjectMemory;
 using Microsoft.Extensions.DependencyInjection;
 

@@ -2,7 +2,6 @@ using System.Reflection;
 using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Agents.Execution.Transport.SignalR;
 using Agw.Files.Exceptions;
-using Agw.Shared.AgwMsgVm;
 using Microsoft.AspNetCore.SignalR;
 
 namespace Agw.Agents.Tests;

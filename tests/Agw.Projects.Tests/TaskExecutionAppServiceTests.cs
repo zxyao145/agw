@@ -1,8 +1,6 @@
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
-using Agw.Projects.Application;
 using Agw.Projects.Domain.Services;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
 using Microsoft.Data.Sqlite;

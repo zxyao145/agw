@@ -1,5 +1,4 @@
 using Agw.Infrastructure.Data;
-using Agw.Shared.Contracts.Projects;
 using Agw.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

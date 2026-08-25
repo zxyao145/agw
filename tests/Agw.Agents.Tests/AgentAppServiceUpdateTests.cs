@@ -6,9 +6,9 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
-using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Tooling;
 
 namespace Agw.Agents.Tests;
 

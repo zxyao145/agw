@@ -4,7 +4,6 @@ using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.Contracts.Coordination;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.DependencyInjection;
@@ -60,7 +59,7 @@ internal sealed class DurableExecutionCoordinator
         Guid executionId,
         string userId,
         ExecCommand command,
-        TaskProjection task,
+        AgentExecutionTask task,
         ExecutionSettings settings,
         CancellationToken cancellationToken
     )

@@ -1,10 +1,7 @@
 using System.Linq.Expressions;
-using Agw.Projects.Contracts;
 using Agw.Projects.Domain.Services;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
-using Agw.Shared.Utils;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Projects.Application;

@@ -15,11 +15,11 @@ Agw.Host/            # Shared ASP.NET Core Hosting Module and Host composition
 Agw.ControlPlane.Host/ # Web UI, setup, management endpoints, and Job scheduling entry point
 Agw.DataPlane.Host/  # SignalR Execution, A2A, and distributed worker entry point
 Agw.Standalone.Host/ # Combined Control/Data entry point; produces agw-server
-Agw.Data/            # Entities, EF mappings, and repository/unit-of-work contracts
+Agw.Data/            # Persistence primitives and centrally hosted entities during ownership migration
 Agw.Infrastructure/  # DbContext, repositories, provider adapters, and seeding
 Agw.Migrations.Sqlite/   # SQLite migrations and provider-specific model snapshot
 Agw.Migrations.Postgres/ # PostgreSQL migrations and provider-specific model snapshot
-Agw.Shared/          # Cross-module contracts, errors, results, and utilities
+Agw.Shared/          # Errors, results, coordination, platform utilities, and stable shared values
 Agw.A2A/             # A2A discovery, protocol types, and endpoints
 Agw.Auth/            # Cookie/Bearer/LocalTrusted auth, CSRF, and guards
 Agw.Agents/          # Agent/Agentflow definitions, tools, and runtimes
@@ -41,6 +41,8 @@ Agw.Tools/           # Tool/ToolBlock catalog and materialization
 ### Module Layering
 
 Backend modules use `Api → Application → Domain ← Infrastructure`. Api owns protocol adapters, Application owns use cases, Domain contains data-only entities/value objects, and Infrastructure implements persistence and external adapters. Dependencies point inward.
+
+Modules that own persisted entities expose an `I<Module>DbContext` persistence seam from `Application/Persistence`. The single scoped `AgwDbContext` implements all eight seams; module code may use only its own interface, while cross-module transactions remain explicit Infrastructure adapters.
 
 ### Client Workspace (`src/clients/`)
 

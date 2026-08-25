@@ -1,5 +1,4 @@
 using Agw.Projects.Contracts.Execution;
-using Agw.Shared.Contracts.Projects;
 
 namespace Agw.Projects.Application.Facades;
 

@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Agw.Agents.Contracts.Execution;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Turns;
@@ -11,8 +10,6 @@ using Agw.Jobs.Application.Skills;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Contracts.Execution;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
@@ -340,7 +337,7 @@ public class JobManagementSkillTests
             return TurnContextAccessor.Push(
                 new RuntimeTurnContext(
                     ExecutionSettings.FromCommand(new SettingCommand(projectId)),
-                    new TaskProjection
+                    new AgentExecutionTask
                     {
                         TaskId = Guid.CreateVersion7(),
                         ProjectConversationId = Guid.CreateVersion7(),

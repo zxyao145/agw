@@ -1,9 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Agw.Data\Agw.Data.csproj" />
     <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
   </ItemGroup>
 </Project>

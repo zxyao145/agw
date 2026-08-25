@@ -1,3 +1,5 @@
+using Agw.Agents.Application.Persistence;
+using Agw.Auth.Application.Persistence;
 using Agw.Auth.Contracts;
 using Agw.Infrastructure.Auth;
 using Agw.Infrastructure.Configuration;
@@ -8,15 +10,21 @@ using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Jobs;
 using Agw.Infrastructure.Repositories;
 using Agw.Infrastructure.Skills;
+using Agw.Integrations.Application.Persistence;
+using Agw.Jobs.Application.Persistence;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
+using Agw.Projects.Application.Persistence;
+using Agw.Providers.Application.Persistence;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
+using Agw.Skills.Application.Persistence;
 using Agw.Skills.Contracts.Remote;
+using Agw.Tools.Application.Persistence;
 using Medallion.Threading;
 using Medallion.Threading.Postgres;
 using Microsoft.EntityFrameworkCore;
@@ -96,6 +104,16 @@ public static class DependencyInjection
         services.AddScoped<IApiTokenStore, EfApiTokenStore>();
 
         services.AddScoped<DbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<IAgentsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<IProjectsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<IJobsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<IAuthDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<IIntegrationsDbContext>(serviceProvider =>
+            serviceProvider.GetRequiredService<AgwDbContext>()
+        );
+        services.AddScoped<IProvidersDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<ISkillsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<IToolsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
         services.AddScoped<JobRepo>();
         services.AddScoped<IRepository<Job>, JobRepo>(sp => sp.GetRequiredService<JobRepo>());

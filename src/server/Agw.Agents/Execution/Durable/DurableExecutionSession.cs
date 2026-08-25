@@ -3,8 +3,6 @@ using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Turns;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
 
@@ -65,7 +63,7 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
     /// </summary>
     public async Task StartAsync(
         ExecCommand command,
-        TaskProjection task,
+        AgentExecutionTask task,
         ExecutionSettings settings,
         CancellationToken cancellationToken
     )

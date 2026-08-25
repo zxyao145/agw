@@ -1,9 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using Agw.Projects.Contracts;
 using Agw.Projects.Domain.Services;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;

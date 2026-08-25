@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Agw.Agents.Contracts.Execution;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
@@ -7,11 +6,7 @@ using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Turns;
 using Agw.Infrastructure.Data;
 using Agw.Shared;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Agents;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Coordination;
-using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
 using Microsoft.Data.Sqlite;
@@ -748,7 +743,7 @@ public sealed class DurableExecutionStoreTests
     private static AgwUserInput CreateInput(string content) =>
         new() { MessageId = "message-1", Contents = [new AgwTextContent { Content = content }] };
 
-    private static TaskProjection CreateTask() =>
+    private static AgentExecutionTask CreateTask() =>
         new()
         {
             TaskId = Guid.CreateVersion7(),

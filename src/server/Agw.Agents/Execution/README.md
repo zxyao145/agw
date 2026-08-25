@@ -166,7 +166,7 @@ Execution/
 `ExecutionConnectionContext` 是状态内核，独占：
 
 - 当前不可变 `ExecutionSettings`；
-- 已解析的 `TaskProjection`；
+- 已解析的 `AgentExecutionTask`；
 - 已解析并规范化的 workspace；
 - 当前 `ExecutionTarget`；
 - 可跨 turn 复用的 `RuntimeBase`；

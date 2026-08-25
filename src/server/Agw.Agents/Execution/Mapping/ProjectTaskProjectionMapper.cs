@@ -1,5 +1,4 @@
 using Agw.Projects.Contracts.Execution;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 
@@ -7,7 +6,7 @@ namespace Agw.Agents.Execution.Mapping;
 
 internal static class ProjectTaskProjectionMapper
 {
-    public static TaskProjection Map(ProjectTaskSnapshot task) =>
+    public static AgentExecutionTask Map(ProjectTaskSnapshot task) =>
         new()
         {
             TaskId = task.TaskId,

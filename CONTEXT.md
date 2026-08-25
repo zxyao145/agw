@@ -15,3 +15,7 @@ The combined Host that composes the Control Plane and Data Plane assemblies. It 
 ## Durable Execution
 
 A PostgreSQL-owned execution lifecycle with replayable output through PostgreSQL or Redis. SignalR, distributed Jobs, and distributed A2A submit work through the same execution interface, while Data Plane workers claim and run the persisted work.
+
+## Module DbContext
+
+The owner Module's inward persistence interface. Agents, Projects, Jobs, Auth, Integrations, Providers, Skills, and Tools expose only their owned `DbSet` values plus `SaveChangesAsync`. A single scoped `AgwDbContext` implements every Module DbContext; this does not imply separate databases or separate EF Core contexts.

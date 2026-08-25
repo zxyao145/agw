@@ -1,5 +1,4 @@
 using Agw.Agents.Contracts.Catalog;
-using Agw.Agents.Contracts.Execution;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Facades;
 using Agw.Agents.Execution.Agentflows;
@@ -16,7 +15,6 @@ using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Transport.SignalR;
 using Agw.Agents.Execution.Turns;
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

@@ -1,2 +1,2 @@
+global using Agw.Projects.Contracts;
 global using Agw.Shared;
-global using Agw.Shared.Contracts.Projects;

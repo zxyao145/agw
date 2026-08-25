@@ -1,5 +1,4 @@
 using Agw.Projects.Domain.Services;
-using Agw.Shared.Contracts.Projects;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Projects.Tests;

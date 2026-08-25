@@ -1,8 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="ModelContextProtocol" />
     <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
+    <ProjectReference Include="..\Agw.Data\Agw.Data.csproj" />
     <ProjectReference Include="..\Agw.Projects.Contracts\Agw.Projects.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
   </ItemGroup>

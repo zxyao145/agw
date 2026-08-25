@@ -1,6 +1,4 @@
 using System.Runtime.ExceptionServices;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Extensions;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;

@@ -3,7 +3,6 @@ using Agw.Agents.Contracts.Catalog;
 using Agw.Auth.Contracts;
 using Agw.Files.Utils;
 using Agw.Projects.Domain.Services;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;

@@ -1,10 +1,7 @@
 using System.ComponentModel;
-using Agw.Agents.Contracts.Execution;
 using Agw.Jobs.Application.Contracts;
 using Agw.Jobs.Application.Services;
 using Agw.Shared;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;

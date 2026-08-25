@@ -5,7 +5,6 @@ using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;

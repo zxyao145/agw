@@ -1,16 +1,12 @@
 using System.Runtime.CompilerServices;
 using System.Security.Claims;
-using Agw.Agents.Contracts.Execution;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Facades;
 using Agw.Agents.Execution.Runtimes;
-using Agw.Auth.Contracts;
 using Agw.Projects.Contracts.Execution;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
@@ -192,7 +188,7 @@ public sealed class AgentExecutionFacadeTests
 
         public Task<AgentRuntime?> CreateRuntimeAsync(
             Guid agentId,
-            TaskProjection task,
+            AgentExecutionTask task,
             SettingCommand settings,
             CancellationToken cancellationToken = default
         ) => Task.FromResult<AgentRuntime?>(null);

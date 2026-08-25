@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
+using Agw.Agents.Contracts.Execution;
 using Agw.Shared.Data.Abstractions;
 using Microsoft.EntityFrameworkCore;
 

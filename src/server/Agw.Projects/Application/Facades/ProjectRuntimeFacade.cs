@@ -4,9 +4,9 @@ namespace Agw.Projects.Application.Facades;
 
 public sealed class ProjectRuntimeFacade : IProjectRuntimeFacade
 {
-    private readonly ProjectAppService _projectService;
+    private readonly IProjectAppService _projectService;
 
-    public ProjectRuntimeFacade(ProjectAppService projectService)
+    public ProjectRuntimeFacade(IProjectAppService projectService)
     {
         _projectService = projectService;
     }

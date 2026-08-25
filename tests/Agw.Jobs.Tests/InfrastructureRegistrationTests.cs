@@ -1,13 +1,22 @@
+using Agw.Agents.Application.Persistence;
+using Agw.Auth.Application.Persistence;
 using Agw.Infrastructure;
 using Agw.Infrastructure.Configuration;
+using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Jobs;
+using Agw.Integrations.Application.Persistence;
+using Agw.Jobs.Application.Persistence;
 using Agw.Jobs.Scheduling.Coordination;
+using Agw.Projects.Application.Persistence;
+using Agw.Providers.Application.Persistence;
 using Agw.Shared.Configuration;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
+using Agw.Skills.Application.Persistence;
+using Agw.Tools.Application.Persistence;
 using Medallion.Threading;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -79,7 +88,7 @@ public class InfrastructureRegistrationTests
     }
 
     [Fact]
-    public void AddInfrastructure_ResolvesDbContextAndUnitOfWorkToTheSameScopedInstance()
+    public void AddInfrastructure_ResolvesModuleDbContextsToTheSameScopedInstance()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Database:Provider"] = "sqlite" })
@@ -92,12 +101,25 @@ public class InfrastructureRegistrationTests
         services.AddScoped<IEntityAuditUserIdProvider>(_ => new TestAuditUserIdProvider());
 
         using var serviceProvider = services.BuildServiceProvider();
-        using var scope = serviceProvider.CreateScope();
+        AgwDbContext firstContext;
+        using (var scope = serviceProvider.CreateScope())
+        {
+            firstContext = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
+            Assert.Same(firstContext, scope.ServiceProvider.GetRequiredService<DbContext>());
+            Assert.Same(firstContext, scope.ServiceProvider.GetRequiredService<IUnitOfWork>());
+            Assert.Same(firstContext, scope.ServiceProvider.GetRequiredService<IAgentsDbContext>());
+            Assert.Same(firstContext, scope.ServiceProvider.GetRequiredService<IProjectsDbContext>());
+            Assert.Same(firstContext, scope.ServiceProvider.GetRequiredService<IJobsDbContext>());
+            Assert.Same(firstContext, scope.ServiceProvider.GetRequiredService<IAuthDbContext>());
+            Assert.Same(firstContext, scope.ServiceProvider.GetRequiredService<IIntegrationsDbContext>());
+            Assert.Same(firstContext, scope.ServiceProvider.GetRequiredService<IProvidersDbContext>());
+            Assert.Same(firstContext, scope.ServiceProvider.GetRequiredService<ISkillsDbContext>());
+            Assert.Same(firstContext, scope.ServiceProvider.GetRequiredService<IToolsDbContext>());
+        }
 
-        var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
-        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-
-        Assert.Same(dbContext, unitOfWork);
+        using var secondScope = serviceProvider.CreateScope();
+        var secondContext = secondScope.ServiceProvider.GetRequiredService<AgwDbContext>();
+        Assert.NotSame(firstContext, secondContext);
     }
 
     [Fact]

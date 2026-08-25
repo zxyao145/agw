@@ -1,11 +1,8 @@
 using System.Text.Json;
 using Agw.Projects.Domain.Services;
 using Agw.Shared;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
-using Agw.Shared.Extensions;
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;

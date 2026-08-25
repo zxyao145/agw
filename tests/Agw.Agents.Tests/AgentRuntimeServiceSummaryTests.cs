@@ -1,7 +1,6 @@
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Summaries;
-using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data.Entities.Agents;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;

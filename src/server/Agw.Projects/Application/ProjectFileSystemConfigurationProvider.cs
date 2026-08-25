@@ -1,5 +1,4 @@
 using Agw.Files.Abstracts;
-using Agw.Shared.Contracts.Projects;
 
 namespace Agw.Projects.Application;
 

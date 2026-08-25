@@ -3,9 +3,7 @@ using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Projects.Contracts.Execution;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Utils;
 using Microsoft.Extensions.Logging;
 
 namespace Agw.Agents.Execution.Agents;
@@ -17,7 +15,7 @@ public partial class AgentRuntimeService
     /// </summary>
     public Task<AgentRuntime?> CreateRuntimeAsync(
         Guid agentId,
-        TaskProjection task,
+        AgentExecutionTask task,
         SettingCommand settings,
         CancellationToken cancellationToken = default
     ) => CreateRuntimeCoreAsync(agentId, task, settings, deferHumanInteractions: false, cancellationToken);
@@ -27,7 +25,7 @@ public partial class AgentRuntimeService
     /// </summary>
     internal Task<AgentRuntime?> CreateDurableRuntimeAsync(
         Guid agentId,
-        TaskProjection task,
+        AgentExecutionTask task,
         SettingCommand settings,
         CancellationToken cancellationToken = default
     ) => CreateRuntimeCoreAsync(agentId, task, settings, deferHumanInteractions: true, cancellationToken);
@@ -37,7 +35,7 @@ public partial class AgentRuntimeService
     /// </summary>
     private async Task<AgentRuntime?> CreateRuntimeCoreAsync(
         Guid agentId,
-        TaskProjection task,
+        AgentExecutionTask task,
         SettingCommand settings,
         bool deferHumanInteractions,
         CancellationToken cancellationToken
@@ -174,7 +172,7 @@ public partial class AgentRuntimeService
 
     private Func<string, CancellationToken, ValueTask>? CreateExternalSessionStartedCallback(
         Agent agent,
-        TaskProjection task,
+        AgentExecutionTask task,
         string contextId
     )
     {

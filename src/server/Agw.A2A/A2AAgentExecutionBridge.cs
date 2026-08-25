@@ -1,9 +1,9 @@
 using System.Runtime.CompilerServices;
 using A2A;
 using Agw.Agents.Contracts.Execution;
+using Agw.Agents.Contracts.Messages;
 using Agw.Auth.Contracts;
 using Agw.Projects.Contracts.Execution;
-using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.DependencyInjection;
 

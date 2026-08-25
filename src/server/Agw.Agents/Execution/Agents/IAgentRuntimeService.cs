@@ -2,10 +2,9 @@ using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Runtimes;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
+using RuntimeAgentExecutionResult = Agw.Agents.Execution.Agents.Dtos.AgentExecutionResult;
 
 namespace Agw.Agents.Execution.Agents;
 
@@ -57,7 +56,7 @@ public interface IAgentRuntimeService
 
     Task<AgentRuntime?> CreateRuntimeAsync(
         Guid agentId,
-        TaskProjection task,
+        AgentExecutionTask task,
         SettingCommand settings,
         CancellationToken cancellationToken = default
     );
@@ -99,7 +98,7 @@ public interface IAgentRuntimeService
         CancellationToken cancellationToken = default
     ) => ExecuteAsync(session, input, cancellationToken);
 
-    Task<AgentExecutionResult?> ExecuteByIdAsync(
+    Task<RuntimeAgentExecutionResult?> ExecuteByIdAsync(
         AgentExecuteByIdRequest request,
         CancellationToken cancellationToken = default
     );

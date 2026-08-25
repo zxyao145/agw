@@ -1,8 +1,6 @@
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Messaging;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
 
 namespace Agw.Agents.Execution.Turns;
 
@@ -10,7 +8,7 @@ public sealed record RuntimeTurnContext
 {
     public RuntimeTurnContext(
         ExecutionSettings settings,
-        TaskProjection task,
+        AgentExecutionTask task,
         ExecutionTarget target,
         string workspace,
         IExecutionMessageSink messageSink,
@@ -27,7 +25,7 @@ public sealed record RuntimeTurnContext
 
     public ExecutionSettings Settings { get; }
 
-    public TaskProjection Task { get; }
+    public AgentExecutionTask Task { get; }
 
     public ExecutionTarget Target { get; }
 

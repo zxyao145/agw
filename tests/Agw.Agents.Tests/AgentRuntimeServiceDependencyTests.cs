@@ -2,7 +2,6 @@ using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Store;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Repositories;
 
 namespace Agw.Agents.Tests;

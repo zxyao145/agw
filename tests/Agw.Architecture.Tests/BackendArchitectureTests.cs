@@ -53,6 +53,7 @@ public sealed partial class BackendArchitectureTests
             ["Agw.Infrastructure"] = Set(
                 "Agw.Agents",
                 "Agw.Auth",
+                "Agw.Data",
                 "Agw.Integrations",
                 "Agw.Jobs",
                 "Agw.Projects",
@@ -63,6 +64,7 @@ public sealed partial class BackendArchitectureTests
             ["Agw.Agents"] = Set(
                 "Agw.Agents.Contracts",
                 "Agw.Auth",
+                "Agw.Data",
                 "Agw.Files",
                 "Agw.Integrations",
                 "Agw.Projects.Contracts",
@@ -74,10 +76,11 @@ public sealed partial class BackendArchitectureTests
             ["Agw.Agents.Contracts"] = Set("Agw.Projects.Contracts", "Agw.Shared"),
             ["Agw.Files"] = Set(),
 
-            ["Agw.Integrations"] = Set("Agw.Auth", "Agw.Projects.Contracts", "Agw.Shared"),
+            ["Agw.Integrations"] = Set("Agw.Auth", "Agw.Data", "Agw.Projects.Contracts", "Agw.Shared"),
             ["Agw.Jobs"] = Set(
                 "Agw.Agents.Contracts",
                 "Agw.Auth",
+                "Agw.Data",
                 "Agw.Jobs.Contracts",
                 "Agw.Projects.Contracts",
                 "Agw.Shared",
@@ -87,18 +90,19 @@ public sealed partial class BackendArchitectureTests
             ["Agw.Projects"] = Set(
                 "Agw.Agents.Contracts",
                 "Agw.Auth",
+                "Agw.Data",
                 "Agw.Files",
                 "Agw.Projects.Contracts",
                 "Agw.Shared"
             ),
             ["Agw.Projects.Contracts"] = Set("Agw.Shared"),
-            ["Agw.Providers"] = Set("Agw.Agents.Contracts", "Agw.Shared"),
-            ["Agw.Skills"] = Set("Agw.Agents.Contracts", "Agw.Shared"),
-            ["Agw.Tools"] = Set("Agw.Auth", "Agw.Files", "Agw.Shared"),
+            ["Agw.Providers"] = Set("Agw.Agents.Contracts", "Agw.Data", "Agw.Shared"),
+            ["Agw.Skills"] = Set("Agw.Agents.Contracts", "Agw.Data", "Agw.Shared"),
+            ["Agw.Tools"] = Set("Agw.Agents.Contracts", "Agw.Auth", "Agw.Data", "Agw.Files", "Agw.Shared"),
 
-            ["Agw.Auth"] = Set("Agw.Shared"),
-            ["Agw.Shared"] = Set("Agw.Data"),
-            ["Agw.Data"] = Set(),
+            ["Agw.Auth"] = Set("Agw.Data", "Agw.Shared"),
+            ["Agw.Shared"] = Set(),
+            ["Agw.Data"] = Set("Agw.Agents.Contracts", "Agw.Shared"),
 
             ["Agw.Setup"] = Set("Agw.Auth", "Agw.Infrastructure", "Agw.Shared", "Agw.Skills"),
             ["Agw.Migrations.Postgres"] = Set("Agw.Infrastructure"),
@@ -330,6 +334,7 @@ public sealed partial class BackendArchitectureTests
         }
 
         var relativePath = NormalizePath(Path.GetRelativePath(serverRoot, sourceFile));
+        var allowsForeignPersistence = AllowedForeignPersistenceAccessFiles.Contains(relativePath);
         var lineNumber = 0;
         foreach (var line in File.ReadLines(sourceFile))
         {
@@ -361,9 +366,19 @@ public sealed partial class BackendArchitectureTests
             {
                 var entity = match.Groups["entity"].Value;
                 var owner = EntityOwners.GetValueOrDefault(entity);
-                if (owner != null && owner != owningProject)
+                if (owner != null && owner != owningProject && !allowsForeignPersistence)
                 {
                     yield return $"{relativePath}:{lineNumber}: {owningProject} references IRepository<{entity}> owned by {owner}";
+                }
+            }
+
+            foreach (Match match in OwnedDbSetAccessRegex().Matches(line))
+            {
+                var entity = match.Groups["entity"].Value;
+                var owner = EntityOwners.GetValueOrDefault(entity);
+                if (owner != null && owner != owningProject && !allowsForeignPersistence)
+                {
+                    yield return $"{relativePath}:{lineNumber}: {owningProject} accesses {entity} DbSet owned by {owner}";
                 }
             }
         }
@@ -392,6 +407,14 @@ public sealed partial class BackendArchitectureTests
             foreach (var referencedNamespace in referencedNamespaces)
             {
                 if (!ContainsInternalLayer(referencedNamespace))
+                {
+                    continue;
+                }
+
+                if (
+                    owningProject == "Agw.Infrastructure"
+                    && referencedNamespace.EndsWith(".Application.Persistence", StringComparison.Ordinal)
+                )
                 {
                     continue;
                 }
@@ -489,16 +512,52 @@ public sealed partial class BackendArchitectureTests
     )
     {
         ["Agent"] = "Agw.Agents",
+        ["AgentConnectionRelation"] = "Agw.Agents",
+        ["AgentMcpServerRelation"] = "Agw.Agents",
+        ["AgentSessionStateEntry"] = "Agw.Agents",
         ["Agentflow"] = "Agw.Agents",
+        ["AgentflowEdge"] = "Agw.Agents",
+        ["AgentflowNode"] = "Agw.Agents",
+        ["AgentflowTrace"] = "Agw.Agents",
+        ["AgentflowCheckpointRecord"] = "Agw.Agents",
+        ["DurableExecutionEventRecord"] = "Agw.Agents",
+        ["DurableExecutionRecord"] = "Agw.Agents",
         ["McpServer"] = "Agw.Agents",
         ["AgentSkillRelation"] = "Agw.Agents",
+        ["ApiToken"] = "Agw.Auth",
+        ["Connection"] = "Agw.Integrations",
+        ["ConnectionCredential"] = "Agw.Integrations",
+        ["PluginInstallation"] = "Agw.Integrations",
+        ["PluginInstallationCredential"] = "Agw.Integrations",
         ["Project"] = "Agw.Projects",
+        ["ProjectConnectionRelation"] = "Agw.Projects",
         ["ProjectConversation"] = "Agw.Projects",
         ["ProjectConversationChatHistory"] = "Agw.Projects",
+        ["ProjectMcpServerRelation"] = "Agw.Projects",
+        ["ProjectSkillRelation"] = "Agw.Projects",
+        ["TaskSessionBinding"] = "Agw.Projects",
         ["AgentUsage"] = "Agw.Projects",
         ["Job"] = "Agw.Jobs",
         ["JobLog"] = "Agw.Jobs",
+        ["AgwAiModel"] = "Agw.Providers",
+        ["ModelProviderRelation"] = "Agw.Providers",
+        ["Provider"] = "Agw.Providers",
+        ["ProviderAuthConfig"] = "Agw.Providers",
+        ["RemoteSkillCache"] = "Agw.Skills",
+        ["Skill"] = "Agw.Skills",
+        ["ProjectMemoryEntry"] = "Agw.Tools",
+        ["UserMemory"] = "Agw.Tools",
     };
+
+    private static readonly IReadOnlySet<string> AllowedForeignPersistenceAccessFiles = Set(
+        "Agw.Agents/Definitions/Agents/AgentAppService.cs",
+        "Agw.Agents/Definitions/Agents/AgentSuggestionAppService.cs",
+        "Agw.Agents/Definitions/Agents/AgentflowAppService.cs",
+        "Agw.Agents/Execution/Agentflows/AgentflowCheckpointStore.cs",
+        "Agw.Agents/Execution/Agents/Store/AgentSessionStateStore.cs",
+        "Agw.Projects/Application/ProjectAppService.cs",
+        "Agw.Projects/Application/ProjectConversationAppService.cs"
+    );
 
     private static readonly IReadOnlyDictionary<string, string> LegacyCrossModuleServiceOwners = new Dictionary<
         string,
@@ -540,9 +599,9 @@ public sealed partial class BackendArchitectureTests
     )]
     private static partial Regex LegacyCrossModuleServiceReferenceRegex();
 
-    [GeneratedRegex(
-        @"\bIRepository\s*<\s*(?<entity>Agent|Agentflow|McpServer|AgentSkillRelation|Project|ProjectConversation|ProjectConversationChatHistory|AgentUsage|Job|JobLog)\s*>",
-        RegexOptions.CultureInvariant
-    )]
+    [GeneratedRegex(@"\bIRepository\s*<\s*(?<entity>[A-Za-z_][A-Za-z0-9_]*)\s*>", RegexOptions.CultureInvariant)]
     private static partial Regex OwnedRepositoryRegex();
+
+    [GeneratedRegex(@"\b(?:DbSet|Set)\s*<\s*(?<entity>[A-Za-z_][A-Za-z0-9_]*)\s*>", RegexOptions.CultureInvariant)]
+    private static partial Regex OwnedDbSetAccessRegex();
 }

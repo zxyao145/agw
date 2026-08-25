@@ -1,7 +1,5 @@
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Messaging;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Agents;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution.Turns;

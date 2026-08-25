@@ -6,4 +6,8 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Agw.Agents.Contracts\Agw.Agents.Contracts.csproj" />
+    <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
+  </ItemGroup>
 </Project>

@@ -2,8 +2,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands.Abstracts;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Data;
 
 namespace Agw.Agents.Execution.Commands.Exec;
 

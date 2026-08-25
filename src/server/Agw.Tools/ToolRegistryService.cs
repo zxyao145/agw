@@ -1,8 +1,8 @@
 using System.Reflection;
-using Agw.Shared.Contracts.Tools;
-using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Exceptions;
 using Agw.Tools.ContextualTools;
+using Agw.Tools.Contracts;
+using Agw.Tools.Contracts.Abstractions;
 using Agw.Tools.HumanInteraction;
 using Agw.Tools.ToolBlocks;
 using Microsoft.Extensions.AI;

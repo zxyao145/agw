@@ -1,4 +1,4 @@
-using Agw.Shared.Data.Entities.Tools;
+using Agw.Shared.Tooling;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;

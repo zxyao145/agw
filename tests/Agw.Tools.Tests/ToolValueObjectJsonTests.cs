@@ -2,7 +2,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Tools;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 

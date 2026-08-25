@@ -1,4 +1,3 @@
-using Agw.Shared.Contracts.Projects;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 

@@ -1,6 +1,5 @@
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Tools.Tests;

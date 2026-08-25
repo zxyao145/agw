@@ -7,9 +7,6 @@ using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Turns;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -70,7 +67,7 @@ public class ExecutionConnectionTests
     {
         var provider = new ServiceCollection().BuildServiceProvider();
         var runtimeFactory = new FakeRuntimeFactory(holdTurnOpen);
-        var task = new TaskProjection
+        var task = new AgentExecutionTask
         {
             TaskId = Guid.CreateVersion7(),
             ProjectConversationId = Guid.CreateVersion7(),
@@ -147,7 +144,7 @@ public class ExecutionConnectionTests
     {
         private readonly ProjectTaskSnapshot _task;
 
-        public FakeProjectTaskFacade(TaskProjection task)
+        public FakeProjectTaskFacade(AgentExecutionTask task)
         {
             _task = ToSnapshot(task);
         }
@@ -200,7 +197,7 @@ public class ExecutionConnectionTests
             Task.FromResult<string?>("/workspace");
     }
 
-    private static ProjectTaskSnapshot ToSnapshot(TaskProjection task) =>
+    private static ProjectTaskSnapshot ToSnapshot(AgentExecutionTask task) =>
         new(
             task.TaskId,
             task.ProjectConversationId,

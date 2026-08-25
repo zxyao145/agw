@@ -1,15 +1,15 @@
 using System.IO.Compression;
 using Agw.Agents.ExternalAgents;
+using Agw.Projects.Contracts;
 using Agw.Shared;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
-using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
+using Agw.Shared.Tooling;
 using Agw.Skills.Contracts.Registration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;

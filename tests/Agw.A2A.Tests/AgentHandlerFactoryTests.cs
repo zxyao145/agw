@@ -3,7 +3,6 @@ using System.Reflection;
 using System.Text.Json;
 using A2A;
 using Agw.Agents.Contracts.Catalog;
-using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;

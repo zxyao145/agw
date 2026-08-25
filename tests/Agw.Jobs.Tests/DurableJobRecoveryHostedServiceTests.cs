@@ -1,6 +1,5 @@
 using System.Linq.Expressions;
 using System.Reflection;
-using Agw.Agents.Contracts.Execution;
 using Agw.Jobs.Scheduling.Attempts;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Shared.Data.Entities.Jobs;

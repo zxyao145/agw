@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
-using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Testing;
 using Microsoft.Data.Sqlite;

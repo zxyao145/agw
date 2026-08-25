@@ -1,9 +1,6 @@
 using System.Text.Json;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Executions;
 
 namespace Agw.Agents.Execution.Durable;
@@ -93,7 +90,7 @@ internal sealed record DurableExecutionManifest
 }
 
 /// <summary>
-/// 从完整 TaskProjection 提取的最小任务上下文。
+/// 从完整 AgentExecutionTask 提取的最小任务上下文。
 /// </summary>
 internal sealed record DurableProjectTaskSnapshot
 {
@@ -120,7 +117,7 @@ internal sealed record DurableProjectTaskSnapshot
     /// <summary>
     /// 从运行时任务投影创建可持久化的最小快照。
     /// </summary>
-    public static DurableProjectTaskSnapshot FromProjection(TaskProjection task) =>
+    public static DurableProjectTaskSnapshot FromProjection(AgentExecutionTask task) =>
         new()
         {
             TaskId = task.TaskId,
@@ -132,7 +129,7 @@ internal sealed record DurableProjectTaskSnapshot
     /// <summary>
     /// 重建 Agent runtime 所需的任务投影。
     /// </summary>
-    public TaskProjection ToProjection() =>
+    public AgentExecutionTask ToProjection() =>
         new()
         {
             TaskId = TaskId,

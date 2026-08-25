@@ -7,11 +7,7 @@ using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Turns;
 using Agw.Files.Abstracts;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Utils;
 
 namespace Agw.Agents.Execution.Runtimes;
 
@@ -19,7 +15,7 @@ public readonly record struct RuntimeStartResult(RuntimeBase? Runtime, ActiveTur
 
 public sealed record RuntimeStartRequest(
     Guid AgentId,
-    TaskProjection Task,
+    AgentExecutionTask Task,
     ExecCommand Command,
     RuntimeBase? CurrentRuntime,
     RuntimeTurnContext TurnContext

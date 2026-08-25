@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using A2A;
 using Agw.A2A.Extensions;
 using Agw.Agents.Contracts.Catalog;
-using Agw.Shared.AgwMsgVm;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;

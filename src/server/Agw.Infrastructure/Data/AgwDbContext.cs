@@ -1,4 +1,10 @@
+using Agw.Agents.Application.Persistence;
+using Agw.Auth.Application.Persistence;
 using Agw.Infrastructure.Data.Encryption;
+using Agw.Integrations.Application.Persistence;
+using Agw.Jobs.Application.Persistence;
+using Agw.Projects.Application.Persistence;
+using Agw.Providers.Application.Persistence;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
@@ -10,13 +16,24 @@ using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Entities.Tools;
+using Agw.Skills.Application.Persistence;
+using Agw.Tools.Application.Persistence;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Agw.Infrastructure.Data;
 
-public class AgwDbContext : EFContext
+public class AgwDbContext
+    : EFContext,
+        IAgentsDbContext,
+        IProjectsDbContext,
+        IJobsDbContext,
+        IAuthDbContext,
+        IIntegrationsDbContext,
+        IProvidersDbContext,
+        ISkillsDbContext,
+        IToolsDbContext
 {
     private static readonly IEncryptedDataProtector DefaultEncryptedDataProtector =
         new DataProtectionEncryptedDataProtector(new EphemeralDataProtectionProvider());

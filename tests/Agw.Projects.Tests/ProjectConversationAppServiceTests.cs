@@ -1,11 +1,7 @@
 using System.Text.Json;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
-using Agw.Projects.Application;
 using Agw.Shared;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Agents;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;

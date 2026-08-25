@@ -1,7 +1,6 @@
 using Agw.Jobs.Execution;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Attempts;
-using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.Logging.Abstractions;

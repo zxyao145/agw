@@ -1,7 +1,5 @@
-using Agw.Agents.Contracts.Execution;
 using Agw.Jobs.Execution;
 using Agw.Projects.Contracts.Execution;
-using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Jobs;
 
 namespace Agw.Jobs.Tests;

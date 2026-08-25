@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using Agw.Agents.Execution.Commands.Setting;
-using Agw.Shared.Contracts.Projects;
 
 namespace Agw.Agents.Execution.Connections;
 

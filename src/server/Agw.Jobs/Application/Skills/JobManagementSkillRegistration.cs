@@ -1,4 +1,3 @@
-using Agw.Agents.Contracts.Execution;
 using Agw.Skills.Contracts.Registration;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.DependencyInjection;

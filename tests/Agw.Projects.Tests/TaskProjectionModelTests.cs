@@ -1,5 +1,4 @@
 using Agw.Infrastructure.Data;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.EntityFrameworkCore;
 
@@ -101,11 +100,11 @@ public class TaskProjectionModelTests
     }
 
     [Fact]
-    public void SharedTaskContracts_DoNotExposeInternalTaskResponseTypes()
+    public void ProjectTaskContracts_DoNotExposeInternalTaskResponseTypes()
     {
         var contractTypeNames = typeof(TaskCreateRequest)
             .Assembly.GetTypes()
-            .Where(type => type.Namespace == "Agw.Shared.Contracts.Projects")
+            .Where(type => type.Namespace == "Agw.Projects.Contracts")
             .Select(type => type.Name)
             .ToArray();
 

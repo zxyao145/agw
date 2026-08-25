@@ -4,7 +4,6 @@ using System.Threading.Channels;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.ExternalAgents.ClaudeCode;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Extensions;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
