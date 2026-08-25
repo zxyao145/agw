@@ -298,6 +298,14 @@ export class ExecutionSession {
   private reconnectState: ExecutionReconnectState | null = null;
   /** 标记 SignalR 已进入自动重连生命周期。 */
   private reconnecting = false;
+  /** 当前自动重连等待的截止时间，用于避免重复执行已经开始的尝试。 */
+  private automaticReconnectDeadlineMs: number | null = null;
+  /** 标记手动重试已接管 SignalR 的当前自动重连轮次。 */
+  private manualReconnectActive = false;
+  /** 当前手动接管的重连任务，重复点击只会跳过下一段等待。 */
+  private manualReconnectPromise: Promise<void> | null = null;
+  /** 允许手动 Retry 提前结束当前重连等待。 */
+  private resumeReconnectDelay: (() => void) | null = null;
   /** 让业务命令等待重连和执行上下文恢复完成。 */
   private reconnectCompletion: {
     promise: Promise<Error | null>;
@@ -314,6 +322,8 @@ export class ExecutionSession {
     const reconnectPolicy: IRetryPolicy = {
       nextRetryDelayInMilliseconds: (context) => {
         const retryDelayMs = getExecutionReconnectDelay(context.previousRetryCount);
+        this.automaticReconnectDeadlineMs =
+          retryDelayMs === null ? null : Date.now() + retryDelayMs;
         if (retryDelayMs !== null) {
           this.updateReconnectState({
             status: "reconnecting",
@@ -353,17 +363,20 @@ export class ExecutionSession {
       );
     });
     this.connection.onclose((error) => {
+      if (this.manualReconnectActive) return;
+
+      this.automaticReconnectDeadlineMs = null;
       const reconnectExhausted =
         this.reconnecting && isExecutionReconnectExhausted(this.reconnectState);
       this.reconnecting = false;
-      if (this.durableConfirmed) this.hasActiveTurn = false;
-      else this.finishActiveTurn();
 
       if (reconnectExhausted && !this.disposed) {
         this.failReconnect(new Error("Execution connection retries exhausted."));
         return;
       }
 
+      if (this.durableConfirmed) this.hasActiveTurn = false;
+      else this.finishActiveTurn();
       this.reconnectState = null;
       this.finishReconnect(error ?? new Error("Execution connection closed."));
       if (!this.disposed) this.handlers.onClose?.(error);
@@ -563,36 +576,44 @@ export class ExecutionSession {
     );
   }
 
-  /** 在自动重试耗尽后立即重连，并恢复当前 execution 上下文。 */
-  public async retryConnection(): Promise<void> {
-    if (this.disposed) throw new Error("Execution connection is disposed");
-    if (this.reconnecting || this.reconnectState?.status !== "failed") return;
+  /** 立即执行当前重连次数；失败后继续等待下一次，耗尽后可重新开始一轮。 */
+  public retryConnection(): Promise<void> {
+    if (this.disposed) return Promise.reject(new Error("Execution connection is disposed"));
 
-    this.reconnecting = true;
-    this.beginReconnect();
-    this.updateReconnectState({
-      status: "reconnecting",
-      retryAttempt: 1,
-      retryDelayMs: 0,
-    });
-
-    try {
-      if (this.connection.state === HubConnectionState.Disconnected) {
-        await this.connection.start();
-      } else if (this.connection.state !== HubConnectionState.Connected) {
-        throw new Error(`Execution connection is ${this.connection.state}`);
-      }
-      await this.restoreAfterReconnect();
-      this.finishReconnectSuccessfully();
-    } catch (error) {
-      const normalized = error instanceof Error ? error : new Error(String(error));
-      this.failReconnect(normalized);
+    if (this.manualReconnectPromise) {
+      this.skipManualReconnectDelay();
+      return this.manualReconnectPromise;
     }
+
+    const state = this.reconnectState;
+    if (!state) return Promise.resolve();
+    if (
+      state.status === "reconnecting" &&
+      (state.retryDelayMs === 0 ||
+        this.automaticReconnectDeadlineMs === null ||
+        Date.now() >= this.automaticReconnectDeadlineMs)
+    ) {
+      return Promise.resolve();
+    }
+
+    const retryAttempt = state.status === "failed" ? 1 : state.retryAttempt;
+    const cancelAutomaticReconnect = state.status === "reconnecting";
+    const manualReconnectPromise = this.runManualReconnect(retryAttempt, cancelAutomaticReconnect);
+    this.manualReconnectPromise = manualReconnectPromise;
+    const clearManualReconnectPromise = () => {
+      if (this.manualReconnectPromise === manualReconnectPromise) {
+        this.manualReconnectPromise = null;
+      }
+    };
+    void manualReconnectPromise.then(clearManualReconnectPromise, clearManualReconnectPromise);
+    return manualReconnectPromise;
   }
 
   public async dispose(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
+    this.automaticReconnectDeadlineMs = null;
+    this.resumeReconnectDelay?.();
     this.finishReconnect(new Error("Execution connection is disposed"));
     if (this.connection.state !== HubConnectionState.Disconnected) {
       await this.connection.stop();
@@ -662,6 +683,90 @@ export class ExecutionSession {
     if (this.reconnecting && !this.disposed) this.handlers.onReconnecting?.(state);
   }
 
+  /** 接管当前自动重连，并从当前次数开始执行可跳过等待的剩余计划。 */
+  private async runManualReconnect(
+    initialRetryAttempt: number,
+    cancelAutomaticReconnect: boolean,
+  ): Promise<void> {
+    this.manualReconnectActive = true;
+    this.automaticReconnectDeadlineMs = null;
+    this.reconnecting = true;
+    this.beginReconnect();
+    this.updateReconnectState({
+      status: "reconnecting",
+      retryAttempt: initialRetryAttempt,
+      retryDelayMs: 0,
+    });
+
+    let retryAttempt = initialRetryAttempt;
+    let retryError = new Error("Execution connection retry failed.");
+
+    try {
+      if (cancelAutomaticReconnect) {
+        await this.connection.stop();
+      }
+
+      while (!this.disposed && retryAttempt <= executionReconnectDelaysMs.length) {
+        if (retryAttempt > initialRetryAttempt) {
+          const retryDelayMs = getExecutionReconnectDelay(retryAttempt - 1);
+          if (retryDelayMs === null) break;
+          this.updateReconnectState({ status: "reconnecting", retryAttempt, retryDelayMs });
+          await this.waitForManualReconnectDelay(retryDelayMs);
+          if (this.disposed) return;
+          this.updateReconnectState({ status: "reconnecting", retryAttempt, retryDelayMs: 0 });
+        }
+
+        try {
+          if (this.connection.state === HubConnectionState.Disconnected) {
+            await this.connection.start();
+          } else if (this.connection.state !== HubConnectionState.Connected) {
+            throw new Error(`Execution connection is ${this.connection.state}`);
+          }
+          await this.restoreAfterReconnect();
+          this.finishReconnectSuccessfully();
+          return;
+        } catch (error) {
+          retryError = error instanceof Error ? error : new Error(String(error));
+          if (this.disposed) return;
+          if (this.connection.state !== HubConnectionState.Disconnected) {
+            await this.connection.stop();
+          }
+          retryAttempt += 1;
+        }
+      }
+
+      if (!this.disposed) this.failReconnect(retryError);
+    } catch (error) {
+      const normalized = error instanceof Error ? error : new Error(String(error));
+      if (!this.disposed) this.failReconnect(normalized);
+    } finally {
+      this.resumeReconnectDelay = null;
+      this.manualReconnectActive = false;
+    }
+  }
+
+  /** 等待下一次重连；Retry 可解析此 Promise 来立即消费该次尝试。 */
+  private async waitForManualReconnectDelay(retryDelayMs: number): Promise<void> {
+    await new Promise<void>((resolve) => {
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      const resume = () => {
+        if (timeoutId !== undefined) clearTimeout(timeoutId);
+        if (this.resumeReconnectDelay === resume) this.resumeReconnectDelay = null;
+        resolve();
+      };
+      this.resumeReconnectDelay = resume;
+      timeoutId = setTimeout(resume, retryDelayMs);
+    });
+  }
+
+  /** 跳过手动接管后的当前等待，并同步 UI 为立即尝试。 */
+  private skipManualReconnectDelay(): void {
+    const state = this.reconnectState;
+    if (!this.resumeReconnectDelay || state?.status !== "reconnecting") return;
+    this.updateReconnectState({ ...state, retryDelayMs: 0 });
+    this.resumeReconnectDelay();
+  }
+
   /** 重连成功后先恢复设置和 durable 订阅，再解除 Chat 阻塞。 */
   private async completeReconnectAfterRestore(): Promise<void> {
     try {
@@ -680,6 +785,7 @@ export class ExecutionSession {
   /** 清理重连状态，并在 execution 上下文恢复后解除 Chat 阻塞。 */
   private finishReconnectSuccessfully(): void {
     this.reconnecting = false;
+    this.automaticReconnectDeadlineMs = null;
     this.reconnectState = null;
     this.finishReconnect(null);
     if (!this.disposed) this.handlers.onReconnected?.();
@@ -688,6 +794,9 @@ export class ExecutionSession {
   /** 保留可手动重试的失败状态，并结束当前重连等待。 */
   private failReconnect(error: Error): void {
     this.reconnecting = false;
+    this.automaticReconnectDeadlineMs = null;
+    if (this.durableConfirmed) this.hasActiveTurn = false;
+    else this.finishActiveTurn();
     const failedState: ExecutionReconnectState = {
       status: "failed",
       retryAttempt: executionReconnectDelaysMs.length,

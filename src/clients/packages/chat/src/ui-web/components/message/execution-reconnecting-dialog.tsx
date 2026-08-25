@@ -29,14 +29,16 @@ function useReconnectCountdown(state: ExecutionReconnectState): number {
 type ExecutionReconnectingDialogProps = {
   /** 当前自动重连进度或重试耗尽状态。 */
   state: ExecutionReconnectState;
-  /** 自动重试耗尽后，由用户触发一次立即重连。 */
+  /** 立即消费当前重连次数；失败后继续下一次等待。 */
   onRetry: () => void;
 };
 
 /** 在 SignalR 自动重连期间阻塞 Chat 工作区，并保留 Desktop 顶栏逃生入口。 */
 export function ExecutionReconnectingDialog({ state, onRetry }: ExecutionReconnectingDialogProps) {
   const isFailed = state.status === "failed";
-  const remainingSeconds = Math.ceil(useReconnectCountdown(state) / 1_000);
+  const remainingMs = useReconnectCountdown(state);
+  const remainingSeconds = Math.ceil(remainingMs / 1_000);
+  const isRetryingNow = !isFailed && remainingMs === 0;
   const retryMessage = isFailed
     ? "Failed to rejoin. Please retry or reload the page."
     : remainingSeconds > 0
@@ -108,12 +110,7 @@ export function ExecutionReconnectingDialog({ state, onRetry }: ExecutionReconne
               {state.retryAttempt}/{executionReconnectDelaysMs.length}
             </span>
           </div>
-          {isFailed ? (
-            <Button type="button" size="sm" className="mt-3 w-full" onClick={onRetry}>
-              <RefreshCw className="size-4" aria-hidden="true" />
-              Retry
-            </Button>
-          ) : (
+          {!isFailed ? (
             <div className="mt-3 flex gap-1" aria-hidden="true">
               {executionReconnectDelaysMs.map((_, index) => (
                 <span
@@ -126,7 +123,20 @@ export function ExecutionReconnectingDialog({ state, onRetry }: ExecutionReconne
                 />
               ))}
             </div>
-          )}
+          ) : null}
+          <Button
+            type="button"
+            size="sm"
+            className="mt-3 w-full"
+            disabled={isRetryingNow}
+            onClick={onRetry}
+          >
+            <RefreshCw
+              className={cn("size-4", isRetryingNow && "animate-spin")}
+              aria-hidden="true"
+            />
+            {isRetryingNow ? "Retrying…" : isFailed ? "Retry" : "Retry now"}
+          </Button>
         </div>
 
         <p className="mt-4 text-center text-xs leading-5 text-muted-foreground">

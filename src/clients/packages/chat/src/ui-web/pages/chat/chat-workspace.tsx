@@ -1037,7 +1037,7 @@ export function ChatWorkspace({
         ? `Hide ${activeSidebarTitle}`
         : `Show ${activeSidebarTitle}`;
 
-  /** 手动重新连接当前 Server，并继续恢复对应的 execution 会话。 */
+  /** 立即执行当前 Server 的本次重连，并继续恢复对应的 execution 会话。 */
   const handleReconnectRetry = React.useCallback(() => {
     if (!selectedProjectId || !contextId) return;
     void executionSessionManager

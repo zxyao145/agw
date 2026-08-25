@@ -203,7 +203,7 @@ export class ExecutionSessionManager {
     return this.activity.getActiveCount();
   }
 
-  /** 请求指定会话在自动重试耗尽后立即重新建立连接。 */
+  /** 请求指定会话立即执行当前重连次数，失败后继续剩余计划。 */
   public async retryConnection(key: ExecutionSessionKey): Promise<void> {
     const entry = this.entries.get(getExecutionSessionKey(key));
     if (!entry) throw new Error("Execution session is not available.");
@@ -262,7 +262,7 @@ export class ExecutionSessionManager {
     entry.handler?.onReconnecting?.(state);
   }
 
-  /** 保存自动重试耗尽状态，并通知 Chat 展示手动重试入口。 */
+  /** 保存重试耗尽状态，并通知 Chat 保留手动重试入口。 */
   private handleReconnectFailed(entry: Entry, state: ExecutionReconnectState): void {
     entry.reconnectState = state;
     entry.handler?.onReconnectFailed?.(state);

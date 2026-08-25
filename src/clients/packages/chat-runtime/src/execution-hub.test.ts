@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { HubConnectionBuilder, HubConnectionState } from "@microsoft/signalr";
+import { HubConnectionBuilder, HubConnectionState, type IRetryPolicy } from "@microsoft/signalr";
 import type { AiMessage } from "@agw/api";
 
 test("buildSettingCommand keeps target data out of settings", async () => {
@@ -284,6 +284,146 @@ test("execution session keeps tool rendering scope across handler replacement an
         .map((item) => item.toolName),
       ["Read", "Bash", "Read"],
     );
+  } finally {
+    await client.dispose();
+    HubConnectionBuilder.prototype.build = originalBuild;
+  }
+});
+
+test("manual reconnect consumes the current attempt and waits on the next after failure", async () => {
+  const { ExecutionHubClient } = await import("./execution-hub" + ".ts");
+  const originalBuild = HubConnectionBuilder.prototype.build;
+  let reconnectPolicy: IRetryPolicy | undefined;
+  let reconnectingCallback: (() => void) | undefined;
+  let closeCallback: (() => void) | undefined;
+  let startCount = 0;
+  const connection: {
+    state: HubConnectionState;
+    on: () => void;
+    onreconnecting: (callback: () => void) => void;
+    onclose: (callback: () => void) => void;
+    onreconnected: () => void;
+    start: () => Promise<void>;
+    stop: () => Promise<void>;
+    invoke: () => Promise<undefined>;
+  } = {
+    state: HubConnectionState.Disconnected,
+    on: () => undefined,
+    onreconnecting: (callback) => {
+      reconnectingCallback = callback;
+    },
+    onclose: (callback) => {
+      closeCallback = callback;
+    },
+    onreconnected: () => undefined,
+    start: async () => {
+      startCount += 1;
+      if ([1, 3, 4].includes(startCount)) {
+        connection.state = HubConnectionState.Disconnected;
+        throw new Error("still offline");
+      }
+      connection.state = HubConnectionState.Connected;
+    },
+    stop: async () => {
+      connection.state = HubConnectionState.Disconnected;
+      closeCallback?.();
+    },
+    invoke: async () => undefined,
+  };
+  HubConnectionBuilder.prototype.build = function () {
+    reconnectPolicy = this.reconnectPolicy;
+    return connection as never;
+  };
+
+  const reconnectStates: Array<{
+    status: "reconnecting" | "failed";
+    retryAttempt: number;
+    retryDelayMs: number;
+  }> = [];
+  let reconnectedCount = 0;
+  const client = new ExecutionHubClient(
+    {
+      onMessage: () => undefined,
+      onReconnecting: (state) => reconnectStates.push(state),
+      onReconnectFailed: (state) => reconnectStates.push(state),
+      onReconnected: () => {
+        reconnectedCount += 1;
+      },
+    },
+    { baseUrl: "https://agw.example.test", token: null, attachmentStore: null },
+  );
+
+  try {
+    assert.ok(reconnectPolicy);
+    reconnectPolicy.nextRetryDelayInMilliseconds({
+      previousRetryCount: 2,
+      elapsedMilliseconds: 7_000,
+      retryReason: new Error("offline"),
+    });
+    connection.state = HubConnectionState.Reconnecting;
+    reconnectingCallback?.();
+    assert.deepEqual(reconnectStates.at(-1), {
+      status: "reconnecting",
+      retryAttempt: 3,
+      retryDelayMs: 5_000,
+    });
+
+    const reconnectCycle = client.retryConnection();
+    for (let index = 0; index < 20; index += 1) {
+      if (reconnectStates.at(-1)?.retryAttempt === 4) break;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+
+    assert.equal(startCount, 1);
+    assert.deepEqual(reconnectStates.slice(-2), [
+      { status: "reconnecting", retryAttempt: 3, retryDelayMs: 0 },
+      { status: "reconnecting", retryAttempt: 4, retryDelayMs: 7_000 },
+    ]);
+
+    const continuedCycle = client.retryConnection();
+    await Promise.all([reconnectCycle, continuedCycle]);
+
+    assert.equal(startCount, 2);
+    assert.deepEqual(reconnectStates.at(-1), {
+      status: "reconnecting",
+      retryAttempt: 4,
+      retryDelayMs: 0,
+    });
+    assert.equal(reconnectedCount, 1);
+
+    reconnectPolicy.nextRetryDelayInMilliseconds({
+      previousRetryCount: 6,
+      elapsedMilliseconds: 44_000,
+      retryReason: new Error("offline again"),
+    });
+    connection.state = HubConnectionState.Reconnecting;
+    reconnectingCallback?.();
+    const lastAttempt = client.retryConnection();
+    await lastAttempt;
+
+    assert.equal(startCount, 3);
+    assert.deepEqual(reconnectStates.at(-1), {
+      status: "failed",
+      retryAttempt: 7,
+      retryDelayMs: 0,
+    });
+
+    const restartedCycle = client.retryConnection();
+    for (let index = 0; index < 20; index += 1) {
+      if (reconnectStates.at(-1)?.retryAttempt === 2) break;
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+
+    assert.equal(startCount, 4);
+    assert.deepEqual(reconnectStates.slice(-2), [
+      { status: "reconnecting", retryAttempt: 1, retryDelayMs: 0 },
+      { status: "reconnecting", retryAttempt: 2, retryDelayMs: 2_000 },
+    ]);
+
+    const restartedAndContinuedCycle = client.retryConnection();
+    await Promise.all([restartedCycle, restartedAndContinuedCycle]);
+    assert.equal(startCount, 5);
+    assert.equal(reconnectedCount, 2);
   } finally {
     await client.dispose();
     HubConnectionBuilder.prototype.build = originalBuild;
