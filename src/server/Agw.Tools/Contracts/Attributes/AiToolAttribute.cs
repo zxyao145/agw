@@ -50,8 +50,9 @@ public sealed class AiToolAttribute : Attribute
     public int TimeoutMs { get; set; } = 30000;
 
     /// <summary>
-    /// Gets or sets whether exceptions should be returned as tool results
-    /// instead of being thrown.
+    /// Gets or sets the legacy exception-result preference.
+    /// The Agent execution pipeline always returns Tool exceptions as results;
+    /// this property is retained for compatibility and cannot disable that policy.
     /// </summary>
     public bool ReturnExceptionsAsResults { get; set; } = true;
 }

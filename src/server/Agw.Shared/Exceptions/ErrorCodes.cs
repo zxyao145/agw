@@ -611,6 +611,11 @@ public static class ErrorCodes
         "Stored remote skill configuration is invalid.",
         HttpStatusCode.InternalServerError
     );
+    public static readonly ErrorCode ToolExecutionFailed = new(
+        500_0026,
+        "Tool execution failed.",
+        HttpStatusCode.InternalServerError
+    );
 
     public static readonly ErrorCode UnsupportedTransportType = new(
         501_0001,

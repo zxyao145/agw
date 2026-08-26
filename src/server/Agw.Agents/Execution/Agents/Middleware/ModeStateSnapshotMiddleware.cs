@@ -115,6 +115,7 @@ internal sealed class ModeStateSnapshotMiddleware
         {
             if (
                 result.Exception != null
+                || ToolInvocationExceptionHandler.IsErrorResult(result.Result)
                 || !callNames.TryGetValue(result.CallId, out var toolName)
                 || !ModeMutationToolNames.Contains(toolName)
                 || !snapshottedCallIds.Add(result.CallId)

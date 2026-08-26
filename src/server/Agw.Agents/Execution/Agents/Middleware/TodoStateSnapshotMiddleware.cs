@@ -50,6 +50,7 @@ internal sealed class TodoStateSnapshotMiddleware
             {
                 if (
                     result.Exception != null
+                    || ToolInvocationExceptionHandler.IsErrorResult(result.Result)
                     || !callNames.TryGetValue(result.CallId, out var toolName)
                     || !MutationToolNames.Contains(toolName)
                     || !snapshottedCallIds.Add(result.CallId)

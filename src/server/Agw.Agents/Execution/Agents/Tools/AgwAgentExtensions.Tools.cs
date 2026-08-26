@@ -48,11 +48,18 @@ public static class AgwAgentExtensions
         var compactionStateKey = definition.CompactionProvider is CompactionProvider compactionProvider
             ? compactionProvider.StateKeys.SingleOrDefault()
             : null;
+        var toolInvocationExceptionHandler = new ToolInvocationExceptionHandler(
+            loggerFactory.CreateLogger<ToolInvocationExceptionHandler>()
+        );
         var chatClientBuilder = chatClient
             .AsBuilder()
             .UseApprovalResponseBinding(loggerFactory)
             .UseApprovalNotRequiredFunctionBypassing()
-            .UseFunctionInvocation(loggerFactory);
+            .UseFunctionInvocation(
+                loggerFactory,
+                functionInvokingClient =>
+                    functionInvokingClient.FunctionInvoker = toolInvocationExceptionHandler.InvokeAsync
+            );
         if (definition.CompactionProvider != null)
         {
             functionLoopContextTracker = new FunctionLoopContextTracker();

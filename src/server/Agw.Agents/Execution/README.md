@@ -202,6 +202,8 @@ turn 是一次用户输入到执行结束的完整过程。`RuntimeTurnContext` 
 
 在 `InProcess` 模式中，Tool 直接进入进程内 channel。`Distributed` 模式则只在 durable runtime 构造时，再套一层 MAF `ApprovalRequiredAIFunction`，把 Tool 调用截断在可 checkpoint 的 `ToolApprovalRequestContent` 边界；恢复 segment 后，持久化回答先还原为 `ToolApprovalResponseContent`，随后由预回答 channel 注入真正的 `ask_user_question` Tool。两种模式复用同一个 Tool 和交互协议，普通执行路径没有行为变化。
 
+所有 Agw 进程内可执行的 `AIFunction` 都经过统一的函数调用异常边界。Tool 抛出 `AgwException` 或 `AgwFilesException` 时，函数结果保留其错误码和可公开消息；其他异常返回脱敏结果 `{"isError":true,"code":5000026,"message":"Tool execution failed."}`，完整异常只写入结构化日志并标记当前 Activity 为失败。调用方已经请求取消时仍传播 `OperationCanceledException`，不会将取消伪装成 Tool 结果。该边界覆盖内置 Tool、Tool Block、Connection Native/MCP、独立 MCP，以及所有 Agent 运行模式；Tool 物化/配置阶段、Hosted Tool 和外部 Agent CLI 的异常仍由各自协议处理。
+
 `TurnPipeline` 统一输出协议：
 
 1. 先发送 `turn-start`；
