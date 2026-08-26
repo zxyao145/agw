@@ -297,7 +297,9 @@ export function Chat({
         ),
     [checkpointAvailability],
   );
-  const checkpointResumeDisabled = isExecuting || isTransitioning || reconnectState !== null;
+  const isHydratingSession = hydratedSessionRevision !== sessionSeed.revision;
+  const checkpointResumeDisabled =
+    isExecuting || isTransitioning || isHydratingSession || reconnectState !== null;
 
   const notifyExecutionError = React.useCallback(
     (error: unknown) => {
@@ -575,6 +577,9 @@ export function Chat({
   );
 
   React.useEffect(() => {
+    if (isHydratingSession) {
+      return;
+    }
     if (!projectId || !contextId) {
       setReconnectState(null);
       return;
@@ -643,6 +648,7 @@ export function Chat({
     applyExecutionMessage,
     contextId,
     executionServerId,
+    isHydratingSession,
     notifyExecutionError,
     projectId,
     refreshAgentflowCheckpoints,
@@ -659,7 +665,16 @@ export function Chat({
         throw new Error("Please select a project");
       }
 
+      const key = { serverId: executionServerId, projectId, contextId: nextContextId };
       let client = executionClientRef.current;
+      if (client && !client.matchesKey(key)) {
+        client.detach();
+        if (executionClientRef.current === client) {
+          executionClientRef.current = null;
+        }
+        configuredSessionRef.current = null;
+        client = null;
+      }
       if (!client) {
         let attachedClient!: ManagedExecutionHandle;
         attachedClient = executionSessionManager.attach(
@@ -851,7 +866,7 @@ export function Chat({
 
   const handleExecute = React.useCallback(
     async (value: string, imageAttachments: readonly ChatImageAttachment[]) => {
-      if (reconnectState) return;
+      if (isHydratingSession || reconnectState) return;
       if (isTransitioning) {
         toast.error("Please wait for the previous execution to stop");
         return;
@@ -940,6 +955,7 @@ export function Chat({
     [
       ensureConfiguredClient,
       ensureContextId,
+      isHydratingSession,
       isTransitioning,
       notifyExecutionError,
       onConversationChange,
@@ -1460,7 +1476,7 @@ export function Chat({
           {/* 输入框 */}
           <ChatInput
             isExecuting={isExecuting}
-            isTransitioning={isTransitioning}
+            isTransitioning={isTransitioning || isHydratingSession}
             isLoadingHistory={isLoadingOlderMessages || isJumpingToTop}
             hasMessages={renderItems.length > 0}
             onExecute={(value, imageAttachments) => {

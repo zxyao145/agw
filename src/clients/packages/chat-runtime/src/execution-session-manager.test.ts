@@ -81,6 +81,22 @@ test("manager marks a restored durable execution active", async () => {
   assert.equal(handle.getStatus(), "running");
 });
 
+test("manager creates independent clients for different conversation execution keys", () => {
+  let createdClientCount = 0;
+  const manager = new ExecutionSessionManager(() => {
+    createdClientCount += 1;
+    return createExecutionClient();
+  });
+  const otherSessionKey = { ...sessionKey, contextId: "context-2" };
+  const first = manager.attach(sessionKey, { onMessage: () => undefined });
+  const second = manager.attach(otherSessionKey, { onMessage: () => undefined });
+
+  assert.equal(createdClientCount, 2);
+  assert.equal(first.matchesKey(sessionKey), true);
+  assert.equal(first.matchesKey(otherSessionKey), false);
+  assert.equal(second.matchesKey(otherSessionKey), true);
+});
+
 test("manager preserves active recovery state when durable subscribe temporarily fails", async () => {
   const failedState: ExecutionReconnectState = {
     status: "failed",

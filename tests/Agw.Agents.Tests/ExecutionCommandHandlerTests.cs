@@ -79,6 +79,34 @@ public class ExecutionCommandHandlerTests
     }
 
     [Fact]
+    public async Task SettingCommand_ActiveTurnWithUnchangedSettings_DoesNotSendBusy()
+    {
+        var sink = new CapturingSink();
+        var task = CreateTask("current");
+        var runtimeFactory = new FakeRuntimeFactory { HoldTurnOpen = true };
+        var context = CreateContext(runtimeFactory, task, sink: sink);
+        var handler = new SettingCommandHandler();
+        await handler.HandleAsync(
+            new SettingCommand(task.ProjectId, contextId: "current"),
+            context,
+            TestContext.Current.CancellationToken
+        );
+        await context.StartTurnAsync(CreateExecCommand(Guid.CreateVersion7()), TestContext.Current.CancellationToken);
+
+        await handler.HandleAsync(
+            new SettingCommand(task.ProjectId, contextId: "current"),
+            context,
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Empty(sink.Messages);
+
+        runtimeFactory.CompleteHeldTurn();
+        await runtimeFactory.CreatedRuntimes[0].WhenIdleAsync();
+        await context.DisposeAsync();
+    }
+
+    [Fact]
     public async Task InterruptCommand_WithoutActiveTurn_SendsSystemMessageAndInterruptedFinish()
     {
         var sink = new CapturingSink();

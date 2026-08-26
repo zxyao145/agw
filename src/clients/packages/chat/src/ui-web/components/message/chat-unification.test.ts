@@ -33,6 +33,17 @@ test("shared Chat uses the package runtime session manager", async () => {
   assert.doesNotMatch(source, /new ExecutionHubClient/);
 });
 
+test("shared Chat does not reuse an execution handle for another conversation context", async () => {
+  const source = await readFile(CHAT_URL, "utf8");
+
+  assert.match(
+    source,
+    /if \(client && !client\.matchesKey\(key\)\) \{[\s\S]*?client\.detach\(\);[\s\S]*?client = null;/,
+  );
+  assert.match(source, /hydratedSessionRevision !== sessionSeed\.revision/);
+  assert.match(source, /if \(isHydratingSession\) \{\s*return;/);
+});
+
 test("checkpoint resume buffers new branch messages without using executionId as scope", async () => {
   const source = await readFile(CHAT_URL, "utf8");
   assert.match(source, /const checkpointResumeBufferRef = React\.useRef<AiMessage\[\] \| null>/);

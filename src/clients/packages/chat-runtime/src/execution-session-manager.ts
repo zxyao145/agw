@@ -47,6 +47,7 @@ type Entry = {
 };
 
 export type ManagedExecutionHandle = {
+  matchesKey(key: ExecutionSessionKey): boolean;
   configure(setting: ExecutionSetting): Promise<ExecutionConfigurationResult>;
   execute(request: ExecutionRequest): Promise<void>;
   listAgentflowCheckpoints(agentflowId: string): Promise<AgentflowCheckpointAvailability[]>;
@@ -126,6 +127,7 @@ export class ExecutionSessionManager {
 
     const attachedEntry = entry;
     return {
+      matchesKey: (candidate) => getExecutionSessionKey(candidate) === id,
       configure: async (setting) => {
         try {
           const result = await attachedEntry.client.configure(setting);

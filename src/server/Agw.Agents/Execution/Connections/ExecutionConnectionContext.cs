@@ -95,14 +95,14 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     public async Task ApplySettingsAsync(ExecutionSettings settings, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        if (HasActiveTurn)
+        if (settings.Equals(Settings))
         {
-            await SendErrorAsync(BusyMessage);
             return;
         }
 
-        if (settings.Equals(Settings))
+        if (HasActiveTurn)
         {
+            await SendErrorAsync(BusyMessage);
             return;
         }
 
