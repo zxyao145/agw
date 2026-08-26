@@ -179,6 +179,40 @@ public class LocalSkillScriptRunnerTests
         }
     }
 
+    [Fact]
+    public async Task RunAsync_ChildKeepsRedirectedStreamsOpen_ThrowsCommandTimeout()
+    {
+        // Arrange
+        var root = CreateTempDirectory();
+        var script = Path.Combine(root, "spawn-child.py");
+        await File.WriteAllTextAsync(
+            script,
+            "import subprocess, sys; subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(3)']); print('parent exited')",
+            TestContext.Current.CancellationToken
+        );
+
+        try
+        {
+            // Act
+            var exception = await Assert.ThrowsAsync<AgwException>(() =>
+                LocalSkillScriptRunner.RunAsync(
+                    root,
+                    script,
+                    arguments: null,
+                    TestContext.Current.CancellationToken,
+                    timeout: TimeSpan.FromMilliseconds(250)
+                )
+            );
+
+            // Assert
+            Assert.Equal(ErrorCodes.CommandTimeout.Code, exception.Code);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static string CreateTempDirectory()
     {
         var path = Path.Combine(Path.GetTempPath(), $"agw-local-skill-{Guid.CreateVersion7():N}");

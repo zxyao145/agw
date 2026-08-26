@@ -137,10 +137,19 @@ public class DbSeederTests
 
             var skillMarkdown = Path.Combine(paths.SkillsDirectory, "xhs-explore", "SKILL.md");
             Assert.True(File.Exists(skillMarkdown));
-            Assert.Contains(
-                "name: xhs-explore",
-                await File.ReadAllTextAsync(skillMarkdown, TestContext.Current.CancellationToken)
+            var skillMarkdownContent = await File.ReadAllTextAsync(
+                skillMarkdown,
+                TestContext.Current.CancellationToken
             );
+            Assert.Contains("name: xhs-explore", skillMarkdownContent, StringComparison.Ordinal);
+            Assert.Contains("`run_skill_script`", skillMarkdownContent, StringComparison.Ordinal);
+            Assert.Contains("\"scriptName\": \"scripts/cli.py\"", skillMarkdownContent, StringComparison.Ordinal);
+            Assert.DoesNotContain("python scripts/cli.py", skillMarkdownContent, StringComparison.Ordinal);
+            var skillCli = Path.Combine(paths.SkillsDirectory, "xhs-explore", "scripts", "cli.py");
+            var skillCliContent = await File.ReadAllTextAsync(skillCli, TestContext.Current.CancellationToken);
+            Assert.Contains("\"stdin\": subprocess.DEVNULL", skillCliContent, StringComparison.Ordinal);
+            Assert.Contains("\"stdout\": subprocess.DEVNULL", skillCliContent, StringComparison.Ordinal);
+            Assert.Contains("\"stderr\": subprocess.DEVNULL", skillCliContent, StringComparison.Ordinal);
 
             var agentflow = await context
                 .Agentflows.Include(x => x.Nodes)
