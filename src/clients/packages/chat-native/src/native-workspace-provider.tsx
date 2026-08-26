@@ -89,7 +89,7 @@ export type NativeWorkspaceContextValue = {
   setPermissionMode(mode: PermissionMode): void;
   setAgentMode(mode: AgentMode): void;
   selectConversation(conversationId: string): void;
-  newChat(): void;
+  newChat(): Promise<void>;
   sendMessage(text: string, attachments: readonly ChatImageAttachment[]): Promise<void>;
   stopExecution(): void;
   submitHumanResponse(response: {
@@ -552,25 +552,42 @@ export function NativeWorkspaceProvider({
     if (isExecuting) throw new Error("Stop the current execution before switching context.");
   }, [isExecuting]);
 
-  const newChat = React.useCallback(() => {
+  const newChat = React.useCallback(async () => {
     ensureIdle();
+
+    const conversation =
+      conversationService && selectedProjectId
+        ? await conversationService.createProjectConversation(selectedProjectId)
+        : null;
+
     executionGenerationRef.current += 1;
     modeChangeGenerationRef.current += 1;
     batcherRef.current?.discard();
     disposeExecutionSession();
-    hydratedConversationRef.current = null;
-    selectedConversationIdRef.current = null;
-    selectedContextIdRef.current = null;
+    hydratedConversationRef.current = conversation
+      ? `${selectedProjectId}:${conversation.conversationId}`
+      : null;
+    selectedConversationIdRef.current = conversation?.conversationId ?? null;
+    selectedContextIdRef.current = conversation?.contextId ?? null;
     confirmedAgentModeRef.current = DEFAULT_AGENT_MODE;
-    setSelectedConversationId(null);
-    setSelectedContextId(null);
+    setSelectedConversationId(conversation?.conversationId ?? null);
+    setSelectedContextId(conversation?.contextId ?? null);
     setMessages([]);
     setClaudeCommands([]);
     setAgentModeState(DEFAULT_AGENT_MODE);
     setPendingHumanGate(null);
     setCheckpointAvailability([]);
     setOperationError(null);
-  }, [disposeExecutionSession, ensureIdle]);
+    if (conversation) {
+      await conversationsQuery.refetch();
+    }
+  }, [
+    conversationService,
+    conversationsQuery,
+    disposeExecutionSession,
+    ensureIdle,
+    selectedProjectId,
+  ]);
 
   const selectProject = React.useCallback(
     (projectId: string) => {
@@ -940,7 +957,7 @@ export function NativeWorkspaceProvider({
       if (!conversationService || !selectedProjectId) return;
       ensureIdle();
       await conversationService.deleteProjectConversation(selectedProjectId, conversationId);
-      if (selectedConversationId === conversationId) newChat();
+      if (selectedConversationId === conversationId) await newChat();
       await conversationsQuery.refetch();
     },
     [

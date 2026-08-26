@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { getFileDiff, readFile, type GitDiffResponse, type GitDiffScope } from "@agw/projects";
 import { apiGet } from "@agw/api";
 import {
+  createProjectConversation,
   getProjectConversationDetails,
   getProjectConversationMessages,
   type ConversationResumeState,
@@ -587,10 +588,33 @@ export function ChatWorkspace({
     syncRoute(selectedProjectId, null);
   }, [clearLocalSessionState, selectedProjectId, syncRoute]);
 
-  const startNewConversation = React.useCallback(() => {
-    clearLocalSessionState();
-    syncRoute(selectedProjectId, null);
-  }, [clearLocalSessionState, selectedProjectId, syncRoute]);
+  const startNewConversation = React.useCallback(async () => {
+    if (!selectedProjectId) {
+      return;
+    }
+
+    try {
+      const conversation = await createProjectConversation(selectedProjectId);
+      clearLocalSessionState();
+      hydratedConversationKeyRef.current = getConversationHydrationKey(
+        selectedProjectId,
+        conversation.conversationId,
+      );
+      setConversationId(conversation.conversationId);
+      setContextId(conversation.contextId);
+      replaceChatSession({
+        contextId: conversation.contextId,
+        messages: [],
+        usage: EMPTY_TOKEN_USAGE,
+        olderMessagesCursor: null,
+        hasOlderMessages: false,
+        agentMode: null,
+      });
+      syncRoute(selectedProjectId, conversation.conversationId);
+    } catch (error) {
+      toast.error(`Failed to create conversation: ${getApiErrorMessage(error)}`);
+    }
+  }, [clearLocalSessionState, replaceChatSession, selectedProjectId, syncRoute]);
 
   const loadConversationHistory = React.useCallback(
     async (projectId: string, nextConversationId: string, signal?: AbortSignal) => {
@@ -912,8 +936,8 @@ export function ChatWorkspace({
     [selectedProjectId, syncRoute],
   );
 
-  const handleNewConversation = React.useCallback(() => {
-    startNewConversation();
+  const handleNewConversation = React.useCallback(async () => {
+    await startNewConversation();
     setIsDrawerOpen(false);
   }, [startNewConversation]);
 

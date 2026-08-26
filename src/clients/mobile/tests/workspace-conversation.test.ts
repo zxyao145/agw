@@ -41,3 +41,17 @@ test("Mobile sends the next message through the preserved execution context id",
   expect(sendHandler).toMatch(/const contextId = ensureContextId\(\)/);
   expect(sendHandler).toMatch(/ensureConfiguredSession\(contextId, permissionMode\)/);
 });
+
+test("Mobile persists a new conversation before selecting it", () => {
+  const newChatStart = source.indexOf("const newChat = React.useCallback");
+  const newChatEnd = source.indexOf("const selectProject = React.useCallback", newChatStart);
+  const newChatHandler = source.slice(newChatStart, newChatEnd);
+
+  expect(newChatStart).toBeGreaterThan(-1);
+  expect(newChatEnd).toBeGreaterThan(-1);
+  expect(newChatHandler).toMatch(
+    /conversationService\.createProjectConversation\(selectedProjectId\)/,
+  );
+  expect(newChatHandler).toMatch(/setSelectedConversationId\(conversation\?\.conversationId/);
+  expect(newChatHandler).toMatch(/setSelectedContextId\(conversation\?\.contextId/);
+});

@@ -4,7 +4,10 @@ import { normalizeTokenUsage, type TokenUsage, type TokenUsageInput } from "@agw
 import { ApiError, type AgwApiClient } from "@agw/api";
 import * as browserClient from "@agw/api";
 
-type ProjectConversationApiClient = Pick<AgwApiClient, "apiGet" | "apiPut" | "apiDelete">;
+type ProjectConversationApiClient = Pick<
+  AgwApiClient,
+  "apiGet" | "apiPost" | "apiPut" | "apiDelete"
+>;
 
 export type ConversationMessageDirection = "newer" | "older";
 
@@ -93,10 +96,6 @@ function toConversationSummary(
   };
 }
 
-function shouldIncludeConversation(conversation: ConversationSummary): boolean {
-  return conversation.messageCount > 0 || conversation.executionCount === 0;
-}
-
 function toConversationDetails(conversation: ProjectConversationResponse): ConversationDetails {
   return {
     ...toConversationSummary(conversation),
@@ -117,7 +116,19 @@ export async function getProjectConversations(
     params: { path: { projectId } },
   })) as ProjectConversationSummaryResponse[];
 
-  return result.map(toConversationSummary).filter(shouldIncludeConversation);
+  return result.map(toConversationSummary);
+}
+
+export async function createProjectConversation(
+  projectId: string,
+  client: ProjectConversationApiClient = browserClient,
+): Promise<ConversationSummary> {
+  const response = (await client.apiPost("/api/projects/{projectId}/conversations", {
+    params: { path: { projectId } },
+    body: { contextId: null },
+  })) as ProjectConversationSummaryResponse;
+
+  return toConversationSummary(response);
 }
 
 export async function getProjectConversationDetails(
@@ -295,6 +306,7 @@ export async function deleteAllProjectConversations(
 
 export type ProjectConversationService = {
   getProjectConversations(projectId: string): Promise<ConversationSummary[]>;
+  createProjectConversation(projectId: string): Promise<ConversationSummary>;
   getProjectConversationDetails(
     projectId: string,
     conversationId: string,
@@ -323,6 +335,7 @@ export function createProjectConversationService(
 ): ProjectConversationService {
   return {
     getProjectConversations: (projectId) => getProjectConversations(projectId, client),
+    createProjectConversation: (projectId) => createProjectConversation(projectId, client),
     getProjectConversationDetails: (projectId, conversationId) =>
       getProjectConversationDetails(projectId, conversationId, client),
     getProjectConversationMessages: (projectId, conversationId, options) =>

@@ -22,6 +22,29 @@ public class ProjectConversationsController : ControllerBase
     public async Task<IActionResult> ListAsync(Guid projectId) =>
         ApiResult.Ok(await _projectConversationAppService.ListResponsesAsync(projectId));
 
+    [HttpPost]
+    [ProducesApiResult(typeof(ProjectConversationSummaryResponse))]
+    public async Task<IActionResult> CreateAsync(
+        Guid projectId,
+        [FromBody] ProjectConversationCreateRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await _projectConversationAppService.CreateAsync(
+            projectId,
+            request,
+            User.GetUserId(),
+            cancellationToken
+        );
+
+        return result.Type switch
+        {
+            ApplicationResultType.Success => ApiResult.Ok(result.Value!),
+            ApplicationResultType.NotFound => ErrorCodes.ResourceNotFound.ToApiResult(),
+            _ => ApiResult.BadRequest(result.Error ?? "Invalid request.", ErrorCodes.InvalidParam.Code),
+        };
+    }
+
     [HttpGet("{conversationId}")]
     [ProducesApiResult(typeof(ProjectConversationResponse))]
     public async Task<IActionResult> GetAsync(Guid projectId, Guid conversationId, CancellationToken cancellationToken)

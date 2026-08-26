@@ -22,6 +22,20 @@ public class ProjectConversationsControllerTests
     }
 
     [Fact]
+    public void CreateAsync_UsesCollectionPostRoute()
+    {
+        var method = typeof(ProjectConversationsController).GetMethod(
+            "CreateAsync",
+            [typeof(Guid), typeof(ProjectConversationCreateRequest), typeof(CancellationToken)]
+        );
+
+        Assert.NotNull(method);
+        var attribute = Assert.Single(method.GetCustomAttributes<HttpPostAttribute>());
+
+        Assert.Null(attribute.Template);
+    }
+
+    [Fact]
     public void GetAsync_UsesContextIdRoute()
     {
         var method = GetGetMethod();

@@ -2643,7 +2643,36 @@ export interface paths {
       };
     };
     put?: never;
-    post?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path: {
+          projectId: string;
+        };
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["ProjectConversationCreateRequest"];
+          "text/json": components["schemas"]["ProjectConversationCreateRequest"];
+          "application/*+json": components["schemas"]["ProjectConversationCreateRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfProjectConversationSummaryResponse"];
+            "application/json": components["schemas"]["ApiResultOfProjectConversationSummaryResponse"];
+            "text/json": components["schemas"]["ApiResultOfProjectConversationSummaryResponse"];
+          };
+        };
+      };
+    };
     delete: {
       parameters: {
         query?: never;
@@ -4672,6 +4701,13 @@ export interface components {
       title: string;
       detail: null | string;
     };
+    ApiResultOfProjectConversationSummaryResponse: {
+      data?: null | components["schemas"]["ProjectConversationSummaryResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
     "ApiResultOfProjectConversationSummaryResponse[]": {
       data?: null | components["schemas"]["ProjectConversationSummaryResponse"][];
       /** Format: int32 */
@@ -5349,6 +5385,9 @@ export interface components {
       projectId: string;
       /** Format: uuid */
       connectionId: string;
+    };
+    ProjectConversationCreateRequest: {
+      contextId: null | string;
     };
     /** @enum {unknown} */
     ProjectConversationMessageDirection: "newer" | "older";

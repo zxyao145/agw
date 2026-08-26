@@ -65,6 +65,18 @@ test("chat page refreshes the conversation list after an execution completes", a
   assert.match(pageSource, /onConversationChange=\{refreshConversationList\}/);
 });
 
+test("new chat persists its conversation before selecting the local session", async () => {
+  const workspaceSource = await readFile(CHAT_WORKSPACE_URL, "utf8");
+
+  assert.match(workspaceSource, /const startNewConversation = React\.useCallback\(async/);
+  assert.match(
+    workspaceSource,
+    /const conversation = await createProjectConversation\(selectedProjectId\)/,
+  );
+  assert.match(workspaceSource, /setConversationId\(conversation\.conversationId\)/);
+  assert.match(workspaceSource, /setContextId\(conversation\.contextId\)/);
+});
+
 test("chat file explorer starts with diff mode disabled", async () => {
   const workspaceSource = await readFile(CHAT_WORKSPACE_URL, "utf8");
 
@@ -140,15 +152,11 @@ test("chat conversations use the shared friendly local date-time formatter", asy
   assert.doesNotMatch(conversationListSource, /const formatDate =/);
 });
 
-test("chat conversation list keeps cleared conversations and filters empty execution placeholders", async () => {
+test("chat conversation list trusts the project conversation API visibility contract", async () => {
   const taskClientSource = await readFile(TASK_CLIENT_URL, "utf8");
 
-  assert.match(taskClientSource, /function shouldIncludeConversation/);
-  assert.match(
-    taskClientSource,
-    /conversation\.messageCount > 0 \|\| conversation\.executionCount === 0/,
-  );
-  assert.match(taskClientSource, /\.filter\(shouldIncludeConversation\)/);
+  assert.match(taskClientSource, /return result\.map\(toConversationSummary\);/);
+  assert.doesNotMatch(taskClientSource, /shouldIncludeConversation/);
 });
 
 test("chat page keeps conversation resource id separate from execution context id", async () => {
