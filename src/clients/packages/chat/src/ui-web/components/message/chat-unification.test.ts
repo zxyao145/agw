@@ -44,6 +44,15 @@ test("shared Chat does not reuse an execution handle for another conversation co
   assert.match(source, /if \(isHydratingSession\) \{\s*return;/);
 });
 
+test("shared Chat replaces hydrated turns with a complete active snapshot", async () => {
+  const source = await readFile(CHAT_URL, "utf8");
+
+  assert.match(source, /getActiveTurnSnapshot\(\)/);
+  assert.match(source, /const nextMessages = replaceStreamingScope\(/);
+  assert.match(source, /restoreActiveTurnSnapshot\(client, generation\)/);
+  assert.match(source, /activeStreamingScopeRef\.current = snapshot\.streamingScopeId/);
+});
+
 test("checkpoint resume buffers new branch messages without using executionId as scope", async () => {
   const source = await readFile(CHAT_URL, "utf8");
   assert.match(source, /const checkpointResumeBufferRef = React\.useRef<AiMessage\[\] \| null>/);

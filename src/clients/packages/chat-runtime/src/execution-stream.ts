@@ -10,6 +10,7 @@ export {
   mergeStreamingMessage,
   mergeStreamingMessages,
   mergeStreamingMessagesById,
+  replaceStreamingScope,
   scopeMessagesByUserTurn,
   scopeStreamingMessage,
   STREAMING_MESSAGE_BATCH_INTERVAL_MS,

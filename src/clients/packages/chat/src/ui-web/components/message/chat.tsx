@@ -46,6 +46,7 @@ import {
   createStreamingMessageBatcher,
   createUserMessage,
   mergeStreamingMessages,
+  replaceStreamingScope,
   scopeMessagesByUserTurn,
   scopeStreamingMessage,
   toExecutionUserInput,
@@ -576,6 +577,51 @@ export function Chat({
     [notifyExecutionError, onConversationChange, refreshAgentflowCheckpoints],
   );
 
+  const restoreActiveTurnSnapshot = React.useCallback(
+    (client: ManagedExecutionHandle, generation: number) => {
+      if (generation !== executionGenerationRef.current) {
+        return;
+      }
+
+      const snapshot = client.getActiveTurnSnapshot();
+      if (!snapshot) {
+        return;
+      }
+
+      const prepared = prepareChatHistory(snapshot.messages);
+      const nextMessages = replaceStreamingScope(
+        messagesRef.current,
+        prepared.messages,
+        snapshot.streamingScopeId,
+      );
+      messagesRef.current = nextMessages;
+      setMessages(nextMessages);
+      activeStreamingScopeRef.current = snapshot.streamingScopeId;
+
+      let nextCommands: string[] | null = null;
+      let nextMode: AgentMode | null = null;
+      for (const message of snapshot.messages) {
+        const initCommands = getClaudeInitCommands(message);
+        if (initCommands !== null) {
+          nextCommands = initCommands;
+        }
+
+        const messageMode = getAgentMode(message);
+        if (messageMode) {
+          nextMode = messageMode;
+        }
+      }
+      if (nextCommands !== null) {
+        setClaudeCommands(nextCommands);
+      }
+      if (nextMode) {
+        confirmedAgentModeRef.current = nextMode;
+        setAgentMode(nextMode);
+      }
+    },
+    [],
+  );
+
   React.useEffect(() => {
     if (isHydratingSession) {
       return;
@@ -639,6 +685,7 @@ export function Chat({
     executionClientRef.current = client;
     setReconnectState(client.getReconnectState());
     setIsExecuting(["running", "waiting-approval", "detached"].includes(client.getStatus()));
+    restoreActiveTurnSnapshot(client, generation);
 
     return () => {
       if (executionClientRef.current === client) executionClientRef.current = null;
@@ -652,6 +699,7 @@ export function Chat({
     notifyExecutionError,
     projectId,
     refreshAgentflowCheckpoints,
+    restoreActiveTurnSnapshot,
     sessionSeed.revision,
   ]);
 
@@ -730,6 +778,7 @@ export function Chat({
         client = attachedClient;
         executionClientRef.current = client;
         setReconnectState(client.getReconnectState());
+        restoreActiveTurnSnapshot(client, generation);
       }
 
       const configurationKey = JSON.stringify({
@@ -765,6 +814,7 @@ export function Chat({
       permissionMode,
       projectId,
       refreshAgentflowCheckpoints,
+      restoreActiveTurnSnapshot,
     ],
   );
 

@@ -56,12 +56,16 @@ export function getMessageMeta(message: AiMessage): MessageMeta | null {
     return agentAuthor ? { name: null, author: agentAuthor } : null;
   }
 
+  const nodeName = readStringProperty(message, ["nodeName"]);
   const agentName = readStringProperty(message, AGENT_NAME_KEYS);
-  if (!agentName && !agentAuthor) return null;
+  const persistedAgentName = readStringProperty(message, ["agentName"]);
+  const displayAuthor =
+    agentAuthor ?? (message.role !== "tool" && nodeName ? persistedAgentName : null);
+  if (!agentName && !displayAuthor) return null;
 
   return {
     name: agentName,
-    author: agentAuthor,
+    author: displayAuthor,
   };
 }
 

@@ -189,3 +189,27 @@ export function mergeStreamingMessages<T extends ExecutionMessage>(
 export function mergeStreamingMessagesById<T extends ExecutionMessage>(messages: T[]): T[] {
   return mergeStreamingMessages([], messages);
 }
+
+/**
+ * Replaces all messages in one streaming turn while preserving the position of
+ * that turn and every message belonging to other turns.
+ */
+export function replaceStreamingScope<T extends ExecutionMessage>(
+  messages: T[],
+  replacement: readonly T[],
+  streamingScopeId: string,
+): T[] {
+  const firstMatchIndex = messages.findIndex(
+    (message) => getMessageStreamingScopeId(message) === streamingScopeId,
+  );
+  const remaining = messages.filter(
+    (message) => getMessageStreamingScopeId(message) !== streamingScopeId,
+  );
+
+  if (firstMatchIndex < 0) {
+    return [...remaining, ...replacement];
+  }
+
+  remaining.splice(Math.min(firstMatchIndex, remaining.length), 0, ...replacement);
+  return remaining;
+}

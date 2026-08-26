@@ -97,6 +97,68 @@ test("manager creates independent clients for different conversation execution k
   assert.equal(second.matchesKey(otherSessionKey), true);
 });
 
+test("manager restores the complete active turn instead of replaying capped deltas", async () => {
+  let clientHandlers: ExecutionHubHandlers | undefined;
+  const manager = new ExecutionSessionManager((handlers) => {
+    clientHandlers = handlers;
+    return createExecutionClient();
+  });
+  const first = manager.attach(sessionKey, { onMessage: () => undefined });
+  const input = {
+    messageId: "user-1",
+    author: "$agw",
+    contents: [{ type: "TextContent", content: "run" }],
+  };
+
+  await first.execute({ agentId: "agent-1", agentType: 0, input });
+  clientHandlers?.onMessage({
+    messageId: "turn-start-1",
+    role: "system",
+    author: "$agw",
+    contents: [],
+    streamingScopeId: "user-1",
+    additionalProperties: { type: "turn-start" },
+  });
+
+  const deltas = Array.from({ length: 250 }, (_, index) => String(index % 10));
+  for (const content of deltas) {
+    clientHandlers?.onMessage({
+      messageId: "assistant-1",
+      role: "assistant",
+      author: "general-agent",
+      contents: [{ type: "TextContent", content }],
+      streamingScopeId: "user-1",
+    });
+  }
+  const interaction = createQuestionInteraction("active-interaction");
+  clientHandlers?.onMessage(interaction);
+
+  first.detach();
+  const replayed: AiMessage[] = [];
+  const second = manager.attach(sessionKey, { onMessage: (message) => replayed.push(message) });
+  await Promise.resolve();
+
+  assert.deepEqual(replayed, [interaction]);
+  const snapshot = second.getActiveTurnSnapshot();
+  assert.ok(snapshot);
+  assert.equal(snapshot.streamingScopeId, "user-1");
+  assert.equal(snapshot.messages[0]?.role, "user");
+  assert.equal(
+    snapshot.messages.find((message) => message.messageId === "assistant-1")?.contents[0]?.content,
+    deltas.join(""),
+  );
+
+  clientHandlers?.onMessage({
+    messageId: "turn-finished-1",
+    role: "system",
+    author: "$agw",
+    contents: [],
+    streamingScopeId: "user-1",
+    additionalProperties: { type: "turn-finished", status: "completed" },
+  });
+  assert.equal(second.getActiveTurnSnapshot(), null);
+});
+
 test("manager preserves active recovery state when durable subscribe temporarily fails", async () => {
   const failedState: ExecutionReconnectState = {
     status: "failed",

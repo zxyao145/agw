@@ -163,6 +163,58 @@ test("restores Desktop agent name and author metadata", () => {
   );
 });
 
+test("prefers an explicit author over the persisted Agentflow agent name", () => {
+  assert.deepEqual(
+    getMessageMeta({
+      messageId: "message-1",
+      role: "assistant",
+      author: "live-agent",
+      contents: [],
+      additionalProperties: { nodeName: "Review Node", agentName: "historical-agent" },
+    }),
+    { name: "Review Node", author: "live-agent" },
+  );
+});
+
+test("uses the persisted agent name when historical Agentflow messages have no author", () => {
+  assert.deepEqual(
+    getMessageMeta({
+      messageId: "message-1",
+      role: "assistant",
+      author: null,
+      contents: [],
+      additionalProperties: { nodeName: "Review Node", agentName: "general-agent" },
+    }),
+    { name: "Review Node", author: "general-agent" },
+  );
+});
+
+test("does not duplicate a standalone agent name", () => {
+  assert.deepEqual(
+    getMessageMeta({
+      messageId: "message-1",
+      role: "assistant",
+      author: null,
+      contents: [],
+      additionalProperties: { agentName: "general-agent" },
+    }),
+    { name: "general-agent", author: null },
+  );
+});
+
+test("does not add historical agent metadata to tool messages", () => {
+  assert.deepEqual(
+    getMessageMeta({
+      messageId: "message-1",
+      role: "tool",
+      author: null,
+      contents: [],
+      additionalProperties: { nodeName: "Review Node", agentName: "general-agent" },
+    }),
+    { name: "Review Node", author: null },
+  );
+});
+
 test("uses the first line for collapsed message previews", () => {
   assert.equal(getMessagePreview("Planning the change\nMore detail"), "Planning the change");
   assert.match(getMessagePreview("reasoning ".repeat(40).trim()), /…$/);

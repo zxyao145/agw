@@ -13,6 +13,12 @@ import {
 } from "./execution-session";
 import type { AiMessage } from "@agw/api";
 import {
+  cloneMessage,
+  getMessageStreamingScopeId,
+  mergeStreamingMessages,
+  scopeStreamingMessage,
+} from "@agw/execution-core";
+import {
   ExecutionActivityStore,
   getExecutionSessionKey,
   type ExecutionSessionKey,
@@ -44,6 +50,16 @@ type Entry = {
   pendingMessages: AiMessage[];
   pendingHumanGate: { requestId: string; message: AiMessage } | null;
   reconnectState: ExecutionReconnectState | null;
+  activeTurn: ActiveTurnState | null;
+};
+
+type ActiveTurnState = ActiveTurnSnapshot & {
+  replayable: boolean;
+};
+
+export type ActiveTurnSnapshot = {
+  streamingScopeId: string;
+  messages: AiMessage[];
 };
 
 export type ManagedExecutionHandle = {
@@ -69,6 +85,7 @@ export type ManagedExecutionHandle = {
   }): Promise<void>;
   getStatus(): ExecutionStatus;
   getReconnectState(): ExecutionReconnectState | null;
+  getActiveTurnSnapshot(): ActiveTurnSnapshot | null;
   detach(): void;
   dispose(): Promise<void>;
 };
@@ -102,6 +119,7 @@ export class ExecutionSessionManager {
         pendingMessages: [],
         pendingHumanGate: null,
         reconnectState: null,
+        activeTurn: null,
       };
       entry = nextEntry;
       this.entries.set(id, entry);
@@ -110,18 +128,22 @@ export class ExecutionSessionManager {
     }
     this.activity.attach(key);
     const pendingMessages = entry.pendingMessages.splice(0);
+    const replayableActiveTurn = entry.activeTurn?.replayable === true;
+    const replayMessages = replayableActiveTurn
+      ? pendingMessages.filter((message) => getPendingHumanGate(message) !== null)
+      : pendingMessages;
     const pendingHumanGate = entry.pendingHumanGate;
     if (
       pendingHumanGate &&
-      !pendingMessages.some(
+      !replayMessages.some(
         (message) => getPendingHumanGate(message)?.requestId === pendingHumanGate.requestId,
       )
     ) {
-      pendingMessages.push(pendingHumanGate.message);
+      replayMessages.push(pendingHumanGate.message);
     }
-    if (pendingMessages.length > 0) {
+    if (replayMessages.length > 0) {
       queueMicrotask(() => {
-        for (const message of pendingMessages) handler.onMessage(message);
+        for (const message of replayMessages) handler.onMessage(message);
       });
     }
 
@@ -146,10 +168,12 @@ export class ExecutionSessionManager {
         if (this.activity.isActive(key)) {
           throw new Error("This conversation already has a running task.");
         }
+        this.beginActiveTurn(attachedEntry, request.input);
         this.activity.turnStarted(key);
         try {
           await attachedEntry.client.execute(request);
         } catch (error) {
+          attachedEntry.activeTurn = null;
           this.activity.turnFinished(key, "failed");
           throw error;
         }
@@ -160,6 +184,7 @@ export class ExecutionSessionManager {
         if (this.activity.isActive(key)) {
           throw new Error("This conversation already has a running task.");
         }
+        attachedEntry.activeTurn = null;
         this.activity.turnStarted(key);
         try {
           return await attachedEntry.client.resumeCheckpoint(args);
@@ -178,6 +203,7 @@ export class ExecutionSessionManager {
       },
       getStatus: () => this.activity.getStatus(key),
       getReconnectState: () => attachedEntry.reconnectState,
+      getActiveTurnSnapshot: () => this.readActiveTurnSnapshot(attachedEntry),
       detach: () => {
         if (attachedEntry.handler === handler) {
           attachedEntry.handler = null;
@@ -217,6 +243,7 @@ export class ExecutionSessionManager {
   public getSnapshot = this.activity.getSnapshot;
 
   private handleMessage(entry: Entry, message: AiMessage): void {
+    this.captureActiveTurnMessage(entry, message);
     const humanGate = getPendingHumanGate(message);
     if (message.additionalProperties?.type === "turn-start") {
       this.clearPendingHumanGate(entry);
@@ -230,6 +257,7 @@ export class ExecutionSessionManager {
       if (terminalStatus) {
         this.clearPendingHumanGate(entry);
         this.activity.turnFinished(entry.key, terminalStatus);
+        entry.activeTurn = null;
       }
     }
     if (entry.handler) {
@@ -250,6 +278,59 @@ export class ExecutionSessionManager {
         !pendingHumanGate || (requestId !== undefined && pendingHumanGate.requestId !== requestId)
       );
     });
+  }
+
+  private beginActiveTurn(entry: Entry, input: ExecutionRequest["input"]): void {
+    const streamingScopeId = input.messageId;
+    entry.activeTurn = {
+      streamingScopeId,
+      replayable: true,
+      messages: [
+        scopeStreamingMessage(
+          {
+            messageId: input.messageId,
+            author: input.author,
+            role: "user",
+            contents: input.contents,
+          },
+          streamingScopeId,
+        ),
+      ],
+    };
+    entry.pendingMessages = [];
+    entry.pendingHumanGate = null;
+  }
+
+  private captureActiveTurnMessage(entry: Entry, message: AiMessage): void {
+    const explicitScopeId = getMessageStreamingScopeId(message);
+    if (message.additionalProperties?.type === "turn-start" && explicitScopeId) {
+      if (!entry.activeTurn || entry.activeTurn.streamingScopeId !== explicitScopeId) {
+        entry.activeTurn = {
+          streamingScopeId: explicitScopeId,
+          replayable: false,
+          messages: [],
+        };
+      }
+    }
+
+    const activeTurn = entry.activeTurn;
+    if (!activeTurn || (explicitScopeId && explicitScopeId !== activeTurn.streamingScopeId)) {
+      return;
+    }
+
+    const scopedMessage = scopeStreamingMessage(message, activeTurn.streamingScopeId);
+    activeTurn.messages = mergeStreamingMessages(activeTurn.messages, [scopedMessage]);
+  }
+
+  private readActiveTurnSnapshot(entry: Entry): ActiveTurnSnapshot | null {
+    if (!entry.activeTurn?.replayable) {
+      return null;
+    }
+
+    return {
+      streamingScopeId: entry.activeTurn.streamingScopeId,
+      messages: entry.activeTurn.messages.map((message) => cloneMessage(message)),
+    };
   }
 
   private handleClose(entry: Entry, error?: Error): void {
