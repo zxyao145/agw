@@ -15,7 +15,7 @@ Agw.Host/            # Shared ASP.NET Core Hosting Module and Host composition
 Agw.ControlPlane.Host/ # Web UI, setup, management endpoints, and Job scheduling entry point
 Agw.DataPlane.Host/  # SignalR Execution, A2A, and distributed worker entry point
 Agw.Standalone.Host/ # Combined Control/Data entry point; produces agw-server
-Agw.Data/            # Persistence primitives and centrally hosted entities during ownership migration
+Agw.Data/            # Persistence primitives and centrally hosted entity types with logical module ownership
 Agw.Infrastructure/  # DbContext, repositories, provider adapters, and seeding
 Agw.Migrations.Sqlite/   # SQLite migrations and provider-specific model snapshot
 Agw.Migrations.Postgres/ # PostgreSQL migrations and provider-specific model snapshot
@@ -43,6 +43,10 @@ Agw.Tools/           # Tool/ToolBlock catalog and materialization
 Backend modules use `Api → Application → Domain ← Infrastructure`. Api owns protocol adapters, Application owns use cases, Domain contains data-only entities/value objects plus framework-free Behaviors, Policies, and genuine cross-boundary DomainServices, and Infrastructure implements persistence and external adapters. Dependencies point inward.
 
 Modules that own persisted entities expose an `I<Module>DbContext` persistence seam from `Application/Persistence`. The single scoped `AgwDbContext` implements all eight seams; module code may use only its own interface, while cross-module transactions remain explicit Infrastructure adapters.
+
+Persisted data ownership is logical rather than physical. Every entity and table has exactly one owning module, while entity CLR types and EF configurations may remain in `Agw.Data` and all module seams may share the single `AgwDbContext`, database, and schema. Physical co-location does not grant cross-module query or write ownership.
+
+The EF Core model may retain navigation and relationship metadata, but SQLite and PostgreSQL migration generation must use `NoForeignKeyModelDiffer` and must not emit database foreign-key constraints or foreign-key migration operations. Do not add foreign keys manually to migrations; Application and Infrastructure flows own referential validation and relation cleanup.
 
 ### Anemic Data and Behavior Pattern
 

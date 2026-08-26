@@ -261,7 +261,7 @@ erDiagram
 - Agent 和 Project 关系表使用复合主键，因此不会出现重复绑定。
 - `ValidationMetadataJson` 和 Credential 的 `MetadataJson` 是内部保留字段，不属于管理 API。
 
-EF Model 声明了导航与级联关系，但当前 Integration Migration 有意没有在数据库中创建这些外键约束。因此删除 Installation、Connection、Agent 或 Project 时，`AgwDbContext` 会显式清理相关 Credential 和 Agent/Project 关系。
+按照全局架构规范，EF Model 可以声明导航与级联关系，但 SQLite 和 PostgreSQL 的迁移生成器不得生成数据库外键约束或外键迁移操作，也不得在手写 Migration 中补加外键。因此删除 Installation、Connection、Agent 或 Project 时，Application/Infrastructure 流程负责引用完整性，`AgwDbContext` 会显式清理相关 Credential 和 Agent/Project 关系。
 
 升级说明：`EnforceUserOwnedConnections` 会保留所有非 NULL 的 `create_by`；通过管理 API 创建的 Connection 原本就记录了调用者的稳定 User ID。只有 Owner 为 NULL 的历史或旁路写入记录会回退给管理员 `1001`，因为无法仅从该行还原原始归属。多用户部署升级前应执行 `SELECT id, alias FROM integration_connection WHERE create_by IS NULL` 做审计；如果有外部 Owner 映射，应先据此回填。
 

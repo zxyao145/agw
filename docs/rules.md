@@ -36,13 +36,17 @@
 
 ---
 
-## 2. Module internal layering
+## 2. Backend architecture and module layering
 
 Each backend module follows lightweight Clean Architecture layering.
 
 ```
 Api → Application → Domain ← Infrastructure
 ```
+
+- The backend MUST remain a modular monolith organized by business module. A module MUST create only the layers its actual complexity needs; empty layers and full Clean Architecture ceremony are not required.
+- Persisted data ownership MUST be logical rather than physical. Every entity and table MUST have exactly one owning module, while entity CLR types and EF configurations MAY remain in `Agw.Data` and all module persistence seams MAY share the single `AgwDbContext`, database, and schema. Physical co-location MUST NOT grant cross-module query or write ownership.
+- The EF Core model MAY retain navigation and relationship metadata, but SQLite and PostgreSQL migration generation MUST use `NoForeignKeyModelDiffer` and MUST NOT emit database foreign-key constraints or foreign-key migration operations. Hand-authored migrations MUST NOT add foreign keys. Application and Infrastructure flows MUST own referential validation and relation cleanup.
 
 - **Api**: Controllers, DTOs, routing, validation
 - **Application**: Use cases, workflows, service coordination, external-fact loading, and Domain rule invocation
