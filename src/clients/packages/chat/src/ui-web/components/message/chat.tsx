@@ -282,6 +282,7 @@ export function Chat({
   const renderItems = React.useMemo(
     () =>
       buildConversationRenderModel(messages, {
+        collapseToolRuns: true,
         pendingHumanGate,
         checkpointAvailability,
       }),

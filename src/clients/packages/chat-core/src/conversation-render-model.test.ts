@@ -391,6 +391,238 @@ test("tool calls pair per scope and completed questions use a dedicated result i
   );
 });
 
+test("consecutive tool calls in one turn become a compact batch with summaries", () => {
+  const toolPair = (
+    callId: string,
+    toolName: string,
+    argumentsValue: Record<string, unknown>,
+    resultValue: unknown,
+  ): AiMessage[] => [
+    {
+      messageId: `${callId}-call`,
+      role: "assistant",
+      author: "agent",
+      streamingScopeId: "user-1",
+      contents: [
+        {
+          type: "FunctionCallContent",
+          content: JSON.stringify(argumentsValue),
+          additionalProperties: { callId, toolName },
+        },
+      ],
+    },
+    {
+      messageId: `${callId}-result`,
+      role: "tool",
+      author: "agent",
+      streamingScopeId: "user-1",
+      contents: [
+        {
+          type: "FunctionResultContent",
+          content: JSON.stringify(resultValue),
+          additionalProperties: { callId },
+        },
+      ],
+    },
+  ];
+
+  const messages = [
+    ...toolPair("bash-1", "Bash", { description: "  Run\n  tests  " }, "done"),
+    ...toolPair("read-1", "Read", { file_path: "src/file.ts" }, { ok: true }),
+  ];
+  const unbatchedItems = buildConversationRenderModel(messages);
+  assert.deepEqual(
+    unbatchedItems.map((item) => item.type),
+    ["tool-accordion", "tool-accordion"],
+  );
+
+  const items = buildConversationRenderModel(messages, { collapseToolRuns: true });
+
+  assert.equal(items.length, 1);
+  const batch = items[0];
+  assert.equal(batch?.type, "tool-batch");
+  if (batch?.type !== "tool-batch") return;
+
+  assert.equal(batch.tools.length, 2);
+  assert.deepEqual(
+    batch.tools.map((tool) => [tool.toolName, tool.summary, tool.status]),
+    [
+      ["Bash", "Run tests", "complete"],
+      ["Read", "src/file.ts", "complete"],
+    ],
+  );
+});
+
+test("tool batches pair out-of-order results before preserving tool-use order", () => {
+  const calls: AiMessage = {
+    messageId: "concurrent-calls",
+    role: "assistant",
+    author: "agent",
+    streamingScopeId: "user-1",
+    contents: [
+      {
+        type: "FunctionCallContent",
+        content: JSON.stringify({ file_path: "src/file.ts" }),
+        additionalProperties: { callId: "call-1", toolName: "Read" },
+      },
+      {
+        type: "FunctionCallContent",
+        content: JSON.stringify({ command: "pnpm test" }),
+        additionalProperties: { callId: "call-2", toolName: "Bash" },
+      },
+      {
+        type: "FunctionCallContent",
+        content: JSON.stringify({ path: "src/file.ts" }),
+        additionalProperties: { callId: "call-3", toolName: "Edit" },
+      },
+    ],
+  };
+  const result = (callId: string): AiMessage => ({
+    messageId: `${callId}-result`,
+    role: "tool",
+    author: "agent",
+    streamingScopeId: "replayed-scope",
+    contents: [
+      {
+        type: "FunctionResultContent",
+        content: JSON.stringify({ ok: true }),
+        additionalProperties: { callId },
+      },
+    ],
+  });
+
+  const items = buildConversationRenderModel(
+    [calls, result("call-3"), result("call-1"), result("call-2")],
+    { collapseToolRuns: true },
+  );
+
+  assert.equal(items.length, 1);
+  const batch = items[0];
+  assert.equal(batch?.type, "tool-batch");
+  if (batch?.type !== "tool-batch") return;
+
+  assert.deepEqual(
+    batch.tools.map((tool) => tool.toolName),
+    ["Read", "Bash", "Edit"],
+  );
+  assert.deepEqual(
+    batch.tools.map((tool) =>
+      tool.messages.flatMap((message) =>
+        message.source.contents.map((content) => content.additionalProperties?.callId),
+      ),
+    ),
+    [
+      ["call-1", "call-1"],
+      ["call-2", "call-2"],
+      ["call-3", "call-3"],
+    ],
+  );
+  assert.deepEqual(
+    batch.tools.map((tool) => tool.status),
+    ["complete", "complete", "complete"],
+  );
+});
+
+test("pending and failed tool calls expose stable identities and status", () => {
+  const call: AiMessage = {
+    messageId: "pending-call",
+    role: "assistant",
+    author: "agent",
+    streamingScopeId: "user-1",
+    contents: [
+      {
+        type: "FunctionCallContent",
+        content: JSON.stringify({ command: "pnpm test" }),
+        additionalProperties: { callId: "call-1", toolName: "Bash" },
+      },
+    ],
+  };
+  const pending = buildConversationRenderModel([call], { collapseToolRuns: true });
+  const pendingTool = pending[0];
+  assert.equal(pendingTool?.type, "tool-accordion");
+  if (pendingTool?.type !== "tool-accordion") return;
+  assert.equal(pendingTool.status, "running");
+  assert.equal(pendingTool.summary, "pnpm test");
+
+  const unbatchedPending = buildConversationRenderModel([call]);
+  assert.equal(unbatchedPending[0]?.type, "message");
+
+  const failed = buildConversationRenderModel([
+    call,
+    {
+      messageId: "failed-result",
+      role: "tool",
+      author: "agent",
+      streamingScopeId: "user-1",
+      contents: [
+        {
+          type: "FunctionResultContent",
+          content: JSON.stringify({ isError: true, message: "failed" }),
+          additionalProperties: { callId: "call-1" },
+        },
+      ],
+    },
+  ]);
+  const failedTool = failed[0];
+  assert.equal(failedTool?.type, "tool-accordion");
+  if (failedTool?.type !== "tool-accordion") return;
+  assert.equal(failedTool.status, "failed");
+  assert.equal(failedTool.identity, pendingTool.identity);
+});
+
+test("tool batches stop at ordinary messages and scope boundaries", () => {
+  const tool = (id: string, scope: string): AiMessage[] => [
+    {
+      messageId: `${id}-call`,
+      role: "assistant",
+      author: "agent",
+      streamingScopeId: scope,
+      contents: [
+        {
+          type: "FunctionCallContent",
+          content: JSON.stringify({ command: id }),
+          additionalProperties: { callId: `${id}-call`, toolName: "Bash" },
+        },
+      ],
+    },
+    {
+      messageId: `${id}-result`,
+      role: "tool",
+      author: "agent",
+      streamingScopeId: scope,
+      contents: [
+        {
+          type: "FunctionResultContent",
+          content: "done",
+          additionalProperties: { callId: `${id}-call` },
+        },
+      ],
+    },
+  ];
+
+  const separatedByText = buildConversationRenderModel(
+    [
+      ...tool("first", "user-1"),
+      message("text", "assistant", "between tools"),
+      ...tool("second", "user-1"),
+    ],
+    { collapseToolRuns: true },
+  );
+  assert.deepEqual(
+    separatedByText.map((item) => item.type),
+    ["tool-accordion", "message", "tool-accordion"],
+  );
+
+  const separatedByScope = buildConversationRenderModel(
+    [...tool("first", "user-1"), ...tool("second", "user-2")],
+    { collapseToolRuns: true },
+  );
+  assert.deepEqual(
+    separatedByScope.map((item) => item.type),
+    ["tool-accordion", "tool-accordion"],
+  );
+});
+
 test("Claude AskUserQuestion calls use the dedicated result item and support array answers", () => {
   const call: AiMessage = {
     messageId: "claude-call",

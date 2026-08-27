@@ -35,7 +35,7 @@ streamingScopeId + messageId + role + author
 ### 工具配对
 
 - `createMessageFragments`：把一条消息按 content 逐条拆成 `normal / result / function-call / function-result`，支持混合 content。
-- `processMessages`：call / result 按 `JSON.stringify([streamingScopeId ?? null, callId])` 分组，支持多 call、乱序结果、跨轮复用 callId 隔离。
+- `processMessages`：先按 `streamingScopeId + callId` 建立 call 组；result 优先命中同 scope，回放或恢复导致 scope 不一致时按 `callId` 关联到最近的 call 组。完成配对后只按 call 的原始顺序输出，因此支持并发 call、乱序 result，并保留跨轮复用 callId 的隔离。
 
 ## 泛型：无损保留调用方类型
 

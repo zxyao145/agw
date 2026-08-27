@@ -7,13 +7,15 @@ import { buildConversationRenderModel, getMessageMeta } from "@agw/chat-core";
 
 const CONVERSATION_URL = new URL("./conversation.tsx", import.meta.url);
 const PRESENTED_MESSAGE_URL = new URL("./presented-message.tsx", import.meta.url);
+const MESSAGE_TRIGGER_URL = new URL("../message-trigger.tsx", import.meta.url);
 
 test("conversation is a thin host over the shared render model union", async () => {
   const source = await readFile(CONVERSATION_URL, "utf8");
-  assert.match(source, /type \{ ConversationRenderItem \} from "@agw\/chat-core"/);
+  assert.match(source, /ConversationRenderItem/);
   assert.match(source, /items: ConversationRenderItem\[\]/);
   assert.doesNotMatch(source, /processMessages|collapseConsecutiveSystemMessages|callId/);
   assert.match(source, /item\.type === "tool-accordion"/);
+  assert.match(source, /item\.type === "tool-batch"/);
   assert.match(source, /item\.type === "human-interaction"/);
   assert.match(source, /item\.type === "checkpoint"/);
 });
@@ -24,8 +26,29 @@ test("conversation virtualizes dynamically measured message rows", async () => {
   assert.match(source, /useVirtualizer\(/);
   assert.match(source, /ref=\{virtualizer\.measureElement\}/);
   assert.match(source, /getItemKey/);
+  assert.match(source, /estimateSize: \(\) => 72/);
   assert.match(source, /overscan: 6/);
   assert.match(source, /Loading earlier messages/);
+});
+
+test("tool rows constrain long summaries without pushing status off screen", async () => {
+  const [conversation, trigger] = await Promise.all([
+    readFile(CONVERSATION_URL, "utf8"),
+    readFile(MESSAGE_TRIGGER_URL, "utf8"),
+  ]);
+
+  assert.match(trigger, /Header className="flex min-w-0"/);
+  assert.match(trigger, /flex min-w-0 flex-1 items-start/);
+  assert.match(conversation, /className="mx-4 min-w-0 w-full max-w-\[80%\]"/);
+  assert.match(
+    conversation,
+    /className="flex w-0 min-w-0 flex-1 items-center gap-2 overflow-hidden"/,
+  );
+  assert.match(
+    conversation,
+    /className="block min-w-0 max-w-full flex-1 truncate text-xs text-muted-foreground"/,
+  );
+  assert.match(conversation, /className="ml-auto shrink-0"/);
 });
 
 test("agent metadata keeps name priority and independent author", () => {

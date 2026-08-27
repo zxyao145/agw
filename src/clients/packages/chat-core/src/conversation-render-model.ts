@@ -96,6 +96,7 @@ function isHiddenSystemToolFragment(
 export type ConversationAlignment = "left" | "right";
 export type ConversationWidth = "normal" | "full";
 export type ToolStatePresentationType = "todo" | "mode" | "background" | "warning";
+export type ToolCallStatus = "running" | "complete" | "failed";
 
 export type PresentedContent =
   | { type: "markdown"; markdown: string; sourceType: string }
@@ -115,6 +116,15 @@ export type PresentedMessage = {
   contents: PresentedContent[];
 };
 
+export type PresentedTool = {
+  identity: string;
+  scopeId: string | null;
+  toolName: string;
+  summary: string | null;
+  status: ToolCallStatus;
+  messages: PresentedMessage[];
+};
+
 type BaseConversationRenderItem = {
   key: string;
   alignment: ConversationAlignment;
@@ -130,10 +140,10 @@ export type ConversationRenderItem =
       stateType: ToolStatePresentationType;
       message: AiMessage;
     })
+  | (BaseConversationRenderItem & { type: "tool-accordion" } & PresentedTool)
   | (BaseConversationRenderItem & {
-      type: "tool-accordion";
-      toolName: string;
-      messages: PresentedMessage[];
+      type: "tool-batch";
+      tools: PresentedTool[];
     })
   | (BaseConversationRenderItem & {
       type: "human-interaction";
@@ -153,6 +163,7 @@ export type ConversationRenderItem =
 export type BuildConversationRenderModelOptions = {
   pendingHumanGate?: PendingHumanGate | null;
   checkpointAvailability?: readonly AgentflowCheckpointAvailability[];
+  collapseToolRuns?: boolean;
 };
 
 export function isHiddenControlMessage(message: AiMessage): boolean {
@@ -211,6 +222,114 @@ export function stringifyContentValue(value: unknown): string {
   if (typeof value === "string") return value;
   if (value == null) return "";
   return JSON.stringify(value, null, 2) ?? "";
+}
+
+const TOOL_SUMMARY_KEYS = [
+  "description",
+  "command",
+  "query",
+  "file_path",
+  "filePath",
+  "path",
+  "url",
+];
+
+function getToolCallContent(messages: readonly AiMessage[]): AiMessageContent | undefined {
+  return messages
+    .flatMap((message) => message.contents)
+    .find((content) => content.type === MessageContentType.FunctionCallContent);
+}
+
+function parseToolArguments(value: unknown): Record<string, unknown> | null {
+  let parsed = value;
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+
+  return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+    ? (parsed as Record<string, unknown>)
+    : null;
+}
+
+function normalizeToolSummary(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const summary = value.replace(/\s+/g, " ").trim();
+  return summary.length > 0 ? summary : null;
+}
+
+function getToolSummary(messages: readonly AiMessage[]): string | null {
+  const call = getToolCallContent(messages);
+  const argumentsObject = parseToolArguments(call?.content);
+  if (!argumentsObject) return null;
+
+  for (const key of TOOL_SUMMARY_KEYS) {
+    const summary = normalizeToolSummary(argumentsObject[key]);
+    if (summary) return summary;
+  }
+
+  return null;
+}
+
+function isToolErrorResult(content: AiMessageContent): boolean {
+  if (content.additionalProperties?.isError === true) return true;
+  const result = parseToolArguments(content.content);
+  return result?.isError === true;
+}
+
+function getToolCallStatus(messages: readonly AiMessage[]): ToolCallStatus {
+  const contents = messages.flatMap((message) => message.contents);
+  const hasResult = contents.some(
+    (content) => content.type === MessageContentType.FunctionResultContent,
+  );
+  if (!hasResult) return "running";
+
+  const failed = contents.some(
+    (content) =>
+      content.type === MessageContentType.ErrorContent ||
+      (content.type === MessageContentType.FunctionResultContent && isToolErrorResult(content)),
+  );
+  return failed ? "failed" : "complete";
+}
+
+function getToolScopeId(messages: readonly AiMessage[]): string | null {
+  const scopeId = messages[0]?.streamingScopeId;
+  return typeof scopeId === "string" && scopeId.length > 0 ? scopeId : null;
+}
+
+function getToolName(messages: readonly AiMessage[], fallback: string): string {
+  const call = getToolCallContent(messages);
+  const toolName = call?.additionalProperties?.toolName;
+  return typeof toolName === "string" && toolName.trim().length > 0
+    ? toolName
+    : fallback.trim() || "Tool";
+}
+
+function getToolPresentationBase(message: AiMessage, content: AiMessageContent): string {
+  const callId = content.additionalProperties?.callId;
+  const toolName = content.additionalProperties?.toolName;
+  return `tool:${getStreamingIdentity(message)}:${String(
+    callId ?? (typeof toolName === "string" ? toolName : "Tool"),
+  )}`;
+}
+
+function createPresentedTool(
+  messages: AiMessage[],
+  presentedMessages: PresentedMessage[],
+  identity: string,
+  fallbackToolName: string,
+): PresentedTool {
+  return {
+    identity,
+    scopeId: getToolScopeId(messages),
+    toolName: getToolName(messages, fallbackToolName),
+    summary: getToolSummary(messages),
+    status: getToolCallStatus(messages),
+    messages: presentedMessages,
+  };
 }
 
 export function formatToolContent(value: unknown): string {
@@ -276,11 +395,9 @@ export function buildConversationRenderModel(
       const interactionResult = QUESTION_INTERACTION_TOOL_NAMES.has(item.toolName)
         ? getHumanInteractionQuestionResult(item.messages)
         : null;
-      const first = item.messages[0];
-      const callId = first?.contents[0]?.additionalProperties?.callId;
-      const base = `tool:${first ? getStreamingIdentity(first) : "unknown"}:${String(
-        callId ?? item.toolName,
-      )}`;
+      const first = item.messages.find((message) => getToolCallContent([message]));
+      const call = first ? getToolCallContent([first]) : undefined;
+      const base = first && call ? getToolPresentationBase(first, call) : `tool:${item.toolName}`;
       if (interactionResult) {
         items.push({
           type: "human-interaction-result",
@@ -296,16 +413,14 @@ export function buildConversationRenderModel(
         const presented = presentMessage(message);
         return presented ? [presented] : [];
       });
-      if (presentedMessages.length > 0) {
-        items.push({
-          type: "tool-accordion",
-          key: uniqueKey(base),
-          alignment: "left",
-          width: "normal",
-          toolName: item.toolName || "Tool",
-          messages: presentedMessages,
-        });
-      }
+      const identity = uniqueKey(base);
+      items.push({
+        type: "tool-accordion",
+        key: identity,
+        alignment: "left",
+        width: "normal",
+        ...createPresentedTool(item.messages, presentedMessages, identity, item.toolName),
+      });
       continue;
     }
 
@@ -353,6 +468,25 @@ export function buildConversationRenderModel(
       continue;
     }
 
+    const toolCall = getToolCallContent([message]);
+    if (toolCall && options.collapseToolRuns) {
+      const identity = uniqueKey(getToolPresentationBase(message, toolCall));
+      const presented = presentMessage(message);
+      items.push({
+        type: "tool-accordion",
+        key: identity,
+        alignment: "left",
+        width: "normal",
+        ...createPresentedTool(
+          [message],
+          presented ? [presented] : [],
+          identity,
+          getToolName([message], "Tool"),
+        ),
+      });
+      continue;
+    }
+
     const presented = presentMessage(message);
     if (!presented) continue;
     const type =
@@ -380,7 +514,55 @@ export function buildConversationRenderModel(
       embedded: false,
     });
   }
-  return items;
+  return options.collapseToolRuns ? collapseConsecutiveToolItems(items) : items;
+}
+
+function collapseConsecutiveToolItems(items: ConversationRenderItem[]): ConversationRenderItem[] {
+  const collapsed: ConversationRenderItem[] = [];
+
+  for (let index = 0; index < items.length; ) {
+    const item = items[index];
+    if (item.type !== "tool-accordion" || item.scopeId === null) {
+      collapsed.push(item);
+      index += 1;
+      continue;
+    }
+
+    const run = [item];
+    let nextIndex = index + 1;
+    while (nextIndex < items.length) {
+      const candidate = items[nextIndex];
+      if (candidate.type !== "tool-accordion" || candidate.scopeId !== item.scopeId) {
+        break;
+      }
+
+      run.push(candidate);
+      nextIndex += 1;
+    }
+
+    if (run.length < 2) {
+      collapsed.push(item);
+    } else {
+      collapsed.push({
+        type: "tool-batch",
+        key: `tool-batch:${run[0].key}`,
+        alignment: "left",
+        width: "normal",
+        tools: run.map(({ identity, scopeId, toolName, summary, status, messages }) => ({
+          identity,
+          scopeId,
+          toolName,
+          summary,
+          status,
+          messages,
+        })),
+      });
+    }
+
+    index = nextIndex;
+  }
+
+  return collapsed;
 }
 
 function presentContent(message: AiMessage, content: AiMessageContent): PresentedContent[] {

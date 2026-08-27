@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { LoaderCircle } from "lucide-react";
+import { CheckCircle2, CircleAlert, LoaderCircle } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
-import type { ConversationRenderItem } from "@agw/chat-core";
+import type { ConversationRenderItem, PresentedTool, ToolCallStatus } from "@agw/chat-core";
 import type { PermissionMode } from "@agw/execution-core";
 import {
   Accordion,
@@ -72,7 +72,7 @@ export function Conversation({
   const virtualizer = useVirtualizer({
     count: items.length + rowOffset,
     getScrollElement: () => scrollElementRef.current,
-    estimateSize: () => 160,
+    estimateSize: () => 72,
     getItemKey,
     overscan: 6,
   });
@@ -221,25 +221,16 @@ function ConversationItem({
 
   if (item.type === "tool-accordion") {
     return (
-      <div className="mx-4 max-w-[80%]">
-        <Accordion type="single" collapsible className="w-full">
-          <AccordionItem value="tool">
-            <MessageTrigger className="cursor-pointer py-0">
-              <div className="flex flex-2 items-center gap-2">
-                <Badge variant="secondary" className="text-xs">
-                  {item.toolName}
-                </Badge>
-              </div>
-            </MessageTrigger>
-            <AccordionContent>
-              <div className="space-y-4">
-                {item.messages.map((message) => (
-                  <PresentedMessageComponent key={message.identity} message={message} embedded />
-                ))}
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+      <div className="mx-4 min-w-0 w-full max-w-[80%]">
+        <ToolAccordionRow tool={item} />
+      </div>
+    );
+  }
+
+  if (item.type === "tool-batch") {
+    return (
+      <div className="mx-4 min-w-0 w-full max-w-[80%]">
+        <ToolBatch tools={item.tools} batchKey={item.key} />
       </div>
     );
   }
@@ -284,4 +275,123 @@ function ConversationItem({
       <PresentedMessageComponent message={message} />
     </div>
   );
+}
+
+function ToolBatch({ tools, batchKey }: { tools: PresentedTool[]; batchKey: string }) {
+  const counts = tools.reduce(
+    (result, tool) => {
+      result[tool.status] += 1;
+      return result;
+    },
+    { running: 0, complete: 0, failed: 0 } as Record<ToolCallStatus, number>,
+  );
+  const toolSummary = summarizeToolNames(tools);
+
+  return (
+    <Accordion type="single" collapsible className="min-w-0 w-full">
+      <AccordionItem value={batchKey} className="rounded-lg border bg-card px-3 shadow-xs">
+        <MessageTrigger className="min-w-0 cursor-pointer py-2">
+          <div className="flex w-0 min-w-0 flex-1 flex-col gap-1.5 overflow-hidden sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1 overflow-hidden">
+              <div className="text-sm font-medium">{tools.length} tool calls</div>
+              <div className="block max-w-full truncate text-xs text-muted-foreground">
+                {toolSummary}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0">
+              {counts.running > 0 ? (
+                <ToolStatusBadge status="running" count={counts.running} />
+              ) : null}
+              {counts.failed > 0 ? <ToolStatusBadge status="failed" count={counts.failed} /> : null}
+              {counts.complete > 0 ? (
+                <ToolStatusBadge status="complete" count={counts.complete} />
+              ) : null}
+            </div>
+          </div>
+        </MessageTrigger>
+        <AccordionContent className="px-1">
+          <div className="space-y-1.5 border-l border-border/60 pl-3">
+            {tools.map((tool) => (
+              <ToolAccordionRow key={tool.identity} tool={tool} />
+            ))}
+          </div>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
+  );
+}
+
+function ToolAccordionRow({ tool }: { tool: PresentedTool }) {
+  return (
+    <Accordion type="single" collapsible className="min-w-0 w-full">
+      <AccordionItem value={tool.identity}>
+        <MessageTrigger className="min-w-0 cursor-pointer py-1.5">
+          <div className="flex w-0 min-w-0 flex-1 items-center gap-2 overflow-hidden">
+            <Badge variant="secondary" className="text-xs">
+              {tool.toolName}
+            </Badge>
+            {tool.summary ? (
+              <span className="block min-w-0 max-w-full flex-1 truncate text-xs text-muted-foreground">
+                {tool.summary}
+              </span>
+            ) : null}
+            <span className="ml-auto shrink-0">
+              <ToolStatusBadge status={tool.status} />
+            </span>
+          </div>
+        </MessageTrigger>
+        <AccordionContent className="px-1">
+          {tool.messages.length > 0 ? (
+            <div className="space-y-3 pl-6 pr-1">
+              {tool.messages.map((message) => (
+                <PresentedMessageComponent key={message.identity} message={message} embedded />
+              ))}
+            </div>
+          ) : (
+            <p className="pl-6 text-xs text-muted-foreground">No tool details yet.</p>
+          )}
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
+  );
+}
+
+function ToolStatusBadge({ status, count }: { status: ToolCallStatus; count?: number }) {
+  const presentation = {
+    running: {
+      label: count ? `${count} running` : "Running",
+      icon: LoaderCircle,
+      variant: "outline" as const,
+      className: "text-primary",
+    },
+    complete: {
+      label: count ? `${count} done` : "Done",
+      icon: CheckCircle2,
+      variant: "secondary" as const,
+      className: "",
+    },
+    failed: {
+      label: count ? `${count} failed` : "Failed",
+      icon: CircleAlert,
+      variant: "destructive" as const,
+      className: "",
+    },
+  }[status];
+  const Icon = presentation.icon;
+
+  return (
+    <Badge variant={presentation.variant} className={presentation.className}>
+      <Icon className={status === "running" ? "animate-spin" : undefined} aria-hidden="true" />
+      {presentation.label}
+    </Badge>
+  );
+}
+
+function summarizeToolNames(tools: PresentedTool[]): string {
+  const counts = new Map<string, number>();
+  for (const tool of tools) {
+    counts.set(tool.toolName, (counts.get(tool.toolName) ?? 0) + 1);
+  }
+
+  return [...counts.entries()].map(([toolName, count]) => `${toolName} ×${count}`).join(" · ");
 }

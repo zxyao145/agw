@@ -28,6 +28,7 @@ test("native renderer consumes the shared render-item union and native markdown"
   assert.doesNotMatch(source, /containerStyle=\{markdownContainerStyle\}/);
   assert.doesNotMatch(source, /const markdownContainerStyle/);
   assert.match(source, /updateAutoScrollState/);
+  assert.match(source, /collapseToolRuns: false/);
   assert.doesNotMatch(source, /processMessages|collapseConsecutiveSystemMessages/);
 });
 

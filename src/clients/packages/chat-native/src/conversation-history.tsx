@@ -85,7 +85,12 @@ export const NativeConversationHistoryHost = React.forwardRef<
   ref,
 ) {
   const items = React.useMemo(
-    () => buildConversationRenderModel(messages, { pendingHumanGate, checkpointAvailability }),
+    () =>
+      buildConversationRenderModel(messages, {
+        pendingHumanGate,
+        checkpointAvailability,
+        collapseToolRuns: false,
+      }),
     [checkpointAvailability, messages, pendingHumanGate],
   );
   return <NativeConversationHistory ref={ref} items={items} {...props} />;
@@ -226,6 +231,26 @@ function NativeRenderItem({
 }) {
   if (item.type === "tool-accordion") {
     return <NativeToolAccordion item={item} styles={styles} theme={theme} />;
+  }
+  if (item.type === "tool-batch") {
+    return (
+      <View>
+        {item.tools.map((tool) => (
+          <NativeToolAccordion
+            key={tool.identity}
+            item={{
+              ...tool,
+              type: "tool-accordion",
+              key: tool.identity,
+              alignment: "left",
+              width: "normal",
+            }}
+            styles={styles}
+            theme={theme}
+          />
+        ))}
+      </View>
+    );
   }
   if (item.type === "human-interaction-result") {
     return <NativeQuestionResult result={item.result} styles={styles} theme={theme} />;

@@ -22,6 +22,7 @@ test("Web and Desktop pages keep Chat implementation inside workspace packages",
 test("shared Chat delegates presentation to chat-core", async () => {
   const source = await readFile(CHAT_URL, "utf8");
   assert.match(source, /buildConversationRenderModel/);
+  assert.match(source, /collapseToolRuns: true/);
   assert.match(source, /<Conversation[\s\S]*?items=\{renderItems\}/);
   assert.doesNotMatch(source, /stripUsageContents/);
 });
