@@ -11,7 +11,7 @@ test("integrations page renders configured integrations above available integrat
   assert.match(source, /<h2 className="text-xl font-semibold">Configured integrations<\/h2>/);
   assert.match(source, /<PluginCard/);
   assert.match(source, /canConfigureInstallation=\{canConfigureInstallations\}/);
-  assert.match(source, /authSessionQuery\.data\?\.userId === ADMIN_USER_ID/);
+  assert.match(source, /authSessionQuery\.data\?\.authenticated === true/);
   assert.match(source, /queryFn: getAuthSession/);
   assert.match(source, /Available integrations/);
   assert.match(source, /<ConnectionDialog/);

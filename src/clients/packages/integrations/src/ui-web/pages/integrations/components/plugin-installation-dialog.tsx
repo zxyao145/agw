@@ -48,8 +48,7 @@ export function PluginInstallationDialog({
         <DialogHeader>
           <DialogTitle>Integration setup</DialogTitle>
           <DialogDescription>
-            Configure platform-level credentials shared by configured integrations using this
-            authentication scheme.
+            Configure your credentials for configured integrations using this authentication scheme.
           </DialogDescription>
         </DialogHeader>
 
@@ -64,7 +63,7 @@ export function PluginInstallationDialog({
               <div>
                 <Label htmlFor="installation-enabled">Integration setup enabled</Label>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Disabling it makes all configured integrations from this definition unavailable.
+                  Disabling it makes your configured integrations from this definition unavailable.
                 </p>
               </div>
               <Switch

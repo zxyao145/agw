@@ -7,7 +7,7 @@ import { toast } from "sonner";
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@agw/api";
 import { getApiErrorMessage } from "@agw/api";
-import { ADMIN_USER_ID, getAuthSession } from "@agw/auth";
+import { getAuthSession } from "@agw/auth";
 import { Button } from "@agw/components";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@agw/components";
 
@@ -58,21 +58,25 @@ export default function IntegrationsPage({
   const [connectionEditor, setConnectionEditor] =
     React.useState<ConnectionEditorState>(emptyConnectionEditor);
 
-  const pluginsQuery = useQuery({
-    queryKey: integrationQueryKeys.plugins,
-    queryFn: async () =>
-      (await apiGet("/api/integrations/plugins")) as unknown as PluginDefinition[],
-  });
   const authSessionQuery = useQuery({
     queryKey: ["auth", "session"],
     queryFn: getAuthSession,
   });
+  const authUserId = authSessionQuery.data?.userId ?? "anonymous";
+  const pluginsQuery = useQuery({
+    queryKey: [...integrationQueryKeys.plugins, authUserId],
+    enabled: authSessionQuery.data?.authenticated === true,
+    queryFn: async () =>
+      (await apiGet("/api/integrations/plugins")) as unknown as PluginDefinition[],
+  });
   const connectionsQuery = useQuery({
-    queryKey: integrationQueryKeys.connections,
+    queryKey: [...integrationQueryKeys.connections, authUserId],
+    enabled: authSessionQuery.data?.authenticated === true,
     queryFn: async () => (await apiGet("/api/integrations/connections")) as unknown as Connection[],
   });
   const oauthCallbackQuery = useQuery({
-    queryKey: integrationQueryKeys.oauthCallback,
+    queryKey: [...integrationQueryKeys.oauthCallback, authUserId],
+    enabled: authSessionQuery.data?.authenticated === true,
     queryFn: async () =>
       (await apiGet("/api/integrations/oauth/callback-info")) as unknown as {
         callbackUrl: string;
@@ -195,7 +199,7 @@ export default function IntegrationsPage({
   const plugins = pluginsQuery.data ?? [];
   const connections = connectionsQuery.data ?? [];
   const callbackUrl = oauthCallbackQuery.data?.callbackUrl ?? "Loading callback URL…";
-  const canConfigureInstallations = authSessionQuery.data?.userId === ADMIN_USER_ID;
+  const canConfigureInstallations = authSessionQuery.data?.authenticated === true;
 
   const openInstallation = (selection: IntegrationSelection) => {
     if (!canConfigureInstallations) return;
@@ -318,7 +322,7 @@ export default function IntegrationsPage({
           <div>
             <h2 className="text-xl font-semibold">Available integrations</h2>
             <p className="text-sm text-muted-foreground">
-              System-provided integrations and their shared authentication setup.
+              System-provided integrations and your own authentication setup.
             </p>
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
