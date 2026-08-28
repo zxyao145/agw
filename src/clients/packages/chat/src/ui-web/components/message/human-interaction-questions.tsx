@@ -55,8 +55,15 @@ export function HumanInteractionQuestions({
   };
   const focusedLabel = focusedOptions[question.question] ?? selection.selected[0];
   const preview = question.options.find((option) => option.label === focusedLabel)?.preview;
+  const hasPreview = question.options.some((option) => Boolean(option.preview));
   const singleValue = selection.otherSelected ? OTHER_OPTION_VALUE : selection.selected[0];
   const hasMultipleQuestions = request.questions.length > 1;
+
+  const focusOption = (questionText: string, optionLabel: string) => {
+    setFocusedOptions((current) =>
+      current[questionText] === optionLabel ? current : { ...current, [questionText]: optionLabel },
+    );
+  };
 
   const selectSingle = (question: HumanInteractionQuestion, value: string) => {
     setSelections((current) => ({
@@ -206,18 +213,8 @@ export function HumanInteractionQuestions({
                         ? "border-primary/45 bg-primary/6"
                         : "border-border/80 bg-background hover:border-primary/25 hover:bg-muted/35"
                     }`}
-                    onMouseEnter={() =>
-                      setFocusedOptions((current) => ({
-                        ...current,
-                        [question.question]: option.label,
-                      }))
-                    }
-                    onFocus={() =>
-                      setFocusedOptions((current) => ({
-                        ...current,
-                        [question.question]: option.label,
-                      }))
-                    }
+                    onMouseEnter={() => focusOption(question.question, option.label)}
+                    onFocus={() => focusOption(question.question, option.label)}
                   >
                     <Checkbox
                       id={id}
@@ -258,18 +255,8 @@ export function HumanInteractionQuestions({
                         ? "border-primary/45 bg-primary/6"
                         : "border-border/80 bg-background hover:border-primary/25 hover:bg-muted/35"
                     }`}
-                    onMouseEnter={() =>
-                      setFocusedOptions((current) => ({
-                        ...current,
-                        [question.question]: option.label,
-                      }))
-                    }
-                    onFocus={() =>
-                      setFocusedOptions((current) => ({
-                        ...current,
-                        [question.question]: option.label,
-                      }))
-                    }
+                    onMouseEnter={() => focusOption(question.question, option.label)}
+                    onFocus={() => focusOption(question.question, option.label)}
                   >
                     <RadioGroupItem id={id} value={option.label} className="mt-0.5" />
                     <OptionCopy label={option.label} description={option.description} />
@@ -287,14 +274,31 @@ export function HumanInteractionQuestions({
             </RadioGroup>
           )}
 
-          {preview ? (
-            <div className="overflow-hidden rounded-lg border border-primary/15 bg-muted/25">
-              <div className="flex items-center gap-1.5 border-b border-primary/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+          {hasPreview ? (
+            <div
+              role="region"
+              aria-label="Option preview"
+              className="flex h-48 flex-col overflow-hidden rounded-lg border border-primary/15 bg-muted/25"
+            >
+              <div className="flex shrink-0 items-center gap-1.5 border-b border-primary/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                 <ChevronRight className="h-3 w-3 text-primary" />
                 Preview
               </div>
-              <div className="max-h-40 overflow-auto px-3 py-2 text-xs agw-scrollbar">
-                <MdCard mdText={preview} />
+              <div
+                className={cn(
+                  "min-h-0 flex-1 overflow-auto px-3 py-2 text-xs agw-scrollbar",
+                  !preview && "grid place-items-center",
+                )}
+              >
+                {preview ? (
+                  <MdCard mdText={preview} />
+                ) : (
+                  <p className="text-center text-muted-foreground">
+                    {focusedLabel
+                      ? "No preview is available for this option."
+                      : "Hover or focus an option to preview it."}
+                  </p>
+                )}
               </div>
             </div>
           ) : null}
