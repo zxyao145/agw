@@ -1,6 +1,7 @@
 import type { paths } from "./openapi";
 import {
   ApiError,
+  ApiTransportError,
   appendQuery,
   compilePath,
   readResponseBody,
@@ -8,7 +9,7 @@ import {
   type ApiResultEnvelope,
 } from "@agw/http-client";
 
-export { ApiError } from "@agw/http-client";
+export { ApiError, ApiTransportError } from "@agw/http-client";
 
 export type ApiMethod = "get" | "post" | "put" | "delete";
 
@@ -55,14 +56,20 @@ function resolveApiUrl(path: string): string {
 
 async function getAntiforgeryToken(): Promise<string> {
   if (antiforgeryToken) return antiforgeryToken;
-  const response = await fetch(resolveApiUrl("/api/auth/antiforgery"), {
-    credentials:
-      apiRuntime.baseUrl && apiRuntime.token
-        ? "omit"
-        : apiRuntime.baseUrl
-          ? "include"
-          : "same-origin",
-  });
+  const url = resolveApiUrl("/api/auth/antiforgery");
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      credentials:
+        apiRuntime.baseUrl && apiRuntime.token
+          ? "omit"
+          : apiRuntime.baseUrl
+            ? "include"
+            : "same-origin",
+    });
+  } catch (caught) {
+    throw new ApiTransportError({ url, cause: caught });
+  }
   const body = await readResponseBody(response);
   const value = unwrapApiResultEnvelope(body) as { requestToken?: unknown } | undefined;
   if (!response.ok || typeof value?.requestToken !== "string") {
@@ -221,7 +228,12 @@ export async function apiRequest(
       }
     }
 
-    const response = await fetch(url, init);
+    let response: Response;
+    try {
+      response = await fetch(url, init);
+    } catch (caught) {
+      throw new ApiTransportError({ url, cause: caught });
+    }
 
     if (!response.ok) {
       const errBody = await readResponseBody(response);
@@ -340,7 +352,12 @@ export function createBearerApiClient(config: BearerApiClientConfig): AgwApiClie
       }
     }
 
-    const response = await fetch(url, init);
+    let response: Response;
+    try {
+      response = await fetch(url, init);
+    } catch (caught) {
+      throw new ApiTransportError({ url, cause: caught });
+    }
     const responseBody = await readResponseBody(response);
     if (!response.ok) {
       if (response.status === 401) config.onUnauthorized?.();

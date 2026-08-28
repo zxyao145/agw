@@ -22,6 +22,18 @@ export class ApiError extends Error {
   }
 }
 
+export class ApiTransportError extends Error {
+  public readonly url: string;
+  public readonly cause: unknown;
+
+  public constructor(args: { url: string; cause: unknown }) {
+    super("API transport request failed.");
+    this.name = "ApiTransportError";
+    this.url = args.url;
+    this.cause = args.cause;
+  }
+}
+
 export function compilePath(pathTemplate: string, pathParams?: Record<string, unknown>): string {
   if (!pathParams) return pathTemplate;
   return pathTemplate.replace(/\{(\w+)\}/g, (_, key: string) => {

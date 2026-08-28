@@ -14,6 +14,25 @@ test("apiGet unwraps Bens.Results data envelopes", async (t) => {
   assert.deepEqual(await apiGet("/api/agents"), [{ id: "agent-1" }]);
 });
 
+test("browser API clients wrap fetch transport errors", async (t) => {
+  const { ApiTransportError, apiGet, resetApiRuntime } = await import("./client" + ".ts");
+  const originalFetch = globalThis.fetch;
+  resetApiRuntime();
+  globalThis.fetch = (async () => {
+    throw new Error("network down");
+  }) as typeof fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    resetApiRuntime();
+  });
+
+  await assert.rejects(apiGet("/api/agents"), (caught: unknown) => {
+    assert.ok(caught instanceof ApiTransportError);
+    assert.equal(caught.url, "/api/agents");
+    return true;
+  });
+});
+
 test("apiPost obtains and attaches an antiforgery token", async (t) => {
   const { apiPost, clearAntiforgeryToken, resetApiRuntime } = await import("./client" + ".ts");
   const originalFetch = globalThis.fetch;
