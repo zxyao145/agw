@@ -1,6 +1,7 @@
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;
 using Agw.Auth.Security;
+using Agw.Shared.Contracts;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -70,6 +71,7 @@ public static class DependencyInjection
         services.TryAddSingleton<AuthenticationAttemptLimiter>();
         services.TryAddScoped<UserInfoService>();
         services.TryAddScoped<IUserInfoService>(provider => provider.GetRequiredService<UserInfoService>());
+        services.TryAddScoped<ICurrentUser>(provider => provider.GetRequiredService<UserInfoService>());
         return services;
     }
 }

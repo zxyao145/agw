@@ -79,6 +79,7 @@ public class AgentCapabilityComposerTests
                 TransportType = "stdio",
                 Command = "server-command",
                 EnvironmentVariables = new Dictionary<string, string> { ["CONFIGURED"] = "configured" },
+                CreateBy = "tester",
             }
         );
         await database.Context.SaveChangesAsync(cancellationToken);

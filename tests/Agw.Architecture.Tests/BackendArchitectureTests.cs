@@ -556,7 +556,8 @@ public sealed partial class BackendArchitectureTests
         "Agw.Agents/Execution/Agentflows/AgentflowCheckpointStore.cs",
         "Agw.Agents/Execution/Agents/Store/AgentSessionStateStore.cs",
         "Agw.Projects/Application/ProjectAppService.cs",
-        "Agw.Projects/Application/ProjectConversationAppService.cs"
+        "Agw.Projects/Application/ProjectConversationAppService.cs",
+        "Agw.Tools/ToolBlocks/Storage/EfProjectMemoryStore.cs"
     );
 
     private static readonly IReadOnlyDictionary<string, string> LegacyCrossModuleServiceOwners = new Dictionary<

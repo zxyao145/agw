@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Security.Claims;
 using System.Text.Json;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents;
@@ -19,8 +20,16 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
-public sealed class AgwAgentExtensionsTests
+public sealed class AgwAgentExtensionsTests : IDisposable
 {
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
+
     [Fact]
     public async Task AsAgwAgent_OwnedCapabilities_DisposeConfiguredChatClientPipeline()
     {

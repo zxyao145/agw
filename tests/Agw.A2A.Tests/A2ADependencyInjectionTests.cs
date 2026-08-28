@@ -240,6 +240,13 @@ public class A2ADependencyInjectionTests
 
         public Task<AgentCatalogMetrics> GetMetricsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(new AgentCatalogMetrics(0, 0));
+
+        public Task<bool> IsOwnedTargetAsync(
+            Agw.Agents.Contracts.Execution.AgentRuntimeType type,
+            Guid id,
+            string ownerUserId,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(true);
     }
 
     private sealed class FakeUserInfoService : IUserInfoService

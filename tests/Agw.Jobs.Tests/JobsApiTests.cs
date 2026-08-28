@@ -1,7 +1,10 @@
 using System.Data.Common;
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Claims;
 using System.Text.Json;
+using Agw.Auth.Application;
+using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Jobs.Api;
@@ -21,8 +24,12 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Jobs.Tests;
 
-public class JobsApiTests
+public class JobsApiTests : IDisposable
 {
+    private readonly IDisposable _userScope = UserInfoUtil.Push(CreatePrincipal("tester"));
+
+    public void Dispose() => _userScope.Dispose();
+
     [Fact]
     public async Task ListJobs_ReturnsBensResultsEnvelope()
     {
@@ -59,9 +66,9 @@ public class JobsApiTests
                 MaxRetryCount = 4,
                 IsEnabled = true,
                 Status = JobStatus.Pending,
-                CreateBy = "seed",
+                CreateBy = "tester",
                 CreateTime = nextRunTime.AddHours(-1),
-                UpdateBy = "seed",
+                UpdateBy = "tester",
                 UpdateTime = nextRunTime.AddHours(-1),
             },
             cancellationToken
@@ -144,10 +151,24 @@ public class JobsApiTests
             );
             builder.Services.AddSingleton<JobScheduleCalculator>();
             builder.Services.AddSingleton<JobSchedulerWakeSignal>();
+            builder.Services.AddScoped<IUserInfoService, UserInfoService>();
+            builder.Services.AddScoped<
+                Agw.Projects.Contracts.Runtime.IProjectRuntimeFacade,
+                TestProjectRuntimeFacade
+            >();
+            builder.Services.AddScoped<Agw.Agents.Contracts.Catalog.IAgentCatalogFacade, TestAgentCatalogFacade>();
             builder.Services.AddScoped<IProjectTaskFacade, NoopProjectTaskFacade>();
             builder.Services.AddScoped<JobAppService>();
 
             var app = builder.Build();
+            app.Use(
+                async (context, next) =>
+                {
+                    context.User = CreatePrincipal("tester");
+                    using var userScope = UserInfoUtil.Push(context.User);
+                    await next();
+                }
+            );
             app.MapJobsApi();
 
             await using (var scope = app.Services.CreateAsyncScope())
@@ -167,6 +188,9 @@ public class JobsApiTests
             await _connection.DisposeAsync();
         }
     }
+
+    private static ClaimsPrincipal CreatePrincipal(string userId) =>
+        new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], authenticationType: "Test"));
 
     private sealed class NoopProjectTaskFacade : IProjectTaskFacade
     {

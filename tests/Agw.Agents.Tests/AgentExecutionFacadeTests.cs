@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Security.Claims;
+using Agw.Agents.Contracts.Catalog;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Commands.Setting;
@@ -30,7 +31,7 @@ public sealed class AgentExecutionFacadeTests
         var facade = new AgentExecutionFacade(
             agentRuntimeService: null!,
             agentflowRuntimeService: null!,
-            catalog: null!,
+            catalog: new AlwaysOwnedAgentCatalog(),
             services,
             Options.Create(new ExecutionRuntimeOptions { Provider = ExecutionProvider.Distributed })
         );
@@ -78,13 +79,13 @@ public sealed class AgentExecutionFacadeTests
         var facade = new AgentExecutionFacade(
             runtime,
             agentflowRuntimeService: null!,
-            catalog: null!,
+            catalog: new AlwaysOwnedAgentCatalog(),
             services,
             Options.Create(new ExecutionRuntimeOptions { Provider = ExecutionProvider.InProcess })
         );
         var executionId = Guid.CreateVersion7();
         var previousUser = new ClaimsPrincipal(
-            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "caller")], "Test")
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "owner")], "Test")
         );
         UserInfoUtil.Current = previousUser;
         try
@@ -122,7 +123,7 @@ public sealed class AgentExecutionFacadeTests
         var facade = new AgentExecutionFacade(
             agentRuntimeService: null!,
             agentflowRuntime,
-            catalog: null!,
+            catalog: new AlwaysOwnedAgentCatalog(),
             services,
             Options.Create(new ExecutionRuntimeOptions { Provider = ExecutionProvider.InProcess })
         );
@@ -220,12 +221,39 @@ public sealed class AgentExecutionFacadeTests
         }
     }
 
+    private sealed class AlwaysOwnedAgentCatalog : IAgentCatalogFacade
+    {
+        public Task<IReadOnlyList<AgentDescriptor>> ListDiscoverableAsync(
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<IReadOnlyList<AgentDescriptor>>([]);
+
+        public Task<AgentDescriptor?> FindDiscoverableByNameAsync(
+            string name,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<AgentDescriptor?>(null);
+
+        public Task<IReadOnlySet<Guid>> FilterExistingMcpServerIdsAsync(
+            IReadOnlyCollection<Guid> serverIds,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<IReadOnlySet<Guid>>(serverIds.ToHashSet());
+
+        public Task<bool> IsOwnedTargetAsync(
+            AgentRuntimeType type,
+            Guid id,
+            string ownerUserId,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(true);
+
+        public Task<AgentCatalogMetrics> GetMetricsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(new AgentCatalogMetrics(0, 0));
+    }
+
     private sealed class RejectingAgentflowRuntimeService : IAgentflowRuntimeService
     {
         public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
             Guid agentflowId,
             string input,
-            CancellationToken cancellationToken = default,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default,
             Guid? projectId = null,
             string? contextId = null,
             Guid? taskId = null,

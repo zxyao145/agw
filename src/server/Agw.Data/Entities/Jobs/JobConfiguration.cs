@@ -17,6 +17,12 @@ public class JobConfiguration : IEntityTypeConfiguration<Job>
                 )
         );
         builder.HasKey(e => e.Id);
+        builder.Property(e => e.CreateBy).IsRequired();
+        builder
+            .HasMany(e => e.Logs)
+            .WithOne(log => log.Job)
+            .HasForeignKey(log => log.JobId)
+            .OnDelete(DeleteBehavior.Cascade);
         builder.Property(e => e.Name).IsRequired().HasMaxLength(200);
         builder.Property(e => e.Prompt).HasMaxLength(4000);
         builder.Property(e => e.TriggerType).HasConversion<int>();

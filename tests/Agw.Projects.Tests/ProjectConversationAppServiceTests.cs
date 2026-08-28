@@ -906,6 +906,7 @@ public class ProjectConversationAppServiceTests
             ProjectId = projectId,
             ContextId = contextId,
             AgentName = agentName,
+            UserId = "tester",
             RecordedAt = TimeProvider.System.GetUtcNow(),
             InputTokenCount = inputTokenCount,
             OutputTokenCount = outputTokenCount,
@@ -975,6 +976,7 @@ public class ProjectConversationAppServiceTests
     )
     {
         var projectRepository = new EfRepository<Project>(dbContext);
+        var userInfo = new TestUserInfoService();
 
         return new ProjectConversationAppService(
             new EfRepository<ProjectConversation>(dbContext),
@@ -983,13 +985,14 @@ public class ProjectConversationAppServiceTests
             new EfRepository<AgentflowTrace>(dbContext),
             new EfRepository<AgentUsage>(dbContext),
             dbContext,
-            new ProjectResolver(projectRepository),
+            new ProjectResolver(projectRepository, userInfo),
             taskSessionBindingService
                 ?? new TaskSessionBindingService(
                     new EfRepository<TaskSessionBinding>(dbContext),
                     new EfRepository<ProjectConversation>(dbContext),
                     dbContext,
-                    TimeProvider.System
+                    TimeProvider.System,
+                    userInfo
                 ),
             TimeProvider.System
         );

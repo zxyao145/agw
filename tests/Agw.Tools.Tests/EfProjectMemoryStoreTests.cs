@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Agw.Infrastructure.Data;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
@@ -8,32 +10,41 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Tools.Tests;
 
-public sealed class EfProjectMemoryStoreTests
+public sealed class EfProjectMemoryStoreTests : IDisposable
 {
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
+
     [Fact]
     public async Task FileOperations_SameProjectShareAcrossStoreInstances()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
-        var options = new DbContextOptionsBuilder<TestDbContext>().UseSqlite(connection).Options;
-        await using (var database = new TestDbContext(options))
+        var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options;
+        await using (var database = new AgwDbContext(options))
         {
             await database.Database.EnsureCreatedAsync(cancellationToken);
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new TestDbContext(options));
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var projectId = Guid.CreateVersion7();
+        await SeedProjectsAsync(options, cancellationToken, projectId);
         var firstStore = new EfProjectMemoryStore(scopeFactory, TimeProvider.System, projectId);
         var secondStore = new EfProjectMemoryStore(scopeFactory, TimeProvider.System, projectId);
 
         await firstStore.WriteAsync("notes.md", "shared content", cancellationToken);
 
         Assert.Equal("shared content", await secondStore.ReadAsync("notes.md", cancellationToken));
-        await using var verification = new TestDbContext(options);
+        await using var verification = new AgwDbContext(options);
         var entry = await verification.ProjectMemories.AsNoTracking().SingleAsync(cancellationToken);
         Assert.Equal(projectId, entry.ProjectId);
         Assert.Equal("shared content", entry.Content);
@@ -45,18 +56,21 @@ public sealed class EfProjectMemoryStoreTests
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
-        var options = new DbContextOptionsBuilder<TestDbContext>().UseSqlite(connection).Options;
-        await using (var database = new TestDbContext(options))
+        var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options;
+        await using (var database = new AgwDbContext(options))
         {
             await database.Database.EnsureCreatedAsync(cancellationToken);
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new TestDbContext(options));
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
-        var firstStore = new EfProjectMemoryStore(scopeFactory, TimeProvider.System, Guid.CreateVersion7());
-        var secondStore = new EfProjectMemoryStore(scopeFactory, TimeProvider.System, Guid.CreateVersion7());
+        var firstProjectId = Guid.CreateVersion7();
+        var secondProjectId = Guid.CreateVersion7();
+        await SeedProjectsAsync(options, cancellationToken, firstProjectId, secondProjectId);
+        var firstStore = new EfProjectMemoryStore(scopeFactory, TimeProvider.System, firstProjectId);
+        var secondStore = new EfProjectMemoryStore(scopeFactory, TimeProvider.System, secondProjectId);
 
         await firstStore.WriteAsync("notes.md", "first project", cancellationToken);
         await secondStore.WriteAsync("notes.md", "second project", cancellationToken);
@@ -71,17 +85,18 @@ public sealed class EfProjectMemoryStoreTests
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
-        var options = new DbContextOptionsBuilder<TestDbContext>().UseSqlite(connection).Options;
-        await using (var database = new TestDbContext(options))
+        var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options;
+        await using (var database = new AgwDbContext(options))
         {
             await database.Database.EnsureCreatedAsync(cancellationToken);
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new TestDbContext(options));
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var projectId = Guid.CreateVersion7();
+        await SeedProjectsAsync(options, cancellationToken, projectId);
         var store = new EfProjectMemoryStore(
             scopeFactory,
             TimeProvider.System,
@@ -101,7 +116,7 @@ public sealed class EfProjectMemoryStoreTests
         start.SetResult();
         await Task.WhenAll(writes);
 
-        await using var verification = new TestDbContext(options);
+        await using var verification = new AgwDbContext(options);
         var entry = await verification.ProjectMemories.SingleAsync(cancellationToken);
         Assert.StartsWith("content-", entry.Content, StringComparison.Ordinal);
     }
@@ -112,18 +127,20 @@ public sealed class EfProjectMemoryStoreTests
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
-        var options = new DbContextOptionsBuilder<TestDbContext>().UseSqlite(connection).Options;
-        await using (var database = new TestDbContext(options))
+        var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options;
+        await using (var database = new AgwDbContext(options))
         {
             await database.Database.EnsureCreatedAsync(cancellationToken);
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new TestDbContext(options));
+        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var applicationLock = new InMemoryApplicationLock();
         var projectId = Guid.CreateVersion7();
+        var directoryProjectId = Guid.CreateVersion7();
+        await SeedProjectsAsync(options, cancellationToken, projectId, directoryProjectId);
         var fileFirstStore = new EfProjectMemoryStore(scopeFactory, TimeProvider.System, applicationLock, projectId);
         await fileFirstStore.WriteAsync("foo", "file", cancellationToken);
 
@@ -136,7 +153,7 @@ public sealed class EfProjectMemoryStoreTests
             scopeFactory,
             TimeProvider.System,
             applicationLock,
-            Guid.CreateVersion7()
+            directoryProjectId
         );
         await directoryFirstStore.WriteAsync("foo/bar.txt", "child", cancellationToken);
         var ancestorException = await Assert.ThrowsAsync<AgwException>(() =>
@@ -145,20 +162,22 @@ public sealed class EfProjectMemoryStoreTests
         Assert.Equal(ErrorCodes.InvalidParam.Code, ancestorException.Code);
     }
 
-    private sealed class TestDbContext : DbContext
+    private static async Task SeedProjectsAsync(
+        DbContextOptions<AgwDbContext> options,
+        CancellationToken cancellationToken,
+        params Guid[] projectIds
+    )
     {
-        public TestDbContext(DbContextOptions<TestDbContext> options)
-            : base(options) { }
-
-        public DbSet<ProjectMemoryEntry> ProjectMemories => Set<ProjectMemoryEntry>();
-
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
-        {
-            var entity = modelBuilder.Entity<ProjectMemoryEntry>();
-            entity.HasKey(entry => entry.Id);
-            entity.Property(entry => entry.Path).IsRequired();
-            entity.Property(entry => entry.Content).IsRequired();
-            entity.HasIndex(entry => new { entry.ProjectId, entry.Path }).IsUnique();
-        }
+        await using var context = new AgwDbContext(options);
+        context.Projects.AddRange(
+            projectIds.Select(projectId => new Project
+            {
+                Id = projectId,
+                Name = $"project-{projectId:N}",
+                CreateBy = "tester",
+                CreateTime = TimeProvider.System.GetUtcNow(),
+            })
+        );
+        await context.SaveChangesAsync(cancellationToken);
     }
 }

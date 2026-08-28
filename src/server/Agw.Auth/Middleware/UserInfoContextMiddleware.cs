@@ -14,15 +14,7 @@ public sealed class UserInfoContextMiddleware
 
     public async Task InvokeAsync(HttpContext context, IUserInfoService userInfoService)
     {
-        var previous = userInfoService.Current;
-        try
-        {
-            userInfoService.Current = context.User.Identity?.IsAuthenticated == true ? context.User : null;
-            await _next(context);
-        }
-        finally
-        {
-            userInfoService.Current = previous;
-        }
+        using var userContext = UserInfoUtil.Push(context.User.Identity?.IsAuthenticated == true ? context.User : null);
+        await _next(context);
     }
 }

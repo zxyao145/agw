@@ -76,6 +76,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 Name = "test-model",
                 MaxContextWindowTokens = 128_000,
                 MaxOutputTokens = 16_000,
+                CreateBy = "tester",
             }
         );
         dbContext.Providers.Add(
@@ -85,6 +86,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 Name = "test-provider",
                 ProviderType = ProviderType.OpenAIChatCompletions,
                 Endpoint = "https://example.test/v1",
+                CreateBy = "tester",
                 AuthConfigs =
                 [
                     new ProviderAuthConfig
@@ -94,6 +96,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                         AuthType = ProviderAuthType.ApiKey,
                         ApiKey = "test-api-key",
                         Enable = true,
+                        CreateBy = "tester",
                     },
                 ],
             }
@@ -104,6 +107,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 Id = modelProviderId,
                 ModelId = modelId,
                 ProviderId = providerId,
+                CreateBy = "tester",
             }
         );
         dbContext.McpToolServers.AddRange(
@@ -112,12 +116,14 @@ public class AgentRuntimeServiceSystemCompositionTests
                 Id = agentMcpServerId,
                 Name = "agent_mcp",
                 Enabled = true,
+                CreateBy = "tester",
             },
             new McpServer
             {
                 Id = projectMcpServerId,
                 Name = "project_mcp",
                 Enabled = true,
+                CreateBy = "tester",
             }
         );
         dbContext.Skills.AddRange(
@@ -128,6 +134,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 Description = "agent skill",
                 Kind = SkillKind.Local,
                 ContentPath = "agent-skill",
+                CreateBy = "tester",
             },
             new Skill
             {
@@ -136,6 +143,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 Description = "project skill",
                 Kind = SkillKind.Local,
                 ContentPath = "project-skill",
+                CreateBy = "tester",
             },
             new Skill
             {
@@ -145,6 +153,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 Kind = SkillKind.Remote,
                 ContentPath = string.Empty,
                 RemoteUrl = "https://example.test/remote-skill",
+                CreateBy = "tester",
             },
             new Skill
             {

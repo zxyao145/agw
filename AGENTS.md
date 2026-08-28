@@ -178,6 +178,8 @@ Remote web access uses the administrator session cookie. Desktop, mobile, and au
 
 Bearer principals inherit the API Token creator's user ID. Execution ownership, audit fields, task-session bindings, checkpoints, and User Memory must use that stable user ID rather than a display name or authentication scheme label.
 
+This phase does not add a User table, OIDC provisioning, or a user-ID counter. When a User table is introduced later, its numeric primary key must start at `10010`; claims and persisted owner contracts continue to use that value as a decimal string.
+
 Primary backend settings live in `src/server/Agw.Host/appsettings.json` under `Database`, `DistributedLock`, `Execution`, and `OpenTelemetry`.
 
 Configuration guidance:
@@ -210,10 +212,12 @@ Read [`docs/rules.md`](docs/rules.md) before coding. Its rules are mandatory.
 ### Integrations Terminology and Ownership
 
 - User-facing surfaces call catalog definitions **Available integrations** and user-configured accounts or endpoints **Configured integrations**. Do not expose `Connection` or `PluginInstallation` as product terminology.
-- Developer contracts keep the precise model: `PluginDefinition` is code-defined, `PluginInstallation` is platform-wide shared setup, and `Connection` is one user-owned configured account or endpoint. `Connector` remains the service or protocol variant and is not a Connection synonym.
+- Developer contracts keep the precise model: `PluginDefinition` is code-defined, `PluginInstallation` is one user's setup, and `Connection` is one user-owned configured account or endpoint. `Connector` remains the service or protocol variant and is not a Connection synonym.
 - `Connection.CreateBy` is the stable owner user ID. Connection CRUD, OAuth, credential reads, Agent/Project binding projection, and runtime Native/MCP invocation must enforce that owner. Treat foreign Connection IDs as unavailable without disclosing ownership.
 - Connection Alias values are immutable and unique within `(CreateBy, Alias)`, not globally. Shared Agent/Project definitions keep each user's Connection bindings as independent overlays; editing one user's bindings must preserve every other user's bindings.
-- Only the stable administrator user ID `1001` may mutate `PluginInstallation` setup. Catalog definitions remain readable to authenticated users, and setup changes may invalidate Connections for every owner.
+- Catalog definitions remain readable to authenticated users. `PluginInstallation` setup is user-scoped by `(CreateBy, PluginId)`; setup changes invalidate only that user's Connections. The stable administrator user ID `1001` owns legacy seeded data but is not a global setup bypass.
+- All persisted business, configuration, and execution roots are isolated by immutable `CreateBy` (or an existing `UserId` owner). Child tables such as JobLog, traces, sessions, and conversation history resolve ownership through their root. Missing or unstable authenticated user IDs fail closed; foreign IDs use the same NotFound/InvalidParam response as nonexistent resources.
+- Infrastructure registers the named `UserScopeFilter`, which fails closed when no user context is active. HTTP and execution flows establish a stable user context; only token validation, seeding, and scheduler scans may enter the restricted system scope or selectively bypass the user filter while retaining soft-delete filtering.
 - Keep real transport terminology such as database connections, SignalR `ExecutionConnection`, HTTP connections, and connection strings unchanged.
 
 ### Project Workspaces

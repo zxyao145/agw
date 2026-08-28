@@ -297,6 +297,17 @@ public class AgentSuggestionAppServiceTests
         IEnumerable<Skill>? skills = null
     )
     {
+        var ownedAgents = (agents ?? []).ToArray();
+        foreach (var agent in ownedAgents)
+        {
+            agent.CreateBy ??= "tester";
+        }
+        var ownedSkills = (skills ?? []).ToArray();
+        foreach (var skill in ownedSkills)
+        {
+            skill.CreateBy ??= "tester";
+        }
+
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             new ServiceCollection().BuildServiceProvider(),
@@ -304,10 +315,11 @@ public class AgentSuggestionAppServiceTests
             new ToolBlockRegistry([new TodoToolBlock(), new ModeToolBlock()])
         );
         return new AgentSuggestionAppService(
-            new TestRepository<Agent>(agents),
+            new TestRepository<Agent>(ownedAgents),
             new TestProjectRuntimeFacade(projects),
-            new TestRepository<Skill>(skills),
-            registry
+            new TestRepository<Skill>(ownedSkills),
+            registry,
+            new TestUserInfoService()
         );
     }
 

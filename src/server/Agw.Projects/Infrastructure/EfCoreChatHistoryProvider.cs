@@ -1,11 +1,12 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using Agw.Auth.Contracts;
 using Agw.Projects.Domain.Services;
-using Agw.Shared;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -30,7 +31,6 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         ),
     };
 
-    private const string DefaultUserId = Constants.AdminUserId;
     private const string AgentNamePropertyName = "agentName";
     private const string HistoryScopeMetadataKey = "historyScope";
     private const string NodeNamePropertyName = "nodeName";
@@ -272,6 +272,22 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
 
+        if (!UserInfoUtil.IsContextActive)
+        {
+            throw new AgwException(ErrorCodes.AuthenticationRequired);
+        }
+
+        var ownerUserId = UserInfoUtil.RequiredUserId;
+        if (
+            !await dbContext
+                .Set<Project>()
+                .AnyAsync(project => project.Id == projectId && project.CreateBy == ownerUserId, cancellationToken)
+                .ConfigureAwait(false)
+        )
+        {
+            return;
+        }
+
         var now = _timeProvider.GetUtcNow();
         var firstUserText = ExtractFirstText(
             persistableMessages.FirstOrDefault(message => message.Role == ChatRole.User)
@@ -301,9 +317,9 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                 ProjectId = projectId,
                 ContextId = contextId,
                 Title = TaskTitleFactory.Create(firstUserText),
-                CreateBy = DefaultUserId,
+                CreateBy = ResolveCurrentUserId(),
                 CreateTime = now,
-                UpdateBy = DefaultUserId,
+                UpdateBy = ResolveCurrentUserId(),
                 UpdateTime = now,
             };
             dbContext.Set<ProjectConversation>().Add(projectConversation);
@@ -319,7 +335,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                 projectConversation.Title = titleFromUser;
             }
 
-            projectConversation.UpdateBy = DefaultUserId;
+            projectConversation.UpdateBy = ResolveCurrentUserId();
             projectConversation.UpdateTime = now;
         }
 
@@ -517,6 +533,8 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
         return result;
     }
+
+    private static string ResolveCurrentUserId() => UserInfoUtil.RequiredUserId;
 
     private static void AddFilteredMessage(
         ICollection<ChatMessage> destination,

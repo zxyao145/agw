@@ -1,8 +1,11 @@
+using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Turns;
+using Agw.Auth.Application;
+using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Jobs.Application.Services;
@@ -22,9 +25,12 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Jobs.Tests;
 
-public class JobManagementSkillTests
+public class JobManagementSkillTests : IDisposable
 {
     private static readonly DateTimeOffset UtcNow = new(2026, 7, 26, 10, 0, 0, TimeSpan.Zero);
+    private readonly IDisposable _userScope = UserInfoUtil.Push(CreatePrincipal("seed"));
+
+    public void Dispose() => _userScope.Dispose();
 
     [Fact]
     public async Task SkillMetadata_MafDiscoversFrontmatterResourceAndFiveScripts()
@@ -120,7 +126,7 @@ public class JobManagementSkillTests
     {
         await using var fixture = await JobManagementSkillFixture.CreateAsync();
         var projectId = Guid.CreateVersion7();
-        var existing = await fixture.SeedJobAsync(projectId, "Existing job", "Keep or clear");
+        var existing = await fixture.SeedJobAsync(projectId, "Existing job", "Keep or clear", "patch-user");
         var skill = fixture.CreateSkill(projectId);
         using var context = fixture.PushInteractiveContext(projectId, "patch-user");
 
@@ -153,7 +159,7 @@ public class JobManagementSkillTests
     {
         await using var fixture = await JobManagementSkillFixture.CreateAsync();
         var projectId = Guid.CreateVersion7();
-        var existing = await fixture.SeedJobAsync(projectId, "Existing job");
+        var existing = await fixture.SeedJobAsync(projectId, "Existing job", ownerUserId: "schedule-user");
         var skill = fixture.CreateSkill(projectId);
         using var context = fixture.PushInteractiveContext(projectId, "schedule-user");
 
@@ -175,7 +181,7 @@ public class JobManagementSkillTests
     {
         await using var fixture = await JobManagementSkillFixture.CreateAsync();
         var projectId = Guid.CreateVersion7();
-        var existing = await fixture.SeedJobAsync(projectId, "Existing job");
+        var existing = await fixture.SeedJobAsync(projectId, "Existing job", ownerUserId: "patch-user");
         var skill = fixture.CreateSkill(projectId);
         using var context = fixture.PushInteractiveContext(projectId, "patch-user");
 
@@ -248,8 +254,8 @@ public class JobManagementSkillTests
         await using var fixture = await JobManagementSkillFixture.CreateAsync();
         var projectId = Guid.CreateVersion7();
         var otherProjectId = Guid.CreateVersion7();
-        var projectJob = await fixture.SeedJobAsync(projectId, "Project job");
-        var otherJob = await fixture.SeedJobAsync(otherProjectId, "Other job");
+        var projectJob = await fixture.SeedJobAsync(projectId, "Project job", ownerUserId: "delete-user");
+        var otherJob = await fixture.SeedJobAsync(otherProjectId, "Other job", ownerUserId: "delete-user");
         var skill = fixture.CreateSkill(projectId);
         using var context = fixture.PushInteractiveContext(projectId, "delete-user");
 
@@ -307,6 +313,9 @@ public class JobManagementSkillTests
             ?? throw new Xunit.Sdk.XunitException($"Script '{scriptName}' returned no {typeof(T).Name} result.");
     }
 
+    private static ClaimsPrincipal CreatePrincipal(string userId) =>
+        new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], authenticationType: "Test"));
+
     private sealed class JobManagementSkillFixture : IAsyncDisposable
     {
         private readonly SqliteConnection _connection;
@@ -334,7 +343,8 @@ public class JobManagementSkillTests
         public IDisposable PushInteractiveContext(Guid projectId, string userId)
         {
             var contextId = Guid.CreateVersion7().ToString("D");
-            return TurnContextAccessor.Push(
+            var userScope = UserInfoUtil.Push(CreatePrincipal(userId));
+            var turnScope = TurnContextAccessor.Push(
                 new RuntimeTurnContext(
                     ExecutionSettings.FromCommand(new SettingCommand(projectId)),
                     new AgentExecutionTask
@@ -353,6 +363,7 @@ public class JobManagementSkillTests
                     UserId = userId,
                 }
             );
+            return new CompositeScope(turnScope, userScope);
         }
 
         public static async Task<JobManagementSkillFixture> CreateAsync()
@@ -373,6 +384,9 @@ public class JobManagementSkillTests
             services.AddSingleton<IProjectTaskFacade, NoopProjectTaskFacade>();
             services.AddSingleton<JobScheduleCalculator>();
             services.AddSingleton<JobSchedulerWakeSignal>();
+            services.AddScoped<IUserInfoService, UserInfoService>();
+            services.AddScoped<Agw.Projects.Contracts.Runtime.IProjectRuntimeFacade, TestProjectRuntimeFacade>();
+            services.AddScoped<Agw.Agents.Contracts.Catalog.IAgentCatalogFacade, TestAgentCatalogFacade>();
             services.AddScoped(_ => new AgwDbContext(options));
             services.AddScoped<DbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
             services.AddScoped<IUnitOfWork>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
@@ -402,7 +416,12 @@ public class JobManagementSkillTests
             return new JobManagementSkillFixture(connection, serviceProvider, turnContextAccessor, registration);
         }
 
-        public async Task<Job> SeedJobAsync(Guid projectId, string name, string? prompt = "Prompt")
+        public async Task<Job> SeedJobAsync(
+            Guid projectId,
+            string name,
+            string? prompt = "Prompt",
+            string ownerUserId = "seed"
+        )
         {
             await using var scope = _serviceProvider.CreateAsyncScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
@@ -420,9 +439,9 @@ public class JobManagementSkillTests
                 Status = JobStatus.Pending,
                 IsEnabled = true,
                 MaxRetryCount = 3,
-                CreateBy = "seed",
+                CreateBy = ownerUserId,
                 CreateTime = UtcNow,
-                UpdateBy = "seed",
+                UpdateBy = ownerUserId,
                 UpdateTime = UtcNow,
             };
             dbContext.Jobs.Add(job);
@@ -474,6 +493,24 @@ public class JobManagementSkillTests
                 }
 
                 public void Dispose() => _accessor.Current = _previous;
+            }
+        }
+
+        private sealed class CompositeScope : IDisposable
+        {
+            private readonly IDisposable _turnScope;
+            private readonly IDisposable _userScope;
+
+            public CompositeScope(IDisposable turnScope, IDisposable userScope)
+            {
+                _turnScope = turnScope;
+                _userScope = userScope;
+            }
+
+            public void Dispose()
+            {
+                _turnScope.Dispose();
+                _userScope.Dispose();
             }
         }
 

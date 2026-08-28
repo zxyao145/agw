@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using A2A;
 using Agw.Projects.Contracts.Execution;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Exceptions;
 
 namespace Agw.A2A;
@@ -10,17 +11,29 @@ public class TaskStore : ITaskStore
 {
     private readonly IExternalTaskSnapshotStore _snapshots;
     private readonly TimeProvider _timeProvider;
+    private readonly IProjectDefaultResolver? _projectDefaults;
 
-    public TaskStore(IExternalTaskSnapshotStore snapshots, TimeProvider timeProvider)
+    public TaskStore(
+        IExternalTaskSnapshotStore snapshots,
+        TimeProvider timeProvider,
+        IProjectDefaultResolver? projectDefaults = null
+    )
     {
         _snapshots = snapshots;
         _timeProvider = timeProvider;
+        _projectDefaults = projectDefaults;
     }
 
     public async Task DeleteTaskAsync(string taskId, CancellationToken cancellationToken = default)
     {
+        var projectId = await ResolveA2AProjectIdAsync(cancellationToken).ConfigureAwait(false);
+        if (!projectId.HasValue)
+        {
+            return;
+        }
+
         await _snapshots
-            .DeleteAsync(ProjectDefaults.A2AId, ParseRequiredTaskId(taskId), cancellationToken)
+            .DeleteAsync(projectId.Value, ParseRequiredTaskId(taskId), cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -31,9 +44,13 @@ public class TaskStore : ITaskStore
             return null;
         }
 
-        var snapshot = await _snapshots
-            .GetAsync(ProjectDefaults.A2AId, taskGuid, cancellationToken)
-            .ConfigureAwait(false);
+        var projectId = await ResolveA2AProjectIdAsync(cancellationToken).ConfigureAwait(false);
+        if (!projectId.HasValue)
+        {
+            return null;
+        }
+
+        var snapshot = await _snapshots.GetAsync(projectId.Value, taskGuid, cancellationToken).ConfigureAwait(false);
         if (snapshot == null)
         {
             return null;
@@ -48,8 +65,20 @@ public class TaskStore : ITaskStore
         CancellationToken cancellationToken = default
     )
     {
+        var projectId = await ResolveA2AProjectIdAsync(cancellationToken).ConfigureAwait(false);
+        if (!projectId.HasValue)
+        {
+            return new ListTasksResponse
+            {
+                Tasks = [],
+                PageSize = 0,
+                TotalSize = 0,
+                NextPageToken = string.Empty,
+            };
+        }
+
         var snapshots = await _snapshots
-            .ListAsync(ProjectDefaults.A2AId, request.ContextId, cancellationToken)
+            .ListAsync(projectId.Value, request.ContextId, cancellationToken)
             .ConfigureAwait(false);
         var persistedTasks = snapshots
             .Select(snapshot => ReadPayload(snapshot.Payload) ?? BuildFallbackTask(snapshot.Task))
@@ -91,13 +120,14 @@ public class TaskStore : ITaskStore
         var statusTimestamp = task.Status?.Timestamp ?? now;
         var contextId = string.IsNullOrWhiteSpace(task.ContextId) ? taskGuid.ToString("D") : task.ContextId.Trim();
         var errorMessage = ExtractMessageText(task.Status?.Message);
-        var existing = await _snapshots
-            .GetAsync(ProjectDefaults.A2AId, taskGuid, cancellationToken)
-            .ConfigureAwait(false);
+        var projectId =
+            await ResolveA2AProjectIdAsync(cancellationToken).ConfigureAwait(false)
+            ?? throw new AgwException(ErrorCodes.A2ATaskNotFound);
+        var existing = await _snapshots.GetAsync(projectId, taskGuid, cancellationToken).ConfigureAwait(false);
         var result = await _snapshots
             .SaveAsync(
                 new SaveExternalTaskSnapshotRequest(
-                    ProjectDefaults.A2AId,
+                    projectId,
                     taskGuid,
                     contextId,
                     BuildTitle(ExtractFirstUserText(task), existing?.Task.Title),
@@ -188,6 +218,13 @@ public class TaskStore : ITaskStore
 
     private static Guid ParseRequiredTaskId(string taskId) =>
         Guid.TryParse(taskId, out var taskGuid) ? taskGuid : throw new AgwException(ErrorCodes.A2ATaskIdMustBeGuid);
+
+    private async Task<Guid?> ResolveA2AProjectIdAsync(CancellationToken cancellationToken)
+    {
+        return _projectDefaults == null
+            ? ProjectDefaults.A2AId
+            : await _projectDefaults.ResolveA2AProjectIdAsync(cancellationToken).ConfigureAwait(false);
+    }
 
     private static string? ExtractFirstUserText(AgentTask task) =>
         task

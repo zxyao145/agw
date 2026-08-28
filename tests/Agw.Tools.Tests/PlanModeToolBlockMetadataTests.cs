@@ -69,7 +69,7 @@ public sealed class PlanModeToolBlockMetadataTests
 
     private sealed class UnusedFileSystemResolver : IAgwFileSystemResolver
     {
-        public Task<IAgwFileSystem> ResolveAsync(Guid projectId, CancellationToken ct) =>
+        public Task<IAgwFileSystem?> ResolveAsync(Guid projectId, CancellationToken ct) =>
             throw new InvalidOperationException("The resolver should not be used during materialization.");
     }
 

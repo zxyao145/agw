@@ -70,7 +70,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         var pluginIds = storedConnections.Select(item => item.PluginId).Distinct().ToArray();
         var installations = await _installationRepository
             .Queryable.AsNoTracking()
-            .Where(item => pluginIds.Contains(item.PluginId))
+            .Where(item => pluginIds.Contains(item.PluginId) && item.CreateBy == userId)
             .ToDictionaryAsync(item => item.PluginId, StringComparer.OrdinalIgnoreCase, cancellationToken);
 
         var nativeTools = new List<AITool>();
@@ -529,7 +529,10 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
 
             var installation = await _installationRepository
                 .Queryable.AsNoTracking()
-                .SingleOrDefaultAsync(item => item.PluginId == connection.PluginId, cancellationToken);
+                .SingleOrDefaultAsync(
+                    item => item.PluginId == connection.PluginId && item.CreateBy == userId,
+                    cancellationToken
+                );
             var plugin = _pluginCatalog.Find(connection.PluginId);
             var connector = plugin?.Connectors.FirstOrDefault(item =>
                 string.Equals(item.Id, connection.ConnectorId, StringComparison.OrdinalIgnoreCase)

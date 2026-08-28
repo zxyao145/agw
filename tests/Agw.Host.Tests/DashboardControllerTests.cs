@@ -1,5 +1,7 @@
+using System.Security.Claims;
 using Agw.Agents.Contracts.Catalog;
 using Agw.Agents.Definitions.Facades;
+using Agw.Auth.Contracts;
 using Agw.Host.Controllers;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
@@ -18,8 +20,16 @@ using Xunit;
 
 namespace Agw.Host.Tests;
 
-public class DashboardControllerTests
+public class DashboardControllerTests : IDisposable
 {
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
+
     [Fact]
     public async Task GetStats_SharedScopedDependencies_DoesNotOverlapCalls()
     {
@@ -86,6 +96,7 @@ public class DashboardControllerTests
             {
                 Id = projectId,
                 Name = "Deleted project",
+                CreateBy = "tester",
                 CreateTime = TimeProvider.System.GetUtcNow(),
             }
         );
@@ -96,6 +107,7 @@ public class DashboardControllerTests
                 ProjectId = projectId,
                 ContextId = "context-1",
                 Title = "Context",
+                CreateBy = "tester",
                 CreateTime = TimeProvider.System.GetUtcNow(),
             }
         );
@@ -134,20 +146,23 @@ public class DashboardControllerTests
 
     private static DashboardController CreateController(AgwDbContext dbContext)
     {
+        var userInfo = new TestUserInfoService();
         return new DashboardController(
-            new JobMetricsFacade(new EfRepository<Job>(dbContext)),
+            new JobMetricsFacade(new EfRepository<Job>(dbContext), userInfo),
             new ProjectMetricsFacade(
                 new EfRepository<Project>(dbContext),
                 new EfRepository<ProjectConversation>(dbContext),
                 new EfRepository<ProjectConversationChatHistory>(dbContext),
-                new EfRepository<AgentUsage>(dbContext)
+                new EfRepository<AgentUsage>(dbContext),
+                userInfo
             ),
             new AgentCatalogFacade(
                 new EfRepository<Agent>(dbContext),
                 new EfRepository<Agentflow>(dbContext),
                 new EfRepository<McpServer>(dbContext),
                 new EfRepository<AgentSkillRelation>(dbContext),
-                dbContext
+                dbContext,
+                userInfo
             )
         );
     }
@@ -165,6 +180,7 @@ public class DashboardControllerTests
             ProjectId = projectId,
             ContextId = contextId,
             AgentName = "planner",
+            UserId = "tester",
             RecordedAt = TimeProvider.System.GetUtcNow(),
             InputTokenCount = inputTokenCount,
             OutputTokenCount = outputTokenCount,
@@ -250,6 +266,13 @@ public class DashboardControllerTests
 
         public Task<AgentCatalogMetrics> GetMetricsAsync(CancellationToken cancellationToken = default) =>
             _tracker.RunAsync(new AgentCatalogMetrics(7, 8));
+
+        public Task<bool> IsOwnedTargetAsync(
+            Agw.Agents.Contracts.Execution.AgentRuntimeType type,
+            Guid id,
+            string ownerUserId,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(true);
 
         public Task<IReadOnlyList<AgentDescriptor>> ListDiscoverableAsync(
             CancellationToken cancellationToken = default

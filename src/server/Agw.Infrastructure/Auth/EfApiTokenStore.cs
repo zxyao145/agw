@@ -2,7 +2,6 @@ using System.Security.Cryptography;
 using System.Text;
 using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
-using Agw.Shared;
 using Agw.Shared.Data.Entities.Auth;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -14,16 +13,20 @@ public sealed class EfApiTokenStore : IApiTokenStore
     private const int PrefixLength = 12;
 
     private readonly AgwDbContext _context;
+    private readonly IUserInfoService? _userInfoService;
 
-    public EfApiTokenStore(AgwDbContext context)
+    public EfApiTokenStore(AgwDbContext context, IUserInfoService? userInfoService = null)
     {
         _context = context;
+        _userInfoService = userInfoService;
     }
 
     public async Task<IReadOnlyList<ApiTokenSummary>> ListTokensAsync(CancellationToken cancellationToken = default)
     {
+        var ownerUserId = ResolveOwnerUserId();
         var tokens = await _context
             .ApiTokens.AsNoTracking()
+            .Where(token => token.CreateBy == ownerUserId)
             .Select(token => new ApiTokenSummary(token.Id, token.Name, token.Prefix, token.CreateTime))
             .ToArrayAsync(cancellationToken);
         return tokens.OrderByDescending(token => token.CreatedAt).ToArray();
@@ -31,8 +34,14 @@ public sealed class EfApiTokenStore : IApiTokenStore
 
     public async Task<CreatedApiToken> CreateTokenAsync(string name, CancellationToken cancellationToken = default)
     {
+        var ownerUserId = ResolveOwnerUserId();
         var normalizedName = ApiToken.NormalizeName(name);
-        if (await _context.ApiTokens.AnyAsync(token => token.NormalizedName == normalizedName, cancellationToken))
+        if (
+            await _context.ApiTokens.AnyAsync(
+                token => token.NormalizedName == normalizedName && token.CreateBy == ownerUserId,
+                cancellationToken
+            )
+        )
         {
             throw new AgwException(ErrorCodes.ApiTokenNameAlreadyExists);
         }
@@ -45,6 +54,7 @@ public sealed class EfApiTokenStore : IApiTokenStore
             NormalizedName = normalizedName,
             Prefix = secret[..Math.Min(secret.Length, PrefixLength)],
             SecretHash = Hash(secret),
+            CreateBy = ownerUserId,
         };
         _context.ApiTokens.Add(token);
 
@@ -57,7 +67,7 @@ public sealed class EfApiTokenStore : IApiTokenStore
             _context.ChangeTracker.Clear();
             if (
                 await _context.ApiTokens.AnyAsync(
-                    existing => existing.NormalizedName == normalizedName,
+                    existing => existing.NormalizedName == normalizedName && existing.CreateBy == ownerUserId,
                     cancellationToken
                 )
             )
@@ -73,7 +83,11 @@ public sealed class EfApiTokenStore : IApiTokenStore
 
     public async Task<bool> RevokeTokenAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var token = await _context.ApiTokens.FindAsync([id], cancellationToken);
+        var ownerUserId = ResolveOwnerUserId();
+        var token = await _context.ApiTokens.FirstOrDefaultAsync(
+            candidate => candidate.Id == id && candidate.CreateBy == ownerUserId,
+            cancellationToken
+        );
         if (token == null)
             return false;
 
@@ -92,6 +106,7 @@ public sealed class EfApiTokenStore : IApiTokenStore
         var prefix = token[..Math.Min(token.Length, PrefixLength)];
         var candidates = await _context
             .ApiTokens.AsNoTracking()
+            .IgnoreUserScope()
             .Where(candidate => candidate.Prefix == prefix)
             .Select(candidate => new { candidate.SecretHash, candidate.CreateBy })
             .ToArrayAsync(cancellationToken);
@@ -111,10 +126,10 @@ public sealed class EfApiTokenStore : IApiTokenStore
 
             if (CryptographicOperations.FixedTimeEquals(candidateHash, storedHash))
             {
-                var userId = string.IsNullOrWhiteSpace(candidate.CreateBy)
-                    ? Constants.AdminUserId
-                    : candidate.CreateBy.Trim();
-                return new ApiTokenIdentity(userId);
+                if (!string.IsNullOrWhiteSpace(candidate.CreateBy))
+                {
+                    return new ApiTokenIdentity(candidate.CreateBy.Trim());
+                }
             }
         }
 
@@ -132,4 +147,6 @@ public sealed class EfApiTokenStore : IApiTokenStore
     }
 
     private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+
+    private string ResolveOwnerUserId() => _userInfoService?.RequiredUserId ?? UserInfoUtil.RequiredUserId;
 }

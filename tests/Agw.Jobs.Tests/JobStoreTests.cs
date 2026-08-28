@@ -1,4 +1,6 @@
+using System.Security.Claims;
 using System.Text.Json;
+using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Shared.Data.Entities.Jobs;
@@ -8,8 +10,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Jobs.Tests;
 
-public class JobStoreTests
+public class JobStoreTests : IDisposable
 {
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "owner")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
+
     [Fact]
     public async Task TryStartAttemptAsync_PersistsStableAttemptIdentity()
     {

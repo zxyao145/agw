@@ -38,10 +38,15 @@ public sealed class FileAppService
         CancellationToken cancellationToken = default
     )
     {
+        if (projectId == Guid.Empty)
+        {
+            return FileOperationResult<FileListOutput>.Invalid("Project ID is required");
+        }
+
         var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
         if (fileSystem == null)
         {
-            return FileOperationResult<FileListOutput>.Invalid("Project ID is required");
+            return FileOperationResult<FileListOutput>.Missing("Project not found");
         }
 
         path ??= string.Empty;
@@ -151,10 +156,15 @@ public sealed class FileAppService
         CancellationToken cancellationToken = default
     )
     {
+        if (projectId == Guid.Empty)
+        {
+            return FileOperationResult<string>.Invalid("Project ID is required");
+        }
+
         var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
         if (fileSystem == null)
         {
-            return FileOperationResult<string>.Invalid("Project ID is required");
+            return FileOperationResult<string>.Missing("Project not found");
         }
 
         if (string.IsNullOrWhiteSpace(path))
@@ -178,10 +188,15 @@ public sealed class FileAppService
         CancellationToken cancellationToken = default
     )
     {
+        if (projectId == Guid.Empty)
+        {
+            return FileOperationResult<FileDiffOutput>.Invalid("Project ID is required");
+        }
+
         var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
         if (fileSystem == null)
         {
-            return FileOperationResult<FileDiffOutput>.Invalid("Project ID is required");
+            return FileOperationResult<FileDiffOutput>.Missing("Project not found");
         }
 
         if (string.IsNullOrWhiteSpace(path))
@@ -231,10 +246,15 @@ public sealed class FileAppService
         CancellationToken cancellationToken = default
     )
     {
+        if (projectId == Guid.Empty)
+        {
+            return FileOperationResult<FileMutationOutput>.Invalid("Project ID is required");
+        }
+
         var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
         if (fileSystem == null)
         {
-            return FileOperationResult<FileMutationOutput>.Invalid("Project ID is required");
+            return FileOperationResult<FileMutationOutput>.Missing("Project not found");
         }
 
         if (string.IsNullOrWhiteSpace(path))
@@ -268,10 +288,15 @@ public sealed class FileAppService
         CancellationToken cancellationToken = default
     )
     {
+        if (projectId == Guid.Empty)
+        {
+            return FileOperationResult<FileMutationOutput>.Invalid("Project ID is required");
+        }
+
         var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
         if (fileSystem == null)
         {
-            return FileOperationResult<FileMutationOutput>.Invalid("Project ID is required");
+            return FileOperationResult<FileMutationOutput>.Missing("Project not found");
         }
 
         if (string.IsNullOrWhiteSpace(path))
@@ -338,10 +363,15 @@ public sealed class FileAppService
         CancellationToken cancellationToken = default
     )
     {
+        if (projectId == Guid.Empty)
+        {
+            return FileOperationResult<FileSearchOutput>.Invalid("Project ID is required");
+        }
+
         var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
         if (fileSystem == null)
         {
-            return FileOperationResult<FileSearchOutput>.Invalid("Project ID is required");
+            return FileOperationResult<FileSearchOutput>.Missing("Project not found");
         }
 
         path ??= string.Empty;
@@ -384,10 +414,15 @@ public sealed class FileAppService
         CancellationToken cancellationToken
     )
     {
+        if (projectId == Guid.Empty)
+        {
+            return FileOperationResult<FileMutationOutput>.Invalid("Project ID is required");
+        }
+
         var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
         if (fileSystem == null)
         {
-            return FileOperationResult<FileMutationOutput>.Invalid("Project ID is required");
+            return FileOperationResult<FileMutationOutput>.Missing("Project not found");
         }
 
         if (string.IsNullOrWhiteSpace(path))

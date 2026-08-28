@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.Json;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
@@ -18,8 +19,16 @@ using IntegrationConnection = Agw.Shared.Data.Entities.Integrations.Connection;
 
 namespace Agw.Integrations.Tests;
 
-public class ConnectionCapabilityResolverTests
+public class ConnectionCapabilityResolverTests : IDisposable
 {
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "test")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
+
     [Fact]
     public async Task Resolve_TwoReadyGitHubConnections_CreatesAliasToolsUsingExactConnectionAndRotatedToken()
     {

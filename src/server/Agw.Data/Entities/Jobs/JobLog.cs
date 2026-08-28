@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Shared.Data.Entities.Jobs;
@@ -16,4 +17,7 @@ public class JobLog : BaseEntity
     public bool Success { get; set; }
     public int Attempt { get; set; }
     public string? ErrorMessage { get; set; }
+
+    [JsonIgnore]
+    public Job? Job { get; set; }
 }

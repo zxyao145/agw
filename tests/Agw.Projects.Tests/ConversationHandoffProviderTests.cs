@@ -14,9 +14,26 @@ public class ConversationHandoffProviderTests
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     [Fact]
+    public async Task CreateAsync_WithoutUserContext_ReturnsEmpty()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        var options = CreateOptions(connection);
+        await using var dbContext = new AgwDbContext(options);
+        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+
+        var handoff = await CreateProvider(dbContext)
+            .CreateAsync(Guid.CreateVersion7(), AgentRuntimeType.Agentflow, Guid.CreateVersion7(), cancellationToken);
+
+        Assert.Empty(handoff.Messages);
+        Assert.Null(handoff.ThroughSequence);
+    }
+
+    [Fact]
     public async Task CreateAsync_LegacyCurrentTargetWithoutCursor_RecoversPreviousPlan()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = PushTestUser();
         await using var connection = await OpenConnectionAsync(cancellationToken);
         var options = CreateOptions(connection);
         var projectId = Guid.CreateVersion7();
@@ -88,6 +105,7 @@ public class ConversationHandoffProviderTests
     public async Task CreateAsync_CurrentTargetCursor_ReturnsOnlyNewOtherTargetMessages()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = PushTestUser();
         await using var connection = await OpenConnectionAsync(cancellationToken);
         var options = CreateOptions(connection);
         var projectId = Guid.CreateVersion7();
@@ -169,6 +187,7 @@ public class ConversationHandoffProviderTests
     public async Task CreateAsync_StandaloneTarget_IncludesScopedAndHiddenResultButNotVisibleUnscopedHistory()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = PushTestUser();
         await using var connection = await OpenConnectionAsync(cancellationToken);
         var options = CreateOptions(connection);
         var projectId = Guid.CreateVersion7();
@@ -225,6 +244,7 @@ public class ConversationHandoffProviderTests
     public async Task CreateAsync_DuplicateMessageIdsAndOversizedLatestMessage_DeduplicatesAndKeepsLatestComplete()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = PushTestUser();
         await using var connection = await OpenConnectionAsync(cancellationToken);
         var options = CreateOptions(connection);
         var projectId = Guid.CreateVersion7();
@@ -265,6 +285,7 @@ public class ConversationHandoffProviderTests
     public async Task CreateAsync_DuplicateMessageIds_KeepsLatestRecord()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = PushTestUser();
         await using var connection = await OpenConnectionAsync(cancellationToken);
         var options = CreateOptions(connection);
         var projectId = Guid.CreateVersion7();
@@ -301,6 +322,7 @@ public class ConversationHandoffProviderTests
     public async Task CreateAsync_PrivateControlAndToolMessages_ReturnsOnlyPublicTextAndResult()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = PushTestUser();
         await using var connection = await OpenConnectionAsync(cancellationToken);
         var options = CreateOptions(connection);
         var projectId = Guid.CreateVersion7();
@@ -373,6 +395,16 @@ public class ConversationHandoffProviderTests
 
     private static ConversationHandoffProvider CreateProvider(AgwDbContext dbContext) =>
         new(new EfRepository<ProjectConversationChatHistory>(dbContext));
+
+    private static IDisposable PushTestUser() =>
+        UserInfoUtil.Push(
+            new System.Security.Claims.ClaimsPrincipal(
+                new System.Security.Claims.ClaimsIdentity(
+                    [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, "tester")],
+                    "test"
+                )
+            )
+        );
 
     private static async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken)
     {

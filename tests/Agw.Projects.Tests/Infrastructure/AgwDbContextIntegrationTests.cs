@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
@@ -8,8 +9,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Infrastructure.Tests;
 
-public class AgwDbContextIntegrationTests
+public class AgwDbContextIntegrationTests : IDisposable
 {
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
+
     [Fact]
     public async Task Project_WhenDeletedWithoutForeignKeys_RemovesCapabilityRelations()
     {
@@ -146,10 +155,18 @@ public class AgwDbContextIntegrationTests
             Id = id,
             Name = $"skill-{id:N}",
             Description = "Skill",
+            Kind = SkillKind.Local,
             ContentPath = $"/skills/{id:N}",
+            CreateBy = "tester",
         };
 
-    private static McpServer CreateMcpServer(Guid id) => new() { Id = id, Name = $"mcp-{id:N}" };
+    private static McpServer CreateMcpServer(Guid id) =>
+        new()
+        {
+            Id = id,
+            Name = $"mcp-{id:N}",
+            CreateBy = "tester",
+        };
 
     private static Connection CreateConnection(Guid id, string alias) =>
         new()

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Definitions.Domain;
@@ -8,35 +9,39 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
+using Agw.Shared.Exceptions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Agents.Tests;
 
-public class AgentConnectionRelationTests
+public class AgentConnectionRelationTests : IDisposable
 {
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
+
     [Fact]
-    public async Task CreateAgentAsync_WhenConnectionIdsContainDuplicates_PersistsDistinctExistingConnections()
+    public async Task CreateAgentAsync_WhenConnectionIdsContainUnknownValues_ThrowsInvalidParam()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await TestScope.CreateAsync(cancellationToken);
         var agent = CreateAgent(Guid.CreateVersion7());
 
-        var created = await scope.Service.CreateAgentAsync(
-            agent,
-            mcpToolServerIds: null,
-            skillIds: null,
-            connectionIds: [scope.FirstConnectionId, scope.FirstConnectionId, Guid.Empty, Guid.CreateVersion7()]
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            scope.Service.CreateAgentAsync(
+                agent,
+                mcpToolServerIds: null,
+                skillIds: null,
+                connectionIds: [scope.FirstConnectionId, scope.FirstConnectionId, Guid.Empty, Guid.CreateVersion7()]
+            )
         );
 
-        Assert.NotNull(created);
-        await using var assertContext = scope.CreateDbContext();
-        var relation = Assert.Single(
-            await assertContext
-                .AgentConnectionRelations.Where(relation => relation.AgentId == agent.Id)
-                .ToListAsync(cancellationToken)
-        );
-        Assert.Equal(scope.FirstConnectionId, relation.ConnectionId);
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
     }
 
     [Fact]
@@ -122,7 +127,7 @@ public class AgentConnectionRelationTests
     }
 
     [Fact]
-    public async Task UserScopedRelations_SharedAgent_PreservesOtherUsersBindings()
+    public async Task UserScopedRelations_ForeignUserCannotViewAgentAndOwnerUpdatePreservesForeignRows()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await TestScope.CreateAsync(cancellationToken, AgentType.System);
@@ -154,10 +159,10 @@ public class AgentConnectionRelationTests
 
         Assert.NotNull(ownView);
         Assert.Equal(scope.FirstConnectionId, Assert.Single(ownView.AgentConnectionRelations).ConnectionId);
-        Assert.NotNull(foreignView);
-        Assert.Equal(foreignConnectionId, Assert.Single(foreignView.AgentConnectionRelations).ConnectionId);
+        Assert.Null(foreignView);
         Assert.NotNull(updated);
         await using var assertContext = scope.CreateDbContext();
+        using var systemScope = UserInfoUtil.PushSystemScope();
         Assert.Equal(
             new[] { foreignConnectionId, scope.SecondConnectionId }.OrderBy(id => id),
             (
@@ -178,6 +183,7 @@ public class AgentConnectionRelationTests
             SystemPrompt = "prompt",
             Type = type,
             ModelProviderId = modelProviderId,
+            CreateBy = "tester",
         };
 
     private static Connection CreateConnection(Guid id, string alias, string user = "tester") =>
@@ -245,13 +251,21 @@ public class AgentConnectionRelationTests
             var modelProviderId = Guid.CreateVersion7();
             await using (var seedContext = new AgwDbContext(options))
             {
-                seedContext.Models.Add(new AgwAiModel { Id = modelId, Name = "test-model" });
+                seedContext.Models.Add(
+                    new AgwAiModel
+                    {
+                        Id = modelId,
+                        Name = "test-model",
+                        CreateBy = "tester",
+                    }
+                );
                 seedContext.Providers.Add(
                     new Provider
                     {
                         Id = providerId,
                         Name = "test-provider",
                         Endpoint = "https://example.test",
+                        CreateBy = "tester",
                     }
                 );
                 seedContext.ModelProviders.Add(
@@ -260,6 +274,7 @@ public class AgentConnectionRelationTests
                         Id = modelProviderId,
                         ModelId = modelId,
                         ProviderId = providerId,
+                        CreateBy = "tester",
                     }
                 );
                 seedContext.Agents.Add(CreateAgent(agentId, agentType, modelProviderId));

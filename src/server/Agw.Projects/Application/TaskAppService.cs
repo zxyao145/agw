@@ -1,3 +1,4 @@
+using Agw.Auth.Contracts;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
@@ -13,21 +14,27 @@ public class TaskAppService : ITaskAppService
     private readonly IRepository<ProjectConversationChatHistory> _recordRepository;
     private readonly ProjectResolver _projectResolver;
     private readonly TaskExecutionAppService _taskExecutionAppService;
+    private readonly IUserInfoService _userInfoService;
 
     public TaskAppService(
         IRepository<ProjectConversation> contextRepository,
         IRepository<ProjectConversationChatHistory> recordRepository,
         ProjectResolver projectResolver,
-        TaskExecutionAppService taskExecutionAppService
+        TaskExecutionAppService taskExecutionAppService,
+        IUserInfoService userInfoService
     )
     {
         _contextRepository = contextRepository;
         _recordRepository = recordRepository;
         _projectResolver = projectResolver;
         _taskExecutionAppService = taskExecutionAppService;
+        _userInfoService = userInfoService;
     }
 
-    public Task<TaskProjection?> GetTaskAsync(Guid id) => _taskExecutionAppService.GetTaskAsync(id);
+    public Task<TaskProjection?> GetTaskAsync(Guid id) => GetTaskAsync(id, ResolveOwnerUserId());
+
+    public Task<TaskProjection?> GetTaskAsync(Guid id, string? ownerUserId) =>
+        _taskExecutionAppService.GetTaskAsync(id, ownerUserId);
 
     public async Task<TaskProjection?> CreateTaskForExecutionAsync(
         Guid projectId,
@@ -52,7 +59,7 @@ public class TaskAppService : ITaskAppService
             return null;
         }
 
-        return await _taskExecutionAppService.GetTaskAsync(result.Value.TaskId);
+        return await _taskExecutionAppService.GetTaskAsync(result.Value.TaskId, user);
     }
 
     public async Task<bool> HasTaskAsync(
@@ -72,13 +79,15 @@ public class TaskAppService : ITaskAppService
                 r =>
                     r.TaskId == taskId
                     && r.ProjectConversation != null
-                    && r.ProjectConversation.ProjectId == project.Id,
+                    && r.ProjectConversation.ProjectId == project.Id
+                    && r.ProjectConversation.CreateBy == project.CreateBy,
                 cancellationToken
             );
             return existInProject;
         }
 
-        var exist = await _recordRepository.Queryable.AnyAsync(r => r.TaskId == taskId, cancellationToken);
+        var ownerUserId = ResolveOwnerUserId();
+        var exist = await _taskExecutionAppService.GetTaskAsync(taskId, ownerUserId).ConfigureAwait(false) != null;
         return exist;
     }
 
@@ -89,7 +98,10 @@ public class TaskAppService : ITaskAppService
         CancellationToken cancellationToken
     )
     {
-        var resolvedProjectId = await _projectResolver.ResolveProjectIdAsync(request.ProjectId);
+        var ownerUserId = string.IsNullOrWhiteSpace(request.User) ? ResolveOwnerUserId() : request.User.Trim();
+        var resolvedProjectId = await _projectResolver
+            .ResolveProjectIdForUserAsync(request.ProjectId, ownerUserId, cancellationToken)
+            .ConfigureAwait(false);
         if (!resolvedProjectId.HasValue)
         {
             return new ExecutionTaskResolutionResult(
@@ -102,7 +114,7 @@ public class TaskAppService : ITaskAppService
         {
             if (request.TaskId.HasValue && request.TaskId.Value != Guid.Empty)
             {
-                var existingTask = await GetTaskAsync(request.TaskId.Value);
+                var existingTask = await GetTaskAsync(request.TaskId.Value, ownerUserId);
                 if (existingTask == null)
                 {
                     return new ExecutionTaskResolutionResult(
@@ -136,6 +148,7 @@ public class TaskAppService : ITaskAppService
             var latestTask = await GetLatestTaskByContextAsync(
                 resolvedProjectId.Value,
                 request.ContextId,
+                ownerUserId,
                 cancellationToken
             );
             if (latestTask == null)
@@ -155,12 +168,12 @@ public class TaskAppService : ITaskAppService
                 null,
                 request.ContextId,
                 request.Input,
-                request.User,
+                ownerUserId,
                 cancellationToken
             );
         }
 
-        var task = await GetTaskAsync(request.TaskId.Value);
+        var task = await GetTaskAsync(request.TaskId.Value, ownerUserId);
         if (task == null)
         {
             return await CreateTaskAsync(
@@ -168,7 +181,7 @@ public class TaskAppService : ITaskAppService
                 request.TaskId,
                 request.ContextId,
                 request.Input,
-                request.User,
+                ownerUserId,
                 cancellationToken
             );
         }
@@ -190,12 +203,13 @@ public class TaskAppService : ITaskAppService
     private async Task<TaskProjection?> GetLatestTaskByContextAsync(
         Guid projectId,
         string contextId,
+        string? ownerUserId,
         CancellationToken cancellationToken
     )
     {
         var normalizedContextId = ContextIdUtil.NormalizeContextId(contextId);
         var context = await _contextRepository.SingleOrDefaultAsync(item =>
-            item.ProjectId == projectId && item.ContextId == normalizedContextId
+            item.ProjectId == projectId && item.ContextId == normalizedContextId && item.CreateBy == ownerUserId
         );
         if (context == null)
         {
@@ -237,6 +251,8 @@ public class TaskAppService : ITaskAppService
 
         return new ExecutionTaskResolutionResult(task, null);
     }
+
+    private string ResolveOwnerUserId() => _userInfoService.RequiredUserId;
 
     #endregion
 }

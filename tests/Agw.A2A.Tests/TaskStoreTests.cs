@@ -215,7 +215,9 @@ public class TaskStoreTests
             new ExternalTaskSnapshotStore(
                 new EfRepository<ProjectConversation>(dbContext),
                 new EfRepository<ProjectConversationChatHistory>(dbContext),
-                dbContext
+                dbContext,
+                new TestUserInfoService(),
+                new EfRepository<Project>(dbContext)
             ),
             TimeProvider.System
         );

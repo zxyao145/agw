@@ -440,6 +440,7 @@ public static class AgwHostApplication
             {
                 app.UseMiddleware<InitializationGuardMiddleware>();
             }
+            app.UseMiddleware<AgwApiExceptionMiddleware>();
             app.UseAgwAuth();
             if (hasControlPlane)
             {
@@ -448,7 +449,6 @@ public static class AgwHostApplication
             }
             app.UseRouting();
             app.UseAuthorization();
-            app.UseMiddleware<AgwApiExceptionMiddleware>();
             app.UseMiddleware<FileEndpointExceptionMappingMiddleware>();
 
             foreach (var module in modules)

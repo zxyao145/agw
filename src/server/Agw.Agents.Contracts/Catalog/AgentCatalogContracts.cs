@@ -1,3 +1,5 @@
+using Agw.Agents.Contracts.Execution;
+
 namespace Agw.Agents.Contracts.Catalog;
 
 public sealed record AgentDescriptor(Guid Id, string Name, string DisplayName, string DiscoveryDescription);
@@ -12,6 +14,13 @@ public interface IAgentCatalogFacade
 
     Task<IReadOnlySet<Guid>> FilterExistingMcpServerIdsAsync(
         IReadOnlyCollection<Guid> serverIds,
+        CancellationToken cancellationToken = default
+    );
+
+    Task<bool> IsOwnedTargetAsync(
+        AgentRuntimeType type,
+        Guid id,
+        string ownerUserId,
         CancellationToken cancellationToken = default
     );
 

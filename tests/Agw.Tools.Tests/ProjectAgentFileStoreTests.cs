@@ -334,6 +334,7 @@ public sealed class ProjectAgentFileStoreTests
             _fileSystem = fileSystem;
         }
 
-        public Task<IAgwFileSystem> ResolveAsync(Guid projectId, CancellationToken ct) => Task.FromResult(_fileSystem);
+        public Task<IAgwFileSystem?> ResolveAsync(Guid projectId, CancellationToken ct) =>
+            Task.FromResult<IAgwFileSystem?>(_fileSystem);
     }
 }

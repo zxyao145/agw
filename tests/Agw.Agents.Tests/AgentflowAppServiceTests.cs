@@ -179,7 +179,12 @@ public sealed class AgentflowAppServiceTests
     }
 
     private static AgentflowAppService CreateService(AgwDbContext dbContext) =>
-        new(dbContext, new EfRepository<ModelProviderRelation>(dbContext), new TestTimeProvider(UtcNow));
+        new(
+            dbContext,
+            new EfRepository<ModelProviderRelation>(dbContext),
+            new TestTimeProvider(UtcNow),
+            new TestUserInfoService()
+        );
 
     private static async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken)
     {

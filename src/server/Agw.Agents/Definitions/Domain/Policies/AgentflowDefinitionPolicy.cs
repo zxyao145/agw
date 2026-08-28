@@ -16,7 +16,8 @@ public sealed class AgentflowDefinitionPolicy
         IReadOnlyCollection<Guid> existingAgentIds,
         Guid? summaryModelProviderId = null,
         IReadOnlyCollection<Guid>? existingModelProviderIds = null,
-        IReadOnlyDictionary<Guid, string>? existingAgentNames = null
+        IReadOnlyDictionary<Guid, string>? existingAgentNames = null,
+        IReadOnlyCollection<Guid>? existingAgentflowIds = null
     )
     {
         var (normalizedNodes, normalizedEdges) = ValidateAndNormalizeGraph(
@@ -26,7 +27,8 @@ public sealed class AgentflowDefinitionPolicy
             existingAgentIds,
             summaryModelProviderId,
             existingModelProviderIds,
-            existingAgentNames
+            existingAgentNames,
+            existingAgentflowIds
         );
         return new AgentflowDefinitionDecision { Nodes = normalizedNodes, Edges = normalizedEdges };
     }
@@ -38,7 +40,8 @@ public sealed class AgentflowDefinitionPolicy
         IReadOnlyCollection<Guid> existingAgentIds,
         Guid? summaryModelProviderId = null,
         IReadOnlyCollection<Guid>? existingModelProviderIds = null,
-        IReadOnlyDictionary<Guid, string>? existingAgentNames = null
+        IReadOnlyDictionary<Guid, string>? existingAgentNames = null,
+        IReadOnlyCollection<Guid>? existingAgentflowIds = null
     )
     {
         if (nodes == null || edges == null)
@@ -73,6 +76,22 @@ public sealed class AgentflowDefinitionPolicy
         if (relatedAgentIds.Any(id => !agentIdSet.Contains(id)))
         {
             return (null, null);
+        }
+
+        if (existingAgentflowIds != null)
+        {
+            var agentflowIdSet = existingAgentflowIds.ToHashSet();
+            var relatedAgentflowIds = nodes
+                .Where(x => x.Kind == AgentflowNodeKind.WorkflowAsAgent)
+                .Select(x => x.RelateId)
+                .Where(x => x is not null && x.Value != Guid.Empty)
+                .Select(x => x!.Value)
+                .Distinct()
+                .ToList();
+            if (relatedAgentflowIds.Any(id => id == agentflowId || !agentflowIdSet.Contains(id)))
+            {
+                return (null, null);
+            }
         }
 
         var outputNodes = nodes.Where(node => node.Kind == AgentflowNodeKind.Output).ToList();

@@ -45,6 +45,7 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
     )
     {
         ArgumentNullException.ThrowIfNull(request);
+        using var userScope = PushExecutionUser(request.OwnerUserId);
         var target = await ResolveTargetAsync(request.Target, cancellationToken).ConfigureAwait(false);
         return _provider == ExecutionProvider.Distributed
             ? await ExecuteDurableAsync(request, target, cancellationToken).ConfigureAwait(false)
@@ -57,6 +58,7 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
     )
     {
         ArgumentNullException.ThrowIfNull(request);
+        using var userScope = PushExecutionUser(request.OwnerUserId);
         var target = await ResolveTargetAsync(request.Target, cancellationToken).ConfigureAwait(false);
         if (_provider == ExecutionProvider.Distributed)
         {
@@ -70,57 +72,45 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
             yield break;
         }
 
-        var previousUser = UserInfoUtil.Current;
-        UserInfoUtil.Current = CreateUserPrincipal(request.OwnerUserId);
-        try
+        if (target.Kind == AgentTargetKind.Agent)
         {
-            if (target.Kind == AgentTargetKind.Agent)
+            var task = ProjectTaskProjectionMapper.Map(request.Task);
+            var settings = new SettingCommand(task.ProjectId, contextId: task.ContextId) { Resume = request.Resume };
+            await using var runtime = await _agentRuntimeService
+                .CreateRuntimeAsync(target.Id, task, settings, cancellationToken)
+                .ConfigureAwait(false);
+            if (runtime == null)
             {
-                var task = ProjectTaskProjectionMapper.Map(request.Task);
-                var settings = new SettingCommand(task.ProjectId, contextId: task.ContextId)
-                {
-                    Resume = request.Resume,
-                };
-                await using var runtime = await _agentRuntimeService
-                    .CreateRuntimeAsync(target.Id, task, settings, cancellationToken)
-                    .ConfigureAwait(false);
-                if (runtime == null)
-                {
-                    throw new AgwException(ErrorCodes.UnableToCreateAgentSession);
-                }
-
-                await foreach (
-                    var message in _agentRuntimeService
-                        .ExecuteStreamingAsync(runtime, request.Input, cancellationToken)
-                        .ConfigureAwait(false)
-                )
-                {
-                    EnsureHumanInteractionAllowed(request, message);
-                    yield return new AgentExecutionEvent(null, message);
-                }
-                yield break;
+                throw new AgwException(ErrorCodes.UnableToCreateAgentSession);
             }
 
             await foreach (
-                var message in _agentflowRuntimeService
-                    .ExecuteStreamingAsync(
-                        target.Id,
-                        ExtractText(request.Input),
-                        cancellationToken,
-                        request.Task.ProjectId,
-                        request.Task.ContextId,
-                        request.ExecutionId
-                    )
+                var message in _agentRuntimeService
+                    .ExecuteStreamingAsync(runtime, request.Input, cancellationToken)
                     .ConfigureAwait(false)
             )
             {
                 EnsureHumanInteractionAllowed(request, message);
                 yield return new AgentExecutionEvent(null, message);
             }
+            yield break;
         }
-        finally
+
+        await foreach (
+            var message in _agentflowRuntimeService
+                .ExecuteStreamingAsync(
+                    target.Id,
+                    ExtractText(request.Input),
+                    cancellationToken,
+                    request.Task.ProjectId,
+                    request.Task.ContextId,
+                    request.ExecutionId
+                )
+                .ConfigureAwait(false)
+        )
         {
-            UserInfoUtil.Current = previousUser;
+            EnsureHumanInteractionAllowed(request, message);
+            yield return new AgentExecutionEvent(null, message);
         }
     }
 
@@ -130,6 +120,7 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
         CancellationToken cancellationToken = default
     )
     {
+        using var userScope = PushExecutionUser(ownerUserId);
         var outcome = await DurableClient
             .GetOutcomeAsync(executionId, ownerUserId, cancellationToken)
             .ConfigureAwait(false);
@@ -143,6 +134,7 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
         [EnumeratorCancellation] CancellationToken cancellationToken = default
     )
     {
+        using var userScope = PushExecutionUser(ownerUserId);
         await foreach (
             var executionEvent in DurableClient
                 .ReadAsync(executionId, ownerUserId, afterCursor, cancellationToken)
@@ -158,7 +150,20 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
         string ownerUserId,
         string reason,
         CancellationToken cancellationToken = default
-    ) => DurableClient.InterruptAsync(executionId, ownerUserId, reason, cancellationToken);
+    ) => InterruptCoreAsync(executionId, ownerUserId, reason, cancellationToken);
+
+    private async Task<bool> InterruptCoreAsync(
+        Guid executionId,
+        string ownerUserId,
+        string reason,
+        CancellationToken cancellationToken
+    )
+    {
+        using var userScope = PushExecutionUser(ownerUserId);
+        return await DurableClient
+            .InterruptAsync(executionId, ownerUserId, reason, cancellationToken)
+            .ConfigureAwait(false);
+    }
 
     private IDurableExecutionClient DurableClient =>
         _services.GetService<IDurableExecutionClient>()
@@ -170,60 +175,51 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
         CancellationToken cancellationToken
     )
     {
-        var previousUser = UserInfoUtil.Current;
-        UserInfoUtil.Current = CreateUserPrincipal(request.OwnerUserId);
-        try
+        IReadOnlyList<AgwMessage> messages;
+        if (target.Kind == AgentTargetKind.Agent)
         {
-            IReadOnlyList<AgwMessage> messages;
-            if (target.Kind == AgentTargetKind.Agent)
-            {
-                var result = await _agentRuntimeService
-                    .ExecuteByIdAsync(
-                        new AgentExecuteByIdRequest(
-                            [AgwMessageUtil.CreateUserChatMessage(request.Input)],
-                            target.Id,
-                            request.ExecutionId,
-                            request.Task.ProjectId,
-                            request.Task.ContextId
-                        ),
-                        cancellationToken
-                    )
-                    .ConfigureAwait(false);
-                if (result == null)
-                {
-                    throw new AgwException(ErrorCodes.AgentNotFound);
-                }
-                messages = result.Messages;
-            }
-            else
-            {
-                var result = await _agentflowRuntimeService
-                    .ExecuteAsync(
+            var result = await _agentRuntimeService
+                .ExecuteByIdAsync(
+                    new AgentExecuteByIdRequest(
+                        [AgwMessageUtil.CreateUserChatMessage(request.Input)],
                         target.Id,
                         request.ExecutionId,
-                        [AgwMessageUtil.CreateUserChatMessage(request.Input)],
-                        cancellationToken,
                         request.Task.ProjectId,
                         request.Task.ContextId
-                    )
-                    .ConfigureAwait(false);
-                if (result == null)
-                {
-                    throw new AgwException(ErrorCodes.ResourceNotFound, "The Agentflow was not found.");
-                }
-                messages = result.Messages;
-            }
-
-            foreach (var message in messages)
+                    ),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (result == null)
             {
-                EnsureHumanInteractionAllowed(request, message);
+                throw new AgwException(ErrorCodes.AgentNotFound);
             }
-            return new AgentExecutionResult(request.ExecutionId, AgentExecutionState.Completed, messages);
+            messages = result.Messages;
         }
-        finally
+        else
         {
-            UserInfoUtil.Current = previousUser;
+            var result = await _agentflowRuntimeService
+                .ExecuteAsync(
+                    target.Id,
+                    request.ExecutionId,
+                    [AgwMessageUtil.CreateUserChatMessage(request.Input)],
+                    cancellationToken,
+                    request.Task.ProjectId,
+                    request.Task.ContextId
+                )
+                .ConfigureAwait(false);
+            if (result == null)
+            {
+                throw new AgwException(ErrorCodes.ResourceNotFound, "The Agentflow was not found.");
+            }
+            messages = result.Messages;
         }
+
+        foreach (var message in messages)
+        {
+            EnsureHumanInteractionAllowed(request, message);
+        }
+        return new AgentExecutionResult(request.ExecutionId, AgentExecutionState.Completed, messages);
     }
 
     private async Task<AgentExecutionResult> ExecuteDurableAsync(
@@ -327,6 +323,13 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
     {
         if (target.Id is { } id && id != Guid.Empty)
         {
+            var runtimeType =
+                target.Kind == AgentTargetKind.Agent ? AgentRuntimeType.Agent : AgentRuntimeType.Agentflow;
+            if (!await _catalog.IsOwnedTargetAsync(runtimeType, id, UserInfoUtil.RequiredUserId, cancellationToken))
+            {
+                throw new AgwException(ErrorCodes.ResourceNotFound);
+            }
+
             return new ResolvedTarget(target.Kind, id);
         }
         if (target.Kind != AgentTargetKind.Agent || string.IsNullOrWhiteSpace(target.Name))
@@ -379,6 +382,25 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
 
     private static ClaimsPrincipal CreateUserPrincipal(string userId) =>
         new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], "AgentExecutionFacade"));
+
+    private static IDisposable PushExecutionUser(string userId)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            throw new AgwException(ErrorCodes.AuthenticationRequired);
+        }
+
+        var normalizedUserId = userId.Trim();
+        if (
+            UserInfoUtil.IsContextActive
+            && !string.Equals(UserInfoUtil.RequiredUserId, normalizedUserId, StringComparison.Ordinal)
+        )
+        {
+            throw new AgwException(ErrorCodes.ResourceNotFound);
+        }
+
+        return UserInfoUtil.Push(CreateUserPrincipal(normalizedUserId));
+    }
 
     private sealed record ResolvedTarget(AgentTargetKind Kind, Guid Id);
 }

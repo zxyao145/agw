@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Agw.Auth.Contracts;
 using Agw.Projects.Domain.Services;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Projects;
@@ -35,9 +36,19 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
             return ConversationHandoff.Empty;
         }
 
+        if (!UserInfoUtil.IsContextActive)
+        {
+            return ConversationHandoff.Empty;
+        }
+
+        var ownerUserId = UserInfoUtil.RequiredUserId;
         var records = await _recordRepository
             .Queryable.AsNoTracking()
-            .Where(record => record.ConversationId == conversationId)
+            .Where(record =>
+                record.ConversationId == conversationId
+                && record.ProjectConversation!.CreateBy == ownerUserId
+                && record.ProjectConversation.Project!.CreateBy == ownerUserId
+            )
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         records = records

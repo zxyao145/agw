@@ -4,6 +4,7 @@ using Agw.Agents.Contracts.Execution;
 using Agw.Agents.Contracts.Messages;
 using Agw.Auth.Contracts;
 using Agw.Projects.Contracts.Execution;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -77,11 +78,21 @@ public sealed class A2AAgentExecutionBridge : IDurableA2AExecutionBridge
         await using var scope = _scopeFactory.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var ownerUserId = services.GetRequiredService<IUserInfoService>().RequiredUserId;
+        var projectDefaults = services.GetService<IProjectDefaultResolver>();
+        var projectId =
+            projectDefaults == null
+                ? ProjectDefaults.A2AId
+                : await projectDefaults.ResolveA2AProjectIdAsync(cancellationToken).ConfigureAwait(false);
+        if (!projectId.HasValue)
+        {
+            throw new AgwException(ErrorCodes.ResourceNotFound, "A2A project was not found.");
+        }
+
         var task = await services
             .GetRequiredService<IProjectTaskFacade>()
             .GetOrCreateAsync(
                 new StartProjectTaskRequest(
-                    ProjectDefaults.A2AId,
+                    projectId.Value,
                     executionId,
                     JobId: null,
                     GetInputText(input),

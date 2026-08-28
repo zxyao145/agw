@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.Json;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands.Setting;
@@ -15,8 +16,16 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Agents.Tests;
 
-public sealed class AgentflowCheckpointStoreTests
+public sealed class AgentflowCheckpointStoreTests : IDisposable
 {
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "user-id")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
+
     [Fact]
     public async Task InProcessOccurrences_RepeatedNode_RestoreExactBoundary()
     {
@@ -394,6 +403,7 @@ public sealed class AgentflowCheckpointStoreTests
                     Id = fixture.ProjectId,
                     Name = "Project",
                     Workspace = "/tmp",
+                    CreateBy = "user-id",
                     CreateTime = now,
                 }
             );
@@ -404,6 +414,7 @@ public sealed class AgentflowCheckpointStoreTests
                     ProjectId = fixture.ProjectId,
                     ContextId = fixture.ContextId,
                     Title = "Conversation",
+                    CreateBy = "user-id",
                     CreateTime = now,
                 }
             );
@@ -413,6 +424,7 @@ public sealed class AgentflowCheckpointStoreTests
                     Id = fixture.AgentflowId,
                     Name = "Flow",
                     SystemPrompt = "original",
+                    CreateBy = "user-id",
                     CreateTime = now,
                 }
             );

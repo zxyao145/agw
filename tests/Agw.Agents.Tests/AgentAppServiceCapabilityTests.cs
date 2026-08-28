@@ -122,17 +122,36 @@ public class AgentAppServiceCapabilityTests
         IEnumerable<AgentSkillRelation>? agentSkillRelations = null
     )
     {
+        var serverItems = (mcpServers ?? []).ToArray();
+        foreach (var server in serverItems)
+        {
+            server.CreateBy ??= "tester";
+        }
+        var skillItems = (skills ?? []).ToArray();
+        foreach (var skill in skillItems)
+        {
+            skill.CreateBy ??= "tester";
+        }
+        var mcpRelations = (agentMcpRelations ?? []).ToArray();
+        var skillRelations = (agentSkillRelations ?? []).ToArray();
+        var agents = mcpRelations
+            .Select(relation => relation.AgentId)
+            .Concat(skillRelations.Select(relation => relation.AgentId))
+            .Distinct()
+            .Select(id => new Agent { Id = id, CreateBy = "tester" })
+            .ToArray();
+
         return new AgentAppService(
-            new TestRepository<Agent>(),
+            new TestRepository<Agent>(agents),
             new TestRepository<AgentConnectionRelation>(),
             new TestRepository<Connection>(),
             new TestRepository<ModelProviderRelation>(),
             new TestRepository<AgwAiModel>(),
             new TestRepository<Provider>(),
-            new TestRepository<McpServer>(mcpServers),
-            new TestRepository<AgentMcpServerRelation>(agentMcpRelations),
-            new TestRepository<Skill>(skills),
-            new TestRepository<AgentSkillRelation>(agentSkillRelations),
+            new TestRepository<McpServer>(serverItems),
+            new TestRepository<AgentMcpServerRelation>(mcpRelations),
+            new TestRepository<Skill>(skillItems),
+            new TestRepository<AgentSkillRelation>(skillRelations),
             new TestUnitOfWork(),
             new AgentDomainService(TimeProvider.System),
             new TestUserInfoService()

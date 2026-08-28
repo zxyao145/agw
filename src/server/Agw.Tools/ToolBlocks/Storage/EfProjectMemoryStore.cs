@@ -1,5 +1,6 @@
 using System.IO.Enumeration;
 using System.Text.RegularExpressions;
+using Agw.Auth.Contracts;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Projects;
@@ -39,6 +40,7 @@ public sealed class EfProjectMemoryStore : AgentFileStore
         await using var mutationLease = await AcquireMutationLockAsync(cancellationToken).ConfigureAwait(false);
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
+        await EnsureProjectOwnedAsync(dbContext, cancellationToken).ConfigureAwait(false);
         var existingPaths = await Query(dbContext)
             .AsNoTracking()
             .Select(item => item.Path)
@@ -223,8 +225,40 @@ public sealed class EfProjectMemoryStore : AgentFileStore
         return Task.CompletedTask;
     }
 
-    private IQueryable<ProjectMemoryEntry> Query(DbContext dbContext) =>
-        dbContext.Set<ProjectMemoryEntry>().Where(item => item.ProjectId == _projectId);
+    private IQueryable<ProjectMemoryEntry> Query(DbContext dbContext)
+    {
+        var query = dbContext.Set<ProjectMemoryEntry>().Where(item => item.ProjectId == _projectId);
+        if (!UserInfoUtil.IsContextActive)
+        {
+            return query;
+        }
+
+        var ownerUserId = UserInfoUtil.RequiredUserId;
+        return query.Where(item =>
+            dbContext.Set<Project>().Any(project => project.Id == item.ProjectId && project.CreateBy == ownerUserId)
+        );
+    }
+
+    private async Task EnsureProjectOwnedAsync(DbContext dbContext, CancellationToken cancellationToken)
+    {
+        if (!UserInfoUtil.IsContextActive)
+        {
+            throw new AgwException(ErrorCodes.AuthenticationRequired);
+        }
+
+        if (
+            !await dbContext
+                .Set<Project>()
+                .AnyAsync(
+                    project => project.Id == _projectId && project.CreateBy == UserInfoUtil.RequiredUserId,
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
+        )
+        {
+            throw new AgwException(ErrorCodes.ResourceNotFound, "Project was not found.");
+        }
+    }
 
     private Task<IAsyncDisposable> AcquireMutationLockAsync(CancellationToken cancellationToken) =>
         _applicationLock.AcquireAsync($"project-memory-store:{_projectId:D}", cancellationToken);

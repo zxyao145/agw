@@ -2,10 +2,8 @@ using Agw.Auth.Contracts;
 using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.Management;
 using Agw.Integrations.Domain.Plugins;
-using Agw.Shared;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;
-using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Integrations.Application.Management;
@@ -48,10 +46,6 @@ public sealed class PluginInstallationAppService
     )
     {
         var user = _userInfoService.RequiredUserId;
-        if (!string.Equals(user, Constants.AdminUserId, StringComparison.Ordinal))
-        {
-            throw new AgwException(ErrorCodes.AdministratorRequired);
-        }
 
         var definition = IntegrationDefinitionResolver.Resolve(
             _pluginCatalog,
@@ -64,7 +58,7 @@ public sealed class PluginInstallationAppService
         var authSchemeId = definition.AuthScheme.Id;
         var installation = await _installationRepository
             .Queryable.Include(item => item.Credentials)
-            .FirstOrDefaultAsync(item => item.PluginId == pluginId, cancellationToken);
+            .FirstOrDefaultAsync(item => item.PluginId == pluginId && item.CreateBy == user, cancellationToken);
         if (installation == null)
         {
             installation = new PluginInstallation
@@ -132,7 +126,7 @@ public sealed class PluginInstallationAppService
         var user = _userInfoService.RequiredUserId;
         var query = _connectionRepository
             .Queryable.Include(connection => connection.Credentials)
-            .Where(connection => connection.PluginId == installation.PluginId);
+            .Where(connection => connection.PluginId == installation.PluginId && connection.CreateBy == user);
         if (installation.Enabled)
         {
             query = query.Where(connection =>

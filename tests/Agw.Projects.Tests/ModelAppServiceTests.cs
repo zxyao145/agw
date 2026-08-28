@@ -93,5 +93,10 @@ public sealed class ModelAppServiceTests
     }
 
     private static ModelAppService CreateService(AgwDbContext dbContext) =>
-        new(new EfRepository<AgwAiModel>(dbContext), dbContext, new ModelDomainService(TimeProvider.System));
+        new(
+            new EfRepository<AgwAiModel>(dbContext),
+            dbContext,
+            new ModelDomainService(TimeProvider.System),
+            new TestUserInfoService()
+        );
 }

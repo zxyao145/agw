@@ -37,6 +37,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
     private readonly HumanInteractionContextAccessor? _humanInteractionContextAccessor;
     private readonly IConversationHandoffProvider? _conversationHandoffProvider;
     private readonly IRuntimeTurnContextAccessor? _turnContextAccessor;
+    private readonly IProjectDefaultResolver? _projectDefaults;
     private readonly TimeProvider _timeProvider;
 
     private readonly ILoggerFactory _loggerFactory;
@@ -64,7 +65,8 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         HumanInteractionContextAccessor? humanInteractionContextAccessor = null,
         IConversationHandoffProvider? conversationHandoffProvider = null,
         IRuntimeTurnContextAccessor? turnContextAccessor = null,
-        TimeProvider? timeProvider = null
+        TimeProvider? timeProvider = null,
+        IProjectDefaultResolver? projectDefaults = null
     )
     {
         _agentAppService = agentAppService;
@@ -89,7 +91,30 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         _humanInteractionContextAccessor = humanInteractionContextAccessor;
         _conversationHandoffProvider = conversationHandoffProvider;
         _turnContextAccessor = turnContextAccessor;
+        _projectDefaults = projectDefaults;
         _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
         _services = services ?? new ServiceCollection().BuildServiceProvider();
+    }
+
+    private async Task<Guid?> ResolveProjectIdAsync(Guid? projectId, CancellationToken cancellationToken)
+    {
+        if (
+            projectId.HasValue
+            && projectId.Value != Guid.Empty
+            && projectId.Value != ProjectDefaults.DefaultBuiltInId
+            && projectId.Value != ProjectDefaults.A2AId
+        )
+        {
+            return projectId.Value;
+        }
+
+        if (_projectDefaults == null)
+        {
+            return ProjectDefaults.DefaultBuiltInId;
+        }
+
+        return projectId == ProjectDefaults.A2AId
+            ? await _projectDefaults.ResolveA2AProjectIdAsync(cancellationToken).ConfigureAwait(false)
+            : await _projectDefaults.ResolveDefaultProjectIdAsync(cancellationToken).ConfigureAwait(false);
     }
 }

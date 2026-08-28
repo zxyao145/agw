@@ -1,7 +1,11 @@
+using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Application.Capabilities;
 using Agw.Integrations.Application.Management;
 using Agw.Integrations.Contracts.Management;
 using Agw.Integrations.Infrastructure.Plugins;
+using Agw.Shared.Data.Entities.Integrations;
+using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Integrations.Tests;
 
@@ -10,9 +14,14 @@ public class PluginCatalogAppServiceTests
     [Fact]
     public void List_WhenGitHubIsBuiltIn_ReturnsExplicitCompleteMetadata()
     {
+        using var dbContext = new AgwDbContext(
+            new DbContextOptionsBuilder<AgwDbContext>().UseSqlite("Data Source=:memory:").Options
+        );
         var service = new PluginCatalogAppService(
             new BuiltInPluginCatalog(),
-            new PluginSkillMetadataReader(new AppContextPluginContentRootProvider())
+            new EfRepository<PluginInstallation>(dbContext),
+            new PluginSkillMetadataReader(new AppContextPluginContentRootProvider()),
+            new TestUserInfoService()
         );
 
         var plugins = service.List();

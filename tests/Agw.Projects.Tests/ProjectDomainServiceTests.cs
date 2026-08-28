@@ -44,7 +44,7 @@ public class ProjectDomainServiceTests
 
         Assert.True(result);
         Assert.Equal("Demo_Project_Alpha", project.Name);
-        Assert.Equal("~/.agw/Demo_Project_Alpha", project.Workspace);
+        Assert.Equal($"~/.agw/projects/{project.Id:N}", project.Workspace);
     }
 
     [Fact]

@@ -1,5 +1,8 @@
+using Agw.Auth.Contracts;
 using Agw.Shared.Data.Abstractions;
+using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Agw.Infrastructure.Data.Interceptors;
@@ -41,7 +44,58 @@ public sealed class EntityModifierInterceptor : SaveChangesInterceptor
         {
             if (entry.State == EntityState.Modified)
             {
+                EnsureCreateByUnchanged(entry);
+                EnsureOwnerMatchesCurrentUser(entry);
                 EntityAuditStamping.StampModified(entry, userId, now);
+            }
+        }
+    }
+
+    private static void EnsureCreateByUnchanged(EntityEntry entry)
+    {
+        var property = entry.Metadata.FindProperty(nameof(IEntityCreator.CreateBy));
+        if (
+            property != null
+            && entry.Property(property.Name).IsModified
+            && !string.Equals(
+                entry.Property(property.Name).OriginalValue as string,
+                entry.Property(property.Name).CurrentValue as string,
+                StringComparison.Ordinal
+            )
+        )
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "CreateBy is immutable.");
+        }
+    }
+
+    private static void EnsureOwnerMatchesCurrentUser(EntityEntry entry)
+    {
+        if (!UserInfoUtil.IsContextActive || UserInfoUtil.IsSystemScopeActive)
+        {
+            return;
+        }
+
+        var currentUserId = UserInfoUtil.RequiredUserId;
+        foreach (var propertyName in new[] { nameof(IEntityCreator.CreateBy), "UserId" })
+        {
+            var property = entry.Metadata.FindProperty(propertyName);
+            if (property == null)
+            {
+                continue;
+            }
+
+            var value = entry.Property(propertyName).CurrentValue as string;
+            if (propertyName == "UserId" && string.IsNullOrWhiteSpace(value))
+            {
+                throw new AgwException(ErrorCodes.InvalidParam, "UserId is required.");
+            }
+
+            if (
+                !string.IsNullOrWhiteSpace(value)
+                && !string.Equals(value.Trim(), currentUserId, StringComparison.Ordinal)
+            )
+            {
+                throw new AgwException(ErrorCodes.InvalidParam, $"{propertyName} must match the current user.");
             }
         }
     }

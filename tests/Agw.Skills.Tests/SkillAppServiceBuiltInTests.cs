@@ -45,6 +45,7 @@ public class SkillAppServiceBuiltInTests
                 new TestRemoteSkillClient(),
                 new TestRemoteSkillRefreshLock(),
                 TimeProvider.System,
+                new TestCurrentUser("test-user"),
                 [new TestSkillRegistration()]
             );
 

@@ -9,7 +9,7 @@ public class ApiTokenConfiguration : IEntityTypeConfiguration<ApiToken>
     {
         builder.ToTable(table => table.HasComment("Stores hashed API tokens used by external Agw clients."));
         builder.HasKey(entity => entity.Id);
-        builder.HasIndex(entity => entity.NormalizedName).IsUnique();
+        builder.HasIndex(entity => new { entity.CreateBy, entity.NormalizedName }).IsUnique();
         builder.HasIndex(entity => entity.Prefix);
         builder.Property(entity => entity.Name).IsRequired().HasMaxLength(64);
         builder.Property(entity => entity.NormalizedName).IsRequired().HasMaxLength(64);

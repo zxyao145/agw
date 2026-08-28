@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Claims;
 using System.Text;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
@@ -31,6 +32,7 @@ public sealed class OAuthAppServiceTests
     public async Task StartAsync_PkceEnabled_ReturnsOpaqueStateAndS256Challenge()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = UserInfoUtil.Push(CreatePrincipal("tester"));
         await using var scope = await OAuthTestScope.CreateAsync(
             OAuth2ClientAuthenticationMethod.None,
             OAuthSubjectSource.TokenResponse,
@@ -73,6 +75,7 @@ public sealed class OAuthAppServiceTests
     public async Task StartAsync_ForeignConnection_ThrowsConnectionNotFound()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = UserInfoUtil.Push(CreatePrincipal("tester"));
         await using var scope = await OAuthTestScope.CreateAsync(
             OAuth2ClientAuthenticationMethod.None,
             OAuthSubjectSource.TokenResponse,
@@ -102,6 +105,7 @@ public sealed class OAuthAppServiceTests
     public async Task StartAsync_UnsafeReturnPath_RejectsBeforeChangingConnection(string returnPath)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = UserInfoUtil.Push(CreatePrincipal("tester"));
         await using var scope = await OAuthTestScope.CreateAsync(
             OAuth2ClientAuthenticationMethod.None,
             OAuthSubjectSource.TokenResponse,
@@ -127,6 +131,7 @@ public sealed class OAuthAppServiceTests
     public async Task Callback_BodyClientAuthentication_StoresProtectedTokensForStateConnection()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = UserInfoUtil.Push(CreatePrincipal("tester"));
         await using var scope = await OAuthTestScope.CreateAsync(
             OAuth2ClientAuthenticationMethod.Body,
             OAuthSubjectSource.TokenResponse,
@@ -202,6 +207,7 @@ public sealed class OAuthAppServiceTests
     public async Task Callback_BasicClientAuthentication_UsesHeaderAndOmitsBodyCredentials()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = UserInfoUtil.Push(CreatePrincipal("tester"));
         await using var scope = await OAuthTestScope.CreateAsync(
             OAuth2ClientAuthenticationMethod.Basic,
             OAuthSubjectSource.TokenResponse,
@@ -227,6 +233,7 @@ public sealed class OAuthAppServiceTests
     public async Task Callback_BasicClientAuthentication_FormEncodesCredentialsBeforeBase64()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = UserInfoUtil.Push(CreatePrincipal("tester"));
         const string clientId = "client id:with%chars";
         const string clientSecret = "secret value:with%chars";
         await using var scope = await OAuthTestScope.CreateAsync(
@@ -267,6 +274,7 @@ public sealed class OAuthAppServiceTests
     )
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = UserInfoUtil.Push(CreatePrincipal("tester"));
         await using var scope = await OAuthTestScope.CreateAsync(
             OAuth2ClientAuthenticationMethod.None,
             source,
@@ -286,6 +294,7 @@ public sealed class OAuthAppServiceTests
     public async Task Callback_UserInfoSubject_UsesNewAccessToken()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = UserInfoUtil.Push(CreatePrincipal("tester"));
         await using var scope = await OAuthTestScope.CreateAsync(
             OAuth2ClientAuthenticationMethod.None,
             OAuthSubjectSource.UserInfo,
@@ -310,6 +319,7 @@ public sealed class OAuthAppServiceTests
     public async Task Refresh_TokenResponseOmitsRefreshToken_PreservesExistingRefreshToken()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = UserInfoUtil.Push(CreatePrincipal("tester"));
         await using var scope = await OAuthTestScope.CreateAsync(
             OAuth2ClientAuthenticationMethod.Body,
             OAuthSubjectSource.TokenResponse,
@@ -358,6 +368,7 @@ public sealed class OAuthAppServiceTests
     public async Task Callback_TokenEndpointError_DoesNotExposeProviderBodyOrCallbackValues()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = UserInfoUtil.Push(CreatePrincipal("tester"));
         await using var scope = await OAuthTestScope.CreateAsync(
             OAuth2ClientAuthenticationMethod.None,
             OAuthSubjectSource.TokenResponse,
@@ -387,6 +398,7 @@ public sealed class OAuthAppServiceTests
     public async Task Callback_ProviderError_UsesStableRedirectAndDoesNotReflectDescription()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = UserInfoUtil.Push(CreatePrincipal("tester"));
         await using var scope = await OAuthTestScope.CreateAsync(
             OAuth2ClientAuthenticationMethod.None,
             OAuthSubjectSource.TokenResponse,
@@ -407,6 +419,30 @@ public sealed class OAuthAppServiceTests
         Assert.Empty(scope.Handler.Requests);
         var connection = await scope.DbContext.Connections.SingleAsync(cancellationToken);
         Assert.Equal(ConnectionStatus.PendingAuthorization, connection.Status);
+    }
+
+    [Fact]
+    public async Task Callback_PersistenceFailure_ReturnsFailedRedirectAndMarksConnectionInvalid()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = UserInfoUtil.Push(CreatePrincipal("tester"));
+        await using var scope = await OAuthTestScope.CreateAsync(
+            OAuth2ClientAuthenticationMethod.None,
+            OAuthSubjectSource.TokenResponse,
+            cancellationToken,
+            failCallbackPersistence: true
+        );
+        scope.Handler.EnqueueJson(HttpStatusCode.OK, "{\"access_token\":\"token\",\"account\":{\"name\":\"user\"}}");
+        var state = await StartAndReadStateAsync(scope, cancellationToken);
+
+        var result = await scope.Authorization.HandleCallbackAsync(state, "code", null, cancellationToken);
+
+        Assert.False(result.Success);
+        Assert.Contains("code=token_exchange_failed", result.RedirectPath, StringComparison.Ordinal);
+        scope.DbContext.ChangeTracker.Clear();
+        var connection = await scope.DbContext.Connections.SingleAsync(cancellationToken);
+        Assert.Equal(ConnectionStatus.Invalid, connection.Status);
+        Assert.Equal("integration.oauth_token_exchange_failed", connection.LastValidationErrorCode);
     }
 
     private static async Task<string> StartAndReadStateAsync(OAuthTestScope scope, CancellationToken cancellationToken)
@@ -468,6 +504,7 @@ public sealed class OAuthAppServiceTests
             OAuthSubjectSource subjectSource,
             CancellationToken cancellationToken,
             bool supportsRefresh = false,
+            bool failCallbackPersistence = false,
             string clientId = "oauth-client",
             string clientSecret = "oauth-secret"
         )
@@ -499,7 +536,9 @@ public sealed class OAuthAppServiceTests
             IRepository<ConnectionCredential> connectionCredentialRepository = new EfRepository<ConnectionCredential>(
                 dbContext
             );
-            IUnitOfWork unitOfWork = dbContext;
+            IUnitOfWork unitOfWork = failCallbackPersistence
+                ? new FailCallbackPersistenceUnitOfWork(dbContext)
+                : dbContext;
             var userInfo = new TestUserInfoService();
             var reader = new ConnectionCredentialReader(
                 installationCredentialRepository,
@@ -542,7 +581,7 @@ public sealed class OAuthAppServiceTests
                         ] = clientId,
                     }
                 ),
-                CreateBy = "seed",
+                CreateBy = "tester",
                 CreateTime = now,
             };
             dbContext.PluginInstallations.Add(installation);
@@ -563,7 +602,7 @@ public sealed class OAuthAppServiceTests
                             "client-secret"
                         ),
                         Value = clientSecret,
-                        CreateBy = "seed",
+                        CreateBy = "tester",
                         CreateTime = now,
                     }
                 );
@@ -608,6 +647,7 @@ public sealed class OAuthAppServiceTests
             CancellationToken cancellationToken
         )
         {
+            using var userScope = UserInfoUtil.Push(CreatePrincipal("tester"));
             DbContext.ConnectionCredentials.Add(
                 new ConnectionCredential
                 {
@@ -616,7 +656,7 @@ public sealed class OAuthAppServiceTests
                     Slot = slot,
                     Value = value,
                     ExpiresAtUtc = expiresAtUtc,
-                    CreateBy = "seed",
+                    CreateBy = "tester",
                     CreateTime = Now,
                 }
             );
@@ -626,6 +666,7 @@ public sealed class OAuthAppServiceTests
 
         public async Task<Guid> SeedOtherConnectionAsync(CancellationToken cancellationToken)
         {
+            using var systemScope = UserInfoUtil.PushSystemScope();
             var connectionId = Guid.CreateVersion7();
             DbContext.Connections.Add(
                 new IntegrationConnection
@@ -665,7 +706,7 @@ public sealed class OAuthAppServiceTests
             _userInfo = userInfo;
         }
 
-        public Task<OAuthAuthorizeStartResponse> StartAsync(
+        public async Task<OAuthAuthorizeStartResponse> StartAsync(
             Guid connectionId,
             string callbackUri,
             string returnPath,
@@ -675,7 +716,10 @@ public sealed class OAuthAppServiceTests
         )
         {
             _userInfo.UserId = userId;
-            return _service.StartAsync(connectionId, callbackUri, returnPath, completionTarget, cancellationToken);
+            using var userScope = UserInfoUtil.Push(CreatePrincipal(userId));
+            return await _service
+                .StartAsync(connectionId, callbackUri, returnPath, completionTarget, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         public Task<OAuthCallbackResult> HandleCallbackAsync(
@@ -700,14 +744,15 @@ public sealed class OAuthAppServiceTests
             _userInfo = userInfo;
         }
 
-        public Task<OAuthRefreshResponse> RefreshAsync(
+        public async Task<OAuthRefreshResponse> RefreshAsync(
             Guid connectionId,
             string userId,
             CancellationToken cancellationToken
         )
         {
             _userInfo.UserId = userId;
-            return _service.RefreshAsync(connectionId, cancellationToken);
+            using var userScope = UserInfoUtil.Push(CreatePrincipal(userId));
+            return await _service.RefreshAsync(connectionId, cancellationToken).ConfigureAwait(false);
         }
     }
 
@@ -722,7 +767,7 @@ public sealed class OAuthAppServiceTests
             _userInfo = userInfo;
         }
 
-        public Task<ResolvedCredential?> ReadConnectionAsync(
+        public async Task<ResolvedCredential?> ReadConnectionAsync(
             Guid connectionId,
             string userId,
             string slot,
@@ -730,8 +775,38 @@ public sealed class OAuthAppServiceTests
         )
         {
             _userInfo.UserId = userId;
-            return _reader.ReadConnectionAsync(connectionId, slot, cancellationToken);
+            using var userScope = UserInfoUtil.Push(CreatePrincipal(userId));
+            return await _reader.ReadConnectionAsync(connectionId, slot, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    private static ClaimsPrincipal CreatePrincipal(string userId) =>
+        new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], "test"));
+
+    private sealed class FailCallbackPersistenceUnitOfWork : IUnitOfWork
+    {
+        private readonly IUnitOfWork _inner;
+        private int _saveCount;
+
+        public FailCallbackPersistenceUnitOfWork(IUnitOfWork inner)
+        {
+            _inner = inner;
+        }
+
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            if (Interlocked.Increment(ref _saveCount) == 2)
+            {
+                throw new DbUpdateException("simulated callback persistence failure");
+            }
+
+            return _inner.SaveChangesAsync(cancellationToken);
+        }
+
+        public Task<bool> SaveEntitiesAsync(CancellationToken cancellationToken = default) =>
+            _inner.SaveEntitiesAsync(cancellationToken);
+
+        public void Dispose() { }
     }
 
     private sealed class OAuthTestCatalog : IPluginCatalog

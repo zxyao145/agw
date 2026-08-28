@@ -47,11 +47,11 @@ public class ProjectDomainService
         }
 
         project.Name = projectName;
+        project.Id = project.Id == Guid.Empty ? Guid.CreateVersion7() : project.Id;
         project.Workspace = string.IsNullOrWhiteSpace(project.Workspace)
-            ? GetDefaultWorkspace(projectName)
+            ? GetDefaultWorkspace(project.Id)
             : project.Workspace.Trim();
         NormalizeEnvironmentVariables(project);
-        project.Id = project.Id == Guid.Empty ? Guid.CreateVersion7() : project.Id;
         project.CreateBy = user;
         project.CreateTime = _timeProvider.GetUtcNow();
         return true;
@@ -72,7 +72,7 @@ public class ProjectDomainService
         return true;
     }
 
-    private static string GetDefaultWorkspace(string projectName) => $"~/.agw/{projectName}";
+    private static string GetDefaultWorkspace(Guid projectId) => $"~/.agw/projects/{projectId:N}";
 
     private static void NormalizeEnvironmentVariables(Project project)
     {

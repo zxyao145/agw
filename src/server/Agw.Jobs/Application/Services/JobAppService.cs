@@ -1,8 +1,11 @@
 using System.Globalization;
+using Agw.Agents.Contracts.Catalog;
+using Agw.Auth.Contracts;
 using Agw.Jobs.Application.Contracts;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Contracts.Execution;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
@@ -19,6 +22,9 @@ public class JobAppService
     private readonly JobScheduleCalculator _jobScheduleCalculator;
     private readonly JobSchedulerWakeSignal _schedulerWakeSignal;
     private readonly TimeProvider _timeProvider;
+    private readonly IUserInfoService _userInfoService;
+    private readonly IProjectRuntimeFacade _projects;
+    private readonly IAgentCatalogFacade _agentCatalog;
 
     public JobAppService(
         IRepository<Job> jobTaskRepository,
@@ -27,7 +33,10 @@ public class JobAppService
         IUnitOfWork unitOfWork,
         JobScheduleCalculator jobScheduleCalculator,
         JobSchedulerWakeSignal schedulerWakeSignal,
-        TimeProvider timeProvider
+        TimeProvider timeProvider,
+        IUserInfoService userInfoService,
+        IProjectRuntimeFacade projects,
+        IAgentCatalogFacade agentCatalog
     )
     {
         _jobTaskRepository = jobTaskRepository;
@@ -37,11 +46,17 @@ public class JobAppService
         _jobScheduleCalculator = jobScheduleCalculator;
         _schedulerWakeSignal = schedulerWakeSignal;
         _timeProvider = timeProvider;
+        _userInfoService = userInfoService;
+        _projects = projects;
+        _agentCatalog = agentCatalog;
     }
 
     public async Task<IReadOnlyList<Job>> ListAsync(CancellationToken cancellationToken = default)
     {
-        var jobs = await _jobTaskRepository.Queryable.ToListAsync(cancellationToken);
+        var ownerUserId = ResolveOwnerUserId();
+        var jobs = await _jobTaskRepository
+            .Queryable.Where(job => job.CreateBy == ownerUserId)
+            .ToListAsync(cancellationToken);
 
         return jobs.OrderBy(t => t.NextRunTime).ToList();
     }
@@ -51,8 +66,9 @@ public class JobAppService
         CancellationToken cancellationToken = default
     )
     {
+        var ownerUserId = ResolveOwnerUserId();
         var jobs = await _jobTaskRepository
-            .Queryable.Where(job => job.ProjectId == projectId)
+            .Queryable.Where(job => job.ProjectId == projectId && job.CreateBy == ownerUserId)
             .ToListAsync(cancellationToken);
 
         return jobs.OrderBy(job => job.NextRunTime).ToList();
@@ -60,13 +76,15 @@ public class JobAppService
 
     public Task<Job?> GetAsync(Guid id)
     {
-        return _jobTaskRepository.GetByIdAsync(id);
+        var ownerUserId = ResolveOwnerUserId();
+        return _jobTaskRepository.Queryable.FirstOrDefaultAsync(job => job.Id == id && job.CreateBy == ownerUserId);
     }
 
     public Task<Job?> GetByProjectAsync(Guid id, Guid projectId, CancellationToken cancellationToken = default)
     {
+        var ownerUserId = ResolveOwnerUserId();
         return _jobTaskRepository.Queryable.SingleOrDefaultAsync(
-            job => job.Id == id && job.ProjectId == projectId,
+            job => job.Id == id && job.ProjectId == projectId && job.CreateBy == ownerUserId,
             cancellationToken
         );
     }
@@ -76,6 +94,16 @@ public class JobAppService
         CancellationToken cancellationToken = default
     )
     {
+        var ownerUserId = ResolveOwnerUserId();
+        var jobExists = await _jobTaskRepository.Queryable.AnyAsync(
+            job => job.Id == jobId && job.CreateBy == ownerUserId,
+            cancellationToken
+        );
+        if (!jobExists)
+        {
+            throw new AgwException(ErrorCodes.ResourceNotFound);
+        }
+
         var logs = await _jobExecutionLogRepository
             .Queryable.Where(log => log.JobId == jobId)
             .ToListAsync(cancellationToken);
@@ -106,6 +134,8 @@ public class JobAppService
 
     public async Task<Job> CreateAsync(JobCreateRequest request, string user)
     {
+        await EnsureProjectVisibleAsync(request.ProjectId, user).ConfigureAwait(false);
+        await EnsureAgentTargetVisibleAsync(request.AgentType, request.AgentId, user).ConfigureAwait(false);
         var now = _timeProvider.GetUtcNow();
         var entity = new Job
         {
@@ -113,7 +143,7 @@ public class JobAppService
             ProjectId = request.ProjectId,
             AgentType = request.AgentType,
             AgentId = request.AgentId,
-            Name = await ResolveNameAsync(request.Name, now),
+            Name = await ResolveNameAsync(request.Name, user, now),
             Prompt = request.Prompt,
             TriggerType = request.TriggerType,
             TriggerValue = request.TriggerValue,
@@ -136,12 +166,16 @@ public class JobAppService
 
     public async Task<Job?> UpdateAsync(Guid id, JobUpdateRequest request, string user)
     {
-        var entity = await _jobTaskRepository.GetByIdAsync(id);
+        var entity = await _jobTaskRepository.Queryable.FirstOrDefaultAsync(job =>
+            job.Id == id && job.CreateBy == user
+        );
         if (entity == null)
         {
             return null;
         }
 
+        await EnsureProjectVisibleAsync(request.ProjectId, user).ConfigureAwait(false);
+        await EnsureAgentTargetVisibleAsync(request.AgentType, request.AgentId, user).ConfigureAwait(false);
         return await UpdateEntityAsync(entity, request, user, recalculateSchedule: true);
     }
 
@@ -160,6 +194,8 @@ public class JobAppService
             return null;
         }
 
+        await EnsureProjectVisibleAsync(projectId, user).ConfigureAwait(false);
+        await EnsureAgentTargetVisibleAsync(request.AgentType, request.AgentId, user).ConfigureAwait(false);
         request.ProjectId = projectId;
         return await UpdateEntityAsync(entity, request, user, recalculateSchedule, cancellationToken);
     }
@@ -186,7 +222,7 @@ public class JobAppService
         entity.ProjectId = request.ProjectId;
         entity.AgentType = request.AgentType;
         entity.AgentId = request.AgentId;
-        entity.Name = await ResolveNameAsync(request.Name, now);
+        entity.Name = await ResolveNameAsync(request.Name, user, now);
         entity.Prompt = request.Prompt;
         entity.TriggerType = request.TriggerType;
         entity.TriggerValue = request.TriggerValue;
@@ -204,7 +240,9 @@ public class JobAppService
 
     public async Task<Job?> UpdateEnabledAsync(JobEnabledUpdateRequest request, string user)
     {
-        var entity = await _jobTaskRepository.GetByIdAsync(request.JobId);
+        var entity = await _jobTaskRepository.Queryable.FirstOrDefaultAsync(job =>
+            job.Id == request.JobId && job.CreateBy == user
+        );
         if (entity == null)
         {
             return null;
@@ -227,7 +265,10 @@ public class JobAppService
 
     public async Task<bool> DeleteAsync(Guid id)
     {
-        var entity = await _jobTaskRepository.GetByIdAsync(id);
+        var user = ResolveOwnerUserId();
+        var entity = await _jobTaskRepository.Queryable.FirstOrDefaultAsync(job =>
+            job.Id == id && job.CreateBy == user
+        );
         if (entity == null)
         {
             return false;
@@ -235,6 +276,10 @@ public class JobAppService
 
         EnsureMutable(entity);
 
+        await _jobExecutionLogRepository
+            .Queryable.Where(log => log.JobId == entity.Id)
+            .ExecuteDeleteAsync()
+            .ConfigureAwait(false);
         _jobTaskRepository.Remove(entity);
         await _unitOfWork.SaveChangesAsync();
         return true;
@@ -250,19 +295,23 @@ public class JobAppService
 
         EnsureMutable(entity);
 
+        await _jobExecutionLogRepository
+            .Queryable.Where(log => log.JobId == entity.Id)
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
         _jobTaskRepository.Remove(entity);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return entity;
     }
 
-    private async Task<string> ResolveNameAsync(string? requestedName, DateTimeOffset now)
+    private async Task<string> ResolveNameAsync(string? requestedName, string user, DateTimeOffset now)
     {
         if (!string.IsNullOrWhiteSpace(requestedName))
         {
             return requestedName.Trim();
         }
 
-        var count = await _jobTaskRepository.Queryable.CountAsync();
+        var count = await _jobTaskRepository.Queryable.CountAsync(job => job.CreateBy == user);
         return $"job-{count + 1}-{now.ToString("yyyyMMdd", CultureInfo.InvariantCulture)}";
     }
 
@@ -283,5 +332,29 @@ public class JobAppService
         }
 
         return nextRunTime.Value;
+    }
+
+    private string ResolveOwnerUserId() => _userInfoService.RequiredUserId;
+
+    private async Task EnsureProjectVisibleAsync(Guid projectId, string user)
+    {
+        var project = await _projects.GetForCurrentUserAsync(projectId).ConfigureAwait(false);
+        if (project == null)
+        {
+            throw new AgwException(ErrorCodes.ResourceNotFound);
+        }
+    }
+
+    private async Task EnsureAgentTargetVisibleAsync(AgentRuntimeType? agentType, Guid? agentId, string user)
+    {
+        if (!agentType.HasValue || !agentId.HasValue)
+        {
+            return;
+        }
+
+        if (!await _agentCatalog.IsOwnedTargetAsync(agentType.Value, agentId.Value, user).ConfigureAwait(false))
+        {
+            throw new AgwException(ErrorCodes.InvalidParam);
+        }
     }
 }

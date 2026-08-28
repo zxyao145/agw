@@ -370,9 +370,9 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.HasIndex("ModelProviderId")
                         .HasDatabaseName("ix_agent_model_provider_id");
 
-                    b.HasIndex("Name")
+                    b.HasIndex("CreateBy", "Name")
                         .IsUnique()
-                        .HasDatabaseName("ix_agent_name");
+                        .HasDatabaseName("ix_agent_create_by_name");
 
                     b.ToTable("agent", (string)null);
                 });
@@ -605,12 +605,12 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.HasKey("Id")
                         .HasName("pk_api_token");
 
-                    b.HasIndex("NormalizedName")
-                        .IsUnique()
-                        .HasDatabaseName("ix_api_token_normalized_name");
-
                     b.HasIndex("Prefix")
                         .HasDatabaseName("ix_api_token_prefix");
+
+                    b.HasIndex("CreateBy", "NormalizedName")
+                        .IsUnique()
+                        .HasDatabaseName("ix_api_token_create_by_normalized_name");
 
                     b.ToTable("api_token", null, t =>
                         {
@@ -1025,6 +1025,7 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnName("configuration_json");
 
                     b.Property<string>("CreateBy")
+                        .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("create_by");
 
@@ -1053,13 +1054,13 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.HasKey("Id")
                         .HasName("pk_plugin_installation");
 
-                    b.HasIndex("PluginId")
+                    b.HasIndex("CreateBy", "PluginId")
                         .IsUnique()
-                        .HasDatabaseName("ix_plugin_installation_plugin_id");
+                        .HasDatabaseName("ix_plugin_installation_create_by_plugin_id");
 
                     b.ToTable("plugin_installation", null, t =>
                         {
-                            t.HasComment("Stores platform-wide plugin installation configuration.");
+                            t.HasComment("Stores per-user plugin installation setup.");
                         });
                 });
 
@@ -1143,6 +1144,7 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnName("agent_type");
 
                     b.Property<string>("CreateBy")
+                        .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("create_by");
 
@@ -1341,6 +1343,12 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("total_token_count");
 
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("user_id");
+
                     b.HasKey("Id")
                         .HasName("pk_agent_usage");
 
@@ -1349,6 +1357,9 @@ namespace Agw.Migrations.Postgres.Migrations
 
                     b.HasIndex("RecordedAt")
                         .HasDatabaseName("ix_agent_usage_recorded_at");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_agent_usage_user_id");
 
                     b.HasIndex("ProjectId", "ContextId")
                         .HasDatabaseName("ix_agent_usage_project_id_context_id");
@@ -1418,9 +1429,9 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.HasKey("Id")
                         .HasName("pk_project");
 
-                    b.HasIndex("Name")
+                    b.HasIndex("CreateBy", "Name")
                         .IsUnique()
-                        .HasDatabaseName("ix_project_name");
+                        .HasDatabaseName("ix_project_create_by_name");
 
                     b.ToTable("project", (string)null);
                 });
@@ -1772,9 +1783,9 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.HasKey("Id")
                         .HasName("pk_model");
 
-                    b.HasIndex("Name")
+                    b.HasIndex("CreateBy", "Name")
                         .IsUnique()
-                        .HasDatabaseName("ix_model_name");
+                        .HasDatabaseName("ix_model_create_by_name");
 
                     b.ToTable("model", null, t =>
                         {
@@ -1892,9 +1903,9 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.HasKey("Id")
                         .HasName("pk_provider");
 
-                    b.HasIndex("Name", "ProviderType")
+                    b.HasIndex("CreateBy", "Name", "ProviderType")
                         .IsUnique()
-                        .HasDatabaseName("ix_provider_name_provider_type");
+                        .HasDatabaseName("ix_provider_create_by_name_provider_type");
 
                     b.ToTable("provider", (string)null);
                 });
@@ -2033,9 +2044,9 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.HasKey("Id")
                         .HasName("pk_skill");
 
-                    b.HasIndex("Name")
+                    b.HasIndex("CreateBy", "Name")
                         .IsUnique()
-                        .HasDatabaseName("ix_skill_name");
+                        .HasDatabaseName("ix_skill_create_by_name");
 
                     b.ToTable("skill", (string)null);
                 });
@@ -2265,6 +2276,18 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.Navigation("PluginInstallation");
                 });
 
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Jobs.JobLog", b =>
+                {
+                    b.HasOne("Agw.Shared.Data.Entities.Jobs.Job", "Job")
+                        .WithMany("Logs")
+                        .HasForeignKey("JobId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_job_log_job_job_id");
+
+                    b.Navigation("Job");
+                });
+
             modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectConnectionRelation", b =>
                 {
                     b.HasOne("Agw.Shared.Data.Entities.Integrations.Connection", "Connection")
@@ -2443,6 +2466,11 @@ namespace Agw.Migrations.Postgres.Migrations
             modelBuilder.Entity("Agw.Shared.Data.Entities.Integrations.PluginInstallation", b =>
                 {
                     b.Navigation("Credentials");
+                });
+
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Jobs.Job", b =>
+                {
+                    b.Navigation("Logs");
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.Project", b =>

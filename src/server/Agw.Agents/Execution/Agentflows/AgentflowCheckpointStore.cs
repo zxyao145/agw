@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Agw.Agents.Execution.Durable;
+using Agw.Auth.Contracts;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
@@ -54,7 +55,19 @@ public sealed class AgentflowCheckpointStore
         {
             return null;
         }
-        userId = string.IsNullOrWhiteSpace(userId) ? Constants.AdminUserId : userId.Trim();
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            throw new AgwException(ErrorCodes.AuthenticationRequired);
+        }
+
+        userId = userId.Trim();
+        if (
+            !UserInfoUtil.IsContextActive
+            || !string.Equals(UserInfoUtil.RequiredUserId, userId, StringComparison.Ordinal)
+        )
+        {
+            throw new AgwException(ErrorCodes.AuthenticationRequired);
+        }
 
         var occurrenceId = CreateDeterministicGuid(
             sourceExecutionId ?? taskId,
@@ -98,7 +111,11 @@ public sealed class AgentflowCheckpointStore
             .Set<ProjectConversation>()
             .AsNoTracking()
             .AnyAsync(
-                item => item.Id == conversationId && item.ProjectId == projectId && item.ContextId == contextId,
+                item =>
+                    item.Id == conversationId
+                    && item.ProjectId == projectId
+                    && item.ContextId == contextId
+                    && item.CreateBy == userId,
                 cancellationToken
             )
             .ConfigureAwait(false);

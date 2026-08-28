@@ -3,6 +3,7 @@ using Agw.Auth.Application;
 using Agw.Auth.Contracts;
 using Agw.Auth.Security;
 using Agw.Shared;
+using Agw.Shared.Exceptions;
 using Microsoft.AspNetCore.Http;
 
 namespace Agw.Auth.Middleware;
@@ -90,7 +91,14 @@ public sealed class AgwAuthenticationMiddleware
         }
 
         EnsureDefaultClaim(identity, ClaimTypes.Name, Constants.AdminUserName);
-        EnsureDefaultClaim(identity, ClaimTypes.NameIdentifier, Constants.AdminUserId);
+        if (
+            !identity.HasClaim(claim =>
+                claim.Type == ClaimTypes.NameIdentifier && !string.IsNullOrWhiteSpace(claim.Value)
+            )
+        )
+        {
+            throw new AgwException(ErrorCodes.AuthenticationRequired, "A stable user id is required.");
+        }
     }
 
     private static void EnsureDefaultClaim(ClaimsIdentity identity, string claimType, string defaultValue)

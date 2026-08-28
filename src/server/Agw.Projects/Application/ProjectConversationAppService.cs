@@ -57,14 +57,14 @@ public class ProjectConversationAppService
         ArgumentNullException.ThrowIfNull(request);
 
         var project = await _projectResolver.ResolveRequiredAsync(projectId, cancellationToken);
-        if (project == null)
+        if (project == null || !string.Equals(project.CreateBy, user, StringComparison.Ordinal))
         {
             return ApplicationResult<ProjectConversationSummaryResponse>.NotFound();
         }
 
         var contextId = ContextIdUtil.ResolveContextId(request.ContextId);
         var conversation = await _conversationRepository.SingleOrDefaultAsync(
-            item => item.ProjectId == project.Id && item.ContextId == contextId,
+            item => item.ProjectId == project.Id && item.ContextId == contextId && item.CreateBy == user,
             cancellationToken
         );
         if (conversation == null)
@@ -97,7 +97,7 @@ public class ProjectConversationAppService
         }
 
         var conversations = await _conversationRepository.ListAsync(conversation =>
-            conversation.ProjectId == project.Id
+            conversation.ProjectId == project.Id && conversation.CreateBy == project.CreateBy
         );
         if (conversations.Count == 0)
         {
@@ -137,7 +137,7 @@ public class ProjectConversationAppService
         }
 
         var conversation = await _conversationRepository.SingleOrDefaultAsync(item =>
-            item.ProjectId == project.Id && item.Id == conversationId
+            item.ProjectId == project.Id && item.Id == conversationId && item.CreateBy == project.CreateBy
         );
 
         return conversation == null ? null : await ToResponseAsync(conversation, cancellationToken);
@@ -273,11 +273,19 @@ public class ProjectConversationAppService
         }
 
         var conversations = await _conversationRepository.ListAsync(conversation =>
-            conversation.ProjectId == project.Id
+            conversation.ProjectId == project.Id && conversation.CreateBy == project.CreateBy
         );
         foreach (var conversation in conversations)
         {
             await _taskSessionBindingService.DeleteByConversationAsync(conversation.Id);
+        }
+
+        var conversationIds = conversations.Select(conversation => conversation.Id).ToArray();
+        if (conversationIds.Length > 0)
+        {
+            await _recordRepository
+                .Queryable.Where(record => conversationIds.Contains(record.ConversationId))
+                .ExecuteDeleteAsync();
         }
 
         await _traceRepository.Queryable.Where(trace => trace.ProjectId == project.Id).ExecuteDeleteAsync();
@@ -286,7 +294,9 @@ public class ProjectConversationAppService
             .ExecuteDeleteAsync();
 
         await _conversationRepository
-            .Queryable.Where(conversation => conversation.ProjectId == project.Id)
+            .Queryable.Where(conversation =>
+                conversation.ProjectId == project.Id && conversation.CreateBy == project.CreateBy
+            )
             .ExecuteDeleteAsync();
 
         await _unitOfWork.SaveChangesAsync();
@@ -604,7 +614,9 @@ public class ProjectConversationAppService
         }
 
         return await _conversationRepository.SingleOrDefaultAsync(conversation =>
-            conversation.ProjectId == project.Id && conversation.Id == conversationId
+            conversation.ProjectId == project.Id
+            && conversation.Id == conversationId
+            && conversation.CreateBy == project.CreateBy
         );
     }
 

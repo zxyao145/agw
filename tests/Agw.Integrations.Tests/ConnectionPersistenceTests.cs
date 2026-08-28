@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
@@ -9,8 +10,16 @@ using IntegrationConnection = Agw.Shared.Data.Entities.Integrations.Connection;
 
 namespace Agw.Integrations.Tests;
 
-public class ConnectionPersistenceTests
+public class ConnectionPersistenceTests : IDisposable
 {
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
+
     [Fact]
     public void Model_ConnectionPersistence_ConfiguresTablesKeysAndUniqueIndexes()
     {
@@ -37,7 +46,7 @@ public class ConnectionPersistenceTests
             ["ProjectId", "ConnectionId"]
         );
 
-        AssertUniqueIndex(dbContext.Model, typeof(PluginInstallation), ["PluginId"]);
+        AssertUniqueIndex(dbContext.Model, typeof(PluginInstallation), ["CreateBy", "PluginId"]);
         AssertUniqueIndex(dbContext.Model, typeof(IntegrationConnection), ["CreateBy", "Alias"]);
         AssertUniqueIndex(dbContext.Model, typeof(PluginInstallationCredential), ["PluginInstallationId", "Slot"]);
         AssertUniqueIndex(dbContext.Model, typeof(ConnectionCredential), ["ConnectionId", "Slot"]);

@@ -344,6 +344,8 @@ public class ProjectConversationsControllerTests
     private static ProjectConversationAppService CreateService(AgwDbContext dbContext)
     {
         var projectRepository = new EfRepository<Project>(dbContext);
+        var userInfo = new TestUserInfoService();
+        var projectResolver = new ProjectResolver(projectRepository, userInfo);
 
         return new ProjectConversationAppService(
             new EfRepository<ProjectConversation>(dbContext),
@@ -352,12 +354,13 @@ public class ProjectConversationsControllerTests
             new EfRepository<AgentflowTrace>(dbContext),
             new EfRepository<AgentUsage>(dbContext),
             dbContext,
-            new ProjectResolver(projectRepository),
+            projectResolver,
             new TaskSessionBindingService(
                 new EfRepository<TaskSessionBinding>(dbContext),
                 new EfRepository<ProjectConversation>(dbContext),
                 dbContext,
-                TimeProvider.System
+                TimeProvider.System,
+                userInfo
             ),
             TimeProvider.System
         );

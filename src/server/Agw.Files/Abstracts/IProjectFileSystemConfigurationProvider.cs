@@ -8,4 +8,4 @@ public interface IProjectFileSystemConfigurationProvider
     Task<ProjectFileSystemConfiguration?> GetAsync(Guid projectId, CancellationToken cancellationToken);
 }
 
-public sealed record ProjectFileSystemConfiguration(string Name, string? Workspace);
+public sealed record ProjectFileSystemConfiguration(string Name, string? Workspace, string? OwnerUserId = null);

@@ -188,7 +188,7 @@ public class SkillAppServiceRemoteTests
                 skill.Name,
                 skill.Description,
                 archive: null,
-                "local-admin",
+                "remote-admin",
                 "https://example.com/remote",
                 TestContext.Current.CancellationToken
             )
@@ -245,7 +245,12 @@ public class SkillAppServiceRemoteTests
             _root = Path.Combine(Path.GetTempPath(), $"agw-remote-skill-service-{Guid.CreateVersion7():N}");
             var dataPaths = AgwDataPaths.Resolve(_root, "/unused");
             dataPaths.EnsureCreated();
-            SkillRepository = new TestRepository<Skill>(skills ?? [], entity => entity.Id);
+            var ownedSkills = (skills ?? []).ToArray();
+            foreach (var skill in ownedSkills)
+            {
+                skill.CreateBy ??= "remote-admin";
+            }
+            SkillRepository = new TestRepository<Skill>(ownedSkills, entity => entity.Id);
             CacheRepository = new TestRepository<RemoteSkillCache>(caches ?? [], entity => entity.SkillId);
             RefreshLock = new TestRemoteSkillRefreshLock();
             Logger = new TestLogger<SkillAppService>();
@@ -260,7 +265,8 @@ public class SkillAppServiceRemoteTests
                 Logger,
                 new TestRemoteSkillClient(definition),
                 RefreshLock,
-                new TestTimeProvider(UtcNow)
+                new TestTimeProvider(UtcNow),
+                new TestCurrentUser("remote-admin")
             );
         }
 

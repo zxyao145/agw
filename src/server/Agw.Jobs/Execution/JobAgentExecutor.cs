@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Agw.Auth.Contracts;
 using Agw.Projects.Contracts.Execution;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Jobs;
@@ -26,6 +28,9 @@ public sealed class JobAgentExecutor : IJobAgentExecutor
         var (prompt, title) = BuildPromptAndTitle(job);
         var contextId = ContextIdUtil.GenContextId();
         var ownerUserId = ResolveOwnerUserId(job);
+        using var userScope = UserInfoUtil.Push(
+            new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, ownerUserId)], "ScheduledJob"))
+        );
         var task = await _projectTasks
             .GetOrCreateAsync(
                 new StartProjectTaskRequest(
@@ -87,7 +92,15 @@ public sealed class JobAgentExecutor : IJobAgentExecutor
     }
 
     internal static string ResolveOwnerUserId(Job job) =>
-        string.IsNullOrWhiteSpace(job.CreateBy) ? Constants.AdminUserId : job.CreateBy;
+        TryResolveOwnerUserId(job, out var ownerUserId)
+            ? ownerUserId
+            : throw new AgwException(ErrorCodes.AuthenticationRequired);
+
+    internal static bool TryResolveOwnerUserId(Job job, out string ownerUserId)
+    {
+        ownerUserId = job.CreateBy?.Trim() ?? string.Empty;
+        return ownerUserId.Length > 0;
+    }
 
     private static AgentTargetKind Map(AgentRuntimeType type) =>
         type switch

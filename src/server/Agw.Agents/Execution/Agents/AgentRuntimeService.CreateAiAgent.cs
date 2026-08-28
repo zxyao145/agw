@@ -140,11 +140,17 @@ public partial class AgentRuntimeService
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Agent);
-        var projectSnapshot = await _projectRuntimeFacade.GetForCurrentUserAsync(
-            request.ProjectId ?? ProjectDefaults.DefaultBuiltInId,
-            cancellationToken
-        );
-        ArgumentNullException.ThrowIfNull(projectSnapshot);
+        var projectId = await ResolveProjectIdAsync(request.ProjectId, cancellationToken).ConfigureAwait(false);
+        if (!projectId.HasValue)
+        {
+            return null;
+        }
+
+        var projectSnapshot = await _projectRuntimeFacade.GetForCurrentUserAsync(projectId.Value, cancellationToken);
+        if (projectSnapshot == null)
+        {
+            return null;
+        }
         var project = MapProject(projectSnapshot);
         var environmentVariables = AgentRuntimeServiceUtil.MergeEnvironmentVariables(
             request.Agent.EnvironmentVariables,

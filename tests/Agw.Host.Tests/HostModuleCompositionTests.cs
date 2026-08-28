@@ -3,6 +3,7 @@ using Agw.A2A.Extensions;
 using Agw.Agents;
 using Agw.Agents.Contracts.Catalog;
 using Agw.Agents.Contracts.Execution;
+using Agw.Auth.Contracts;
 using Agw.ControlPlane.Host;
 using Agw.DataPlane.Host;
 using Agw.Host.Hosting;
@@ -11,6 +12,7 @@ using Agw.Jobs.Execution;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Contracts.Execution;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Repositories;
 using Microsoft.AspNetCore.Builder;
@@ -208,6 +210,9 @@ public sealed class HostModuleCompositionTests
         services.AddSingleton<JobScheduleCalculator>();
         services.AddSingleton<JobSchedulerWakeSignal>();
         services.AddSingleton<ICurrentAgentTurn, EmptyCurrentAgentTurn>();
+        services.AddScoped<IUserInfoService, TestUserInfoService>();
+        services.AddScoped<IProjectRuntimeFacade, EmptyProjectRuntimeFacade>();
+        services.AddScoped<IAgentCatalogFacade, EmptyAgentCatalogFacade>();
         services.AddScoped<IRepository<Job>, EmptyRepository<Job>>();
         services.AddScoped<IRepository<JobLog>, EmptyRepository<JobLog>>();
         services.AddScoped<IUnitOfWork, NoopUnitOfWork>();
@@ -217,6 +222,17 @@ public sealed class HostModuleCompositionTests
     private sealed class EmptyCurrentAgentTurn : ICurrentAgentTurn
     {
         public AgentTurnSnapshot? Current => null;
+    }
+
+    private sealed class EmptyProjectRuntimeFacade : IProjectRuntimeFacade
+    {
+        public Task<ProjectRuntimeSnapshot?> GetForCurrentUserAsync(
+            Guid projectId,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<ProjectRuntimeSnapshot?>(null);
+
+        public Task<string?> GetWorkspaceAsync(Guid projectId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(null);
     }
 
     private sealed class EmptyRepository<TEntity> : IRepository<TEntity>
@@ -304,6 +320,13 @@ public sealed class HostModuleCompositionTests
 
         public Task<AgentCatalogMetrics> GetMetricsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(new AgentCatalogMetrics(0, 0));
+
+        public Task<bool> IsOwnedTargetAsync(
+            Agw.Agents.Contracts.Execution.AgentRuntimeType type,
+            Guid id,
+            string ownerUserId,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(true);
     }
 
     private sealed class EmptyExternalTaskSnapshotStore : IExternalTaskSnapshotStore

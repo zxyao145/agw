@@ -205,8 +205,9 @@ public sealed class ProjectAgentFileStore : AgentFileStore
         await fileSystem.CreateDirectoryAsync(ScopePath(path), cancellationToken).ConfigureAwait(false);
     }
 
-    private Task<IAgwFileSystem> ResolveAsync(CancellationToken cancellationToken) =>
-        _resolver.ResolveAsync(_projectId, cancellationToken);
+    private async Task<IAgwFileSystem> ResolveAsync(CancellationToken cancellationToken) =>
+        await _resolver.ResolveAsync(_projectId, cancellationToken).ConfigureAwait(false)
+        ?? throw new AgwException(ErrorCodes.ResourceNotFound, "Project was not found.");
 
     private static string TruncateSearchLine(string line, int maxCharacters)
     {

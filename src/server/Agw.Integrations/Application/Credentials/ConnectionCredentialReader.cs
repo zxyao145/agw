@@ -44,7 +44,10 @@ public sealed class ConnectionCredentialReader : IConnectionCredentialReader
     )
     {
         var credential = await _installationCredentialRepository.Queryable.FirstOrDefaultAsync(
-            item => item.PluginInstallationId == pluginInstallationId && item.Slot == slot,
+            item =>
+                item.PluginInstallationId == pluginInstallationId
+                && item.PluginInstallation!.CreateBy == _userInfoService.RequiredUserId
+                && item.Slot == slot,
             cancellationToken
         );
         return credential == null ? null : Resolve(credential.Value, null);

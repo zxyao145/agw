@@ -10,7 +10,7 @@ public class ProjectConfiguration : IEntityTypeConfiguration<Project>
     public void Configure(EntityTypeBuilder<Project> builder)
     {
         builder.HasKey(e => e.Id);
-        builder.HasIndex(e => e.Name).IsUnique();
+        builder.HasIndex(e => new { e.CreateBy, e.Name }).IsUnique();
         builder.Property(e => e.Name).IsRequired().HasMaxLength(200);
         // UserDefined = 0,
         // DefaultBuiltIn = 1,

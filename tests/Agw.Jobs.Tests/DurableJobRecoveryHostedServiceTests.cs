@@ -54,13 +54,63 @@ public sealed class DurableJobRecoveryHostedServiceTests
         Assert.Contains("was not registered", recorder.ErrorMessage, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task RecoverJobAsync_MissingOwner_RecordsFailureWithoutRetryingForever()
+    {
+        var executionId = Guid.CreateVersion7();
+        var job = new Job
+        {
+            Id = Guid.CreateVersion7(),
+            ProjectId = Guid.CreateVersion7(),
+            Status = JobStatus.Running,
+            IsEnabled = true,
+            ActiveExecutionId = executionId,
+            ActiveAttemptStartedAt = TimeProvider.System.GetUtcNow(),
+            CreateBy = string.Empty,
+        };
+        var recorder = new RecordingOutcomeRecorder();
+        var executionFacade = new MissingDurableExecutionFacade();
+        var services = new ServiceCollection()
+            .AddSingleton<IRepository<Job>>(new InMemoryJobRepository(job))
+            .AddSingleton<IDurableAgentExecutionFacade>(executionFacade)
+            .AddSingleton<IJobAttemptOutcomeRecorder>(recorder)
+            .BuildServiceProvider();
+        var timeProvider = TimeProvider.System;
+        var service = new DurableJobRecoveryHostedService(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            new ImmediateProjectExecutionLock(),
+            timeProvider,
+            new JobSchedulerWakeSignal(timeProvider),
+            NullLogger<DurableJobRecoveryHostedService>.Instance
+        );
+        var method = typeof(DurableJobRecoveryHostedService).GetMethod(
+            "RecoverJobAsync",
+            BindingFlags.Instance | BindingFlags.NonPublic
+        );
+
+        var invocation = method!.Invoke(service, [job, TestContext.Current.CancellationToken]);
+        await Assert.IsAssignableFrom<Task>(invocation);
+
+        Assert.Equal(job.Id, recorder.JobId);
+        Assert.Equal(executionId, recorder.ExecutionId);
+        Assert.False(recorder.Success);
+        Assert.Equal("The Job owner is missing.", recorder.ErrorMessage);
+        Assert.Equal(0, executionFacade.GetOutcomeCalls);
+    }
+
     private sealed class MissingDurableExecutionFacade : IDurableAgentExecutionFacade
     {
+        public int GetOutcomeCalls { get; private set; }
+
         public Task<AgentExecutionResult> GetOutcomeAsync(
             Guid executionId,
             string ownerUserId,
             CancellationToken cancellationToken = default
-        ) => throw new AgwException(ErrorCodes.DurableExecutionNotFound);
+        )
+        {
+            GetOutcomeCalls++;
+            throw new AgwException(ErrorCodes.DurableExecutionNotFound);
+        }
 
         public async IAsyncEnumerable<AgentExecutionEvent> SubscribeAsync(
             Guid executionId,

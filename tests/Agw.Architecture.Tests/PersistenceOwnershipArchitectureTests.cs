@@ -158,6 +158,120 @@ public sealed partial class BackendArchitectureTests
         }
     }
 
+    [Fact]
+    public void UserScopeFilter_Bypass_IsRestrictedToApprovedInfrastructurePaths()
+    {
+        var serverRoot = GetServerRoot();
+        var allowed = new HashSet<string>(
+            [
+                "Agw.Infrastructure/Auth/EfApiTokenStore.cs",
+                "Agw.Infrastructure/Repositories/JobRepo.cs",
+                "Agw.Infrastructure/Data/UserScopeModelBuilderExtensions.cs",
+            ],
+            StringComparer.Ordinal
+        );
+
+        var violations = GetSourceFiles(serverRoot)
+            .Where(path =>
+                File.ReadAllText(path).Contains("IgnoreUserScope", StringComparison.Ordinal)
+                || File.ReadAllText(path).Contains("IgnoreQueryFilters", StringComparison.Ordinal)
+            )
+            .Select(path => NormalizePath(Path.GetRelativePath(serverRoot, path)))
+            .Where(path => !allowed.Contains(path))
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Empty(violations);
+    }
+
+    [Fact]
+    public void UserScopeSystemScope_Usage_IsRestrictedToTrustedSchedulers()
+    {
+        var serverRoot = GetServerRoot();
+        var allowed = new HashSet<string>(
+            [
+                "Agw.Agents/Execution/Durable/DistributedExecutionWorker.cs",
+                "Agw.Agents/Execution/Durable/DurableExecutionSegmentExecutor.cs",
+                "Agw.Agents/Execution/Durable/DurableExecutionStore.cs",
+                "Agw.Auth/Contracts/UserInfoUtil.cs",
+                "Agw.Infrastructure/Data/DbSeeder.cs",
+                "Agw.Infrastructure/Repositories/JobRepo.cs",
+                "Agw.Jobs/Scheduling/Attempts/JobAttemptOutcomeRecorder.cs",
+                "Agw.Jobs/Scheduling/Coordination/DurableJobRecoveryHostedService.cs",
+                "Agw.Setup/Services/LegacyApiTokenMigrator.cs",
+            ],
+            StringComparer.Ordinal
+        );
+
+        var violations = GetSourceFiles(serverRoot)
+            .Where(path => File.ReadAllText(path).Contains("PushSystemScope", StringComparison.Ordinal))
+            .Select(path => NormalizePath(Path.GetRelativePath(serverRoot, path)))
+            .Where(path => !allowed.Contains(path))
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Empty(violations);
+    }
+
+    [Fact]
+    public void UserOwnedApplicationAndProtocolCode_IsFailClosed()
+    {
+        var serverRoot = GetServerRoot();
+        var violations = GetSourceFiles(serverRoot)
+            .Where(path => IsUserOwnedApplicationOrProtocolPath(serverRoot, path))
+            .SelectMany(path =>
+            {
+                var source = File.ReadAllText(path);
+                return FailOpenUserScopeRegex()
+                    .Matches(source)
+                    .Select(_ => NormalizePath(Path.GetRelativePath(serverRoot, path)));
+            })
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Empty(violations);
+    }
+
+    [Fact]
+    public void UserOwnedApplicationServices_RequireCurrentUserDependency()
+    {
+        var serverRoot = GetServerRoot();
+        var violations = GetSourceFiles(serverRoot)
+            .Where(path => IsUserOwnedApplicationOrProtocolPath(serverRoot, path))
+            .Where(path => OptionalCurrentUserRegex().IsMatch(File.ReadAllText(path)))
+            .Select(path => NormalizePath(Path.GetRelativePath(serverRoot, path)))
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Empty(violations);
+    }
+
+    [Fact]
+    public void UserOwnedExecutionCode_DoesNotFallBackToUnscopedOrAdministratorOwner()
+    {
+        var serverRoot = GetServerRoot();
+        var executionRoot = Path.Combine(serverRoot, "Agw.Agents", "Execution");
+        var violations = GetSourceFiles(executionRoot)
+            .Where(path => ExecutionOwnerFallbackRegex().IsMatch(File.ReadAllText(path)))
+            .Select(path => NormalizePath(Path.GetRelativePath(serverRoot, path)))
+            .OrderBy(static path => path, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Empty(violations);
+    }
+
+    private static bool IsUserOwnedApplicationOrProtocolPath(string serverRoot, string path)
+    {
+        var relativePath = NormalizePath(Path.GetRelativePath(serverRoot, path));
+        return relativePath.StartsWith("Agw.A2A/", StringComparison.Ordinal)
+            || relativePath.StartsWith("Agw.Tools/", StringComparison.Ordinal)
+            || relativePath.StartsWith("Agw.Agents/Definitions/", StringComparison.Ordinal)
+            || relativePath.Contains("/Application/", StringComparison.Ordinal)
+            || relativePath.Contains("/Controllers/", StringComparison.Ordinal)
+            || relativePath.Contains("/Api/", StringComparison.Ordinal);
+    }
+
     private static readonly IReadOnlyDictionary<string, string> ModuleDbContextOwners = new Dictionary<string, string>(
         StringComparer.Ordinal
     )
@@ -181,11 +295,11 @@ public sealed partial class BackendArchitectureTests
         ["Agw.Auth"] = 0,
         ["Agw.Integrations"] = 28,
         ["Agw.Jobs"] = 12,
-        ["Agw.Projects"] = 60,
-        ["Agw.Providers"] = 10,
+        ["Agw.Projects"] = 62,
+        ["Agw.Providers"] = 14,
         ["Agw.Setup"] = 6,
         ["Agw.Skills"] = 8,
-        ["Agw.Tools"] = 9,
+        ["Agw.Tools"] = 10,
     };
 
     [GeneratedRegex(@"\[Table\([^\]]+\)\][\s\S]*?\bclass\s+(?<entity>[A-Za-z_][A-Za-z0-9_]*)\b")]
@@ -207,4 +321,15 @@ public sealed partial class BackendArchitectureTests
 
     [GeneratedRegex(@"\b(?:AgwDbContext|DbContext)\b|\bIRepository\s*<")]
     private static partial Regex RawPersistenceAccessRegex();
+
+    [GeneratedRegex(
+        @"ownerUserId\s*==\s*null\s*\|\||!UserInfoUtil\.IsContextActive\s*\|\||\?\?\s*Constants\.AdminUserId"
+    )]
+    private static partial Regex FailOpenUserScopeRegex();
+
+    [GeneratedRegex(@"\b(?:IUserInfoService|ICurrentUser)\?")]
+    private static partial Regex OptionalCurrentUserRegex();
+
+    [GeneratedRegex(@"ownerUserId\s*==\s*null\s*\|\||\?\?\s*Constants\.AdminUserId")]
+    private static partial Regex ExecutionOwnerFallbackRegex();
 }

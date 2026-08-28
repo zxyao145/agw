@@ -6,8 +6,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Agw.Shared.Data.Entities.Integrations;
 
 /// <summary>
-/// 表示已安装集成插件的平台范围配置。
-/// Represents platform-wide configuration for an installed integration plugin.
+/// 表示当前用户的集成插件 setup。
+/// Represents one user's setup for an installed integration plugin.
 /// </summary>
 [Table("plugin_installation")]
 [EntityTypeConfiguration(typeof(PluginInstallationConfiguration))]

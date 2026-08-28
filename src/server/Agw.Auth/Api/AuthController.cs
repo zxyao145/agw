@@ -169,7 +169,7 @@ public sealed class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> ListTokens(CancellationToken cancellationToken)
     {
-        return IsInteractiveAdmin()
+        return IsInteractiveUser()
             ? ApiResult.Ok(await _tokenStore.ListTokensAsync(cancellationToken))
             : ErrorCodes.InteractiveAdminRequired.ToApiResult();
     }
@@ -183,7 +183,7 @@ public sealed class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateToken(CreateTokenRequest request, CancellationToken cancellationToken)
     {
-        if (!IsInteractiveAdmin())
+        if (!IsInteractiveUser())
             return ErrorCodes.InteractiveAdminRequired.ToApiResult();
         if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 64)
             return ApiResult.BadRequest(
@@ -201,7 +201,7 @@ public sealed class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RevokeToken(Guid id, CancellationToken cancellationToken)
     {
-        if (!IsInteractiveAdmin())
+        if (!IsInteractiveUser())
             return ErrorCodes.InteractiveAdminRequired.ToApiResult();
         return await _tokenStore.RevokeTokenAsync(id, cancellationToken)
             ? ApiResult.Ok()
@@ -209,5 +209,8 @@ public sealed class AuthController : ControllerBase
     }
 
     private bool IsInteractiveAdmin() =>
+        User.Identity?.AuthenticationType is AgwAuthDefaults.CookieScheme or AgwAuthDefaults.LocalTrustedScheme;
+
+    private bool IsInteractiveUser() =>
         User.Identity?.AuthenticationType is AgwAuthDefaults.CookieScheme or AgwAuthDefaults.LocalTrustedScheme;
 }

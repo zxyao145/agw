@@ -58,7 +58,8 @@ public sealed class AgentflowDomainService
         IReadOnlyCollection<Guid> existingAgentIds,
         Guid? summaryModelProviderId = null,
         IReadOnlyCollection<Guid>? existingModelProviderIds = null,
-        IReadOnlyDictionary<Guid, string>? existingAgentNames = null
+        IReadOnlyDictionary<Guid, string>? existingAgentNames = null,
+        IReadOnlyCollection<Guid>? existingAgentflowIds = null
     )
     {
         var decision = _definitionPolicy.Evaluate(
@@ -68,7 +69,8 @@ public sealed class AgentflowDomainService
             existingAgentIds,
             summaryModelProviderId,
             existingModelProviderIds,
-            existingAgentNames
+            existingAgentNames,
+            existingAgentflowIds
         );
         return (decision.Nodes, decision.Edges);
     }

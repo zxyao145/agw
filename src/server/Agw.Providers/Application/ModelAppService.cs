@@ -1,7 +1,9 @@
 using Agw.Providers.Contracts.Manager;
 using Agw.Providers.Domain.Services;
+using Agw.Shared.Contracts;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Repositories;
+using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Providers.Application;
 
@@ -10,21 +12,32 @@ public class ModelAppService : IModelAppService
     private readonly IRepository<AgwAiModel> _modelRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ModelDomainService _modelDomainService;
+    private readonly ICurrentUser _currentUser;
 
     public ModelAppService(
         IRepository<AgwAiModel> modelRepository,
         IUnitOfWork unitOfWork,
-        ModelDomainService modelDomainService
+        ModelDomainService modelDomainService,
+        ICurrentUser currentUser
     )
     {
         _modelRepository = modelRepository;
         _unitOfWork = unitOfWork;
         _modelDomainService = modelDomainService;
+        _currentUser = currentUser;
     }
 
-    public Task<IReadOnlyList<AgwAiModel>> ListAsync() => _modelRepository.ListAsync();
+    public Task<IReadOnlyList<AgwAiModel>> ListAsync()
+    {
+        var ownerUserId = ResolveOwnerUserId();
+        return _modelRepository.ListAsync(model => model.CreateBy == ownerUserId);
+    }
 
-    public Task<AgwAiModel?> GetAsync(Guid id) => _modelRepository.GetByIdAsync(id);
+    public Task<AgwAiModel?> GetAsync(Guid id)
+    {
+        var ownerUserId = ResolveOwnerUserId();
+        return _modelRepository.Queryable.FirstOrDefaultAsync(model => model.Id == id && model.CreateBy == ownerUserId);
+    }
 
     public async Task<AgwAiModel> CreateAsync(ModelCreateRequest request, string user)
     {
@@ -45,7 +58,10 @@ public class ModelAppService : IModelAppService
 
     public async Task<AgwAiModel?> UpdateAsync(Guid id, ModelUpdateRequest request, string user)
     {
-        var existing = await _modelRepository.GetByIdAsync(id);
+        var ownerUserId = ResolveOwnerUserId();
+        var existing = await _modelRepository.Queryable.FirstOrDefaultAsync(model =>
+            model.Id == id && model.CreateBy == ownerUserId
+        );
         if (existing == null)
         {
             return null;
@@ -71,7 +87,10 @@ public class ModelAppService : IModelAppService
 
     public async Task<bool> DeleteAsync(Guid id)
     {
-        var existing = await _modelRepository.GetByIdAsync(id);
+        var ownerUserId = ResolveOwnerUserId();
+        var existing = await _modelRepository.Queryable.FirstOrDefaultAsync(model =>
+            model.Id == id && model.CreateBy == ownerUserId
+        );
         if (existing == null)
         {
             return false;
@@ -81,4 +100,6 @@ public class ModelAppService : IModelAppService
         await _unitOfWork.SaveChangesAsync();
         return true;
     }
+
+    private string ResolveOwnerUserId() => _currentUser.RequiredUserId;
 }

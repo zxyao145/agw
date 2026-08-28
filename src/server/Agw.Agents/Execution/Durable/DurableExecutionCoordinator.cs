@@ -252,6 +252,7 @@ internal sealed class DurableExecutionCoordinator
     /// </summary>
     internal async IAsyncEnumerable<ExecutionStreamEntry> ReadAsync(
         Guid executionId,
+        string userId,
         string? afterCursor,
         [EnumeratorCancellation] CancellationToken cancellationToken
     )
@@ -299,7 +300,7 @@ internal sealed class DurableExecutionCoordinator
             var now = _timeProvider.GetUtcNow();
             if (now >= nextStatusCheck)
             {
-                var snapshot = await GetSnapshotAsync(executionId, cancellationToken).ConfigureAwait(false);
+                var snapshot = await GetSnapshotAsync(executionId, userId, cancellationToken).ConfigureAwait(false);
                 if (snapshot.Status == DurableExecutionStatus.WaitingForHuman)
                 {
                     // pending 只在 checkpoint 与请求已经原子落库后合成，回答不会指向未持久化边界。
@@ -359,11 +360,15 @@ internal sealed class DurableExecutionCoordinator
     /// <summary>
     /// 在独立 DI scope 中加载 execution 快照，避免后台订阅持有 request scope DbContext。
     /// </summary>
-    private async Task<DurableExecutionSnapshot> GetSnapshotAsync(Guid executionId, CancellationToken cancellationToken)
+    private async Task<DurableExecutionSnapshot> GetSnapshotAsync(
+        Guid executionId,
+        string userId,
+        CancellationToken cancellationToken
+    )
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-        return await store.GetAsync(executionId, cancellationToken).ConfigureAwait(false);
+        return await store.GetAuthorizedAsync(executionId, userId, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

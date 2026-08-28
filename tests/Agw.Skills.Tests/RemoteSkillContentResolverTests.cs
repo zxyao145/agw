@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Security.Claims;
+using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Shared.Data.Entities.Skills;
@@ -12,9 +14,16 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Skills.Tests;
 
-public class RemoteSkillContentResolverTests
+public class RemoteSkillContentResolverTests : IDisposable
 {
     private static readonly DateTimeOffset UtcNow = new(2026, 7, 26, 8, 0, 0, TimeSpan.Zero);
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "remote-admin")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
 
     [Fact]
     public async Task ResolveAsync_FreshSharedSnapshot_DoesNotFetchRemote()
@@ -196,6 +205,7 @@ public class RemoteSkillContentResolverTests
             Kind = SkillKind.Remote,
             ContentPath = string.Empty,
             RemoteUrl = "https://example.com/skills/expense-report",
+            CreateBy = "remote-admin",
             CreateTime = UtcNow,
         };
     }

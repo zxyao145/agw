@@ -1,3 +1,4 @@
+using Agw.Auth.Contracts;
 using Agw.Shared.Extensions;
 
 namespace Agw.Agents.Execution.Agents.Store;
@@ -32,6 +33,7 @@ public sealed class AgentSessionStateScope
     internal string CacheKey =>
         string.Join(
             ':',
+            UserInfoUtil.RequiredUserId,
             ProjectDefaults.GetDefaultProjectIdentifier(ProjectId).Normalize(),
             ContextId,
             AgentId.Normalize(),

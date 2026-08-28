@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Tools.GitHub;
@@ -8,8 +9,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Integrations.Tests;
 
-public sealed class ProjectWorkspaceResolverTests
+public sealed class ProjectWorkspaceResolverTests : IDisposable
 {
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "test")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
+
     [Fact]
     public async Task ResolveWorkspaceAsync_ProjectExists_ReturnsPersistedWorkspace()
     {

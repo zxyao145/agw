@@ -2,6 +2,7 @@ using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Runtimes;
+using Agw.Auth.Contracts;
 using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Agents;
 using Microsoft.Extensions.Logging;
@@ -70,6 +71,10 @@ public partial class AgentRuntimeService
         );
 
         var fs = await _fileSystemResolver.ResolveAsync(projectId, cancellationToken);
+        if (fs == null)
+        {
+            return null;
+        }
         var rootStat = await fs.StatAsync("", cancellationToken);
         if (rootStat == null)
         {
@@ -181,6 +186,7 @@ public partial class AgentRuntimeService
             return null;
         }
 
+        var executionUserId = ResolveExecutionUserId();
         return async (providerSessionId, _) =>
         {
             try
@@ -188,7 +194,7 @@ public partial class AgentRuntimeService
                 await _providerSessions.SaveProviderSessionIdAsync(
                     new ProjectProviderSessionReference(task.ProjectId, contextId, agent.Id, agent.Name),
                     providerSessionId,
-                    _turnContextAccessor?.Current?.UserId ?? Constants.AdminUserId,
+                    executionUserId,
                     CancellationToken.None
                 );
             }
@@ -202,5 +208,16 @@ public partial class AgentRuntimeService
                 );
             }
         };
+    }
+
+    private string ResolveExecutionUserId()
+    {
+        if (UserInfoUtil.IsContextActive)
+        {
+            return UserInfoUtil.RequiredUserId;
+        }
+
+        var userId = _turnContextAccessor?.Current?.UserId;
+        return string.IsNullOrWhiteSpace(userId) ? Constants.AdminUserId : userId.Trim();
     }
 }

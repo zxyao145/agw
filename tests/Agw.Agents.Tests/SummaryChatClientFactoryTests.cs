@@ -31,6 +31,7 @@ public class SummaryChatClientFactoryTests
             Name = "OpenAI",
             ProviderType = ProviderType.OpenAIChatCompletions,
             Endpoint = "https://example.invalid",
+            CreateBy = "tester",
             AuthConfigs =
             [
                 new ProviderAuthConfig
@@ -39,15 +40,22 @@ public class SummaryChatClientFactoryTests
                     AuthType = ProviderAuthType.ApiKey,
                     ApiKey = "test-key",
                     Enable = true,
+                    CreateBy = "tester",
                 },
             ],
         };
-        var model = new AgwAiModel { Id = Guid.CreateVersion7(), Name = "test-model" };
+        var model = new AgwAiModel
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "test-model",
+            CreateBy = "tester",
+        };
         var modelProvider = new ModelProviderRelation
         {
             Id = Guid.CreateVersion7(),
             ModelId = model.Id,
             ProviderId = provider.Id,
+            CreateBy = "tester",
         };
         dbContext.AddRange(provider, model, modelProvider);
         await dbContext.SaveChangesAsync(cancellationToken);

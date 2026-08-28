@@ -1,5 +1,9 @@
+using Agw.Auth.Contracts;
 using Agw.Shared.Data.Abstractions;
+using Agw.Shared.Data.Entities.Jobs;
+using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace Agw.Infrastructure.Data.Interceptors;
@@ -42,6 +46,41 @@ public sealed class EntityCreatorInterceptor : SaveChangesInterceptor
             if (entry.State == EntityState.Added)
             {
                 EntityAuditStamping.StampCreated(entry, userId, now);
+                EnsureOwnerMatchesCurrentUser(entry);
+            }
+        }
+    }
+
+    private static void EnsureOwnerMatchesCurrentUser(EntityEntry entry)
+    {
+        if (!UserInfoUtil.IsContextActive || UserInfoUtil.IsSystemScopeActive || entry.Entity is JobLog)
+        {
+            return;
+        }
+
+        var currentUserId = UserInfoUtil.RequiredUserId;
+        foreach (var propertyName in new[] { nameof(IEntityCreator.CreateBy), "UserId" })
+        {
+            var property = entry.Metadata.FindProperty(propertyName);
+            if (property == null)
+            {
+                continue;
+            }
+
+            var value = entry.Property(propertyName).CurrentValue as string;
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                if (propertyName == "UserId")
+                {
+                    entry.Property(propertyName).CurrentValue = currentUserId;
+                }
+
+                continue;
+            }
+
+            if (!string.Equals(value.Trim(), currentUserId, StringComparison.Ordinal))
+            {
+                throw new AgwException(ErrorCodes.InvalidParam, $"{propertyName} must match the current user.");
             }
         }
     }

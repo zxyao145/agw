@@ -437,7 +437,10 @@ public sealed class ConnectionAppService
 
         var installation = await _installationRepository
             .Queryable.Include(item => item.Credentials)
-            .FirstOrDefaultAsync(item => item.PluginId == connection.PluginId, cancellationToken);
+            .FirstOrDefaultAsync(
+                item => item.PluginId == connection.PluginId && item.CreateBy == _userInfoService.RequiredUserId,
+                cancellationToken
+            );
         if (installation == null || !installation.Enabled)
         {
             return ConnectionStatus.NeedsConfiguration;

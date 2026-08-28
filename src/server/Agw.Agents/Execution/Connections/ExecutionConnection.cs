@@ -1,6 +1,7 @@
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Commands.Abstracts;
+using Agw.Shared.Exceptions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -27,7 +28,9 @@ internal sealed class ExecutionConnection : IAsyncDisposable
     )
     {
         _connectionId = connectionId;
-        UserId = string.IsNullOrWhiteSpace(userId) ? Constants.AdminUserId : userId.Trim();
+        UserId = string.IsNullOrWhiteSpace(userId)
+            ? throw new AgwException(ErrorCodes.AuthenticationRequired)
+            : userId.Trim();
         _scope = scope;
         _dispatcher = dispatcher;
         _context = context;

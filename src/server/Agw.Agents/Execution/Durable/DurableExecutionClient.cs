@@ -35,7 +35,9 @@ internal sealed class DurableExecutionClient : IDurableExecutionClient
     {
         _ = await _coordinator.GetOutcomeAsync(executionId, userId, cancellationToken).ConfigureAwait(false);
         await foreach (
-            var entry in _coordinator.ReadAsync(executionId, afterCursor, cancellationToken).ConfigureAwait(false)
+            var entry in _coordinator
+                .ReadAsync(executionId, userId, afterCursor, cancellationToken)
+                .ConfigureAwait(false)
         )
         {
             yield return new DurableExecutionEvent(entry.Cursor, entry.Message);

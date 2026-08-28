@@ -10,7 +10,6 @@ namespace Agw.A2A;
 
 public class CommonAgentHandler : IAgentHandler
 {
-    private AgentCard? _agentCard;
     private readonly string _agentName;
     private readonly IAgentExecutionBridge _executionBridge;
     private readonly A2AAgentService? _a2aAgentService;
@@ -36,23 +35,16 @@ public class CommonAgentHandler : IAgentHandler
 
     public async Task<AgentCard?> GetAgentCardAsync()
     {
-        if (_agentCard is not null)
-        {
-            return _agentCard;
-        }
-
         if (_a2aAgentService is not null)
         {
-            _agentCard = await _a2aAgentService.GetAgentCardAsync(_agentName).ConfigureAwait(false);
-            return _agentCard;
+            return await _a2aAgentService.GetAgentCardAsync(_agentName).ConfigureAwait(false);
         }
 
         ArgumentNullException.ThrowIfNull(_serviceScopeFactory);
 
         using var scope = _serviceScopeFactory.CreateScope();
         var scopedA2AAgentService = scope.ServiceProvider.GetRequiredService<A2AAgentService>();
-        _agentCard = await scopedA2AAgentService.GetAgentCardAsync(_agentName).ConfigureAwait(false);
-        return _agentCard;
+        return await scopedA2AAgentService.GetAgentCardAsync(_agentName).ConfigureAwait(false);
     }
 
     public async Task ExecuteAsync(

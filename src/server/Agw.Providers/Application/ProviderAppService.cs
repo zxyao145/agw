@@ -1,5 +1,6 @@
 using Agw.Providers.Contracts.Manager;
 using Agw.Providers.Domain.Services;
+using Agw.Shared.Contracts;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +17,7 @@ public class ProviderAppService : IProviderAppService
     private readonly ModelDomainService _modelDomainService;
     private readonly ModelProviderDomainService _modelProviderDomainService;
     private readonly ModelProviderUsageGuard _modelProviderUsageGuard;
+    private readonly ICurrentUser _currentUser;
 
     public ProviderAppService(
         IRepository<Provider> providerRepository,
@@ -25,7 +27,8 @@ public class ProviderAppService : IProviderAppService
         ProviderDomainService providerDomainService,
         ModelDomainService modelDomainService,
         ModelProviderDomainService modelProviderDomainService,
-        ModelProviderUsageGuard modelProviderUsageGuard
+        ModelProviderUsageGuard modelProviderUsageGuard,
+        ICurrentUser currentUser
     )
     {
         _providerRepository = providerRepository;
@@ -36,18 +39,27 @@ public class ProviderAppService : IProviderAppService
         _modelDomainService = modelDomainService;
         _modelProviderDomainService = modelProviderDomainService;
         _modelProviderUsageGuard = modelProviderUsageGuard;
+        _currentUser = currentUser;
     }
 
     public async Task<IReadOnlyList<Provider>> ListAsync()
     {
-        var providers = await _providerRepository.ListAsync(includes: provider => provider.AuthConfigs);
+        var ownerUserId = ResolveOwnerUserId();
+        var providers = await _providerRepository.ListAsync(
+            provider => provider.CreateBy == ownerUserId,
+            null,
+            provider => provider.AuthConfigs
+        );
         return providers.OrderByDescending(provider => provider.CreateTime).ToList();
     }
 
-    public Task<Provider?> GetAsync(Guid id) =>
-        _providerRepository
+    public Task<Provider?> GetAsync(Guid id)
+    {
+        var ownerUserId = ResolveOwnerUserId();
+        return _providerRepository
             .Queryable.Include(provider => provider.AuthConfigs)
-            .FirstOrDefaultAsync(provider => provider.Id == id);
+            .FirstOrDefaultAsync(provider => provider.Id == id && provider.CreateBy == ownerUserId);
+    }
 
     public async Task<Provider> CreateAsync(ProviderCreateRequest request, string user)
     {
@@ -69,11 +81,12 @@ public class ProviderAppService : IProviderAppService
 
     public async Task<Provider?> UpdateAsync(Guid id, ProviderUpdateRequest request, string user)
     {
+        var ownerUserId = ResolveOwnerUserId();
         var existing = await _providerRepository
             .Queryable.Include(provider => provider.AuthConfigs)
             .Include(provider => provider.Models)
                 .ThenInclude(modelProvider => modelProvider.Model)
-            .FirstOrDefaultAsync(provider => provider.Id == id);
+            .FirstOrDefaultAsync(provider => provider.Id == id && provider.CreateBy == ownerUserId);
         if (existing == null)
         {
             return null;
@@ -123,9 +136,10 @@ public class ProviderAppService : IProviderAppService
 
     public async Task<bool> DeleteAsync(Guid id)
     {
+        var ownerUserId = ResolveOwnerUserId();
         var existing = await _providerRepository
             .Queryable.Include(provider => provider.AuthConfigs)
-            .FirstOrDefaultAsync(provider => provider.Id == id);
+            .FirstOrDefaultAsync(provider => provider.Id == id && provider.CreateBy == ownerUserId);
         if (existing == null)
         {
             return false;
@@ -176,7 +190,9 @@ public class ProviderAppService : IProviderAppService
         var models =
             modelNames.Count == 0
                 ? []
-                : await _modelRepository.Queryable.Where(model => modelNames.Contains(model.Name)).ToListAsync();
+                : await _modelRepository
+                    .Queryable.Where(model => modelNames.Contains(model.Name) && model.CreateBy == user)
+                    .ToListAsync();
         var modelByName = models.ToDictionary(model => model.Name, StringComparer.Ordinal);
         foreach (var modelName in modelNames)
         {
@@ -229,4 +245,6 @@ public class ProviderAppService : IProviderAppService
             .Distinct(StringComparer.Ordinal)
             .ToList();
     }
+
+    private string ResolveOwnerUserId() => _currentUser.RequiredUserId;
 }

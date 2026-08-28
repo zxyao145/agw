@@ -164,18 +164,36 @@ public sealed class UserMemoryAppServiceTests
 
     internal sealed class TestUserInfoService : IUserInfoService
     {
+        private ClaimsPrincipal? _current;
+
         public TestUserInfoService(string userId)
         {
             SetUserId(userId);
         }
 
-        public ClaimsPrincipal? Current { get; set; }
+        public ClaimsPrincipal? Current
+        {
+            get => _current;
+            set
+            {
+                _current = value;
+                UserInfoUtil.Current = value;
+            }
+        }
 
         public string? UserId => Current?.GetUserId();
 
         public bool IsAuthenticated => Current?.Identity?.IsAuthenticated == true;
 
-        public string RequiredUserId => UserId ?? throw new InvalidOperationException("A test user is required.");
+        public string RequiredUserId
+        {
+            get
+            {
+                var userId = UserId ?? throw new InvalidOperationException("A test user is required.");
+                UserInfoUtil.Current = Current;
+                return userId;
+            }
+        }
 
         public void SetUserId(string userId)
         {

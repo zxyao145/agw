@@ -8,7 +8,6 @@ using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.Management;
 using Agw.Integrations.Domain.Plugins;
 using Agw.Integrations.Infrastructure.Plugins;
-using Agw.Shared;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
@@ -40,7 +39,7 @@ public class IntegrationManagementAppServiceTests
                 Configuration = new Dictionary<string, string?> { ["client-id"] = "client-123" },
                 Secrets = new Dictionary<string, SecretFieldUpdateRequest> { ["client-secret"] = Encrypted(plaintext) },
             },
-            Constants.AdminUserId,
+            "tester",
             cancellationToken
         );
 
@@ -112,20 +111,19 @@ public class IntegrationManagementAppServiceTests
     }
 
     [Fact]
-    public async Task UpsertInstallation_NonAdministrator_ThrowsAdministratorRequired()
+    public async Task UpsertInstallation_NonAdministrator_CreatesUserOwnedSetup()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await ManagementTestScope.CreateAsync(cancellationToken);
 
-        var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            scope.Installations.UpsertAsync(
-                InstallationRequest(Encrypted("replacement"), null),
-                "user-a",
-                cancellationToken
-            )
+        var response = await scope.Installations.UpsertAsync(
+            InstallationRequest(Encrypted("replacement"), null),
+            "user-a",
+            cancellationToken
         );
 
-        Assert.Equal(ErrorCodes.AdministratorRequired.Code, exception.Code);
+        Assert.Equal("test-plugin", response.PluginId);
+        Assert.Equal("user-a", (await scope.DbContext.PluginInstallations.SingleAsync(cancellationToken)).CreateBy);
     }
 
     [Fact]
@@ -134,7 +132,7 @@ public class IntegrationManagementAppServiceTests
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await ManagementTestScope.CreateAsync(cancellationToken);
         var initial = InstallationRequest(Encrypted("initial-secret"), Encrypted("optional-secret"));
-        var created = await scope.Installations.UpsertAsync(initial, Constants.AdminUserId, cancellationToken);
+        var created = await scope.Installations.UpsertAsync(initial, "tester", cancellationToken);
 
         var credentialBeforeKeep = await scope.DbContext.PluginInstallationCredentials.SingleAsync(
             item => item.Slot.EndsWith("client-secret"),
@@ -156,7 +154,7 @@ public class IntegrationManagementAppServiceTests
                     ["optional-secret"] = Encrypted("optional-replacement"),
                 },
             },
-            Constants.AdminUserId,
+            "tester",
             cancellationToken
         );
 
@@ -189,7 +187,7 @@ public class IntegrationManagementAppServiceTests
                     ["optional-secret"] = new SecretFieldUpdateRequest { Action = SecretUpdateAction.Clear },
                 },
             },
-            Constants.AdminUserId,
+            "tester",
             cancellationToken
         );
 
@@ -218,7 +216,7 @@ public class IntegrationManagementAppServiceTests
                         ["client-secret"] = Encrypted("secret"),
                     },
                 },
-                Constants.AdminUserId,
+                "tester",
                 cancellationToken
             )
         );
@@ -227,7 +225,7 @@ public class IntegrationManagementAppServiceTests
         var unknown = InstallationRequest(Encrypted("secret"), null);
         unknown.Configuration["unknown"] = "value";
         var unknownError = await Assert.ThrowsAsync<AgwException>(() =>
-            scope.Installations.UpsertAsync(unknown, Constants.AdminUserId, cancellationToken)
+            scope.Installations.UpsertAsync(unknown, "tester", cancellationToken)
         );
         Assert.Equal(ErrorCodes.IntegrationConfigurationInvalid.Code, unknownError.Code);
 
@@ -236,7 +234,7 @@ public class IntegrationManagementAppServiceTests
             null
         );
         var sourceError = await Assert.ThrowsAsync<AgwException>(() =>
-            scope.Installations.UpsertAsync(invalidSource, Constants.AdminUserId, cancellationToken)
+            scope.Installations.UpsertAsync(invalidSource, "tester", cancellationToken)
         );
         Assert.Equal(ErrorCodes.IntegrationSecretMutationInvalid.Code, sourceError.Code);
     }
@@ -475,7 +473,7 @@ public class IntegrationManagementAppServiceTests
                     ["client-secret"] = Encrypted("github-secret"),
                 },
             },
-            Constants.AdminUserId,
+            "tester",
             cancellationToken
         );
         request.Alias = "github-ready";
@@ -516,7 +514,7 @@ public class IntegrationManagementAppServiceTests
 
         await scope.Installations.UpsertAsync(
             InstallationRequest(new SecretFieldUpdateRequest { Action = SecretUpdateAction.Clear }, null),
-            Constants.AdminUserId,
+            "tester",
             cancellationToken
         );
 
@@ -543,7 +541,7 @@ public class IntegrationManagementAppServiceTests
         );
         await scope.Installations.UpsertAsync(
             InstallationRequest(new SecretFieldUpdateRequest { Action = SecretUpdateAction.Clear }, null),
-            Constants.AdminUserId,
+            "tester",
             cancellationToken
         );
 
@@ -555,7 +553,7 @@ public class IntegrationManagementAppServiceTests
                 AuthSchemeId = "api-key",
                 Enabled = false,
             },
-            Constants.AdminUserId,
+            "tester",
             cancellationToken
         );
 
@@ -579,7 +577,7 @@ public class IntegrationManagementAppServiceTests
         };
 
         var unknown = await Assert.ThrowsAsync<AgwException>(() =>
-            scope.Installations.UpsertAsync(request, Constants.AdminUserId, cancellationToken)
+            scope.Installations.UpsertAsync(request, "tester", cancellationToken)
         );
         Assert.Equal(ErrorCodes.IntegrationConfigurationInvalid.Code, unknown.Code);
 
@@ -590,7 +588,7 @@ public class IntegrationManagementAppServiceTests
             SecretValue = " ",
         };
         var invalidSecret = await Assert.ThrowsAsync<AgwException>(() =>
-            scope.Installations.UpsertAsync(request, Constants.AdminUserId, cancellationToken)
+            scope.Installations.UpsertAsync(request, "tester", cancellationToken)
         );
         Assert.Equal(ErrorCodes.IntegrationSecretMutationInvalid.Code, invalidSecret.Code);
     }
@@ -628,7 +626,7 @@ public class IntegrationManagementAppServiceTests
             null
         );
         disableInstallation.Enabled = false;
-        await scope.Installations.UpsertAsync(disableInstallation, Constants.AdminUserId, cancellationToken);
+        await scope.Installations.UpsertAsync(disableInstallation, "tester", cancellationToken);
 
         var connections = (await scope.Connections.ListAsync(null, "tester", cancellationToken)).ToDictionary(
             connection => connection.Alias,
@@ -670,7 +668,7 @@ public class IntegrationManagementAppServiceTests
                 ["client-secret"] = Encrypted("github-secret"),
             },
         };
-        await scope.Installations.UpsertAsync(installation, Constants.AdminUserId, cancellationToken);
+        await scope.Installations.UpsertAsync(installation, "tester", cancellationToken);
 
         var pending = await scope.Connections.CreateAsync(
             new ConnectionCreateRequest
@@ -738,7 +736,7 @@ public class IntegrationManagementAppServiceTests
 
         installation.Configuration["client-id"] = "rotated-client";
         installation.Secrets["client-secret"] = Encrypted("rotated-secret");
-        await scope.Installations.UpsertAsync(installation, Constants.AdminUserId, cancellationToken);
+        await scope.Installations.UpsertAsync(installation, "tester", cancellationToken);
 
         var connections = (await scope.Connections.ListAsync(null, "tester", cancellationToken)).ToDictionary(
             connection => connection.Alias,
@@ -928,7 +926,7 @@ public class IntegrationManagementAppServiceTests
                 dbContext
             );
             IUnitOfWork unitOfWork = dbContext;
-            var userInfo = new TestUserInfoService(Constants.AdminUserId);
+            var userInfo = new TestUserInfoService("tester");
 
             var reader = new ConnectionCredentialReader(
                 installationCredentialRepository,
@@ -953,7 +951,8 @@ public class IntegrationManagementAppServiceTests
             var plugins = new PluginCatalogAppService(
                 catalog,
                 installationRepository,
-                new PluginSkillMetadataReader(new AppContextPluginContentRootProvider())
+                new PluginSkillMetadataReader(new AppContextPluginContentRootProvider()),
+                userInfo
             );
             var connections = new ConnectionAppService(
                 connectionRepository,
@@ -973,7 +972,7 @@ public class IntegrationManagementAppServiceTests
             {
                 await installationClient.UpsertAsync(
                     InstallationRequest(Encrypted("seed-secret"), null),
-                    Constants.AdminUserId,
+                    "tester",
                     cancellationToken
                 );
                 dbContext.ChangeTracker.Clear();

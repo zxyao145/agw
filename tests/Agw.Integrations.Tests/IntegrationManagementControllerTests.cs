@@ -1,11 +1,16 @@
 using System.Text.Json;
+using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Application.Capabilities;
 using Agw.Integrations.Application.Management;
 using Agw.Integrations.Contracts.Management;
 using Agw.Integrations.Contracts.OAuth;
 using Agw.Integrations.Controllers;
 using Agw.Integrations.Infrastructure.Plugins;
+using Agw.Shared.Data.Entities.Integrations;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Integrations.Tests;
 
@@ -68,10 +73,16 @@ public class IntegrationManagementControllerTests
     [Fact]
     public async Task PluginsController_List_ReturnsBensResultsEnvelope()
     {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        var dbContext = new AgwDbContext(new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options);
+        await dbContext.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
         var controller = new PluginsController(
             new PluginCatalogAppService(
                 new BuiltInPluginCatalog(),
-                new PluginSkillMetadataReader(new AppContextPluginContentRootProvider())
+                new EfRepository<PluginInstallation>(dbContext),
+                new PluginSkillMetadataReader(new AppContextPluginContentRootProvider()),
+                new TestUserInfoService()
             )
         );
 

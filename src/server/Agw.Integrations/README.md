@@ -11,7 +11,7 @@ The built-in catalog currently contains GitHub only.
 Product surfaces intentionally use Integration terminology: catalog definitions are **Available integrations**, while a user's configured accounts or service endpoints are **Configured integrations**. The implementation keeps the more precise developer model:
 
 - `PluginDefinition` is the system-provided Integration definition.
-- `PluginInstallation` is deployment-wide setup, such as an OAuth Client ID and Client Secret, and only administrator user `1001` may change it.
+- `PluginInstallation` is per-user setup, such as an OAuth Client ID and Client Secret. Each user can maintain their own setup; setup changes affect only that user's Connections.
 - `Connection` is one configured Integration instance owned by the stable user ID in `CreateBy`; a user may create several Connections from the same definition.
 - `Connector` is a service or protocol variant within a Plugin and is not a synonym for Connection.
 
@@ -141,13 +141,13 @@ PluginDefinition
 | `PluginDefinition` | A versioned capability package. It groups Connectors and bundled Skills. Definitions are returned by `IPluginCatalog` and are not persisted. |
 | `ConnectorDefinition` | A service or protocol variant, for example `github-cloud` or another endpoint variant exposed by the same Plugin. |
 | `AuthSchemeDefinition` | Authentication metadata and form schema. Current types are `OAuth2`, `ApiKey`, and `AkSk`. |
-| Installation fields | Platform-wide values shared by Connections of the plugin, such as an OAuth Client ID and Client Secret. |
+| Installation fields | Per-user setup values shared by that user's Connections of the plugin, such as an OAuth Client ID and Client Secret. |
 | Connection fields | Values belonging to one account or endpoint, such as an API Key, access key, secret key, endpoint, or region. |
 | `NativeCapabilitySourceDefinition` | Selects an in-process C# provider through its `Provider` key. |
 | `McpCapabilitySourceDefinition` | Describes an MCP transport and the exact credential-to-header/environment bindings allowed for it. |
 | Capability Source `Id` | A stable identity within a Connector. MCP wrapper tools retain this ID so the source can be found again when an operation is invoked. It is not a semantic capability taxonomy. |
 | `PluginSkillDefinition` | Stores only a safe relative `ContentPath`. Skill ID and description are read from the `name` and `description` frontmatter fields in `SKILL.md`. |
-| `PluginInstallation` | One platform-wide row per plugin. A row is required and must be enabled before a Connection can contribute runtime capabilities. |
+| `PluginInstallation` | One per-user row per plugin. A row is required and must be enabled before that user's Connection can contribute runtime capabilities. |
 | `Connection` | One user-owned, Agent-selectable external account or endpoint. It fixes the Plugin, Connector, Auth Scheme, display name, immutable per-owner alias, status, subject, and non-secret configuration. |
 | Credential | An encrypted value owned by either a Plugin Installation or a Connection and addressed by a stable slot. |
 
@@ -249,7 +249,7 @@ erDiagram
 
 Important storage rules:
 
-- `plugin_installation.plugin_id` is unique. Connector/Auth Scheme scopes share the same installation row.
+- `(plugin_installation.create_by, plugin_installation.plugin_id)` is unique. Connector/Auth Scheme scopes share the same setup row for one user.
 - Installation non-secret fields are stored in `ConfigurationJson` under `{connectorId}:{authSchemeId}:{fieldId}`.
 - Connection non-secret fields are stored in `ConfigurationJson` under their field IDs.
 - Secret fields never enter either `ConfigurationJson`.
@@ -263,7 +263,7 @@ Important storage rules:
 
 The EF model declares ownership/navigation relationships, while the current integration migration intentionally creates these integration tables without database foreign-key constraints. `AgwDbContext` therefore removes dependent credentials and Agent/Project relations explicitly when an Installation, Connection, Agent, or Project is deleted.
 
-Upgrade note: `EnforceUserOwnedConnections` preserves every non-null `create_by`; Connections created through the management API already recorded the caller's stable User ID. Only legacy or out-of-band rows whose owner is NULL fall back to administrator `1001`, because their original ownership cannot be reconstructed from the row. Before upgrading a multi-user deployment, audit `SELECT id, alias FROM integration_connection WHERE create_by IS NULL` and backfill those rows from an external ownership mapping when one exists.
+Upgrade note: `EnforceUserDataIsolation` preserves every non-empty `create_by`; rows whose owner cannot be reconstructed fall back to administrator `1001`, while `AgentUsage.user_id` is first backfilled from the owning Project. Connection and PluginInstallation uniqueness now includes the owner. Before upgrading a multi-user deployment, audit empty owners and cross-owner duplicate names, and apply any external ownership mapping before running the migration.
 
 ## Connection status model
 
@@ -515,7 +515,7 @@ Discover definitions:
 GET /api/integrations/plugins
 ```
 
-Configure the shared GitHub OAuth client:
+Configure your GitHub OAuth client setup:
 
 ```http
 PUT /api/integrations/plugin-installations
@@ -599,7 +599,7 @@ Only fields declared by the selected Auth Scheme are accepted.
 | Method | Route | Purpose |
 | --- | --- | --- |
 | GET | `/api/integrations/plugins` | List definitions and projected Installation state. |
-| PUT | `/api/integrations/plugin-installations` | Create/update one Connector/Auth Scheme scope within the plugin-wide Installation. |
+| PUT | `/api/integrations/plugin-installations` | Create/update one Connector/Auth Scheme scope within the current user's Plugin Installation. |
 | GET | `/api/integrations/connections?id={id}` | List Connections or retrieve one by query ID. |
 | POST | `/api/integrations/connections` | Create a Connection. |
 | PUT | `/api/integrations/connections` | Update mutable Connection fields; alias and definition tuple remain immutable. |
@@ -623,7 +623,7 @@ Choose stable IDs. Catalog IDs must start with a letter and may contain alphanum
 
 ### 2. Define authentication fields
 
-Use `InstallationFields` for platform-shared settings and `ConnectionFields` for per-account/per-endpoint settings:
+Use `InstallationFields` for per-user setup settings and `ConnectionFields` for per-account/per-endpoint settings:
 
 ```csharp
 new AuthSchemeDefinition

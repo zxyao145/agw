@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using Agw.Agents.Contracts.Catalog;
 using Agw.Auth.Contracts;
+using Agw.Files.Abstracts;
 using Agw.Files.Utils;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Agentflows;
@@ -8,6 +9,7 @@ using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Projects.Application;
@@ -26,6 +28,7 @@ public class ProjectAppService : IProjectAppService
     private readonly ProjectDomainService _projectDomainService;
     private readonly ProjectResolver _projectResolver;
     private readonly IUserInfoService _userInfoService;
+    private readonly IProjectFileSystemCacheInvalidator? _fileSystemCache;
 
     public ProjectAppService(
         IRepository<Project> projectRepository,
@@ -39,7 +42,8 @@ public class ProjectAppService : IProjectAppService
         IUnitOfWork unitOfWork,
         ProjectDomainService projectDomainService,
         ProjectResolver projectResolver,
-        IUserInfoService userInfoService
+        IUserInfoService userInfoService,
+        IProjectFileSystemCacheInvalidator? fileSystemCache = null
     )
     {
         _projectRepository = projectRepository;
@@ -54,11 +58,12 @@ public class ProjectAppService : IProjectAppService
         _projectDomainService = projectDomainService;
         _projectResolver = projectResolver;
         _userInfoService = userInfoService;
+        _fileSystemCache = fileSystemCache;
     }
 
     public async Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null)
     {
-        var query = CreateProjectQuery();
+        var query = CreateProjectQuery(_userInfoService.RequiredUserId);
         if (predicate != null)
         {
             query = query.Where(predicate);
@@ -75,7 +80,8 @@ public class ProjectAppService : IProjectAppService
 
     public async Task<Project?> GetAsync(Guid id)
     {
-        return await CreateProjectQuery().FirstOrDefaultAsync(project => project.Id == id);
+        return await CreateProjectQuery(_userInfoService.RequiredUserId)
+            .FirstOrDefaultAsync(project => project.Id == id);
     }
 
     public Task<Project?> GetForCurrentUserAsync(Guid id) =>
@@ -117,14 +123,29 @@ public class ProjectAppService : IProjectAppService
     )
     {
         var user = _userInfoService.RequiredUserId;
-        var existing = await _projectRepository.GetByIdAsync(id);
+        var existing = await _projectRepository.Queryable.FirstOrDefaultAsync(
+            project => project.Id == id && project.CreateBy == user,
+            CancellationToken.None
+        );
         if (existing == null)
         {
             return null;
         }
 
+        var originalType = existing.Type;
+        var originalName = existing.Name;
         if (!_projectDomainService.TryApplyUpdate(existing, updateAction, user))
         {
+            return null;
+        }
+
+        if (
+            originalType == ProjectType.DefaultBuiltIn
+            && (existing.Type != originalType || existing.Name != originalName)
+        )
+        {
+            existing.Type = originalType;
+            existing.Name = originalName;
             return null;
         }
 
@@ -143,13 +164,22 @@ public class ProjectAppService : IProjectAppService
             await SyncProjectConnectionRelationsAsync(existing.Id, connectionIds);
         }
         await _unitOfWork.SaveChangesAsync();
+        _fileSystemCache?.Invalidate(existing.Id);
         return await GetForCurrentUserAsync(existing.Id);
     }
 
     public async Task<bool> DeleteAsync(Guid id)
     {
-        var existing = await _projectRepository.GetByIdAsync(id);
+        var existing = await _projectRepository.Queryable.FirstOrDefaultAsync(
+            project => project.Id == id && project.CreateBy == _userInfoService.RequiredUserId,
+            CancellationToken.None
+        );
         if (existing == null)
+        {
+            return false;
+        }
+
+        if (existing.Type == ProjectType.DefaultBuiltIn)
         {
             return false;
         }
@@ -157,6 +187,7 @@ public class ProjectAppService : IProjectAppService
         await _traceRepository.Queryable.Where(trace => trace.ProjectId == id).ExecuteDeleteAsync();
         _projectRepository.Remove(existing);
         await _unitOfWork.SaveChangesAsync();
+        _fileSystemCache?.Invalidate(id);
         return true;
     }
 
@@ -194,6 +225,10 @@ public class ProjectAppService : IProjectAppService
             requestedIds.Count == 0
                 ? []
                 : (await _agentCatalog.FilterExistingMcpServerIdsAsync(requestedIds).ConfigureAwait(false)).ToList();
+        if (validIds.Count != requestedIds.Count)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam);
+        }
         var removedIds = currentIds.Except(validIds).ToList();
         if (removedIds.Count > 0)
         {
@@ -218,6 +253,7 @@ public class ProjectAppService : IProjectAppService
 
     private async Task SyncProjectSkillRelationsAsync(Guid projectId, IEnumerable<Guid>? skillIds)
     {
+        var user = _userInfoService.RequiredUserId;
         var currentIds = await _projectSkillRelationRepository
             .Queryable.Where(relation => relation.ProjectId == projectId)
             .Select(relation => relation.SkillId)
@@ -227,9 +263,17 @@ public class ProjectAppService : IProjectAppService
         var validIds =
             requestedIds.Count == 0
                 ? []
-                : (await _skillRepository.ListAsync(skill => requestedIds.Contains(skill.Id)))
+                : (
+                    await _skillRepository.ListAsync(skill =>
+                        requestedIds.Contains(skill.Id) && (skill.Kind == SkillKind.BuiltIn || skill.CreateBy == user)
+                    )
+                )
                     .Select(skill => skill.Id)
                     .ToList();
+        if (validIds.Count != requestedIds.Count)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam);
+        }
         var removedIds = currentIds.Except(validIds).ToList();
         if (removedIds.Count > 0)
         {
@@ -250,20 +294,22 @@ public class ProjectAppService : IProjectAppService
         }
     }
 
-    private IQueryable<Project> CreateProjectQuery(string? connectionOwnerUserId = null)
+    private IQueryable<Project> CreateProjectQuery(string ownerUserId)
     {
         IQueryable<Project> query = _projectRepository
-            .Queryable.Include(project => project.ProjectMcpToolServers)
-            .Include(project => project.ProjectSkillRelations);
-        query =
-            connectionOwnerUserId == null
-                ? query.Include(project => project.ProjectConnectionRelations)
-                : query.Include(project =>
-                    project.ProjectConnectionRelations.Where(relation =>
-                        relation.Connection.CreateBy == connectionOwnerUserId
-                    )
-                );
-        return connectionOwnerUserId == null ? query.AsSplitQuery() : query.AsNoTracking().AsSplitQuery();
+            .Queryable.Include(project =>
+                project.ProjectMcpToolServers.Where(relation => relation.McpToolServer.CreateBy == ownerUserId)
+            )
+            .Include(project =>
+                project.ProjectSkillRelations.Where(relation =>
+                    relation.Skill.Kind == SkillKind.BuiltIn || relation.Skill.CreateBy == ownerUserId
+                )
+            )
+            .Include(project =>
+                project.ProjectConnectionRelations.Where(relation => relation.Connection.CreateBy == ownerUserId)
+            )
+            .Where(project => project.CreateBy == ownerUserId);
+        return query.AsNoTracking().AsSplitQuery();
     }
 
     private async Task SyncProjectConnectionRelationsAsync(Guid projectId, IEnumerable<Guid>? connectionIds)
@@ -285,6 +331,10 @@ public class ProjectAppService : IProjectAppService
                 )
                     .Select(connection => connection.Id)
                     .ToList();
+        if (validIds.Count != requestedIds.Count)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam);
+        }
         var removedIds = currentIds.Except(validIds).ToList();
         if (removedIds.Count > 0)
         {

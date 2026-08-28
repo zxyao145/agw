@@ -1,3 +1,4 @@
+using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Agentflows;
@@ -14,7 +15,7 @@ using Xunit;
 
 namespace Agw.Setup.Tests;
 
-public class DbSeederTests
+public class DbSeederTests : IDisposable
 {
     private static readonly Guid GeneralAgentId = Guid.Parse("11111111-1111-1111-6666-000000000001");
     private static readonly Guid LocationExtractorAgentId = Guid.Parse("11111111-1111-1111-6666-000000000002");
@@ -23,6 +24,9 @@ public class DbSeederTests
     private static readonly Guid ModelProviderId = Guid.Parse("11111111-1111-1111-5555-000000000001");
     private static readonly Guid SkillId = Guid.Parse("11111111-1111-1111-8888-000000000001");
     private static readonly Guid JobManagementSkillId = Guid.Parse("11111111-1111-1111-8888-000000000002");
+    private readonly IDisposable _systemScope = UserInfoUtil.PushSystemScope();
+
+    public void Dispose() => _systemScope.Dispose();
 
     [Fact]
     public async Task SeedAsync_NewDatabase_CreatesDefaultDefinitionsAndRemainsIdempotent()
@@ -195,6 +199,7 @@ public class DbSeederTests
                     Description = "Legacy job skill",
                     Kind = SkillKind.BuiltIn,
                     ContentPath = string.Empty,
+                    CreateBy = Constants.AdminUserId,
                 }
             );
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -226,7 +231,7 @@ public class DbSeederTests
     }
 
     [Fact]
-    public async Task SeedAsync_ClassSkillNameOwnedByUser_PreservesUserSkillAndSkipsBuiltIn()
+    public async Task SeedAsync_ClassSkillNameOwnedByUser_PreservesUserSkillAndSeedsGlobalBuiltIn()
     {
         var paths = CreatePaths();
         try
@@ -246,6 +251,7 @@ public class DbSeederTests
                     Description = "User-owned skill",
                     Kind = SkillKind.Local,
                     ContentPath = "skills/agw-job",
+                    CreateBy = "user-a",
                 }
             );
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -259,15 +265,71 @@ public class DbSeederTests
 
             await seeder.SeedAsync();
 
-            var skill = await context.Skills.SingleAsync(
-                x => x.Name == "agw-job",
-                TestContext.Current.CancellationToken
+            var skills = await context
+                .Skills.Where(x => x.Name == "agw-job")
+                .ToListAsync(TestContext.Current.CancellationToken);
+            Assert.Equal(2, skills.Count);
+            var userSkill = Assert.Single(skills, skill => skill.Id == userSkillId);
+            Assert.Equal("User-owned skill", userSkill.Description);
+            Assert.Equal(SkillKind.Local, userSkill.Kind);
+            Assert.Equal("user-a", userSkill.CreateBy);
+            var builtIn = Assert.Single(skills, skill => skill.Id == JobManagementSkillId);
+            Assert.Equal(SkillKind.BuiltIn, builtIn.Kind);
+            Assert.Equal(Constants.AdminUserId, builtIn.CreateBy);
+        }
+        finally
+        {
+            Directory.Delete(paths.Root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task SeedAsync_ReservedDefaultSkillOwnedByUser_IsNotMutated()
+    {
+        var paths = CreatePaths();
+        try
+        {
+            var options = new DbContextOptionsBuilder<AgwDbContext>()
+                .UseSqlite($"Data Source={Path.Combine(paths.Root, "reserved-skill.db")}")
+                .UseSnakeCaseNamingConvention()
+                .Options;
+            await using var context = new AgwDbContext(options);
+            await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+            context.Skills.Add(
+                new Skill
+                {
+                    Id = SkillId,
+                    Name = "user-owned-reserved-id",
+                    Description = "Must remain untouched",
+                    Kind = SkillKind.Local,
+                    ContentPath = "skills/user-owned-reserved-id",
+                    CreateBy = "user-a",
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                }
             );
-            Assert.Equal(userSkillId, skill.Id);
-            Assert.Equal("User-owned skill", skill.Description);
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+            context.ChangeTracker.Clear();
+
+            var seeder = new DbSeeder(
+                context,
+                NullLogger<DbSeeder>.Instance,
+                TimeProvider.System,
+                paths,
+                [new TestSkillRegistration()]
+            );
+
+            await seeder.SeedAsync();
+
+            using var systemScope = UserInfoUtil.PushSystemScope();
+            var skill = await context.Skills.SingleAsync(x => x.Id == SkillId, TestContext.Current.CancellationToken);
+            Assert.Equal("user-owned-reserved-id", skill.Name);
+            Assert.Equal("user-a", skill.CreateBy);
             Assert.Equal(SkillKind.Local, skill.Kind);
             Assert.False(
-                await context.Skills.AnyAsync(x => x.Id == JobManagementSkillId, TestContext.Current.CancellationToken)
+                await context.Skills.AnyAsync(
+                    x => x.Id == SkillId && x.CreateBy == Constants.AdminUserId,
+                    TestContext.Current.CancellationToken
+                )
             );
         }
         finally
@@ -300,6 +362,7 @@ public class DbSeederTests
                     DisplayName = "General Agent",
                     Type = AgentType.System,
                     Tools = CreateLegacyGeneralAgentTools(includesFileAccess),
+                    CreateBy = Constants.AdminUserId,
                 },
                 new Agent
                 {
@@ -307,6 +370,7 @@ public class DbSeederTests
                     Name = "location-extractor",
                     DisplayName = "Location Extractor",
                     Type = AgentType.System,
+                    CreateBy = Constants.AdminUserId,
                     Tools =
                     [
                         new ToolValue { Definition = new WebFetchToolDefinition() },

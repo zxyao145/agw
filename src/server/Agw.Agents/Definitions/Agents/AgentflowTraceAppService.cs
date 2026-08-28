@@ -1,4 +1,5 @@
 using Agw.Agents.Definitions.Contracts;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Repositories;
@@ -12,10 +13,15 @@ public class AgentflowTraceAppService
     private const int MaxPageSize = 100;
 
     private readonly IRepository<AgentflowTrace> _traceRepository;
+    private readonly IProjectOwnershipFacade? _projectOwnership;
 
-    public AgentflowTraceAppService(IRepository<AgentflowTrace> traceRepository)
+    public AgentflowTraceAppService(
+        IRepository<AgentflowTrace> traceRepository,
+        IProjectOwnershipFacade? projectOwnership = null
+    )
     {
         _traceRepository = traceRepository;
+        _projectOwnership = projectOwnership;
     }
 
     public async Task<PagedResult<AgentflowTraceDto>> ListAsync(
@@ -26,6 +32,14 @@ public class AgentflowTraceAppService
         ValidateQuery(query);
 
         var queryable = _traceRepository.Queryable.AsNoTracking();
+        var ownedProjectIds =
+            _projectOwnership == null
+                ? null
+                : await _projectOwnership.ListOwnedProjectIdsAsync(cancellationToken).ConfigureAwait(false);
+        if (ownedProjectIds != null)
+        {
+            queryable = queryable.Where(trace => ownedProjectIds.Contains(trace.ProjectId));
+        }
 
         if (query.ProjectId.HasValue)
         {

@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Security.Claims;
 using System.Text.Json;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Domain.Services;
@@ -16,8 +17,16 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Projects.Tests;
 
-public class EfCoreChatHistoryProviderTests
+public class EfCoreChatHistoryProviderTests : IDisposable
 {
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
+
     [Fact]
     public void TryGetProjectContext_InitializedSession_ReturnsProjectAndContext()
     {
@@ -1501,8 +1510,8 @@ public class EfCoreChatHistoryProviderTests
 
         await using var verificationContext = new AgwDbContext(options);
         var context = await verificationContext.ProjectConversations.SingleAsync(cancellationToken);
-        Assert.Equal(Constants.AdminUserId, context.CreateBy);
-        Assert.Equal(Constants.AdminUserId, context.UpdateBy);
+        Assert.Equal("tester", context.CreateBy);
+        Assert.Equal("tester", context.UpdateBy);
         var sequences = await verificationContext
             .ProjectConversationChatHistories.Where(record => record.ConversationId == context.Id)
             .OrderBy(record => record.ConversationSequence)

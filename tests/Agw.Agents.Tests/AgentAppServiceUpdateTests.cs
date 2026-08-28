@@ -313,6 +313,7 @@ public class AgentAppServiceUpdateTests
             Tools = [new ToolValue { Definition = new WebFetchToolDefinition() }],
             Extra = "{\"original\":true}",
             EnvironmentVariables = new Dictionary<string, string> { ["TOKEN"] = "original" },
+            CreateBy = "tester",
         };
 
     private static AgentUpdateRequest Deserialize(string json) =>
@@ -328,7 +329,10 @@ public class AgentAppServiceUpdateTests
         TestUnitOfWork? unitOfWork = null
     )
     {
-        var modelProviders = (modelProviderIds ?? []).Select(id => new ModelProviderRelation { Id = id }).ToArray();
+        agent.CreateBy ??= "tester";
+        var modelProviders = (modelProviderIds ?? [])
+            .Select(id => new ModelProviderRelation { Id = id, CreateBy = "tester" })
+            .ToArray();
         return new AgentAppService(
             new TestRepository<Agent>([agent], item => item.Id),
             connectionRelationRepository ?? new TestRepository<AgentConnectionRelation>(),

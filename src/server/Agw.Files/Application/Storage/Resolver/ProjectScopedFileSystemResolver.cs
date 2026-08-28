@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Agw.Files.Application.Storage.Resolver;
 
-public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver
+public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver, IProjectFileSystemCacheInvalidator
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ProjectScopedFileSystemResolver> _logger;
@@ -25,58 +25,67 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver
         _timeProvider = timeProvider;
     }
 
-    public async Task<IAgwFileSystem> ResolveAsync(Guid projectId, CancellationToken ct)
+    public async Task<IAgwFileSystem?> ResolveAsync(Guid projectId, CancellationToken ct)
     {
         if (projectId == Guid.Empty)
         {
-            return CreateFallbackLocal();
+            return null;
         }
 
+        using var scope = _scopeFactory.CreateScope();
+        var configurationProvider = scope.ServiceProvider.GetRequiredService<IProjectFileSystemConfigurationProvider>();
+        var project = await configurationProvider.GetAsync(projectId, ct).ConfigureAwait(false);
+        if (project == null)
+        {
+            _cache.TryRemove(projectId, out _);
+            return null;
+        }
+        if (string.IsNullOrWhiteSpace(project.OwnerUserId))
+        {
+            _cache.TryRemove(projectId, out _);
+            return null;
+        }
+
+        var workspace = project.Workspace?.Trim();
         if (_cache.TryGetValue(projectId, out var cached))
         {
-            return cached.FileSystem;
+            if (
+                string.Equals(cached.OwnerUserId, project.OwnerUserId, StringComparison.Ordinal)
+                && string.Equals(cached.Workspace, workspace, StringComparison.Ordinal)
+            )
+            {
+                return cached.FileSystem;
+            }
+
+            _cache.TryRemove(projectId, out _);
         }
 
-        var fs = await CreateForProjectAsync(projectId, ct);
+        var fs = CreateForProject(project, projectId);
 
-        _cache[projectId] = new CachedEntry(fs, _timeProvider.GetUtcNow());
+        _cache[projectId] = new CachedEntry(fs, project.OwnerUserId, workspace, _timeProvider.GetUtcNow());
         return fs;
     }
 
-    private async Task<IAgwFileSystem> CreateForProjectAsync(Guid projectId, CancellationToken ct)
+    public void Invalidate(Guid projectId)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var configurationProvider = scope.ServiceProvider.GetRequiredService<IProjectFileSystemConfigurationProvider>();
-
-        var project = await configurationProvider.GetAsync(projectId, ct);
-        if (project == null)
+        if (projectId != Guid.Empty)
         {
-            _logger.LogWarning("Project {ProjectId} not found, falling back to default local file system.", projectId);
-            return CreateFallbackLocal();
+            _cache.TryRemove(projectId, out _);
         }
+    }
 
+    private IAgwFileSystem CreateForProject(ProjectFileSystemConfiguration project, Guid projectId)
+    {
         var hasConfiguredWorkspace = !string.IsNullOrWhiteSpace(project.Workspace);
-        var rootPath = hasConfiguredWorkspace ? project.Workspace! : $"~/.agw/{project.Name}";
+        var rootPath = hasConfiguredWorkspace ? project.Workspace! : $"~/.agw/projects/{projectId:N}";
 
         if (!hasConfiguredWorkspace)
         {
             Directory.CreateDirectory(PathUtil.ExpandTilde(rootPath));
         }
 
-        _logger.LogInformation("Project {ProjectId} is using local workspace: {Path}", projectId, rootPath);
+        _logger.LogInformation("Project {ProjectName} is using local workspace: {Path}", project.Name, rootPath);
         return CreateLocal(rootPath);
-    }
-
-    private IAgwFileSystem CreateFallbackLocal()
-    {
-        var tempWorkspace = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".agw",
-            "temp"
-        );
-
-        Directory.CreateDirectory(tempWorkspace);
-        return CreateLocal(tempWorkspace);
     }
 
     private static LocalFileSystem CreateLocal(string rootPath)
@@ -84,5 +93,10 @@ public sealed class ProjectScopedFileSystemResolver : IAgwFileSystemResolver
         return new LocalFileSystem(PathUtil.ExpandTilde(rootPath));
     }
 
-    private sealed record CachedEntry(IAgwFileSystem FileSystem, DateTimeOffset CreatedAt);
+    private sealed record CachedEntry(
+        IAgwFileSystem FileSystem,
+        string? OwnerUserId,
+        string? Workspace,
+        DateTimeOffset CreatedAt
+    );
 }

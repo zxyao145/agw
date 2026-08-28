@@ -1,14 +1,9 @@
 using System.Security.Claims;
+using Agw.Shared.Contracts;
 
 namespace Agw.Auth.Contracts;
 
-public interface IUserInfoService
+public interface IUserInfoService : ICurrentUser
 {
     ClaimsPrincipal? Current { get; set; }
-
-    string? UserId { get; }
-
-    bool IsAuthenticated { get; }
-
-    string RequiredUserId { get; }
 }

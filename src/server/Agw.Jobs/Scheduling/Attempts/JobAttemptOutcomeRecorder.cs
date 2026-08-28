@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Agw.Auth.Contracts;
 using Agw.Jobs.Execution;
 using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Jobs;
@@ -56,9 +58,13 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
         CancellationToken cancellationToken
     )
     {
-        var job = await _jobRepository
-            .Queryable.SingleOrDefaultAsync(item => item.Id == jobId, cancellationToken)
-            .ConfigureAwait(false);
+        Job? job;
+        using (UserInfoUtil.PushSystemScope())
+        {
+            job = await _jobRepository
+                .Queryable.SingleOrDefaultAsync(item => item.Id == jobId, cancellationToken)
+                .ConfigureAwait(false);
+        }
         if (
             job == null
             || job.Status != JobStatus.Running
@@ -71,7 +77,14 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
 
         var normalizedError = success ? null : errorMessage ?? "The Job attempt failed.";
         var startedAt = job.ActiveAttemptStartedAt.Value;
-        var ownerUserId = JobAgentExecutor.ResolveOwnerUserId(job);
+        if (!JobAgentExecutor.TryResolveOwnerUserId(job, out var ownerUserId))
+        {
+            return await RecordMissingOwnerAsync(job, executionId, startedAt, cancellationToken).ConfigureAwait(false);
+        }
+
+        using var userScope = UserInfoUtil.Push(
+            new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, ownerUserId)], "ScheduledJob"))
+        );
         if (success)
         {
             _ = await _projectTasks
@@ -159,5 +172,48 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
         return result is JobAttemptResult.Reschedule
             ? new JobAttemptResult.Reschedule(ScheduledJob.FromJob(job))
             : result;
+    }
+
+    private async Task<JobAttemptResult> RecordMissingOwnerAsync(
+        Job job,
+        Guid executionId,
+        DateTimeOffset startedAt,
+        CancellationToken cancellationToken
+    )
+    {
+        const string errorMessage = "The Job owner is missing.";
+        var now = _timeProvider.GetUtcNow();
+        var attempt = job.RetryCount + 1;
+        using var systemScope = UserInfoUtil.PushSystemScope();
+
+        job.RetryCount = attempt;
+        job.LastError = errorMessage;
+        job.Status = JobStatus.Paused;
+        job.IsEnabled = false;
+        job.ActiveExecutionId = null;
+        job.ActiveAttemptStartedAt = null;
+        job.UpdateBy = SchedulerUser;
+        job.UpdateTime = now;
+        _jobRepository.Update(job);
+
+        await _jobLogRepository.AddAsync(
+            new JobLog
+            {
+                Id = Guid.CreateVersion7(),
+                JobId = job.Id,
+                TaskId = executionId,
+                StartTime = startedAt,
+                EndTime = now,
+                Success = false,
+                Attempt = attempt,
+                ErrorMessage = errorMessage,
+                CreateBy = SchedulerUser,
+                CreateTime = now,
+                UpdateBy = SchedulerUser,
+                UpdateTime = now,
+            }
+        );
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        return new JobAttemptResult.Drop();
     }
 }

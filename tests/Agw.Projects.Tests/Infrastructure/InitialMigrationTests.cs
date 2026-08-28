@@ -24,7 +24,7 @@ public sealed class InitialMigrationTests
         using var dbContext = new AgwDbContext(options.Options);
 
         var migrations = dbContext.Database.GetMigrations().ToArray();
-        Assert.Equal(8, migrations.Length);
+        Assert.Equal(9, migrations.Length);
         Assert.EndsWith("_Init", migrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", migrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", migrations[2], StringComparison.Ordinal);
@@ -33,6 +33,7 @@ public sealed class InitialMigrationTests
         Assert.EndsWith("_UseUserIdForExecutionOwnership", migrations[5], StringComparison.Ordinal);
         Assert.EndsWith("_AddJobActiveAttempt", migrations[6], StringComparison.Ordinal);
         Assert.EndsWith("_EnforceUserOwnedConnections", migrations[7], StringComparison.Ordinal);
+        Assert.EndsWith("_EnforceUserDataIsolation", migrations[8], StringComparison.Ordinal);
 
         var script = dbContext
             .GetService<IMigrator>()
@@ -78,6 +79,11 @@ public sealed class InitialMigrationTests
             Assert.Contains("uuid", script, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("timestamp with time zone", script, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("ALTER COLUMN create_by SET NOT NULL", script, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(
+                "ALTER TABLE job ALTER COLUMN create_by SET NOT NULL",
+                script,
+                StringComparison.OrdinalIgnoreCase
+            );
             Assert.DoesNotContain(
                 "ALTER COLUMN create_by TYPE character varying",
                 script,
@@ -116,7 +122,7 @@ public sealed class InitialMigrationTests
         await dbContext.Database.MigrateAsync(cancellationToken);
 
         var appliedMigrations = (await dbContext.Database.GetAppliedMigrationsAsync(cancellationToken)).ToArray();
-        Assert.Equal(8, appliedMigrations.Length);
+        Assert.Equal(9, appliedMigrations.Length);
         Assert.EndsWith("_Init", appliedMigrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", appliedMigrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", appliedMigrations[2], StringComparison.Ordinal);
@@ -125,6 +131,7 @@ public sealed class InitialMigrationTests
         Assert.EndsWith("_UseUserIdForExecutionOwnership", appliedMigrations[5], StringComparison.Ordinal);
         Assert.EndsWith("_AddJobActiveAttempt", appliedMigrations[6], StringComparison.Ordinal);
         Assert.EndsWith("_EnforceUserOwnedConnections", appliedMigrations[7], StringComparison.Ordinal);
+        Assert.EndsWith("_EnforceUserDataIsolation", appliedMigrations[8], StringComparison.Ordinal);
         Assert.True(await TableExistsAsync(connection, "integration_connection", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "plugin_installation", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "project_memory", cancellationToken));
@@ -341,6 +348,148 @@ public sealed class InitialMigrationTests
         Assert.Equal(Constants.AdminUserId, Convert.ToString(await select.ExecuteScalarAsync(cancellationToken)));
     }
 
+    [Fact]
+    public async Task MigrateAsync_Sqlite_UserIsolationUsesCompositeIndexes()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(
+                connection,
+                migrations => migrations.MigrationsAssembly(AgwDbContextOptionsConfigurator.SqliteMigrationsAssembly)
+            )
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using var dbContext = new AgwDbContext(options);
+
+        await dbContext.Database.MigrateAsync(cancellationToken);
+
+        var migrations = dbContext.Database.GetMigrations().ToArray();
+        var userIsolationScript = dbContext
+            .GetService<IMigrator>()
+            .GenerateScript(migrations[^2], migrations[^1], MigrationsSqlGenerationOptions.NoTransactions);
+
+        Assert.True(
+            await IndexHasColumnsAsync(
+                connection,
+                "project",
+                "ix_project_create_by_name",
+                ["create_by", "name"],
+                cancellationToken
+            )
+        );
+        Assert.True(
+            await IndexHasColumnsAsync(
+                connection,
+                "agent",
+                "ix_agent_create_by_name",
+                ["create_by", "name"],
+                cancellationToken
+            )
+        );
+        Assert.True(
+            await IndexHasColumnsAsync(
+                connection,
+                "skill",
+                "ix_skill_create_by_name",
+                ["create_by", "name"],
+                cancellationToken
+            )
+        );
+        Assert.True(
+            await IndexHasColumnsAsync(
+                connection,
+                "model",
+                "ix_model_create_by_name",
+                ["create_by", "name"],
+                cancellationToken
+            )
+        );
+        Assert.True(
+            await IndexHasColumnsAsync(
+                connection,
+                "api_token",
+                "ix_api_token_create_by_normalized_name",
+                ["create_by", "normalized_name"],
+                cancellationToken
+            )
+        );
+        Assert.True(
+            await IndexHasColumnsAsync(
+                connection,
+                "plugin_installation",
+                "ix_plugin_installation_create_by_plugin_id",
+                ["create_by", "plugin_id"],
+                cancellationToken
+            )
+        );
+        Assert.True(
+            await IndexHasColumnsAsync(
+                connection,
+                "provider",
+                "ix_provider_create_by_name_provider_type",
+                ["create_by", "name", "provider_type"],
+                cancellationToken
+            )
+        );
+        Assert.True(await ColumnIsNotNullAsync(connection, "plugin_installation", "create_by", cancellationToken));
+        Assert.True(await ColumnIsNotNullAsync(connection, "job", "create_by", cancellationToken));
+        Assert.True(await ColumnIsNotNullAsync(connection, "agent_usage", "user_id", cancellationToken));
+
+        Assert.Contains("SELECT create_by FROM project", userIsolationScript, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("FOREIGN KEY", userIsolationScript, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task MigrateAsync_Sqlite_UserIsolationBackfillsAgentUsageFromProjectOwner()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(
+                connection,
+                migrations => migrations.MigrationsAssembly(AgwDbContextOptionsConfigurator.SqliteMigrationsAssembly)
+            )
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using var dbContext = new AgwDbContext(options);
+        var migrations = dbContext.Database.GetMigrations().ToArray();
+        var migrator = dbContext.GetService<IMigrator>();
+        await migrator.MigrateAsync(migrations[^2], cancellationToken);
+
+        var projectId = Guid.CreateVersion7();
+        var usageId = Guid.CreateVersion7();
+        await using (var insert = connection.CreateCommand())
+        {
+            insert.CommandText = """
+                INSERT INTO project
+                    (id, name, type, tools, environment_variables, create_time, create_by)
+                VALUES
+                    ($projectId, 'Owned project', 0, '[]', '{}', $now, 'user-42');
+
+                INSERT INTO agent_usage
+                    (id, project_id, context_id, agent_name, recorded_at,
+                     input_token_count, output_token_count, total_token_count,
+                     cached_input_token_count, reasoning_token_count)
+                VALUES
+                    ($usageId, $projectId, 'context-1', 'agent', $now, 1, 2, 3, 0, 0);
+                """;
+            insert.Parameters.AddWithValue("$projectId", projectId);
+            insert.Parameters.AddWithValue("$usageId", usageId);
+            insert.Parameters.AddWithValue("$now", TimeProvider.System.GetUtcNow());
+            await insert.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await migrator.MigrateAsync(migrations[^1], cancellationToken);
+
+        await using var select = connection.CreateCommand();
+        select.CommandText = "SELECT user_id FROM agent_usage WHERE id = $usageId;";
+        select.Parameters.AddWithValue("$usageId", usageId);
+        Assert.Equal("user-42", Convert.ToString(await select.ExecuteScalarAsync(cancellationToken)));
+    }
+
     private static async Task<bool> TableExistsAsync(
         SqliteConnection connection,
         string tableName,
@@ -404,6 +553,42 @@ public sealed class InitialMigrationTests
         command.CommandText = "SELECT [unique] FROM pragma_index_list($tableName) WHERE name = $indexName;";
         command.Parameters.AddWithValue("$tableName", tableName);
         command.Parameters.AddWithValue("$indexName", indexName);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) == 1;
+    }
+
+    private static async Task<bool> IndexHasColumnsAsync(
+        SqliteConnection connection,
+        string tableName,
+        string indexName,
+        IReadOnlyList<string> expectedColumns,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT name FROM pragma_index_info($indexName) ORDER BY seqno;";
+        command.Parameters.AddWithValue("$indexName", indexName);
+        var actualColumns = new List<string>();
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            actualColumns.Add(reader.GetString(0));
+        }
+
+        return actualColumns.SequenceEqual(expectedColumns, StringComparer.Ordinal)
+            && await IndexIsUniqueAsync(connection, tableName, indexName, cancellationToken);
+    }
+
+    private static async Task<bool> ColumnIsNotNullAsync(
+        SqliteConnection connection,
+        string tableName,
+        string columnName,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT [notnull] FROM pragma_table_info($tableName) WHERE name = $columnName;";
+        command.Parameters.AddWithValue("$tableName", tableName);
+        command.Parameters.AddWithValue("$columnName", columnName);
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) == 1;
     }
 }

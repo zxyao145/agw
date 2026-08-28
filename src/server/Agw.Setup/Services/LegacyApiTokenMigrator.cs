@@ -1,3 +1,4 @@
+using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Auth;
@@ -26,6 +27,7 @@ public sealed class LegacyApiTokenMigrator
 
     public async Task<int> MigrateAsync(CancellationToken cancellationToken = default)
     {
+        using var systemScope = UserInfoUtil.PushSystemScope();
         var legacyTokens = _stateStore.GetLegacyApiTokens();
         if (!_stateStore.HasLegacyApiTokenSection)
             return 0;

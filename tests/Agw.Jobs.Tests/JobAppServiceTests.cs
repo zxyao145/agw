@@ -1,3 +1,6 @@
+using System.Security.Claims;
+using Agw.Agents.Contracts.Catalog;
+using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Jobs.Application.Contracts;
@@ -6,6 +9,7 @@ using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Application;
 using Agw.Projects.Application.Facades;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
@@ -16,9 +20,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Jobs.Tests;
 
-public class JobAppServiceTests
+public class JobAppServiceTests : IDisposable
 {
     private static readonly DateTimeOffset UtcNow = new(2026, 7, 15, 23, 30, 0, TimeSpan.Zero);
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "test-user")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
 
     [Fact]
     public async Task CreateAsync_BlankName_GeneratesCountBasedUtcName()
@@ -78,12 +89,12 @@ public class JobAppServiceTests
 
         var job = await fixture.Service.UpdateEnabledAsync(
             new JobEnabledUpdateRequest { JobId = fixture.FirstJobId, IsEnabled = false },
-            "toggle-user"
+            "test-user"
         );
 
         Assert.NotNull(job);
         Assert.False(job!.IsEnabled);
-        Assert.Equal("toggle-user", job.UpdateBy);
+        Assert.Equal("test-user", job.UpdateBy);
         Assert.Equal(updatedAt, job.UpdateTime);
         Assert.Equal(original.ProjectId, job.ProjectId);
         Assert.Equal(original.Name, job.Name);
@@ -103,7 +114,7 @@ public class JobAppServiceTests
 
         var job = await fixture.Service.UpdateEnabledAsync(
             new JobEnabledUpdateRequest { JobId = Guid.CreateVersion7(), IsEnabled = false },
-            "toggle-user"
+            "test-user"
         );
 
         Assert.Null(job);
@@ -118,7 +129,7 @@ public class JobAppServiceTests
 
         await fixture.Service.UpdateEnabledAsync(
             new JobEnabledUpdateRequest { JobId = fixture.FirstJobId, IsEnabled = true },
-            "toggle-user"
+            "test-user"
         );
 
         await wait.WaitAsync(TimeSpan.FromSeconds(1), cancellationToken);
@@ -260,28 +271,35 @@ public class JobAppServiceTests
             var projectRepository = new EfRepository<Project>(dbContext);
             var conversationRepository = new EfRepository<ProjectConversation>(dbContext);
             var historyRepository = new EfRepository<ProjectConversationChatHistory>(dbContext);
+            var userInfo = new TestUserInfoService();
+            var projectResolver = new ProjectResolver(projectRepository, userInfo);
             var taskService = new TaskExecutionAppService(
                 conversationRepository,
                 historyRepository,
                 dbContext,
                 new ProjectConversationChatHistoryDomainService(),
-                new ProjectResolver(projectRepository),
-                timeProvider
+                projectResolver,
+                timeProvider,
+                userInfo
             );
             var taskResolver = new TaskAppService(
                 conversationRepository,
                 historyRepository,
-                new ProjectResolver(projectRepository),
-                taskService
+                projectResolver,
+                taskService,
+                userInfo
             );
             var service = new JobAppService(
                 new JobRepo(dbContext, timeProvider),
                 new EfRepository<JobLog>(dbContext),
-                new ProjectTaskFacade(taskService, conversationRepository, historyRepository, taskResolver),
+                new ProjectTaskFacade(taskService, conversationRepository, historyRepository, taskResolver, userInfo),
                 dbContext,
                 new JobScheduleCalculator(),
                 schedulerWakeSignal,
-                timeProvider
+                timeProvider,
+                userInfo,
+                new TestProjectRuntimeFacade(),
+                new TestAgentCatalogFacade()
             );
 
             return new JobAppServiceFixture(
@@ -299,5 +317,56 @@ public class JobAppServiceTests
             await _dbContext.DisposeAsync();
             await _connection.DisposeAsync();
         }
+    }
+
+    private sealed class TestProjectRuntimeFacade : IProjectRuntimeFacade
+    {
+        public Task<ProjectRuntimeSnapshot?> GetForCurrentUserAsync(
+            Guid projectId,
+            CancellationToken cancellationToken = default
+        ) =>
+            Task.FromResult<ProjectRuntimeSnapshot?>(
+                new ProjectRuntimeSnapshot(
+                    projectId,
+                    "project",
+                    null,
+                    null,
+                    [],
+                    new Dictionary<string, string>(),
+                    [],
+                    [],
+                    []
+                )
+            );
+
+        public Task<string?> GetWorkspaceAsync(Guid projectId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(null);
+    }
+
+    private sealed class TestAgentCatalogFacade : IAgentCatalogFacade
+    {
+        public Task<IReadOnlyList<AgentDescriptor>> ListDiscoverableAsync(
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<IReadOnlyList<AgentDescriptor>>([]);
+
+        public Task<AgentDescriptor?> FindDiscoverableByNameAsync(
+            string name,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<AgentDescriptor?>(null);
+
+        public Task<IReadOnlySet<Guid>> FilterExistingMcpServerIdsAsync(
+            IReadOnlyCollection<Guid> serverIds,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<IReadOnlySet<Guid>>(serverIds.ToHashSet());
+
+        public Task<bool> IsOwnedTargetAsync(
+            AgentRuntimeType type,
+            Guid id,
+            string ownerUserId,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(true);
+
+        public Task<AgentCatalogMetrics> GetMetricsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(new AgentCatalogMetrics(0, 0));
     }
 }

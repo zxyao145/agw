@@ -1,3 +1,5 @@
+using Agw.Auth.Contracts;
+using Agw.Infrastructure.Data;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Attempts;
 using Agw.Shared.Data.Entities.Jobs;
@@ -23,7 +25,7 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
         CancellationToken cancellationToken
     )
     {
-        var jobs = await _dbSet.Where(t => t.IsEnabled).AsNoTracking().ToListAsync(cancellationToken);
+        var jobs = await _dbSet.IgnoreUserScope().Where(t => t.IsEnabled).AsNoTracking().ToListAsync(cancellationToken);
 
         return jobs.Where(t => t.Status == JobStatus.Pending && t.NextRunTime <= horizon).ToList();
     }
@@ -31,11 +33,13 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
     public async Task<JobAttemptClaim?> TryStartAttemptAsync(Guid jobId, CancellationToken cancellationToken)
     {
         var now = _timeProvider.GetUtcNow();
-        var job = await _dbSet.FirstOrDefaultAsync(t => t.Id == jobId && t.IsEnabled, cancellationToken);
+        var job = await _dbSet
+            .IgnoreUserScope()
+            .FirstOrDefaultAsync(t => t.Id == jobId && t.IsEnabled, cancellationToken);
 
         if (job == null)
         {
-            var exists = await _dbSet.AsNoTracking().AnyAsync(t => t.Id == jobId, cancellationToken);
+            var exists = await _dbSet.IgnoreUserScope().AsNoTracking().AnyAsync(t => t.Id == jobId, cancellationToken);
 
             if (!exists)
             {
@@ -47,6 +51,22 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
 
         if (job.Status != JobStatus.Pending)
         {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(job.CreateBy))
+        {
+            job.Status = JobStatus.Paused;
+            job.IsEnabled = false;
+            job.LastError = "The Job owner is missing.";
+            job.ActiveExecutionId = null;
+            job.ActiveAttemptStartedAt = null;
+            job.UpdateTime = now;
+            job.UpdateBy = "scheduler";
+            using (UserInfoUtil.PushSystemScope())
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
             return null;
         }
 

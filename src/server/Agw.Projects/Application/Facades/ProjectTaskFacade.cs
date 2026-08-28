@@ -1,3 +1,4 @@
+using Agw.Auth.Contracts;
 using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
@@ -12,18 +13,21 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
     private readonly ITaskAppService _taskResolver;
     private readonly IRepository<ProjectConversation> _conversationRepository;
     private readonly IRepository<ProjectConversationChatHistory> _historyRepository;
+    private readonly IUserInfoService _userInfoService;
 
     public ProjectTaskFacade(
         TaskExecutionAppService taskService,
         IRepository<ProjectConversation> conversationRepository,
         IRepository<ProjectConversationChatHistory> historyRepository,
-        ITaskAppService taskResolver
+        ITaskAppService taskResolver,
+        IUserInfoService userInfoService
     )
     {
         _taskService = taskService;
         _conversationRepository = conversationRepository;
         _historyRepository = historyRepository;
         _taskResolver = taskResolver;
+        _userInfoService = userInfoService;
     }
 
     public async Task<ProjectTaskSnapshot> ResolveAsync(
@@ -62,7 +66,7 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var existing = await _taskService.GetTaskAsync(request.TaskId).ConfigureAwait(false);
+        var existing = await _taskService.GetTaskAsync(request.TaskId, request.OwnerUserId).ConfigureAwait(false);
         if (existing != null)
         {
             if (existing.ProjectId != request.ProjectId)
@@ -95,7 +99,7 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
             );
         }
 
-        var created = await _taskService.GetTaskAsync(request.TaskId).ConfigureAwait(false);
+        var created = await _taskService.GetTaskAsync(request.TaskId, request.OwnerUserId).ConfigureAwait(false);
         return created == null
             ? throw new AgwException(ErrorCodes.TaskCreationFailed, "Failed to reload the execution task.")
             : Map(created);
@@ -131,6 +135,7 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
         }
 
         var ids = taskIds.ToHashSet();
+        var ownerUserId = ResolveOwnerUserId();
         var histories = await _historyRepository
             .Queryable.AsNoTracking()
             .Where(record => ids.Contains(record.TaskId))
@@ -139,11 +144,12 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
         var conversationIds = histories.Select(record => record.ConversationId).ToHashSet();
         var conversations = await _conversationRepository
             .Queryable.AsNoTracking()
-            .Where(conversation => conversationIds.Contains(conversation.Id))
+            .Where(conversation => conversationIds.Contains(conversation.Id) && conversation.CreateBy == ownerUserId)
             .ToDictionaryAsync(conversation => conversation.Id, cancellationToken)
             .ConfigureAwait(false);
 
         return histories
+            .Where(history => conversations.ContainsKey(history.ConversationId))
             .GroupBy(record => record.TaskId)
             .ToDictionary(
                 group => group.Key,
@@ -187,4 +193,6 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
             ProjectTaskStatus.Canceled => TaskExecutionStatus.Canceled,
             _ => throw new AgwException(ErrorCodes.InvalidParam, $"Unsupported task status '{status}'."),
         };
+
+    private string ResolveOwnerUserId() => _userInfoService.RequiredUserId;
 }

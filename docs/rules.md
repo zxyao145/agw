@@ -163,12 +163,17 @@ Direct `new HttpClient()` causes socket exhaustion and DNS staleness. `IHttpClie
 ## 7. Backend Service Registration and Boundaries
 
 - Register new backend services in the relevant module `DependencyInjection.cs` or extension method and ensure `Agw.Host/Program.cs` composes the module.
-- `Agw.Integrations` treats `IPluginCatalog` as the source of truth for plugin, connector, authentication, capability-source, and bundled Skill definitions; definitions are code/content assets and are not EF entities.
-- Persist platform-level configuration in `PluginInstallation`, Agent-selectable accounts or endpoints in `Connection`, and protected or environment-referenced secrets in their dedicated credential entities.
+- `Agw.Integrations` treats `IPluginCatalog` as the source of truth for plugin, connector, authentication, capability-source, and bundled Skill definitions; definitions are code/content assets and are not EF entities. These Available integrations are global read-only catalog data.
+- Persist each user's setup in `PluginInstallation`, Agent-selectable accounts or endpoints in `Connection`, and protected or environment-referenced secrets in their dedicated credential entities.
 - User-facing surfaces call catalog definitions Available integrations and Connection instances Configured integrations. Developer contracts retain `PluginDefinition`, `PluginInstallation`, `Connection`, and `ConnectionId`.
 - `Connection.CreateBy` is the stable owner user ID. Alias values are immutable and unique within `(CreateBy, Alias)`. CRUD, OAuth, credential reads, binding projection, and every Native/MCP invocation scope must reject foreign Connection IDs without disclosing ownership.
-- Agent and Project integration bindings reference concrete `ConnectionId` values and form per-user overlays on shared definitions. Updating one user's overlay must preserve other users' relations. Only owner-matched `Ready` Connections may contribute runtime tools or bundled Plugin Skills.
-- Only the stable administrator user ID `1001` may mutate platform-wide `PluginInstallation` setup. A setup change still invalidates affected Connections across all owners.
+- Every persisted business/configuration/execution root is owned by its immutable `CreateBy` (or its existing `UserId` owner). Application list, detail, mutation, binding, and runtime-resolution queries MUST constrain that owner. Child tables such as JobLog, traces, sessions, and conversation history MUST resolve ownership through their root.
+- Agent and Project integration bindings reference concrete `ConnectionId` values. Only owner-matched `Ready` Connections may contribute runtime tools or bundled Plugin Skills.
+- `PluginInstallation` setup is user-scoped and keyed by `(CreateBy, PluginId)`. A setup change invalidates only that user's affected Connections. The administrator identity `1001` is only the owner of legacy seeded data, not a global setup bypass.
+- `UserScopeFilter` is the named Infrastructure query filter for persisted owners and MUST fail closed when no user context is active. HTTP and execution contexts MUST establish a stable user ID; only token validation, seeding, and scheduler scans may use the restricted system scope or narrowly scoped bypasses while retaining soft-delete filtering.
+- `ApiToken.CreateBy` is both token owner and Bearer principal user ID; do not add an `OwnerUserId` column. Token names are unique within `(CreateBy, NormalizedName)`.
+- `ProjectType` remains unchanged. The protected default projects are `default-built-in` and `a2a`, both `DefaultBuiltIn`; ordinary execution resolves them by `(CreateBy, Name)` and missing projects return NotFound.
+- This phase does not add a User table, OIDC provisioning, or a user-ID counter. A future User table uses numeric primary keys beginning at `10010`; claims and owner contracts keep the decimal-string representation.
 - Never return or log plaintext installation secrets, access or refresh tokens, API keys, AK/SK values, protected credential payloads, or complete OAuth token responses.
 - Plugin MCP sources that inject credentials into HTTP or SSE requests must use HTTPS endpoints. Materialize them with invocation-scoped credentials and dispose the client and transport after the invocation.
 

@@ -16,6 +16,19 @@ public class EntityAuditUserIdProvider : IEntityAuditUserIdProvider
 
     public string GetUserId()
     {
+        // Trusted infrastructure scopes must not inherit an active anonymous
+        // HTTP context. Preserve an explicit execution user when one exists;
+        // otherwise use the legacy administrator audit actor for seeding.
+        if (UserInfoUtil.IsSystemScopeActive)
+        {
+            return UserInfoUtil.UserId ?? Constants.AdminUserId;
+        }
+
+        if (UserInfoUtil.IsContextActive)
+        {
+            return UserInfoUtil.RequiredUserId;
+        }
+
         return _userInfoService.Current?.GetUserId() ?? Constants.AdminUserId;
     }
 }

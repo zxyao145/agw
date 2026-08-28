@@ -801,6 +801,13 @@ public class AgentHandlerFactoryTests
 
         public Task<AgentCatalogMetrics> GetMetricsAsync(CancellationToken cancellationToken = default) =>
             Task.FromResult(new AgentCatalogMetrics(_repository.Queryable.Count(), 0));
+
+        public Task<bool> IsOwnedTargetAsync(
+            Agw.Agents.Contracts.Execution.AgentRuntimeType type,
+            Guid id,
+            string ownerUserId,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(true);
     }
 
     private sealed class FakeTaskStore : ITaskStore

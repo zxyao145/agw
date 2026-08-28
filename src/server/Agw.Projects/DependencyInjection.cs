@@ -19,6 +19,8 @@ public static class DependencyInjection
         services.AddScoped<ITaskAppService, TaskAppService>();
         services.AddScoped<IProjectAppService, ProjectAppService>();
         services.AddScoped<IProjectFileSystemConfigurationProvider, ProjectFileSystemConfigurationProvider>();
+        services.AddScoped<IProjectDefaultResolver, ProjectDefaultResolver>();
+        services.AddScoped<IProjectOwnershipFacade, ProjectOwnershipFacade>();
         services.AddScoped<ITaskSessionBindingService, TaskSessionBindingService>();
         services.AddScoped<TaskExecutionAppService>();
         services.AddScoped<IProjectTaskFacade, ProjectTaskFacade>();

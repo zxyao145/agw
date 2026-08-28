@@ -21,6 +21,7 @@ internal sealed class ExecutionConnectionContextFactory
     private readonly ExecutionProvider _executionProvider;
     private readonly DurableExecutionCoordinator? _durableCoordinator;
     private readonly AgentflowCheckpointStore _checkpointStore;
+    private readonly IProjectDefaultResolver _projectDefaults;
 
     /// <summary>
     /// 初始化连接上下文工厂，并只在启用 Distributed 时解析其协调器。
@@ -29,6 +30,7 @@ internal sealed class ExecutionConnectionContextFactory
         IRuntimeFactory runtimeFactory,
         IProjectTaskFacade projectTasks,
         IProjectRuntimeFacade projects,
+        IProjectDefaultResolver projectDefaults,
         IOptions<ExecutionRuntimeOptions> executionOptions,
         IServiceProvider serviceProvider
     )
@@ -36,6 +38,7 @@ internal sealed class ExecutionConnectionContextFactory
         _runtimeFactory = runtimeFactory;
         _projectTasks = projectTasks;
         _projects = projects;
+        _projectDefaults = projectDefaults;
         _executionProvider = executionOptions.Value.Provider;
         _durableCoordinator = serviceProvider.GetService<DurableExecutionCoordinator>();
         _checkpointStore = serviceProvider.GetRequiredService<AgentflowCheckpointStore>();
@@ -71,7 +74,8 @@ internal sealed class ExecutionConnectionContextFactory
             _projectTasks,
             _projects,
             durableSession,
-            _checkpointStore
+            _checkpointStore,
+            _projectDefaults
         );
     }
 }

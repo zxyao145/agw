@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 
 namespace Agw.Shared.Tests;
@@ -22,7 +23,7 @@ public sealed class ClaimsPrincipalExtensionsTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void GetUserId_NameIdentifierMissingOrBlank_ReturnsAdminUserId(string? userId)
+    public void GetUserId_NameIdentifierMissingOrBlank_ThrowsAuthenticationRequired(string? userId)
     {
         var claims = new List<Claim> { new(ClaimTypes.Name, Constants.AdminUserName) };
         if (userId != null)
@@ -31,7 +32,8 @@ public sealed class ClaimsPrincipalExtensionsTests
         }
         var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "test"));
 
-        Assert.Equal(Constants.AdminUserId, principal.GetUserId());
+        var exception = Assert.Throws<AgwException>(() => principal.GetUserId());
+        Assert.Equal(ErrorCodes.AuthenticationRequired.Code, exception.Code);
     }
 
     [Fact]

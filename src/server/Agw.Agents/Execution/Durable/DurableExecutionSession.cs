@@ -33,7 +33,9 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
         DurableExecutionCoordinator coordinator
     )
     {
-        _userId = string.IsNullOrWhiteSpace(userId) ? Constants.AdminUserId : userId.Trim();
+        _userId = string.IsNullOrWhiteSpace(userId)
+            ? throw new AgwException(ErrorCodes.AuthenticationRequired)
+            : userId.Trim();
         _messageSink = messageSink;
         _hostToken = hostToken;
         _coordinator = coordinator;
@@ -234,7 +236,9 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
         try
         {
             await foreach (
-                var entry in _coordinator.ReadAsync(executionId, cursor, cancellationToken).ConfigureAwait(false)
+                var entry in _coordinator
+                    .ReadAsync(executionId, _userId, cursor, cancellationToken)
+                    .ConfigureAwait(false)
             )
             {
                 await _messageSink.WriteAsync(entry.Message, cancellationToken).ConfigureAwait(false);

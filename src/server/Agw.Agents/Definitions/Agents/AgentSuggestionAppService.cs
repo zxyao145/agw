@@ -1,5 +1,6 @@
 using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.ExternalAgents;
+using Agw.Auth.Contracts;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Skills;
@@ -15,24 +16,28 @@ public class AgentSuggestionAppService
     private readonly IProjectRuntimeFacade _projects;
     private readonly IRepository<Skill> _skillRepository;
     private readonly ToolRegistryService _toolRegistryService;
+    private readonly IUserInfoService _userInfoService;
 
     public AgentSuggestionAppService(
         IRepository<Agent> agentRepository,
         IProjectRuntimeFacade projects,
         IRepository<Skill> skillRepository,
-        ToolRegistryService toolRegistryService
+        ToolRegistryService toolRegistryService,
+        IUserInfoService userInfoService
     )
     {
         _agentRepository = agentRepository;
         _projects = projects;
         _skillRepository = skillRepository;
         _toolRegistryService = toolRegistryService;
+        _userInfoService = userInfoService;
     }
 
     public async Task<AgentSuggestionsResponse> GetSuggestionsAsync(Guid? projectId, Guid agentId)
     {
+        var ownerUserId = ResolveOwnerUserId();
         var agents = await _agentRepository.ListAsync(
-            agent => agent.Id == agentId,
+            agent => agent.Id == agentId && agent.CreateBy == ownerUserId,
             null,
             agent => agent.AgentSkillRelations
         );
@@ -66,7 +71,9 @@ public class AgentSuggestionAppService
         var skillIds = relatedSkillIds.Where(id => id != Guid.Empty).Distinct().ToArray();
         if (skillIds.Length > 0)
         {
-            var skills = await _skillRepository.ListAsync(skill => skillIds.Contains(skill.Id));
+            var skills = await _skillRepository.ListAsync(skill =>
+                skillIds.Contains(skill.Id) && (skill.Kind == SkillKind.BuiltIn || skill.CreateBy == ownerUserId)
+            );
             suggestions.AddRange(
                 skills
                     .Where(skill => !string.IsNullOrWhiteSpace(skill.Name))
@@ -132,4 +139,6 @@ public class AgentSuggestionAppService
     {
         return string.Join(" · ", parts.Where(part => !string.IsNullOrWhiteSpace(part)).Select(part => part!.Trim()));
     }
+
+    private string ResolveOwnerUserId() => _userInfoService.RequiredUserId;
 }

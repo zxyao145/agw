@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Infrastructure.Repositories;
@@ -20,12 +21,47 @@ public class EfRepository<TEntity> : IRepository<TEntity>
 
     public Task<TEntity?> GetByIdAsync(object id)
     {
-        if (id is object[] composite)
+        var key = _dbContext.Model.FindEntityType(typeof(TEntity))?.FindPrimaryKey();
+        if (key == null)
         {
-            return _dbSet.FindAsync(composite).AsTask();
+            throw new AgwException(ErrorCodes.InvalidParam, $"Entity '{typeof(TEntity).Name}' has no primary key.");
         }
 
-        return _dbSet.FindAsync(id).AsTask();
+        object?[] values = id switch
+        {
+            object[] composite => composite,
+            Array array => array.Cast<object?>().ToArray(),
+            _ => [id],
+        };
+        if (values.Length != key.Properties.Count)
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                $"Expected {key.Properties.Count} key value(s) for '{typeof(TEntity).Name}', but received {values.Length}."
+            );
+        }
+
+        var parameter = Expression.Parameter(typeof(TEntity), "entity");
+        Expression? predicate = null;
+        for (var index = 0; index < key.Properties.Count; index++)
+        {
+            var property = key.Properties[index];
+            Expression propertyAccess =
+                property.PropertyInfo == null
+                    ? Expression.Call(
+                        typeof(EF),
+                        nameof(EF.Property),
+                        [property.ClrType],
+                        parameter,
+                        Expression.Constant(property.Name)
+                    )
+                    : Expression.Property(parameter, property.PropertyInfo);
+            var value = Expression.Constant(values[index], property.ClrType);
+            var equals = Expression.Equal(propertyAccess, value);
+            predicate = predicate == null ? equals : Expression.AndAlso(predicate, equals);
+        }
+
+        return _dbSet.SingleOrDefaultAsync(Expression.Lambda<Func<TEntity, bool>>(predicate!, parameter));
     }
 
     public Task<TEntity?> SingleOrDefaultAsync(

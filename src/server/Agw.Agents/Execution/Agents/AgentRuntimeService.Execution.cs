@@ -224,7 +224,11 @@ public partial class AgentRuntimeService
         string? contextId = request.ContextId;
         Agent agent = request.Agent;
 
-        projectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
+        projectId = await ResolveProjectIdAsync(projectId, cancellationToken).ConfigureAwait(false);
+        if (!projectId.HasValue)
+        {
+            return null;
+        }
         var resolvedContextId = ContextIdUtil.ResolveContextId(contextId);
         var conversationId = await _sessionStateStore
             .ResolveProjectConversationIdAsync(projectId.Value, resolvedContextId, cancellationToken)

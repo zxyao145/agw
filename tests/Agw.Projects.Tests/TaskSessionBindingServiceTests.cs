@@ -1,6 +1,5 @@
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
-using Agw.Shared;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +12,7 @@ public class TaskSessionBindingServiceTests
     public async Task UpsertAsync_WhenContextBindingExists_UpdatesProviderSessionId()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = PushTestUser();
 
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
@@ -61,7 +61,8 @@ public class TaskSessionBindingServiceTests
             new EfRepository<TaskSessionBinding>(dbContext),
             new EfRepository<ProjectConversation>(dbContext),
             dbContext,
-            TimeProvider.System
+            TimeProvider.System,
+            new TestUserInfoService()
         );
 
         await service.UpsertAsync(
@@ -92,14 +93,15 @@ public class TaskSessionBindingServiceTests
         Assert.Equal(agentId, binding.AgentId);
         Assert.Equal("codex", binding.ExternalAgentName);
         Assert.Equal("22222222-2222-2222-2222-222222222222", binding.ProviderSessionId);
-        Assert.Equal(Constants.AdminUserId, binding.CreateBy);
-        Assert.Equal(Constants.AdminUserId, binding.UpdateBy);
+        Assert.Equal("tester", binding.CreateBy);
+        Assert.Equal("tester", binding.UpdateBy);
     }
 
     [Fact]
     public async Task GetAsync_WhenDifferentTasksUseSameContext_ReturnsSameContextBinding()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = PushTestUser();
 
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(cancellationToken);
@@ -148,7 +150,8 @@ public class TaskSessionBindingServiceTests
             new EfRepository<TaskSessionBinding>(dbContext),
             new EfRepository<ProjectConversation>(dbContext),
             dbContext,
-            TimeProvider.System
+            TimeProvider.System,
+            new TestUserInfoService()
         );
 
         await service.UpsertAsync(
@@ -172,6 +175,7 @@ public class TaskSessionBindingServiceTests
     public async Task UpsertAsync_WhenSameBindingCreatedConcurrently_CompletesWithSingleBinding()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = PushTestUser();
         var dbPath = Path.Combine(Path.GetTempPath(), $"agw-binding-{Guid.CreateVersion7():N}.db");
 
         try
@@ -226,7 +230,8 @@ public class TaskSessionBindingServiceTests
                         new EfRepository<TaskSessionBinding>(dbContext),
                         new EfRepository<ProjectConversation>(dbContext),
                         dbContext,
-                        TimeProvider.System
+                        TimeProvider.System,
+                        new TestUserInfoService()
                     );
 
                     return await service.UpsertAsync(
@@ -235,7 +240,7 @@ public class TaskSessionBindingServiceTests
                         agentId,
                         "codex",
                         Guid.CreateVersion7().ToString("D"),
-                        $"tester-{index}",
+                        "tester",
                         cancellationToken
                     );
                 })
@@ -264,4 +269,14 @@ public class TaskSessionBindingServiceTests
             }
         }
     }
+
+    private static IDisposable PushTestUser() =>
+        UserInfoUtil.Push(
+            new System.Security.Claims.ClaimsPrincipal(
+                new System.Security.Claims.ClaimsIdentity(
+                    [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, "tester")],
+                    "test"
+                )
+            )
+        );
 }

@@ -58,6 +58,7 @@ public class DefinitionPaginationTests
             Name = "paged-agent",
             DisplayName = "Paged Agent",
             Type = AgentType.External,
+            CreateBy = "tester",
             CreateTime = now,
         };
         var mcpServer = new McpServer
@@ -65,6 +66,7 @@ public class DefinitionPaginationTests
             Id = Guid.CreateVersion7(),
             Name = "paged-mcp",
             TransportType = "stdio",
+            CreateBy = "tester",
             CreateTime = now,
         };
         var skill = new Skill
@@ -73,6 +75,8 @@ public class DefinitionPaginationTests
             Name = "paged-skill",
             Description = "Paged skill",
             ContentPath = "skills/paged-skill",
+            Kind = SkillKind.Local,
+            CreateBy = "tester",
             CreateTime = now,
         };
         var connection = new Connection
@@ -116,6 +120,7 @@ public class DefinitionPaginationTests
             Name = "skill-agent",
             DisplayName = "Skill Agent",
             Type = AgentType.External,
+            CreateBy = "tester",
             CreateTime = now,
         };
         var skill = new Skill
@@ -124,6 +129,8 @@ public class DefinitionPaginationTests
             Name = "related-skill",
             Description = "Related skill",
             ContentPath = "skills/related-skill",
+            Kind = SkillKind.Local,
+            CreateBy = "tester",
             CreateTime = now,
         };
 
@@ -138,7 +145,8 @@ public class DefinitionPaginationTests
                 new EfRepository<Agentflow>(database.Context),
                 new EfRepository<McpServer>(database.Context),
                 new EfRepository<AgentSkillRelation>(database.Context),
-                database.Context
+                database.Context,
+                new TestUserInfoService()
             ),
             new EfRepository<RemoteSkillCache>(database.Context),
             database.Context,
@@ -147,7 +155,8 @@ public class DefinitionPaginationTests
             NullLogger<SkillAppService>.Instance,
             new TestRemoteSkillClient(),
             new TestRemoteSkillRefreshLock(),
-            TimeProvider.System
+            TimeProvider.System,
+            new TestUserInfoService()
         );
 
         var result = await service.ListPageAsync(1, 10, cancellationToken);

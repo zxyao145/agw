@@ -1,5 +1,4 @@
 using Agw.Auth.Contracts;
-using Agw.Shared;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Repositories;
@@ -358,8 +357,7 @@ public sealed class UserMemoryAppService
 
     private string GetCurrentUserId()
     {
-        var userId = _userInfoService.UserId;
-        return NormalizeUserId(string.IsNullOrWhiteSpace(userId) ? Constants.AdminUserId : userId);
+        return NormalizeUserId(_userInfoService.RequiredUserId);
     }
 
     private static string NormalizeUserId(string userId)

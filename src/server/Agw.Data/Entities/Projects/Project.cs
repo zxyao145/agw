@@ -33,7 +33,7 @@ public class Project : BaseEntity, IAggregateRoot
     {
         if (string.IsNullOrEmpty(Workspace))
         {
-            return "~/.agw/temp";
+            return $"~/.agw/projects/{Id:N}";
         }
         return Workspace;
     }

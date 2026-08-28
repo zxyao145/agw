@@ -10,7 +10,7 @@ public class AgentConfiguration : IEntityTypeConfiguration<Agent>
     public void Configure(EntityTypeBuilder<Agent> builder)
     {
         builder.HasKey(e => e.Id);
-        builder.HasIndex(e => e.Name).IsUnique();
+        builder.HasIndex(e => new { e.CreateBy, e.Name }).IsUnique();
         builder.Property(e => e.DisplayName).IsRequired().HasMaxLength(200);
         builder.Property(e => e.Name).IsRequired().HasMaxLength(200);
         builder.Property(e => e.Description).HasMaxLength(200);

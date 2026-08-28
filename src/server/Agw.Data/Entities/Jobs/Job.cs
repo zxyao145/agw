@@ -37,4 +37,7 @@ public class Job : BaseEntity, IAggregateRoot
     public DateTimeOffset? ActiveAttemptStartedAt { get; set; }
 
     public byte[] RowVersion { get; set; } = Array.Empty<byte>();
+
+    [JsonIgnore]
+    public ICollection<JobLog> Logs { get; set; } = new List<JobLog>();
 }

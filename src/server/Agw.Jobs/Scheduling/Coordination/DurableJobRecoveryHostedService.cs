@@ -1,3 +1,4 @@
+using Agw.Auth.Contracts;
 using Agw.Jobs.Execution;
 using Agw.Jobs.Scheduling.Attempts;
 using Agw.Shared.Data.Entities.Jobs;
@@ -59,7 +60,11 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var jobRepository = scope.ServiceProvider.GetRequiredService<IRepository<Job>>();
-        var runningJobs = await jobRepository.ListAsync(job => job.Status == JobStatus.Running);
+        IReadOnlyList<Job> runningJobs;
+        using (UserInfoUtil.PushSystemScope())
+        {
+            runningJobs = await jobRepository.ListAsync(job => job.Status == JobStatus.Running);
+        }
         await Task.WhenAll(runningJobs.Select(job => RecoverJobAsync(job, cancellationToken)));
     }
 
@@ -68,7 +73,11 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
         await using var projectLock = await _projectExecutionLock.AcquireAsync(job.ProjectId, cancellationToken);
         await using var scope = _scopeFactory.CreateAsyncScope();
         var jobRepository = scope.ServiceProvider.GetRequiredService<IRepository<Job>>();
-        var currentJob = await jobRepository.GetByIdAsync(job.Id);
+        Job? currentJob;
+        using (UserInfoUtil.PushSystemScope())
+        {
+            currentJob = await jobRepository.GetByIdAsync(job.Id);
+        }
         if (currentJob?.Status != JobStatus.Running)
         {
             return;
@@ -81,7 +90,19 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
         }
 
         var executionId = currentJob.ActiveExecutionId.Value;
-        var ownerUserId = JobAgentExecutor.ResolveOwnerUserId(currentJob);
+        if (!JobAgentExecutor.TryResolveOwnerUserId(currentJob, out var ownerUserId))
+        {
+            await RecordOutcomeAsync(
+                scope.ServiceProvider,
+                currentJob.Id,
+                executionId,
+                success: false,
+                "The Job owner is missing.",
+                cancellationToken
+            );
+            return;
+        }
+
         var executionClient = scope.ServiceProvider.GetRequiredService<IDurableAgentExecutionFacade>();
         AgentExecutionResult outcome;
         try
