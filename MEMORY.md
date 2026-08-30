@@ -8,3 +8,8 @@
 - Never let a Behavior reference or construct a Policy or DomainService. Application may construct Behavior first for root-local preconditions, separately evaluates Policy into a data-only Decision, then asks Behavior to apply it; dependency direction matters, not a rigid invocation order.
 - For an EF-tracked consistency boundary, load the complete root and owned navigations before Behavior mutation, then reconcile children in place by owned key. Never replace a tracked navigation before querying its old rows or delete/re-add duplicate tracked keys.
 - Apply selective DDD only to the Agentflow graph subdomain: `AgentflowDefinitionPolicy` produces a data-only Decision, `AgentflowBehavior` applies it to Agentflow plus owned Nodes/Edges, and `AgentflowTopology` serves shared algorithms; simple modules remain ordinary Application + DbContext flows.
+
+## Tooling
+
+- Never create or merge a pull request automatically. Each remote PR action requires an explicit user request for that action.
+- When developing Agw against an adjacent SDK repository, use a local `ProjectReference` instead of publishing or upgrading a temporary NuGet package.
