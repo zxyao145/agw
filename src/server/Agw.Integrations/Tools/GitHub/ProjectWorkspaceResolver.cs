@@ -1,24 +1,18 @@
-using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Repositories;
-using Microsoft.EntityFrameworkCore;
+using Agw.Projects.Contracts.Runtime;
 
 namespace Agw.Integrations.Tools.GitHub;
 
 public sealed class ProjectWorkspaceResolver : IProjectWorkspaceResolver
 {
-    private readonly IRepository<Project> _projectRepository;
+    private readonly IProjectRuntimeFacade _projects;
 
-    public ProjectWorkspaceResolver(IRepository<Project> projectRepository)
+    public ProjectWorkspaceResolver(IProjectRuntimeFacade projects)
     {
-        _projectRepository = projectRepository;
+        _projects = projects;
     }
 
     public Task<string?> ResolveWorkspaceAsync(Guid projectId, CancellationToken cancellationToken)
     {
-        return _projectRepository
-            .Queryable.AsNoTracking()
-            .Where(project => project.Id == projectId)
-            .Select(project => project.Workspace)
-            .SingleOrDefaultAsync(cancellationToken);
+        return _projects.GetWorkspaceAsync(projectId, cancellationToken);
     }
 }

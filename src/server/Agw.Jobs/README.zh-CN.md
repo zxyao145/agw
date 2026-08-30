@@ -35,7 +35,7 @@
 
 ```mermaid
 flowchart LR
-    Client["Web UI / API Client"] --> Endpoints["JobsEndpointRouteBuilderExtensions"]
+    Client["Web UI / API Client"] --> Endpoints["EndpointRouteBuilderExtensions"]
     Endpoints --> AppService["JobAppService"]
     AppService --> Repository["IRepository<Job>"]
     AppService --> Calculator["JobScheduleCalculator"]
@@ -53,6 +53,9 @@ flowchart LR
     Lock --> Runner["JobAttemptRunner"]
     Runner --> Store
     Runner --> Executor["JobAgentExecutor"]
+    Runner --> Outcome["JobAttemptOutcomeRecorder"]
+    Outcome --> Store
+    Outcome --> Projects
     Executor --> Projects["TaskExecutionAppService"]
     Executor --> AgentRuntime["AgentRuntimeService"]
     Executor --> FlowRuntime["AgentflowRuntimeService"]
@@ -61,7 +64,7 @@ flowchart LR
 
 ### 主要组件
 
-#### `JobsEndpointRouteBuilderExtensions`
+#### `EndpointRouteBuilderExtensions`
 
 通过 `MapJobsApi()` 注册 `/api/jobs` 下的 CRUD 和执行日志查询端点。所有响应都直接使用 `ApiResult`，因此客户端收到的是 Bens.Results 响应封装，而不是裸 JSON 模型。
 
@@ -69,7 +72,7 @@ flowchart LR
 
 负责创建、查询、更新和删除 Job。创建或更新时，它通过 `JobScheduleCalculator` 从当前 UTC 时间计算 `NextRunTime`。名称为空时，会生成 `job-{序号}-{yyyyMMdd}` 格式的名称。
 
-创建成功后会调用 `JobSchedulerWakeSignal.NotifyCreated`。当前只有已启用、状态为 `Pending` 且即将在一分钟内执行的 `Once` Job 会唤醒预取循环；其他任务和更新操作由周期性预取发现。这里使用的是模块内的调度协作信号，不是领域事件总线。
+创建成功后会调用 `JobSchedulerWakeSignal.NotifyCreated`。当前只有已启用、状态为 `Pending` 且即将在一分钟内执行的 `Once` Job 会唤醒预取循环。专用的启用状态更新在把 Job 设为启用时调用 `NotifyChanged`；其他完整更新仍由周期性预取发现。这里使用的是模块内的调度协作信号，不是领域事件总线。
 
 #### `JobHostedService`
 
@@ -84,14 +87,15 @@ flowchart LR
 
 #### `JobAttemptRunner`
 
-负责一次 Job 尝试的完整状态迁移：认领 `Pending` Job、调用执行适配器、计算下一次运行时间、写入成功或失败日志，并返回“重新入队”或“丢弃”结果。`JobHostedService` 因此只保留调度和队列职责。
+负责认领 `Pending` Job 并调用执行适配器。认领会同时生成并持久化本次 `ActiveExecutionId` 和开始时间；成功或异常随后统一交给 `JobAttemptOutcomeRecorder`。后者标记项目 Task、计算下一次运行或重试，并在一次数据库保存中更新 Job、清除 active attempt 和写入 JobLog。正常执行与重启恢复因此使用同一套结算语义。
 
 #### `JobAgentExecutor`
 
-每次运行都会生成新的 `contextId`，并通过 `TaskExecutionAppService.CreateRunningAsync` 创建项目 Task。随后根据 `AgentType` 选择执行入口：
+每次运行都会生成新的 `contextId`，并通过 `IProjectTaskFacade` 使用认领阶段生成的 executionId 创建项目 Task。随后把目标类型和 ID 交给 `IAgentExecutionFacade`：
 
-- `AgentRuntimeType.Agent`：调用 `IAgentRuntimeService.ExecuteByIdAsync`；
-- `AgentRuntimeType.Agentflow`：调用 `IAgentflowRuntimeService.ExecuteAsync`。
+- Agents 模块内部根据目标类型选择 Agent 或 Agentflow runtime；
+- Agents 模块内部根据 `Execution:Provider` 选择 InProcess 或 Distributed；
+- Jobs 不再引用具体 RuntimeService、durable client 或 Projects AppService。
 
 执行成功后，项目 Task 标记为成功；发生异常时，项目 Task 标记为失败，异常继续交给调度器处理重试。Job 没有 `AgentId` 或 `AgentType` 时，创建接口仍可保存它，但真正执行时会失败。
 
@@ -113,6 +117,7 @@ flowchart LR
 | `Status` / `IsEnabled` | 调度状态和总开关 |
 | `RetryCount` / `MaxRetryCount` | 当前失败重试次数和允许的最大重试次数 |
 | `LastError` | 上一次执行错误 |
+| `ActiveExecutionId` / `ActiveAttemptStartedAt` | 当前 Running attempt 的内部身份与起点；不进入 REST/OpenAPI |
 
 `JobStatus` 包含三个值：`Pending = 1`、`Running = 2`、`Paused = 3`。
 
@@ -121,7 +126,7 @@ flowchart LR
 ```mermaid
 stateDiagram-v2
     [*] --> Pending: 创建或恢复
-    Pending --> Running: 到期且 MarkRunning 成功
+    Pending --> Running: TryStartAttempt 原子认领
     Running --> Pending: 成功且存在下一次运行时间
     Running --> Paused: 一次性任务完成
     Running --> Pending: 失败但仍可重试
@@ -147,7 +152,7 @@ stateDiagram-v2
 4. 创建操作通知 `JobSchedulerWakeSignal`；
 5. 已启用且近期执行的 `Once` Job 会唤醒预取循环，其他 Job 等待下一轮周期预取。
 
-更新和删除当前不会向调度器派发专用事件。仍位于预取窗口内的更新会在下一次预取时用版本号替换旧内存项；禁用、暂停或删除的 Job 会在执行前重新检查持久化状态并丢弃。但如果只是把 `NextRunTime` 移到预取窗口之外，旧内存项不会因此立即失效。因此不要把更新接口理解为对内存队列的同步修改；需要严格的即时改期或取消语义时，应先补充对应事件和队列失效机制。
+`PUT /api/jobs/enabled` 在启用 Job 时会唤醒预取循环，但完整更新和删除当前不会向调度器派发队列失效事件。仍位于预取窗口内的更新会在下一次预取时用版本号替换旧内存项；禁用、暂停或删除的 Job 会在执行前重新检查持久化状态并丢弃。但如果只是把 `NextRunTime` 移到预取窗口之外，旧内存项不会因此立即失效。因此不要把更新接口理解为对内存队列的同步修改；需要严格的即时改期或取消语义时，应先补充对应事件和队列失效机制。
 
 ### 2. 预取与到期派发
 
@@ -156,17 +161,17 @@ stateDiagram-v2
 3. 执行循环等待最早的 Job 到期；
 4. 同一项目已有 Job 运行时，新 Job 进入该项目的 backlog；
 5. 获得 `IProjectExecutionLock` 后，调度器调用 `JobAttemptRunner`；
-6. `JobAttemptRunner` 通过 `MarkRunningAsync` 再次确认持久化状态，确认成功后进入 Agent 执行流程。
+6. `JobAttemptRunner` 通过 `TryStartAttemptAsync` 再次确认持久化状态，同时保存 executionId 和 attempt 起点后进入执行流程。
 
 项目锁只保证同一项目的定时任务不会并发运行，不等同于持久化消息队列的 exactly-once 投递保证。需要严格一次性语义时，还需要基于数据库租约、幂等键或原子认领设计额外机制。
 
 ### 3. Agent 执行
 
 1. `JobAgentExecutor` 为本次运行生成独立 `contextId`；
-2. 在目标项目中创建状态为 Running 的逻辑 Task，执行用户记为 `job-executor`；
+2. 使用本次 active executionId 在目标项目中创建状态为 Running 的逻辑 Task，执行 owner 继承 Job 创建者；
 3. 根据 `AgentType` 调用 Agent 或 Agentflow runtime；
-4. runtime 成功后将项目 Task 标记为成功；
-5. runtime 抛出异常时将项目 Task 标记为失败，并把异常交回调度器。
+4. runtime 返回成功或抛出异常后，由共享 outcome recorder 标记项目 Task 并结算 Job；
+5. Control Plane 重启后，恢复服务直接使用 Job 上的 active executionId 查询 durable outcome，不从聊天历史猜测本次执行。
 
 所以 Job 执行历史既存在于 `JobLog` 中，也会以普通项目 Task 和 Context 的形式进入项目历史。`JobLog` 负责描述“第几次调度尝试”，项目记录负责保存实际对话和执行内容。
 
@@ -205,7 +210,7 @@ builder.Services
 
 ```bash
 # 仓库根目录
-dotnet run --project src/server/Agw.Host
+dotnet run --project src/server/Agw.Standalone.Host
 
 # 另一个终端，从客户端 Workspace 根目录运行
 cd src/clients
@@ -247,6 +252,7 @@ curl 'http://localhost:30816/api/jobs' \
 | `GET /api/jobs/{id}/logs` | 查询 Job 执行日志，按开始时间倒序返回 |
 | `POST /api/jobs` | 创建 Job |
 | `PUT /api/jobs/{id}` | 完整更新 Job 并重新计算下一次执行时间 |
+| `PUT /api/jobs/enabled` | 只更新一个 Job 的启用状态；启用时唤醒调度器 |
 | `DELETE /api/jobs/{id}` | 删除 Job |
 
 查询日志：
@@ -256,7 +262,7 @@ curl 'http://localhost:30816/api/jobs/33333333-3333-3333-3333-000000000001/logs'
   --header 'Authorization: Bearer agw_...'
 ```
 
-更新接口使用 `JobUpdateRequest`，除了创建字段还必须传入 `status`。恢复暂停任务时，通常需要同时设置 `status: 1`、`isEnabled: true`，并保证触发器仍能计算出未来时间。
+完整更新接口使用 `JobUpdateRequest`，除了创建字段还必须传入 `status`。`Running` 由调度器独占，客户端不能手工写入；存在 active attempt 时，完整更新和删除返回 409。只切换总开关时应使用 `PUT /api/jobs/enabled`：禁用不会中断当前 attempt，但其结算完成后不会再次入队。
 
 ### 触发器格式
 
@@ -272,7 +278,7 @@ curl 'http://localhost:30816/api/jobs/33333333-3333-3333-3333-000000000001/logs'
 
 ### 配置项目级锁
 
-默认配置位于 `Agw.Host/appsettings.json`：
+默认配置位于 `src/server/Agw.Host/appsettings.json`：
 
 ```json
 {
@@ -315,7 +321,7 @@ PostgreSQL 模式的锁名是 `agw:jobs:project-lock:{projectId}`。连接字符
 | 更换持久化实现 | `IJobStore` |
 | 更换项目锁实现 | `IProjectExecutionLock` |
 | 改变 Agent 执行适配 | `IJobAgentExecutor` |
-| 修改单次执行、日志或重试流程 | `JobAttemptRunner` |
+| 修改单次执行、日志或重试流程 | `JobAttemptRunner` 与 `JobAttemptOutcomeRecorder` |
 | 修改创建后的预取唤醒条件 | `JobSchedulerWakeSignal` |
 | 让更新、删除即时影响调度队列 | `JobHostedService` 的队列失效协议（当前尚未实现） |
 

@@ -1,5 +1,7 @@
+using Agw.Jobs.Application.Facades;
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Application.Skills;
+using Agw.Jobs.Contracts.Metrics;
 using Agw.Jobs.Execution;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Attempts;
@@ -12,15 +14,31 @@ namespace Agw.Jobs;
 
 public static class DependencyInjection
 {
-    public static IServiceCollection AddJobs(this IServiceCollection services, IConfiguration configuration)
+    public sealed record RegistrationOptions(bool AddScheduler = true, bool UseDurableExecution = false);
+
+    public static IServiceCollection AddJobs(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        RegistrationOptions? registrationOptions = null
+    )
     {
-        services.AddHostedService<JobHostedService>();
-        services.AddScoped<IJobAgentExecutor, JobAgentExecutor>();
-        services.AddScoped<JobAttemptRunner>();
-        services.AddSingleton<JobSchedulerWakeSignal>();
-        services.AddSingleton<JobScheduleCalculator>();
+        registrationOptions ??= new RegistrationOptions();
+        if (registrationOptions.AddScheduler)
+        {
+            services.AddHostedService<JobHostedService>();
+            services.AddScoped<IJobAgentExecutor, JobAgentExecutor>();
+            if (registrationOptions.UseDurableExecution)
+            {
+                services.AddHostedService<DurableJobRecoveryHostedService>();
+            }
+            services.AddScoped<JobAttemptRunner>();
+            services.AddScoped<IJobAttemptOutcomeRecorder, JobAttemptOutcomeRecorder>();
+            services.AddSingleton<JobSchedulerWakeSignal>();
+            services.AddSingleton<JobScheduleCalculator>();
+        }
         services.AddSingleton<IAgentSkillRegistration, JobManagementSkillRegistration>();
         services.AddScoped<JobAppService>();
+        services.AddScoped<IJobMetricsFacade, JobMetricsFacade>();
         return services;
     }
 }

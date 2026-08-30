@@ -1,8 +1,6 @@
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
-using Agw.Projects.Application;
 using Agw.Projects.Domain.Services;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
 using Microsoft.Data.Sqlite;
@@ -58,7 +56,7 @@ public class TaskExecutionAppServiceTests
                 Title: "Nightly sync",
                 ContextId: "context-1"
             ),
-            "job-executor"
+            "tester"
         );
 
         Assert.Equal(ApplicationResultType.Success, result.Type);
@@ -110,11 +108,11 @@ public class TaskExecutionAppServiceTests
                 Title: "Nightly sync",
                 ContextId: "context-1"
             ),
-            "job-executor"
+            "tester"
         );
         var createdTask = Assert.IsType<TaskExecutionSnapshot>(createResult.Value);
 
-        var result = await service.MarkSucceededAsync(createdTask.TaskId, "job-executor");
+        var result = await service.MarkSucceededAsync(createdTask.TaskId, "tester");
 
         Assert.NotNull(result);
         Assert.Equal(TaskExecutionStatus.Succeeded, result.Status);
@@ -148,7 +146,7 @@ public class TaskExecutionAppServiceTests
             projectId,
             taskId,
             new TaskCreateRequest(JobId: null, Input: "Run scheduled sync", Title: "Nightly sync"),
-            "job-executor"
+            "tester"
         );
 
         Assert.Equal(ApplicationResultType.Success, result.Type);
@@ -341,14 +339,17 @@ public class TaskExecutionAppServiceTests
     private static TaskExecutionAppService CreateService(AgwDbContext dbContext)
     {
         var projectRepository = new EfRepository<Project>(dbContext);
+        var userInfo = new TestUserInfoService();
+        var projectResolver = new ProjectResolver(projectRepository, userInfo);
 
         return new TaskExecutionAppService(
             new EfRepository<ProjectConversation>(dbContext),
             new EfRepository<ProjectConversationChatHistory>(dbContext),
             dbContext,
             new ProjectConversationChatHistoryDomainService(),
-            new ProjectResolver(projectRepository),
-            TimeProvider.System
+            projectResolver,
+            TimeProvider.System,
+            userInfo
         );
     }
 }

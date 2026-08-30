@@ -33,6 +33,9 @@ export function ExecuteAgentDrawer({ open, setOpen, executingAgent }: ExecuteAge
       contextId: null,
       messages: [],
       usage: EMPTY_TOKEN_USAGE,
+      olderMessagesCursor: null,
+      hasOlderMessages: false,
+      agentMode: null,
     }),
     [executingAgent?.id, resetSignal],
   );
@@ -62,6 +65,7 @@ export function ExecuteAgentDrawer({ open, setOpen, executingAgent }: ExecuteAge
           className="h-[calc(100vh-62px)]"
           target={{ id: executingAgent.id, type: "agent" }}
           projectId={projectId}
+          conversationId={null}
           active={open}
           sessionSeed={sessionSeed}
           placeholder="请输入要发送给 agent 的内容..."

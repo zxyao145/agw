@@ -6,24 +6,21 @@ using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.AIContextProviders.AgwWorkspace;
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Middleware;
-using Agw.Domain.Services;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
-using Agw.Integrations.Application.Capabilities;
 using Agw.Integrations.Mcp;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Contracts.Tools.Abstractions;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
-using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Runtime;
-using Agw.Skills.Application.Remote;
+using Agw.Shared.Tooling;
 using Agw.Skills.Contracts.Registration;
 using Agw.Skills.Execution;
+using Agw.Tools.Contracts.Abstractions;
 using Agw.Tools.ToolBlocks;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Compaction;
@@ -79,6 +76,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 Name = "test-model",
                 MaxContextWindowTokens = 128_000,
                 MaxOutputTokens = 16_000,
+                CreateBy = "tester",
             }
         );
         dbContext.Providers.Add(
@@ -88,6 +86,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 Name = "test-provider",
                 ProviderType = ProviderType.OpenAIChatCompletions,
                 Endpoint = "https://example.test/v1",
+                CreateBy = "tester",
                 AuthConfigs =
                 [
                     new ProviderAuthConfig
@@ -97,6 +96,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                         AuthType = ProviderAuthType.ApiKey,
                         ApiKey = "test-api-key",
                         Enable = true,
+                        CreateBy = "tester",
                     },
                 ],
             }
@@ -107,6 +107,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 Id = modelProviderId,
                 ModelId = modelId,
                 ProviderId = providerId,
+                CreateBy = "tester",
             }
         );
         dbContext.McpToolServers.AddRange(
@@ -115,12 +116,14 @@ public class AgentRuntimeServiceSystemCompositionTests
                 Id = agentMcpServerId,
                 Name = "agent_mcp",
                 Enabled = true,
+                CreateBy = "tester",
             },
             new McpServer
             {
                 Id = projectMcpServerId,
                 Name = "project_mcp",
                 Enabled = true,
+                CreateBy = "tester",
             }
         );
         dbContext.Skills.AddRange(
@@ -131,6 +134,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 Description = "agent skill",
                 Kind = SkillKind.Local,
                 ContentPath = "agent-skill",
+                CreateBy = "tester",
             },
             new Skill
             {
@@ -139,6 +143,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 Description = "project skill",
                 Kind = SkillKind.Local,
                 ContentPath = "project-skill",
+                CreateBy = "tester",
             },
             new Skill
             {
@@ -148,6 +153,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 Kind = SkillKind.Remote,
                 ContentPath = string.Empty,
                 RemoteUrl = "https://example.test/remote-skill",
+                CreateBy = "tester",
             },
             new Skill
             {
@@ -167,7 +173,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             Workspace = Path.Combine(root, "workspace"),
             Tools =
             [
-                new ToolValue { Definition = new GenerateGuidToolDefinition() },
+                new ToolValue { Definition = new DiffToolDefinition() },
                 new ToolValue { Definition = new WebFetchToolDefinition() },
             ],
             EnvironmentVariables = new Dictionary<string, string>
@@ -193,7 +199,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             ModelProviderId = modelProviderId,
             Tools =
             [
-                new ToolValue { Definition = new BashToolDefinition() },
+                new ToolValue { Definition = new GitCloneToolDefinition() },
                 new ToolValue { Definition = new WebFetchToolDefinition() },
             ],
             EnvironmentVariables = new Dictionary<string, string> { ["SHARED"] = "agent", ["AGENT_ONLY"] = "agent" },
@@ -234,7 +240,7 @@ public class AgentRuntimeServiceSystemCompositionTests
 
         var runtimeService = CreateRuntimeService(
             agentAppService,
-            new TestProjectAppService(project),
+            new TestProjectRuntimeFacade(project),
             toolRegistry,
             AgwDataPaths.Resolve(root, root),
             connectionResolver,
@@ -271,7 +277,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             Assert.Equal(16_000, chatOptions.MaxOutputTokens);
             Assert.NotNull(chatOptions.Tools);
             Assert.Equal(
-                new[] { "bash", "agent_mcp", "generate_guid", "project_mcp", "web_fetch" }
+                new[] { "agent_mcp", "diff", "git_clone", "project_mcp", "web_fetch" }
                     .OrderBy(name => name, StringComparer.Ordinal)
                     .ToArray(),
                 chatOptions.Tools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray()
@@ -424,7 +430,7 @@ public class AgentRuntimeServiceSystemCompositionTests
         };
         var runtimeService = CreateRuntimeService(
             CreateAgentAppService(dbContext),
-            new TestProjectAppService(project),
+            new TestProjectRuntimeFacade(project),
             CreateToolRegistry(),
             AgwDataPaths.Resolve(root, root),
             new TestConnectionCapabilityResolver(CreateResolution([], new TrackingResource())),
@@ -476,13 +482,14 @@ public class AgentRuntimeServiceSystemCompositionTests
             new EfRepository<Skill>(dbContext),
             new EfRepository<AgentSkillRelation>(dbContext),
             dbContext,
-            new AgentDomainService(TimeProvider.System)
+            new AgentDomainService(TimeProvider.System),
+            new TestUserInfoService()
         );
     }
 
     private static AgentRuntimeService CreateRuntimeService(
         AgentAppService appService,
-        IProjectAppService projectAppService,
+        IProjectRuntimeFacade projectRuntimeFacade,
         ToolRegistryService toolRegistry,
         AgwDataPaths dataPaths,
         IConnectionCapabilityResolver connectionCapabilityResolver,
@@ -493,7 +500,7 @@ public class AgentRuntimeServiceSystemCompositionTests
     {
         return new AgentRuntimeService(
             appService,
-            projectAppService,
+            projectRuntimeFacade,
             new AgentCapabilityComposer(
                 appService,
                 toolRegistry,
@@ -505,7 +512,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             ),
             chatHistoryProvider: null!,
             providerSessionState: null!,
-            taskSessionBindingService: null!,
+            providerSessions: null!,
             dataPaths,
             fileSystemResolver: null!,
             sessionStateStore: null!,
@@ -786,29 +793,34 @@ public class AgentRuntimeServiceSystemCompositionTests
         public Task SaveChangesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
-    private sealed class TestProjectAppService : IProjectAppService
+    private sealed class TestProjectRuntimeFacade : IProjectRuntimeFacade
     {
         private readonly Project _project;
 
-        public TestProjectAppService(Project project)
+        public TestProjectRuntimeFacade(Project project)
         {
             _project = project;
         }
 
-        public Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null) =>
-            Task.FromResult<IReadOnlyList<Project>>([_project]);
+        public Task<ProjectRuntimeSnapshot?> GetForCurrentUserAsync(
+            Guid projectId,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<ProjectRuntimeSnapshot?>(Map(_project));
 
-        public Task<string?> GetProjectExtraSettingAsync(Guid? projectId) => Task.FromResult(_project.ExtraSetting);
+        public Task<string?> GetWorkspaceAsync(Guid projectId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_project.Workspace);
 
-        public Task<Guid?> ResolveProjectIdAsync(Guid? projectId) => Task.FromResult<Guid?>(_project.Id);
-
-        public Task<Project?> CreateAsync(Project project, string user) => Task.FromResult<Project?>(project);
-
-        public Task<bool> DeleteAsync(Guid id) => Task.FromResult(false);
-
-        public Task<Project?> GetAsync(Guid id) => Task.FromResult<Project?>(_project);
-
-        public Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction, string user) =>
-            Task.FromResult<Project?>(_project);
+        private static ProjectRuntimeSnapshot Map(Project project) =>
+            new(
+                project.Id,
+                project.Name,
+                project.Workspace,
+                project.ExtraSetting,
+                project.Tools,
+                project.EnvironmentVariables,
+                project.ProjectSkillRelations.Select(relation => relation.SkillId).ToArray(),
+                project.ProjectMcpToolServers.Select(relation => relation.McpToolServerId).ToArray(),
+                project.ProjectConnectionRelations.Select(relation => relation.ConnectionId).ToArray()
+            );
     }
 }

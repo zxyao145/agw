@@ -1,11 +1,11 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Agw.Agents.Definitions.Domain.Topology;
 using Agw.Agents.Execution.Agentflows.Builders;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
@@ -277,7 +277,7 @@ public sealed class AgentflowWorkflowCompiler
         }
 
         AddRequestPortOutputEdges(builder, nodeMap, bindings, requestPortBindings, requestPortOutputBindings);
-        var cyclicComponents = AgentflowDomainService.FindCyclicComponents(
+        var cyclicComponents = AgentflowTopology.FindCyclicComponents(
             orderedNodes.Select(node => node.NodeId).ToList(),
             runtimeEdges
         );
@@ -362,7 +362,7 @@ public sealed class AgentflowWorkflowCompiler
     {
         if (
             summaryContext == null
-            || !AgentflowDomainService.TryReadOutputSummaryEnabled(node.ConfigJson, out var summaryEnabled)
+            || !AgentflowTopology.TryReadOutputSummaryEnabled(node.ConfigJson, out var summaryEnabled)
             || !summaryEnabled
         )
         {
@@ -669,7 +669,7 @@ public sealed class AgentflowWorkflowCompiler
 
     private static int GetSwitchCaseOrder(AgentflowEdge edge)
     {
-        return AgentflowDomainService.TryReadSwitchCaseOrder(edge.ConfigJson, out var order) ? order : int.MaxValue;
+        return AgentflowTopology.TryReadSwitchCaseOrder(edge.ConfigJson, out var order) ? order : int.MaxValue;
     }
 
     private static void AddWorkflowOutputs(

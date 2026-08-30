@@ -6,6 +6,6 @@ public sealed record ChangePasswordRequest(string? CurrentPassword, string NewPa
 
 public sealed record CreateTokenRequest(string Name);
 
-public sealed record SessionResponse(bool Authenticated, string AccessMode, int ApiMajorVersion);
+public sealed record SessionResponse(bool Authenticated, string AccessMode, int ApiMajorVersion, string? UserId);
 
 public sealed record AntiforgeryResponse(string? RequestToken);

@@ -1,18 +1,19 @@
+using System.Security.Claims;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands.Checkpoint;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Durable;
+using Agw.Agents.Execution.Mapping;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Turns;
+using Agw.Auth.Contracts;
 using Agw.Files.Utils;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
+using Agw.Projects.Contracts.Execution;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Utils;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution.Connections;
@@ -27,12 +28,13 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     private readonly IExecutionMessageSink _messageSink;
     private readonly CancellationToken _hostToken;
     private readonly IRuntimeFactory _runtimeFactory;
-    private readonly ITaskAppService _taskAppService;
-    private readonly IProjectAppService _projectAppService;
+    private readonly IProjectTaskFacade _projectTasks;
+    private readonly IProjectRuntimeFacade _projects;
+    private readonly IProjectDefaultResolver? _projectDefaults;
     private readonly DurableExecutionSession? _durableSession;
     private readonly AgentflowCheckpointStore? _checkpointStore;
     private RuntimeBase? _runtime;
-    private TaskProjection? _resolvedTask;
+    private AgentExecutionTask? _resolvedTask;
     private string? _workspace;
     private ExecutionTarget? _target;
     private PendingModeChange? _pendingModeChange;
@@ -44,18 +46,22 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         IExecutionMessageSink messageSink,
         CancellationToken hostToken,
         IRuntimeFactory runtimeFactory,
-        ITaskAppService taskAppService,
-        IProjectAppService projectAppService,
+        IProjectTaskFacade projectTasks,
+        IProjectRuntimeFacade projects,
         DurableExecutionSession? durableSession = null,
-        AgentflowCheckpointStore? checkpointStore = null
+        AgentflowCheckpointStore? checkpointStore = null,
+        IProjectDefaultResolver? projectDefaults = null
     )
     {
-        _userId = string.IsNullOrWhiteSpace(userId) ? Constants.AdminUserId : userId.Trim();
+        _userId = string.IsNullOrWhiteSpace(userId)
+            ? throw new AgwException(ErrorCodes.AuthenticationRequired)
+            : userId.Trim();
         _messageSink = messageSink;
         _hostToken = hostToken;
         _runtimeFactory = runtimeFactory;
-        _taskAppService = taskAppService;
-        _projectAppService = projectAppService;
+        _projectTasks = projectTasks;
+        _projects = projects;
+        _projectDefaults = projectDefaults;
         _durableSession = durableSession;
         _checkpointStore = checkpointStore;
     }
@@ -70,7 +76,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     public string? ContextId => _resolvedTask?.ContextId ?? Settings?.ContextId;
 
-    public TaskProjection? ResolvedTask => _resolvedTask;
+    public AgentExecutionTask? ResolvedTask => _resolvedTask;
 
     public string? Workspace => _workspace;
 
@@ -95,15 +101,16 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     public async Task ApplySettingsAsync(ExecutionSettings settings, CancellationToken cancellationToken)
     {
+        using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
         ArgumentNullException.ThrowIfNull(settings);
-        if (HasActiveTurn)
+        if (settings.Equals(Settings))
         {
-            await SendErrorAsync(BusyMessage);
             return;
         }
 
-        if (settings.Equals(Settings))
+        if (HasActiveTurn)
         {
+            await SendErrorAsync(BusyMessage);
             return;
         }
 
@@ -117,6 +124,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     public async Task StartTurnAsync(ExecCommand command, CancellationToken cancellationToken)
     {
+        using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
         ArgumentNullException.ThrowIfNull(command);
         if (HasActiveTurn)
         {
@@ -203,6 +211,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     public async Task SetModeAsync(Guid agentId, string mode, CancellationToken cancellationToken)
     {
+        using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
         var change = new PendingModeChange(agentId, mode);
         _pendingModeChange = change;
         if (
@@ -230,6 +239,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     public async Task SetPermissionModeAsync(PermissionMode permissionMode, CancellationToken cancellationToken)
     {
+        using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
         Settings = (Settings ?? ExecutionSettings.CreateDefault()).WithPermissionMode(permissionMode);
         var runtime = _runtime;
         if (runtime == null)
@@ -252,6 +262,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     /// </summary>
     public async Task InterruptTurnAsync(Guid? executionId, string? reason, CancellationToken cancellationToken)
     {
+        using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
         if (_durableSession != null)
         {
             await _durableSession.InterruptAsync(executionId, reason, cancellationToken);
@@ -270,6 +281,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     public async Task SubmitHumanDecisionAsync(HumanResponseCommand command, CancellationToken cancellationToken)
     {
+        using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
         ArgumentNullException.ThrowIfNull(command);
         if (_durableSession != null)
         {
@@ -288,6 +300,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         CancellationToken cancellationToken
     )
     {
+        using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
         if (agentflowId == Guid.Empty)
         {
             throw new AgwException(ErrorCodes.InvalidParam, "agentflowId is required.");
@@ -313,9 +326,10 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             inProcessOccurrences = runtime.CheckpointOccurrenceIds;
         }
 
+        var projectId = await ResolveProjectIdAsync(settings, cancellationToken).ConfigureAwait(false);
         return await checkpointStore
             .ListAsync(
-                ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId),
+                projectId,
                 ContextIdUtil.ResolveContextId(settings.ContextId),
                 agentflowId,
                 _userId,
@@ -327,6 +341,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     public async Task ResumeCheckpointAsync(ResumeCheckpointCommand command, CancellationToken cancellationToken)
     {
+        using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
         ArgumentNullException.ThrowIfNull(command);
         if (
             command.CheckpointOccurrenceId == Guid.Empty
@@ -360,7 +375,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 ErrorCodes.InvalidParam,
                 "Execution settings must be configured before resuming a checkpoint."
             );
-        var projectId = ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId);
+        var projectId = await ResolveProjectIdAsync(settings, cancellationToken).ConfigureAwait(false);
         var contextId = ContextIdUtil.ResolveContextId(settings.ContextId);
 
         if (_durableSession != null)
@@ -420,6 +435,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
         if (_durableSession != null)
         {
             await _durableSession.DisposeAsync();
@@ -459,6 +475,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     /// </summary>
     public async Task SubscribeExecutionAsync(Guid executionId, string? cursor, CancellationToken cancellationToken)
     {
+        using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
         var session =
             _durableSession
             ?? throw new AgwException(
@@ -472,20 +489,18 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     {
         if (_resolvedTask == null)
         {
-            var resolution = await _taskAppService.ResolveTaskAsync(
-                new ExecutionTaskRequest(
+            var task = await _projectTasks.ResolveAsync(
+                new ResolveProjectTaskRequest(
                     TaskId: null,
                     ProjectId: Settings!.ProjectId,
                     ContextId: Settings.ContextId,
                     Input: AgwMessageUtil.ExtractInputText(command.Input),
                     Resume: Settings.Resume,
-                    User: _userId
+                    OwnerUserId: _userId
                 ),
                 cancellationToken
             );
-            _resolvedTask =
-                resolution.Task
-                ?? throw new AgwException(ErrorCodes.InvalidParam, "Execution task could not be resolved.");
+            _resolvedTask = ProjectTaskProjectionMapper.Map(task);
         }
 
         if (_workspace != null)
@@ -494,9 +509,36 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         }
 
         var project =
-            await _projectAppService.GetAsync(_resolvedTask.ProjectId)
+            await _projects.GetForCurrentUserAsync(_resolvedTask.ProjectId, cancellationToken)
             ?? throw new AgwException(ErrorCodes.InvalidParam, $"Project '{_resolvedTask.ProjectId}' was not found.");
-        _workspace = Path.GetFullPath(PathUtil.ExpandTilde(project.GetMustWorkspace().Trim()));
+        var configuredWorkspace = string.IsNullOrEmpty(project.Workspace)
+            ? $"~/.agw/projects/{project.Id:N}"
+            : project.Workspace;
+        _workspace = Path.GetFullPath(PathUtil.ExpandTilde(configuredWorkspace.Trim()));
+    }
+
+    private async Task<Guid> ResolveProjectIdAsync(ExecutionSettings settings, CancellationToken cancellationToken)
+    {
+        if (
+            settings.ProjectId != Guid.Empty
+            && settings.ProjectId != ProjectDefaults.DefaultBuiltInId
+            && settings.ProjectId != ProjectDefaults.A2AId
+        )
+        {
+            return settings.ProjectId;
+        }
+
+        if (_projectDefaults != null)
+        {
+            var projectId =
+                settings.ProjectId == ProjectDefaults.A2AId
+                    ? await _projectDefaults.ResolveA2AProjectIdAsync(cancellationToken).ConfigureAwait(false)
+                    : await _projectDefaults.ResolveDefaultProjectIdAsync(cancellationToken).ConfigureAwait(false);
+            return projectId
+                ?? throw new AgwException(ErrorCodes.ResourceNotFound, "The default project was not found.");
+        }
+
+        return ProjectDefaults.DefaultBuiltInId;
     }
 
     private async Task ReleaseRuntimeAsync()
@@ -601,4 +643,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         );
 
     private sealed record PendingModeChange(Guid AgentId, string Mode);
+
+    private ClaimsPrincipal CreateUserPrincipal() =>
+        new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, _userId)], "ExecutionConnection"));
 }

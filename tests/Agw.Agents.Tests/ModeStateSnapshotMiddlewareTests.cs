@@ -2,7 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Tools;
-using Agw.Shared.Contracts.Agents;
+using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -108,6 +108,32 @@ public sealed class ModeStateSnapshotMiddlewareTests
     }
 
     [Fact]
+    public async Task RunAsync_ModeSetErrorResult_DoesNotEmitSnapshot()
+    {
+        var modeProvider = new AgentModeProvider(new AgentModeProviderOptions { DefaultMode = "plan" });
+        using var providerResource = modeProvider;
+        var session = new TestAgentSession();
+        var middleware = new ModeStateSnapshotMiddleware(modeProvider);
+        var errorResult = new ToolExecutionErrorResult(
+            IsError: true,
+            Code: ErrorCodes.ToolExecutionFailed.Code,
+            Message: ErrorCodes.ToolExecutionFailed.Message
+        );
+
+        var response = await middleware.RunAsync(
+            [new ChatMessage(ChatRole.User, "switch mode")],
+            session,
+            options: null,
+            new FunctionTranscriptAgent(errorResult),
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(2, response.Messages.Count);
+        Assert.IsType<FunctionCallContent>(Assert.Single(response.Messages[0].Contents));
+        Assert.IsType<FunctionResultContent>(Assert.Single(response.Messages[1].Contents));
+    }
+
+    [Fact]
     public async Task CreateAsync_ModeToolCompleted_DoesNotCreateDuplicateTurnSnapshot()
     {
         var agent = new FunctionTranscriptAgent("Mode changed to \"execute\".");
@@ -137,10 +163,10 @@ public sealed class ModeStateSnapshotMiddlewareTests
 
     private sealed class FunctionTranscriptAgent : AIAgent
     {
-        private readonly string _result;
+        private readonly object _result;
         private readonly string _toolName;
 
-        public FunctionTranscriptAgent(string result, string toolName = "mode_set")
+        public FunctionTranscriptAgent(object result, string toolName = "mode_set")
         {
             _result = result;
             _toolName = toolName;

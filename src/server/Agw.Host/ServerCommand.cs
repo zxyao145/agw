@@ -1,4 +1,4 @@
-using Agw.Auth.Application;
+using Agw.Auth.Contracts;
 using Agw.Setup.Services;
 using Agw.Shared.Runtime;
 using Microsoft.AspNetCore.Identity;

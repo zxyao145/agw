@@ -2,6 +2,7 @@ using System.Text.Json;
 using A2A;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
+using Agw.Projects.Application.Facades;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -211,9 +212,13 @@ public class TaskStoreTests
 
     private static TaskStore CreateStore(AgwDbContext dbContext) =>
         new(
-            new EfRepository<ProjectConversation>(dbContext),
-            new EfRepository<ProjectConversationChatHistory>(dbContext),
-            dbContext,
+            new ExternalTaskSnapshotStore(
+                new EfRepository<ProjectConversation>(dbContext),
+                new EfRepository<ProjectConversationChatHistory>(dbContext),
+                dbContext,
+                new TestUserInfoService(),
+                new EfRepository<Project>(dbContext)
+            ),
             TimeProvider.System
         );
 

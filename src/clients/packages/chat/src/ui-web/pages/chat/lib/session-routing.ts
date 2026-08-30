@@ -2,26 +2,26 @@ export type ChatRouteSessionAction =
   | { type: "clearLocal" }
   | { type: "selectProject"; projectId: string }
   | {
-      type: "hydrateContext";
+      type: "hydrateConversation";
       hydrateKey: string;
       projectId: string;
-      contextId: string;
+      conversationId: string;
     }
   | { type: "ignore" };
 
-export function getContextHydrationKey(
+export function getConversationHydrationKey(
   projectId: string | null | undefined,
-  contextId: string | null | undefined,
+  conversationId: string | null | undefined,
 ): string | null {
-  if (!projectId || !contextId) {
+  if (!projectId || !conversationId) {
     return null;
   }
 
-  return `${projectId}:context:${contextId}`;
+  return `${projectId}:conversation:${conversationId}`;
 }
 
 export function getRouteHydrationKey(action: ChatRouteSessionAction): string | null {
-  if (action.type === "hydrateContext") {
+  if (action.type === "hydrateConversation") {
     return action.hydrateKey;
   }
 
@@ -30,28 +30,28 @@ export function getRouteHydrationKey(action: ChatRouteSessionAction): string | n
 
 export function getChatRouteSessionAction({
   queryProjectId,
-  queryContextId,
+  queryConversationId,
   hydratedRouteKey,
 }: {
   queryProjectId: string | null;
-  queryContextId?: string | null;
+  queryConversationId?: string | null;
   hydratedRouteKey: string | null;
 }): ChatRouteSessionAction {
   if (!queryProjectId) {
     return { type: "clearLocal" };
   }
 
-  if (queryContextId) {
-    const hydrateKey = getContextHydrationKey(queryProjectId, queryContextId);
+  if (queryConversationId) {
+    const hydrateKey = getConversationHydrationKey(queryProjectId, queryConversationId);
     if (hydrateKey && hydratedRouteKey === hydrateKey) {
       return { type: "ignore" };
     }
 
     return {
-      type: "hydrateContext",
+      type: "hydrateConversation",
       hydrateKey: hydrateKey!,
       projectId: queryProjectId,
-      contextId: queryContextId,
+      conversationId: queryConversationId,
     };
   }
 

@@ -6,9 +6,9 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
-using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Tooling;
 
 namespace Agw.Agents.Tests;
 
@@ -61,7 +61,7 @@ public class AgentAppServiceUpdateTests
             """
         );
 
-        var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester");
+        var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand());
 
         Assert.Same(agent, updated);
         Assert.Equal("", agent.DisplayName);
@@ -101,7 +101,7 @@ public class AgentAppServiceUpdateTests
             _ => throw new Xunit.Sdk.XunitException($"Unexpected field: {fieldName}"),
         };
 
-        var updated = await service.UpdateAgentAsync(agent.Id, Deserialize(json).ToCommand(), "tester");
+        var updated = await service.UpdateAgentAsync(agent.Id, Deserialize(json).ToCommand());
 
         Assert.Same(agent, updated);
         Assert.Equal(fieldName == "displayName" ? "Updated Agent" : "External Agent", agent.DisplayName);
@@ -120,7 +120,7 @@ public class AgentAppServiceUpdateTests
         var agent = CreateExternalAgent();
         var service = CreateService(agent);
 
-        var updated = await service.UpdateAgentAsync(agent.Id, Deserialize("{}").ToCommand(), "tester");
+        var updated = await service.UpdateAgentAsync(agent.Id, Deserialize("{}").ToCommand());
 
         Assert.Same(agent, updated);
         Assert.Equal("External Agent", agent.DisplayName);
@@ -147,7 +147,7 @@ public class AgentAppServiceUpdateTests
             """
         );
 
-        var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester");
+        var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand());
 
         Assert.Same(agent, updated);
         Assert.Null(agent.ModelProviderId);
@@ -165,7 +165,7 @@ public class AgentAppServiceUpdateTests
         var request = Deserialize($"{{\"{fieldName}\":null}}");
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester")
+            service.UpdateAgentAsync(agent.Id, request.ToCommand())
         );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
@@ -189,7 +189,7 @@ public class AgentAppServiceUpdateTests
         var request = Deserialize(json);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester")
+            service.UpdateAgentAsync(agent.Id, request.ToCommand())
         );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
@@ -227,7 +227,7 @@ public class AgentAppServiceUpdateTests
             """
         );
 
-        var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester");
+        var updated = await service.UpdateAgentAsync(agent.Id, request.ToCommand());
 
         Assert.Same(agent, updated);
         Assert.Equal("After", agent.DisplayName);
@@ -263,7 +263,7 @@ public class AgentAppServiceUpdateTests
         );
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester")
+            service.UpdateAgentAsync(agent.Id, request.ToCommand())
         );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
@@ -293,7 +293,7 @@ public class AgentAppServiceUpdateTests
         );
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.UpdateAgentAsync(agent.Id, request.ToCommand(), "tester")
+            service.UpdateAgentAsync(agent.Id, request.ToCommand())
         );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
@@ -313,6 +313,7 @@ public class AgentAppServiceUpdateTests
             Tools = [new ToolValue { Definition = new WebFetchToolDefinition() }],
             Extra = "{\"original\":true}",
             EnvironmentVariables = new Dictionary<string, string> { ["TOKEN"] = "original" },
+            CreateBy = "tester",
         };
 
     private static AgentUpdateRequest Deserialize(string json) =>
@@ -328,7 +329,10 @@ public class AgentAppServiceUpdateTests
         TestUnitOfWork? unitOfWork = null
     )
     {
-        var modelProviders = (modelProviderIds ?? []).Select(id => new ModelProviderRelation { Id = id }).ToArray();
+        agent.CreateBy ??= "tester";
+        var modelProviders = (modelProviderIds ?? [])
+            .Select(id => new ModelProviderRelation { Id = id, CreateBy = "tester" })
+            .ToArray();
         return new AgentAppService(
             new TestRepository<Agent>([agent], item => item.Id),
             connectionRelationRepository ?? new TestRepository<AgentConnectionRelation>(),
@@ -341,7 +345,8 @@ public class AgentAppServiceUpdateTests
             new TestRepository<Skill>(),
             skillRelationRepository ?? new TestRepository<AgentSkillRelation>(),
             unitOfWork ?? new TestUnitOfWork(),
-            new AgentDomainService(TimeProvider.System)
+            new AgentDomainService(TimeProvider.System),
+            new TestUserInfoService()
         );
     }
 

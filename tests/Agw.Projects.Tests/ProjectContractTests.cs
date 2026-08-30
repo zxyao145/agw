@@ -1,7 +1,5 @@
-using Agw.Projects.Application;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Entities.Tools;
+using Agw.Shared.Tooling;
 
 namespace Agw.Projects.Tests;
 
@@ -43,7 +41,6 @@ public class ProjectContractTests
             typeof(IEnumerable<Guid>),
             typeof(IEnumerable<Guid>),
             typeof(IEnumerable<Guid>),
-            typeof(string),
         };
         var updateParameterTypes = new[]
         {
@@ -52,7 +49,6 @@ public class ProjectContractTests
             typeof(IEnumerable<Guid>),
             typeof(IEnumerable<Guid>),
             typeof(IEnumerable<Guid>),
-            typeof(string),
         };
 
         Assert.NotNull(typeof(ProjectAppService).GetMethod("CreateAsync", createParameterTypes));

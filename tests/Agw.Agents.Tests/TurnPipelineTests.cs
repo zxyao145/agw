@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Turns;
-using Agw.Shared.AgwMsgVm;
 
 namespace Agw.Agents.Tests;
 

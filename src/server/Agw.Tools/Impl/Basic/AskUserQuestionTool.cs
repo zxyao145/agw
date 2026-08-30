@@ -1,9 +1,8 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Agw.Shared.Contracts.Agents;
-using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Exceptions;
+using Agw.Tools.Contracts.Abstractions;
 using Agw.Tools.HumanInteraction;
 using Microsoft.Extensions.AI;
 
@@ -240,7 +239,7 @@ internal class AskUserQuestionTool : IAgwTool
             + ". You can now continue with the user's answers in mind.";
     }
 
-    private static void ValidateQuestions(IReadOnlyList<AskUserQuestionQuestion>? questions)
+    internal static void ValidateQuestions(IReadOnlyList<AskUserQuestionQuestion>? questions)
     {
         if (questions is null || questions.Count == 0)
         {
@@ -327,7 +326,7 @@ internal class AskUserQuestionTool : IAgwTool
         }
     }
 
-    private static Dictionary<string, string> ValidateAnswers(
+    internal static Dictionary<string, string> ValidateAnswers(
         IReadOnlyList<AskUserQuestionQuestion> questions,
         Dictionary<string, string>? answers,
         Dictionary<string, AskUserQuestionAnnotation>? annotations

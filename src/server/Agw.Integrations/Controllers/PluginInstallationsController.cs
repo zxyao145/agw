@@ -1,6 +1,5 @@
 using Agw.Integrations.Application.Management;
 using Agw.Integrations.Contracts.Management;
-using Agw.Shared.Extensions;
 using Agw.Shared.Results;
 using Bens.Results;
 using Microsoft.AspNetCore.Mvc;
@@ -25,8 +24,7 @@ public sealed class PluginInstallationsController : ControllerBase
         CancellationToken cancellationToken
     )
     {
-        var user = User.GetUserId();
-        var response = await _service.UpsertAsync(request, user, cancellationToken);
+        var response = await _service.UpsertAsync(request, cancellationToken);
         return ApiResult.Ok(response);
     }
 }

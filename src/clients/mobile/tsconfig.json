@@ -3,7 +3,15 @@
   "compilerOptions": {
     "strict": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@tanstack/react-query": ["./node_modules/@tanstack/react-query"],
+      "expo-file-system": ["./node_modules/expo-file-system"],
+      "expo-image": ["./node_modules/expo-image"],
+      "expo-image-picker": ["./node_modules/expo-image-picker"],
+      "react-native": ["./node_modules/react-native"],
+      "react-native/*": ["./node_modules/react-native/*"],
+      "react-native-enriched-markdown": ["./node_modules/react-native-enriched-markdown"],
+      "react-native-svg": ["./node_modules/react-native-svg"]
     },
     "types": ["jest"]
   },

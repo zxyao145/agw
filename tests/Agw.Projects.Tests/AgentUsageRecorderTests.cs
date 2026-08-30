@@ -1,15 +1,22 @@
+using System.Security.Claims;
 using Agw.Infrastructure.Data;
-using Agw.Projects.Infrastructure;
-using Agw.Shared.Contracts.Projects;
+using Agw.Shared.Data.Entities.Projects;
 using Agw.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Projects.Tests;
 
-public class AgentUsageRecorderTests
+public class AgentUsageRecorderTests : IDisposable
 {
     private static readonly DateTimeOffset RecordedAt = new(2026, 7, 14, 3, 4, 5, TimeSpan.Zero);
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
 
     [Fact]
     public async Task AddAsync_PersistsUsageFactWithDimensionsAndRecordedTime()
@@ -28,6 +35,7 @@ public class AgentUsageRecorderTests
             );
             var projectId = Guid.CreateVersion7();
             var contextId = Guid.CreateVersion7();
+            await SeedProjectAsync(options, projectId, cancellationToken);
 
             await recorder.AddAsync(
                 projectId,
@@ -48,6 +56,7 @@ public class AgentUsageRecorderTests
             var usage = await verifyContext.AgentUsages.SingleAsync(cancellationToken);
             Assert.NotEqual(Guid.Empty, usage.Id);
             Assert.Equal(projectId, usage.ProjectId);
+            Assert.Equal("tester", usage.UserId);
             Assert.Equal(contextId.ToString("D"), usage.ContextId);
             Assert.Equal("planner", usage.AgentName);
             Assert.Equal(RecordedAt, usage.RecordedAt);
@@ -80,6 +89,7 @@ public class AgentUsageRecorderTests
                 new TestTimeProvider(RecordedAt)
             );
             var projectId = Guid.CreateVersion7();
+            await SeedProjectAsync(options, projectId, cancellationToken);
 
             await recorder.AddAsync(
                 projectId,
@@ -124,6 +134,7 @@ public class AgentUsageRecorderTests
             );
             var projectId = Guid.CreateVersion7();
             var usage = new ProjectContextUsage { TotalTokenCount = 3 };
+            await SeedProjectAsync(options, projectId, cancellationToken);
 
             await Task.WhenAll(
                 recorder.AddAsync(projectId, "context-1", "agent-1", usage, cancellationToken),
@@ -161,5 +172,24 @@ public class AgentUsageRecorderTests
     {
         await using var dbContext = new AgwDbContext(options);
         await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+    }
+
+    private static async Task SeedProjectAsync(
+        DbContextOptions<AgwDbContext> options,
+        Guid projectId,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var dbContext = new AgwDbContext(options);
+        dbContext.Projects.Add(
+            new Project
+            {
+                Id = projectId,
+                Name = $"project-{projectId:N}",
+                CreateBy = "tester",
+                CreateTime = TimeProvider.System.GetUtcNow(),
+            }
+        );
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 }

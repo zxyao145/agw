@@ -1,8 +1,8 @@
 using System.Security.Claims;
 using Agw.Auth.Application;
+using Agw.Auth.Contracts;
 using Agw.Auth.Extensions;
 using Agw.Auth.Middleware;
-using Agw.Shared;
 using Agw.Shared.Exceptions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -121,7 +121,7 @@ public sealed class UserInfoContextMiddlewareTests
     }
 
     [Fact]
-    public void UserInfoService_UserId_UsesNameIdentifierAndFallsBackToAdminUserId()
+    public void UserInfoService_UserId_UsesNameIdentifierAndRejectsMissingIdentifier()
     {
         var service = new UserInfoService { Current = CreatePrincipal("admin", "admin-id") };
 
@@ -134,8 +134,9 @@ public sealed class UserInfoContextMiddlewareTests
 
             service.Current = CreatePrincipal("admin", null);
 
-            Assert.Equal(Constants.AdminUserId, service.UserId);
-            Assert.Equal(Constants.AdminUserId, UserInfoUtil.UserId);
+            Assert.Null(service.UserId);
+            Assert.Null(UserInfoUtil.UserId);
+            Assert.Throws<AgwException>(() => service.RequiredUserId);
         }
         finally
         {
@@ -155,15 +156,16 @@ public sealed class UserInfoContextMiddlewareTests
     }
 
     [Fact]
-    public void RequiredUserId_WhenAuthenticatedWithoutUserId_ReturnsFallback()
+    public void RequiredUserId_WhenAuthenticatedWithoutUserId_ThrowsAuthenticationRequired()
     {
         UserInfoUtil.Current = new ClaimsPrincipal(new ClaimsIdentity([], AgwAuthDefaults.CookieScheme));
 
         try
         {
             Assert.True(UserInfoUtil.IsAuthenticated);
-            Assert.Equal(Constants.AdminUserId, UserInfoUtil.UserId);
-            Assert.Equal("1001", UserInfoUtil.RequiredUserId);
+            Assert.Null(UserInfoUtil.UserId);
+            var exception = Assert.Throws<AgwException>(() => UserInfoUtil.RequiredUserId);
+            Assert.Equal(ErrorCodes.AuthenticationRequired.Code, exception.Code);
         }
         finally
         {

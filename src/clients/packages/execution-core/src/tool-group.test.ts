@@ -143,6 +143,34 @@ test("concurrent tool calls pair with out-of-order results in call order", () =>
   );
 });
 
+test("concurrent tool calls pair by call id when replayed result scopes differ", () => {
+  const items = processMessages([
+    toolContentsMessage("FunctionCallContent", "user-1", ["call-1", "call-2", "call-3"]),
+    toolContentsMessage("FunctionResultContent", "replayed-scope", ["call-3", "call-1", "call-2"]),
+  ]);
+
+  assert.deepEqual(
+    items.map((item) => item.type),
+    ["accordion", "accordion", "accordion"],
+  );
+  assert.deepEqual(
+    items.map((item) => (item.type === "accordion" ? item.toolName : "")),
+    ["tool-call-1", "tool-call-2", "tool-call-3"],
+  );
+  assert.deepEqual(
+    items.map((item) =>
+      item.type === "accordion"
+        ? item.messages.map((message) => message.contents[0].additionalProperties?.callId)
+        : [],
+    ),
+    [
+      ["call-1", "call-1"],
+      ["call-2", "call-2"],
+      ["call-3", "call-3"],
+    ],
+  );
+});
+
 test("final result messages keep their result classification", () => {
   const finalResult: ExecutionMessage = {
     messageId: "final-result",
@@ -193,16 +221,19 @@ test("mixed ordinary and unmatched tool contents preserve content order", () => 
   );
 });
 
-test("createMessageFragments pairs a call and result only within the same scope", () => {
+test("processMessages falls back to call id when a result scope differs", () => {
   const call = toolMessage("FunctionCallContent", "user-1", "call-1");
   const result = toolMessage("FunctionResultContent", "user-2", "call-1");
 
   const items = processMessages([call, result]);
 
-  assert.equal(items.length, 2);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].type, "accordion");
   assert.deepEqual(
-    items.map((item) => item.type),
-    ["normal", "normal"],
+    items[0].type === "accordion"
+      ? items[0].messages.map((message) => message.contents[0].additionalProperties?.callId)
+      : [],
+    ["call-1", "call-1"],
   );
 });
 
@@ -215,15 +246,15 @@ test("createMessageFragments returns stable fragment references for the same mes
   assert.equal(first, second);
 });
 
-test("processMessages hides injected user messages without an author", () => {
-  const injectedUser: ExecutionMessage = {
-    messageId: "injected-user",
+test("processMessages renders authorless user messages unless presentation filtering hides them", () => {
+  const userMessage: ExecutionMessage = {
+    messageId: "user-1",
     role: "user",
-    contents: [{ type: "TextContent", content: "hidden" }],
+    contents: [{ type: "TextContent", content: "visible" }],
   };
-  const items = processMessages([injectedUser]);
+  const items = processMessages([userMessage]);
 
-  assert.equal(items.length, 0);
+  assert.deepEqual(items, [{ type: "normal", message: userMessage }]);
 });
 
 test("processMessages renders authorless system messages instead of skipping all system messages", () => {

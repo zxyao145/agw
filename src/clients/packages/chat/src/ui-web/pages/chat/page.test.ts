@@ -55,7 +55,7 @@ test("chat page refreshes the conversation list after an execution completes", a
   ]);
 
   assert.match(conversationListSource, /refreshSignal\?: number;/);
-  assert.match(conversationListSource, /\[refreshSignal, refreshContexts\]/);
+  assert.match(conversationListSource, /\[refreshSignal, refreshConversations\]/);
   assert.match(
     pageSource,
     /const \[conversationListRefreshSignal, setConversationListRefreshSignal\] = React\.useState\(0\)/,
@@ -63,6 +63,18 @@ test("chat page refreshes the conversation list after an execution completes", a
   assert.match(pageSource, /setConversationListRefreshSignal\(\(signal\) => signal \+ 1\)/);
   assert.match(pageSource, /refreshSignal=\{conversationListRefreshSignal\}/);
   assert.match(pageSource, /onConversationChange=\{refreshConversationList\}/);
+});
+
+test("new chat persists its conversation before selecting the local session", async () => {
+  const workspaceSource = await readFile(CHAT_WORKSPACE_URL, "utf8");
+
+  assert.match(workspaceSource, /const startNewConversation = React\.useCallback\(async/);
+  assert.match(
+    workspaceSource,
+    /const conversation = await createProjectConversation\(selectedProjectId\)/,
+  );
+  assert.match(workspaceSource, /setConversationId\(conversation\.conversationId\)/);
+  assert.match(workspaceSource, /setContextId\(conversation\.contextId\)/);
 });
 
 test("chat file explorer starts with diff mode disabled", async () => {
@@ -111,7 +123,7 @@ test("shared chat preserves streamed messages after an execution completes", asy
   const chatSource = await readFile(CHAT_COMPONENT_URL, "utf8");
   const terminalBranchStart = chatSource.indexOf("const terminalStatus =");
   const nextMessageBranchStart = chatSource.indexOf(
-    'if (message.role !== "user")',
+    "if (!isUserTurnMessage(message))",
     terminalBranchStart,
   );
 
@@ -119,7 +131,7 @@ test("shared chat preserves streamed messages after an execution completes", asy
   assert.notEqual(nextMessageBranchStart, -1);
 
   const terminalBranch = chatSource.slice(terminalBranchStart, nextMessageBranchStart);
-  assert.doesNotMatch(terminalBranch, /getProjectContextDetails|setMessages/);
+  assert.doesNotMatch(terminalBranch, /getProjectConversationDetails|setMessages/);
 });
 
 test("conversation list ignores stale refresh responses", async () => {
@@ -129,26 +141,25 @@ test("conversation list ignores stale refresh responses", async () => {
   assert.match(conversationListSource, /requestId !== refreshRequestIdRef\.current/);
 });
 
-test("chat contexts use the shared friendly local date-time formatter", async () => {
+test("chat conversations use the shared friendly local date-time formatter", async () => {
   const conversationListSource = await readFile(CONVERSATION_LIST_URL, "utf8");
 
   assert.match(conversationListSource, /formatFriendlyLocalDateTime/);
   assert.match(
     conversationListSource,
-    /formatFriendlyLocalDateTime\(context\.updateTime \?\? context\.createTime\)/,
+    /formatFriendlyLocalDateTime\([\s\S]*?conversation\.updateTime \?\? conversation\.createTime/,
   );
   assert.doesNotMatch(conversationListSource, /const formatDate =/);
 });
 
-test("chat context list keeps cleared contexts and filters empty execution placeholders", async () => {
+test("chat conversation list trusts the project conversation API visibility contract", async () => {
   const taskClientSource = await readFile(TASK_CLIENT_URL, "utf8");
 
-  assert.match(taskClientSource, /function shouldIncludeContext/);
-  assert.match(taskClientSource, /context\.messageCount > 0 \|\| context\.executionCount === 0/);
-  assert.match(taskClientSource, /\.filter\(shouldIncludeContext\)/);
+  assert.match(taskClientSource, /return result\.map\(toConversationSummary\);/);
+  assert.doesNotMatch(taskClientSource, /shouldIncludeConversation/);
 });
 
-test("chat page resolves the active context from context id only", async () => {
+test("chat page keeps conversation resource id separate from execution context id", async () => {
   const [pageSource, conversationListSource] = await Promise.all([
     readFile(CHAT_WORKSPACE_URL, "utf8"),
     readFile(CONVERSATION_LIST_URL, "utf8"),
@@ -156,14 +167,18 @@ test("chat page resolves the active context from context id only", async () => {
 
   assert.doesNotMatch(conversationListSource, new RegExp("current" + "Task" + "Id"));
   assert.doesNotMatch(conversationListSource, new RegExp("latest" + "Task" + "Id"));
-  assert.match(conversationListSource, /context\.contextId === currentContextId/);
-  assert.match(conversationListSource, /onActiveContextResolved/);
+  assert.match(conversationListSource, /conversation\.contextId === currentContextId/);
+  assert.match(conversationListSource, /onActiveConversationResolved/);
   assert.match(pageSource, /currentContextId=\{contextId\}/);
-  assert.match(pageSource, /setContextId\(context\.contextId\)/);
-  assert.match(pageSource, /syncRoute\(selectedProjectId, context\.contextId\)/);
+  assert.match(pageSource, /currentConversationId=\{conversationId\}/);
+  assert.match(pageSource, /setContextId\(details\.contextId\)/);
+  assert.match(pageSource, /setConversationId\(conversation\.conversationId\)/);
+  assert.match(pageSource, /conversationId=\{conversationId\}/);
+  assert.match(pageSource, /onContextIdChange=\{handleChatContextIdChange\}/);
+  assert.match(pageSource, /syncRoute\(selectedProjectId, conversation\.conversationId\)/);
 });
 
-test("chat routes keep project and context parameters without URL settings", async () => {
+test("chat routes keep project and conversation parameters without URL settings", async () => {
   const [workspaceSource, routeSource] = await Promise.all([
     readFile(CHAT_WORKSPACE_URL, "utf8"),
     readFile(CHAT_ROUTE_URL, "utf8"),
@@ -171,7 +186,7 @@ test("chat routes keep project and context parameters without URL settings", asy
 
   assert.match(workspaceSource, /buildChatHref\(routeBasePath,/);
   assert.match(routeSource, /searchParams\.set\("projectId", params\.projectId\)/);
-  assert.match(routeSource, /searchParams\.set\("contextId", params\.contextId\)/);
+  assert.match(routeSource, /searchParams\.set\("conversationId", params\.conversationId\)/);
   assert.doesNotMatch(
     `${workspaceSource}\n${routeSource}`,
     /url-settings|hashSettingsValue|routeSettingsParam|settingsHash|hashchange/,

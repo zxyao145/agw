@@ -1,5 +1,4 @@
 using Agw.Agents.Execution.Messaging;
-using Agw.Shared.AgwMsgVm;
 
 namespace Agw.Agents.Execution.Turns;
 
@@ -21,8 +20,8 @@ public static class TurnPipeline
         {
             await foreach (var message in messages.WithCancellation(cancellationToken))
             {
-                var messageType = GetMessageType(message);
-                if (string.Equals(messageType, "turn-finished", StringComparison.Ordinal))
+                var messageType = TurnMessageProtocol.GetMessageType(message);
+                if (TurnMessageProtocol.IsFinished(message))
                 {
                     continue;
                 }
@@ -90,9 +89,6 @@ public static class TurnPipeline
             .Any(content =>
                 content.AdditionalProperties?.TryGetValue("isFatalError", out var value) == true && value is true
             );
-
-    private static string? GetMessageType(AgwMessage message) =>
-        message.AdditionalProperties?.TryGetValue("type", out var value) == true ? value as string : null;
 
     private static AgwMessage CreateErrorMessage(string message) =>
         new(

@@ -2,7 +2,7 @@ export type ChatRouteBasePath = "/chat" | "/desktop/chat";
 
 type ChatRouteParams = {
   projectId: string | null;
-  contextId: string | null;
+  conversationId: string | null;
 };
 
 type ChatRouteRedirectInput = {
@@ -16,8 +16,8 @@ export function buildChatHref(basePath: ChatRouteBasePath, params: ChatRoutePara
   if (params.projectId) {
     searchParams.set("projectId", params.projectId);
   }
-  if (params.projectId && params.contextId) {
-    searchParams.set("contextId", params.contextId);
+  if (params.projectId && params.conversationId) {
+    searchParams.set("conversationId", params.conversationId);
   }
 
   const search = searchParams.toString();

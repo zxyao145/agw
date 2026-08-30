@@ -4,18 +4,20 @@ using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Definitions.Controllers;
 using Agw.Agents.ExternalAgents;
-using Agw.Domain.Services;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Skills;
-using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
+using Agw.Shared.Tooling;
+using Agw.Tools.ContextualTools.Shell;
 using Agw.Tools.ContextualTools.WebSearch;
 using Agw.Tools.ToolBlocks;
 using Agw.Tools.ToolBlocks.Blocks.Mode;
 using Agw.Tools.ToolBlocks.Blocks.Todo;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -40,7 +42,7 @@ public class AgentSuggestionAppServiceTests
             Type = AgentType.System,
             Tools =
             [
-                new ToolValue { Definition = new BashToolDefinition() },
+                new ToolValue { Definition = new RunShellToolDefinition() },
                 new ToolBlockValue { Definition = new TodoToolBlockDefinition() },
             ],
             AgentSkillRelations =
@@ -66,11 +68,11 @@ public class AgentSuggestionAppServiceTests
         Assert.Equal(AgentSuggestionMode.System, response.Mode);
         Assert.Equal(
             [
-                "/bash",
                 "/deploy",
                 "/mode_get",
                 "/mode_set",
                 "/review",
+                "/run_shell",
                 "/todos_add",
                 "/todos_complete",
                 "/todos_get_all",
@@ -82,8 +84,9 @@ public class AgentSuggestionAppServiceTests
         );
         Assert.Contains(
             response.Suggestions,
-            static suggestion => suggestion.Text == "/bash" && suggestion.Kind == AgentSuggestionKind.Tool
+            static suggestion => suggestion.Text == "/run_shell" && suggestion.Kind == AgentSuggestionKind.Tool
         );
+        Assert.DoesNotContain(response.Suggestions, static suggestion => suggestion.Text == "/bash");
         Assert.Contains(
             response.Suggestions,
             static suggestion => suggestion.Text == "/deploy" && suggestion.Kind == AgentSuggestionKind.Skill
@@ -126,6 +129,23 @@ public class AgentSuggestionAppServiceTests
         var suggestion = Assert.Single(response.Suggestions);
         Assert.Equal("/web_fetch", suggestion.Text);
         Assert.Equal(AgentSuggestionKind.Tool, suggestion.Kind);
+    }
+
+    [Fact]
+    public async Task GetSuggestionsAsync_SystemAgentWithObsoleteTool_OmitsObsoleteSuggestion()
+    {
+        var agent = new Agent
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "system-agent",
+            Type = AgentType.System,
+            Tools = [new ToolValue { Definition = new BashToolDefinition() }],
+        };
+        var service = CreateService(agents: [agent]);
+
+        var response = await service.GetSuggestionsAsync(default, agent.Id);
+
+        Assert.Empty(response.Suggestions);
     }
 
     [Fact]
@@ -277,18 +297,67 @@ public class AgentSuggestionAppServiceTests
         IEnumerable<Skill>? skills = null
     )
     {
+        var ownedAgents = (agents ?? []).ToArray();
+        foreach (var agent in ownedAgents)
+        {
+            agent.CreateBy ??= "tester";
+        }
+        var ownedSkills = (skills ?? []).ToArray();
+        foreach (var skill in ownedSkills)
+        {
+            skill.CreateBy ??= "tester";
+        }
+
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             new ServiceCollection().BuildServiceProvider(),
-            [new WebSearchContextualTool()],
+            [new WebSearchContextualTool(), new ShellContextualTool(new ConfigurationBuilder().Build())],
             new ToolBlockRegistry([new TodoToolBlock(), new ModeToolBlock()])
         );
         return new AgentSuggestionAppService(
-            new TestRepository<Agent>(agents),
-            new TestRepository<Project>(projects),
-            new TestRepository<Skill>(skills),
-            registry
+            new TestRepository<Agent>(ownedAgents),
+            new TestProjectRuntimeFacade(projects),
+            new TestRepository<Skill>(ownedSkills),
+            registry,
+            new TestUserInfoService()
         );
+    }
+
+    private sealed class TestProjectRuntimeFacade : IProjectRuntimeFacade
+    {
+        private readonly IReadOnlyDictionary<Guid, Project> _projects;
+
+        public TestProjectRuntimeFacade(IEnumerable<Project>? projects)
+        {
+            _projects = (projects ?? []).ToDictionary(project => project.Id);
+        }
+
+        public Task<ProjectRuntimeSnapshot?> GetForCurrentUserAsync(
+            Guid projectId,
+            CancellationToken cancellationToken = default
+        )
+        {
+            if (!_projects.TryGetValue(projectId, out var project))
+            {
+                return Task.FromResult<ProjectRuntimeSnapshot?>(null);
+            }
+            return Task.FromResult<ProjectRuntimeSnapshot?>(
+                new ProjectRuntimeSnapshot(
+                    project.Id,
+                    project.Name,
+                    project.Workspace,
+                    project.ExtraSetting,
+                    project.Tools,
+                    project.EnvironmentVariables,
+                    project.ProjectSkillRelations.Select(relation => relation.SkillId).ToArray(),
+                    project.ProjectMcpToolServers.Select(relation => relation.McpToolServerId).ToArray(),
+                    project.ProjectConnectionRelations.Select(relation => relation.ConnectionId).ToArray()
+                )
+            );
+        }
+
+        public Task<string?> GetWorkspaceAsync(Guid projectId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(_projects.GetValueOrDefault(projectId)?.Workspace);
     }
 
     private sealed class TestRepository<TEntity> : IRepository<TEntity>

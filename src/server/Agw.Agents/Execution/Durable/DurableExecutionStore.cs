@@ -1,6 +1,6 @@
+using System.Security.Claims;
 using Agw.Agents.Execution.Connections;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
+using Agw.Auth.Contracts;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -107,9 +107,9 @@ internal sealed class DurableExecutionStore
         Guid executionId,
         string userId,
         Guid agentId,
-        Agw.Shared.Data.AgentRuntimeType agentType,
+        Agw.Agents.Contracts.Execution.AgentRuntimeType agentType,
         AgwUserInput input,
-        TaskProjection task,
+        AgentExecutionTask task,
         ExecutionSettings settings,
         CancellationToken cancellationToken
     )
@@ -118,7 +118,19 @@ internal sealed class DurableExecutionStore
         {
             throw new AgwException(ErrorCodes.InvalidParam, "executionId is required.");
         }
-        userId = string.IsNullOrWhiteSpace(userId) ? Constants.AdminUserId : userId.Trim();
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            throw new AgwException(ErrorCodes.AuthenticationRequired);
+        }
+
+        userId = userId.Trim();
+        if (
+            !UserInfoUtil.IsContextActive
+            || !string.Equals(UserInfoUtil.RequiredUserId, userId, StringComparison.Ordinal)
+        )
+        {
+            throw new AgwException(ErrorCodes.AuthenticationRequired);
+        }
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(task);
         ArgumentNullException.ThrowIfNull(settings);
@@ -134,8 +146,12 @@ internal sealed class DurableExecutionStore
             Settings = DurableExecutionSettings.FromSettings(settings),
         };
         var manifestJson = DurableExecutionJson.Serialize(manifest);
-        var existing = await FindAsync(executionId, userId: null, tracking: false, cancellationToken)
-            .ConfigureAwait(false);
+        DurableExecutionRecord? existing;
+        using (UserInfoUtil.PushSystemScope())
+        {
+            existing = await FindAsync(executionId, userId: null, tracking: false, cancellationToken)
+                .ConfigureAwait(false);
+        }
         if (existing != null)
         {
             return EnsureIdempotentRegistration(existing, userId, manifestJson);
@@ -163,8 +179,11 @@ internal sealed class DurableExecutionStore
         {
             // 多个 Server 可能同时登记同一 executionId；主键选出胜者后再校验真正幂等。
             _dbContext.ChangeTracker.Clear();
-            existing = await FindAsync(executionId, userId: null, tracking: false, cancellationToken)
-                .ConfigureAwait(false);
+            using (UserInfoUtil.PushSystemScope())
+            {
+                existing = await FindAsync(executionId, userId: null, tracking: false, cancellationToken)
+                    .ConfigureAwait(false);
+            }
             if (existing == null)
             {
                 throw;
@@ -200,6 +219,38 @@ internal sealed class DurableExecutionStore
             await FindAsync(executionId, userId, tracking: false, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
         return ToSnapshot(record);
+    }
+
+    /// <summary>
+    /// Loads the authorized execution status without materializing the encrypted execution manifest.
+    /// The encrypted error is loaded only for failed executions.
+    /// </summary>
+    internal async Task<DurableExecutionOutcome> GetAuthorizedOutcomeAsync(
+        Guid executionId,
+        string userId,
+        CancellationToken cancellationToken
+    )
+    {
+        var state = await _dbContext
+            .Set<DurableExecutionRecord>()
+            .AsNoTracking()
+            .Where(item => item.Id == executionId && item.UserId == userId)
+            .Select(item => new { item.Id, item.Status })
+            .SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (state == null)
+        {
+            throw new AgwException(ErrorCodes.DurableExecutionNotFound);
+        }
+
+        string? errorMessage = null;
+        if (state.Status == DurableExecutionStatus.Failed)
+        {
+            var record = await FindAsync(executionId, userId, tracking: false, cancellationToken).ConfigureAwait(false);
+            errorMessage = record?.ErrorMessage;
+        }
+
+        return new DurableExecutionOutcome(state.Id, state.Status, errorMessage);
     }
 
     /// <summary>
@@ -443,6 +494,8 @@ internal sealed class DurableExecutionStore
                     setters
                         .SetProperty(item => item.Status, DurableExecutionStatus.Interrupted)
                         .SetProperty(item => item.StateChangedAt, now)
+                        .SetProperty(item => item.UpdateBy, userId)
+                        .SetProperty(item => item.UpdateTime, now)
                         .SetProperty(item => item.StateVersion, Guid.CreateVersion7()),
                 cancellationToken
             )
@@ -655,6 +708,16 @@ internal sealed class DurableExecutionStore
     {
         record.StateChangedAt = _timeProvider.GetUtcNow();
         record.StateVersion = Guid.CreateVersion7();
+        if (string.IsNullOrWhiteSpace(record.UserId))
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        using var userScope = UserInfoUtil.Push(CreateUserPrincipal(record.UserId));
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    private static ClaimsPrincipal CreateUserPrincipal(string userId) =>
+        new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId.Trim())], "DurableExecution"));
 }

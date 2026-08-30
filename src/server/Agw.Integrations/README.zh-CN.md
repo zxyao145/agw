@@ -6,6 +6,17 @@
 
 当前内建 Catalog 只有 GitHub。
 
+## 术语与所有权
+
+产品界面统一使用 Integration 术语：Catalog 定义显示为 **Available integrations**，用户配置的账号或服务端点显示为 **Configured integrations**。实现层保留更精确的开发者模型：
+
+- `PluginDefinition` 是系统内置的 Integration 定义。
+- `PluginInstallation` 是当前用户自己的基础设置，例如 OAuth Client ID 和 Client Secret；每个用户都可以维护独立 setup，变更只影响该用户的 Connection。
+- `Connection` 是由 `CreateBy` 中稳定用户 ID 拥有的一个 Integration 配置实例；同一用户可以基于同一定义创建多个 Connection。
+- `Connector` 是 Plugin 内的服务或协议变体，不是 Connection 的同义词。
+
+Connection CRUD、OAuth、凭据读取、Agent/Project 绑定视图以及每次 Native/MCP 调用都必须校验 Owner。Alias 创建后不可修改，并且只在同一 Owner 内唯一。共享 Agent 和 Project 会为每个用户分别保留自己的 Connection 绑定叠加层。
+
 ## 设计目标
 
 模块遵循以下原则：
@@ -137,7 +148,7 @@ PluginDefinition
 | Capability Source `Id` | Connector 内稳定且唯一的 Source 标识。MCP 包装工具会保留这个 ID，以便真正调用时重新找到对应 Source。它不是一套语义化 Capability 分类。 |
 | `PluginSkillDefinition` | 只保存安全的相对 `ContentPath`；Skill ID 和描述来自 `SKILL.md` Frontmatter 中的 `name`、`description`。 |
 | `PluginInstallation` | 每个 Plugin 一条平台级配置。Connection 想要在运行时提供能力，必须能找到启用的 Installation。 |
-| `Connection` | Agent 可以选择的一个具体外部账号或服务端点。它固定 Plugin、Connector、Auth Scheme、显示名、不可变 Alias、状态、Subject 和非敏感配置。 |
+| `Connection` | 用户拥有、Agent 可以选择的一个具体外部账号或服务端点。它固定 Plugin、Connector、Auth Scheme、显示名、Owner 内唯一且不可变的 Alias、状态、Subject 和非敏感配置。 |
 | Credential | 由 Plugin Installation 或 Connection 拥有的加密值，通过稳定的 Slot 定位。 |
 
 ### 为什么以 Connection 为选择单位
@@ -238,19 +249,21 @@ erDiagram
 
 重要存储规则：
 
-- `plugin_installation.plugin_id` 唯一。多个 Connector/Auth Scheme Scope 共享同一条 Installation。
+- `(plugin_installation.create_by, plugin_installation.plugin_id)` 唯一。多个 Connector/Auth Scheme Scope 共享同一用户的 Installation。
 - Installation 的非敏感字段使用 `{connectorId}:{authSchemeId}:{fieldId}` 作为 Key，写入 `ConfigurationJson`。
 - Connection 的非敏感字段直接用 Field ID 作为 Key，写入 `ConfigurationJson`。
 - Secret 字段绝不会进入两种 `ConfigurationJson`。
 - Installation Secret Slot 为 `field:{connectorId}:{authSchemeId}:{fieldId}`。
 - Connection Secret Slot 为 `field:{fieldId}`。
 - OAuth Token Slot 为 `oauth.access-token`、`oauth.refresh-token`、`oauth.id-token`。
-- `integration_connection.alias` 全局唯一，创建后不可修改。
+- `(integration_connection.create_by, integration_connection.alias)` 唯一，Alias 创建后不可修改。
 - 同一凭据所有者的 `(owner_id, slot)` 唯一。
 - Agent 和 Project 关系表使用复合主键，因此不会出现重复绑定。
 - `ValidationMetadataJson` 和 Credential 的 `MetadataJson` 是内部保留字段，不属于管理 API。
 
-EF Model 声明了导航与级联关系，但当前 Integration Migration 有意没有在数据库中创建这些外键约束。因此删除 Installation、Connection、Agent 或 Project 时，`AgwDbContext` 会显式清理相关 Credential 和 Agent/Project 关系。
+按照全局架构规范，EF Model 可以声明导航与级联关系，但 SQLite 和 PostgreSQL 的迁移生成器不得生成数据库外键约束或外键迁移操作，也不得在手写 Migration 中补加外键。因此删除 Installation、Connection、Agent 或 Project 时，Application/Infrastructure 流程负责引用完整性，`AgwDbContext` 会显式清理相关 Credential 和 Agent/Project 关系。
+
+升级说明：`EnforceUserDataIsolation` 会保留所有非空的 `create_by`；无法从历史行恢复归属的空 Owner 回退给管理员 `1001`，而 `AgentUsage` 会优先从关联 Project owner 回填 `user_id`。Connection 和 PluginInstallation 的唯一键改为带 Owner 的复合键。多用户部署升级前应先审计空 Owner 和跨 Owner 的同名记录，必要时据外部 Owner 映射回填后再应用迁移。
 
 ## Connection 状态模型
 
@@ -483,7 +496,7 @@ API SecretValue
 以内建 GitHub Plugin 为例：
 
 1. 打开 `/integrations`。
-2. 配置 GitHub Plugin Installation，填写 OAuth Client ID 和 Client Secret。
+2. 配置自己的 GitHub Plugin Installation，填写 OAuth Client ID 和 Client Secret。
 3. 创建 Connection，填写易读的 Display Name 和不可变的小写 kebab-case Alias，例如 `work-github`。
 4. 发起 OAuth Authorization，并完成第三方授权。
 5. 确认 Connection 为 `Ready`；需要时可以用 Validate 重新检查本地 Credential 状态。
@@ -491,6 +504,8 @@ API SecretValue
 7. 运行进程内 Agent。模型会看到 `work-github__list_repositories` 等工具以及 GitHub Plugin Skill。
 
 Project 级绑定会让该 Project 中运行的所有进程内 Agent 都能使用 Connection；Agent 级绑定只影响该 Agent。Agent 和 Project 同时绑定同一个 Connection 时，只创建一套工具。
+
+绑定更新按 Owner 隔离。请求中的 `ConnectionId` 如果不存在或属于其他用户，会按不可用处理并直接忽略，不暴露其所有权。客户端提交完整绑定列表前应刷新当前用户可用的 Integrations。
 
 ### REST API 示例
 
@@ -500,7 +515,7 @@ Project 级绑定会让该 Project 中运行的所有进程内 Agent 都能使�
 GET /api/integrations/plugins
 ```
 
-配置平台共享的 GitHub OAuth Client：
+配置当前用户自己的 GitHub OAuth Client：
 
 ```http
 PUT /api/integrations/plugin-installations
@@ -584,7 +599,7 @@ Content-Type: application/json
 | Method | Route | 用途 |
 | --- | --- | --- |
 | GET | `/api/integrations/plugins` | 查询 Plugin 定义和投影后的 Installation 状态。 |
-| PUT | `/api/integrations/plugin-installations` | 创建或更新 Plugin 级 Installation 中的一个 Connector/Auth Scheme Scope。 |
+| PUT | `/api/integrations/plugin-installations` | 创建或更新当前用户 Plugin Installation 中的一个 Connector/Auth Scheme Scope。 |
 | GET | `/api/integrations/connections?id={id}` | 查询全部 Connection，或按 Query ID 查询一个。 |
 | POST | `/api/integrations/connections` | 创建 Connection。 |
 | PUT | `/api/integrations/connections` | 更新可变 Connection 字段；Alias 和定义组合保持不变。 |
@@ -608,7 +623,7 @@ ID 应当保持稳定。Catalog ID 必须以字母开头，可以使用字母数
 
 ### 2. 定义认证字段
 
-平台共享字段放在 `InstallationFields`，账号或端点自己的字段放在 `ConnectionFields`：
+用户 setup 共享字段放在 `InstallationFields`，账号或端点自己的字段放在 `ConnectionFields`：
 
 ```csharp
 new AuthSchemeDefinition

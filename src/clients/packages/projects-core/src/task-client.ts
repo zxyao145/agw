@@ -4,10 +4,16 @@ import { normalizeTokenUsage, type TokenUsage, type TokenUsageInput } from "@agw
 import { ApiError, type AgwApiClient } from "@agw/api";
 import * as browserClient from "@agw/api";
 
-type ProjectContextApiClient = Pick<AgwApiClient, "apiGet" | "apiPut" | "apiDelete">;
+type ProjectConversationApiClient = Pick<
+  AgwApiClient,
+  "apiGet" | "apiPost" | "apiPut" | "apiDelete"
+>;
 
-export interface ContextSummary {
+export type ConversationMessageDirection = "newer" | "older";
+
+export interface ConversationSummary {
   projectId: string;
+  conversationId: string;
   contextId: string;
   jobId?: string | null;
   title: string;
@@ -19,13 +25,30 @@ export interface ContextSummary {
   errorMessage?: string | null;
 }
 
-export interface ContextDetails extends ContextSummary {
-  messages: AiMessage[];
+export type ConversationResumeState = {
+  targetType?: string | null;
+  targetId?: string | null;
+  agentMode?: string | null;
+};
+
+export interface ConversationDetails extends ConversationSummary {
   usage: TokenUsage;
+  resumeState: ConversationResumeState | null;
 }
 
-export type ProjectContextSummaryResponse = {
+export interface ConversationHistory extends ConversationDetails {
+  messages: AiMessage[];
+}
+
+export type ConversationMessagePage = {
+  items: AiMessage[];
+  nextCursor: string | null;
+  hasMore: boolean;
+};
+
+export type ProjectConversationSummaryResponse = {
   projectId: string;
+  conversationId: string;
   contextId: string;
   jobId?: string | null;
   title: string;
@@ -37,35 +60,47 @@ export type ProjectContextSummaryResponse = {
   errorMessage?: string | null;
 };
 
-export type ProjectContextResponse = ProjectContextSummaryResponse & {
-  messages?: AiMessage[] | null;
+export type ProjectConversationResponse = ProjectConversationSummaryResponse & {
   usage?: TokenUsageInput | null;
+  resumeState?: ConversationResumeState | null;
 };
 
-function toContextSummary(context: ProjectContextSummaryResponse): ContextSummary {
+export type ProjectConversationMessagePageResponse = {
+  items?: AiMessage[] | null;
+  nextCursor?: string | null;
+  hasMore: boolean;
+};
+
+export type ConversationMessagePageOptions = {
+  direction: ConversationMessageDirection;
+  cursor?: string | null;
+  pageSize?: number;
+  signal?: AbortSignal;
+};
+
+function toConversationSummary(
+  conversation: ProjectConversationSummaryResponse,
+): ConversationSummary {
   return {
-    projectId: context.projectId,
-    contextId: context.contextId,
-    jobId: context.jobId ?? null,
-    title: context.title,
-    latestStatus: context.latestStatus ?? null,
-    executionCount: context.executionCount,
-    messageCount: context.messageCount,
-    createTime: context.createTime,
-    updateTime: context.updateTime ?? null,
-    errorMessage: context.errorMessage ?? null,
+    projectId: conversation.projectId,
+    conversationId: conversation.conversationId,
+    contextId: conversation.contextId,
+    jobId: conversation.jobId ?? null,
+    title: conversation.title,
+    latestStatus: conversation.latestStatus ?? null,
+    executionCount: conversation.executionCount,
+    messageCount: conversation.messageCount,
+    createTime: conversation.createTime,
+    updateTime: conversation.updateTime ?? null,
+    errorMessage: conversation.errorMessage ?? null,
   };
 }
 
-function shouldIncludeContext(context: ContextSummary): boolean {
-  return context.messageCount > 0 || context.executionCount === 0;
-}
-
-function toContextDetails(context: ProjectContextResponse): ContextDetails {
+function toConversationDetails(conversation: ProjectConversationResponse): ConversationDetails {
   return {
-    ...toContextSummary(context),
-    messages: context.messages ?? [],
-    usage: normalizeTokenUsage(context.usage),
+    ...toConversationSummary(conversation),
+    usage: normalizeTokenUsage(conversation.usage),
+    resumeState: conversation.resumeState ?? null,
   };
 }
 
@@ -73,43 +108,123 @@ function isNotFoundError(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404;
 }
 
-export async function getProjectContexts(
+export async function getProjectConversations(
   projectId: string,
-  client: ProjectContextApiClient = browserClient,
-): Promise<ContextSummary[]> {
-  const result = (await client.apiGet("/api/projects/{projectId}/contexts", {
+  client: ProjectConversationApiClient = browserClient,
+): Promise<ConversationSummary[]> {
+  const result = (await client.apiGet("/api/projects/{projectId}/conversations", {
     params: { path: { projectId } },
-  })) as ProjectContextSummaryResponse[];
+  })) as ProjectConversationSummaryResponse[];
 
-  return result.map(toContextSummary).filter(shouldIncludeContext);
+  return result.map(toConversationSummary);
 }
 
-export async function getProjectContextDetails(
+export async function createProjectConversation(
   projectId: string,
-  contextId: string,
-  client: ProjectContextApiClient = browserClient,
-): Promise<ContextDetails> {
-  const response = (await client.apiGet("/api/projects/{projectId}/contexts/{contextId}", {
-    params: { path: { projectId, contextId } },
-  })) as ProjectContextResponse;
+  client: ProjectConversationApiClient = browserClient,
+): Promise<ConversationSummary> {
+  const response = (await client.apiPost("/api/projects/{projectId}/conversations", {
+    params: { path: { projectId } },
+    body: { contextId: null },
+  })) as ProjectConversationSummaryResponse;
 
-  return toContextDetails(response);
+  return toConversationSummary(response);
 }
 
-export async function updateProjectContextTitle(
+export async function getProjectConversationDetails(
   projectId: string,
-  contextId: string,
+  conversationId: string,
+  client: ProjectConversationApiClient = browserClient,
+  signal?: AbortSignal,
+): Promise<ConversationDetails> {
+  const response = (await client.apiGet(
+    "/api/projects/{projectId}/conversations/{conversationId}",
+    {
+      params: { path: { projectId, conversationId } },
+      signal,
+    },
+  )) as ProjectConversationResponse;
+
+  return toConversationDetails(response);
+}
+
+export async function getProjectConversationMessages(
+  projectId: string,
+  conversationId: string,
+  options: ConversationMessagePageOptions,
+  client: ProjectConversationApiClient = browserClient,
+): Promise<ConversationMessagePage> {
+  const response = (await client.apiGet(
+    "/api/projects/{projectId}/conversations/{conversationId}/messages",
+    {
+      params: {
+        path: { projectId, conversationId },
+        query: {
+          direction: options.direction,
+          cursor: options.cursor ?? undefined,
+          pageSize: options.pageSize ?? 50,
+        },
+      },
+      signal: options.signal,
+    },
+  )) as ProjectConversationMessagePageResponse;
+
+  return {
+    items: response.items ?? [],
+    nextCursor: response.nextCursor ?? null,
+    hasMore: response.hasMore,
+  };
+}
+
+export async function getProjectConversationHistory(
+  projectId: string,
+  conversationId: string,
+  client: ProjectConversationApiClient = browserClient,
+  signal?: AbortSignal,
+): Promise<ConversationHistory> {
+  const [details, firstPage] = await Promise.all([
+    getProjectConversationDetails(projectId, conversationId, client, signal),
+    getProjectConversationMessages(
+      projectId,
+      conversationId,
+      { direction: "newer", pageSize: 100, signal },
+      client,
+    ),
+  ]);
+  const messages: AiMessage[] = [];
+  let page = firstPage;
+
+  while (true) {
+    messages.push(...page.items);
+    if (!page.hasMore || !page.nextCursor) {
+      break;
+    }
+
+    page = await getProjectConversationMessages(
+      projectId,
+      conversationId,
+      { direction: "newer", cursor: page.nextCursor, pageSize: 100, signal },
+      client,
+    );
+  }
+
+  return { ...details, messages };
+}
+
+export async function updateProjectConversationTitle(
+  projectId: string,
+  conversationId: string,
   title: string,
-  client: ProjectContextApiClient = browserClient,
+  client: ProjectConversationApiClient = browserClient,
 ): Promise<boolean> {
   const normalizedTitle = title.trim();
-  if (!projectId || !contextId || !normalizedTitle) {
+  if (!projectId || !conversationId || !normalizedTitle) {
     return false;
   }
 
   try {
-    await client.apiPut("/api/projects/{projectId}/contexts/{contextId}/title", {
-      params: { path: { projectId, contextId } },
+    await client.apiPut("/api/projects/{projectId}/conversations/{conversationId}/title", {
+      params: { path: { projectId, conversationId } },
       body: { title: normalizedTitle },
     });
     return true;
@@ -121,18 +236,18 @@ export async function updateProjectContextTitle(
   }
 }
 
-export async function deleteProjectContext(
+export async function deleteProjectConversation(
   projectId: string,
-  contextId: string,
-  client: ProjectContextApiClient = browserClient,
+  conversationId: string,
+  client: ProjectConversationApiClient = browserClient,
 ): Promise<boolean> {
-  if (!projectId || !contextId) {
+  if (!projectId || !conversationId) {
     return false;
   }
 
   try {
-    await client.apiDelete("/api/projects/{projectId}/contexts/{contextId}", {
-      params: { path: { projectId, contextId } },
+    await client.apiDelete("/api/projects/{projectId}/conversations/{conversationId}", {
+      params: { path: { projectId, conversationId } },
     });
     return true;
   } catch (error) {
@@ -143,19 +258,22 @@ export async function deleteProjectContext(
   }
 }
 
-export async function clearProjectContextRecords(
+export async function clearProjectConversationRecords(
   projectId: string,
-  contextId: string,
-  client: ProjectContextApiClient = browserClient,
+  conversationId: string,
+  client: ProjectConversationApiClient = browserClient,
 ): Promise<boolean> {
-  if (!projectId || !contextId) {
+  if (!projectId || !conversationId) {
     return false;
   }
 
   try {
-    await client.apiDelete("/api/projects/{projectId}/contexts/{contextId}/clear-records", {
-      params: { path: { projectId, contextId } },
-    });
+    await client.apiDelete(
+      "/api/projects/{projectId}/conversations/{conversationId}/clear-records",
+      {
+        params: { path: { projectId, conversationId } },
+      },
+    );
     return true;
   } catch (error) {
     if (isNotFoundError(error)) {
@@ -165,16 +283,16 @@ export async function clearProjectContextRecords(
   }
 }
 
-export async function deleteAllProjectContexts(
+export async function deleteAllProjectConversations(
   projectId: string,
-  client: ProjectContextApiClient = browserClient,
+  client: ProjectConversationApiClient = browserClient,
 ): Promise<boolean> {
   if (!projectId) {
     return false;
   }
 
   try {
-    await client.apiDelete("/api/projects/{projectId}/contexts", {
+    await client.apiDelete("/api/projects/{projectId}/conversations", {
       params: { path: { projectId } },
     });
     return true;
@@ -186,28 +304,50 @@ export async function deleteAllProjectContexts(
   }
 }
 
-export type ProjectContextService = {
-  getProjectContexts(projectId: string): Promise<ContextSummary[]>;
-  getProjectContextDetails(projectId: string, contextId: string): Promise<ContextDetails>;
-  updateProjectContextTitle(projectId: string, contextId: string, title: string): Promise<boolean>;
-  deleteProjectContext(projectId: string, contextId: string): Promise<boolean>;
-  clearProjectContextRecords(projectId: string, contextId: string): Promise<boolean>;
-  deleteAllProjectContexts(projectId: string): Promise<boolean>;
+export type ProjectConversationService = {
+  getProjectConversations(projectId: string): Promise<ConversationSummary[]>;
+  createProjectConversation(projectId: string): Promise<ConversationSummary>;
+  getProjectConversationDetails(
+    projectId: string,
+    conversationId: string,
+  ): Promise<ConversationDetails>;
+  getProjectConversationMessages(
+    projectId: string,
+    conversationId: string,
+    options: ConversationMessagePageOptions,
+  ): Promise<ConversationMessagePage>;
+  getProjectConversationHistory(
+    projectId: string,
+    conversationId: string,
+  ): Promise<ConversationHistory>;
+  updateProjectConversationTitle(
+    projectId: string,
+    conversationId: string,
+    title: string,
+  ): Promise<boolean>;
+  deleteProjectConversation(projectId: string, conversationId: string): Promise<boolean>;
+  clearProjectConversationRecords(projectId: string, conversationId: string): Promise<boolean>;
+  deleteAllProjectConversations(projectId: string): Promise<boolean>;
 };
 
-export function createProjectContextService(
-  client: ProjectContextApiClient,
-): ProjectContextService {
+export function createProjectConversationService(
+  client: ProjectConversationApiClient,
+): ProjectConversationService {
   return {
-    getProjectContexts: (projectId) => getProjectContexts(projectId, client),
-    getProjectContextDetails: (projectId, contextId) =>
-      getProjectContextDetails(projectId, contextId, client),
-    updateProjectContextTitle: (projectId, contextId, title) =>
-      updateProjectContextTitle(projectId, contextId, title, client),
-    deleteProjectContext: (projectId, contextId) =>
-      deleteProjectContext(projectId, contextId, client),
-    clearProjectContextRecords: (projectId, contextId) =>
-      clearProjectContextRecords(projectId, contextId, client),
-    deleteAllProjectContexts: (projectId) => deleteAllProjectContexts(projectId, client),
+    getProjectConversations: (projectId) => getProjectConversations(projectId, client),
+    createProjectConversation: (projectId) => createProjectConversation(projectId, client),
+    getProjectConversationDetails: (projectId, conversationId) =>
+      getProjectConversationDetails(projectId, conversationId, client),
+    getProjectConversationMessages: (projectId, conversationId, options) =>
+      getProjectConversationMessages(projectId, conversationId, options, client),
+    getProjectConversationHistory: (projectId, conversationId) =>
+      getProjectConversationHistory(projectId, conversationId, client),
+    updateProjectConversationTitle: (projectId, conversationId, title) =>
+      updateProjectConversationTitle(projectId, conversationId, title, client),
+    deleteProjectConversation: (projectId, conversationId) =>
+      deleteProjectConversation(projectId, conversationId, client),
+    clearProjectConversationRecords: (projectId, conversationId) =>
+      clearProjectConversationRecords(projectId, conversationId, client),
+    deleteAllProjectConversations: (projectId) => deleteAllProjectConversations(projectId, client),
   };
 }

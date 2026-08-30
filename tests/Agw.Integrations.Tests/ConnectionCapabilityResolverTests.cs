@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.Json;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
@@ -18,8 +19,16 @@ using IntegrationConnection = Agw.Shared.Data.Entities.Integrations.Connection;
 
 namespace Agw.Integrations.Tests;
 
-public class ConnectionCapabilityResolverTests
+public class ConnectionCapabilityResolverTests : IDisposable
 {
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "test")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
+
     [Fact]
     public async Task Resolve_TwoReadyGitHubConnections_CreatesAliasToolsUsingExactConnectionAndRotatedToken()
     {
@@ -52,6 +61,25 @@ public class ConnectionCapabilityResolverTests
         var secondUser = Assert.IsType<JsonElement>(await workTool.InvokeAsync(cancellationToken: cancellationToken));
         Assert.Equal("work-token-v2", secondUser.GetProperty("login").GetString());
         Assert.Equal([work.Id, work.Id], scope.Invocations.ConnectionIds);
+    }
+
+    [Fact]
+    public async Task Resolve_ForeignConnection_ReturnsNotFoundWarningWithoutTools()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scope = await ResolverTestScope.CreateAsync(cancellationToken, userId: "other-user");
+        var connection = await scope.AddReadyConnectionAsync("work", cancellationToken);
+
+        await using var resolution = await scope.Resolver.ResolveAsync(
+            Guid.CreateVersion7(),
+            [connection.Id],
+            cancellationToken
+        );
+
+        Assert.Empty(resolution.Tools);
+        var warning = Assert.Single(resolution.Warnings);
+        Assert.Equal(ConnectionCapabilityWarningCodes.ConnectionNotFound, warning.Code);
+        Assert.Equal("The integration was not found.", warning.Message);
     }
 
     [Fact]
@@ -423,7 +451,8 @@ public class ConnectionCapabilityResolverTests
             DateTimeOffset? now = null,
             IPluginCatalog? catalog = null,
             IMcpToolMaterializer? mcpToolMaterializer = null,
-            string? pluginContentRoot = null
+            string? pluginContentRoot = null,
+            string userId = "test"
         )
         {
             var sqlite = new SqliteConnection("Data Source=:memory:;Foreign Keys=False");
@@ -460,7 +489,8 @@ public class ConnectionCapabilityResolverTests
                 new PluginSkillMetadataReader(
                     new FixedPluginContentRootProvider(pluginContentRoot ?? AppContext.BaseDirectory)
                 ),
-                new FixedTimeProvider(now ?? TimeProvider.System.GetUtcNow())
+                new FixedTimeProvider(now ?? TimeProvider.System.GetUtcNow()),
+                new TestUserInfoService(userId)
             );
             mcpToolInvoker.Resolver = resolver;
             return new ResolverTestScope(sqlite, dbContext, resolver, credentials, invocations);

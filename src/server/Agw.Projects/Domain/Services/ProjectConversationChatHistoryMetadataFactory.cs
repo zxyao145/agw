@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Agw.Shared.Contracts.Projects;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Projects.Domain.Services;
@@ -39,6 +38,16 @@ public static class ProjectConversationChatHistoryMetadataFactory
             metadata[ConversationHandoffMetadata.ThroughSequenceKey] = JsonSerializer.SerializeToElement(
                 throughSequence
             );
+        }
+
+        if (message.AdditionalProperties?.TryGetValue("mode", out var mode) == true)
+        {
+            var modeValue = mode?.ToString();
+            if (modeValue is "plan" or "execute")
+            {
+                metadata ??= [];
+                metadata["agentMode"] = JsonSerializer.SerializeToElement(modeValue);
+            }
         }
 
         return metadata;

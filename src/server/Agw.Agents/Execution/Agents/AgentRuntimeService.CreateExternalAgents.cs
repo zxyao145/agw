@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.ExternalAgents;
+using Agw.Agents.ExternalAgents.ClaudeCode;
 using Agw.Files.Utils;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
@@ -38,7 +39,8 @@ public partial class AgentRuntimeService
                 project,
                 request.ProviderSessionId,
                 request.IsResume,
-                environmentVariables
+                environmentVariables,
+                isBackground
             ),
             AgentNames.Codex => CreateCodexAgent(
                 project,
@@ -52,28 +54,37 @@ public partial class AgentRuntimeService
 
         if (aiAgent != null)
         {
-            var onProviderSessionStartedAsync = IsClaudeCodeExternalAgent(request.Agent)
-                ? request.OnExternalSessionStartedAsync
-                : null;
-            aiAgent = WrapExternalAgent(aiAgent, isBackground, onProviderSessionStartedAsync);
+            aiAgent = IsClaudeCodeExternalAgent(request.Agent)
+                ? WrapClaudeCodeAgent(aiAgent, isBackground, request.OnExternalSessionStartedAsync)
+                : WrapExternalAgent(aiAgent, isBackground);
         }
 
         return aiAgent != null;
     }
 
-    internal AIAgent WrapExternalAgent(
+    internal AIAgent WrapExternalAgent(AIAgent aiAgent, bool isBackground) =>
+        DecorateExternalAgent(
+            new ExternalAgentChatHistoryAgent(aiAgent, _chatHistoryProvider, _timeProvider, _logger),
+            isBackground
+        );
+
+    internal AIAgent WrapClaudeCodeAgent(
         AIAgent aiAgent,
         bool isBackground,
-        Func<string, CancellationToken, ValueTask>? onProviderSessionStartedAsync = null
+        Func<string, CancellationToken, ValueTask>? onProviderSessionStartedAsync
     )
     {
-        var agentBuilder = new ExternalAgentChatHistoryAgent(
-            aiAgent,
-            _chatHistoryProvider,
-            _timeProvider,
-            _logger,
-            onProviderSessionStartedAsync
-        )
+        if (onProviderSessionStartedAsync != null)
+        {
+            aiAgent = new ClaudeCodeProviderSessionTrackingAgent(aiAgent, onProviderSessionStartedAsync);
+        }
+
+        return DecorateExternalAgent(aiAgent, isBackground);
+    }
+
+    private AIAgent DecorateExternalAgent(AIAgent aiAgent, bool isBackground)
+    {
+        var agentBuilder = aiAgent
             .AsBuilder()
             .Use(
                 runFunc: _observabilityMiddleware.LogRunMiddleware,
@@ -99,7 +110,8 @@ public partial class AgentRuntimeService
         Project project,
         Guid? providerSessionId,
         bool isResume,
-        IReadOnlyDictionary<string, string>? environmentVariables
+        IReadOnlyDictionary<string, string>? environmentVariables,
+        bool isBackground
     )
     {
         string? extra = project.ExtraSetting;
@@ -115,7 +127,8 @@ public partial class AgentRuntimeService
             PathUtil.ExpandTilde(project.Workspace),
             providerSessionId,
             isResume,
-            environmentVariables
+            environmentVariables,
+            new ClaudeCodeChatHistoryProvider(_chatHistoryProvider)
         );
         if (options == null)
         {
@@ -123,7 +136,15 @@ public partial class AgentRuntimeService
             return null;
         }
 
-        return new ClaudeCodeAIAgent(options, _logger);
+        var interactionBridge = new ClaudeCodeAskUserQuestionBridge(
+            _humanInteractionContextAccessor,
+            allowInteraction: !isBackground
+        );
+        options = options with { CanUseTool = interactionBridge.HandleAsync };
+        return new ClaudeCodeAIAgent(options, _logger)
+            .AsBuilder()
+            .Use(runFunc: interactionBridge.BindRunAsync, runStreamingFunc: interactionBridge.BindRunStreamingAsync)
+            .Build();
     }
 
     private static ClaudeCodeAIAgentOptions? BuildClaudeCodeAIAgentOptions(
@@ -131,7 +152,8 @@ public partial class AgentRuntimeService
         string? workspace,
         Guid? providerSessionId,
         bool isResume,
-        IReadOnlyDictionary<string, string>? environmentVariables = null
+        IReadOnlyDictionary<string, string>? environmentVariables = null,
+        ChatHistoryProvider? chatHistoryProvider = null
     )
     {
         var options = JsonUtil.Deserialize<ClaudeCodeAIAgentOptions>(extra);
@@ -140,15 +162,15 @@ public partial class AgentRuntimeService
             return null;
         }
 
-        options = DisableExternalSdkChatHistoryPersistence(
-            options with
-            {
-                WorkingDirectory = workspace,
-                ContinueConversation = false,
-                Resume = null,
-                SessionId = null,
-            }
-        );
+        options = options with
+        {
+            WorkingDirectory = workspace,
+            IncludePartialMessages = true,
+            ContinueConversation = false,
+            Resume = null,
+            SessionId = null,
+            ChatHistoryProvider = chatHistoryProvider,
+        };
 
         if (providerSessionId.HasValue)
         {
@@ -197,10 +219,6 @@ public partial class AgentRuntimeService
         options = DisableExternalSdkChatHistoryPersistence(options);
         return new CodexAIAgent(options, _logger);
     }
-
-    internal static ClaudeCodeAIAgentOptions DisableExternalSdkChatHistoryPersistence(
-        ClaudeCodeAIAgentOptions options
-    ) => options with { ChatHistoryProvider = null };
 
     internal static CodexAIAgentOptions DisableExternalSdkChatHistoryPersistence(CodexAIAgentOptions options) =>
         options with

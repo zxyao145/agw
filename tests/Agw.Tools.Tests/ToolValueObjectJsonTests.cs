@@ -1,15 +1,23 @@
+using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Tools;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Tools.Tests;
 
-public sealed class ToolValueObjectJsonTests
+public sealed class ToolValueObjectJsonTests : IDisposable
 {
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
+
     [Fact]
     public void Serialize_ToolAndToolBlock_WritesDoublePolymorphicContract()
     {
@@ -163,6 +171,7 @@ public sealed class ToolValueObjectJsonTests
                 DisplayName = "Legacy tools",
                 Name = $"legacy-tools-{agentId:N}",
                 Type = AgentType.External,
+                CreateBy = "tester",
             }
         );
         await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -206,6 +215,7 @@ public sealed class ToolValueObjectJsonTests
                 DisplayName = "Unknown legacy tool",
                 Name = $"unknown-legacy-tool-{agentId:N}",
                 Type = AgentType.External,
+                CreateBy = "tester",
             }
         );
         await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);

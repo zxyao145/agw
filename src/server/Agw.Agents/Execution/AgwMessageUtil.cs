@@ -1,7 +1,4 @@
 using Agw.Agents.Execution.Runtimes;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
 using Agw.Shared.Exceptions;
 using ClaudeCodeSdk.MAF;
 using Microsoft.Extensions.AI;

@@ -7,11 +7,7 @@ using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Turns;
 using Agw.Files.Abstracts;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Utils;
 
 namespace Agw.Agents.Execution.Runtimes;
 
@@ -19,7 +15,7 @@ public readonly record struct RuntimeStartResult(RuntimeBase? Runtime, ActiveTur
 
 public sealed record RuntimeStartRequest(
     Guid AgentId,
-    TaskProjection Task,
+    AgentExecutionTask Task,
     ExecCommand Command,
     RuntimeBase? CurrentRuntime,
     RuntimeTurnContext TurnContext
@@ -77,7 +73,14 @@ public sealed class RuntimeFactory : IRuntimeFactory
             case AgentRuntimeType.Agent:
             {
                 var session = request.CurrentRuntime as AgentRuntime;
-                if (!CanReuseAgentSession(session, request.TurnContext.Settings, request.Task.ContextId))
+                if (
+                    !CanReuseAgentSession(
+                        session,
+                        request.Task.ProjectId,
+                        request.TurnContext.Settings,
+                        request.Task.ContextId
+                    )
+                )
                 {
                     await DisposeRuntimeAsync(request.CurrentRuntime);
                     session = await _agentRuntimeService.CreateRuntimeAsync(
@@ -299,6 +302,10 @@ public sealed class RuntimeFactory : IRuntimeFactory
     private async Task EnsureWorkspaceAsync(Guid projectId, CancellationToken cancellationToken)
     {
         var fs = await _fileSystemResolver.ResolveAsync(projectId, cancellationToken);
+        if (fs == null)
+        {
+            throw new AgwException(ErrorCodes.ResourceNotFound, "Project was not found.");
+        }
         if (await fs.StatAsync("", cancellationToken) == null)
         {
             await fs.CreateDirectoryAsync("", cancellationToken);
@@ -310,6 +317,7 @@ public sealed class RuntimeFactory : IRuntimeFactory
     /// </summary>
     private static bool CanReuseAgentSession(
         AgentRuntime? session,
+        Guid projectId,
         ExecutionSettings settings,
         string resolvedContextId
     )
@@ -320,7 +328,7 @@ public sealed class RuntimeFactory : IRuntimeFactory
             string.IsNullOrWhiteSpace(settings.ContextId) ? resolvedContextId : settings.ContextId
         );
         return string.Equals(session._contextId, contextId, StringComparison.Ordinal)
-            && session._projectId == ProjectDefaults.GetDefaultProjectIdentifier(settings.ProjectId);
+            && session._projectId == projectId;
     }
 
     private sealed class MessageSinkApprovalHandler : IHumanGateApprovalHandler

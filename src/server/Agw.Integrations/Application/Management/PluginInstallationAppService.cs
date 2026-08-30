@@ -1,3 +1,4 @@
+using Agw.Auth.Contracts;
 using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.Management;
 using Agw.Integrations.Domain.Plugins;
@@ -18,6 +19,7 @@ public sealed class PluginInstallationAppService
     private readonly IPluginCatalog _pluginCatalog;
     private readonly CredentialMutationService _credentialMutations;
     private readonly TimeProvider _timeProvider;
+    private readonly IUserInfoService _userInfoService;
 
     public PluginInstallationAppService(
         IRepository<PluginInstallation> installationRepository,
@@ -25,7 +27,8 @@ public sealed class PluginInstallationAppService
         IUnitOfWork unitOfWork,
         IPluginCatalog pluginCatalog,
         CredentialMutationService credentialMutations,
-        TimeProvider timeProvider
+        TimeProvider timeProvider,
+        IUserInfoService userInfoService
     )
     {
         _installationRepository = installationRepository;
@@ -34,14 +37,16 @@ public sealed class PluginInstallationAppService
         _pluginCatalog = pluginCatalog;
         _credentialMutations = credentialMutations;
         _timeProvider = timeProvider;
+        _userInfoService = userInfoService;
     }
 
     public async Task<PluginInstallationResponse> UpsertAsync(
         PluginInstallationUpsertRequest request,
-        string user,
         CancellationToken cancellationToken
     )
     {
+        var user = _userInfoService.RequiredUserId;
+
         var definition = IntegrationDefinitionResolver.Resolve(
             _pluginCatalog,
             request.PluginId,
@@ -53,7 +58,7 @@ public sealed class PluginInstallationAppService
         var authSchemeId = definition.AuthScheme.Id;
         var installation = await _installationRepository
             .Queryable.Include(item => item.Credentials)
-            .FirstOrDefaultAsync(item => item.PluginId == pluginId, cancellationToken);
+            .FirstOrDefaultAsync(item => item.PluginId == pluginId && item.CreateBy == user, cancellationToken);
         if (installation == null)
         {
             installation = new PluginInstallation
@@ -105,14 +110,8 @@ public sealed class PluginInstallationAppService
         );
         installation.ConfigurationJson = IntegrationConfigurationCodec.Write(allConfiguration);
 
-        await _credentialMutations.ApplyInstallationAsync(
-            installation,
-            input.SecretUpdates,
-            connectorId,
-            authSchemeId,
-            user
-        );
-        await InvalidateConnectionsAsync(installation, definition, user, cancellationToken);
+        await _credentialMutations.ApplyInstallationAsync(installation, input.SecretUpdates, connectorId, authSchemeId);
+        await InvalidateConnectionsAsync(installation, definition, cancellationToken);
         await _unitOfWork.SaveChangesAsync();
 
         return Map(installation, definition, input.Configuration);
@@ -121,13 +120,13 @@ public sealed class PluginInstallationAppService
     private async Task InvalidateConnectionsAsync(
         PluginInstallation installation,
         ResolvedIntegrationDefinition definition,
-        string user,
         CancellationToken cancellationToken
     )
     {
+        var user = _userInfoService.RequiredUserId;
         var query = _connectionRepository
             .Queryable.Include(connection => connection.Credentials)
-            .Where(connection => connection.PluginId == installation.PluginId);
+            .Where(connection => connection.PluginId == installation.PluginId && connection.CreateBy == user);
         if (installation.Enabled)
         {
             query = query.Where(connection =>

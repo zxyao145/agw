@@ -1,4 +1,6 @@
+using Agw.Agents.Contracts.Catalog;
 using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Definitions.Facades;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents;
@@ -8,11 +10,11 @@ using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Durable;
+using Agw.Agents.Execution.Facades;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Transport.SignalR;
 using Agw.Agents.Execution.Turns;
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,17 +28,27 @@ namespace Agw.Agents;
 /// </summary>
 public static class DependencyInjection
 {
+    public sealed record RegistrationOptions(
+        bool AddExecutionTransport = true,
+        bool AddDistributedWorker = true,
+        bool AddTraceCollector = true
+    );
+
     /// <summary>
     /// 根据配置注册 InProcess 或 Distributed execution 实现。
     /// </summary>
-    public static IServiceCollection AddAgents(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddAgents(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        RegistrationOptions? registrationOptions = null
+    )
     {
+        registrationOptions ??= new RegistrationOptions();
         var executionOptions =
             configuration.GetSection(ExecutionRuntimeOptions.SectionName).Get<ExecutionRuntimeOptions>()
             ?? new ExecutionRuntimeOptions();
         services.Configure<ExecutionRuntimeOptions>(configuration.GetSection(ExecutionRuntimeOptions.SectionName));
         services.AddSingleton<IAgentInstructionsSource, ProjectInstructionsSource>();
-        services.AddScoped<AgentflowDomainService>();
         services.AddScoped<AgentflowAppService>();
         services.AddScoped<AgentflowTraceAppService>();
         services.AddScoped<AgentflowRuntimeService>();
@@ -46,6 +58,9 @@ public static class DependencyInjection
         services.AddScoped<McpToolServerDomainService>();
         services.AddScoped<AgentDomainService>();
         services.AddScoped<AgentAppService>();
+        services.AddScoped<AgentCatalogFacade>();
+        services.AddScoped<IAgentCatalogFacade>(provider => provider.GetRequiredService<AgentCatalogFacade>());
+        services.AddScoped<IAgentReferenceFacade>(provider => provider.GetRequiredService<AgentCatalogFacade>());
         services.AddScoped<AgentSuggestionAppService>();
         services.AddScoped<McpToolServerAppService>();
         services.AddScoped<AgentSessionStateStore>();
@@ -54,15 +69,26 @@ public static class DependencyInjection
         services.AddScoped<IAgentRuntimeService>(serviceProvider =>
             serviceProvider.GetRequiredService<AgentRuntimeService>()
         );
+        services.AddScoped<AgentExecutionFacade>();
+        services.AddScoped<IAgentExecutionFacade>(provider => provider.GetRequiredService<AgentExecutionFacade>());
+        services.AddScoped<IDurableAgentExecutionFacade>(provider =>
+            provider.GetRequiredService<AgentExecutionFacade>()
+        );
         services.AddScoped<ISummaryChatClientFactory, SummaryChatClientFactory>();
         services.AddScoped<IAgentTurnSummaryService, AgentTurnSummaryService>();
         services.AddScoped<IRuntimeFactory, RuntimeFactory>();
-        services.AddExecutionCommands();
-        services.AddScoped<ExecutionCommandDispatcher>();
-        services.AddScoped<ExecutionConnectionContextFactory>();
-        services.AddSingleton<ExecutionConnectionRegistry>();
+        if (registrationOptions.AddExecutionTransport)
+        {
+            services.AddExecutionCommands();
+            services.AddScoped<ExecutionCommandDispatcher>();
+            services.AddScoped<ExecutionConnectionContextFactory>();
+            services.AddSingleton<ExecutionConnectionRegistry>();
+        }
         services.AddSingleton<RuntimeTurnContextAccessor>();
-        services.AddSingleton<IRuntimeTurnContextAccessor, RuntimeTurnContextAccessor>();
+        services.AddSingleton<IRuntimeTurnContextAccessor>(provider =>
+            provider.GetRequiredService<RuntimeTurnContextAccessor>()
+        );
+        services.AddSingleton<ICurrentAgentTurn>(provider => provider.GetRequiredService<RuntimeTurnContextAccessor>());
         services.AddSingleton<HumanInteractionContextAccessor>();
         services.AddSingleton<IHumanInteractionContextAccessor>(serviceProvider =>
             serviceProvider.GetRequiredService<HumanInteractionContextAccessor>()
@@ -70,10 +96,13 @@ public static class DependencyInjection
         services.AddSingleton<ObservabilityMiddleware>();
         services.AddSingleton<UsageTrackingMiddleware>();
         services.AddSingleton<IAgentflowNodeExecutionTraceStore, AgentflowNodeExecutionTraceStore>();
-        services.AddSingleton<AgentflowNodeExecutionTraceCollector>();
-        services.AddHostedService(serviceProvider =>
-            serviceProvider.GetRequiredService<AgentflowNodeExecutionTraceCollector>()
-        );
+        if (registrationOptions.AddTraceCollector)
+        {
+            services.AddSingleton<AgentflowNodeExecutionTraceCollector>();
+            services.AddHostedService(serviceProvider =>
+                serviceProvider.GetRequiredService<AgentflowNodeExecutionTraceCollector>()
+            );
+        }
 
         if (executionOptions.Provider == ExecutionProvider.Distributed)
         {
@@ -83,7 +112,11 @@ public static class DependencyInjection
             services.AddScoped<DurableExecutionSegmentExecutor>();
             AddExecutionEventStream(services, executionOptions);
             services.AddSingleton<DurableExecutionCoordinator>();
-            services.AddHostedService<DistributedExecutionWorker>();
+            services.AddSingleton<IDurableExecutionClient, DurableExecutionClient>();
+            if (registrationOptions.AddDistributedWorker)
+            {
+                services.AddHostedService<DistributedExecutionWorker>();
+            }
         }
 
         return services;

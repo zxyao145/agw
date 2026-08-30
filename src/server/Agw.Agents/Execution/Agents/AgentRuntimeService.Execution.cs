@@ -6,16 +6,13 @@ using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Agents.Tools;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Turns;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
-using Agw.Shared.Utils;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
+using RuntimeAgentExecutionResult = Agw.Agents.Execution.Agents.Dtos.AgentExecutionResult;
 
 namespace Agw.Agents.Execution.Agents;
 
@@ -189,14 +186,14 @@ public partial class AgentRuntimeService
         );
     }
 
-    public async Task<AgentExecutionResult?> ExecuteByIdAsync(
+    public async Task<RuntimeAgentExecutionResult?> ExecuteByIdAsync(
         AgentExecuteByIdRequest request,
         CancellationToken cancellationToken = default
     )
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        var agent = await _agentAppService.GetAgentAsync(request.AgentId);
+        var agent = await _agentAppService.GetAgentForCurrentUserAsync(request.AgentId);
         if (agent == null)
         {
             return null;
@@ -216,7 +213,7 @@ public partial class AgentRuntimeService
     /// <summary>
     /// 解析执行上下文、恢复 Agent 会话并执行请求，同时持久化会话和可选摘要。
     /// </summary>
-    private async Task<AgentExecutionResult?> ExecuteAsync(
+    private async Task<RuntimeAgentExecutionResult?> ExecuteAsync(
         AgentExecuteRequest request,
         CancellationToken cancellationToken = default
     )
@@ -227,7 +224,11 @@ public partial class AgentRuntimeService
         string? contextId = request.ContextId;
         Agent agent = request.Agent;
 
-        projectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
+        projectId = await ResolveProjectIdAsync(projectId, cancellationToken).ConfigureAwait(false);
+        if (!projectId.HasValue)
+        {
+            return null;
+        }
         var resolvedContextId = ContextIdUtil.ResolveContextId(contextId);
         var conversationId = await _sessionStateStore
             .ResolveProjectConversationIdAsync(projectId.Value, resolvedContextId, cancellationToken)
@@ -293,7 +294,7 @@ public partial class AgentRuntimeService
                 )
                 .ConfigureAwait(false);
 
-            return new AgentExecutionResult(taskIdValue, resolvedContextId, messages);
+            return new RuntimeAgentExecutionResult(taskIdValue, resolvedContextId, messages);
         }
         catch (Exception exception)
         {

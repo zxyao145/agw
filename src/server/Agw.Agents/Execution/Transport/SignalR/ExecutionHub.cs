@@ -59,7 +59,7 @@ public sealed class ExecutionHub : Hub<IExecutionHubClient>
             )
         );
 
-    private string CurrentUserId => Context.User?.GetUserId() ?? Constants.AdminUserId;
+    private string CurrentUserId => Context.User.GetUserId();
 
     private static async Task InvokeAsync(Func<Task> action)
     {

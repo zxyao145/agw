@@ -37,6 +37,9 @@ export function ExecuteAgentflowDrawer({
       contextId: null,
       messages: [],
       usage: EMPTY_TOKEN_USAGE,
+      olderMessagesCursor: null,
+      hasOlderMessages: false,
+      agentMode: null,
     }),
     [agentflow?.id, resetSignal],
   );
@@ -66,6 +69,7 @@ export function ExecuteAgentflowDrawer({
           className="h-[calc(100vh-62px)]"
           target={{ id: agentflow.id, type: "agentflow" }}
           projectId={projectId}
+          conversationId={null}
           active={open}
           sessionSeed={sessionSeed}
           placeholder="请输入要发送给 agentflow 的内容..."

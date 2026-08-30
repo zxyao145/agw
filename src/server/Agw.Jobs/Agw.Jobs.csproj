@@ -3,9 +3,13 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Cronos" />
     <PackageReference Include="Microsoft.Agents.AI" />
-    <ProjectReference Include="..\Agw.Agents\Agw.Agents.csproj" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <ProjectReference Include="..\Agw.Agents.Contracts\Agw.Agents.Contracts.csproj" />
+    <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
+    <ProjectReference Include="..\Agw.Data\Agw.Data.csproj" />
+    <ProjectReference Include="..\Agw.Jobs.Contracts\Agw.Jobs.Contracts.csproj" />
+    <ProjectReference Include="..\Agw.Projects.Contracts\Agw.Projects.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
-    <ProjectReference Include="..\Agw.Projects\Agw.Projects.csproj" />
     <ProjectReference Include="..\Agw.Skills\Agw.Skills.csproj" />
   </ItemGroup>
 </Project>

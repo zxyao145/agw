@@ -1,3 +1,4 @@
+using Agw.Agents.Definitions.Facades;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Projects.Application;
@@ -25,8 +26,14 @@ public class ProjectTraceCleanupTests
         var projectId = Guid.CreateVersion7();
         await SeedProjectConversationsAndTracesAsync(dbContext, projectId, cancellationToken);
         var service = CreateProjectConversationService(dbContext);
+        var conversationId = await dbContext
+            .ProjectConversations.Where(conversation =>
+                conversation.ProjectId == projectId && conversation.ContextId == "context-1"
+            )
+            .Select(conversation => conversation.Id)
+            .SingleAsync(cancellationToken);
 
-        await service.ClearRecordsAsync(projectId, "context-1");
+        await service.ClearRecordsAsync(projectId, conversationId);
 
         var trace = Assert.Single(await dbContext.AgentflowNodeExecutionTraces.ToListAsync(cancellationToken));
         Assert.Equal("context-2", trace.ContextId);
@@ -41,8 +48,14 @@ public class ProjectTraceCleanupTests
         var projectId = Guid.CreateVersion7();
         await SeedProjectConversationsAndTracesAsync(dbContext, projectId, cancellationToken);
         var service = CreateProjectConversationService(dbContext);
+        var conversationId = await dbContext
+            .ProjectConversations.Where(conversation =>
+                conversation.ProjectId == projectId && conversation.ContextId == "context-1"
+            )
+            .Select(conversation => conversation.Id)
+            .SingleAsync(cancellationToken);
 
-        await service.DeleteAsync(projectId, "context-1");
+        await service.DeleteAsync(projectId, conversationId);
 
         var trace = Assert.Single(await dbContext.AgentflowNodeExecutionTraces.ToListAsync(cancellationToken));
         Assert.Equal("context-2", trace.ContextId);
@@ -161,23 +174,24 @@ public class ProjectTraceCleanupTests
             Status = AgentflowNodeExecutionStatus.Succeeded,
         };
 
-    private static ProjectContextAppService CreateProjectConversationService(AgwDbContext dbContext)
+    private static ProjectConversationAppService CreateProjectConversationService(AgwDbContext dbContext)
     {
         var projectRepository = new EfRepository<Project>(dbContext);
-        return new ProjectContextAppService(
+        var userInfo = new TestUserInfoService();
+        return new ProjectConversationAppService(
             new EfRepository<ProjectConversation>(dbContext),
             new EfRepository<ProjectConversationChatHistory>(dbContext),
             new EfRepository<AgentflowCheckpointRecord>(dbContext),
             new EfRepository<AgentflowTrace>(dbContext),
             new EfRepository<AgentUsage>(dbContext),
             dbContext,
-            new ProjectResolver(projectRepository),
-            new ProjectConversationChatHistoryDomainService(),
+            new ProjectResolver(projectRepository, userInfo),
             new TaskSessionBindingService(
                 new EfRepository<TaskSessionBinding>(dbContext),
                 new EfRepository<ProjectConversation>(dbContext),
                 dbContext,
-                TimeProvider.System
+                TimeProvider.System,
+                userInfo
             ),
             TimeProvider.System
         );
@@ -186,10 +200,18 @@ public class ProjectTraceCleanupTests
     private static ProjectAppService CreateProjectService(AgwDbContext dbContext)
     {
         var projectRepository = new EfRepository<Project>(dbContext);
+        var userInfo = new TestUserInfoService();
         return new ProjectAppService(
             projectRepository,
             new EfRepository<ProjectMcpServerRelation>(dbContext),
-            new EfRepository<McpServer>(dbContext),
+            new AgentCatalogFacade(
+                new EfRepository<Agent>(dbContext),
+                new EfRepository<Agentflow>(dbContext),
+                new EfRepository<McpServer>(dbContext),
+                new EfRepository<AgentSkillRelation>(dbContext),
+                dbContext,
+                userInfo
+            ),
             new EfRepository<ProjectSkillRelation>(dbContext),
             new EfRepository<Skill>(dbContext),
             new EfRepository<ProjectConnectionRelation>(dbContext),
@@ -197,7 +219,8 @@ public class ProjectTraceCleanupTests
             new EfRepository<AgentflowTrace>(dbContext),
             dbContext,
             new ProjectDomainService(TimeProvider.System),
-            new ProjectResolver(projectRepository)
+            new ProjectResolver(projectRepository, userInfo),
+            userInfo
         );
     }
 }

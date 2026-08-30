@@ -1,8 +1,10 @@
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Controllers;
+using Agw.Agents.Definitions.Facades;
 using Agw.Domain.Services.Skills;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
+using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;
@@ -56,6 +58,7 @@ public class DefinitionPaginationTests
             Name = "paged-agent",
             DisplayName = "Paged Agent",
             Type = AgentType.External,
+            CreateBy = "tester",
             CreateTime = now,
         };
         var mcpServer = new McpServer
@@ -63,6 +66,7 @@ public class DefinitionPaginationTests
             Id = Guid.CreateVersion7(),
             Name = "paged-mcp",
             TransportType = "stdio",
+            CreateBy = "tester",
             CreateTime = now,
         };
         var skill = new Skill
@@ -71,6 +75,8 @@ public class DefinitionPaginationTests
             Name = "paged-skill",
             Description = "Paged skill",
             ContentPath = "skills/paged-skill",
+            Kind = SkillKind.Local,
+            CreateBy = "tester",
             CreateTime = now,
         };
         var connection = new Connection
@@ -81,6 +87,7 @@ public class DefinitionPaginationTests
             AuthSchemeId = "test-auth",
             DisplayName = "Paged Connection",
             Alias = "paged-connection",
+            CreateBy = "tester",
             CreateTime = now,
         };
 
@@ -113,6 +120,7 @@ public class DefinitionPaginationTests
             Name = "skill-agent",
             DisplayName = "Skill Agent",
             Type = AgentType.External,
+            CreateBy = "tester",
             CreateTime = now,
         };
         var skill = new Skill
@@ -121,6 +129,8 @@ public class DefinitionPaginationTests
             Name = "related-skill",
             Description = "Related skill",
             ContentPath = "skills/related-skill",
+            Kind = SkillKind.Local,
+            CreateBy = "tester",
             CreateTime = now,
         };
 
@@ -130,8 +140,14 @@ public class DefinitionPaginationTests
 
         var service = new SkillAppService(
             new EfRepository<Skill>(database.Context),
-            new EfRepository<Agent>(database.Context),
-            new EfRepository<AgentSkillRelation>(database.Context),
+            new AgentCatalogFacade(
+                new EfRepository<Agent>(database.Context),
+                new EfRepository<Agentflow>(database.Context),
+                new EfRepository<McpServer>(database.Context),
+                new EfRepository<AgentSkillRelation>(database.Context),
+                database.Context,
+                new TestUserInfoService()
+            ),
             new EfRepository<RemoteSkillCache>(database.Context),
             database.Context,
             new SkillDomainService(TimeProvider.System),
@@ -139,7 +155,8 @@ public class DefinitionPaginationTests
             NullLogger<SkillAppService>.Instance,
             new TestRemoteSkillClient(),
             new TestRemoteSkillRefreshLock(),
-            TimeProvider.System
+            TimeProvider.System,
+            new TestUserInfoService()
         );
 
         var result = await service.ListPageAsync(1, 10, cancellationToken);
@@ -162,7 +179,8 @@ public class DefinitionPaginationTests
             new EfRepository<Skill>(dbContext),
             new EfRepository<AgentSkillRelation>(dbContext),
             dbContext,
-            new AgentDomainService(TimeProvider.System)
+            new AgentDomainService(TimeProvider.System),
+            new TestUserInfoService()
         );
     }
 

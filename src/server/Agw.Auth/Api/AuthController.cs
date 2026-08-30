@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;
+using Agw.Auth.Security;
 using Agw.Shared;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Results;
@@ -23,6 +24,7 @@ public sealed class AuthController : ControllerBase
     private readonly IAntiforgery _antiforgery;
     private readonly AuthenticationAttemptLimiter _attemptLimiter;
     private readonly TimeProvider _timeProvider;
+    private readonly IUserInfoService _userInfoService;
 
     public AuthController(
         IAuthenticationStateStore stateStore,
@@ -30,7 +32,8 @@ public sealed class AuthController : ControllerBase
         IPasswordHasher<object> passwordHasher,
         IAntiforgery antiforgery,
         AuthenticationAttemptLimiter attemptLimiter,
-        TimeProvider timeProvider
+        TimeProvider timeProvider,
+        IUserInfoService userInfoService
     )
     {
         _stateStore = stateStore;
@@ -39,6 +42,7 @@ public sealed class AuthController : ControllerBase
         _antiforgery = antiforgery;
         _attemptLimiter = attemptLimiter;
         _timeProvider = timeProvider;
+        _userInfoService = userInfoService;
     }
 
     [HttpGet("session")]
@@ -47,9 +51,10 @@ public sealed class AuthController : ControllerBase
     public IActionResult Session()
     {
         var identity = User.Identity;
+        var authenticated = identity?.IsAuthenticated == true;
         return ApiResult.Ok(
             new SessionResponse(
-                identity?.IsAuthenticated == true,
+                authenticated,
                 identity?.AuthenticationType switch
                 {
                     AgwAuthDefaults.LocalTrustedScheme => "localTrusted",
@@ -57,7 +62,8 @@ public sealed class AuthController : ControllerBase
                     AgwAuthDefaults.BearerScheme => "bearer",
                     _ => "anonymous",
                 },
-                1
+                1,
+                authenticated ? _userInfoService.RequiredUserId : null
             )
         );
     }
@@ -163,7 +169,7 @@ public sealed class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> ListTokens(CancellationToken cancellationToken)
     {
-        return IsInteractiveAdmin()
+        return IsInteractiveUser()
             ? ApiResult.Ok(await _tokenStore.ListTokensAsync(cancellationToken))
             : ErrorCodes.InteractiveAdminRequired.ToApiResult();
     }
@@ -177,7 +183,7 @@ public sealed class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateToken(CreateTokenRequest request, CancellationToken cancellationToken)
     {
-        if (!IsInteractiveAdmin())
+        if (!IsInteractiveUser())
             return ErrorCodes.InteractiveAdminRequired.ToApiResult();
         if (string.IsNullOrWhiteSpace(request.Name) || request.Name.Trim().Length > 64)
             return ApiResult.BadRequest(
@@ -195,7 +201,7 @@ public sealed class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RevokeToken(Guid id, CancellationToken cancellationToken)
     {
-        if (!IsInteractiveAdmin())
+        if (!IsInteractiveUser())
             return ErrorCodes.InteractiveAdminRequired.ToApiResult();
         return await _tokenStore.RevokeTokenAsync(id, cancellationToken)
             ? ApiResult.Ok()
@@ -203,5 +209,8 @@ public sealed class AuthController : ControllerBase
     }
 
     private bool IsInteractiveAdmin() =>
+        User.Identity?.AuthenticationType is AgwAuthDefaults.CookieScheme or AgwAuthDefaults.LocalTrustedScheme;
+
+    private bool IsInteractiveUser() =>
         User.Identity?.AuthenticationType is AgwAuthDefaults.CookieScheme or AgwAuthDefaults.LocalTrustedScheme;
 }

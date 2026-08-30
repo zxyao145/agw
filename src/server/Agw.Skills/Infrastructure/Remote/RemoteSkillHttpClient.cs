@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Agw.Shared.Exceptions;
 using Agw.Skills.Application.Remote;
+using Agw.Skills.Contracts.Remote;
 using Microsoft.Agents.AI;
 
 namespace Agw.Skills.Infrastructure.Remote;

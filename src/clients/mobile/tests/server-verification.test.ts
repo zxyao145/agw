@@ -31,6 +31,85 @@ describe("server verification", () => {
       expect((requests[0].init?.headers as Record<string, string> | undefined)?.Authorization).toBe(
         "Bearer agw_mobile",
       );
+      expect(requests[0].init?.signal).toBeInstanceOf(AbortSignal);
+      expect(requests[1].init?.signal).toBe(requests[0].init?.signal);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("normalizes native network errors", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = jest.fn(async () => {
+      throw new Error("fetch failed: UnexpectedException: Could not connect to the server.");
+    }) as typeof fetch;
+
+    try {
+      await expect(verifyServerProfile(profile, "agw_mobile")).rejects.toThrow(
+        "Could not connect to the Agw Server. Check the Server URL and network, then try again.",
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("times out a stalled server connection after five seconds", async () => {
+    const originalFetch = globalThis.fetch;
+    jest.useFakeTimers();
+    globalThis.fetch = jest.fn(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new Error("aborted")), {
+            once: true,
+          });
+        }),
+    ) as typeof fetch;
+
+    try {
+      const verification = verifyServerProfile(profile, "agw_mobile");
+      await Promise.resolve();
+      jest.advanceTimersByTime(4_999);
+      await Promise.resolve();
+      jest.advanceTimersByTime(1);
+
+      await expect(verification).rejects.toThrow(
+        "Server verification timed out after 5 seconds. Check the Server URL, network, firewall, and Server availability, then try again.",
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+      jest.useRealTimers();
+    }
+  });
+
+  test("does not classify response processing errors as connection failures", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = jest.fn(async () => {
+      return {
+        headers: {
+          get: () => {
+            throw new Error("response parsing failed");
+          },
+        },
+      } as unknown as Response;
+    }) as typeof fetch;
+
+    try {
+      await expect(verifyServerProfile(profile, "agw_mobile")).rejects.toThrow(
+        "response parsing failed",
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test("rejects a successful response with an invalid payload", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = jest.fn(async () => Response.json({ code: 0, title: "OK" })) as typeof fetch;
+
+    try {
+      await expect(verifyServerProfile(profile, "agw_mobile")).rejects.toThrow(
+        "The Agw Server returned an invalid response.",
+      );
     } finally {
       globalThis.fetch = originalFetch;
     }

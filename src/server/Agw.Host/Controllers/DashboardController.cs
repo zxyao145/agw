@@ -1,12 +1,9 @@
-using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Jobs;
-using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Repositories;
+using Agw.Agents.Contracts.Catalog;
+using Agw.Jobs.Contracts.Metrics;
+using Agw.Projects.Contracts.Metrics;
 using Agw.Shared.Results;
 using Bens.Results;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Host.Controllers;
 
@@ -14,47 +11,38 @@ namespace Agw.Host.Controllers;
 [Route("api/dashboard")]
 public class DashboardController : ControllerBase
 {
-    private readonly IRepository<Job> _jobRepository;
-    private readonly IRepository<Project> _projectRepository;
-    private readonly IRepository<ProjectConversation> _projectConversationRepository;
-    private readonly IRepository<AgentUsage> _agentUsageRepository;
-    private readonly IRepository<ProjectConversationChatHistory> _chatHistoryRepository;
-    private readonly IRepository<Agent> _agentRepository;
-    private readonly IRepository<Agentflow> _agentflowRepository;
+    private readonly IJobMetricsFacade _jobMetrics;
+    private readonly IProjectMetricsFacade _projectMetrics;
+    private readonly IAgentCatalogFacade _agentCatalog;
 
     public DashboardController(
-        IRepository<Job> jobRepository,
-        IRepository<Project> projectRepository,
-        IRepository<ProjectConversation> projectConversationRepository,
-        IRepository<AgentUsage> agentUsageRepository,
-        IRepository<ProjectConversationChatHistory> chatHistoryRepository,
-        IRepository<Agent> agentRepository,
-        IRepository<Agentflow> agentflowRepository
+        IJobMetricsFacade jobMetrics,
+        IProjectMetricsFacade projectMetrics,
+        IAgentCatalogFacade agentCatalog
     )
     {
-        _jobRepository = jobRepository;
-        _projectRepository = projectRepository;
-        _projectConversationRepository = projectConversationRepository;
-        _agentUsageRepository = agentUsageRepository;
-        _chatHistoryRepository = chatHistoryRepository;
-        _agentRepository = agentRepository;
-        _agentflowRepository = agentflowRepository;
+        _jobMetrics = jobMetrics;
+        _projectMetrics = projectMetrics;
+        _agentCatalog = agentCatalog;
     }
 
     [HttpGet("stats")]
     [ProducesApiResult(typeof(DashboardStatsResponse))]
-    public async Task<IActionResult> GetStats()
+    public async Task<IActionResult> GetStats(CancellationToken cancellationToken)
     {
+        var jobs = await _jobMetrics.GetAsync(cancellationToken);
+        var projects = await _projectMetrics.GetAsync(cancellationToken);
+        var agents = await _agentCatalog.GetMetricsAsync(cancellationToken);
         var stats = new DashboardStatsResponse(
-            await _jobRepository.Queryable.CountAsync(),
-            await _projectRepository.Queryable.CountAsync(),
-            await _projectConversationRepository.Queryable.CountAsync(),
-            await _chatHistoryRepository.Queryable.CountAsync(),
-            await _agentRepository.Queryable.CountAsync(),
-            await _agentflowRepository.Queryable.CountAsync(),
-            await _agentUsageRepository.Queryable.SumAsync(usage => usage.InputTokenCount),
-            await _agentUsageRepository.Queryable.SumAsync(usage => usage.OutputTokenCount),
-            await _agentUsageRepository.Queryable.SumAsync(usage => usage.TotalTokenCount)
+            jobs.JobCount,
+            projects.ProjectCount,
+            projects.ConversationCount,
+            projects.TaskRecordCount,
+            agents.AgentCount,
+            agents.AgentflowCount,
+            projects.InputTokens,
+            projects.OutputTokens,
+            projects.TotalTokens
         );
 
         return ApiResult.Ok(stats);

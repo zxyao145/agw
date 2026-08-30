@@ -7,10 +7,11 @@ The Electron entry points are `src/main/index.ts` and `src/preload/index.ts`; th
 ## Runtime model
 
 - The default profile connects to `http://127.0.0.1:30816`.
-- A Full package installs the bundled self-contained `Agw.Host` as a current-user daemon. A Client package contains no Server.
+- A Full package installs the bundled self-contained `Agw.Standalone.Host` as a current-user daemon. A Client package contains no Server.
 - If port 30816 is occupied, Server chooses an available loopback port and publishes it to `~/agw/runtime/server.json`; Desktop validates that descriptor and follows the live process.
 - Desktop uses named Bearer tokens. Local first-run setup is the Server-owned `/setup` Razor page in a sandboxed modal window; after setup, the main process provisions a unique token and encrypts it with the operating system credential store.
 - Multiple remote profiles are supported. HTTPS is required unless the user explicitly accepts the HTTP warning for a profile.
+- Each Server profile owns an isolated React Query cache. Changing its URL or Token retires that cache, and switching profiles aborts stale connection probes and queries so data from the previous Server cannot overwrite the active view.
 - Packaged renderer files are served only inside Electron through `agw://app`. OAuth completion uses the separately registered external protocol `agw-desktop://oauth/complete`, which always opens the Desktop Integrations route.
 
 Every `server + project + conversation` has an independent SignalR connection. Switching Project tabs detaches the visible subscriber without stopping the task. Project status priority is: waiting for approval, failed, running, completed, idle.
@@ -67,7 +68,7 @@ Releases contain nine unsigned artifacts:
 
 Artifact names use `Agw-Desktop-{version}-{full|client}-{platform}-{arch}` with `-Setup.exe`, `-Portable.zip`, `.dmg`, or `.deb` as appropriate.
 
-`.github/workflows/build-desktop.yml` builds the complete matrix on pushes to `main` and retains temporary Actions artifacts. `.github/workflows/release.yml` reuses that matrix for `vX.Y.Z` and supported prerelease tags, or for a manually supplied release tag, then publishes the artifacts on the matching GitHub Release.
+`.github/workflows/build-desktop.yml` builds the complete matrix for relevant pull requests, pushes to `main`, and manual runs, retaining temporary Actions artifacts. `.github/workflows/release.yml` reuses that matrix for `vX.Y.Z` and supported prerelease tags, or for a manually supplied release tag, then publishes the artifacts on the matching GitHub Release.
 
 Opening About checks GitHub's latest stable Release and offers the artifact matching the current Full/Client flavor, platform, architecture, and Windows installation shape. Downloads open in the default browser and remain user-installed; Desktop does not check in the background, download automatically, or install updates. Code signing and notarization are not currently configured.
 

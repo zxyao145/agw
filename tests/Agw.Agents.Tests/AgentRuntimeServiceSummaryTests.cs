@@ -1,7 +1,6 @@
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Summaries;
-using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Data.Entities.Agents;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -106,11 +105,11 @@ public class AgentRuntimeServiceSummaryTests
     private static AgentRuntimeService CreateService(IAgentTurnSummaryService summaryService) =>
         new(
             agentAppService: null!,
-            projectAppService: null!,
+            projectRuntimeFacade: null!,
             capabilityComposer: null!,
             chatHistoryProvider: null!,
             providerSessionState: null!,
-            taskSessionBindingService: null!,
+            providerSessions: null!,
             dataPaths: null!,
             fileSystemResolver: null!,
             sessionStateStore: null!,

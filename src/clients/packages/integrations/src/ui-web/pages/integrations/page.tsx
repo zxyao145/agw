@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { apiDelete, apiGet, apiPost, apiPut } from "@agw/api";
 import { getApiErrorMessage } from "@agw/api";
+import { getAuthSession } from "@agw/auth";
 import { Button } from "@agw/components";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@agw/components";
 
@@ -57,17 +58,25 @@ export default function IntegrationsPage({
   const [connectionEditor, setConnectionEditor] =
     React.useState<ConnectionEditorState>(emptyConnectionEditor);
 
+  const authSessionQuery = useQuery({
+    queryKey: ["auth", "session"],
+    queryFn: getAuthSession,
+  });
+  const authUserId = authSessionQuery.data?.userId ?? "anonymous";
   const pluginsQuery = useQuery({
-    queryKey: integrationQueryKeys.plugins,
+    queryKey: [...integrationQueryKeys.plugins, authUserId],
+    enabled: authSessionQuery.data?.authenticated === true,
     queryFn: async () =>
       (await apiGet("/api/integrations/plugins")) as unknown as PluginDefinition[],
   });
   const connectionsQuery = useQuery({
-    queryKey: integrationQueryKeys.connections,
+    queryKey: [...integrationQueryKeys.connections, authUserId],
+    enabled: authSessionQuery.data?.authenticated === true,
     queryFn: async () => (await apiGet("/api/integrations/connections")) as unknown as Connection[],
   });
   const oauthCallbackQuery = useQuery({
-    queryKey: integrationQueryKeys.oauthCallback,
+    queryKey: [...integrationQueryKeys.oauthCallback, authUserId],
+    enabled: authSessionQuery.data?.authenticated === true,
     queryFn: async () =>
       (await apiGet("/api/integrations/oauth/callback-info")) as unknown as {
         callbackUrl: string;
@@ -83,7 +92,7 @@ export default function IntegrationsPage({
 
   const installationMutation = useMutation({
     mutationFn: async () => {
-      if (!installationSelection) throw new Error("No plugin installation selected.");
+      if (!installationSelection) throw new Error("No integration setup selected.");
       const fields = buildFieldPayload(
         installationSelection.authScheme.installationFields,
         installationForm,
@@ -99,7 +108,7 @@ export default function IntegrationsPage({
       });
     },
     onSuccess: async () => {
-      toast.success("Plugin installation saved");
+      toast.success("Integration setup saved");
       setInstallationSelection(null);
       await refreshIntegrations();
     },
@@ -123,7 +132,7 @@ export default function IntegrationsPage({
 
   const saveConnectionMutation = useMutation({
     mutationFn: async () => {
-      if (!connectionSelection) throw new Error("No connection definition selected.");
+      if (!connectionSelection) throw new Error("No integration definition selected.");
       const fields = buildFieldPayload(
         connectionSelection.authScheme.connectionFields,
         connectionEditor.fields,
@@ -150,7 +159,7 @@ export default function IntegrationsPage({
       };
     },
     onSuccess: async ({ connection, shouldAuthorize }) => {
-      toast.success(editingConnection ? "Connection updated" : "Connection created");
+      toast.success(editingConnection ? "Integration updated" : "Integration created");
       setConnectionSelection(null);
       setEditingConnection(null);
       await refreshIntegrations();
@@ -190,8 +199,10 @@ export default function IntegrationsPage({
   const plugins = pluginsQuery.data ?? [];
   const connections = connectionsQuery.data ?? [];
   const callbackUrl = oauthCallbackQuery.data?.callbackUrl ?? "Loading callback URL…";
+  const canConfigureInstallations = authSessionQuery.data?.authenticated === true;
 
   const openInstallation = (selection: IntegrationSelection) => {
+    if (!canConfigureInstallations) return;
     const installation = selection.authScheme.installation;
     setInstallationSelection(selection);
     setInstallationEnabled(installation?.enabled ?? true);
@@ -204,7 +215,7 @@ export default function IntegrationsPage({
     setConnectionSelection(selection);
     setConnectionEditor({
       ...emptyConnectionEditor(),
-      displayName: `${selection.plugin.displayName} connection`,
+      displayName: `${selection.plugin.displayName} integration`,
       alias: createDefaultConnectionAlias(selection.plugin.id),
       fields: createSchemaFormState(selection.authScheme.connectionFields),
     });
@@ -212,7 +223,7 @@ export default function IntegrationsPage({
   const openEditConnection = (connection: Connection) => {
     const selection = findIntegrationSelection(plugins, connection);
     if (!selection) {
-      toast.error("The plugin definition for this connection is unavailable.");
+      toast.error("The definition for this integration is unavailable.");
       return;
     }
     setEditingConnection(connection);
@@ -231,8 +242,8 @@ export default function IntegrationsPage({
         <div className="space-y-2">
           <h1 className="text-3xl font-semibold tracking-tight">Integrations</h1>
           <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-            Configure a plugin once, then create named connections for the exact accounts and
-            endpoints Agents can use.
+            Set up an integration, then add one or more accounts or service endpoints for Agents to
+            use.
           </p>
         </div>
         <Button
@@ -254,7 +265,7 @@ export default function IntegrationsPage({
       <section className="space-y-4">
         <div className="flex items-end justify-between gap-4">
           <div>
-            <h2 className="text-xl font-semibold">Connections</h2>
+            <h2 className="text-xl font-semibold">Configured integrations</h2>
             <p className="text-sm text-muted-foreground">
               Agent-selectable accounts and service endpoints, each with an immutable alias.
             </p>
@@ -265,7 +276,7 @@ export default function IntegrationsPage({
         </div>
         {connectionsQuery.isError ? (
           <p className="rounded-lg border border-destructive/40 p-4 text-sm text-destructive">
-            Failed to load connections: {getApiErrorMessage(connectionsQuery.error)}
+            Failed to load configured integrations: {getApiErrorMessage(connectionsQuery.error)}
           </p>
         ) : connections.length > 0 ? (
           <div className="grid gap-4 lg:grid-cols-2">
@@ -297,9 +308,9 @@ export default function IntegrationsPage({
         ) : (
           <Empty>
             <EmptyHeader>
-              <EmptyTitle>No connections yet</EmptyTitle>
+              <EmptyTitle>No configured integrations yet</EmptyTitle>
               <EmptyDescription>
-                Configure a plugin below, then create the first named account or endpoint.
+                Choose an available integration below, then add the first account or endpoint.
               </EmptyDescription>
             </EmptyHeader>
           </Empty>
@@ -309,9 +320,9 @@ export default function IntegrationsPage({
       <section className="space-y-4">
         <div className="flex items-end justify-between gap-4">
           <div>
-            <h2 className="text-xl font-semibold">Plugin installations</h2>
+            <h2 className="text-xl font-semibold">Available integrations</h2>
             <p className="text-sm text-muted-foreground">
-              Platform-level definitions and shared OAuth client or protocol configuration.
+              System-provided integrations and your own authentication setup.
             </p>
           </div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -326,6 +337,7 @@ export default function IntegrationsPage({
           <div className="grid grid-cols-1 md:grid-cols-2 md:grid-cols-3 gap-4">
             {plugins.map((plugin) => (
               <PluginCard
+                canConfigureInstallation={canConfigureInstallations}
                 key={plugin.id}
                 plugin={plugin}
                 onConfigure={openInstallation}
@@ -336,18 +348,20 @@ export default function IntegrationsPage({
         )}
       </section>
 
-      <PluginInstallationDialog
-        callbackUrl={callbackUrl}
-        enabled={installationEnabled}
-        form={installationForm}
-        isSubmitting={installationMutation.isPending}
-        onEnabledChange={setInstallationEnabled}
-        onFormChange={setInstallationForm}
-        onOpenChange={(open) => !open && setInstallationSelection(null)}
-        onSubmit={() => installationMutation.mutate()}
-        open={Boolean(installationSelection)}
-        selection={installationSelection}
-      />
+      {canConfigureInstallations ? (
+        <PluginInstallationDialog
+          callbackUrl={callbackUrl}
+          enabled={installationEnabled}
+          form={installationForm}
+          isSubmitting={installationMutation.isPending}
+          onEnabledChange={setInstallationEnabled}
+          onFormChange={setInstallationForm}
+          onOpenChange={(open) => !open && setInstallationSelection(null)}
+          onSubmit={() => installationMutation.mutate()}
+          open={Boolean(installationSelection)}
+          selection={installationSelection}
+        />
+      ) : null}
       <ConnectionDialog
         connection={editingConnection}
         editor={connectionEditor}

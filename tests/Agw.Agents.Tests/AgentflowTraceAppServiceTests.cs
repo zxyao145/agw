@@ -1,16 +1,26 @@
+using System.Security.Claims;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Shared.Data.Entities.Agentflows;
+using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Agents.Tests;
 
-public class AgentflowTraceAppServiceTests
+public class AgentflowTraceAppServiceTests : IDisposable
 {
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
+
     [Fact]
     public async Task ListAsync_ByProjectId_ReturnsOnlyMatchingTraces()
     {
@@ -340,6 +350,18 @@ public class AgentflowTraceAppServiceTests
         CancellationToken cancellationToken
     )
     {
+        dbContext.Projects.AddRange(
+            traces
+                .Select(trace => trace.ProjectId)
+                .Distinct()
+                .Select(projectId => new Project
+                {
+                    Id = projectId,
+                    Name = $"project-{projectId:N}",
+                    CreateBy = "tester",
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                })
+        );
         dbContext.AgentflowNodeExecutionTraces.AddRange(traces);
         return dbContext.SaveChangesAsync(cancellationToken);
     }

@@ -1,4 +1,7 @@
+using Agw.Auth.Contracts;
+using Agw.Infrastructure.Data;
 using Agw.Jobs.Scheduling;
+using Agw.Jobs.Scheduling.Attempts;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
@@ -22,139 +25,59 @@ public class JobRepo : EfRepository<Job>, IRepository<Job>, IJobStore
         CancellationToken cancellationToken
     )
     {
-        var jobs = await _dbSet.Where(t => t.IsEnabled).AsNoTracking().ToListAsync(cancellationToken);
+        var jobs = await _dbSet.IgnoreUserScope().Where(t => t.IsEnabled).AsNoTracking().ToListAsync(cancellationToken);
 
         return jobs.Where(t => t.Status == JobStatus.Pending && t.NextRunTime <= horizon).ToList();
     }
 
-    public async Task<bool> MarkRunningAsync(Guid jobId, CancellationToken cancellationToken)
+    public async Task<JobAttemptClaim?> TryStartAttemptAsync(Guid jobId, CancellationToken cancellationToken)
     {
         var now = _timeProvider.GetUtcNow();
-        var job = await _dbSet.FirstOrDefaultAsync(t => t.Id == jobId && t.IsEnabled, cancellationToken);
+        var job = await _dbSet
+            .IgnoreUserScope()
+            .FirstOrDefaultAsync(t => t.Id == jobId && t.IsEnabled, cancellationToken);
 
         if (job == null)
         {
-            var exists = await _dbSet.AsNoTracking().AnyAsync(t => t.Id == jobId, cancellationToken);
+            var exists = await _dbSet.IgnoreUserScope().AsNoTracking().AnyAsync(t => t.Id == jobId, cancellationToken);
 
             if (!exists)
             {
                 throw new AgwException(ErrorCodes.JobNotFound, $"Job not found: {jobId}");
             }
 
-            return false;
+            return null;
         }
 
         if (job.Status != JobStatus.Pending)
         {
-            return false;
+            return null;
         }
 
+        if (string.IsNullOrWhiteSpace(job.CreateBy))
+        {
+            job.Status = JobStatus.Paused;
+            job.IsEnabled = false;
+            job.LastError = "The Job owner is missing.";
+            job.ActiveExecutionId = null;
+            job.ActiveAttemptStartedAt = null;
+            job.UpdateTime = now;
+            job.UpdateBy = "scheduler";
+            using (UserInfoUtil.PushSystemScope())
+            {
+                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            }
+            return null;
+        }
+
+        var executionId = Guid.CreateVersion7();
         job.Status = JobStatus.Running;
+        job.ActiveExecutionId = executionId;
+        job.ActiveAttemptStartedAt = now;
         job.UpdateTime = now;
         job.UpdateBy = "scheduler";
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return true;
-    }
-
-    public async Task MarkSucceededAsync(Guid jobId, DateTimeOffset? nextRunTime, CancellationToken cancellationToken)
-    {
-        var task =
-            await _dbSet.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
-            ?? throw new AgwException(ErrorCodes.JobNotFound, $"Job not found: {jobId}");
-
-        task.RetryCount = 0;
-        task.LastError = null;
-        task.Status = JobStatus.Pending;
-
-        if (nextRunTime.HasValue)
-        {
-            task.NextRunTime = nextRunTime.Value;
-        }
-        else
-        {
-            task.IsEnabled = false;
-            task.Status = JobStatus.Paused;
-        }
-
-        task.UpdateTime = _timeProvider.GetUtcNow();
-        task.UpdateBy = "scheduler";
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task MarkRetryAsync(
-        Guid jobId,
-        DateTimeOffset nextRunTime,
-        int retryCount,
-        string errorMessage,
-        CancellationToken cancellationToken
-    )
-    {
-        var task =
-            await _dbSet.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
-            ?? throw new AgwException(ErrorCodes.JobNotFound, $"Job not found: {jobId}");
-
-        task.Status = JobStatus.Pending;
-        task.RetryCount = retryCount;
-        task.NextRunTime = nextRunTime;
-        task.LastError = errorMessage;
-        task.UpdateTime = _timeProvider.GetUtcNow();
-        task.UpdateBy = "scheduler";
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task MarkFailedAsync(
-        Guid jobId,
-        int retryCount,
-        string errorMessage,
-        CancellationToken cancellationToken
-    )
-    {
-        var task =
-            await _dbSet.FirstOrDefaultAsync(t => t.Id == jobId, cancellationToken)
-            ?? throw new AgwException(ErrorCodes.JobNotFound, $"Job not found: {jobId}");
-
-        task.Status = JobStatus.Paused;
-        task.IsEnabled = false;
-        task.RetryCount = retryCount;
-        task.LastError = errorMessage;
-        task.UpdateTime = _timeProvider.GetUtcNow();
-        task.UpdateBy = "scheduler";
-
-        await _dbContext.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task AddExecutionLogAsync(
-        Guid jobId,
-        Guid taskId,
-        DateTimeOffset startTime,
-        DateTimeOffset endTime,
-        bool success,
-        int attempt,
-        string? errorMessage,
-        CancellationToken cancellationToken
-    )
-    {
-        var now = _timeProvider.GetUtcNow();
-        var log = new JobLog
-        {
-            Id = Guid.CreateVersion7(),
-            JobId = jobId,
-            TaskId = taskId,
-            StartTime = startTime,
-            EndTime = endTime,
-            Success = success,
-            Attempt = attempt,
-            ErrorMessage = errorMessage,
-            CreateBy = "scheduler",
-            CreateTime = now,
-            UpdateBy = "scheduler",
-            UpdateTime = now,
-        };
-
-        await _dbContext.Set<JobLog>().AddAsync(log, cancellationToken);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        return new JobAttemptClaim(job, executionId, now, job.RetryCount + 1);
     }
 }

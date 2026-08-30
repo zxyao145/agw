@@ -8,7 +8,7 @@ namespace Agw.Skills.Execution;
 
 public static class LocalSkillScriptRunner
 {
-    private static readonly TimeSpan DefaultTimeout = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
 
     public static IReadOnlyList<string> SupportedScriptExtensions { get; } = [".py", ".js", ".cs"];
 
@@ -61,17 +61,18 @@ public static class LocalSkillScriptRunner
             );
         }
 
-        var standardOutputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var standardErrorTask = process.StandardError.ReadToEndAsync(cancellationToken);
         using var timeoutSource = new CancellationTokenSource(timeout ?? DefaultTimeout);
         using var linkedSource = CancellationTokenSource.CreateLinkedTokenSource(
             cancellationToken,
             timeoutSource.Token
         );
+        var standardOutputTask = process.StandardOutput.ReadToEndAsync(linkedSource.Token);
+        var standardErrorTask = process.StandardError.ReadToEndAsync(linkedSource.Token);
 
         try
         {
             await process.WaitForExitAsync(linkedSource.Token).ConfigureAwait(false);
+            await Task.WhenAll(standardOutputTask, standardErrorTask).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {

@@ -6,8 +6,6 @@ using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.Commands.Interrupt;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Commands.Subscribe;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Data;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;

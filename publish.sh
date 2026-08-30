@@ -6,13 +6,23 @@ ARTIFACTS_DIR="${ARTIFACTS_DIR:-$ROOT_DIR/artifacts/publish}"
 PUBLISH_MODE="${PUBLISH_MODE:-docker}"
 IMAGE_NAME="${IMAGE_NAME:-agw:latest}"
 IMAGE_TAGS="${IMAGE_TAGS:-$IMAGE_NAME}"
+DEFAULT_IMAGE_REPOSITORY="${IMAGE_NAME%:*}"
+DEFAULT_IMAGE_VERSION="${IMAGE_NAME##*:}"
+if [[ "$DEFAULT_IMAGE_REPOSITORY" == "$IMAGE_NAME" || "$DEFAULT_IMAGE_VERSION" == */* ]]; then
+  DEFAULT_IMAGE_REPOSITORY="$IMAGE_NAME"
+  DEFAULT_IMAGE_VERSION="latest"
+fi
+CONTROL_PLANE_IMAGE_NAME="${CONTROL_PLANE_IMAGE_NAME:-$DEFAULT_IMAGE_REPOSITORY-control-plane:$DEFAULT_IMAGE_VERSION}"
+CONTROL_PLANE_IMAGE_TAGS="${CONTROL_PLANE_IMAGE_TAGS:-$CONTROL_PLANE_IMAGE_NAME}"
+DATA_PLANE_IMAGE_NAME="${DATA_PLANE_IMAGE_NAME:-$DEFAULT_IMAGE_REPOSITORY-data-plane:$DEFAULT_IMAGE_VERSION}"
+DATA_PLANE_IMAGE_TAGS="${DATA_PLANE_IMAGE_TAGS:-$DATA_PLANE_IMAGE_NAME}"
 APP_VERSION="${APP_VERSION:-0.1.0-local}"
 RIDS="${RIDS:-win-x64 win-arm64 osx-x64 osx-arm64 linux-x64 linux-arm64}"
 DOCKER_PLATFORMS="${DOCKER_PLATFORMS:-linux/amd64,linux/arm64}"
 DOCKER_PUSH="${DOCKER_PUSH:-false}"
 WEB_DIR="$ROOT_DIR/src/clients"
 WEB_OUTPUT="$WEB_DIR/web/out"
-HOST_PROJECT="$ROOT_DIR/src/server/Agw.Host/Agw.Host.csproj"
+HOST_PROJECT="$ROOT_DIR/src/server/Agw.Standalone.Host/Agw.Standalone.Host.csproj"
 
 case "$PUBLISH_MODE" in
   docker|portable|all) ;;
@@ -45,12 +55,15 @@ build_portable() {
   done
 }
 
-build_docker() {
+build_docker_target() {
+  local target="$1"
+  local configured_tags="$2"
+  local artifact_role="$3"
   local -a image_tags tag_args
   local image_tag
   while IFS= read -r image_tag; do
     [[ -n "$image_tag" ]] && image_tags+=("$image_tag")
-  done < <(printf '%s\n' "$IMAGE_TAGS" | tr ', ' '\n\n')
+  done < <(printf '%s\n' "$configured_tags" | tr ', ' '\n\n')
 
   if [[ "${#image_tags[@]}" -eq 0 ]]; then
     echo "IMAGE_TAGS must contain at least one image tag" >&2
@@ -63,6 +76,7 @@ build_docker() {
 
   if [[ "$DOCKER_PUSH" == "true" ]]; then
     docker buildx build -f "$ROOT_DIR/Dockerfile" \
+      --target "$target" \
       --platform "$DOCKER_PLATFORMS" \
       --build-arg "APP_VERSION=$APP_VERSION" \
       --label "org.opencontainers.image.version=$APP_VERSION" \
@@ -83,14 +97,21 @@ build_docker() {
   IFS=',' read -r -a platforms <<< "$DOCKER_PLATFORMS"
   for platform in "${platforms[@]}"; do
     architecture="${platform##*/}"
-    output="$ARTIFACTS_DIR/docker/agw-server-$APP_VERSION-linux-$architecture.tar"
+    output="$ARTIFACTS_DIR/docker/agw-$artifact_role-$APP_VERSION-linux-$architecture.tar"
     docker buildx build -f "$ROOT_DIR/Dockerfile" \
+      --target "$target" \
       --platform "$platform" \
       --build-arg "APP_VERSION=$APP_VERSION" \
       --label "org.opencontainers.image.version=$APP_VERSION" \
       --tag "$image_repository:$image_version-$architecture" \
       --output "type=docker,dest=$output" "$ROOT_DIR"
   done
+}
+
+build_docker() {
+  build_docker_target standalone "$IMAGE_TAGS" server
+  build_docker_target control-plane "$CONTROL_PLANE_IMAGE_TAGS" control-plane
+  build_docker_target data-plane "$DATA_PLANE_IMAGE_TAGS" data-plane
 }
 
 case "$PUBLISH_MODE" in

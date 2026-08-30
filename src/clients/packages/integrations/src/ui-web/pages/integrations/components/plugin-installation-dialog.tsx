@@ -46,10 +46,9 @@ export function PluginInstallationDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="lg" className="max-h-[90vh] overflow-y-auto agw-scrollbar">
         <DialogHeader>
-          <DialogTitle>Plugin installation</DialogTitle>
+          <DialogTitle>Integration setup</DialogTitle>
           <DialogDescription>
-            Configure platform-level credentials shared by connections using this authentication
-            scheme.
+            Configure your credentials for configured integrations using this authentication scheme.
           </DialogDescription>
         </DialogHeader>
 
@@ -62,9 +61,9 @@ export function PluginInstallationDialog({
             </div>
             <div className="flex items-center justify-between rounded-lg border px-4 py-3">
               <div>
-                <Label htmlFor="installation-enabled">Installation enabled</Label>
+                <Label htmlFor="installation-enabled">Integration setup enabled</Label>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Disabling it makes all connections from this plugin unavailable.
+                  Disabling it makes your configured integrations from this definition unavailable.
                 </p>
               </div>
               <Switch
@@ -95,7 +94,7 @@ export function PluginInstallationDialog({
             Cancel
           </Button>
           <Button type="button" onClick={onSubmit} disabled={!selection || isSubmitting}>
-            {isSubmitting ? "Saving..." : "Save installation"}
+            {isSubmitting ? "Saving..." : "Save setup"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -40,7 +40,7 @@ test("renderer event records remove query parameters and credential-like failure
       reason: "ERR_FAILED while loading ?token=secret-value",
       exitCode: -2,
       pathname:
-        "agw://app/desktop/chat/?projectId=project-1&contextId=context-1&token=secret-value",
+        "agw://app/desktop/chat/?projectId=project-1&conversationId=conversation-1&token=secret-value",
     },
     {
       appVersion: "1.2.3",

@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using System.Security.Claims;
 using Agw.Agents.Execution.Turns;
+using Agw.Auth.Contracts;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Runtime;
@@ -88,9 +90,13 @@ internal sealed class DistributedExecutionWorker : BackgroundService
             await using var scope = _scopeFactory.CreateAsyncScope();
             var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
             var staleBefore = _timeProvider.GetUtcNow() - TimeSpan.FromSeconds(_options.RecoveryProbeSeconds);
-            var executionIds = await store
-                .GetRunnableExecutionIdsAsync(staleBefore, capacity + _runningExecutions.Count, cancellationToken)
-                .ConfigureAwait(false);
+            IReadOnlyList<Guid> executionIds;
+            using (UserInfoUtil.PushSystemScope())
+            {
+                executionIds = await store
+                    .GetRunnableExecutionIdsAsync(staleBefore, capacity + _runningExecutions.Count, cancellationToken)
+                    .ConfigureAwait(false);
+            }
             var scheduled = 0;
             foreach (var executionId in executionIds)
             {
@@ -175,9 +181,13 @@ internal sealed class DistributedExecutionWorker : BackgroundService
             var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
             var executor = scope.ServiceProvider.GetRequiredService<DurableExecutionSegmentExecutor>();
             var staleBefore = _timeProvider.GetUtcNow() - TimeSpan.FromSeconds(_options.RecoveryProbeSeconds);
-            var snapshot = await store
-                .TryBeginSegmentAsync(executionId, staleBefore, cancellationToken)
-                .ConfigureAwait(false);
+            DurableExecutionSnapshot? snapshot;
+            using (UserInfoUtil.PushSystemScope())
+            {
+                snapshot = await store
+                    .TryBeginSegmentAsync(executionId, staleBefore, cancellationToken)
+                    .ConfigureAwait(false);
+            }
             if (snapshot == null)
             {
                 return;
@@ -237,7 +247,12 @@ internal sealed class DistributedExecutionWorker : BackgroundService
                 }
             }
 
-            var persisted = await store.SaveSegmentResultAsync(result, cancellationToken).ConfigureAwait(false);
+            DurableExecutionSnapshot persisted;
+            using var ownerScope = UserInfoUtil.Push(CreateUserPrincipal(snapshot.Manifest.ResolveUserId()));
+            using (UserInfoUtil.PushSystemScope())
+            {
+                persisted = await store.SaveSegmentResultAsync(result, cancellationToken).ConfigureAwait(false);
+            }
             if (IsTerminal(persisted.Status))
             {
                 await PublishTerminalBestEffortAsync(
@@ -262,7 +277,11 @@ internal sealed class DistributedExecutionWorker : BackgroundService
             await Task.Delay(InterruptPollingInterval, _timeProvider, cancellationToken).ConfigureAwait(false);
             await using var scope = _scopeFactory.CreateAsyncScope();
             var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-            var snapshot = await store.GetAsync(executionId, cancellationToken).ConfigureAwait(false);
+            DurableExecutionSnapshot snapshot;
+            using (UserInfoUtil.PushSystemScope())
+            {
+                snapshot = await store.GetAsync(executionId, cancellationToken).ConfigureAwait(false);
+            }
             if (snapshot.Status != DurableExecutionStatus.Interrupted)
             {
                 continue;
@@ -358,4 +377,7 @@ internal sealed class DistributedExecutionWorker : BackgroundService
             is DurableExecutionStatus.Completed
                 or DurableExecutionStatus.Failed
                 or DurableExecutionStatus.Interrupted;
+
+    private static ClaimsPrincipal CreateUserPrincipal(string userId) =>
+        new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], "DistributedExecution"));
 }

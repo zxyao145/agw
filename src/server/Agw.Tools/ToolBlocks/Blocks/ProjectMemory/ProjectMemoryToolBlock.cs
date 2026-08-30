@@ -111,7 +111,8 @@ public sealed class ProjectMemoryToolBlock : IToolBlock
             ? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 ".agw",
-                context.Project.Name
+                "projects",
+                context.Project.Id.ToString("N")
             )
             : PathUtil.ExpandTilde(context.Project.Workspace);
         var normalizedWorkspace = Path.TrimEndingDirectorySeparator(Path.GetFullPath(workspace));

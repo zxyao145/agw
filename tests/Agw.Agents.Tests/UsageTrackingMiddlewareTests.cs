@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using Agw.Agents.Execution.Agents.Middleware;
-using Agw.Shared.Contracts.Projects;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;

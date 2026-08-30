@@ -4,7 +4,10 @@ export type AuthSession = {
   authenticated: boolean;
   accessMode: "anonymous" | "localTrusted" | "cookie" | "bearer";
   apiMajorVersion: number;
+  userId: string | null;
 };
+
+export const ADMIN_USER_ID = "1001";
 
 export type ApiTokenSummary = {
   id: string;

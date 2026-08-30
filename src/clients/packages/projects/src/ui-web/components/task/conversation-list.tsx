@@ -5,11 +5,11 @@ import { Pencil, Plus, RotateCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
-  deleteAllProjectContexts,
-  deleteProjectContext,
-  getProjectContexts,
-  updateProjectContextTitle,
-  type ContextSummary,
+  deleteAllProjectConversations,
+  deleteProjectConversation,
+  getProjectConversations,
+  updateProjectConversationTitle,
+  type ConversationSummary,
 } from "../../../services/task-client";
 import { Button } from "@agw/components";
 import {
@@ -28,9 +28,10 @@ import { cn } from "@agw/components";
 interface ConversationListProps {
   projectId: string;
   currentContextId: string | null;
+  currentConversationId: string | null;
   refreshSignal?: number;
-  onContextSelect: (context: ContextSummary) => void;
-  onActiveContextResolved?: (context: ContextSummary) => void;
+  onConversationSelect: (conversation: ConversationSummary) => void;
+  onActiveConversationResolved?: (conversation: ConversationSummary) => void;
   onNewConversation: () => void;
   onAllConversationsDeleted: () => void;
   headerActions?: React.ReactNode;
@@ -39,47 +40,50 @@ interface ConversationListProps {
 export function ConversationList({
   projectId,
   currentContextId,
+  currentConversationId,
   refreshSignal,
-  onContextSelect,
-  onActiveContextResolved,
+  onConversationSelect,
+  onActiveConversationResolved,
   onNewConversation,
   onAllConversationsDeleted,
   headerActions,
 }: ConversationListProps) {
-  const [contexts, setContexts] = React.useState<ContextSummary[]>([]);
+  const [conversations, setConversations] = React.useState<ConversationSummary[]>([]);
   const [clearAllDialogOpen, setClearAllDialogOpen] = React.useState(false);
-  const [contextToDelete, setContextToDelete] = React.useState<ContextSummary | null>(null);
-  const [contextToRename, setContextToRename] = React.useState<ContextSummary | null>(null);
+  const [conversationToDelete, setConversationToDelete] =
+    React.useState<ConversationSummary | null>(null);
+  const [conversationToRename, setConversationToRename] =
+    React.useState<ConversationSummary | null>(null);
   const [renameTitle, setRenameTitle] = React.useState("");
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const didObserveRefreshSignalRef = React.useRef(false);
   const refreshRequestIdRef = React.useRef(0);
 
   const matchesCurrentSession = React.useCallback(
-    (context: ContextSummary) => context.contextId === currentContextId,
+    (conversation: ConversationSummary) => conversation.contextId === currentContextId,
     [currentContextId],
   );
 
-  const refreshContexts = React.useCallback(async (): Promise<ContextSummary[]> => {
+  const refreshConversations = React.useCallback(async (): Promise<ConversationSummary[]> => {
     const requestId = ++refreshRequestIdRef.current;
     setIsRefreshing(true);
     try {
       if (!projectId) {
         if (requestId === refreshRequestIdRef.current) {
-          setContexts([]);
+          setConversations([]);
         }
         return [];
       }
 
-      const latestContexts = await getProjectContexts(projectId);
+      const latestConversations = await getProjectConversations(projectId);
       if (requestId !== refreshRequestIdRef.current) {
-        return latestContexts;
+        return latestConversations;
       }
 
-      setContexts(latestContexts);
-      return latestContexts;
+      setConversations(latestConversations);
+      return latestConversations;
     } catch (error) {
-      console.error("Failed to load chat contexts:", error);
+      console.error("Failed to load conversations:", error);
       return [];
     } finally {
       if (requestId === refreshRequestIdRef.current) {
@@ -89,8 +93,8 @@ export function ConversationList({
   }, [projectId]);
 
   React.useEffect(() => {
-    void refreshContexts();
-  }, [refreshContexts]);
+    void refreshConversations();
+  }, [refreshConversations]);
 
   React.useEffect(() => {
     if (refreshSignal === undefined) {
@@ -102,8 +106,8 @@ export function ConversationList({
       return;
     }
 
-    void refreshContexts();
-  }, [refreshSignal, refreshContexts]);
+    void refreshConversations();
+  }, [refreshSignal, refreshConversations]);
 
   React.useEffect(() => {
     if (!projectId || !currentContextId) {
@@ -116,8 +120,8 @@ export function ConversationList({
 
     const refreshUntilCurrentContextAppears = async () => {
       attempts += 1;
-      const latestContexts = await refreshContexts();
-      if (cancelled || attempts >= 5 || latestContexts.some(matchesCurrentSession)) {
+      const latestConversations = await refreshConversations();
+      if (cancelled || attempts >= 5 || latestConversations.some(matchesCurrentSession)) {
         return;
       }
 
@@ -134,81 +138,84 @@ export function ConversationList({
         clearTimeout(timeoutId);
       }
     };
-  }, [currentContextId, matchesCurrentSession, projectId, refreshContexts]);
+  }, [currentContextId, matchesCurrentSession, projectId, refreshConversations]);
 
-  const activeContext = React.useMemo(() => {
+  const activeConversation = React.useMemo(() => {
     if (!currentContextId) {
       return null;
     }
 
-    return contexts.find(matchesCurrentSession) ?? null;
-  }, [contexts, currentContextId, matchesCurrentSession]);
+    return conversations.find(matchesCurrentSession) ?? null;
+  }, [conversations, currentContextId, matchesCurrentSession]);
 
   React.useEffect(() => {
     if (
-      !activeContext ||
-      !onActiveContextResolved ||
-      activeContext.contextId === currentContextId
+      !activeConversation ||
+      !onActiveConversationResolved ||
+      activeConversation.conversationId === currentConversationId
     ) {
       return;
     }
 
-    onActiveContextResolved(activeContext);
-  }, [activeContext, currentContextId, onActiveContextResolved]);
+    onActiveConversationResolved(activeConversation);
+  }, [activeConversation, currentConversationId, onActiveConversationResolved]);
 
   const handleClearAll = async () => {
     try {
-      await deleteAllProjectContexts(projectId);
+      await deleteAllProjectConversations(projectId);
       toast.success("All chats cleared");
       onAllConversationsDeleted();
-      await refreshContexts();
+      await refreshConversations();
     } catch (error) {
       console.error("Clear all error:", error);
       toast.error("Error clearing chats");
     }
   };
 
-  const handleDeleteContext = async (context: ContextSummary) => {
+  const handleDeleteConversation = async (conversation: ConversationSummary) => {
     try {
-      const deleted = await deleteProjectContext(projectId, context.contextId);
+      const deleted = await deleteProjectConversation(projectId, conversation.conversationId);
       if (!deleted) {
         toast.error("Conversation not found");
-        await refreshContexts();
+        await refreshConversations();
         return;
       }
 
       toast.success("Conversation deleted");
-      if (context.contextId === currentContextId) {
+      if (
+        conversation.conversationId === currentConversationId ||
+        conversation.contextId === currentContextId
+      ) {
         onAllConversationsDeleted();
       }
-      await refreshContexts();
+      await refreshConversations();
     } catch (error) {
       console.error("Delete conversation error:", error);
       toast.error("Error deleting conversation");
     }
   };
 
-  const handleRenameContext = async () => {
-    if (!contextToRename) {
+  const handleRenameConversation = async () => {
+    if (!conversationToRename) {
       return;
     }
 
     try {
-      const updated = await updateProjectContextTitle(
+      const updated = await updateProjectConversationTitle(
         projectId,
-        contextToRename.contextId,
+        conversationToRename.conversationId,
         renameTitle,
       );
       if (!updated) {
         toast.error(renameTitle.trim() ? "Conversation not found" : "Title is required");
-        await refreshContexts();
+        await refreshConversations();
         return;
       }
 
       toast.success("Conversation renamed");
-      setContextToRename(null);
+      setConversationToRename(null);
       setRenameTitle("");
-      await refreshContexts();
+      await refreshConversations();
     } catch (error) {
       console.error("Rename conversation error:", error);
       toast.error("Error renaming conversation");
@@ -224,7 +231,7 @@ export function ConversationList({
             className="cursor-pointer"
             size="sm"
             variant="ghost"
-            onClick={refreshContexts}
+            onClick={refreshConversations}
             disabled={isRefreshing}
             aria-label="Refresh conversations"
           >
@@ -238,12 +245,12 @@ export function ConversationList({
             variant="ghost"
             onClick={async () => {
               await Promise.resolve(onNewConversation());
-              await refreshContexts();
+              await refreshConversations();
             }}
           >
             <Plus className="h-4 w-4" />
           </Button>
-          {contexts.length > 0 && (
+          {conversations.length > 0 && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -264,16 +271,16 @@ export function ConversationList({
       </div>
 
       <div className="flex-1 overflow-y-auto agw-scrollbar p-2 space-y-1">
-        {contexts.length === 0 ? (
+        {conversations.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground text-sm">No chat history yet</div>
         ) : (
-          contexts.map((context) => {
-            const isActive = context.contextId === activeContext?.contextId;
+          conversations.map((conversation) => {
+            const isActive = conversation.conversationId === activeConversation?.conversationId;
 
             return (
               <div
-                key={context.contextId}
-                onClick={() => onContextSelect(context)}
+                key={conversation.conversationId}
+                onClick={() => onConversationSelect(conversation)}
                 className={cn(
                   "group p-2 rounded-md cursor-pointer transition-colors",
                   isActive ? "bg-accent" : "bg-card hover:bg-accent/50",
@@ -282,7 +289,7 @@ export function ConversationList({
                 <div className="flex items-start">
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="font-medium text-sm truncate">
-                      {context.title || "Untitled"}
+                      {conversation.title || "Untitled"}
                     </div>
                     <div className="mt-2 text-xs text-muted-foreground flex gap-1.5">
                       <span>
@@ -291,11 +298,14 @@ export function ConversationList({
                           ? "execution"
                           : "executions"}{" "}
                         ·  */}
-                        {context.messageCount} {context.messageCount === 1 ? "message" : "messages"}
+                        {conversation.messageCount}{" "}
+                        {conversation.messageCount === 1 ? "message" : "messages"}
                       </span>
                       ·
                       <span>
-                        {formatFriendlyLocalDateTime(context.updateTime ?? context.createTime)}
+                        {formatFriendlyLocalDateTime(
+                          conversation.updateTime ?? conversation.createTime,
+                        )}
                       </span>
                     </div>
                   </div>
@@ -307,8 +317,8 @@ export function ConversationList({
                       aria-label="Rename conversation"
                       onClick={(event) => {
                         event.stopPropagation();
-                        setContextToRename(context);
-                        setRenameTitle(context.title || "");
+                        setConversationToRename(conversation);
+                        setRenameTitle(conversation.title || "");
                       }}
                     >
                       <Pencil className="h-4 w-4" />
@@ -320,7 +330,7 @@ export function ConversationList({
                       aria-label="Delete conversation"
                       onClick={(event) => {
                         event.stopPropagation();
-                        setContextToDelete(context);
+                        setConversationToDelete(conversation);
                       }}
                     >
                       <Trash2 className="h-4 w-4" />
@@ -334,10 +344,10 @@ export function ConversationList({
       </div>
 
       <Dialog
-        open={Boolean(contextToRename)}
+        open={Boolean(conversationToRename)}
         onOpenChange={(open) => {
           if (!open) {
-            setContextToRename(null);
+            setConversationToRename(null);
             setRenameTitle("");
           }
         }}
@@ -353,7 +363,7 @@ export function ConversationList({
               onChange={(event) => setRenameTitle(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
-                  void handleRenameContext();
+                  void handleRenameConversation();
                 }
               }}
               placeholder="Conversation title"
@@ -364,13 +374,13 @@ export function ConversationList({
             <Button
               variant="outline"
               onClick={() => {
-                setContextToRename(null);
+                setConversationToRename(null);
                 setRenameTitle("");
               }}
             >
               Cancel
             </Button>
-            <Button onClick={() => void handleRenameContext()} disabled={!renameTitle.trim()}>
+            <Button onClick={() => void handleRenameConversation()} disabled={!renameTitle.trim()}>
               Save
             </Button>
           </DialogFooter>
@@ -378,31 +388,31 @@ export function ConversationList({
       </Dialog>
 
       <Dialog
-        open={Boolean(contextToDelete)}
-        onOpenChange={(open) => !open && setContextToDelete(null)}
+        open={Boolean(conversationToDelete)}
+        onOpenChange={(open) => !open && setConversationToDelete(null)}
       >
         <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>Delete conversation</DialogTitle>
             <DialogDescription className="whitespace-normal wrap-break-word break-all">
-              This will permanently delete "{contextToDelete?.title || "Untitled"}" and all
+              This will permanently delete "{conversationToDelete?.title || "Untitled"}" and all
               executions in this conversation.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setContextToDelete(null)}>
+            <Button variant="outline" onClick={() => setConversationToDelete(null)}>
               Cancel
             </Button>
             <Button
               variant="destructive"
               onClick={async () => {
-                if (!contextToDelete) {
+                if (!conversationToDelete) {
                   return;
                 }
 
-                const context = contextToDelete;
-                setContextToDelete(null);
-                await handleDeleteContext(context);
+                const conversation = conversationToDelete;
+                setConversationToDelete(null);
+                await handleDeleteConversation(conversation);
               }}
             >
               Delete

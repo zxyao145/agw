@@ -2,22 +2,20 @@ using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Turns;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
 
 namespace Agw.Agents.Execution.Runtimes;
 
 public sealed class AgentflowRuntime : RuntimeBase
 {
     private readonly Guid _agentflowId;
-    private readonly TaskProjection _task;
+    private readonly AgentExecutionTask _task;
     private readonly SettingCommand _settings;
     private readonly AgentflowRuntimeService _runtimeService;
     private readonly AgentflowCheckpointRuntimeState _checkpointState = new();
 
     internal AgentflowRuntime(
         Guid agentflowId,
-        TaskProjection task,
+        AgentExecutionTask task,
         SettingCommand settings,
         AgentflowRuntimeService runtimeService
     )

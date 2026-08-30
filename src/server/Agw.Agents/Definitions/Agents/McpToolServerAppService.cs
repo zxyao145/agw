@@ -1,7 +1,10 @@
+using Agw.Auth.Contracts;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Pagination;
 using Agw.Shared.Data.Repositories;
-using Agw.Shared.Pagination;
+using Agw.Shared.Exceptions;
+using Microsoft.EntityFrameworkCore;
 using ModelContextProtocol.Client;
 
 namespace Agw.Agents.Definitions.Agents;
@@ -13,13 +16,15 @@ public class McpToolServerAppService
     private readonly IRepository<AgentMcpServerRelation> _agentMcpToolServerRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly McpToolServerDomainService _mcpToolServerDomainService;
+    private readonly IUserInfoService _userInfoService;
 
     public McpToolServerAppService(
         IRepository<Agent> agentRepository,
         IRepository<McpServer> mcpToolServerRepository,
         IRepository<AgentMcpServerRelation> agentMcpToolServerRepository,
         IUnitOfWork unitOfWork,
-        McpToolServerDomainService mcpToolServerDomainService
+        McpToolServerDomainService mcpToolServerDomainService,
+        IUserInfoService userInfoService
     )
     {
         _agentRepository = agentRepository;
@@ -27,9 +32,14 @@ public class McpToolServerAppService
         _agentMcpToolServerRepository = agentMcpToolServerRepository;
         _unitOfWork = unitOfWork;
         _mcpToolServerDomainService = mcpToolServerDomainService;
+        _userInfoService = userInfoService;
     }
 
-    public Task<IReadOnlyList<McpServer>> ListMcpToolServersAsync() => _mcpToolServerRepository.ListAsync();
+    public Task<IReadOnlyList<McpServer>> ListMcpToolServersAsync()
+    {
+        var ownerUserId = ResolveOwnerUserId();
+        return _mcpToolServerRepository.ListAsync(server => server.CreateBy == ownerUserId);
+    }
 
     public Task<PagedResult<McpServer>> ListMcpToolServerPageAsync(
         int pageIndex,
@@ -37,27 +47,36 @@ public class McpToolServerAppService
         CancellationToken cancellationToken = default
     ) =>
         UpdatedTimePagination.ToPagedResultAsync(
-            _mcpToolServerRepository.Queryable,
+            _mcpToolServerRepository.Queryable.Where(server => server.CreateBy == ResolveOwnerUserId()),
             server => server.Id,
             pageIndex,
             pageSize,
             cancellationToken
         );
 
-    public Task<McpServer?> GetMcpToolServerAsync(Guid id) => _mcpToolServerRepository.GetByIdAsync(id);
+    public Task<McpServer?> GetMcpToolServerAsync(Guid id)
+    {
+        var ownerUserId = ResolveOwnerUserId();
+        return _mcpToolServerRepository.Queryable.FirstOrDefaultAsync(server =>
+            server.Id == id && server.CreateBy == ownerUserId
+        );
+    }
 
     public async Task<McpServer> CreateMcpToolServerAsync(McpServer server, IEnumerable<Guid>? agentIds, string user)
     {
         _mcpToolServerDomainService.PrepareForCreate(server, user);
         await _mcpToolServerRepository.AddAsync(server);
-        await SyncMcpToolServerAgentRelationsAsync(server.Id, agentIds);
+        await SyncMcpToolServerAgentRelationsAsync(server.Id, agentIds, user);
         await _unitOfWork.SaveChangesAsync();
         return server;
     }
 
     public async Task<McpServer?> UpdateMcpToolServerAsync(Guid id, Action<McpServer> updateAction, string user)
     {
-        var existing = await _mcpToolServerRepository.GetByIdAsync(id);
+        var ownerUserId = ResolveOwnerUserId();
+        var existing = await _mcpToolServerRepository.Queryable.FirstOrDefaultAsync(server =>
+            server.Id == id && server.CreateBy == ownerUserId
+        );
         if (existing == null)
         {
             return null;
@@ -71,7 +90,10 @@ public class McpToolServerAppService
 
     public async Task<bool> DeleteMcpToolServerAsync(Guid id)
     {
-        var existing = await _mcpToolServerRepository.GetByIdAsync(id);
+        var ownerUserId = ResolveOwnerUserId();
+        var existing = await _mcpToolServerRepository.Queryable.FirstOrDefaultAsync(server =>
+            server.Id == id && server.CreateBy == ownerUserId
+        );
         if (existing == null)
         {
             return false;
@@ -87,7 +109,10 @@ public class McpToolServerAppService
         CancellationToken cancellationToken = default
     )
     {
-        var server = await _mcpToolServerRepository.GetByIdAsync(mcpToolServerId);
+        var ownerUserId = ResolveOwnerUserId();
+        var server = await _mcpToolServerRepository.Queryable.FirstOrDefaultAsync(item =>
+            item.Id == mcpToolServerId && item.CreateBy == ownerUserId
+        );
         if (server == null || !server.Enabled)
         {
             return [];
@@ -96,7 +121,11 @@ public class McpToolServerAppService
         return await McpToolServerToolClient.ListToolsAsync(server, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task SyncMcpToolServerAgentRelationsAsync(Guid mcpToolServerId, IEnumerable<Guid>? agentIds)
+    private async Task SyncMcpToolServerAgentRelationsAsync(
+        Guid mcpToolServerId,
+        IEnumerable<Guid>? agentIds,
+        string user
+    )
     {
         var existingLinks = await _agentMcpToolServerRepository.ListAsync(x => x.McpToolServerId == mcpToolServerId);
         foreach (var link in existingLinks)
@@ -110,7 +139,11 @@ public class McpToolServerAppService
             return;
         }
 
-        var existingAgents = await _agentRepository.ListAsync(x => requestedIds.Contains(x.Id));
+        var existingAgents = await _agentRepository.ListAsync(x => requestedIds.Contains(x.Id) && x.CreateBy == user);
+        if (existingAgents.Count != requestedIds.Count)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam);
+        }
         foreach (var agentId in existingAgents.Select(x => x.Id))
         {
             await _agentMcpToolServerRepository.AddAsync(
@@ -118,4 +151,6 @@ public class McpToolServerAppService
             );
         }
     }
+
+    private string ResolveOwnerUserId() => _userInfoService.RequiredUserId;
 }

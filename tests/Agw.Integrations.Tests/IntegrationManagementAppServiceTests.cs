@@ -75,6 +75,58 @@ public class IntegrationManagementAppServiceTests
     }
 
     [Fact]
+    public async Task ConnectionOperations_UserScope_IsolatesDataAndAllowsAliasReuse()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scope = await ManagementTestScope.CreateAsync(cancellationToken);
+
+        var first = await scope.Connections.CreateAsync(ConnectionRequest("shared-alias"), "user-a", cancellationToken);
+        var second = await scope.Connections.CreateAsync(
+            ConnectionRequest("shared-alias"),
+            "user-b",
+            cancellationToken
+        );
+
+        Assert.Equal(first.Id, Assert.Single(await scope.Connections.ListAsync(null, "user-a", cancellationToken)).Id);
+        Assert.Equal(second.Id, Assert.Single(await scope.Connections.ListAsync(null, "user-b", cancellationToken)).Id);
+        Assert.Empty(await scope.Connections.ListAsync(first.Id, "user-b", cancellationToken));
+        Assert.Null(
+            await scope.Reader.ReadConnectionAsync(
+                first.Id,
+                "user-b",
+                IntegrationCredentialSlots.ConnectionField("api-key"),
+                cancellationToken
+            )
+        );
+        var duplicate = await Assert.ThrowsAsync<AgwException>(() =>
+            scope.Connections.CreateAsync(ConnectionRequest("shared-alias"), "user-a", cancellationToken)
+        );
+        Assert.Equal(ErrorCodes.ConnectionAliasAlreadyExists.Code, duplicate.Code);
+        var foreignValidation = await Assert.ThrowsAsync<AgwException>(() =>
+            scope.Connections.ValidateAsync(first.Id, "user-b", cancellationToken)
+        );
+        Assert.Equal(ErrorCodes.ConnectionNotFound.Code, foreignValidation.Code);
+        Assert.False(await scope.Connections.DeleteAsync(first.Id, "user-b", cancellationToken));
+        Assert.True(await scope.Connections.DeleteAsync(first.Id, "user-a", cancellationToken));
+    }
+
+    [Fact]
+    public async Task UpsertInstallation_NonAdministrator_CreatesUserOwnedSetup()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var scope = await ManagementTestScope.CreateAsync(cancellationToken);
+
+        var response = await scope.Installations.UpsertAsync(
+            InstallationRequest(Encrypted("replacement"), null),
+            "user-a",
+            cancellationToken
+        );
+
+        Assert.Equal("test-plugin", response.PluginId);
+        Assert.Equal("user-a", (await scope.DbContext.PluginInstallations.SingleAsync(cancellationToken)).CreateBy);
+    }
+
+    [Fact]
     public async Task UpsertInstallation_KeepSetAndClear_AppliesMutationSemantics()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -275,6 +327,7 @@ public class IntegrationManagementAppServiceTests
 
         var value = await scope.Reader.ReadConnectionAsync(
             connection.Id,
+            "tester",
             IntegrationCredentialSlots.ConnectionField("api-key"),
             cancellationToken
         );
@@ -465,7 +518,7 @@ public class IntegrationManagementAppServiceTests
             cancellationToken
         );
 
-        var connection = Assert.Single(await scope.Connections.ListAsync(created.Id, cancellationToken));
+        var connection = Assert.Single(await scope.Connections.ListAsync(created.Id, "tester", cancellationToken));
         Assert.Equal(ConnectionStatusResponse.NeedsConfiguration, connection.Status);
         Assert.Null(connection.LastValidatedAtUtc);
         Assert.Equal("integration.needs_configuration", connection.LastValidationErrorCode);
@@ -505,7 +558,7 @@ public class IntegrationManagementAppServiceTests
         );
 
         Assert.False(disabled.Enabled);
-        var response = Assert.Single(await scope.Connections.ListAsync(connection.Id, cancellationToken));
+        var response = Assert.Single(await scope.Connections.ListAsync(connection.Id, "tester", cancellationToken));
         Assert.Equal(ConnectionStatusResponse.NeedsConfiguration, response.Status);
     }
 
@@ -575,7 +628,7 @@ public class IntegrationManagementAppServiceTests
         disableInstallation.Enabled = false;
         await scope.Installations.UpsertAsync(disableInstallation, "tester", cancellationToken);
 
-        var connections = (await scope.Connections.ListAsync(null, cancellationToken)).ToDictionary(
+        var connections = (await scope.Connections.ListAsync(null, "tester", cancellationToken)).ToDictionary(
             connection => connection.Alias,
             StringComparer.Ordinal
         );
@@ -685,7 +738,7 @@ public class IntegrationManagementAppServiceTests
         installation.Secrets["client-secret"] = Encrypted("rotated-secret");
         await scope.Installations.UpsertAsync(installation, "tester", cancellationToken);
 
-        var connections = (await scope.Connections.ListAsync(null, cancellationToken)).ToDictionary(
+        var connections = (await scope.Connections.ListAsync(null, "tester", cancellationToken)).ToDictionary(
             connection => connection.Alias,
             StringComparer.Ordinal
         );
@@ -722,7 +775,7 @@ public class IntegrationManagementAppServiceTests
         await scope.DbContext.SaveChangesAsync(cancellationToken);
         scope.DbContext.ChangeTracker.Clear();
 
-        Assert.True(await scope.Connections.DeleteAsync(created.Id, cancellationToken));
+        Assert.True(await scope.Connections.DeleteAsync(created.Id, "tester", cancellationToken));
 
         Assert.False(await scope.DbContext.Connections.AnyAsync(item => item.Id == created.Id, cancellationToken));
         Assert.False(
@@ -823,9 +876,9 @@ public class IntegrationManagementAppServiceTests
             SqliteConnection connection,
             AgwDbContext dbContext,
             PluginCatalogAppService plugins,
-            PluginInstallationAppService installations,
-            ConnectionAppService connections,
-            IConnectionCredentialReader reader
+            TestPluginInstallationClient installations,
+            TestConnectionClient connections,
+            TestCredentialReader reader
         )
         {
             _connection = connection;
@@ -838,9 +891,9 @@ public class IntegrationManagementAppServiceTests
 
         public AgwDbContext DbContext { get; }
         public PluginCatalogAppService Plugins { get; }
-        public PluginInstallationAppService Installations { get; }
-        public ConnectionAppService Connections { get; }
-        public IConnectionCredentialReader Reader { get; }
+        public TestPluginInstallationClient Installations { get; }
+        public TestConnectionClient Connections { get; }
+        public TestCredentialReader Reader { get; }
 
         public static async Task<ManagementTestScope> CreateAsync(
             CancellationToken cancellationToken,
@@ -873,15 +926,18 @@ public class IntegrationManagementAppServiceTests
                 dbContext
             );
             IUnitOfWork unitOfWork = dbContext;
+            var userInfo = new TestUserInfoService("tester");
 
             var reader = new ConnectionCredentialReader(
                 installationCredentialRepository,
-                connectionCredentialRepository
+                connectionCredentialRepository,
+                userInfo
             );
             var credentialMutations = new CredentialMutationService(
                 installationCredentialRepository,
                 connectionCredentialRepository,
-                timeProvider
+                timeProvider,
+                userInfo
             );
             var installations = new PluginInstallationAppService(
                 installationRepository,
@@ -889,12 +945,14 @@ public class IntegrationManagementAppServiceTests
                 unitOfWork,
                 catalog,
                 credentialMutations,
-                timeProvider
+                timeProvider,
+                userInfo
             );
             var plugins = new PluginCatalogAppService(
                 catalog,
                 installationRepository,
-                new PluginSkillMetadataReader(new AppContextPluginContentRootProvider())
+                new PluginSkillMetadataReader(new AppContextPluginContentRootProvider()),
+                userInfo
             );
             var connections = new ConnectionAppService(
                 connectionRepository,
@@ -903,26 +961,150 @@ public class IntegrationManagementAppServiceTests
                 catalog,
                 credentialMutations,
                 reader,
-                timeProvider
+                timeProvider,
+                userInfo
             );
+            var installationClient = new TestPluginInstallationClient(installations, userInfo);
+            var connectionClient = new TestConnectionClient(connections, userInfo);
+            var credentialReader = new TestCredentialReader(reader, userInfo);
 
             if (catalog is TestPluginCatalog)
             {
-                await installations.UpsertAsync(
+                await installationClient.UpsertAsync(
                     InstallationRequest(Encrypted("seed-secret"), null),
-                    "seed",
+                    "tester",
                     cancellationToken
                 );
                 dbContext.ChangeTracker.Clear();
             }
 
-            return new ManagementTestScope(connection, dbContext, plugins, installations, connections, reader);
+            return new ManagementTestScope(
+                connection,
+                dbContext,
+                plugins,
+                installationClient,
+                connectionClient,
+                credentialReader
+            );
         }
 
         public async ValueTask DisposeAsync()
         {
             await DbContext.DisposeAsync();
             await _connection.DisposeAsync();
+        }
+    }
+
+    private sealed class TestPluginInstallationClient
+    {
+        private readonly PluginInstallationAppService _service;
+        private readonly TestUserInfoService _userInfo;
+
+        public TestPluginInstallationClient(PluginInstallationAppService service, TestUserInfoService userInfo)
+        {
+            _service = service;
+            _userInfo = userInfo;
+        }
+
+        public Task<PluginInstallationResponse> UpsertAsync(
+            PluginInstallationUpsertRequest request,
+            string userId,
+            CancellationToken cancellationToken
+        )
+        {
+            _userInfo.UserId = userId;
+            return _service.UpsertAsync(request, cancellationToken);
+        }
+    }
+
+    private sealed class TestConnectionClient
+    {
+        private readonly ConnectionAppService _service;
+        private readonly TestUserInfoService _userInfo;
+
+        public TestConnectionClient(ConnectionAppService service, TestUserInfoService userInfo)
+        {
+            _service = service;
+            _userInfo = userInfo;
+        }
+
+        public Task<IReadOnlyList<ConnectionResponse>> ListAsync(
+            Guid? id,
+            string userId,
+            CancellationToken cancellationToken
+        )
+        {
+            SetUser(userId);
+            return _service.ListAsync(id, cancellationToken);
+        }
+
+        public Task<ConnectionResponse> CreateAsync(
+            ConnectionCreateRequest request,
+            string userId,
+            CancellationToken cancellationToken
+        )
+        {
+            SetUser(userId);
+            return _service.CreateAsync(request, cancellationToken);
+        }
+
+        public Task<ConnectionResponse> UpdateAsync(
+            ConnectionUpdateRequest request,
+            string userId,
+            CancellationToken cancellationToken
+        )
+        {
+            SetUser(userId);
+            return _service.UpdateAsync(request, cancellationToken);
+        }
+
+        public Task<ConnectionResponse> ValidateAsync(Guid id, string userId, CancellationToken cancellationToken)
+        {
+            SetUser(userId);
+            return _service.ValidateAsync(id, cancellationToken);
+        }
+
+        public Task<bool> DeleteAsync(Guid id, string userId, CancellationToken cancellationToken)
+        {
+            SetUser(userId);
+            return _service.DeleteAsync(id, cancellationToken);
+        }
+
+        private void SetUser(string userId)
+        {
+            _userInfo.UserId = userId;
+        }
+    }
+
+    private sealed class TestCredentialReader
+    {
+        private readonly IConnectionCredentialReader _reader;
+        private readonly TestUserInfoService _userInfo;
+
+        public TestCredentialReader(IConnectionCredentialReader reader, TestUserInfoService userInfo)
+        {
+            _reader = reader;
+            _userInfo = userInfo;
+        }
+
+        public Task<ResolvedCredential?> ReadConnectionAsync(
+            Guid connectionId,
+            string userId,
+            string slot,
+            CancellationToken cancellationToken
+        )
+        {
+            _userInfo.UserId = userId;
+            return _reader.ReadConnectionAsync(connectionId, slot, cancellationToken);
+        }
+
+        public Task<ResolvedCredential?> ReadPluginInstallationAsync(
+            Guid pluginInstallationId,
+            string slot,
+            CancellationToken cancellationToken
+        )
+        {
+            return _reader.ReadPluginInstallationAsync(pluginInstallationId, slot, cancellationToken);
         }
     }
 

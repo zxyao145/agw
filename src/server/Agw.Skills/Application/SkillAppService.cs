@@ -1,15 +1,17 @@
 using System.IO.Compression;
 using System.Text;
+using Agw.Agents.Contracts.Catalog;
 using Agw.Domain.Services.Skills;
+using Agw.Shared.Contracts;
 using Agw.Shared.Contracts.Pagination;
-using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Skills;
+using Agw.Shared.Data.Pagination;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Pagination;
 using Agw.Shared.Runtime;
 using Agw.Skills.Application.Remote;
 using Agw.Skills.Contracts.Registration;
+using Agw.Skills.Contracts.Remote;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
@@ -20,8 +22,7 @@ public sealed record SkillDetails(Skill Skill, IReadOnlyList<Guid> AgentIds, boo
 public class SkillAppService
 {
     private readonly IRepository<Skill> _skillRepository;
-    private readonly IRepository<Agent> _agentRepository;
-    private readonly IRepository<AgentSkillRelation> _agentSkillRelationRepository;
+    private readonly IAgentReferenceFacade _agentReferences;
     private readonly IRepository<RemoteSkillCache> _remoteSkillCacheRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly SkillDomainService _skillDomainService;
@@ -31,11 +32,11 @@ public class SkillAppService
     private readonly IRemoteSkillClient _remoteSkillClient;
     private readonly IRemoteSkillRefreshLock _remoteSkillRefreshLock;
     private readonly TimeProvider _timeProvider;
+    private readonly ICurrentUser _currentUser;
 
     public SkillAppService(
         IRepository<Skill> skillRepository,
-        IRepository<Agent> agentRepository,
-        IRepository<AgentSkillRelation> agentSkillRelationRepository,
+        IAgentReferenceFacade agentReferences,
         IRepository<RemoteSkillCache> remoteSkillCacheRepository,
         IUnitOfWork unitOfWork,
         SkillDomainService skillDomainService,
@@ -44,12 +45,12 @@ public class SkillAppService
         IRemoteSkillClient remoteSkillClient,
         IRemoteSkillRefreshLock remoteSkillRefreshLock,
         TimeProvider timeProvider,
+        ICurrentUser currentUser,
         IEnumerable<IAgentSkillRegistration>? skillRegistrations = null
     )
     {
         _skillRepository = skillRepository;
-        _agentRepository = agentRepository;
-        _agentSkillRelationRepository = agentSkillRelationRepository;
+        _agentReferences = agentReferences;
         _remoteSkillCacheRepository = remoteSkillCacheRepository;
         _unitOfWork = unitOfWork;
         _skillDomainService = skillDomainService;
@@ -58,12 +59,16 @@ public class SkillAppService
         _remoteSkillClient = remoteSkillClient;
         _remoteSkillRefreshLock = remoteSkillRefreshLock;
         _timeProvider = timeProvider;
+        _currentUser = currentUser;
         _builtInSkillIds = (skillRegistrations ?? []).Select(registration => registration.Id).ToHashSet();
     }
 
     public async Task<IReadOnlyList<SkillDetails>> ListAsync()
     {
-        var skills = await _skillRepository.ListAsync();
+        var ownerUserId = ResolveOwnerUserId();
+        var skills = await _skillRepository.ListAsync(skill =>
+            skill.Kind == SkillKind.BuiltIn || skill.CreateBy == ownerUserId
+        );
         return await AttachAgentIdsAsync(skills);
     }
 
@@ -74,7 +79,9 @@ public class SkillAppService
     )
     {
         var page = await UpdatedTimePagination.ToPagedResultAsync(
-            _skillRepository.Queryable,
+            _skillRepository.Queryable.Where(skill =>
+                skill.Kind == SkillKind.BuiltIn || skill.CreateBy == ResolveOwnerUserId()
+            ),
             skill => skill.Id,
             pageIndex,
             pageSize,
@@ -93,7 +100,12 @@ public class SkillAppService
 
     public async Task<SkillDetails?> GetAsync(Guid id)
     {
-        var skill = await _skillRepository.GetByIdAsync(id);
+        var ownerUserId = ResolveOwnerUserId();
+        var skill = (
+            await _skillRepository.ListAsync(skill =>
+                skill.Id == id && (skill.Kind == SkillKind.BuiltIn || skill.CreateBy == ownerUserId)
+            )
+        ).FirstOrDefault();
         if (skill == null)
         {
             return null;
@@ -132,7 +144,12 @@ public class SkillAppService
         CancellationToken cancellationToken = default
     )
     {
-        var existing = await _skillRepository.GetByIdAsync(id);
+        var ownerUserId = ResolveOwnerUserId();
+        var existing = (
+            await _skillRepository.ListAsync(skill =>
+                skill.Id == id && (skill.Kind == SkillKind.BuiltIn || skill.CreateBy == ownerUserId)
+            )
+        ).FirstOrDefault();
         if (existing == null)
         {
             return null;
@@ -157,7 +174,12 @@ public class SkillAppService
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var existing = await _skillRepository.GetByIdAsync(id);
+        var ownerUserId = ResolveOwnerUserId();
+        var existing = (
+            await _skillRepository.ListAsync(skill =>
+                skill.Id == id && (skill.Kind == SkillKind.BuiltIn || skill.CreateBy == ownerUserId)
+            )
+        ).FirstOrDefault();
         if (existing == null)
         {
             return false;
@@ -193,12 +215,13 @@ public class SkillAppService
         await EnsureNameAvailableAsync(skill.Name, null, cancellationToken);
         skill.RemoteUrl = null;
         _skillDomainService.PrepareForCreate(skill, user);
+        skill.ContentPath = BuildUserContentPath(skill);
         await using var preparedDirectory = await PrepareArchiveDirectoryAsync(skill.Name, skill.Description, archive);
 
         await _skillRepository.AddAsync(skill);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var targetDirectory = GetSkillAbsolutePath(skill.Name);
+        var targetDirectory = GetSkillAbsolutePath(skill);
         ReplaceDirectory(targetDirectory, preparedDirectory.DirectoryPath);
 
         _logger.LogInformation("Created local skill {SkillName} at {SkillPath}", skill.Name, targetDirectory);
@@ -263,8 +286,10 @@ public class SkillAppService
 
         await EnsureNameAvailableAsync(normalizedName, existing.Id, cancellationToken);
 
-        var originalName = existing.Name;
+        var originalPath = GetSkillAbsolutePath(existing);
         _skillDomainService.ApplyUpdate(existing, normalizedName, description, user);
+        existing.ContentPath = BuildUserContentPath(existing);
+        var targetPath = GetSkillAbsolutePath(existing);
 
         PreparedSkillDirectory? preparedDirectory = null;
         if (archive != null)
@@ -279,16 +304,15 @@ public class SkillAppService
         {
             await using (preparedDirectory)
             {
-                ReplaceDirectory(GetSkillAbsolutePath(existing.Name), preparedDirectory.DirectoryPath);
+                ReplaceDirectory(targetPath, preparedDirectory.DirectoryPath);
             }
+            DeleteDirectoryIfDifferent(originalPath, targetPath);
         }
-        else if (!string.Equals(originalName, existing.Name, StringComparison.Ordinal))
+        else if (!string.Equals(originalPath, targetPath, StringComparison.Ordinal))
         {
-            var sourceDirectory = GetSkillAbsolutePath(originalName);
-            var targetDirectory = GetSkillAbsolutePath(existing.Name);
-            if (Directory.Exists(sourceDirectory))
+            if (Directory.Exists(originalPath))
             {
-                ReplaceDirectory(targetDirectory, sourceDirectory, moveSourceDirectory: true);
+                ReplaceDirectory(targetPath, originalPath, moveSourceDirectory: true);
             }
         }
 
@@ -360,18 +384,14 @@ public class SkillAppService
             _remoteSkillCacheRepository.Remove(cache);
         }
 
-        var relations = await _agentSkillRelationRepository.ListAsync(x => x.SkillId == existing.Id);
-        foreach (var relation in relations)
-        {
-            _agentSkillRelationRepository.Remove(relation);
-        }
+        await _agentReferences.RemoveSkillBindingsAsync(existing.Id, cancellationToken).ConfigureAwait(false);
 
         _skillRepository.Remove(existing);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         if (existing.Kind == SkillKind.Local)
         {
-            var targetDirectory = GetSkillAbsolutePath(existing.Name);
+            var targetDirectory = GetSkillAbsolutePath(existing);
             if (Directory.Exists(targetDirectory))
             {
                 Directory.Delete(targetDirectory, recursive: true);
@@ -390,10 +410,7 @@ public class SkillAppService
         }
 
         var skillIds = skills.Select(x => x.Id).ToHashSet();
-        var relations = await _agentSkillRelationRepository.ListAsync(x => skillIds.Contains(x.SkillId));
-        var map = relations
-            .GroupBy(x => x.SkillId)
-            .ToDictionary(g => g.Key, g => (IReadOnlyList<Guid>)g.Select(x => x.AgentId).ToList());
+        var map = await _agentReferences.GetAgentIdsBySkillIdsAsync(skillIds).ConfigureAwait(false);
 
         return skills
             .Select(skill => new SkillDetails(skill, map.GetValueOrDefault(skill.Id, []), IsBuiltIn(skill)))
@@ -410,10 +427,16 @@ public class SkillAppService
 
     private bool IsBuiltIn(Skill skill) => skill.Kind == SkillKind.BuiltIn || _builtInSkillIds.Contains(skill.Id);
 
+    private string ResolveOwnerUserId() => _currentUser.RequiredUserId;
+
     private async Task EnsureNameAvailableAsync(string name, Guid? excludedSkillId, CancellationToken cancellationToken)
     {
+        var ownerUserId = ResolveOwnerUserId();
         var existing = await _skillRepository.SingleOrDefaultAsync(
-            skill => skill.Name == name && (!excludedSkillId.HasValue || skill.Id != excludedSkillId.Value),
+            skill =>
+                skill.Name == name
+                && (skill.Kind == SkillKind.BuiltIn || skill.CreateBy == ownerUserId)
+                && (!excludedSkillId.HasValue || skill.Id != excludedSkillId.Value),
             cancellationToken
         );
         if (existing != null)
@@ -438,31 +461,8 @@ public class SkillAppService
 
     private async Task<IReadOnlyList<Guid>> GetSkillAgentIdsAsync(Guid skillId)
     {
-        var relations = await _agentSkillRelationRepository.ListAsync(x => x.SkillId == skillId);
-        return relations.Select(x => x.AgentId).ToList();
-    }
-
-    private async Task SyncAgentSkillRelationsAsync(Guid skillId, IEnumerable<Guid>? agentIds)
-    {
-        var existingLinks = await _agentSkillRelationRepository.ListAsync(x => x.SkillId == skillId);
-        foreach (var link in existingLinks)
-        {
-            _agentSkillRelationRepository.Remove(link);
-        }
-
-        var requestedAgentIds = _skillDomainService.NormalizeAgentIds(agentIds);
-        if (requestedAgentIds.Count == 0)
-        {
-            return;
-        }
-
-        var existingAgents = await _agentRepository.ListAsync(x => requestedAgentIds.Contains(x.Id));
-        foreach (var agentId in existingAgents.Select(x => x.Id))
-        {
-            await _agentSkillRelationRepository.AddAsync(
-                new AgentSkillRelation { AgentId = agentId, SkillId = skillId }
-            );
-        }
+        var map = await _agentReferences.GetAgentIdsBySkillIdsAsync([skillId]).ConfigureAwait(false);
+        return map.GetValueOrDefault(skillId, []);
     }
 
     private async Task<PreparedSkillDirectory> PrepareArchiveDirectoryAsync(
@@ -658,9 +658,40 @@ public class SkillAppService
         return value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
     }
 
-    private string GetSkillAbsolutePath(string skillName)
+    private static string BuildUserContentPath(Skill skill) => $"skills/{skill.Id:N}";
+
+    private string GetSkillAbsolutePath(Skill skill)
     {
-        return Path.Combine(_dataPaths.SkillsDirectory, skillName);
+        var relativePath = string.IsNullOrWhiteSpace(skill.ContentPath)
+            ? Path.Combine("skills", skill.Name)
+            : skill.ContentPath.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+        var rootPath = Path.GetFullPath(_dataPaths.Root);
+        var absolutePath = Path.GetFullPath(Path.Combine(rootPath, relativePath));
+        var relativeToRoot = Path.GetRelativePath(rootPath, absolutePath);
+        if (
+            Path.IsPathRooted(relativeToRoot)
+            || string.Equals(relativeToRoot, "..", StringComparison.Ordinal)
+            || relativeToRoot.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+        )
+        {
+            throw new AgwException(ErrorCodes.InvalidSkillDirectoryPath);
+        }
+
+        return absolutePath;
+    }
+
+    private static void DeleteDirectoryIfDifferent(string sourceDirectory, string targetDirectory)
+    {
+        if (
+            !string.Equals(
+                Path.GetFullPath(sourceDirectory),
+                Path.GetFullPath(targetDirectory),
+                StringComparison.Ordinal
+            ) && Directory.Exists(sourceDirectory)
+        )
+        {
+            Directory.Delete(sourceDirectory, recursive: true);
+        }
     }
 
     private static void ReplaceDirectory(

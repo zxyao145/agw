@@ -50,7 +50,7 @@ test("consecutive system messages keep only the latest message in each sequence"
       thirdRetry,
       result,
     ]),
-    [assistant, secondRetry, user, result],
+    [assistant, secondRetry, user, thirdRetry, result],
   );
 });
 

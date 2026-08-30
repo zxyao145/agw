@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
 using Agw.Setup.Services;
 using Agw.Shared;
@@ -13,10 +14,13 @@ using Xunit;
 
 namespace Agw.Setup.Tests;
 
-public sealed class LegacyApiTokenMigratorTests
+public sealed class LegacyApiTokenMigratorTests : IDisposable
 {
     private static readonly Guid LegacyTokenId = Guid.Parse("0198b7b8-a50c-7f6e-a50d-b46e722a6622");
     private static readonly DateTimeOffset LegacyCreatedAt = new(2026, 7, 13, 10, 0, 0, TimeSpan.Zero);
+    private readonly IDisposable _systemScope = UserInfoUtil.PushSystemScope();
+
+    public void Dispose() => _systemScope.Dispose();
 
     [Fact]
     public async Task MigrateAsync_ImportsLegacyHashAndMetadataThenRemovesStateTokens()

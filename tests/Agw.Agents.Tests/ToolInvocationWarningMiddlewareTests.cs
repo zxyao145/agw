@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Tools;
-using Agw.Shared.Contracts.Agents;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 

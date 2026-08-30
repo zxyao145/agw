@@ -90,17 +90,19 @@ public class EncryptedDataPersistenceTests
         AssertCiphertext(storedHeaders["X-Api-Key"], "header-api-key");
 
         await using var verifyContext = new AgwDbContext(options, protector);
-        var trackedAuthConfig = await verifyContext.ProviderAuthConfigs.SingleAsync(
-            TestContext.Current.CancellationToken
-        );
-        var untrackedMcpServer = await verifyContext
-            .McpToolServers.AsNoTracking()
+        var trackedAuthConfig = await verifyContext
+            .ProviderAuthConfigs.IgnoreUserScope()
             .SingleAsync(TestContext.Current.CancellationToken);
-        var reloadedPluginCredential = await verifyContext.PluginInstallationCredentials.SingleAsync(
-            TestContext.Current.CancellationToken
-        );
+        var untrackedMcpServer = await verifyContext
+            .McpToolServers.IgnoreUserScope()
+            .AsNoTracking()
+            .SingleAsync(TestContext.Current.CancellationToken);
+        var reloadedPluginCredential = await verifyContext
+            .PluginInstallationCredentials.IgnoreUserScope()
+            .SingleAsync(TestContext.Current.CancellationToken);
         var reloadedConnectionCredential = await verifyContext
-            .ConnectionCredentials.AsNoTracking()
+            .ConnectionCredentials.IgnoreUserScope()
+            .AsNoTracking()
             .SingleAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal("provider-secret", trackedAuthConfig.ApiKey);
@@ -152,13 +154,17 @@ public class EncryptedDataPersistenceTests
         await using var verifyContext = new AgwDbContext(options, protector);
         Assert.Equal(
             "new-api-key",
-            (await verifyContext.ProviderAuthConfigs.SingleAsync(TestContext.Current.CancellationToken)).ApiKey
+            (
+                await verifyContext
+                    .ProviderAuthConfigs.IgnoreUserScope()
+                    .SingleAsync(TestContext.Current.CancellationToken)
+            ).ApiKey
         );
         Assert.Equal(
             "new-header",
-            (await verifyContext.McpToolServers.SingleAsync(TestContext.Current.CancellationToken)).Headers[
-                "Authorization"
-            ]
+            (
+                await verifyContext.McpToolServers.IgnoreUserScope().SingleAsync(TestContext.Current.CancellationToken)
+            ).Headers["Authorization"]
         );
     }
 
@@ -359,7 +365,10 @@ public class EncryptedDataPersistenceTests
 
         await using var context = new AgwDbContext(options, CreateProtector());
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            context.ProviderAuthConfigs.AsNoTracking().SingleAsync(TestContext.Current.CancellationToken)
+            context
+                .ProviderAuthConfigs.IgnoreUserScope()
+                .AsNoTracking()
+                .SingleAsync(TestContext.Current.CancellationToken)
         );
         Assert.Equal(ErrorCodes.EncryptedDataInvalid.Code, exception.Code);
     }

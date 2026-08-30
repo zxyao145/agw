@@ -11,8 +11,8 @@ public sealed class OAuthRefreshAppService
         _authorizationService = authorizationService;
     }
 
-    public Task<OAuthRefreshResponse> RefreshAsync(Guid connectionId, string user, CancellationToken cancellationToken)
+    public Task<OAuthRefreshResponse> RefreshAsync(Guid connectionId, CancellationToken cancellationToken)
     {
-        return _authorizationService.RefreshAsync(connectionId, user, cancellationToken);
+        return _authorizationService.RefreshAsync(connectionId, cancellationToken);
     }
 }

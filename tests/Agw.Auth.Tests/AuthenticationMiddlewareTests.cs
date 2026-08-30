@@ -6,6 +6,7 @@ using Agw.Auth.Contracts;
 using Agw.Auth.Middleware;
 using Agw.Auth.Security;
 using Agw.Shared;
+using Agw.Shared.Exceptions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
 using Xunit;
@@ -138,7 +139,7 @@ public sealed class AuthenticationMiddlewareTests
     }
 
     [Fact]
-    public async Task InvokeAsync_AuthenticatedPrincipalWithMissingOrBlankClaims_AddsDefaults()
+    public async Task InvokeAsync_AuthenticatedPrincipalWithMissingOrBlankUserId_RejectsRequest()
     {
         var context = new DefaultHttpContext
         {
@@ -151,10 +152,7 @@ public sealed class AuthenticationMiddlewareTests
         };
         var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask, false);
 
-        await InvokeAsync(middleware, context, new StateStoreStub());
-
-        Assert.Equal(Constants.AdminUserName, context.User.Identity?.Name);
-        Assert.Equal(Constants.AdminUserId, context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+        await Assert.ThrowsAsync<AgwException>(() => InvokeAsync(middleware, context, new StateStoreStub()));
     }
 
     [Fact]
@@ -187,7 +185,10 @@ public sealed class AuthenticationMiddlewareTests
         context.Request.Headers.Origin = "https://evil.example.com";
         context.User = new ClaimsPrincipal(
             new ClaimsIdentity(
-                [new Claim(ClaimTypes.Name, Constants.AdminUserName)],
+                [
+                    new Claim(ClaimTypes.Name, Constants.AdminUserName),
+                    new Claim(ClaimTypes.NameIdentifier, Constants.AdminUserId),
+                ],
                 AgwAuthDefaults.LocalTrustedScheme
             )
         );

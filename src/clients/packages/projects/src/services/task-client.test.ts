@@ -3,12 +3,14 @@ import test from "node:test";
 
 import { clearAntiforgeryToken } from "@agw/api";
 import {
-  clearProjectContextRecords,
-  deleteAllProjectContexts,
-  deleteProjectContext,
-  getProjectContextDetails,
-  getProjectContexts,
-  updateProjectContextTitle,
+  clearProjectConversationRecords,
+  createProjectConversation,
+  deleteAllProjectConversations,
+  deleteProjectConversation,
+  getProjectConversationDetails,
+  getProjectConversationMessages,
+  getProjectConversations,
+  updateProjectConversationTitle,
 } from "./task-client";
 
 test.beforeEach(() => clearAntiforgeryToken());
@@ -36,7 +38,10 @@ test("clearProjectContextRecords deletes records for a project context", async (
     globalThis.fetch = originalFetch;
   });
 
-  const result = await clearProjectContextRecords("project-1", "ctx/a b");
+  const result = await clearProjectConversationRecords(
+    "project-1",
+    "11111111-1111-1111-1111-000000000010",
+  );
 
   assert.equal(result, true);
   assert.deepEqual(requests, [
@@ -45,7 +50,7 @@ test("clearProjectContextRecords deletes records for a project context", async (
       init: { credentials: "same-origin" },
     },
     {
-      url: "/api/projects/project-1/contexts/ctx%2Fa%20b/clear-records",
+      url: "/api/projects/project-1/conversations/11111111-1111-1111-1111-000000000010/clear-records",
       init: {
         method: "DELETE",
         headers: { "X-CSRF-TOKEN": "csrf-projects" },
@@ -68,7 +73,10 @@ test("clearProjectContextRecords returns false when the context is not found", a
     globalThis.fetch = originalFetch;
   });
 
-  const result = await clearProjectContextRecords("project-1", "missing-context");
+  const result = await clearProjectConversationRecords(
+    "project-1",
+    "11111111-1111-1111-1111-000000000011",
+  );
 
   assert.equal(result, false);
 });
@@ -86,7 +94,7 @@ test("clearProjectContextRecords returns false when ids are blank", async (t) =>
     globalThis.fetch = originalFetch;
   });
 
-  const result = await clearProjectContextRecords("project-1", "");
+  const result = await clearProjectConversationRecords("project-1", "");
 
   assert.equal(result, false);
   assert.equal(fetchCalled, false);
@@ -106,7 +114,7 @@ test("deleteAllProjectContexts deletes all project contexts", async (t) => {
     globalThis.fetch = originalFetch;
   });
 
-  const result = await deleteAllProjectContexts("project-1");
+  const result = await deleteAllProjectConversations("project-1");
 
   assert.equal(result, true);
   assert.deepEqual(requests, [
@@ -115,7 +123,7 @@ test("deleteAllProjectContexts deletes all project contexts", async (t) => {
       init: { credentials: "same-origin" },
     },
     {
-      url: "/api/projects/project-1/contexts",
+      url: "/api/projects/project-1/conversations",
       init: {
         method: "DELETE",
         headers: { "X-CSRF-TOKEN": "csrf-projects" },
@@ -139,13 +147,13 @@ test("deleteAllProjectContexts returns false and skips fetch when project id is 
     globalThis.fetch = originalFetch;
   });
 
-  const result = await deleteAllProjectContexts("");
+  const result = await deleteAllProjectConversations("");
 
   assert.equal(result, false);
   assert.equal(fetchCalled, false);
 });
 
-test("getProjectContexts gets context list for a project", async (t) => {
+test("getProjectConversations gets the complete conversation list for a project", async (t) => {
   const originalFetch = globalThis.fetch;
   const requests: Array<{ url: string; init?: RequestInit }> = [];
 
@@ -157,7 +165,8 @@ test("getProjectContexts gets context list for a project", async (t) => {
       data: [
         {
           projectId: "project-1",
-          contextId: "ctx-empty",
+          conversationId: "11111111-1111-1111-1111-000000000001",
+          contextId: "context-empty",
           jobId: null,
           title: "New Chat",
           latestStatus: 1,
@@ -169,7 +178,8 @@ test("getProjectContexts gets context list for a project", async (t) => {
         },
         {
           projectId: "project-1",
-          contextId: "ctx-1",
+          conversationId: "11111111-1111-1111-1111-000000000002",
+          contextId: "context-1",
           jobId: "job-1",
           title: "Tokyo trip",
           latestStatus: 2,
@@ -181,7 +191,8 @@ test("getProjectContexts gets context list for a project", async (t) => {
         },
         {
           projectId: "project-1",
-          contextId: "ctx-cleared",
+          conversationId: "11111111-1111-1111-1111-000000000003",
+          contextId: "context-cleared",
           jobId: null,
           title: "Cleared chat",
           latestStatus: null,
@@ -199,18 +210,24 @@ test("getProjectContexts gets context list for a project", async (t) => {
     globalThis.fetch = originalFetch;
   });
 
-  const result = await getProjectContexts("project-1");
+  const result = await getProjectConversations("project-1");
 
-  assert.equal(result.length, 2);
-  assert.equal(result[0].contextId, "ctx-1");
-  assert.equal(result[0].jobId, "job-1");
-  assert.equal(result[0].executionCount, 2);
-  assert.equal(result[1].contextId, "ctx-cleared");
-  assert.equal(result[1].executionCount, 0);
-  assert.equal(result[1].messageCount, 0);
+  assert.equal(result.length, 3);
+  assert.equal(result[0].conversationId, "11111111-1111-1111-1111-000000000001");
+  assert.equal(result[0].contextId, "context-empty");
+  assert.equal(result[0].executionCount, 1);
+  assert.equal(result[0].messageCount, 0);
+  assert.equal(result[1].conversationId, "11111111-1111-1111-1111-000000000002");
+  assert.equal(result[1].contextId, "context-1");
+  assert.equal(result[1].jobId, "job-1");
+  assert.equal(result[1].executionCount, 2);
+  assert.equal(result[2].conversationId, "11111111-1111-1111-1111-000000000003");
+  assert.equal(result[2].contextId, "context-cleared");
+  assert.equal(result[2].executionCount, 0);
+  assert.equal(result[2].messageCount, 0);
   assert.deepEqual(requests, [
     {
-      url: "/api/projects/project-1/contexts",
+      url: "/api/projects/project-1/conversations",
       init: {
         method: "GET",
         headers: {},
@@ -221,7 +238,59 @@ test("getProjectContexts gets context list for a project", async (t) => {
   ]);
 });
 
-test("getProjectContextDetails encodes context id path parameter", async (t) => {
+test("createProjectConversation persists a blank conversation immediately", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({ url: String(input), init });
+    if (String(input) === "/api/auth/antiforgery") return createAntiforgeryResponse();
+    return Response.json({
+      code: 200,
+      title: "OK",
+      data: {
+        projectId: "project-1",
+        conversationId: "11111111-1111-1111-1111-000000000003",
+        contextId: "context-new",
+        title: "New Chat",
+        executionCount: 0,
+        messageCount: 0,
+        createTime: "2026-08-21T00:00:00Z",
+        updateTime: "2026-08-21T00:00:00Z",
+        errorMessage: null,
+      },
+    });
+  }) as typeof fetch;
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const result = await createProjectConversation("project-1");
+
+  assert.equal(result.contextId, "context-new");
+  assert.deepEqual(requests, [
+    {
+      url: "/api/auth/antiforgery",
+      init: { credentials: "same-origin" },
+    },
+    {
+      url: "/api/projects/project-1/conversations",
+      init: {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "X-CSRF-TOKEN": "csrf-projects",
+        },
+        body: '{"contextId":null}',
+        signal: undefined,
+        credentials: "same-origin",
+      },
+    },
+  ]);
+});
+
+test("getProjectConversationDetails encodes conversation id path parameter", async (t) => {
   const originalFetch = globalThis.fetch;
   const requests: Array<{ url: string; init?: RequestInit }> = [];
 
@@ -232,7 +301,8 @@ test("getProjectContextDetails encodes context id path parameter", async (t) => 
       title: "OK",
       data: {
         projectId: "project-1",
-        contextId: "ctx/a b",
+        conversationId: "11111111-1111-1111-1111-000000000004",
+        contextId: "context/a b",
         jobId: "job-1",
         title: "Tokyo trip",
         latestStatus: 2,
@@ -241,7 +311,8 @@ test("getProjectContextDetails encodes context id path parameter", async (t) => 
         createTime: "2026-01-01T00:00:00Z",
         updateTime: "2026-01-02T00:00:00Z",
         errorMessage: null,
-        messages: [],
+        usage: null,
+        resumeState: null,
       },
     });
   }) as typeof fetch;
@@ -250,14 +321,18 @@ test("getProjectContextDetails encodes context id path parameter", async (t) => 
     globalThis.fetch = originalFetch;
   });
 
-  const result = await getProjectContextDetails("project-1", "ctx/a b");
+  const result = await getProjectConversationDetails(
+    "project-1",
+    "11111111-1111-1111-1111-000000000004",
+  );
 
-  assert.equal(result.contextId, "ctx/a b");
+  assert.equal(result.conversationId, "11111111-1111-1111-1111-000000000004");
+  assert.equal(result.contextId, "context/a b");
   assert.equal(result.jobId, "job-1");
   assert.equal(result.executionCount, 2);
   assert.deepEqual(requests, [
     {
-      url: "/api/projects/project-1/contexts/ctx%2Fa%20b",
+      url: "/api/projects/project-1/conversations/11111111-1111-1111-1111-000000000004",
       init: {
         method: "GET",
         headers: {},
@@ -266,6 +341,44 @@ test("getProjectContextDetails encodes context id path parameter", async (t) => 
       },
     },
   ]);
+});
+
+test("getProjectConversationMessages sends the directional cursor page query", async (t) => {
+  const originalFetch = globalThis.fetch;
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    requests.push({ url: String(input), init });
+    return Response.json({
+      code: 200,
+      title: "OK",
+      data: {
+        items: [],
+        nextCursor: "next/cursor",
+        hasMore: true,
+      },
+    });
+  }) as typeof fetch;
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  const result = await getProjectConversationMessages(
+    "project-1",
+    "11111111-1111-1111-1111-000000000012",
+    {
+      direction: "older",
+      cursor: "before/cursor",
+      pageSize: 25,
+    },
+  );
+
+  assert.deepEqual(result, { items: [], nextCursor: "next/cursor", hasMore: true });
+  assert.equal(
+    requests[0]?.url,
+    "/api/projects/project-1/conversations/11111111-1111-1111-1111-000000000012/messages?direction=older&cursor=before%2Fcursor&pageSize=25",
+  );
 });
 
 test("updateProjectContextTitle puts the title update for a project context", async (t) => {
@@ -282,7 +395,11 @@ test("updateProjectContextTitle puts the title update for a project context", as
     globalThis.fetch = originalFetch;
   });
 
-  const result = await updateProjectContextTitle("project-1", "ctx/a b", "Renamed conversation");
+  const result = await updateProjectConversationTitle(
+    "project-1",
+    "11111111-1111-1111-1111-000000000013",
+    "Renamed conversation",
+  );
 
   assert.equal(result, true);
   assert.deepEqual(requests, [
@@ -291,7 +408,7 @@ test("updateProjectContextTitle puts the title update for a project context", as
       init: { credentials: "same-origin" },
     },
     {
-      url: "/api/projects/project-1/contexts/ctx%2Fa%20b/title",
+      url: "/api/projects/project-1/conversations/11111111-1111-1111-1111-000000000013/title",
       init: {
         method: "PUT",
         headers: {
@@ -319,7 +436,11 @@ test("updateProjectContextTitle returns false and skips fetch when ids or title 
     globalThis.fetch = originalFetch;
   });
 
-  const result = await updateProjectContextTitle("project-1", "ctx-1", "   ");
+  const result = await updateProjectConversationTitle(
+    "project-1",
+    "11111111-1111-1111-1111-000000000014",
+    "   ",
+  );
 
   assert.equal(result, false);
   assert.equal(fetchCalled, false);
@@ -339,7 +460,10 @@ test("deleteProjectContext deletes a project context", async (t) => {
     globalThis.fetch = originalFetch;
   });
 
-  const result = await deleteProjectContext("project-1", "ctx/a b");
+  const result = await deleteProjectConversation(
+    "project-1",
+    "11111111-1111-1111-1111-000000000015",
+  );
 
   assert.equal(result, true);
   assert.deepEqual(requests, [
@@ -348,7 +472,7 @@ test("deleteProjectContext deletes a project context", async (t) => {
       init: { credentials: "same-origin" },
     },
     {
-      url: "/api/projects/project-1/contexts/ctx%2Fa%20b",
+      url: "/api/projects/project-1/conversations/11111111-1111-1111-1111-000000000015",
       init: {
         method: "DELETE",
         headers: { "X-CSRF-TOKEN": "csrf-projects" },
@@ -372,7 +496,7 @@ test("deleteProjectContext returns false when ids are blank", async (t) => {
     globalThis.fetch = originalFetch;
   });
 
-  const result = await deleteProjectContext("project-1", "");
+  const result = await deleteProjectConversation("project-1", "");
 
   assert.equal(result, false);
   assert.equal(fetchCalled, false);

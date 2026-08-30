@@ -4,6 +4,7 @@
     <File Path=".editorconfig" />
     <File Path=".gitignore" />
     <File Path="CLAUDE.md" />
+    <File Path="CONTEXT.md" />
     <File Path="Dockerfile" />
     <File Path="format.sh" />
     <File Path="publish.sh" />
@@ -13,7 +14,10 @@
     <File Path="src/server/Directory.Packages.props" />
   </Folder>
   <Folder Name="/1.Host/">
+    <Project Path="src/server/Agw.ControlPlane.Host/Agw.ControlPlane.Host.csproj" />
+    <Project Path="src/server/Agw.DataPlane.Host/Agw.DataPlane.Host.csproj" />
     <Project Path="src/server/Agw.Host/Agw.Host.csproj" />
+    <Project Path="src/server/Agw.Standalone.Host/Agw.Standalone.Host.csproj" />
   </Folder>
   <Folder Name="/2.Api/">
     <Project Path="src/server/Agw.A2A/Agw.A2A.csproj" Id="82aa4560-620a-47a2-848c-f05093bc7251" />
@@ -27,10 +31,13 @@
   </Folder>
   <Folder Name="/4.Modules/">
     <Project Path="src/server/Agw.Agents/Agw.Agents.csproj" />
+    <Project Path="src/server/Agw.Agents.Contracts/Agw.Agents.Contracts.csproj" />
     <Project Path="src/server/Agw.Files/Agw.Files.csproj" />
     <Project Path="src/server/Agw.Jobs/Agw.Jobs.csproj" />
+    <Project Path="src/server/Agw.Jobs.Contracts/Agw.Jobs.Contracts.csproj" />
     <Project Path="src/server/Agw.Providers/Agw.Providers.csproj" />
     <Project Path="src/server/Agw.Projects/Agw.Projects.csproj" />
+    <Project Path="src/server/Agw.Projects.Contracts/Agw.Projects.Contracts.csproj" />
   </Folder>
   <Folder Name="/4.Modules/Agent.Capability/">
     <Project Path="src/server/Agw.Integrations/Agw.Integrations.csproj" />
@@ -49,6 +56,7 @@
     <File Path="tests/Directory.Build.props" />
     <File Path="tests/Directory.Packages.props" />
     <Project Path="tests/Agw.A2A.Tests/Agw.A2A.Tests.csproj" />
+    <Project Path="tests/Agw.Architecture.Tests/Agw.Architecture.Tests.csproj" />
     <Project Path="tests/Agw.Agents.Tests/Agw.Agents.Tests.csproj" />
     <Project Path="tests/Agw.Auth.Tests/Agw.Auth.Tests.csproj" />
     <Project Path="tests/Agw.Files.Tests/Agw.Files.Tests.csproj" />

@@ -66,7 +66,7 @@ if (flavor === "full") {
     "dotnet",
     [
       "publish",
-      resolve(repositoryRoot, "src", "server", "Agw.Host", "Agw.Host.csproj"),
+      resolve(repositoryRoot, "src", "server", "Agw.Standalone.Host", "Agw.Standalone.Host.csproj"),
       "-c",
       "Release",
       "-r",

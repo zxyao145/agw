@@ -1,6 +1,6 @@
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Utils;
-using Agw.Shared.Contracts.Projects;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.Agents.AI;
@@ -11,7 +11,7 @@ public partial class AgentRuntimeService
 {
     public async Task<AIAgent?> CreateAiAgentAsync(Guid agentId, CancellationToken cancellationToken = default)
     {
-        var agent = await _agentAppService.GetAgentAsync(agentId);
+        var agent = await _agentAppService.GetAgentForCurrentUserAsync(agentId);
         if (agent == null)
         {
             return null;
@@ -38,7 +38,7 @@ public partial class AgentRuntimeService
         CancellationToken cancellationToken = default
     )
     {
-        var agent = await _agentAppService.GetAgentAsync(agentId);
+        var agent = await _agentAppService.GetAgentForCurrentUserAsync(agentId);
         if (agent == null)
         {
             return null;
@@ -63,7 +63,7 @@ public partial class AgentRuntimeService
         CancellationToken cancellationToken = default
     )
     {
-        var agent = await _agentAppService.GetAgentAsync(agentId);
+        var agent = await _agentAppService.GetAgentForCurrentUserAsync(agentId);
         if (agent == null)
         {
             return null;
@@ -112,7 +112,7 @@ public partial class AgentRuntimeService
         CancellationToken cancellationToken = default
     )
     {
-        var agent = await _agentAppService.GetAgentAsync(agentId);
+        var agent = await _agentAppService.GetAgentForCurrentUserAsync(agentId);
         if (agent == null)
         {
             return null;
@@ -140,8 +140,18 @@ public partial class AgentRuntimeService
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Agent);
-        Project? project = await _projectAppService.GetAsync(request.ProjectId ?? ProjectDefaults.DefaultBuiltInId);
-        ArgumentNullException.ThrowIfNull(project);
+        var projectId = await ResolveProjectIdAsync(request.ProjectId, cancellationToken).ConfigureAwait(false);
+        if (!projectId.HasValue)
+        {
+            return null;
+        }
+
+        var projectSnapshot = await _projectRuntimeFacade.GetForCurrentUserAsync(projectId.Value, cancellationToken);
+        if (projectSnapshot == null)
+        {
+            return null;
+        }
+        var project = MapProject(projectSnapshot);
         var environmentVariables = AgentRuntimeServiceUtil.MergeEnvironmentVariables(
             request.Agent.EnvironmentVariables,
             project.EnvironmentVariables,
@@ -164,5 +174,36 @@ public partial class AgentRuntimeService
                 deferHumanInteractions: request.DeferHumanInteractions
             )
             .ConfigureAwait(false);
+    }
+
+    private static Project MapProject(ProjectRuntimeSnapshot project)
+    {
+        var mapped = new Project
+        {
+            Id = project.Id,
+            Name = project.Name,
+            Workspace = project.Workspace,
+            ExtraSetting = project.ExtraSetting,
+            Tools = project.Tools.ToList(),
+            EnvironmentVariables = project.EnvironmentVariables.ToDictionary(),
+        };
+        mapped.ProjectSkillRelations = project
+            .SkillIds.Select(skillId => new ProjectSkillRelation { ProjectId = mapped.Id, SkillId = skillId })
+            .ToList();
+        mapped.ProjectMcpToolServers = project
+            .McpServerIds.Select(serverId => new ProjectMcpServerRelation
+            {
+                ProjectId = mapped.Id,
+                McpToolServerId = serverId,
+            })
+            .ToList();
+        mapped.ProjectConnectionRelations = project
+            .ConnectionIds.Select(connectionId => new ProjectConnectionRelation
+            {
+                ProjectId = mapped.Id,
+                ConnectionId = connectionId,
+            })
+            .ToList();
+        return mapped;
     }
 }

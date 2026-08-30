@@ -33,18 +33,19 @@ public class SkillAppServiceBuiltInTests
                 Kind = SkillKind.BuiltIn,
                 ContentPath = string.Empty,
             };
+            var unitOfWork = new TestUnitOfWork();
             var service = new SkillAppService(
                 new TestRepository<Skill>([skill], entity => entity.Id),
-                new TestRepository<Agent>([], entity => entity.Id),
-                new TestRepository<AgentSkillRelation>([], _ => Guid.Empty),
+                new TestAgentReferenceFacade(new TestRepository<AgentSkillRelation>([], _ => Guid.Empty), unitOfWork),
                 new TestRepository<RemoteSkillCache>([], entity => entity.SkillId),
-                new TestUnitOfWork(),
+                unitOfWork,
                 new SkillDomainService(TimeProvider.System),
                 dataPaths,
                 NullLogger<SkillAppService>.Instance,
                 new TestRemoteSkillClient(),
                 new TestRemoteSkillRefreshLock(),
                 TimeProvider.System,
+                new TestCurrentUser("test-user"),
                 [new TestSkillRegistration()]
             );
 

@@ -1,15 +1,15 @@
 using System.Reflection;
-using Agw.Shared.Contracts.Tools;
-using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Exceptions;
 using Agw.Tools.ContextualTools;
+using Agw.Tools.Contracts;
+using Agw.Tools.Contracts.Abstractions;
 using Agw.Tools.HumanInteraction;
 using Agw.Tools.ToolBlocks;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace Agw.Domain.Services;
+namespace Agw.Tools;
 
 /// <summary>
 /// Service for discovering, registering, and managing AI tools available to agents.
@@ -20,6 +20,7 @@ public class ToolRegistryService
     private readonly Dictionary<string, MethodInfo> _methods = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ToolInfo> _toolInfos = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, IAgwTool> _toolInstances = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _obsoleteToolNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly IReadOnlyDictionary<string, IContextualTool> _contextualTools;
     private readonly ToolBlockRegistry _toolBlockRegistry;
     private readonly AgwToolFactory _toolFactory;
@@ -36,8 +37,19 @@ public class ToolRegistryService
         _serviceProvider = serviceProvider;
         _logger = logger;
         _toolFactory = new AgwToolFactory(serviceProvider);
-        _contextualTools = BuildContextualToolCatalog(contextualTools ?? []);
         _toolBlockRegistry = toolBlockRegistry ?? new ToolBlockRegistry([]);
+        var resolvedContextualTools = (contextualTools ?? []).ToArray();
+        _contextualTools = BuildContextualToolCatalog(
+            resolvedContextualTools.Where(static tool => !IsObsolete(tool.GetType()))
+        );
+        foreach (var tool in resolvedContextualTools.Where(static tool => IsObsolete(tool.GetType())))
+        {
+            if (!_contextualTools.ContainsKey(tool.Descriptor.Name))
+            {
+                _obsoleteToolNames.Add(tool.Descriptor.Name);
+            }
+        }
+
         DiscoverTools();
         ValidateCatalog();
     }
@@ -114,8 +126,15 @@ public class ToolRegistryService
     {
         var toolAttr = method.GetCustomAttribute<AiToolAttribute>()!;
         var methodName = toolAttr.Name ?? method.Name;
+        if (IsObsolete(method) || method.DeclaringType is { } declaringType && IsObsolete(declaringType))
+        {
+            RecordObsoleteTool(methodName, method);
+            return;
+        }
+
         EnsureIndependentToolNameAvailable(methodName);
 
+        _obsoleteToolNames.Remove(methodName);
         _methods[methodName] = method;
         _toolInfos[methodName] = BuildMethodToolInfo(method, defaultCategory);
     }
@@ -126,8 +145,15 @@ public class ToolRegistryService
     public void RegisterTool(IAgwTool tool)
     {
         ArgumentNullException.ThrowIfNull(tool);
+        if (IsObsolete(tool.GetType()))
+        {
+            RecordObsoleteTool(tool.Name, tool.GetType());
+            return;
+        }
+
         EnsureIndependentToolNameAvailable(tool.Name);
 
+        _obsoleteToolNames.Remove(tool.Name);
         _toolInstances[tool.Name] = tool;
         _toolInfos[tool.Name] = BuildRegisteredToolInfo(tool);
     }
@@ -218,6 +244,11 @@ public class ToolRegistryService
                 if (string.IsNullOrWhiteSpace(name) || !seen.Add(name))
                 {
                     throw new AgwException(ErrorCodes.InvalidParam, $"Tool name '{name}' is empty or duplicated.");
+                }
+
+                if (_obsoleteToolNames.Contains(name))
+                {
+                    throw new AgwException(ErrorCodes.InvalidParam, $"Tool '{name}' is obsolete and unavailable.");
                 }
 
                 if (_toolBlockRegistry.TryGetMemberOwner(name, out var owner))
@@ -483,6 +514,7 @@ public class ToolRegistryService
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var missingImplementations = ToolDefinitionNames
             .All.Except(executableToolNames, StringComparer.OrdinalIgnoreCase)
+            .Except(_obsoleteToolNames, StringComparer.OrdinalIgnoreCase)
             .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         if (missingImplementations.Length > 0)
@@ -499,6 +531,7 @@ public class ToolRegistryService
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var missingToolBlockImplementations = ToolBlockDefinitionNames
             .All.Except(registeredToolBlockNames, StringComparer.OrdinalIgnoreCase)
+            .Except(_toolBlockRegistry.ObsoleteToolBlockNames, StringComparer.OrdinalIgnoreCase)
             .OrderBy(static name => name, StringComparer.OrdinalIgnoreCase)
             .ToArray();
         if (missingToolBlockImplementations.Length > 0)
@@ -540,6 +573,22 @@ public class ToolRegistryService
 
         return result;
     }
+
+    private void RecordObsoleteTool(string name, MemberInfo member)
+    {
+        if (!_toolInfos.ContainsKey(name) && !_contextualTools.ContainsKey(name))
+        {
+            _obsoleteToolNames.Add(name);
+        }
+
+        _logger.LogDebug(
+            "Skipping obsolete Tool {ToolName} implemented by {ToolMember}.",
+            name,
+            member.DeclaringType?.FullName ?? member.Name
+        );
+    }
+
+    private static bool IsObsolete(MemberInfo member) => member.IsDefined(typeof(ObsoleteAttribute), inherit: false);
 
     private void EnsureIndependentToolNameAvailable(string name)
     {

@@ -1,16 +1,16 @@
+using System.Security.Claims;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Dtos;
+using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Summaries;
+using Agw.Agents.Execution.Turns;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Agents;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
@@ -19,16 +19,131 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
+using RuntimeAgentExecutionResult = Agw.Agents.Execution.Agents.Dtos.AgentExecutionResult;
 
 namespace Agw.Agents.Tests;
 
 [Collection(AgentflowExecutionTraceTestCollection.Name)]
-public class AgentflowRuntimeServiceTests
+public class AgentflowRuntimeServiceTests : IDisposable
 {
+    private readonly IDisposable _userScope;
+
+    public AgentflowRuntimeServiceTests()
+    {
+        _userScope = UserInfoUtil.Push(
+            new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], "test"))
+        );
+    }
+
+    public void Dispose()
+    {
+        _userScope.Dispose();
+    }
+
+    [Fact]
+    public async Task ExecuteStreamingAsync_MissingAgentflow_ReportsNotFoundInsteadOfCompletingSilently()
+    {
+        var service = CreateRuntimeService(
+            NullLogger<AgentflowRuntimeService>.Instance,
+            new TestRepository<Agentflow>([], item => item.Id),
+            new TestRepository<AgentflowNode>([], item => (item.AgentflowId, item.NodeId)),
+            new TestRepository<AgentflowEdge>([], item => (item.AgentflowId, item.EdgeId)),
+            new StubAgentRuntimeService(_ => null),
+            new StubProviderSessionState(),
+            new RecordingSummaryService()
+        );
+        using var userScope = UserInfoUtil.Push(
+            new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "user-a")], "test"))
+        );
+
+        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+        {
+            await foreach (
+                var _ in service.ExecuteStreamingAsync(
+                    Guid.CreateVersion7(),
+                    "run",
+                    TestContext.Current.CancellationToken
+                )
+            ) { }
+        });
+
+        Assert.Equal(ErrorCodes.ResourceNotFound.Code, exception.Code);
+    }
+
+    [Fact]
+    public async Task ExecuteStreamingAsync_InvisibleProject_ReportsNotFoundInsteadOfCompletingSilently()
+    {
+        var agentflow = new Agentflow
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "owned-flow",
+            CreateBy = "tester",
+        };
+        var service = CreateRuntimeService(
+            NullLogger<AgentflowRuntimeService>.Instance,
+            new TestRepository<Agentflow>([agentflow], item => item.Id),
+            new TestRepository<AgentflowNode>([], item => (item.AgentflowId, item.NodeId)),
+            new TestRepository<AgentflowEdge>([], item => (item.AgentflowId, item.EdgeId)),
+            new StubAgentRuntimeService(_ => null),
+            new StubProviderSessionState(),
+            new RecordingSummaryService(),
+            projectRuntimeFacade: new MissingProjectRuntimeFacade()
+        );
+
+        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+        {
+            await foreach (
+                var _ in service.ExecuteStreamingAsync(
+                    agentflow.Id,
+                    "run",
+                    TestContext.Current.CancellationToken,
+                    projectId: Guid.CreateVersion7()
+                )
+            ) { }
+        });
+
+        Assert.Equal(ErrorCodes.ResourceNotFound.Code, exception.Code);
+    }
+
+    [Fact]
+    public async Task ExecuteStreamingAsync_WithoutStableUserId_RejectsAuthentication()
+    {
+        _userScope.Dispose();
+        var agentflow = new Agentflow
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "owned-flow",
+            CreateBy = "tester",
+        };
+        var service = CreateRuntimeService(
+            NullLogger<AgentflowRuntimeService>.Instance,
+            new TestRepository<Agentflow>([agentflow], item => item.Id),
+            new TestRepository<AgentflowNode>([], item => (item.AgentflowId, item.NodeId)),
+            new TestRepository<AgentflowEdge>([], item => (item.AgentflowId, item.EdgeId)),
+            new StubAgentRuntimeService(_ => null),
+            new StubProviderSessionState(),
+            new RecordingSummaryService()
+        );
+
+        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+        {
+            await foreach (
+                var _ in service.ExecuteStreamingAsync(agentflow.Id, "run", TestContext.Current.CancellationToken)
+            ) { }
+        });
+
+        Assert.Equal(ErrorCodes.AuthenticationRequired.Code, exception.Code);
+    }
+
     [Fact]
     public async Task ExecuteAsync_ToolApprovalRequest_FailsUnattendedExecution()
     {
-        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "approval-flow" };
+        var agentflow = new Agentflow
+        {
+            CreateBy = "tester",
+            Id = Guid.CreateVersion7(),
+            Name = "approval-flow",
+        };
         var agentId = Guid.CreateVersion7();
         var nodes = new[]
         {
@@ -57,12 +172,11 @@ public class AgentflowRuntimeServiceTests
                 TargetNodeId = "output",
             },
         };
-        var service = new AgentflowRuntimeService(
+        var service = CreateRuntimeService(
             NullLogger<AgentflowRuntimeService>.Instance,
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(_ => new ApprovalRequestAgent()),
             new StubProviderSessionState(),
             new RecordingSummaryService()
@@ -88,7 +202,12 @@ public class AgentflowRuntimeServiceTests
     [InlineData("always-arguments")]
     public async Task ExecuteStreamingAsync_ToolApprovalRequest_ResumesThroughWorkflowResponse(string approvalScope)
     {
-        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "approval-flow" };
+        var agentflow = new Agentflow
+        {
+            CreateBy = "tester",
+            Id = Guid.CreateVersion7(),
+            Name = "approval-flow",
+        };
         var agentId = Guid.CreateVersion7();
         var nodes = new[]
         {
@@ -117,12 +236,11 @@ public class AgentflowRuntimeServiceTests
                 TargetNodeId = "output",
             },
         };
-        var service = new AgentflowRuntimeService(
+        var service = CreateRuntimeService(
             NullLogger<AgentflowRuntimeService>.Instance,
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(_ => new ApprovalRequestAgent()),
             new StubProviderSessionState(),
             new RecordingSummaryService()
@@ -159,7 +277,12 @@ public class AgentflowRuntimeServiceTests
     [Fact]
     public async Task GetMermaidAsync_AgentCreationFails_DisposesAlreadyCreatedAgents()
     {
-        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "creation-failure" };
+        var agentflow = new Agentflow
+        {
+            CreateBy = "tester",
+            Id = Guid.CreateVersion7(),
+            Name = "creation-failure",
+        };
         var firstAgentId = Guid.CreateVersion7();
         var secondAgentId = Guid.CreateVersion7();
         var firstAgent = new TrackingAIAgent();
@@ -203,12 +326,11 @@ public class AgentflowRuntimeServiceTests
                 TargetNodeId = "output",
             },
         };
-        var service = new AgentflowRuntimeService(
+        var service = CreateRuntimeService(
             NullLogger<AgentflowRuntimeService>.Instance,
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(agentId => agentId == firstAgentId ? firstAgent : null),
             new StubProviderSessionState(),
             new RecordingSummaryService()
@@ -223,7 +345,12 @@ public class AgentflowRuntimeServiceTests
     [Fact]
     public async Task ExecuteStreamingAsync_CheckpointMarker_EmitsNamedMafCheckpoint()
     {
-        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "checkpoint-flow" };
+        var agentflow = new Agentflow
+        {
+            CreateBy = "tester",
+            Id = Guid.CreateVersion7(),
+            Name = "checkpoint-flow",
+        };
         var agentId = Guid.CreateVersion7();
         var nodes = new[]
         {
@@ -267,12 +394,11 @@ public class AgentflowRuntimeServiceTests
             },
         };
         var logger = new CapturingLogger<AgentflowRuntimeService>();
-        var service = new AgentflowRuntimeService(
+        var service = CreateRuntimeService(
             logger,
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(agentId),
             new StubProviderSessionState(),
             new RecordingSummaryService()
@@ -298,7 +424,12 @@ public class AgentflowRuntimeServiceTests
     [Fact]
     public async Task ExecuteStreamingAsync_CheckpointAfterToolApproval_EmitsOnce()
     {
-        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "checkpoint-approval-flow" };
+        var agentflow = new Agentflow
+        {
+            CreateBy = "tester",
+            Id = Guid.CreateVersion7(),
+            Name = "checkpoint-approval-flow",
+        };
         var agentId = Guid.CreateVersion7();
         var worker = new ApprovalRequestAgent();
         var nodes = new[]
@@ -343,12 +474,11 @@ public class AgentflowRuntimeServiceTests
             },
         };
         var logger = new CapturingLogger<AgentflowRuntimeService>();
-        var service = new AgentflowRuntimeService(
+        var service = CreateRuntimeService(
             logger,
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(_ => worker),
             new StubProviderSessionState(),
             new RecordingSummaryService()
@@ -370,7 +500,12 @@ public class AgentflowRuntimeServiceTests
     [Fact]
     public async Task AgentflowRuntime_ExecuteStreamingAsync_ForwardsSessionEnvironmentVariables()
     {
-        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "environment-flow" };
+        var agentflow = new Agentflow
+        {
+            CreateBy = "tester",
+            Id = Guid.CreateVersion7(),
+            Name = "environment-flow",
+        };
         var agentId = Guid.CreateVersion7();
         var nodes = new[]
         {
@@ -400,19 +535,18 @@ public class AgentflowRuntimeServiceTests
             },
         };
         var agentRuntimeService = new StubAgentRuntimeService(agentId);
-        var runtimeService = new AgentflowRuntimeService(
+        var runtimeService = CreateRuntimeService(
             NullLogger<AgentflowRuntimeService>.Instance,
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             agentRuntimeService,
             new StubProviderSessionState(),
             new RecordingSummaryService()
         );
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
-        var task = new TaskProjection
+        var task = new AgentExecutionTask
         {
             ProjectId = projectId,
             ProjectConversationId = conversationId,
@@ -450,8 +584,18 @@ public class AgentflowRuntimeServiceTests
     [Fact]
     public async Task GetMermaidAsync_NestedWorkflow_DisposesNestedAgents()
     {
-        var innerFlow = new Agentflow { Id = Guid.CreateVersion7(), Name = "inner" };
-        var outerFlow = new Agentflow { Id = Guid.CreateVersion7(), Name = "outer" };
+        var innerFlow = new Agentflow
+        {
+            CreateBy = "tester",
+            Id = Guid.CreateVersion7(),
+            Name = "inner",
+        };
+        var outerFlow = new Agentflow
+        {
+            CreateBy = "tester",
+            Id = Guid.CreateVersion7(),
+            Name = "outer",
+        };
         var agentId = Guid.CreateVersion7();
         var nodes = new[]
         {
@@ -500,12 +644,11 @@ public class AgentflowRuntimeServiceTests
             },
         };
         var agentRuntimeService = new StubAgentRuntimeService(agentId);
-        var service = new AgentflowRuntimeService(
+        var service = CreateRuntimeService(
             NullLogger<AgentflowRuntimeService>.Instance,
             new TestRepository<Agentflow>([innerFlow, outerFlow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             agentRuntimeService,
             new StubProviderSessionState(),
             new RecordingSummaryService()
@@ -520,7 +663,12 @@ public class AgentflowRuntimeServiceTests
     [Fact]
     public async Task ExecuteStreamingAsync_ApprovalCancellation_DisposesWorkflowAgents()
     {
-        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "cancelled" };
+        var agentflow = new Agentflow
+        {
+            CreateBy = "tester",
+            Id = Guid.CreateVersion7(),
+            Name = "cancelled",
+        };
         var agentId = Guid.CreateVersion7();
         var nodes = new[]
         {
@@ -562,12 +710,11 @@ public class AgentflowRuntimeServiceTests
             },
         };
         var agentRuntimeService = new StubAgentRuntimeService(agentId);
-        var service = new AgentflowRuntimeService(
+        var service = CreateRuntimeService(
             NullLogger<AgentflowRuntimeService>.Instance,
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             agentRuntimeService,
             new StubProviderSessionState(),
             new RecordingSummaryService()
@@ -589,7 +736,12 @@ public class AgentflowRuntimeServiceTests
     [Fact]
     public async Task ExecuteStreamingAsync_HumanGateApproved_PersistsWaitDurationAndInput()
     {
-        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "approval-flow" };
+        var agentflow = new Agentflow
+        {
+            CreateBy = "tester",
+            Id = Guid.CreateVersion7(),
+            Name = "approval-flow",
+        };
         var agentId = Guid.CreateVersion7();
         var nodes = new[]
         {
@@ -638,12 +790,11 @@ public class AgentflowRuntimeServiceTests
             NullLogger<AgentflowNodeExecutionTraceCollector>.Instance
         );
         await collector.StartAsync(TestContext.Current.CancellationToken);
-        var service = new AgentflowRuntimeService(
+        var service = CreateRuntimeService(
             NullLogger<AgentflowRuntimeService>.Instance,
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(agentId),
             new StubProviderSessionState(),
             new RecordingSummaryService()
@@ -689,6 +840,7 @@ public class AgentflowRuntimeServiceTests
         var projectId = Guid.CreateVersion7();
         var agentflow = new Agentflow
         {
+            CreateBy = "tester",
             Id = Guid.CreateVersion7(),
             Name = "summary-flow",
             SummaryModelProviderId = modelProviderId,
@@ -722,12 +874,11 @@ public class AgentflowRuntimeServiceTests
             },
         };
         var summaryService = new RecordingSummaryService();
-        var service = new AgentflowRuntimeService(
+        var service = CreateRuntimeService(
             NullLogger<AgentflowRuntimeService>.Instance,
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(agentId),
             new StubProviderSessionState(),
             summaryService
@@ -767,7 +918,12 @@ public class AgentflowRuntimeServiceTests
     {
         var agentId = Guid.CreateVersion7();
         var projectId = Guid.CreateVersion7();
-        var agentflow = new Agentflow { Id = Guid.CreateVersion7(), Name = "todo-flow" };
+        var agentflow = new Agentflow
+        {
+            CreateBy = "tester",
+            Id = Guid.CreateVersion7(),
+            Name = "todo-flow",
+        };
         var nodes = new[]
         {
             new AgentflowNode
@@ -795,12 +951,11 @@ public class AgentflowRuntimeServiceTests
             },
         };
         var historyWriter = new RecordingConversationHistoryWriter();
-        var service = new AgentflowRuntimeService(
+        var service = CreateRuntimeService(
             NullLogger<AgentflowRuntimeService>.Instance,
             new TestRepository<Agentflow>([agentflow], item => item.Id),
             new TestRepository<AgentflowNode>(nodes, item => (item.AgentflowId, item.NodeId)),
             new TestRepository<AgentflowEdge>(edges, item => (item.AgentflowId, item.EdgeId)),
-            new AgentflowDomainService(TimeProvider.System),
             new StubAgentRuntimeService(_ => new TrackingAIAgent(enableTodo: true)),
             new StubProviderSessionState(),
             new RecordingSummaryService(),
@@ -880,6 +1035,83 @@ public class AgentflowRuntimeServiceTests
         var text = Assert.IsType<TextContent>(Assert.Single(current.Contents));
         Assert.Equal("agentflow", text.AdditionalProperties!["targetType"]);
         Assert.Equal(agentflowId.ToString("D"), text.AdditionalProperties["targetId"]);
+    }
+
+    private static AgentflowRuntimeService CreateRuntimeService(
+        ILogger<AgentflowRuntimeService> logger,
+        IRepository<Agentflow> agentflowRepository,
+        IRepository<AgentflowNode> nodeRepository,
+        IRepository<AgentflowEdge> edgeRepository,
+        IAgentRuntimeService agentRuntimeService,
+        IProviderSessionState providerSessionState,
+        IAgentTurnSummaryService summaryService,
+        AgentSessionStateStore? sessionStateStore = null,
+        IConversationHistoryWriter? conversationHistoryWriter = null,
+        HumanInteractionContextAccessor? humanInteractionContextAccessor = null,
+        AgentflowCheckpointStore? checkpointStore = null,
+        IConversationHandoffProvider? conversationHandoffProvider = null,
+        IProjectRuntimeFacade? projectRuntimeFacade = null
+    ) =>
+        new(
+            logger,
+            agentflowRepository,
+            nodeRepository,
+            edgeRepository,
+            agentRuntimeService,
+            providerSessionState,
+            summaryService,
+            new RuntimeTurnContextAccessor(),
+            new TestProjectDefaultResolver(),
+            projectRuntimeFacade ?? new TestProjectRuntimeFacade(),
+            sessionStateStore,
+            conversationHistoryWriter,
+            humanInteractionContextAccessor,
+            checkpointStore,
+            conversationHandoffProvider
+        );
+
+    private sealed class TestProjectDefaultResolver : IProjectDefaultResolver
+    {
+        public Task<Guid?> ResolveDefaultProjectIdAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<Guid?>(ProjectDefaults.DefaultBuiltInId);
+
+        public Task<Guid?> ResolveA2AProjectIdAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<Guid?>(ProjectDefaults.A2AId);
+    }
+
+    private sealed class TestProjectRuntimeFacade : IProjectRuntimeFacade
+    {
+        public Task<ProjectRuntimeSnapshot?> GetForCurrentUserAsync(
+            Guid projectId,
+            CancellationToken cancellationToken = default
+        ) =>
+            Task.FromResult<ProjectRuntimeSnapshot?>(
+                new ProjectRuntimeSnapshot(
+                    projectId,
+                    "project",
+                    null,
+                    null,
+                    [],
+                    new Dictionary<string, string>(),
+                    [],
+                    [],
+                    []
+                )
+            );
+
+        public Task<string?> GetWorkspaceAsync(Guid projectId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(null);
+    }
+
+    private sealed class MissingProjectRuntimeFacade : IProjectRuntimeFacade
+    {
+        public Task<ProjectRuntimeSnapshot?> GetForCurrentUserAsync(
+            Guid projectId,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<ProjectRuntimeSnapshot?>(null);
+
+        public Task<string?> GetWorkspaceAsync(Guid projectId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(null);
     }
 
     private sealed class DelayedApprovalHandler : IHumanGateApprovalHandler
@@ -1079,7 +1311,7 @@ public class AgentflowRuntimeServiceTests
 
         public Task<AgentRuntime?> CreateRuntimeAsync(
             Guid agentId,
-            TaskProjection task,
+            AgentExecutionTask task,
             SettingCommand settings,
             CancellationToken cancellationToken = default
         ) => throw new NotImplementedException();
@@ -1096,7 +1328,7 @@ public class AgentflowRuntimeServiceTests
             CancellationToken cancellationToken = default
         ) => throw new NotImplementedException();
 
-        public Task<AgentExecutionResult?> ExecuteByIdAsync(
+        public Task<RuntimeAgentExecutionResult?> ExecuteByIdAsync(
             AgentExecuteByIdRequest request,
             CancellationToken cancellationToken = default
         ) => throw new NotImplementedException();

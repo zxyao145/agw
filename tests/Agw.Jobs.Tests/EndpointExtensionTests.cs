@@ -3,6 +3,7 @@ using Agw.Jobs.Application.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace Agw.Jobs.Tests;
 
@@ -11,7 +12,10 @@ public class EndpointExtensionTests
     [Fact]
     public async Task MapJobsApi_MapsExpectedRoutes()
     {
-        var builder = WebApplication.CreateBuilder();
+        // This test inspects route metadata only; JobsApiTests covers the complete service composition.
+        var builder = WebApplication.CreateBuilder(
+            new WebApplicationOptions { EnvironmentName = Environments.Production }
+        );
         builder.Services.AddScoped<JobAppService>();
 
         await using var app = builder.Build();

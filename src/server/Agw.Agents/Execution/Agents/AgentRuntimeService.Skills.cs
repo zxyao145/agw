@@ -1,7 +1,8 @@
-using Agw.Integrations.Application.Capabilities;
+using Agw.Integrations.Contracts.Capabilities;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Skills;
+using Agw.Shared.Exceptions;
 using Agw.Skills.Contracts.Registration;
 using Agw.Skills.Execution;
 using Microsoft.Agents.AI;
@@ -159,13 +160,22 @@ public partial class AgentRuntimeService
 
     private string GetSkillAbsolutePath(Skill skill)
     {
-        if (!string.IsNullOrWhiteSpace(skill.ContentPath))
+        var relativePath = string.IsNullOrWhiteSpace(skill.ContentPath)
+            ? Path.Combine("skills", skill.Name)
+            : skill.ContentPath.Replace('/', Path.DirectorySeparatorChar).Replace('\\', Path.DirectorySeparatorChar);
+        var rootPath = Path.GetFullPath(_dataPaths.Root);
+        var absolutePath = Path.GetFullPath(Path.Combine(rootPath, relativePath));
+        var relativeToRoot = Path.GetRelativePath(rootPath, absolutePath);
+        if (
+            Path.IsPathRooted(relativeToRoot)
+            || string.Equals(relativeToRoot, "..", StringComparison.Ordinal)
+            || relativeToRoot.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+        )
         {
-            var normalizedPath = skill.ContentPath.Replace('/', Path.DirectorySeparatorChar);
-            return Path.Combine(_dataPaths.Root, normalizedPath);
+            throw new AgwException(ErrorCodes.InvalidSkillDirectoryPath);
         }
 
-        return Path.Combine(_dataPaths.SkillsDirectory, skill.Name);
+        return absolutePath;
     }
 
     private static bool TryGetPluginSkillDirectory(string skillFilePath, out string skillDirectory)

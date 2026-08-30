@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: agw
+      POSTGRES_USER: agw
+      POSTGRES_PASSWORD: "${AGW_POSTGRES_PASSWORD}"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - agw
+
+  control-plane:
+    image: ghcr.io/zxyao145/agw-control-plane:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:30816:8080"
+    environment:
+      Setup__DeploymentMode: Cluster
+      Setup__Provider: Postgres
+      Setup__PostgresHost: postgres
+      Setup__PostgresPort: 5432
+      Setup__PostgresDatabase: agw
+      Setup__PostgresUsername: agw
+      Setup__PostgresPassword: "${AGW_POSTGRES_PASSWORD}"
+      Setup__AdminPassword: "${AGW_ADMIN_PASSWORD}"
+    volumes:
+      - agw-data:/data
+      - "${AGW_WORKSPACES_PATH:-./workspaces}:/workspaces"
+    depends_on:
+      - postgres
+    networks:
+      - agw
+
+  data-plane:
+    image: ghcr.io/zxyao145/agw-data-plane:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:30817:8080"
+    volumes:
+      - agw-data:/data
+      - "${AGW_WORKSPACES_PATH:-./workspaces}:/workspaces"
+    depends_on:
+      - control-plane
+    networks:
+      - agw
+
+volumes:
+  agw-data:
+  postgres-data:
+
+networks:
+  agw:

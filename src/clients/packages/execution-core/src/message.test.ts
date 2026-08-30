@@ -8,6 +8,7 @@ import {
   getMessageTextContent,
   mergeStreamingMessage,
   mergeStreamingMessages,
+  replaceStreamingScope,
   scopeMessagesByUserTurn,
   scopeStreamingMessage,
 } from "./message";
@@ -22,7 +23,7 @@ function textMessage({
 }: {
   messageId: string;
   role: string;
-  author: string;
+  author: string | null;
   content: string;
   streamingScopeId?: string;
   additionalProperties?: Record<string, unknown>;
@@ -50,6 +51,60 @@ test("history assigns a reconstructable scope per user turn", () => {
   assert.deepEqual(
     history.map((message) => message.streamingScopeId),
     ["user-1", "user-1", "user-2", "user-2", "user-3", "user-3"],
+  );
+});
+
+test("history preserves explicit persisted scopes before inferring a user turn", () => {
+  const history = scopeMessagesByUserTurn([
+    textMessage({ messageId: "user-1", role: "user", author: "$agw", content: "one" }),
+    textMessage({
+      messageId: "item_0",
+      role: "assistant",
+      author: "agent",
+      content: "restored",
+      additionalProperties: { streamingScopeId: "persisted-scope" },
+    }),
+  ]);
+
+  assert.deepEqual(
+    history.map((message) => message.streamingScopeId),
+    ["user-1", "persisted-scope"],
+  );
+});
+
+test("Claude tool results persisted as pseudo-user messages stay in the active user turn", () => {
+  const history = scopeMessagesByUserTurn([
+    textMessage({ messageId: "user-1", role: "user", author: "$agw", content: "run" }),
+    {
+      messageId: "call-1",
+      role: "assistant",
+      author: "agent",
+      contents: [
+        {
+          type: "FunctionCallContent",
+          content: "{}",
+          additionalProperties: { callId: "Bash_0", toolName: "Bash" },
+        },
+      ],
+    },
+    {
+      messageId: "result-1",
+      role: "user",
+      author: null,
+      additionalProperties: { modelHistoryExcluded: true },
+      contents: [
+        {
+          type: "FunctionResultContent",
+          content: "{}",
+          additionalProperties: { callId: "Bash_0" },
+        },
+      ],
+    },
+  ]);
+
+  assert.deepEqual(
+    history.map((message) => message.streamingScopeId),
+    ["user-1", "user-1", "user-1"],
   );
 });
 
@@ -423,4 +478,92 @@ test("cloneMessage deep copies contents and additionalProperties", () => {
   assert.notEqual(cloned.contents[0], message.contents[0]);
   assert.notEqual(cloned.additionalProperties, message.additionalProperties);
   assert.deepEqual(cloned, message);
+});
+
+test("replaces one streaming scope without disturbing other turns", () => {
+  const previousTurn = textMessage({
+    messageId: "item_0",
+    role: "assistant",
+    author: "agent",
+    content: "previous",
+    streamingScopeId: "user-0",
+  });
+  const persistedUser = textMessage({
+    messageId: "user-1",
+    role: "user",
+    author: "$agw",
+    content: "run",
+    streamingScopeId: "user-1",
+  });
+  const persistedOutput = textMessage({
+    messageId: "item_0",
+    role: "assistant",
+    author: null,
+    content: "persisted",
+    streamingScopeId: "user-1",
+  });
+  const liveUser = textMessage({
+    messageId: "user-1",
+    role: "user",
+    author: "$agw",
+    content: "run",
+    streamingScopeId: "user-1",
+  });
+  const liveOutput = textMessage({
+    messageId: "live-item",
+    role: "assistant",
+    author: "agent",
+    content: "live",
+    streamingScopeId: "user-1",
+  });
+  const history = [previousTurn, persistedUser, persistedOutput];
+
+  const replaced = replaceStreamingScope(history, [liveUser, liveOutput], "user-1");
+
+  assert.deepEqual(
+    replaced.map((message) => message.contents[0]?.content),
+    ["previous", "run", "live"],
+  );
+  assert.deepEqual(
+    history.map((message) => message.contents[0]?.content),
+    ["previous", "run", "persisted"],
+  );
+});
+
+test("replaces only the requested scope when message ids repeat", () => {
+  const messages = [
+    textMessage({
+      messageId: "item_0",
+      role: "assistant",
+      author: "agent",
+      content: "first",
+      streamingScopeId: "user-1",
+    }),
+    textMessage({
+      messageId: "item_0",
+      role: "assistant",
+      author: "agent",
+      content: "second",
+      streamingScopeId: "user-2",
+    }),
+  ];
+
+  const replaced = replaceStreamingScope(
+    messages,
+    [
+      textMessage({
+        messageId: "item-1",
+        role: "assistant",
+        author: "agent",
+        content: "updated",
+        streamingScopeId: "user-1",
+      }),
+    ],
+    "user-1",
+  );
+
+  assert.deepEqual(
+    replaced.map((message) => message.contents[0]?.content),
+    ["updated", "second"],
+  );
 });

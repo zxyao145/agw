@@ -54,9 +54,10 @@ export function ConnectionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="lg" className="max-h-[90vh] overflow-y-auto agw-scrollbar">
         <DialogHeader>
-          <DialogTitle>{connection ? "Edit connection" : "Create connection"}</DialogTitle>
+          <DialogTitle>{connection ? "Edit integration" : "Create integration"}</DialogTitle>
           <DialogDescription>
-            A connection identifies one exact account or endpoint that an Agent can select by alias.
+            A configured integration identifies one exact account or endpoint that an Agent can
+            select by alias.
           </DialogDescription>
         </DialogHeader>
 
@@ -102,7 +103,7 @@ export function ConnectionDialog({
               </div>
             </div>
             <div className="flex items-center justify-between rounded-lg border px-4 py-3">
-              <Label htmlFor="connection-enabled">Connection enabled</Label>
+              <Label htmlFor="connection-enabled">Integration enabled</Label>
               <Switch
                 id="connection-enabled"
                 checked={editor.enabled}
@@ -118,7 +119,7 @@ export function ConnectionDialog({
             {selection.authScheme.type === "OAuth2" ? (
               <p className="rounded-lg border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
                 Save first, then Agw will open the provider consent screen. Reauthorization is also
-                available from the connection card.
+                available from the integration card.
               </p>
             ) : null}
           </div>
@@ -133,7 +134,7 @@ export function ConnectionDialog({
             onClick={onSubmit}
             disabled={!selection || !editor.displayName.trim() || !aliasValid || isSubmitting}
           >
-            {isSubmitting ? "Saving..." : connection ? "Save changes" : "Create connection"}
+            {isSubmitting ? "Saving..." : connection ? "Save changes" : "Create integration"}
           </Button>
         </DialogFooter>
       </DialogContent>

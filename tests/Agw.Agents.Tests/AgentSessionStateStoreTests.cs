@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Security.Claims;
 using System.Text.Json;
 using Agw.Agents.Execution.Agents.Store;
 using Agw.Infrastructure.Data;
@@ -36,8 +37,29 @@ public class AgentSessionStateStoreTests
     }
 
     [Fact]
+    public async Task GetOrCreateAsync_WithoutUserContext_DoesNotReadCache()
+    {
+        var cache = new ThrowingHybridCache();
+        var store = new AgentSessionStateStore(cache, NullLogger<AgentSessionStateStore>.Instance);
+        var agent = new Agent { Type = AgentType.System };
+        var aiAgent = new TestAIAgent();
+
+        var session = await store.GetOrCreateAsync(
+            agent,
+            aiAgent,
+            CreateScope(),
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Same(aiAgent.CreatedSession, session);
+        Assert.Equal(1, aiAgent.CreateSessionCallCount);
+        Assert.Equal(0, aiAgent.DeserializeSessionCallCount);
+    }
+
+    [Fact]
     public async Task GetOrCreateAsync_WhenCacheIsEmpty_CreatesNewSession()
     {
+        using var userScope = PushTestUser();
         var cache = new InMemoryHybridCache();
         var store = new AgentSessionStateStore(cache, NullLogger<AgentSessionStateStore>.Instance);
         var agent = new Agent { Type = AgentType.System };
@@ -58,6 +80,7 @@ public class AgentSessionStateStoreTests
     [Fact]
     public async Task GetOrCreateAsync_WhenCacheContainsSerializedSession_DeserializesSession()
     {
+        using var userScope = PushTestUser();
         var cache = new InMemoryHybridCache();
         var sessionScope = CreateScope();
         await cache.SetAsync(
@@ -79,6 +102,7 @@ public class AgentSessionStateStoreTests
     [Fact]
     public async Task GetOrCreateAsync_WhenCacheContainsInvalidJson_CreatesNewSession()
     {
+        using var userScope = PushTestUser();
         var cache = new InMemoryHybridCache();
         var sessionScope = CreateScope();
         await cache.SetAsync(
@@ -100,6 +124,7 @@ public class AgentSessionStateStoreTests
     [Fact]
     public async Task GetOrCreateAsync_WhenProviderRejectsSerializedSession_CreatesNewSession()
     {
+        using var userScope = PushTestUser();
         var cache = new InMemoryHybridCache();
         var sessionScope = CreateScope();
         await cache.SetAsync(
@@ -124,6 +149,7 @@ public class AgentSessionStateStoreTests
     [Fact]
     public async Task SaveAsync_SerializesSessionIntoCache()
     {
+        using var userScope = PushTestUser();
         var cache = new InMemoryHybridCache();
         var store = new AgentSessionStateStore(cache, NullLogger<AgentSessionStateStore>.Instance);
         var aiAgent = new TestAIAgent();
@@ -143,6 +169,7 @@ public class AgentSessionStateStoreTests
     [Fact]
     public async Task NodeState_SaveAndLoad_UsesStructuredScope()
     {
+        using var userScope = PushTestUser();
         var cache = new InMemoryHybridCache();
         var store = new AgentSessionStateStore(cache, NullLogger<AgentSessionStateStore>.Instance);
         var sessionScope = new AgentSessionStateScope(
@@ -167,6 +194,7 @@ public class AgentSessionStateStoreTests
     [Fact]
     public void Scope_DifferentAgentsAndNodes_UseDifferentCacheKeys()
     {
+        using var userScope = PushTestUser();
         var projectConversationId = Guid.CreateVersion7();
         var projectId = Guid.CreateVersion7();
         var firstAgentId = Guid.CreateVersion7();
@@ -200,6 +228,7 @@ public class AgentSessionStateStoreTests
     [Fact]
     public async Task SaveAsync_PersistsSeparateScopesAndSerializesConcurrentInsert()
     {
+        using var userScope = PushTestUser();
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(TestContext.Current.CancellationToken);
         var services = new ServiceCollection();
@@ -214,13 +243,21 @@ public class AgentSessionStateStoreTests
         {
             var dbContext = serviceScope.ServiceProvider.GetRequiredService<AgwDbContext>();
             await dbContext.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
-            dbContext.Projects.Add(new Project { Id = projectId, Name = "session-state-project" });
+            dbContext.Projects.Add(
+                new Project
+                {
+                    Id = projectId,
+                    Name = "session-state-project",
+                    CreateBy = "tester",
+                }
+            );
             dbContext.Agents.Add(
                 new Agent
                 {
                     Id = agentId,
                     Name = "session-state-agent",
                     DisplayName = "Session State Agent",
+                    CreateBy = "tester",
                 }
             );
             dbContext.ProjectConversations.Add(
@@ -230,6 +267,7 @@ public class AgentSessionStateStoreTests
                     ProjectId = projectId,
                     ContextId = "context-1",
                     Title = "Context",
+                    CreateBy = "tester",
                 }
             );
             await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -298,6 +336,11 @@ public class AgentSessionStateStoreTests
 
     private static AgentSessionStateScope CreateScope() =>
         new(Guid.CreateVersion7(), Guid.CreateVersion7(), "context-1", Guid.CreateVersion7());
+
+    private static IDisposable PushTestUser() =>
+        UserInfoUtil.Push(
+            new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], "test"))
+        );
 
     private sealed class TestAIAgent : AIAgent
     {

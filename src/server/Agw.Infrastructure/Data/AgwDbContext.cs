@@ -1,4 +1,11 @@
+using Agw.Agents.Application.Persistence;
+using Agw.Auth.Application.Persistence;
+using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data.Encryption;
+using Agw.Integrations.Application.Persistence;
+using Agw.Jobs.Application.Persistence;
+using Agw.Projects.Application.Persistence;
+using Agw.Providers.Application.Persistence;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
@@ -10,13 +17,24 @@ using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Entities.Tools;
+using Agw.Skills.Application.Persistence;
+using Agw.Tools.Application.Persistence;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Agw.Infrastructure.Data;
 
-public class AgwDbContext : EFContext
+public class AgwDbContext
+    : EFContext,
+        IAgentsDbContext,
+        IProjectsDbContext,
+        IJobsDbContext,
+        IAuthDbContext,
+        IIntegrationsDbContext,
+        IProvidersDbContext,
+        ISkillsDbContext,
+        IToolsDbContext
 {
     private static readonly IEncryptedDataProtector DefaultEncryptedDataProtector =
         new DataProtectionEncryptedDataProtector(new EphemeralDataProtectionProvider());
@@ -118,7 +136,14 @@ public class AgwDbContext : EFContext
         ConfigureProviderSpecificColumnTypes(modelBuilder);
         EncryptedEntityMetadata.Validate(modelBuilder);
         modelBuilder.ApplySoftDeleteQueryFilters();
+        modelBuilder.ApplyUserScopeQueryFilters(this);
     }
+
+    internal string? CurrentUserId => UserInfoUtil.IsContextActive ? UserInfoUtil.UserId : null;
+
+    internal bool UserScopeIsActive => UserInfoUtil.IsContextActive || UserInfoUtil.IsSystemScopeActive;
+
+    internal bool UserScopeBypass => UserInfoUtil.IsSystemScopeActive;
 
     internal void DecryptMaterializedEntity(object entity)
     {
@@ -334,6 +359,33 @@ public class AgwDbContext : EFContext
             if (agentConnectionRelationsToRemove.Count > 0)
             {
                 AgentConnectionRelations.RemoveRange(agentConnectionRelationsToRemove);
+            }
+        }
+
+        if (deletedAgentIds.Count > 0 || deletedMcpToolServerIds.Count > 0)
+        {
+            var agentMcpRelationsToRemove = AgentMcpToolServers
+                .Where(relation =>
+                    deletedAgentIds.Contains(relation.AgentId)
+                    || deletedMcpToolServerIds.Contains(relation.McpToolServerId)
+                )
+                .ToList();
+            if (agentMcpRelationsToRemove.Count > 0)
+            {
+                AgentMcpToolServers.RemoveRange(agentMcpRelationsToRemove);
+            }
+        }
+
+        if (deletedAgentIds.Count > 0 || deletedSkillIds.Count > 0)
+        {
+            var agentSkillRelationsToRemove = AgentSkillRelations
+                .Where(relation =>
+                    deletedAgentIds.Contains(relation.AgentId) || deletedSkillIds.Contains(relation.SkillId)
+                )
+                .ToList();
+            if (agentSkillRelationsToRemove.Count > 0)
+            {
+                AgentSkillRelations.RemoveRange(agentSkillRelationsToRemove);
             }
         }
 

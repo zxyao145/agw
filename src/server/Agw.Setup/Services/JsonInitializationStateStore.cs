@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Agw.Auth.Application;
 using Agw.Auth.Contracts;
 using Agw.Setup.Contracts;
 using Agw.Shared.Configuration;
@@ -13,14 +12,22 @@ public sealed class JsonInitializationStateStore
         IAuthenticationStateStore,
         IServerInitializationState
 {
+    private const int ErrorSharingViolation = 32;
+    private const int ErrorLockViolation = 33;
+
     private readonly AgwDataPaths _paths;
+    private readonly TimeProvider _timeProvider;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private readonly JsonSerializerOptions _serializerOptions = CreateSerializerOptions();
     private volatile ServerState _state;
 
     public JsonInitializationStateStore(AgwDataPaths paths)
+        : this(paths, TimeProvider.System) { }
+
+    public JsonInitializationStateStore(AgwDataPaths paths, TimeProvider timeProvider)
     {
         _paths = paths;
+        _timeProvider = timeProvider;
         _state = Load(paths.StateFile);
     }
 
@@ -30,10 +37,25 @@ public sealed class JsonInitializationStateStore
         return new AuthenticationSnapshot(state.PasswordHash, state.SessionVersion);
     }
 
-    public bool IsInitialized => _state.IsInitialized;
-    public bool HasLegacyApiTokenSection => _state.Tokens != null;
-    public DatabaseProvider DatabaseProvider => _state.Database.Provider;
-    public string DatabaseConnectionString => _state.Database.ConnectionString;
+    public bool IsInitialized
+    {
+        get { return _state.IsInitialized; }
+    }
+
+    public bool HasLegacyApiTokenSection
+    {
+        get { return _state.Tokens != null; }
+    }
+
+    public DatabaseProvider DatabaseProvider
+    {
+        get { return _state.Database.Provider; }
+    }
+
+    public string DatabaseConnectionString
+    {
+        get { return _state.Database.ConnectionString; }
+    }
 
     public async Task PersistAsync(
         SetupConfiguration configuration,
@@ -44,6 +66,8 @@ public sealed class JsonInitializationStateStore
         await _writeLock.WaitAsync(cancellationToken);
         try
         {
+            await using var stateFileLock = await AcquireStateFileLockAsync(cancellationToken);
+            RefreshFromDisk();
             var nextState = new ServerState
             {
                 SchemaVersion = 2,
@@ -92,6 +116,8 @@ public sealed class JsonInitializationStateStore
         await _writeLock.WaitAsync(cancellationToken);
         try
         {
+            await using var stateFileLock = await AcquireStateFileLockAsync(cancellationToken);
+            RefreshFromDisk();
             if (_state.Tokens == null)
                 return;
 
@@ -111,6 +137,8 @@ public sealed class JsonInitializationStateStore
         await _writeLock.WaitAsync(cancellationToken);
         try
         {
+            await using var stateFileLock = await AcquireStateFileLockAsync(cancellationToken);
+            RefreshFromDisk();
             var nextState = Copy(_state);
             nextState.PasswordHash = passwordHash;
             nextState.SessionVersion++;
@@ -150,7 +178,7 @@ public sealed class JsonInitializationStateStore
 
             if (File.Exists(_paths.StateFile))
             {
-                File.Replace(tempPath, _paths.StateFile, null);
+                await ReplaceAsync(tempPath, cancellationToken);
             }
             else
             {
@@ -168,11 +196,94 @@ public sealed class JsonInitializationStateStore
         }
     }
 
+    public async Task RefreshAsync(CancellationToken cancellationToken = default)
+    {
+        await _writeLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var stateFileLock = await AcquireStateFileLockAsync(cancellationToken).ConfigureAwait(false);
+            RefreshFromDisk();
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
+
+    private void RefreshFromDisk()
+    {
+        if (File.Exists(_paths.StateFile))
+        {
+            _state = Load(_paths.StateFile);
+        }
+    }
+
+    private async Task<FileStream> AcquireStateFileLockAsync(CancellationToken cancellationToken)
+    {
+        var lockPath = $"{_paths.StateFile}.lock";
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                var options = new FileStreamOptions
+                {
+                    Mode = FileMode.OpenOrCreate,
+                    Access = FileAccess.ReadWrite,
+                    Share = FileShare.None,
+                    BufferSize = 1,
+                    Options = FileOptions.Asynchronous,
+                };
+                if (!OperatingSystem.IsWindows())
+                {
+                    options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+                }
+                return new FileStream(lockPath, options);
+            }
+            catch (IOException)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(50), _timeProvider, cancellationToken);
+            }
+        }
+    }
+
+    private async Task ReplaceAsync(string tempPath, CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            try
+            {
+                File.Replace(tempPath, _paths.StateFile, null);
+                return;
+            }
+            catch (IOException exception) when (OperatingSystem.IsWindows() && IsSharingViolation(exception))
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(50), _timeProvider, cancellationToken).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static bool IsSharingViolation(IOException exception) =>
+        (exception.HResult & 0xFFFF) is ErrorSharingViolation or ErrorLockViolation;
+
     private ServerState Load(string path)
     {
         if (!File.Exists(path))
             return new ServerState();
-        return JsonSerializer.Deserialize<ServerState>(File.ReadAllText(path), _serializerOptions) ?? new ServerState();
+
+        using var stream = new FileStream(
+            path,
+            new FileStreamOptions
+            {
+                Mode = FileMode.Open,
+                Access = FileAccess.Read,
+                Share = FileShare.ReadWrite | FileShare.Delete,
+                BufferSize = 4096,
+                Options = FileOptions.SequentialScan,
+            }
+        );
+        return JsonSerializer.Deserialize<ServerState>(stream, _serializerOptions) ?? new ServerState();
     }
 
     private static JsonSerializerOptions CreateSerializerOptions()

@@ -25,7 +25,7 @@ test("shared non-Tool capability panels use SearchableSelect multi-selects", asy
   assert.equal(source.match(/multiple/g)?.length, 3);
   assert.match(source, /searchPlaceholder="Search skills\.\.\."/);
   assert.match(source, /searchPlaceholder="Search MCP tool servers\.\.\."/);
-  assert.match(source, /searchPlaceholder="Search connections\.\.\."/);
+  assert.match(source, /searchPlaceholder="Search integrations\.\.\."/);
   assert.doesNotMatch(source, /<DropdownMenu/);
   assert.doesNotMatch(source, /<Popover/);
 });
@@ -45,7 +45,7 @@ test("Agent form consumes shared capability panels and the Tools module", async 
   assert.match(source, /External agents do not support skill configuration/);
   assert.match(source, /External agents do not support tool configuration/);
   assert.match(source, /External agents do not support MCP tool server configuration/);
-  assert.match(source, /External agents do not support connection configuration/);
+  assert.match(source, /External agents do not support integration configuration/);
 });
 
 test("Connection options expose ready-only searchable metadata", async () => {

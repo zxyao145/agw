@@ -1,5 +1,5 @@
 using A2A;
-using Agw.Shared.Data.Entities.Agents;
+using Agw.Agents.Contracts.Catalog;
 
 namespace Agw.A2A;
 
@@ -8,24 +8,23 @@ namespace Agw.A2A;
 /// </summary>
 public class A2AAgentService
 {
-    private readonly IRepository<Agent> _agentRepository;
+    private readonly IAgentCatalogFacade _agents;
 
-    public A2AAgentService(IRepository<Agent> agentRepository)
+    public A2AAgentService(IAgentCatalogFacade agents)
     {
-        _agentRepository = agentRepository;
+        _agents = agents;
     }
 
     public async Task<List<AgentCard>> ListAgentCardsAsync()
     {
-        var agents = await _agentRepository.ListAsync();
+        var agents = await _agents.ListDiscoverableAsync().ConfigureAwait(false);
         var agentCards = agents.Select(ConvertAgentToCard).ToList();
         return agentCards;
     }
 
     public async Task<AgentCard?> GetAgentCardAsync(string agentName)
     {
-        // Try to parse as GUID first
-        Agent? agent = await _agentRepository.SingleOrDefaultAsync(a => a.Name == agentName);
+        var agent = await _agents.FindDiscoverableByNameAsync(agentName).ConfigureAwait(false);
         if (agent == null)
         {
             return null;
@@ -36,15 +35,12 @@ public class A2AAgentService
         return card;
     }
 
-    private AgentCard ConvertAgentToCard(Agent agent)
+    private static AgentCard ConvertAgentToCard(AgentDescriptor agent)
     {
         var card = new AgentCard
         {
             Name = agent.Name,
-            Description =
-                string.IsNullOrWhiteSpace(agent.SystemPrompt) ? "An AI agent"
-                : agent.SystemPrompt.Length > 200 ? agent.SystemPrompt.Substring(0, 200) + "..."
-                : agent.SystemPrompt,
+            Description = agent.DiscoveryDescription,
             Version = "1.0",
             Capabilities = new AgentCapabilities { Streaming = true },
         };

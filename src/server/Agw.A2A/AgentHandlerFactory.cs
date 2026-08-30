@@ -1,8 +1,8 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
 using A2A;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Exceptions;
+using Agw.Agents.Contracts.Execution;
+using Agw.Agents.Contracts.Messages;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -10,7 +10,6 @@ namespace Agw.A2A;
 
 public class CommonAgentHandler : IAgentHandler
 {
-    private AgentCard? _agentCard;
     private readonly string _agentName;
     private readonly IAgentExecutionBridge _executionBridge;
     private readonly A2AAgentService? _a2aAgentService;
@@ -36,23 +35,16 @@ public class CommonAgentHandler : IAgentHandler
 
     public async Task<AgentCard?> GetAgentCardAsync()
     {
-        if (_agentCard is not null)
-        {
-            return _agentCard;
-        }
-
         if (_a2aAgentService is not null)
         {
-            _agentCard = await _a2aAgentService.GetAgentCardAsync(_agentName).ConfigureAwait(false);
-            return _agentCard;
+            return await _a2aAgentService.GetAgentCardAsync(_agentName).ConfigureAwait(false);
         }
 
         ArgumentNullException.ThrowIfNull(_serviceScopeFactory);
 
         using var scope = _serviceScopeFactory.CreateScope();
         var scopedA2AAgentService = scope.ServiceProvider.GetRequiredService<A2AAgentService>();
-        _agentCard = await scopedA2AAgentService.GetAgentCardAsync(_agentName).ConfigureAwait(false);
-        return _agentCard;
+        return await scopedA2AAgentService.GetAgentCardAsync(_agentName).ConfigureAwait(false);
     }
 
     public async Task ExecuteAsync(
@@ -63,6 +55,7 @@ public class CommonAgentHandler : IAgentHandler
     {
         var updater = new TaskUpdater(eventQueue, context.TaskId, context.ContextId);
         await updater.SubmitAsync(cancellationToken).ConfigureAwait(false);
+        string? terminalStatus = null;
 
         try
         {
@@ -79,6 +72,12 @@ public class CommonAgentHandler : IAgentHandler
                         .ConfigureAwait(false)
                 )
                 {
+                    if (AgentExecutionMessageProtocol.TryGetFinishedStatus(message, out var status))
+                    {
+                        terminalStatus = status;
+                        continue;
+                    }
+
                     await PublishArtifactsAsync(updater, message, cancellationToken).ConfigureAwait(false);
                 }
             }
@@ -87,23 +86,20 @@ public class CommonAgentHandler : IAgentHandler
                 var result = await _executionBridge
                     .ExecuteAsync(_agentName, context, input, cancellationToken)
                     .ConfigureAwait(false);
-                if (result is null)
-                {
-                    throw new AgwException(
-                        ErrorCodes.AgentReturnedNoResult,
-                        $"Agent '{_agentName}' returned no result."
-                    );
-                }
 
                 foreach (var message in result.Messages)
                 {
+                    if (AgentExecutionMessageProtocol.TryGetFinishedStatus(message, out var status))
+                    {
+                        terminalStatus = status;
+                        continue;
+                    }
+
                     await PublishArtifactsAsync(updater, message, cancellationToken).ConfigureAwait(false);
                 }
             }
 
-            await updater
-                .CompleteAsync(CreateStatusMessage(context, "Completed"), cancellationToken)
-                .ConfigureAwait(false);
+            await ApplyTerminalStatusAsync(updater, context, terminalStatus, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -165,13 +161,13 @@ public class CommonAgentHandler : IAgentHandler
         }
     }
 
-    private static async Task PublishArtifactsAsync(
+    internal static async Task PublishArtifactsAsync(
         TaskUpdater updater,
         AgwMessage message,
         CancellationToken cancellationToken
     )
     {
-        if (IsTurnFinished(message))
+        if (AgentExecutionMessageProtocol.IsFinished(message))
         {
             return;
         }
@@ -237,11 +233,33 @@ public class CommonAgentHandler : IAgentHandler
         return parts;
     }
 
-    private static bool IsTurnFinished(AgwMessage message) =>
-        message.AdditionalProperties?.TryGetValue("type", out object? value) == true
-        && string.Equals(value?.ToString(), "turn-finished", StringComparison.OrdinalIgnoreCase);
+    internal static Task ApplyTerminalStatusAsync(
+        TaskUpdater updater,
+        RequestContext context,
+        string? status,
+        CancellationToken cancellationToken
+    )
+    {
+        if (
+            status is null
+            || string.Equals(status, AgentExecutionMessageProtocol.CompletedStatus, StringComparison.Ordinal)
+        )
+        {
+            return updater.CompleteAsync(CreateStatusMessage(context, "Completed"), cancellationToken).AsTask();
+        }
 
-    private static Message CreateStatusMessage(RequestContext context, string text) =>
+        if (string.Equals(status, AgentExecutionMessageProtocol.InterruptedStatus, StringComparison.Ordinal))
+        {
+            return updater.CancelAsync(cancellationToken).AsTask();
+        }
+
+        var message = string.Equals(status, AgentExecutionMessageProtocol.FailedStatus, StringComparison.Ordinal)
+            ? "The agent execution failed."
+            : $"The agent execution ended with unsupported status '{status}'.";
+        return updater.FailAsync(CreateStatusMessage(context, message), cancellationToken).AsTask();
+    }
+
+    internal static Message CreateStatusMessage(RequestContext context, string text) =>
         new()
         {
             Role = Role.Agent,

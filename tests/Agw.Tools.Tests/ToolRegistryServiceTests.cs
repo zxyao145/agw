@@ -1,9 +1,6 @@
 using System.Text.Json;
-using Agw.Domain.Services;
-using Agw.Shared.Contracts.Tools;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
 using Agw.Tools.ContextualTools;
 using Agw.Tools.ContextualTools.Shell;
@@ -53,11 +50,8 @@ public class ToolRegistryServiceTests
         await using var contribution = await registry.MaterializeAsync(
             [
                 new AskUserQuestionToolDefinition(),
-                new BashToolDefinition(),
                 new DiffToolDefinition(),
-                new GenerateGuidToolDefinition(),
                 new GitCloneToolDefinition(),
-                new PowerShellToolDefinition(),
                 new WebFetchToolDefinition(),
             ],
             CreateMaterializationContext(),
@@ -65,7 +59,7 @@ public class ToolRegistryServiceTests
         );
 
         Assert.Equal(
-            ["ask_user_question", "diff", "generate_guid", "web_fetch"],
+            ["ask_user_question", "diff", "web_fetch"],
             contribution.PlanModeAllowedToolNames.Order(StringComparer.Ordinal)
         );
     }
@@ -95,7 +89,7 @@ public class ToolRegistryServiceTests
     }
 
     [Fact]
-    public void RemovedLocalTools_AreNotRegistered()
+    public void RemovedAndObsoleteTools_AreNotRegistered()
     {
         var services = new ServiceCollection();
         using var sp = services.BuildServiceProvider();
@@ -115,11 +109,90 @@ public class ToolRegistryServiceTests
             "task_update",
             "task_output",
             "task_stop",
+            "bash",
+            "generate_guid",
+            "powershell",
         };
 
         Assert.All(removedToolNames, name => Assert.False(registry.ToolExists(name)));
-        Assert.True(registry.ToolExists("bash"));
-        Assert.True(registry.ToolExists("powershell"));
+        Assert.All(removedToolNames, name => Assert.Null(registry.GetTool(name)));
+        Assert.Null(registry.GetToolMethod("generate_guid"));
+        Assert.Null(registry.GetToolInstance("bash"));
+        Assert.Null(registry.GetToolInstance("powershell"));
+        Assert.DoesNotContain(registry.GetAllTools(), tool => removedToolNames.Contains(tool.Name));
+    }
+
+    [Theory]
+    [InlineData(ToolDefinitionNames.Bash)]
+    [InlineData(ToolDefinitionNames.GenerateGuid)]
+    [InlineData(ToolDefinitionNames.PowerShell)]
+    public async Task MaterializeAsync_ObsoleteToolDefinition_ThrowsClearError(string toolName)
+    {
+        await using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, serviceProvider);
+        ToolDefinition definition = toolName switch
+        {
+            ToolDefinitionNames.Bash => new BashToolDefinition(),
+            ToolDefinitionNames.GenerateGuid => new GenerateGuidToolDefinition(),
+            ToolDefinitionNames.PowerShell => new PowerShellToolDefinition(),
+            _ => throw new InvalidOperationException($"Unexpected Tool '{toolName}'."),
+        };
+
+        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+            await registry.MaterializeAsync(
+                [definition],
+                CreateMaterializationContext(),
+                TestContext.Current.CancellationToken
+            )
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.Equal($"Tool '{toolName}' is obsolete and unavailable.", exception.Message);
+    }
+
+    [Fact]
+    public async Task ObsoleteContextualToolAndToolBlock_AreFilteredAndUnavailable()
+    {
+        await using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+#pragma warning disable CS0618
+        var toolBlockRegistry = new ToolBlockRegistry([new ObsoleteTodoToolBlock()]);
+        var registry = new ToolRegistryService(
+            NullLogger<ToolRegistryService>.Instance,
+            serviceProvider,
+            [new ObsoleteWebSearchContextualTool()],
+            toolBlockRegistry
+        );
+#pragma warning restore CS0618
+
+        Assert.False(registry.ToolExists(ToolDefinitionNames.WebSearch));
+        Assert.Null(registry.GetTool(ToolDefinitionNames.WebSearch));
+        Assert.Null(registry.GetTool(ToolBlockNames.Todo));
+        Assert.DoesNotContain(
+            registry.GetAllTools(),
+            tool => tool.Name is ToolDefinitionNames.WebSearch or ToolBlockNames.Todo
+        );
+
+        var contextualException = await Assert.ThrowsAsync<AgwException>(async () =>
+            await registry.MaterializeAsync(
+                [new WebSearchToolDefinition()],
+                CreateMaterializationContext(),
+                TestContext.Current.CancellationToken
+            )
+        );
+        Assert.Equal(
+            $"Tool '{ToolDefinitionNames.WebSearch}' is obsolete and unavailable.",
+            contextualException.Message
+        );
+
+        var toolBlockException = await Assert.ThrowsAsync<AgwException>(async () =>
+            await toolBlockRegistry.MaterializeAsync(
+                [new TodoToolBlockDefinition()],
+                ToolBlockScope.Agent,
+                CreateMaterializationContext(),
+                TestContext.Current.CancellationToken
+            )
+        );
+        Assert.Equal($"Tool Block '{ToolBlockNames.Todo}' is obsolete and unavailable.", toolBlockException.Message);
     }
 
     [Fact]
@@ -236,5 +309,45 @@ public class ToolRegistryServiceTests
             ToolMaterializationContext context,
             CancellationToken cancellationToken
         ) => ValueTask.FromResult(new ToolContribution());
+    }
+
+    [Obsolete("Test obsolete Contextual Tool")]
+    private sealed class ObsoleteWebSearchContextualTool : IContextualTool
+    {
+        public ToolInfo Descriptor { get; } =
+            new()
+            {
+                Name = ToolDefinitionNames.WebSearch,
+                DisplayName = "Obsolete Web Search",
+                Description = "Test obsolete Contextual Tool.",
+                Category = "Test",
+                TypeName = typeof(ObsoleteWebSearchContextualTool).FullName!,
+                Parameters = [],
+            };
+
+        public ValueTask<ToolContribution> MaterializeAsync(
+            ToolDefinition definition,
+            ToolMaterializationContext context,
+            CancellationToken cancellationToken
+        ) => throw new InvalidOperationException("Obsolete Contextual Tool must not be materialized.");
+    }
+
+    [Obsolete("Test obsolete Tool Block")]
+    private sealed class ObsoleteTodoToolBlock : IToolBlock
+    {
+        public ToolBlockDescriptor Descriptor { get; } =
+            new(
+                ToolBlockNames.Todo,
+                "Obsolete Todo",
+                "Test obsolete Tool Block.",
+                ToolBlockScope.Agent | ToolBlockScope.Project,
+                ["obsolete_todo"]
+            );
+
+        public ValueTask<ToolContribution> MaterializeAsync(
+            ToolBlockDefinition definition,
+            ToolMaterializationContext context,
+            CancellationToken cancellationToken
+        ) => throw new InvalidOperationException("Obsolete Tool Block must not be materialized.");
     }
 }

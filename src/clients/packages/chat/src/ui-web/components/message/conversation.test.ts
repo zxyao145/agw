@@ -1,341 +1,116 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import ts from "typescript";
 
 import type { AiMessage } from "@agw/api";
-import { processMessages } from "@agw/execution-core";
+import { buildConversationRenderModel, getMessageMeta } from "@agw/chat-core";
 
 const CONVERSATION_URL = new URL("./conversation.tsx", import.meta.url);
+const PRESENTED_MESSAGE_URL = new URL("./presented-message.tsx", import.meta.url);
+const MESSAGE_TRIGGER_URL = new URL("../message-trigger.tsx", import.meta.url);
 
-async function loadMessageMeta() {
+test("conversation is a thin host over the shared render model union", async () => {
   const source = await readFile(CONVERSATION_URL, "utf8");
-  const start = source.indexOf("type MessageMeta");
-  const end = source.indexOf("\nfunction getFunctionToolName");
-  const messageMetaSource = source
-    .slice(start, end)
-    .replace("function getMessageMeta", "export function getMessageMeta");
-  const javascript = ts.transpileModule(
-    `
-const isResultMessage = (message) => message.additionalProperties?.type === "result";
-${messageMetaSource}
-`,
-    {
-      compilerOptions: {
-        module: ts.ModuleKind.ES2022,
-        target: ts.ScriptTarget.ES2022,
-      },
-    },
-  ).outputText;
-
-  return import(`data:text/javascript;base64,${Buffer.from(javascript).toString("base64")}`);
-}
-
-function toolMessage(type: string, scope: string, callId = "item_1"): AiMessage {
-  return toolContentsMessage(type, scope, [callId]);
-}
-
-function toolContentsMessage(type: string, scope: string, callIds: string[]): AiMessage {
-  return {
-    messageId: `${type}-${scope}`,
-    author: "agent",
-    role: type === "FunctionCallContent" ? "assistant" : "tool",
-    streamingScopeId: scope,
-    contents: callIds.map((callId) => ({
-      type,
-      content: `${type}-${callId}`,
-      additionalProperties: {
-        callId,
-        ...(type === "FunctionCallContent" ? { toolName: `tool-${callId}` } : {}),
-      },
-    })),
-  };
-}
-
-test("conversation renders agent name and author metadata above agent messages", async () => {
-  const source = await readFile(CONVERSATION_URL, "utf8");
-
-  assert.match(source, /function getMessageMeta/);
-  assert.match(source, /agentName/);
-  assert.match(source, /agentAuthor/);
-  assert.match(source, /\{messageMeta\.name\}/);
-  assert.match(source, /\{messageMeta\.author\}/);
-  assert.match(source, /AiMessageComponent message=\{item\.message\}/);
+  assert.match(source, /ConversationRenderItem/);
+  assert.match(source, /items: ConversationRenderItem\[\]/);
+  assert.doesNotMatch(source, /processMessages|collapseConsecutiveSystemMessages|callId/);
+  assert.match(source, /item\.type === "tool-accordion"/);
+  assert.match(source, /item\.type === "tool-batch"/);
+  assert.match(source, /item\.type === "human-interaction"/);
+  assert.match(source, /item\.type === "checkpoint"/);
 });
 
-test("conversation restores the agentflow node and agent names from persisted metadata", async () => {
-  const { getMessageMeta } = await loadMessageMeta();
+test("conversation virtualizes dynamically measured message rows", async () => {
+  const source = await readFile(CONVERSATION_URL, "utf8");
 
+  assert.match(source, /useVirtualizer\(/);
+  assert.match(source, /ref=\{virtualizer\.measureElement\}/);
+  assert.match(source, /getItemKey/);
+  assert.match(source, /estimateSize: \(\) => 72/);
+  assert.match(source, /overscan: 6/);
+  assert.match(source, /Loading earlier messages/);
+});
+
+test("tool rows constrain long summaries without pushing status off screen", async () => {
+  const [conversation, trigger] = await Promise.all([
+    readFile(CONVERSATION_URL, "utf8"),
+    readFile(MESSAGE_TRIGGER_URL, "utf8"),
+  ]);
+
+  assert.match(trigger, /Header className="flex min-w-0"/);
+  assert.match(trigger, /flex min-w-0 flex-1 items-start/);
+  assert.match(conversation, /className="mx-4 min-w-0 w-full max-w-\[80%\]"/);
+  assert.match(
+    conversation,
+    /className="flex w-0 min-w-0 flex-1 items-center gap-2 overflow-hidden"/,
+  );
+  assert.match(
+    conversation,
+    /className="block min-w-0 max-w-full flex-1 truncate text-xs text-muted-foreground"/,
+  );
+  assert.match(conversation, /className="ml-auto shrink-0"/);
+});
+
+test("agent metadata keeps name priority and independent author", () => {
   assert.deepEqual(
     getMessageMeta({
       messageId: "message-1",
       role: "assistant",
+      author: "model-author",
       contents: [],
       additionalProperties: {
         nodeName: "Review Node",
+        name: "Fallback",
         agentName: "general-agent",
-        name: "Fallback Name",
       },
     }),
-    { name: "Review Node", author: "general-agent" },
+    { name: "Review Node", author: "model-author" },
   );
   assert.deepEqual(
     getMessageMeta({
       messageId: "message-2",
-      author: "general-agent",
       role: "assistant",
       contents: [],
+      additionalProperties: { agentName: "general-agent" },
     }),
-    { name: null, author: "general-agent" },
-  );
-  assert.deepEqual(
-    getMessageMeta({
-      messageId: "message-3",
-      role: "assistant",
-      contents: [],
-      additionalProperties: {
-        agentName: "general-agent",
-      },
-    }),
-    { name: null, author: "general-agent" },
+    { name: "general-agent", author: null },
   );
 });
 
-test("conversation delegates grouping to execution-core and keeps stable keys", async () => {
-  const source = await readFile(CONVERSATION_URL, "utf8");
-
-  assert.match(
-    source,
-    /import \{ processMessages, type ProcessedMessageItem \} from "@agw\/execution-core"/,
-  );
-  assert.match(source, /const defaultProcessMessages = processMessages;/);
-  assert.match(source, /function addStableKeys/);
-  assert.match(source, /React\.useMemo\([\s\S]*?processMessages/);
-  assert.doesNotMatch(source, /key=\{index\}|console\.(?:debug|log)/);
-});
-
-test("conversation reuses preprocessing for unchanged messages only", () => {
-  const stableMessage: AiMessage = {
-    messageId: "stable-message",
+test("shared model provides stable per-turn tool groups to the renderer", () => {
+  const tool = (type: string, scope: string): AiMessage => ({
+    messageId: `${type}-${scope}`,
+    role: type === "FunctionCallContent" ? "assistant" : "tool",
     author: "agent",
-    role: "assistant",
-    streamingScopeId: "user-1",
-    contents: [{ type: "TextContent", content: "stable" }],
-  };
-  const activeMessage: AiMessage = {
-    messageId: "active-message",
-    author: "agent",
-    role: "assistant",
-    streamingScopeId: "user-1",
-    contents: [{ type: "TextContent", content: "first" }],
-  };
-  const nextActiveMessage = {
-    ...activeMessage,
-    contents: [{ type: "TextContent", content: "second" }],
-  };
-
-  const first = processMessages([stableMessage, activeMessage]);
-  const second = processMessages([stableMessage, nextActiveMessage]);
-
-  assert.equal(first[0].type, "normal");
-  assert.equal(second[0].type, "normal");
-  assert.equal(first[0].message, second[0].message);
-  assert.notEqual(first[1].message, second[1].message);
-});
-
-test("conversation renders user author metadata above and aligned with user messages", async () => {
-  const source = await readFile(CONVERSATION_URL, "utf8");
-
-  assert.doesNotMatch(source, /message\.role === "user" \|\| isResultMessage\(message\)/);
-  assert.match(source, /if \(message\.role === "user"\)[\s\S]*?name: null,[\s\S]*?author:/);
-  assert.match(source, /const isUserMessage = item\.message\.role === "user";/);
-  assert.match(source, /isUserMessage \? "ml-auto justify-end" : ""/);
-});
-
-test("conversation can delegate scrolling while keeping messages centered", async () => {
-  const source = await readFile(CONVERSATION_URL, "utf8");
-
-  assert.match(source, /scrollable\?: boolean;/);
-  assert.match(source, /scrollable = true,/);
-  assert.match(source, /scrollable && "overflow-y-auto agw-scrollbar"/);
-  assert.match(source, /<div className="mx-auto w-full max-w-225 space-y-4 pb-36">/);
-});
-
-test("conversation renders footer content before its bottom scroll anchor", async () => {
-  const source = await readFile(CONVERSATION_URL, "utf8");
-
-  assert.match(source, /\{footer\}[\s\S]*?<div ref=\{messagesEndRef\}/);
-  assert.match(source, /messages\.length == 0\) && !footer/);
-});
-
-test("conversation renders checkpoint cards bound to their own occurrence", async () => {
-  const source = await readFile(CONVERSATION_URL, "utf8");
-
-  assert.match(source, /getAgentflowCheckpointMessage\(item\.message\)/);
-  assert.match(source, /checkpointsByOccurrence\.get\(checkpoint\.occurrenceId\)/);
-  assert.match(source, /onCheckpointResume\?\.\(checkpoint\.occurrenceId\)/);
-  assert.match(source, /showResume=\{showCheckpointResume\}/);
-});
-
-test("conversation embeds a pending human interaction in its matching function call", async () => {
-  const source = await readFile(CONVERSATION_URL, "utf8");
-
-  assert.match(source, /matchesHumanInteractionCall\(item\.message, pendingHumanInteraction\)/);
-  assert.match(source, /data-function-call-id=\{pendingHumanInteraction\.callId\}/);
-  assert.match(source, /<HumanInteractionPanel[\s\S]*?embedded/);
-});
-
-test("conversation renders completed ask_user_question calls as question and answer text", async () => {
-  const source = await readFile(CONVERSATION_URL, "utf8");
-
-  assert.match(source, /item\.toolName === "ask_user_question"/);
-  assert.match(source, /getHumanInteractionQuestionResult\(item\.messages\)/);
-  assert.match(source, /<HumanInteractionQuestionResultView result=\{questionResult\}/);
-});
-
-test("conversation delegates filtering and grouping to execution-core", async () => {
-  const source = await readFile(CONVERSATION_URL, "utf8");
-
-  assert.match(source, /collapseConsecutiveSystemMessages\(messages\)/);
-  assert.doesNotMatch(source, /if \(message\.role === "system"\) \{\s*continue;/);
-  assert.doesNotMatch(source, /message\.role === "user" && !message\.author/);
-});
-
-test("conversation restores persisted authorless assistant and tool messages", () => {
-  const items = processMessages([
-    {
-      messageId: "assistant-1",
-      author: null,
-      role: "assistant",
-      streamingScopeId: "user-1",
-      contents: [
-        { type: "TextReasoningContent", content: "Planning the task" },
-        {
-          type: "FunctionCallContent",
-          content: "{}",
-          additionalProperties: { callId: "call-1", toolName: "todos_add" },
-        },
-      ],
-    },
-    {
-      messageId: "",
-      author: null,
-      role: "tool",
-      streamingScopeId: "user-1",
-      contents: [
-        {
-          type: "FunctionResultContent",
-          content: "[]",
-          additionalProperties: { callId: "call-1" },
-        },
-      ],
-    },
-  ]);
-
-  assert.deepEqual(
-    items.map((item) => item.type),
-    ["normal", "accordion"],
-  );
-});
-
-test("duplicate call ids produce one tool group per turn", () => {
-  const items = processMessages([
-    toolMessage("FunctionCallContent", "user-1"),
-    toolMessage("FunctionResultContent", "user-1"),
-    toolMessage("FunctionCallContent", "user-2"),
-    toolMessage("FunctionResultContent", "user-2"),
-  ]);
-
-  assert.equal(items.length, 2);
-  assert.deepEqual(
-    items.map((item) => item.type),
-    ["accordion", "accordion"],
-  );
-  assert.deepEqual(
-    items.map((item) =>
-      item.type === "accordion" ? item.messages.map((message) => message.streamingScopeId) : [],
-    ),
-    [
-      ["user-1", "user-1"],
-      ["user-2", "user-2"],
-    ],
-  );
-});
-
-test("concurrent tool calls pair with out-of-order results in call order", () => {
-  const items = processMessages([
-    toolContentsMessage("FunctionCallContent", "user-1", ["call-1", "call-2", "call-3"]),
-    toolContentsMessage("FunctionResultContent", "user-1", ["call-3", "call-1", "call-2"]),
-  ]);
-
-  assert.deepEqual(
-    items.map((item) => item.type),
-    ["accordion", "accordion", "accordion"],
-  );
-  assert.deepEqual(
-    items.map((item) => (item.type === "accordion" ? item.toolName : "")),
-    ["tool-call-1", "tool-call-2", "tool-call-3"],
-  );
-  assert.deepEqual(
-    items.map((item) =>
-      item.type === "accordion"
-        ? item.messages.map((message) => message.contents[0].additionalProperties?.callId)
-        : [],
-    ),
-    [
-      ["call-1", "call-1"],
-      ["call-2", "call-2"],
-      ["call-3", "call-3"],
-    ],
-  );
-});
-
-test("final result messages keep their result classification", () => {
-  const finalResult: AiMessage = {
-    messageId: "final-result",
-    author: "agent",
-    role: "assistant",
-    contents: [{ type: "TextContent", content: "done" }],
-    additionalProperties: { type: "result" },
-  };
-
-  const items = processMessages([finalResult]);
-
-  assert.deepEqual(items, [{ type: "result", message: finalResult }]);
-});
-
-test("mixed ordinary and unmatched tool contents preserve content order", () => {
-  const message: AiMessage = {
-    messageId: "mixed-message",
-    author: "agent",
-    role: "assistant",
-    streamingScopeId: "user-1",
+    streamingScopeId: scope,
     contents: [
-      { type: "TextContent", content: "before" },
       {
-        type: "FunctionCallContent",
-        content: "call",
-        additionalProperties: { callId: "call-without-result", toolName: "orphan-call" },
-      },
-      { type: "TextContent", content: "after" },
-      {
-        type: "FunctionResultContent",
-        content: "result",
-        additionalProperties: { callId: "result-without-call" },
+        type,
+        content: "{}",
+        additionalProperties: { callId: "call-1", toolName: "command_execution" },
       },
     ],
-  };
-
-  const items = processMessages([message]);
-
+  });
+  const items = buildConversationRenderModel([
+    tool("FunctionCallContent", "user-1"),
+    tool("FunctionResultContent", "user-1"),
+    tool("FunctionCallContent", "user-2"),
+    tool("FunctionResultContent", "user-2"),
+  ]);
   assert.deepEqual(
     items.map((item) => item.type),
-    ["normal", "normal", "normal", "normal"],
+    ["tool-accordion", "tool-accordion"],
   );
-  assert.deepEqual(
-    items.map((item) =>
-      item.type === "normal" ? item.message.contents.map((content) => content.type) : [],
-    ),
-    [["TextContent"], ["FunctionCallContent"], ["TextContent"], ["FunctionResultContent"]],
-  );
+  assert.notEqual(items[0].key, items[1].key);
+});
+
+test("DOM renderer applies the requested width and alignment rules", async () => {
+  const [conversation, message] = await Promise.all([
+    readFile(CONVERSATION_URL, "utf8"),
+    readFile(PRESENTED_MESSAGE_URL, "utf8"),
+  ]);
+  assert.match(conversation, /max-w-\[80%\]/);
+  assert.match(message, /bg-\[#f3f3f4\]/);
+  assert.match(message, /message\.width === "full"/);
+  assert.match(message, /text-destructive/);
 });

@@ -6,7 +6,10 @@ import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@agw/components/query";
 import { toast } from "sonner";
 
-import { getProjectContexts, type ContextSummary } from "../../../../services/task-client";
+import {
+  getProjectConversations,
+  type ConversationSummary,
+} from "../../../../services/task-client";
 import { ApiError, apiGet, apiPost } from "@agw/api";
 import { buildChatTargetOptions } from "@agw/api";
 import { formatLocalDateTime } from "@agw/components";
@@ -151,8 +154,8 @@ export default function ProjectDetailsPage() {
   });
 
   const conversationsQuery = useQuery({
-    queryKey: ["projects", projectId, "contexts"],
-    queryFn: async () => getProjectContexts(projectId),
+    queryKey: ["projects", projectId, "conversations"],
+    queryFn: async () => getProjectConversations(projectId),
   });
 
   const project = projectQuery.data;
@@ -177,7 +180,7 @@ export default function ProjectDetailsPage() {
       setCreateTaskOpen(false);
       await queryClient.invalidateQueries({ queryKey: ["jobs"] });
       await queryClient.invalidateQueries({
-        queryKey: ["projects", projectId, "contexts"],
+        queryKey: ["projects", projectId, "conversations"],
       });
     },
     onError: (error) => {
@@ -241,8 +244,8 @@ export default function ProjectDetailsPage() {
             <div className="text-sm text-muted-foreground">No conversation history found.</div>
           ) : (
             <div className="space-y-3">
-              {conversations.map((conversation: ContextSummary) => (
-                <div key={conversation.contextId} className="rounded-lg border p-4">
+              {conversations.map((conversation: ConversationSummary) => (
+                <div key={conversation.conversationId} className="rounded-lg border p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
@@ -260,6 +263,10 @@ export default function ProjectDetailsPage() {
                       <div className="grid gap-1 text-xs text-muted-foreground">
                         <div>
                           Conversation ID:{" "}
+                          <span className="font-mono">{conversation.conversationId}</span>
+                        </div>
+                        <div>
+                          Execution Context ID:{" "}
                           <span className="font-mono">{conversation.contextId}</span>
                         </div>
                         <div>
@@ -281,7 +288,7 @@ export default function ProjectDetailsPage() {
 
                     <Button asChild variant="outline" size="sm">
                       <Link
-                        href={`/projects/conversations/details/?projectId=${encodeURIComponent(projectId)}&contextId=${encodeURIComponent(conversation.contextId)}`}
+                        href={`/projects/conversations/details/?projectId=${encodeURIComponent(projectId)}&conversationId=${encodeURIComponent(conversation.conversationId)}`}
                       >
                         View History
                       </Link>

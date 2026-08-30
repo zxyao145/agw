@@ -1,6 +1,8 @@
+using Agw.Auth.Contracts;
 using Agw.Integrations.Application.Credentials;
 using Agw.Integrations.Application.Management;
 using Agw.Integrations.Application.Plugins;
+using Agw.Integrations.Contracts.Capabilities;
 using Agw.Integrations.Domain.Plugins;
 using Agw.Integrations.Mcp;
 using Agw.Shared.Data.Entities.Integrations;
@@ -23,6 +25,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
     private readonly IConnectionMcpToolInvoker _mcpToolInvoker;
     private readonly PluginSkillMetadataReader _pluginSkillMetadataReader;
     private readonly TimeProvider _timeProvider;
+    private readonly IUserInfoService _userInfoService;
 
     public ConnectionCapabilityResolver(
         IRepository<IntegrationConnection> connectionRepository,
@@ -33,7 +36,8 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         IMcpToolMaterializer mcpToolMaterializer,
         IConnectionMcpToolInvoker mcpToolInvoker,
         PluginSkillMetadataReader pluginSkillMetadataReader,
-        TimeProvider timeProvider
+        TimeProvider timeProvider,
+        IUserInfoService userInfoService
     )
     {
         _connectionRepository = connectionRepository;
@@ -45,6 +49,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         _mcpToolInvoker = mcpToolInvoker;
         _pluginSkillMetadataReader = pluginSkillMetadataReader;
         _timeProvider = timeProvider;
+        _userInfoService = userInfoService;
     }
 
     public async Task<ConnectionCapabilityResolution> ResolveAsync(
@@ -54,17 +59,18 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
     )
     {
         ArgumentNullException.ThrowIfNull(connectionIds);
+        var userId = _userInfoService.RequiredUserId;
 
         var orderedIds = connectionIds.Distinct().ToArray();
         var storedConnections = await _connectionRepository
             .Queryable.AsNoTracking()
-            .Where(item => orderedIds.Contains(item.Id))
+            .Where(item => orderedIds.Contains(item.Id) && item.CreateBy == userId)
             .ToListAsync(cancellationToken);
         var connections = storedConnections.ToDictionary(item => item.Id);
         var pluginIds = storedConnections.Select(item => item.PluginId).Distinct().ToArray();
         var installations = await _installationRepository
             .Queryable.AsNoTracking()
-            .Where(item => pluginIds.Contains(item.PluginId))
+            .Where(item => pluginIds.Contains(item.PluginId) && item.CreateBy == userId)
             .ToDictionaryAsync(item => item.PluginId, StringComparer.OrdinalIgnoreCase, cancellationToken);
 
         var nativeTools = new List<AITool>();
@@ -87,7 +93,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                         Warning(
                             connectionId,
                             ConnectionCapabilityWarningCodes.ConnectionNotFound,
-                            "The connection was not found."
+                            "The integration was not found."
                         )
                     );
                     continue;
@@ -164,7 +170,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                 Warning(
                     connection.Id,
                     ConnectionCapabilityWarningCodes.ConnectionDisabled,
-                    "The connection is disabled."
+                    "The integration is disabled."
                 )
             );
             return null;
@@ -183,7 +189,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                 Warning(
                     connection.Id,
                     ConnectionCapabilityWarningCodes.DefinitionUnavailable,
-                    "The connection definition is unavailable."
+                    "The integration definition is unavailable."
                 )
             );
             return null;
@@ -195,7 +201,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                 Warning(
                     connection.Id,
                     ConnectionCapabilityWarningCodes.PluginInstallationUnavailable,
-                    "The plugin installation is unavailable."
+                    "The integration setup is unavailable."
                 )
             );
             return null;
@@ -243,7 +249,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
             return Warning(
                 connection.Id,
                 ConnectionCapabilityWarningCodes.ConnectionNeedsConfiguration,
-                "The connection configuration is unavailable."
+                "The integration configuration is unavailable."
             );
         }
 
@@ -263,7 +269,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                 return Warning(
                     connection.Id,
                     ConnectionCapabilityWarningCodes.ConnectionNeedsConfiguration,
-                    "A required plugin installation setting is unavailable."
+                    "A required integration setup value is unavailable."
                 );
             }
         }
@@ -277,7 +283,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                 return Warning(
                     connection.Id,
                     ConnectionCapabilityWarningCodes.ConnectionNeedsConfiguration,
-                    "A required connection setting is unavailable."
+                    "A required integration setting is unavailable."
                 );
             }
         }
@@ -294,7 +300,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                 return Warning(
                     connection.Id,
                     ConnectionCapabilityWarningCodes.CredentialUnavailable,
-                    "A required connection credential is unavailable."
+                    "A required integration credential is unavailable."
                 );
             }
 
@@ -303,7 +309,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                 return Warning(
                     connection.Id,
                     ConnectionCapabilityWarningCodes.ConnectionExpired,
-                    "The connection credential is expired."
+                    "The integration credential is expired."
                 );
             }
         }
@@ -324,7 +330,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                 return Warning(
                     connection.Id,
                     ConnectionCapabilityWarningCodes.CredentialUnavailable,
-                    "A required plugin installation credential is unavailable."
+                    "A required integration setup credential is unavailable."
                 );
             }
         }
@@ -343,7 +349,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                 return Warning(
                     connection.Id,
                     ConnectionCapabilityWarningCodes.CredentialUnavailable,
-                    "A required connection credential is unavailable."
+                    "A required integration credential is unavailable."
                 );
             }
 
@@ -352,7 +358,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                 return Warning(
                     connection.Id,
                     ConnectionCapabilityWarningCodes.ConnectionExpired,
-                    "A required connection credential is expired."
+                    "A required integration credential is expired."
                 );
             }
         }
@@ -512,9 +518,10 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
     {
         try
         {
+            var userId = _userInfoService.RequiredUserId;
             var connection = await _connectionRepository
                 .Queryable.AsNoTracking()
-                .SingleOrDefaultAsync(item => item.Id == connectionId, cancellationToken);
+                .SingleOrDefaultAsync(item => item.Id == connectionId && item.CreateBy == userId, cancellationToken);
             if (connection == null)
             {
                 throw new AgwException(ErrorCodes.IntegrationDataInvalid);
@@ -522,7 +529,10 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
 
             var installation = await _installationRepository
                 .Queryable.AsNoTracking()
-                .SingleOrDefaultAsync(item => item.PluginId == connection.PluginId, cancellationToken);
+                .SingleOrDefaultAsync(
+                    item => item.PluginId == connection.PluginId && item.CreateBy == userId,
+                    cancellationToken
+                );
             var plugin = _pluginCatalog.Find(connection.PluginId);
             var connector = plugin?.Connectors.FirstOrDefault(item =>
                 string.Equals(item.Id, connection.ConnectorId, StringComparison.OrdinalIgnoreCase)
@@ -755,7 +765,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         {
             throw new AgwException(
                 ErrorCodes.IntegrationToolNameConflict,
-                $"Connection tool name '{tool.Name}' conflicts with another capability source."
+                $"Integration tool name '{tool.Name}' conflicts with another capability source."
             );
         }
 
@@ -775,7 +785,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
             ConnectionStatus.DefinitionUnavailable => ConnectionCapabilityWarningCodes.DefinitionUnavailable,
             _ => ConnectionCapabilityWarningCodes.ConnectionInvalid,
         };
-        return Warning(connection.Id, code, "The connection is not ready.");
+        return Warning(connection.Id, code, "The integration is not ready.");
     }
 
     private static ConnectionCapabilityWarning SkillWarning(Guid connectionId)

@@ -38,7 +38,7 @@ public class ProviderAppServiceTests
                     Name = "existing-model",
                     MaxContextWindowTokens = 8192,
                     MaxOutputTokens = 2048,
-                    CreateBy = "seed",
+                    CreateBy = "tester",
                     CreateTime = TimeProvider.System.GetUtcNow(),
                 }
             );
@@ -214,7 +214,7 @@ public class ProviderAppServiceTests
                         Name = "flow",
                         SystemPrompt = string.Empty,
                         SummaryModelProviderId = relation.Id,
-                        CreateBy = "seed",
+                        CreateBy = "tester",
                         CreateTime = TimeProvider.System.GetUtcNow(),
                     }
                 );
@@ -231,7 +231,7 @@ public class ProviderAppServiceTests
                         SystemPrompt = string.Empty,
                         ModelProviderId = usage == "agent-model" ? relation.Id : null,
                         SummaryModelProviderId = usage == "agent-summary" ? relation.Id : null,
-                        CreateBy = "seed",
+                        CreateBy = "tester",
                         CreateTime = TimeProvider.System.GetUtcNow(),
                     }
                 );
@@ -308,7 +308,7 @@ public class ProviderAppServiceTests
                     Name = "OpenAI",
                     ProviderType = ProviderType.OpenAIChatCompletions,
                     Endpoint = "https://api.openai.com/v1",
-                    CreateBy = "seed",
+                    CreateBy = "tester",
                     CreateTime = TimeProvider.System.GetUtcNow(),
                     AuthConfigs =
                     [
@@ -319,7 +319,7 @@ public class ProviderAppServiceTests
                             AuthType = ProviderAuthType.ApiKey,
                             ApiKey = "test-key",
                             Enable = true,
-                            CreateBy = "seed",
+                            CreateBy = "tester",
                             CreateTime = TimeProvider.System.GetUtcNow(),
                         },
                     ],
@@ -380,7 +380,7 @@ public class ProviderAppServiceTests
                     ProviderType = ProviderType.OpenAIChatCompletions,
                     Endpoint = "https://api.openai.com/v1",
                     Description = "Original description",
-                    CreateBy = "seed",
+                    CreateBy = "tester",
                     CreateTime = TimeProvider.System.GetUtcNow(),
                     AuthConfigs =
                     [
@@ -391,7 +391,7 @@ public class ProviderAppServiceTests
                             AuthType = ProviderAuthType.ApiKey,
                             ApiKey = "old-key",
                             Enable = true,
-                            CreateBy = "seed",
+                            CreateBy = "tester",
                             CreateTime = TimeProvider.System.GetUtcNow(),
                         },
                     ],
@@ -450,7 +450,10 @@ public class ProviderAppServiceTests
             new ProviderDomainService(TimeProvider.System),
             new ModelDomainService(TimeProvider.System),
             new ModelProviderDomainService(TimeProvider.System),
-            new ModelProviderUsageGuard(new EfRepository<Agent>(dbContext), new EfRepository<Agentflow>(dbContext))
+            new ModelProviderUsageGuard(
+                new TestAgentReferenceFacade(new EfRepository<Agent>(dbContext), new EfRepository<Agentflow>(dbContext))
+            ),
+            new TestUserInfoService("tester")
         );
     }
 
@@ -465,7 +468,7 @@ public class ProviderAppServiceTests
             ProviderType = ProviderType.OpenAIChatCompletions,
             Endpoint = "https://example.test/v1",
             Description = "Original description",
-            CreateBy = "seed",
+            CreateBy = "tester",
             CreateTime = TimeProvider.System.GetUtcNow(),
         };
 
@@ -476,7 +479,7 @@ public class ProviderAppServiceTests
             Name = name,
             MaxContextWindowTokens = AgwAiModel.DefaultMaxContextWindowTokens,
             MaxOutputTokens = AgwAiModel.DefaultMaxOutputTokens,
-            CreateBy = "seed",
+            CreateBy = "tester",
             CreateTime = TimeProvider.System.GetUtcNow(),
         };
 
@@ -486,7 +489,7 @@ public class ProviderAppServiceTests
             Id = Guid.CreateVersion7(),
             ProviderId = providerId,
             ModelId = modelId,
-            CreateBy = "seed",
+            CreateBy = "tester",
             CreateTime = TimeProvider.System.GetUtcNow(),
         };
 }

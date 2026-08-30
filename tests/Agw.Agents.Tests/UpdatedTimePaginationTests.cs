@@ -1,15 +1,24 @@
+using System.Security.Claims;
 using Agw.Infrastructure.Data;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Pagination;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Pagination;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Agents.Tests;
 
-public class UpdatedTimePaginationTests
+public class UpdatedTimePaginationTests : IDisposable
 {
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
+
     [Fact]
     public async Task ToPagedResultAsync_OnSqlite_SortsByEffectiveUpdateTimeAndIdDescending()
     {
@@ -34,6 +43,7 @@ public class UpdatedTimePaginationTests
                         Name = $"agent-{index}",
                         DisplayName = $"Agent {index}",
                         Type = AgentType.External,
+                        CreateBy = "tester",
                         CreateTime = commonTime.AddDays(-1),
                         UpdateTime = commonTime,
                     }
@@ -177,6 +187,7 @@ public class UpdatedTimePaginationTests
             Name = id.ToString("N"),
             DisplayName = id.ToString("N"),
             Type = AgentType.External,
+            CreateBy = "tester",
             CreateTime = createTime,
             UpdateTime = updateTime,
         };

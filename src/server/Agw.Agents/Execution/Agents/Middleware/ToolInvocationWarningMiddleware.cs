@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
 using Agw.Agents.Execution.Agents.Tools;
-using Agw.Shared.Contracts.Agents;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 

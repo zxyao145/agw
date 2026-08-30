@@ -1,12 +1,16 @@
+using System.Data.Common;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text.Json;
+using Agw.Auth.Contracts;
 using Agw.Integrations.Application.Credentials;
 using Agw.Integrations.Application.Management;
 using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.OAuth;
 using Agw.Integrations.Domain.Plugins;
+using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
@@ -57,6 +61,7 @@ public sealed class OAuthAuthorizationAppService
     private readonly OAuthStateProtector _stateProtector;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<OAuthAuthorizationAppService> _logger;
+    private readonly IUserInfoService _userInfoService;
 
     public OAuthAuthorizationAppService(
         IRepository<IntegrationConnection> connectionRepository,
@@ -68,7 +73,8 @@ public sealed class OAuthAuthorizationAppService
         IHttpClientFactory httpClientFactory,
         OAuthStateProtector stateProtector,
         TimeProvider timeProvider,
-        ILogger<OAuthAuthorizationAppService> logger
+        ILogger<OAuthAuthorizationAppService> logger,
+        IUserInfoService userInfoService
     )
     {
         _connectionRepository = connectionRepository;
@@ -81,6 +87,7 @@ public sealed class OAuthAuthorizationAppService
         _stateProtector = stateProtector;
         _timeProvider = timeProvider;
         _logger = logger;
+        _userInfoService = userInfoService;
     }
 
     public async Task<OAuthAuthorizeStartResponse> StartAsync(
@@ -88,15 +95,15 @@ public sealed class OAuthAuthorizationAppService
         string callbackUri,
         string returnPath,
         OAuthCompletionTarget completionTarget,
-        string user,
         CancellationToken cancellationToken
     )
     {
+        var user = _userInfoService.RequiredUserId;
         OAuthStateProtector.ValidateReturnPath(returnPath);
         ValidateCallbackUri(callbackUri);
-        var context = await ResolveContextAsync(connectionId, cancellationToken);
+        var context = await ResolveContextAsync(connectionId, user, cancellationToken);
         var verifier = context.Settings.UsePkce ? CreatePkceVerifier() : null;
-        var state = _stateProtector.Protect(connectionId, verifier, returnPath, callbackUri, completionTarget);
+        var state = _stateProtector.Protect(connectionId, user, verifier, returnPath, callbackUri, completionTarget);
         var parameters = new Dictionary<string, string?>(
             context.Settings.AdditionalAuthorizeParameters.ToDictionary(item => item.Key, item => (string?)item.Value),
             StringComparer.Ordinal
@@ -140,7 +147,6 @@ public sealed class OAuthAuthorizationAppService
         string? protectedState,
         string? authorizationCode,
         string? providerError,
-        string user,
         CancellationToken cancellationToken
     )
     {
@@ -149,10 +155,14 @@ public sealed class OAuthAuthorizationAppService
             return FailedRedirect("/integrations", InvalidStateRedirectCode, OAuthCompletionTarget.Web);
         }
 
+        using var userScope = UserInfoUtil.Push(
+            new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, state.UserId)], "OAuthState"))
+        );
+
         OAuthConnectionContext context;
         try
         {
-            context = await ResolveContextAsync(state.ConnectionId, cancellationToken);
+            context = await ResolveContextAsync(state.ConnectionId, state.UserId, cancellationToken);
         }
         catch (AgwException)
         {
@@ -161,15 +171,19 @@ public sealed class OAuthAuthorizationAppService
 
         if (!string.IsNullOrWhiteSpace(providerError) || string.IsNullOrWhiteSpace(authorizationCode))
         {
-            await SetFailureAsync(
+            await TrySetFailureAsync(
                 context.Connection,
                 ConnectionStatus.PendingAuthorization,
                 AuthorizationDeniedCode,
-                user
+                state.UserId,
+                context,
+                cancellationToken
             );
             return FailedRedirect(state.ReturnPath, AuthorizationDeniedRedirectCode, state.CompletionTarget);
         }
 
+        OAuthTokenPayload token;
+        string? subject;
         try
         {
             var form = BuildTokenForm(context, state.CallbackUri);
@@ -180,29 +194,54 @@ public sealed class OAuthAuthorizationAppService
                 form["code_verifier"] = state.PkceVerifier;
             }
 
-            var token = await RequestTokenAsync(context, form, cancellationToken);
-            var subject = await ResolveSubjectAsync(context, token, required: true, cancellationToken);
-            await SaveTokensAsync(context.Connection, token, preserveMissingRefreshToken: false, user);
-            context.Connection.Subject = subject;
-            MarkReady(context.Connection, user);
-            await _unitOfWork.SaveChangesAsync();
-            return SucceededRedirect(state.ReturnPath, state.CompletionTarget);
+            token = await RequestTokenAsync(context, form, cancellationToken);
+            subject = await ResolveSubjectAsync(context, token, required: true, cancellationToken);
         }
         catch (Exception exception) when (IsProviderFailure(exception, cancellationToken))
         {
             _logger.LogWarning("OAuth authorization failed for connection {ConnectionId}.", context.Connection.Id);
-            await SetFailureAsync(context.Connection, ConnectionStatus.Invalid, TokenExchangeFailedCode, user);
+            await TrySetFailureAsync(
+                context.Connection,
+                ConnectionStatus.Invalid,
+                TokenExchangeFailedCode,
+                state.UserId,
+                context,
+                cancellationToken
+            );
+            return FailedRedirect(state.ReturnPath, TokenExchangeFailedRedirectCode, state.CompletionTarget);
+        }
+
+        await SaveTokensAsync(context.Connection, token, preserveMissingRefreshToken: false, state.UserId);
+        context.Connection.Subject = subject;
+        MarkReady(context.Connection, state.UserId);
+        try
+        {
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            return SucceededRedirect(state.ReturnPath, state.CompletionTarget);
+        }
+        catch (Exception exception) when (IsPersistenceFailure(exception, cancellationToken))
+        {
+            _logger.LogWarning(
+                "OAuth authorization persistence failed for connection {ConnectionId} with {ExceptionType}.",
+                context.Connection.Id,
+                exception.GetType().Name
+            );
+            await TrySetFailureAsync(
+                context.Connection,
+                ConnectionStatus.Invalid,
+                TokenExchangeFailedCode,
+                state.UserId,
+                context,
+                cancellationToken
+            );
             return FailedRedirect(state.ReturnPath, TokenExchangeFailedRedirectCode, state.CompletionTarget);
         }
     }
 
-    internal async Task<OAuthRefreshResponse> RefreshAsync(
-        Guid connectionId,
-        string user,
-        CancellationToken cancellationToken
-    )
+    internal async Task<OAuthRefreshResponse> RefreshAsync(Guid connectionId, CancellationToken cancellationToken)
     {
-        var context = await ResolveContextAsync(connectionId, cancellationToken);
+        var user = _userInfoService.RequiredUserId;
+        var context = await ResolveContextAsync(connectionId, user, cancellationToken);
         if (!context.Settings.SupportsRefresh)
         {
             throw new AgwException(ErrorCodes.IntegrationConfigurationInvalid);
@@ -237,20 +276,27 @@ public sealed class OAuthAuthorizationAppService
         catch (Exception exception) when (IsProviderFailure(exception, cancellationToken))
         {
             _logger.LogWarning("OAuth refresh failed for connection {ConnectionId}.", connectionId);
-            await SetFailureAsync(context.Connection, ConnectionStatus.Invalid, RefreshFailedCode, user);
+            await SetFailureAsync(
+                context.Connection,
+                ConnectionStatus.Invalid,
+                RefreshFailedCode,
+                user,
+                cancellationToken
+            );
             throw new AgwException(ErrorCodes.OAuthProviderRequestFailed);
         }
     }
 
     private async Task<OAuthConnectionContext> ResolveContextAsync(
         Guid connectionId,
+        string user,
         CancellationToken cancellationToken
     )
     {
         var connection =
             await _connectionRepository
                 .Queryable.Include(item => item.Credentials)
-                .FirstOrDefaultAsync(item => item.Id == connectionId, cancellationToken)
+                .FirstOrDefaultAsync(item => item.Id == connectionId && item.CreateBy == user, cancellationToken)
             ?? throw new AgwException(ErrorCodes.ConnectionNotFound);
         if (!connection.Enabled)
         {
@@ -274,7 +320,10 @@ public sealed class OAuthAuthorizationAppService
         var installation =
             await _installationRepository
                 .Queryable.Include(item => item.Credentials)
-                .FirstOrDefaultAsync(item => item.PluginId == connection.PluginId && item.Enabled, cancellationToken)
+                .FirstOrDefaultAsync(
+                    item => item.PluginId == connection.PluginId && item.CreateBy == user && item.Enabled,
+                    cancellationToken
+                )
             ?? throw new AgwException(ErrorCodes.IntegrationConfigurationInvalid);
         var settings = definition.AuthScheme.OAuth2AuthorizationCode;
         var clientId = await ReadInstallationFieldAsync(
@@ -570,7 +619,8 @@ public sealed class OAuthAuthorizationAppService
         IntegrationConnection connection,
         ConnectionStatus status,
         string errorCode,
-        string user
+        string user,
+        CancellationToken cancellationToken = default
     )
     {
         connection.Status = status;
@@ -578,7 +628,52 @@ public sealed class OAuthAuthorizationAppService
         connection.LastValidationErrorCode = errorCode;
         connection.UpdateBy = user;
         connection.UpdateTime = _timeProvider.GetUtcNow();
-        await _unitOfWork.SaveChangesAsync();
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task TrySetFailureAsync(
+        IntegrationConnection connection,
+        ConnectionStatus status,
+        string errorCode,
+        string user,
+        OAuthConnectionContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            if (_unitOfWork is EFContext dbContext)
+            {
+                // A failed SaveChanges can leave pending credential inserts and
+                // the Ready mutation tracked. Discard those changes before
+                // recording the terminal callback state in a clean unit.
+                dbContext.ChangeTracker.Clear();
+                var refreshedConnection = await _connectionRepository
+                    .Queryable.FirstOrDefaultAsync(
+                        item => item.Id == connection.Id && item.CreateBy == user,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+                if (refreshedConnection == null)
+                {
+                    return;
+                }
+
+                await SetFailureAsync(refreshedConnection, status, errorCode, user, cancellationToken)
+                    .ConfigureAwait(false);
+                return;
+            }
+
+            await SetFailureAsync(connection, status, errorCode, user, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(
+                "OAuth authorization failure state could not be persisted for connection {ConnectionId} with {ExceptionType}.",
+                context.Connection.Id,
+                exception.GetType().Name
+            );
+        }
     }
 
     private static string CreatePkceVerifier()
@@ -630,6 +725,12 @@ public sealed class OAuthAuthorizationAppService
         return exception is AgwException agwException && agwException.Code == ErrorCodes.OAuthProviderRequestFailed.Code
             || exception is HttpRequestException or JsonException
             || exception is TaskCanceledException && !cancellationToken.IsCancellationRequested;
+    }
+
+    private static bool IsPersistenceFailure(Exception exception, CancellationToken cancellationToken)
+    {
+        return exception is DbUpdateException or DbException or TimeoutException
+            || exception is OperationCanceledException && !cancellationToken.IsCancellationRequested;
     }
 
     private static string ReadRequiredString(JsonElement element, string propertyName)

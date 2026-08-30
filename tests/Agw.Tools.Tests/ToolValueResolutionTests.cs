@@ -1,4 +1,3 @@
-using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Tools.Tests;

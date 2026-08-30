@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Commands.Exec;
@@ -6,10 +5,8 @@ using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Turns;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
-using Agw.Shared.Data.Entities.Projects;
+using Agw.Projects.Contracts.Execution;
+using Agw.Projects.Contracts.Runtime;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -70,7 +67,7 @@ public class ExecutionConnectionTests
     {
         var provider = new ServiceCollection().BuildServiceProvider();
         var runtimeFactory = new FakeRuntimeFactory(holdTurnOpen);
-        var task = new TaskProjection
+        var task = new AgentExecutionTask
         {
             TaskId = Guid.CreateVersion7(),
             ProjectConversationId = Guid.CreateVersion7(),
@@ -83,8 +80,8 @@ public class ExecutionConnectionTests
             new NullSink(),
             CancellationToken.None,
             runtimeFactory,
-            new FakeTaskAppService(task),
-            new FakeProjectAppService()
+            new FakeProjectTaskFacade(task),
+            new FakeProjectRuntimeFacade()
         );
         var connection = new ExecutionConnection(
             "connection",
@@ -143,57 +140,77 @@ public class ExecutionConnectionTests
         public void CompleteTurn() => _completion!.TrySetResult();
     }
 
-    private sealed class FakeTaskAppService : ITaskAppService
+    private sealed class FakeProjectTaskFacade : IProjectTaskFacade
     {
-        private readonly TaskProjection _task;
+        private readonly ProjectTaskSnapshot _task;
 
-        public FakeTaskAppService(TaskProjection task)
+        public FakeProjectTaskFacade(AgentExecutionTask task)
         {
-            _task = task;
+            _task = ToSnapshot(task);
         }
 
-        public Task<ExecutionTaskResolutionResult> ResolveTaskAsync(
-            ExecutionTaskRequest request,
-            CancellationToken cancellationToken
-        ) => Task.FromResult(new ExecutionTaskResolutionResult(_task, null));
+        public Task<ProjectTaskSnapshot> ResolveAsync(
+            ResolveProjectTaskRequest request,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(_task);
 
-        public Task<TaskProjection?> GetTaskAsync(Guid value) => throw new NotSupportedException();
+        public Task<ProjectTaskSnapshot?> GetAsync(Guid taskId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
-        public Task<TaskProjection?> CreateTaskForExecutionAsync(
-            Guid projectId,
-            Guid? taskId,
-            string input,
-            string user,
-            string? contextId = null,
+        public Task<ProjectTaskSnapshot> GetOrCreateAsync(
+            StartProjectTaskRequest request,
             CancellationToken cancellationToken = default
         ) => throw new NotSupportedException();
 
-        public Task<bool> HasTaskAsync(
-            Guid taskId,
-            Guid? projectId = null,
+        public Task<ProjectTaskSnapshot?> FinishAsync(
+            FinishProjectTaskRequest request,
+            CancellationToken cancellationToken = default
+        ) => throw new NotSupportedException();
+
+        public Task<IReadOnlyDictionary<Guid, string?>> ResolveContextIdsAsync(
+            IReadOnlyCollection<Guid> taskIds,
             CancellationToken cancellationToken = default
         ) => throw new NotSupportedException();
     }
 
-    private sealed class FakeProjectAppService : IProjectAppService
+    private sealed class FakeProjectRuntimeFacade : IProjectRuntimeFacade
     {
-        public Task<Project?> GetAsync(Guid id) =>
-            Task.FromResult<Project?>(new Project { Id = id, Workspace = "/workspace" });
+        public Task<ProjectRuntimeSnapshot?> GetForCurrentUserAsync(
+            Guid projectId,
+            CancellationToken cancellationToken = default
+        ) =>
+            Task.FromResult<ProjectRuntimeSnapshot?>(
+                new ProjectRuntimeSnapshot(
+                    projectId,
+                    "project",
+                    "/workspace",
+                    null,
+                    [],
+                    new Dictionary<string, string>(),
+                    [],
+                    [],
+                    []
+                )
+            );
 
-        public Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null) =>
-            throw new NotSupportedException();
-
-        public Task<string?> GetProjectExtraSettingAsync(Guid? projectId) => throw new NotSupportedException();
-
-        public Task<Guid?> ResolveProjectIdAsync(Guid? projectId) => throw new NotSupportedException();
-
-        public Task<Project?> CreateAsync(Project project, string user) => throw new NotSupportedException();
-
-        public Task<bool> DeleteAsync(Guid id) => throw new NotSupportedException();
-
-        public Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction, string user) =>
-            throw new NotSupportedException();
+        public Task<string?> GetWorkspaceAsync(Guid projectId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>("/workspace");
     }
+
+    private static ProjectTaskSnapshot ToSnapshot(AgentExecutionTask task) =>
+        new(
+            task.TaskId,
+            task.ProjectConversationId,
+            task.ProjectId,
+            task.ContextId,
+            task.JobId,
+            task.Title,
+            ProjectTaskStatus.Pending,
+            task.ErrorMessage,
+            task.CreateTime,
+            task.UpdateTime,
+            task.FinishedTime
+        );
 
     private sealed class TestRuntime : RuntimeBase
     {

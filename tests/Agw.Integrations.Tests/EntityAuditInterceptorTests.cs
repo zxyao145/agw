@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Shared.Data.Abstractions;
@@ -12,6 +13,11 @@ public class EntityAuditInterceptorTests
     [Fact]
     public async Task SaveChanges_ModifiedEntityThroughAgwDbContext_PersistsAuditFields()
     {
+        using var userScope = UserInfoUtil.Push(
+            new ClaimsPrincipal(
+                new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "user-1")], authenticationType: "Test")
+            )
+        );
         await using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync(TestContext.Current.CancellationToken);
 

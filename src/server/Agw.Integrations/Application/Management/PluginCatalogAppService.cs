@@ -1,3 +1,4 @@
+using Agw.Auth.Contracts;
 using Agw.Integrations.Application.Capabilities;
 using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.Management;
@@ -12,24 +13,21 @@ namespace Agw.Integrations.Application.Management;
 public sealed class PluginCatalogAppService
 {
     private readonly IPluginCatalog _pluginCatalog;
-    private readonly IRepository<PluginInstallation>? _installationRepository;
+    private readonly IRepository<PluginInstallation> _installationRepository;
     private readonly PluginSkillMetadataReader _pluginSkillMetadataReader;
-
-    public PluginCatalogAppService(IPluginCatalog pluginCatalog, PluginSkillMetadataReader pluginSkillMetadataReader)
-    {
-        _pluginCatalog = pluginCatalog;
-        _pluginSkillMetadataReader = pluginSkillMetadataReader;
-    }
+    private readonly IUserInfoService _userInfoService;
 
     public PluginCatalogAppService(
         IPluginCatalog pluginCatalog,
         IRepository<PluginInstallation> installationRepository,
-        PluginSkillMetadataReader pluginSkillMetadataReader
+        PluginSkillMetadataReader pluginSkillMetadataReader,
+        IUserInfoService userInfoService
     )
     {
         _pluginCatalog = pluginCatalog;
         _installationRepository = installationRepository;
         _pluginSkillMetadataReader = pluginSkillMetadataReader;
+        _userInfoService = userInfoService;
     }
 
     public IReadOnlyList<PluginResponse> List()
@@ -39,12 +37,11 @@ public sealed class PluginCatalogAppService
 
     public async Task<IReadOnlyList<PluginResponse>> ListAsync(CancellationToken cancellationToken)
     {
-        var installations =
-            _installationRepository == null
-                ? []
-                : await _installationRepository
-                    .Queryable.Include(installation => installation.Credentials)
-                    .ToListAsync(cancellationToken);
+        var ownerUserId = ResolveOwnerUserId();
+        var installations = await _installationRepository
+            .Queryable.Include(installation => installation.Credentials)
+            .Where(installation => installation.CreateBy == ownerUserId)
+            .ToListAsync(cancellationToken);
         return _pluginCatalog
             .List()
             .Select(plugin =>
@@ -69,6 +66,8 @@ public sealed class PluginCatalogAppService
             Connectors = plugin.Connectors.Select(connector => MapConnector(connector, installation)).ToList(),
             Skills = plugin.Skills.Select(skill => MapSkill(skill)).OfType<PluginSkillResponse>().ToList(),
         };
+
+    private string ResolveOwnerUserId() => _userInfoService.RequiredUserId;
 
     private PluginSkillResponse? MapSkill(PluginSkillDefinition skill)
     {

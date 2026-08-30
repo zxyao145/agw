@@ -1,6 +1,5 @@
-using Agw.Shared.Contracts.Projects;
+using Agw.Auth.Contracts;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Utils;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -27,6 +26,22 @@ public sealed class AgentUsageRecorder : IAgentUsageRecorder
     {
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
+        if (!UserInfoUtil.IsContextActive)
+        {
+            return;
+        }
+
+        var currentUserId = UserInfoUtil.RequiredUserId;
+        var project = await dbContext
+            .Set<Project>()
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == projectId && item.CreateBy == currentUserId, cancellationToken)
+            .ConfigureAwait(false);
+        if (project == null || string.IsNullOrWhiteSpace(project.CreateBy))
+        {
+            return;
+        }
+        var ownerUserId = project.CreateBy.Trim();
 
         await dbContext
             .Set<AgentUsage>()
@@ -35,6 +50,7 @@ public sealed class AgentUsageRecorder : IAgentUsageRecorder
                 {
                     Id = Guid.CreateVersion7(),
                     ProjectId = projectId,
+                    UserId = ownerUserId,
                     ContextId = ContextIdUtil.NormalizeContextId(contextId),
                     AgentName = agentName,
                     RecordedAt = _timeProvider.GetUtcNow(),

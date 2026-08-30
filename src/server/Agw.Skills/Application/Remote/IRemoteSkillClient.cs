@@ -1,3 +1,5 @@
+using Agw.Skills.Contracts.Remote;
+
 namespace Agw.Skills.Application.Remote;
 
 public interface IRemoteSkillClient

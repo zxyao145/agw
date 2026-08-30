@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
-using Agw.Shared.Contracts.Tools.Abstractions;
 using Agw.Shared.Exceptions;
+using Agw.Tools.Contracts.Abstractions;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Tools.Impl.Basic;

@@ -14,13 +14,9 @@ import {
 import React from "react";
 import { Item, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@agw/components";
 import { Badge } from "@agw/components";
-import { replaceSuggestion } from "./suggestion-trigger";
+import { replaceSuggestion, type SuggestionItem } from "@agw/chat-core";
 
-export interface SuggestionItem {
-  text: string;
-  kind?: string;
-  description?: string;
-}
+export type { SuggestionItem } from "@agw/chat-core";
 
 // Main UserInput component
 export interface UserInputProps {

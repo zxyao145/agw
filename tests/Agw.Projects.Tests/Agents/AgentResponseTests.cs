@@ -1,6 +1,6 @@
 using Agw.Agents.Definitions.Contracts;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Tools;
+using Agw.Shared.Tooling;
 
 namespace Agw.Agents.Tests;
 

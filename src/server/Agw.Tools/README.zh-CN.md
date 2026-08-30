@@ -189,6 +189,20 @@ Catalog 构建和运行时组合都会校验名称：
 User Memory 会自动注入最多 50 条完整正文；超出范围的条目可通过
 `user_memory_list` 和 `user_memory_read` 获取。
 
+### User Memory 管理 API
+
+管理端点需要认证，按 Principal 的稳定用户 ID 隔离，并统一返回 Bens.Results Envelope：
+
+| 方法 | 路由 | 作用 |
+| --- | --- | --- |
+| `GET` | `/api/user-memories/paged?pageIndex=1&pageSize=20` | 分页列出当前用户的摘要，不返回加密正文。 |
+| `GET` | `/api/user-memories/detail?id={id}` | 读取一条属于当前用户的 Memory。 |
+| `POST` | `/api/user-memories` | 用 `name`、`description` 和 Markdown `content` 创建。 |
+| `PUT` | `/api/user-memories` | 按 Body 中的 `id` 更新当前用户的 Memory。 |
+| `DELETE` | `/api/user-memories?id={id}` | 删除当前用户的 Memory。 |
+
+其他用户拥有的 ID 不会通过这些查询暴露；API Token 请求使用 Token 创建者的用户 ID。
+
 Tool Approval 属于 Agent pipeline。Tool 或 ToolBlock 只贡献必要的自动审批规则，`AsAgwAgent` 统一应用审批中间件；文件写入和 Shell 执行仍要求审批。
 
 运行时消息 author 为 `tools`，消息类型为：

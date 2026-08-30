@@ -79,14 +79,19 @@ public class ModelProviderAppServiceTests
         await using (var deleteContext = new AgwDbContext(options))
         {
             var usageGuard = new ModelProviderUsageGuard(
-                new EfRepository<Agent>(deleteContext),
-                new EfRepository<Agentflow>(deleteContext)
+                new TestAgentReferenceFacade(
+                    new EfRepository<Agent>(deleteContext),
+                    new EfRepository<Agentflow>(deleteContext)
+                )
             );
             var service = new ModelProviderAppService(
                 new EfRepository<ModelProviderRelation>(deleteContext),
                 deleteContext,
                 new ModelProviderDomainService(TimeProvider.System),
-                usageGuard
+                usageGuard,
+                new TestUserInfoService("seed"),
+                new EfRepository<Provider>(deleteContext),
+                new EfRepository<AgwAiModel>(deleteContext)
             );
 
             var exception = await Assert.ThrowsAsync<AgwException>(() => service.DeleteAsync(relationId));

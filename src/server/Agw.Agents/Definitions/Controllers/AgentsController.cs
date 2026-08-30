@@ -2,10 +2,9 @@ using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Extensions;
 using Agw.Shared.Results;
+using Agw.Shared.Tooling;
 using Bens.Results;
 using Microsoft.AspNetCore.Mvc;
 
@@ -28,7 +27,7 @@ public class AgentsController : ControllerBase
     [ProducesApiResult(typeof(AgentResponse[]))]
     public async Task<IActionResult> ListAsync()
     {
-        var agents = await _agentAppService.ListAgentsAsync();
+        var agents = await _agentAppService.ListAgentsForCurrentUserAsync();
         return ApiResult.Ok(agents.Select(AgentResponse.FromDomain).ToArray());
     }
 
@@ -40,7 +39,7 @@ public class AgentsController : ControllerBase
         CancellationToken cancellationToken = default
     )
     {
-        var page = await _agentAppService.ListAgentPageAsync(pageIndex, pageSize, cancellationToken);
+        var page = await _agentAppService.ListAgentPageForCurrentUserAsync(pageIndex, pageSize, cancellationToken);
         return ApiResult.Ok(
             new PagedResult<AgentResponse>
             {
@@ -56,7 +55,7 @@ public class AgentsController : ControllerBase
     [ProducesApiResult(typeof(AgentResponse))]
     public async Task<IActionResult> GetAsync(Guid id)
     {
-        var agent = await _agentAppService.GetAgentAsync(id);
+        var agent = await _agentAppService.GetAgentForCurrentUserAsync(id);
         return agent == null
             ? ErrorCodes.ResourceNotFound.ToApiResult()
             : ApiResult.Ok(AgentResponse.FromDomain(agent));
@@ -80,7 +79,6 @@ public class AgentsController : ControllerBase
             return ApiResult.BadRequest(toolsError, ErrorCodes.InvalidParam.Code);
         }
 
-        var user = User.GetUserId();
         var agent = new Agent
         {
             DisplayName = request.DisplayName,
@@ -98,8 +96,7 @@ public class AgentsController : ControllerBase
             agent,
             request.McpToolServerIds,
             request.SkillIds,
-            request.ConnectionIds,
-            user
+            request.ConnectionIds
         );
         return created == null
             ? ApiResult.BadRequest("Failed to create agent.", ErrorCodes.InvalidParam.Code)
@@ -116,8 +113,7 @@ public class AgentsController : ControllerBase
             return ApiResult.BadRequest(toolsError, ErrorCodes.InvalidParam.Code);
         }
 
-        var user = User.GetUserId();
-        var updated = await _agentAppService.UpdateAgentAsync(id, request.ToCommand(), user);
+        var updated = await _agentAppService.UpdateAgentAsync(id, request.ToCommand());
 
         return updated == null
             ? ErrorCodes.ResourceNotFound.ToApiResult()

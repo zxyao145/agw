@@ -11,5 +11,10 @@ public interface IAgwFileSystemResolver
     /// <param name="projectId">The project whose file system should be resolved.</param>
     /// <param name="ct">A token used to cancel the resolution operation.</param>
     /// <returns>The file system configured for the project.</returns>
-    Task<IAgwFileSystem> ResolveAsync(Guid projectId, CancellationToken ct);
+    Task<IAgwFileSystem?> ResolveAsync(Guid projectId, CancellationToken ct);
+}
+
+public interface IProjectFileSystemCacheInvalidator
+{
+    void Invalidate(Guid projectId);
 }

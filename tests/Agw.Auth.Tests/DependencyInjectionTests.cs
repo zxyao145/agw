@@ -20,6 +20,9 @@ public sealed class DependencyInjectionTests
         services.AddLogging();
         services.AddAuth();
         services.AddSingleton<IAuthenticationStateStore, StateStoreStub>();
+        services.AddSingleton<IAuthenticationStateReader>(provider =>
+            provider.GetRequiredService<IAuthenticationStateStore>()
+        );
         using var provider = services.BuildServiceProvider();
 
         var options = provider
@@ -43,6 +46,9 @@ public sealed class DependencyInjectionTests
         services.AddLogging();
         services.AddAuth();
         services.AddSingleton<IAuthenticationStateStore, StateStoreStub>();
+        services.AddSingleton<IAuthenticationStateReader>(provider =>
+            provider.GetRequiredService<IAuthenticationStateStore>()
+        );
         using var provider = services.BuildServiceProvider();
         var options = provider
             .GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()

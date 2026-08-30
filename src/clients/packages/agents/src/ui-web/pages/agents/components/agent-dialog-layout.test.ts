@@ -54,7 +54,7 @@ test("Agent form uses a responsive 360px metadata column and one combined Tools 
   assert.match(source, /<TabsTrigger value="tools">Tools<\/TabsTrigger>/);
   assert.equal(source.match(/<TabsTrigger value=/g)?.length, 6);
   assert.match(source, /<TabsTrigger value="mcp-tool-servers">MCP Tool Server<\/TabsTrigger>/);
-  assert.match(source, /<TabsTrigger value="connections">Connections<\/TabsTrigger>/);
+  assert.match(source, /<TabsTrigger value="connections">Integrations<\/TabsTrigger>/);
   assert.match(
     source,
     /<TabsTrigger value="environment-variables">Environment Variables<\/TabsTrigger>/,
@@ -65,7 +65,7 @@ test("Agent form uses a responsive 360px metadata column and one combined Tools 
   assert.match(source, /External agents do not support skill configuration/);
   assert.match(source, /External agents do not support tool configuration/);
   assert.match(source, /External agents do not support MCP tool server configuration/);
-  assert.match(source, /External agents do not support connection configuration/);
+  assert.match(source, /External agents do not support integration configuration/);
   assert.match(source, /<SkillsPanel/);
 });
 
@@ -74,7 +74,7 @@ test("Agent form explains project-level capability merging below the tabs", asyn
   const normalizedSource = source.replace(/\s+/g, " ");
   const tabsListEnd = normalizedSource.indexOf("</TabsList>");
   const description = normalizedSource.indexOf(
-    "Agw recommends configuring Skills, Tools, MCP Tool Servers, Connections, and Environment Variables in the Project.",
+    "Agw recommends configuring Skills, Tools, MCP Tool Servers, Integrations, and Environment Variables in the Project.",
   );
 
   assert.ok(description > tabsListEnd);

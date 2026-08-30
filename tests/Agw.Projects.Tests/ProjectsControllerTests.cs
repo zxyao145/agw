@@ -1,9 +1,8 @@
 using System.Linq.Expressions;
 using System.Security.Claims;
 using Agw.Projects.Controllers;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Entities.Tools;
+using Agw.Shared.Tooling;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -75,7 +74,6 @@ public class ProjectsControllerTests
         Assert.Equal([mcpToolServerId], service.McpToolServerIds);
         Assert.Equal([skillId], service.SkillIds);
         Assert.Equal([appInstanceId], service.ConnectionIds);
-        Assert.Equal("user-42", service.User);
     }
 
     [Fact]
@@ -194,19 +192,19 @@ public class ProjectsControllerTests
         public IReadOnlyList<Guid>? McpToolServerIds { get; private set; }
         public IReadOnlyList<Guid>? SkillIds { get; private set; }
         public IReadOnlyList<Guid>? ConnectionIds { get; private set; }
-        public string? User { get; private set; }
 
         public Task<IReadOnlyList<Project>> ListAsync(Expression<Func<Project, bool>>? predicate = null) =>
             Task.FromResult<IReadOnlyList<Project>>([_project]);
+
+        public Task<IReadOnlyList<Project>> ListForCurrentUserAsync() => ListAsync();
 
         public Task<string?> GetProjectExtraSettingAsync(Guid? projectId) => throw new NotSupportedException();
 
         public Task<Guid?> ResolveProjectIdAsync(Guid? projectId) => throw new NotSupportedException();
 
-        public Task<Project?> CreateAsync(Project project, string user)
+        public Task<Project?> CreateAsync(Project project)
         {
             CreatedProject = project;
-            User = user;
             return Task.FromResult<Project?>(_project);
         }
 
@@ -214,12 +212,10 @@ public class ProjectsControllerTests
             Project project,
             IEnumerable<Guid>? mcpToolServerIds,
             IEnumerable<Guid>? skillIds,
-            IEnumerable<Guid>? connectionIds,
-            string user
+            IEnumerable<Guid>? connectionIds
         )
         {
             CreatedProject = project;
-            User = user;
             CaptureRelationIds(mcpToolServerIds, skillIds, connectionIds);
             return Task.FromResult<Project?>(_project);
         }
@@ -228,10 +224,11 @@ public class ProjectsControllerTests
 
         public Task<Project?> GetAsync(Guid id) => Task.FromResult<Project?>(_project);
 
-        public Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction, string user)
+        public Task<Project?> GetForCurrentUserAsync(Guid id) => GetAsync(id);
+
+        public Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction)
         {
             updateAction(_project);
-            User = user;
             return Task.FromResult<Project?>(_project);
         }
 
@@ -240,12 +237,10 @@ public class ProjectsControllerTests
             Action<Project> updateAction,
             IEnumerable<Guid>? mcpToolServerIds,
             IEnumerable<Guid>? skillIds,
-            IEnumerable<Guid>? connectionIds,
-            string user
+            IEnumerable<Guid>? connectionIds
         )
         {
             updateAction(_project);
-            User = user;
             CaptureRelationIds(mcpToolServerIds, skillIds, connectionIds);
             return Task.FromResult<Project?>(_project);
         }

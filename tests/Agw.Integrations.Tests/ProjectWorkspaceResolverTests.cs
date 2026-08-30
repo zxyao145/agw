@@ -1,14 +1,24 @@
+using System.Security.Claims;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Tools.GitHub;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Integrations.Tests;
 
-public sealed class ProjectWorkspaceResolverTests
+public sealed class ProjectWorkspaceResolverTests : IDisposable
 {
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "test")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
+
     [Fact]
     public async Task ResolveWorkspaceAsync_ProjectExists_ReturnsPersistedWorkspace()
     {
@@ -33,10 +43,33 @@ public sealed class ProjectWorkspaceResolverTests
             }
         );
         await dbContext.SaveChangesAsync(cancellationToken);
-        var resolver = new ProjectWorkspaceResolver(new EfRepository<Project>(dbContext));
+        var resolver = new ProjectWorkspaceResolver(
+            new RepositoryProjectRuntimeFacade(new EfRepository<Project>(dbContext))
+        );
 
         var workspace = await resolver.ResolveWorkspaceAsync(projectId, cancellationToken);
 
         Assert.Equal("~/.agw/workspace-project", workspace);
+    }
+
+    private sealed class RepositoryProjectRuntimeFacade : IProjectRuntimeFacade
+    {
+        private readonly EfRepository<Project> _projects;
+
+        public RepositoryProjectRuntimeFacade(EfRepository<Project> projects)
+        {
+            _projects = projects;
+        }
+
+        public Task<ProjectRuntimeSnapshot?> GetForCurrentUserAsync(
+            Guid projectId,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<ProjectRuntimeSnapshot?>(null);
+
+        public Task<string?> GetWorkspaceAsync(Guid projectId, CancellationToken cancellationToken = default) =>
+            _projects
+                .Queryable.Where(project => project.Id == projectId)
+                .Select(project => project.Workspace)
+                .SingleOrDefaultAsync(cancellationToken);
     }
 }

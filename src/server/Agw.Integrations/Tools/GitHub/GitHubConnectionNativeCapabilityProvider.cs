@@ -26,7 +26,7 @@ public sealed class GitHubConnectionNativeCapabilityProvider : IConnectionNative
                 new AIFunctionFactoryOptions
                 {
                     Name = $"{context.Alias}__current_user",
-                    Description = "Get the current GitHub account profile for this connection.",
+                    Description = "Get the current GitHub account profile for this integration.",
                 }
             ),
             AIFunctionFactory.Create(
@@ -34,7 +34,7 @@ public sealed class GitHubConnectionNativeCapabilityProvider : IConnectionNative
                 new AIFunctionFactoryOptions
                 {
                     Name = $"{context.Alias}__list_repositories",
-                    Description = "List repositories visible to this GitHub connection.",
+                    Description = "List repositories visible to this GitHub integration.",
                 }
             ),
             AIFunctionFactory.Create(

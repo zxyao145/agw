@@ -17,7 +17,7 @@ public class IntegrationTableCommentTests
         using var dbContext = new AgwDbContext(options);
         var expectedComments = new Dictionary<Type, string>
         {
-            [typeof(PluginInstallation)] = "Stores platform-wide plugin installation configuration.",
+            [typeof(PluginInstallation)] = "Stores per-user plugin installation setup.",
             [typeof(PluginInstallationCredential)] = "Stores protected credentials owned by a plugin installation.",
             [typeof(Connection)] = "Represents an external account or service endpoint available to agents.",
             [typeof(ConnectionCredential)] = "Stores protected credentials owned by an integration connection.",

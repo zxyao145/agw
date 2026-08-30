@@ -1,10 +1,7 @@
 using System.ComponentModel;
-using Agw.Agents.Execution.Turns;
+using Agw.Auth.Contracts;
 using Agw.Jobs.Application.Contracts;
 using Agw.Jobs.Application.Services;
-using Agw.Shared;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
@@ -18,12 +15,12 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
 {
     private readonly Guid _projectId;
     private readonly IServiceScopeFactory _serviceScopeFactory;
-    private readonly IRuntimeTurnContextAccessor _turnContextAccessor;
+    private readonly ICurrentAgentTurn _turnContextAccessor;
 
     public JobManagementSkill(
         Guid projectId,
         IServiceScopeFactory serviceScopeFactory,
-        IRuntimeTurnContextAccessor turnContextAccessor
+        ICurrentAgentTurn turnContextAccessor
     )
     {
         _projectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
@@ -225,7 +222,20 @@ internal sealed class JobManagementSkill : AgentClassSkill<JobManagementSkill>
             throw new AgwException(ErrorCodes.InteractiveAdminRequired);
         }
 
-        return string.IsNullOrWhiteSpace(context.UserId) ? Constants.AdminUserId : context.UserId;
+        if (string.IsNullOrWhiteSpace(context.UserId))
+        {
+            throw new AgwException(ErrorCodes.AuthenticationRequired, "A stable user id is required.");
+        }
+
+        if (
+            UserInfoUtil.IsContextActive
+            && !string.Equals(context.UserId, UserInfoUtil.RequiredUserId, StringComparison.Ordinal)
+        )
+        {
+            throw new AgwException(ErrorCodes.AuthenticationRequired, "A stable user id is required.");
+        }
+
+        return context.UserId;
     }
 
     private static void ValidatePatch(

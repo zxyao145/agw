@@ -1,11 +1,7 @@
-using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using A2A;
 using Agw.A2A.Extensions;
-using Agw.Agents.Execution.Agents.Dtos;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Repositories;
+using Agw.Agents.Contracts.Catalog;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
@@ -62,7 +58,7 @@ public class A2ARoutesBuilderExtensionsTests
             options.ValidateOnBuild = true;
         });
 
-        var agentService = new A2AAgentService(new EmptyAgentRepository());
+        var agentService = new A2AAgentService(new EmptyAgentCatalog());
 
         builder.Services.AddLogging();
         builder.Services.AddRouting();
@@ -143,14 +139,14 @@ public class A2ARoutesBuilderExtensionsTests
 
     private sealed class FakeAgentExecutionBridge : IAgentExecutionBridge
     {
-        public Task<AgentExecutionResult?> ExecuteAsync(
+        public Task<AgentExecutionResult> ExecuteAsync(
             string agentName,
             RequestContext context,
             AgwUserInput input,
             CancellationToken cancellationToken
         )
         {
-            return Task.FromResult<AgentExecutionResult?>(new AgentExecutionResult(context.TaskId, []));
+            return Task.FromResult(new AgentExecutionResult(context.TaskId, context.ContextId, []));
         }
 
         public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
@@ -165,45 +161,30 @@ public class A2ARoutesBuilderExtensionsTests
         }
     }
 
-    private sealed class EmptyAgentRepository : IRepository<Agent>
+    private sealed class EmptyAgentCatalog : IAgentCatalogFacade
     {
-        public IQueryable<Agent> Queryable => Enumerable.Empty<Agent>().AsQueryable();
-
-        public Task<Agent?> GetByIdAsync(object id) => Task.FromResult<Agent?>(null);
-
-        public Task<Agent?> SingleOrDefaultAsync(
-            Expression<Func<Agent, bool>> predicate,
+        public Task<IReadOnlyList<AgentDescriptor>> ListDiscoverableAsync(
             CancellationToken cancellationToken = default
-        ) => Task.FromResult<Agent?>(null);
+        ) => Task.FromResult<IReadOnlyList<AgentDescriptor>>([]);
 
-        public Task<IReadOnlyList<Agent>> ListAsync(Expression<Func<Agent, bool>>? predicate = null) =>
-            Task.FromResult((IReadOnlyList<Agent>)[]);
+        public Task<AgentDescriptor?> FindDiscoverableByNameAsync(
+            string name,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<AgentDescriptor?>(null);
 
-        public Task<IReadOnlyList<Agent>> ListAsync(Func<IQueryable<Agent>, IOrderedQueryable<Agent>> orderBy) =>
-            Task.FromResult((IReadOnlyList<Agent>)[]);
+        public Task<IReadOnlySet<Guid>> FilterExistingMcpServerIdsAsync(
+            IReadOnlyCollection<Guid> serverIds,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
 
-        public Task<IReadOnlyList<Agent>> ListAsync(
-            Expression<Func<Agent, bool>>? predicate,
-            Func<IQueryable<Agent>, IOrderedQueryable<Agent>>? orderBy
-        ) => Task.FromResult((IReadOnlyList<Agent>)[]);
+        public Task<AgentCatalogMetrics> GetMetricsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(new AgentCatalogMetrics(0, 0));
 
-        public Task<IReadOnlyList<Agent>> ListAsync(
-            Expression<Func<Agent, bool>>? predicate = null,
-            params Expression<Func<Agent, object>>[] includes
-        ) => Task.FromResult((IReadOnlyList<Agent>)[]);
-
-        public Task<IReadOnlyList<Agent>> ListAsync(
-            Expression<Func<Agent, bool>>? predicate,
-            Func<IQueryable<Agent>, IOrderedQueryable<Agent>>? orderBy,
-            params Expression<Func<Agent, object>>[] includes
-        ) => Task.FromResult((IReadOnlyList<Agent>)[]);
-
-        public Task AddAsync(Agent entity) => Task.CompletedTask;
-
-        public void Update(Agent entity) { }
-
-        public void Remove(Agent entity) { }
-
-        public Task SaveChangesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<bool> IsOwnedTargetAsync(
+            Agw.Agents.Contracts.Execution.AgentRuntimeType type,
+            Guid id,
+            string ownerUserId,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(true);
     }
 }

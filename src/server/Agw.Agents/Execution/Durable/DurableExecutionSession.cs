@@ -3,8 +3,6 @@ using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Turns;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
 
@@ -35,7 +33,9 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
         DurableExecutionCoordinator coordinator
     )
     {
-        _userId = string.IsNullOrWhiteSpace(userId) ? Constants.AdminUserId : userId.Trim();
+        _userId = string.IsNullOrWhiteSpace(userId)
+            ? throw new AgwException(ErrorCodes.AuthenticationRequired)
+            : userId.Trim();
         _messageSink = messageSink;
         _hostToken = hostToken;
         _coordinator = coordinator;
@@ -65,7 +65,7 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
     /// </summary>
     public async Task StartAsync(
         ExecCommand command,
-        TaskProjection task,
+        AgentExecutionTask task,
         ExecutionSettings settings,
         CancellationToken cancellationToken
     )
@@ -236,11 +236,13 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
         try
         {
             await foreach (
-                var entry in _coordinator.ReadAsync(executionId, cursor, cancellationToken).ConfigureAwait(false)
+                var entry in _coordinator
+                    .ReadAsync(executionId, _userId, cursor, cancellationToken)
+                    .ConfigureAwait(false)
             )
             {
                 await _messageSink.WriteAsync(entry.Message, cancellationToken).ConfigureAwait(false);
-                if (IsTurnFinished(entry.Message))
+                if (TurnMessageProtocol.IsFinished(entry.Message))
                 {
                     if (ActiveExecutionId == executionId)
                     {
@@ -338,12 +340,4 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
             is DurableExecutionStatus.Completed
                 or DurableExecutionStatus.Failed
                 or DurableExecutionStatus.Interrupted;
-
-    /// <summary>
-    /// 判断消息是否为 turn-finished 控制消息。
-    /// </summary>
-    private static bool IsTurnFinished(AgwMessage message) =>
-        message.AdditionalProperties != null
-        && message.AdditionalProperties.TryGetValue("type", out var type)
-        && string.Equals(type as string, "turn-finished", StringComparison.Ordinal);
 }

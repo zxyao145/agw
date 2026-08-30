@@ -14,7 +14,13 @@ public static class DependencyInjection
     {
         services.AddSingleton<FileAppService>();
         services.TryAddSingleton(TimeProvider.System);
-        services.AddSingleton<IAgwFileSystemResolver, ProjectScopedFileSystemResolver>();
+        services.AddSingleton<ProjectScopedFileSystemResolver>();
+        services.AddSingleton<IAgwFileSystemResolver>(provider =>
+            provider.GetRequiredService<ProjectScopedFileSystemResolver>()
+        );
+        services.AddSingleton<IProjectFileSystemCacheInvalidator>(provider =>
+            provider.GetRequiredService<ProjectScopedFileSystemResolver>()
+        );
         services.AddSingleton<IGitCommandService, GitCommandService>();
 
         return services;

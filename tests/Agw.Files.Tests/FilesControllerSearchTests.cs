@@ -97,9 +97,9 @@ public class FilesControllerSearchTests
             _fileSystem = fileSystem;
         }
 
-        public Task<IAgwFileSystem> ResolveAsync(Guid projectId, CancellationToken ct)
+        public Task<IAgwFileSystem?> ResolveAsync(Guid projectId, CancellationToken ct)
         {
-            return Task.FromResult(_fileSystem);
+            return Task.FromResult<IAgwFileSystem?>(_fileSystem);
         }
     }
 

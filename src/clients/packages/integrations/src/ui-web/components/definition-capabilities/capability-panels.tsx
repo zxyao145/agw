@@ -196,7 +196,7 @@ export function ConnectionsPanel({
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="font-medium">Connections</h3>
+        <h3 className="font-medium">Integrations</h3>
         <p className="mt-1 text-sm text-muted-foreground">
           Attach ready external accounts or service endpoints to this {ownerLabel}.
         </p>
@@ -205,31 +205,31 @@ export function ConnectionsPanel({
       <SearchableSelect
         multiple
         id={`${idPrefix}connections`}
-        ariaLabel="Connections"
+        ariaLabel="Integrations"
         value={selectedConnectionIds}
         onValueChange={(values) =>
           applySelectionChange(selectedConnectionIds, values, toggleConnection)
         }
         options={connectionSelectOptions}
-        placeholder="Select ready connections..."
+        placeholder="Select ready integrations..."
         selectionText={
           selectedConnectionIds.length > 0
-            ? `${selectedConnectionIds.length} connection${selectedConnectionIds.length === 1 ? "" : "s"} selected`
+            ? `${selectedConnectionIds.length} integration${selectedConnectionIds.length === 1 ? "" : "s"} selected`
             : undefined
         }
-        searchPlaceholder="Search connections..."
+        searchPlaceholder="Search integrations..."
         disabled={disabled || connectionSelectOptions.length === 0}
         clearable={false}
       />
       <SelectedItemsList
         items={selectedConnections}
-        emptyLabel="No connections selected"
+        emptyLabel="No integrations selected"
         onRemove={toggleConnection}
         readOnly={disabled}
       />
       {!disabled && connectionSelectOptions.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No ready connections found. Create and validate one on the integrations page first.
+          No ready integrations found. Create and validate one on the integrations page first.
         </p>
       ) : null}
     </div>

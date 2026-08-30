@@ -16,6 +16,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     config: { usesNonExemptEncryption: false },
     infoPlist: {
       NSAppTransportSecurity: { NSAllowsArbitraryLoads: true },
+      NSLocalNetworkUsageDescription: "Allow Agw to connect to Agw Servers on your local network.",
     },
   },
   android: {

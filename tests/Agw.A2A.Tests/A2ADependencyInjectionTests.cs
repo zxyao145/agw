@@ -1,26 +1,18 @@
-using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using A2A;
 using Agw.A2A.Extensions;
-using Agw.Agents.Execution.Agents;
-using Agw.Agents.Execution.Agents.Dtos;
-using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Runtimes;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Repositories;
-using Microsoft.Agents.AI;
+using Agw.Agents.Contracts.Catalog;
+using Agw.Auth.Contracts;
+using Agw.Projects.Contracts.Execution;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using AgwTaskProjection = Agw.Shared.Contracts.Projects.TaskProjection;
 
 namespace Agw.A2A.Tests;
 
 public class A2ADependencyInjectionTests
 {
     [Fact]
-    public void AddA2A_WithOnlyAgentRuntimeInterfaceRegistration_BuildsServiceProvider()
+    public void AddA2A_WithFacadeRegistrations_BuildsServiceProvider()
     {
         var services = CreateA2AServices();
 
@@ -32,26 +24,14 @@ public class A2ADependencyInjectionTests
     }
 
     [Fact]
-    public async Task AgentExecutionBridge_WithOnlyAgentRuntimeInterfaceRegistration_ExecutesAgent()
+    public async Task AgentExecutionBridge_FacadeRegistered_ExecutesAgent()
     {
-        var agentId = Guid.CreateVersion7();
-        var runtime = new FakeAgentRuntimeService();
-        var services = new ServiceCollection();
-        services.AddScoped<IAgentRuntimeService>(_ => runtime);
-        services.AddScoped<IRepository<Agent>>(_ => new RepositoryStub<Agent>([
-            new Agent
-            {
-                Id = agentId,
-                Name = "alpha",
-                SystemPrompt = "Alpha prompt",
-            },
-        ]));
-        services.AddSingleton(TimeProvider.System);
-        services.AddSingleton<IAgentExecutionBridge, A2AAgentExecutionBridge>();
-
+        var execution = new FakeAgentExecutionFacade();
+        var services = CreateA2AServices(execution);
         using var provider = services.BuildServiceProvider(
             new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true }
         );
+        var taskId = Guid.CreateVersion7();
 
         var result = await provider
             .GetRequiredService<IAgentExecutionBridge>()
@@ -59,7 +39,7 @@ public class A2ADependencyInjectionTests
                 "alpha",
                 new RequestContext
                 {
-                    TaskId = Guid.CreateVersion7().ToString("D"),
+                    TaskId = taskId.ToString("D"),
                     ContextId = "ctx-a2a",
                     StreamingResponse = false,
                     Message = new Message
@@ -80,58 +60,89 @@ public class A2ADependencyInjectionTests
             );
 
         Assert.NotNull(result);
-        Assert.NotNull(runtime.CapturedRequest);
-        Assert.Equal(agentId, runtime.CapturedRequest!.AgentId);
+        Assert.NotNull(execution.Request);
+        Assert.Equal("alpha", execution.Request!.Target.Name);
+        Assert.Equal(taskId, execution.Request.ExecutionId);
     }
 
-    private static ServiceCollection CreateA2AServices()
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData("InProcess", false)]
+    [InlineData("Distributed", true)]
+    public void AddA2A_AnyExecutionProvider_RegistersTopologyNeutralBridge(
+        string? executionProvider,
+        bool supportsDurableOperations
+    )
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationManager();
+        configuration["Execution:Provider"] = executionProvider;
+
+        services.AddA2A(configuration);
+        using var provider = services.BuildServiceProvider();
+
+        var executionBridge = provider.GetRequiredService<IAgentExecutionBridge>();
+        var durableBridge = provider.GetRequiredService<IDurableA2AExecutionBridge>();
+        Assert.Same(executionBridge, durableBridge);
+        Assert.Equal(supportsDurableOperations, durableBridge.SupportsDurableOperations);
+    }
+
+    private static ServiceCollection CreateA2AServices(FakeAgentExecutionFacade? execution = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddScoped<IAgentRuntimeService, FakeAgentRuntimeService>();
-        services.AddScoped<IRepository<Agent>, RepositoryStub<Agent>>();
-        services.AddScoped<IRepository<ProjectConversation>, RepositoryStub<ProjectConversation>>();
-        services.AddScoped<
-            IRepository<ProjectConversationChatHistory>,
-            RepositoryStub<ProjectConversationChatHistory>
-        >();
-        services.AddScoped<IUnitOfWork, UnitOfWorkStub>();
+        services.AddScoped<IAgentCatalogFacade, FakeAgentCatalogFacade>();
+        services.AddScoped<IAgentExecutionFacade>(_ => execution ?? new FakeAgentExecutionFacade());
+        services.AddScoped<IDurableAgentExecutionFacade, FakeDurableAgentExecutionFacade>();
+        services.AddScoped<IProjectTaskFacade, FakeProjectTaskFacade>();
+        services.AddScoped<IExternalTaskSnapshotStore, FakeExternalTaskSnapshotStore>();
+        services.AddScoped<IUserInfoService, FakeUserInfoService>();
         services.AddA2A(new ConfigurationManager());
         return services;
     }
 
-    private sealed class FakeAgentRuntimeService : IAgentRuntimeService
+    private sealed class FakeAgentExecutionFacade : IAgentExecutionFacade
     {
-        public AgentExecuteByIdRequest? CapturedRequest { get; private set; }
+        public Agw.Agents.Contracts.Execution.AgentExecutionRequest? Request { get; private set; }
 
-        public Task<AIAgent?> CreateAiAgentAsync(Guid agentId, CancellationToken cancellationToken = default) =>
-            Task.FromResult<AIAgent?>(null);
-
-        public Task<AIAgent?> CreateAiAgentAsync(
-            Guid agentId,
-            Guid? projectId,
-            bool resume,
+        public Task<Agw.Agents.Contracts.Execution.AgentExecutionResult> ExecuteAsync(
+            Agw.Agents.Contracts.Execution.AgentExecutionRequest request,
             CancellationToken cancellationToken = default
-        ) => Task.FromResult<AIAgent?>(null);
+        ) =>
+            Task.FromResult(
+                new Agw.Agents.Contracts.Execution.AgentExecutionResult(
+                    request.ExecutionId,
+                    AgentExecutionState.Completed,
+                    []
+                )
+            );
 
-        public Task<AIAgent?> CreateAiAgentAsync(
-            Guid agentId,
-            Guid? projectId,
-            bool resume,
-            IReadOnlyDictionary<string, string>? environmentVariables,
+        public async IAsyncEnumerable<AgentExecutionEvent> ExecuteStreamingAsync(
+            Agw.Agents.Contracts.Execution.AgentExecutionRequest request,
+            [EnumeratorCancellation] CancellationToken cancellationToken = default
+        )
+        {
+            Request = request;
+            await Task.CompletedTask;
+            yield break;
+        }
+    }
+
+    private sealed class FakeDurableAgentExecutionFacade : IDurableAgentExecutionFacade
+    {
+        public Task<Agw.Agents.Contracts.Execution.AgentExecutionResult> GetOutcomeAsync(
+            Guid executionId,
+            string ownerUserId,
             CancellationToken cancellationToken = default
-        ) => Task.FromResult<AIAgent?>(null);
+        ) =>
+            Task.FromResult(
+                new Agw.Agents.Contracts.Execution.AgentExecutionResult(executionId, AgentExecutionState.Completed, [])
+            );
 
-        public Task<AgentRuntime?> CreateRuntimeAsync(
-            Guid agentId,
-            AgwTaskProjection task,
-            SettingCommand settings,
-            CancellationToken cancellationToken = default
-        ) => Task.FromResult<AgentRuntime?>(null);
-
-        public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
-            AgentRuntime session,
-            AgwUserInput input,
+        public async IAsyncEnumerable<AgentExecutionEvent> SubscribeAsync(
+            Guid executionId,
+            string ownerUserId,
+            string? afterCursor,
             [EnumeratorCancellation] CancellationToken cancellationToken = default
         )
         {
@@ -139,79 +150,110 @@ public class A2ADependencyInjectionTests
             yield break;
         }
 
-        public Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
-            AgentRuntime session,
-            AgwUserInput input,
+        public Task<bool> InterruptAsync(
+            Guid executionId,
+            string ownerUserId,
+            string reason,
             CancellationToken cancellationToken = default
-        ) => Task.FromResult<IReadOnlyList<AgwMessage>>([]);
+        ) => Task.FromResult(true);
+    }
 
-        public Task<AgentExecutionResult?> ExecuteByIdAsync(
-            AgentExecuteByIdRequest request,
+    private sealed class FakeProjectTaskFacade : IProjectTaskFacade
+    {
+        public Task<ProjectTaskSnapshot> ResolveAsync(
+            ResolveProjectTaskRequest request,
             CancellationToken cancellationToken = default
-        )
-        {
-            CapturedRequest = request;
-            return Task.FromResult<AgentExecutionResult?>(
-                new AgentExecutionResult(request.TaskId?.ToString("D") ?? Guid.CreateVersion7().ToString("D"), [])
+        ) => throw new NotSupportedException();
+
+        public Task<ProjectTaskSnapshot?> GetAsync(Guid taskId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<ProjectTaskSnapshot?>(null);
+
+        public Task<ProjectTaskSnapshot> GetOrCreateAsync(
+            StartProjectTaskRequest request,
+            CancellationToken cancellationToken = default
+        ) =>
+            Task.FromResult(
+                new ProjectTaskSnapshot(
+                    request.TaskId,
+                    Guid.CreateVersion7(),
+                    request.ProjectId,
+                    request.ContextId ?? request.TaskId.ToString("D"),
+                    request.JobId,
+                    request.Title ?? "A2A Task",
+                    request.InitialStatus,
+                    null,
+                    DateTimeOffset.UtcNow,
+                    null,
+                    null
+                )
             );
-        }
-    }
 
-    private sealed class RepositoryStub<TEntity>(IEnumerable<TEntity>? entities = null) : IRepository<TEntity>
-        where TEntity : class
-    {
-        private readonly List<TEntity> _entities = entities?.ToList() ?? [];
-
-        public IQueryable<TEntity> Queryable => _entities.AsQueryable();
-
-        public Task<TEntity?> GetByIdAsync(object id) => Task.FromResult<TEntity?>(null);
-
-        public Task<TEntity?> SingleOrDefaultAsync(
-            Expression<Func<TEntity, bool>> predicate,
+        public Task<ProjectTaskSnapshot?> FinishAsync(
+            FinishProjectTaskRequest request,
             CancellationToken cancellationToken = default
-        ) => Task.FromResult(_entities.AsQueryable().SingleOrDefault(predicate));
+        ) => Task.FromResult<ProjectTaskSnapshot?>(null);
 
-        public Task<IReadOnlyList<TEntity>> ListAsync(
-            Expression<Func<TEntity, bool>>? predicate = null,
-            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
-        )
-        {
-            var query = ApplyPredicate(predicate);
-            var results = orderBy is null ? query.ToList() : orderBy(query).ToList();
-            return Task.FromResult((IReadOnlyList<TEntity>)results);
-        }
-
-        public Task<IReadOnlyList<TEntity>> ListAsync(
-            Expression<Func<TEntity, bool>>? predicate = null,
-            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
-            params Expression<Func<TEntity, object>>[] includes
-        ) => ListAsync(predicate, orderBy);
-
-        public Task AddAsync(TEntity entity)
-        {
-            _entities.Add(entity);
-            return Task.CompletedTask;
-        }
-
-        public void Update(TEntity entity) { }
-
-        public void Remove(TEntity entity)
-        {
-            _entities.Remove(entity);
-        }
-
-        public Task SaveChangesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-
-        private IQueryable<TEntity> ApplyPredicate(Expression<Func<TEntity, bool>>? predicate) =>
-            predicate is null ? _entities.AsQueryable() : _entities.AsQueryable().Where(predicate);
+        public Task<IReadOnlyDictionary<Guid, string?>> ResolveContextIdsAsync(
+            IReadOnlyCollection<Guid> taskIds,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<IReadOnlyDictionary<Guid, string?>>(new Dictionary<Guid, string?>());
     }
 
-    private sealed class UnitOfWorkStub : IUnitOfWork
+    private sealed class FakeExternalTaskSnapshotStore : IExternalTaskSnapshotStore
     {
-        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(0);
+        public Task<ExternalTaskSnapshot?> GetAsync(
+            Guid projectId,
+            Guid taskId,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<ExternalTaskSnapshot?>(null);
 
-        public Task<bool> SaveEntitiesAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
+        public Task<IReadOnlyList<ExternalTaskSnapshot>> ListAsync(
+            Guid projectId,
+            string? contextId,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<IReadOnlyList<ExternalTaskSnapshot>>([]);
 
-        public void Dispose() { }
+        public Task<ExternalTaskSaveResult> SaveAsync(
+            SaveExternalTaskSnapshotRequest request,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(ExternalTaskSaveResult.Saved);
+
+        public Task DeleteAsync(Guid projectId, Guid taskId, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+    }
+
+    private sealed class FakeAgentCatalogFacade : IAgentCatalogFacade
+    {
+        public Task<IReadOnlyList<AgentDescriptor>> ListDiscoverableAsync(
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<IReadOnlyList<AgentDescriptor>>([]);
+
+        public Task<AgentDescriptor?> FindDiscoverableByNameAsync(
+            string name,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<AgentDescriptor?>(null);
+
+        public Task<IReadOnlySet<Guid>> FilterExistingMcpServerIdsAsync(
+            IReadOnlyCollection<Guid> serverIds,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<IReadOnlySet<Guid>>(new HashSet<Guid>());
+
+        public Task<AgentCatalogMetrics> GetMetricsAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(new AgentCatalogMetrics(0, 0));
+
+        public Task<bool> IsOwnedTargetAsync(
+            Agw.Agents.Contracts.Execution.AgentRuntimeType type,
+            Guid id,
+            string ownerUserId,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(true);
+    }
+
+    private sealed class FakeUserInfoService : IUserInfoService
+    {
+        public System.Security.Claims.ClaimsPrincipal? Current { get; set; }
+        public string? UserId => "test-user";
+        public bool IsAuthenticated => true;
+        public string RequiredUserId => "test-user";
     }
 }

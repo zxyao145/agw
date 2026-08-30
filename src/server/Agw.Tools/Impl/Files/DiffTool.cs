@@ -1,5 +1,5 @@
 using System.Text;
-using Agw.Shared.Contracts.Tools.Abstractions;
+using Agw.Tools.Contracts.Abstractions;
 using DiffPlex.DiffBuilder;
 using DiffPlex.DiffBuilder.Model;
 using Microsoft.Extensions.AI;

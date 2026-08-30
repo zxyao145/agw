@@ -1,4 +1,3 @@
-using Agw.Auth.Application;
 using Agw.Auth.Security;
 using Agw.Setup.Contracts;
 using Agw.Setup.Services;
@@ -20,6 +19,7 @@ public class SetupController : Controller
     private readonly AuthenticationAttemptLimiter _attemptLimiter;
     private readonly TimeProvider _timeProvider;
     private readonly AgwDataPaths _paths;
+    private readonly SetupDeploymentOptions _deploymentOptions;
 
     public SetupController(
         IInitializationStateStore stateStore,
@@ -27,7 +27,8 @@ public class SetupController : Controller
         SetupCodeService setupCodeService,
         AuthenticationAttemptLimiter attemptLimiter,
         TimeProvider timeProvider,
-        AgwDataPaths paths
+        AgwDataPaths paths,
+        SetupDeploymentOptions? deploymentOptions = null
     )
     {
         _stateStore = stateStore;
@@ -36,6 +37,7 @@ public class SetupController : Controller
         _attemptLimiter = attemptLimiter;
         _timeProvider = timeProvider;
         _paths = paths;
+        _deploymentOptions = deploymentOptions ?? new SetupDeploymentOptions();
     }
 
     [HttpGet("")]
@@ -52,11 +54,15 @@ public class SetupController : Controller
 #endif
 
         ViewData["RequireSetupCode"] = !LocalTrustedRequest.IsLocalTrusted(HttpContext);
+        ViewData["RequiredDeploymentMode"] = _deploymentOptions.RequiredMode;
         return View(
             new SetupRequest
             {
-                DeploymentMode = DeploymentMode.Standalone,
-                Provider = DatabaseProvider.Sqlite,
+                DeploymentMode = _deploymentOptions.RequiredMode ?? DeploymentMode.Standalone,
+                Provider =
+                    _deploymentOptions.RequiredMode == DeploymentMode.Cluster
+                        ? DatabaseProvider.Postgres
+                        : DatabaseProvider.Sqlite,
                 SqlitePath = _paths.DatabaseFile,
             }
         );
@@ -72,6 +78,7 @@ public class SetupController : Controller
     public async Task<IActionResult> Index(SetupRequest request, CancellationToken cancellationToken)
     {
         ViewData["RequireSetupCode"] = !LocalTrustedRequest.IsLocalTrusted(HttpContext);
+        ViewData["RequiredDeploymentMode"] = _deploymentOptions.RequiredMode;
         if (_stateStore.IsInitialized)
         {
             return ErrorCodes.ResourceNotFound.ToApiResult();
@@ -79,6 +86,16 @@ public class SetupController : Controller
 
         if (!ModelState.IsValid)
         {
+            return View(request);
+        }
+
+        if (_deploymentOptions.RequiredMode is { } requiredMode && request.DeploymentMode != requiredMode)
+        {
+            ModelState.AddModelError(
+                nameof(request.DeploymentMode),
+                $"This Host requires the {requiredMode} deployment mode."
+            );
+            request.DeploymentMode = requiredMode;
             return View(request);
         }
 

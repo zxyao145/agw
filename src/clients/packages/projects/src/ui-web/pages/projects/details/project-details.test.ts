@@ -325,5 +325,11 @@ test("project conversation UI uses conversation terminology", async () => {
 
   assert.match(projectDetailsSource, /Conversation ID:/);
   assert.match(conversationDetailsSource, /Conversation ID/);
-  assert.doesNotMatch(`${projectDetailsSource}\n${conversationDetailsSource}`, /Context ID/);
+  assert.match(projectDetailsSource, /Execution Context ID:/);
+  assert.match(conversationDetailsSource, /Execution Context ID/);
+  assert.match(conversationDetailsSource, /useInfiniteQuery\(/);
+  assert.match(conversationDetailsSource, /direction: "newer"/);
+  assert.match(conversationDetailsSource, /useVirtualizer\(/);
+  assert.match(conversationDetailsSource, /ref=\{virtualizer\.measureElement\}/);
+  assert.match(conversationDetailsSource, /h-\[clamp\(20rem,65vh,48rem\)\]/);
 });

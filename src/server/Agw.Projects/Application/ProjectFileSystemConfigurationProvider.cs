@@ -1,5 +1,4 @@
 using Agw.Files.Abstracts;
-using Agw.Shared.Contracts.Projects;
 
 namespace Agw.Projects.Application;
 
@@ -16,6 +15,8 @@ public sealed class ProjectFileSystemConfigurationProvider : IProjectFileSystemC
     {
         cancellationToken.ThrowIfCancellationRequested();
         var project = await _projectAppService.GetAsync(projectId);
-        return project == null ? null : new ProjectFileSystemConfiguration(project.Name, project.Workspace);
+        return project == null
+            ? null
+            : new ProjectFileSystemConfiguration(project.Name, project.Workspace, project.CreateBy);
     }
 }

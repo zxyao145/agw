@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 using Agw.Shared.Data.Abstractions;
-using Agw.Shared.Data.Entities.Tools;
+using Agw.Shared.Tooling;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Shared.Data.Entities.Projects;
@@ -33,7 +33,7 @@ public class Project : BaseEntity, IAggregateRoot
     {
         if (string.IsNullOrEmpty(Workspace))
         {
-            return "~/.agw/temp";
+            return $"~/.agw/projects/{Id:N}";
         }
         return Workspace;
     }

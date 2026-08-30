@@ -1,11 +1,12 @@
+using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
-using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Runtime;
+using Agw.Shared.Tooling;
 using Agw.Skills.Contracts.Registration;
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +15,7 @@ using Xunit;
 
 namespace Agw.Setup.Tests;
 
-public class DbSeederTests
+public class DbSeederTests : IDisposable
 {
     private static readonly Guid GeneralAgentId = Guid.Parse("11111111-1111-1111-6666-000000000001");
     private static readonly Guid LocationExtractorAgentId = Guid.Parse("11111111-1111-1111-6666-000000000002");
@@ -23,6 +24,9 @@ public class DbSeederTests
     private static readonly Guid ModelProviderId = Guid.Parse("11111111-1111-1111-5555-000000000001");
     private static readonly Guid SkillId = Guid.Parse("11111111-1111-1111-8888-000000000001");
     private static readonly Guid JobManagementSkillId = Guid.Parse("11111111-1111-1111-8888-000000000002");
+    private readonly IDisposable _systemScope = UserInfoUtil.PushSystemScope();
+
+    public void Dispose() => _systemScope.Dispose();
 
     [Fact]
     public async Task SeedAsync_NewDatabase_CreatesDefaultDefinitionsAndRemainsIdempotent()
@@ -90,7 +94,7 @@ public class DbSeederTests
                 agents.Single(x => x.Name == "general-agent").Tools,
                 value => Assert.IsType<DiffToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
                 value => Assert.IsType<GitCloneToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
-                value => Assert.IsType<BashToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
+                value => Assert.IsType<RunShellToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
                 value => Assert.IsType<FileAccessToolBlockDefinition>(Assert.IsType<ToolBlockValue>(value).Definition)
             );
             Assert.Collection(
@@ -137,10 +141,19 @@ public class DbSeederTests
 
             var skillMarkdown = Path.Combine(paths.SkillsDirectory, "xhs-explore", "SKILL.md");
             Assert.True(File.Exists(skillMarkdown));
-            Assert.Contains(
-                "name: xhs-explore",
-                await File.ReadAllTextAsync(skillMarkdown, TestContext.Current.CancellationToken)
+            var skillMarkdownContent = await File.ReadAllTextAsync(
+                skillMarkdown,
+                TestContext.Current.CancellationToken
             );
+            Assert.Contains("name: xhs-explore", skillMarkdownContent, StringComparison.Ordinal);
+            Assert.Contains("`run_skill_script`", skillMarkdownContent, StringComparison.Ordinal);
+            Assert.Contains("\"scriptName\": \"scripts/cli.py\"", skillMarkdownContent, StringComparison.Ordinal);
+            Assert.DoesNotContain("python scripts/cli.py", skillMarkdownContent, StringComparison.Ordinal);
+            var skillCli = Path.Combine(paths.SkillsDirectory, "xhs-explore", "scripts", "cli.py");
+            var skillCliContent = await File.ReadAllTextAsync(skillCli, TestContext.Current.CancellationToken);
+            Assert.Contains("\"stdin\": subprocess.DEVNULL", skillCliContent, StringComparison.Ordinal);
+            Assert.Contains("\"stdout\": subprocess.DEVNULL", skillCliContent, StringComparison.Ordinal);
+            Assert.Contains("\"stderr\": subprocess.DEVNULL", skillCliContent, StringComparison.Ordinal);
 
             var agentflow = await context
                 .Agentflows.Include(x => x.Nodes)
@@ -186,6 +199,7 @@ public class DbSeederTests
                     Description = "Legacy job skill",
                     Kind = SkillKind.BuiltIn,
                     ContentPath = string.Empty,
+                    CreateBy = Constants.AdminUserId,
                 }
             );
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -217,7 +231,7 @@ public class DbSeederTests
     }
 
     [Fact]
-    public async Task SeedAsync_ClassSkillNameOwnedByUser_PreservesUserSkillAndSkipsBuiltIn()
+    public async Task SeedAsync_ClassSkillNameOwnedByUser_PreservesUserSkillAndSeedsGlobalBuiltIn()
     {
         var paths = CreatePaths();
         try
@@ -237,6 +251,7 @@ public class DbSeederTests
                     Description = "User-owned skill",
                     Kind = SkillKind.Local,
                     ContentPath = "skills/agw-job",
+                    CreateBy = "user-a",
                 }
             );
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -250,16 +265,17 @@ public class DbSeederTests
 
             await seeder.SeedAsync();
 
-            var skill = await context.Skills.SingleAsync(
-                x => x.Name == "agw-job",
-                TestContext.Current.CancellationToken
-            );
-            Assert.Equal(userSkillId, skill.Id);
-            Assert.Equal("User-owned skill", skill.Description);
-            Assert.Equal(SkillKind.Local, skill.Kind);
-            Assert.False(
-                await context.Skills.AnyAsync(x => x.Id == JobManagementSkillId, TestContext.Current.CancellationToken)
-            );
+            var skills = await context
+                .Skills.Where(x => x.Name == "agw-job")
+                .ToListAsync(TestContext.Current.CancellationToken);
+            Assert.Equal(2, skills.Count);
+            var userSkill = Assert.Single(skills, skill => skill.Id == userSkillId);
+            Assert.Equal("User-owned skill", userSkill.Description);
+            Assert.Equal(SkillKind.Local, userSkill.Kind);
+            Assert.Equal("user-a", userSkill.CreateBy);
+            var builtIn = Assert.Single(skills, skill => skill.Id == JobManagementSkillId);
+            Assert.Equal(SkillKind.BuiltIn, builtIn.Kind);
+            Assert.Equal(Constants.AdminUserId, builtIn.CreateBy);
         }
         finally
         {
@@ -268,7 +284,66 @@ public class DbSeederTests
     }
 
     [Fact]
-    public async Task SeedAsync_DefaultToolRegression_BackfillsExactSignatureAndPreservesCustomization()
+    public async Task SeedAsync_ReservedDefaultSkillOwnedByUser_IsNotMutated()
+    {
+        var paths = CreatePaths();
+        try
+        {
+            var options = new DbContextOptionsBuilder<AgwDbContext>()
+                .UseSqlite($"Data Source={Path.Combine(paths.Root, "reserved-skill.db")}")
+                .UseSnakeCaseNamingConvention()
+                .Options;
+            await using var context = new AgwDbContext(options);
+            await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+            context.Skills.Add(
+                new Skill
+                {
+                    Id = SkillId,
+                    Name = "user-owned-reserved-id",
+                    Description = "Must remain untouched",
+                    Kind = SkillKind.Local,
+                    ContentPath = "skills/user-owned-reserved-id",
+                    CreateBy = "user-a",
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                }
+            );
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+            context.ChangeTracker.Clear();
+
+            var seeder = new DbSeeder(
+                context,
+                NullLogger<DbSeeder>.Instance,
+                TimeProvider.System,
+                paths,
+                [new TestSkillRegistration()]
+            );
+
+            await seeder.SeedAsync();
+
+            using var systemScope = UserInfoUtil.PushSystemScope();
+            var skill = await context.Skills.SingleAsync(x => x.Id == SkillId, TestContext.Current.CancellationToken);
+            Assert.Equal("user-owned-reserved-id", skill.Name);
+            Assert.Equal("user-a", skill.CreateBy);
+            Assert.Equal(SkillKind.Local, skill.Kind);
+            Assert.False(
+                await context.Skills.AnyAsync(
+                    x => x.Id == SkillId && x.CreateBy == Constants.AdminUserId,
+                    TestContext.Current.CancellationToken
+                )
+            );
+        }
+        finally
+        {
+            Directory.Delete(paths.Root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SeedAsync_DefaultToolRegression_BackfillsKnownSignaturesAndPreservesCustomization(
+        bool includesFileAccess
+    )
     {
         var paths = CreatePaths();
         try
@@ -286,12 +361,8 @@ public class DbSeederTests
                     Name = "general-agent",
                     DisplayName = "General Agent",
                     Type = AgentType.System,
-                    Tools =
-                    [
-                        new ToolValue { Definition = new DiffToolDefinition() },
-                        new ToolValue { Definition = new GitCloneToolDefinition() },
-                        new ToolValue { Definition = new BashToolDefinition() },
-                    ],
+                    Tools = CreateLegacyGeneralAgentTools(includesFileAccess),
+                    CreateBy = Constants.AdminUserId,
                 },
                 new Agent
                 {
@@ -299,6 +370,7 @@ public class DbSeederTests
                     Name = "location-extractor",
                     DisplayName = "Location Extractor",
                     Type = AgentType.System,
+                    CreateBy = Constants.AdminUserId,
                     Tools =
                     [
                         new ToolValue { Definition = new WebFetchToolDefinition() },
@@ -316,12 +388,19 @@ public class DbSeederTests
             );
 
             await seeder.SeedAsync();
+            await seeder.SeedAsync();
 
             var general = await context.Agents.SingleAsync(
                 agent => agent.Id == GeneralAgentId,
                 TestContext.Current.CancellationToken
             );
-            Assert.IsType<FileAccessToolBlockDefinition>(Assert.IsType<ToolBlockValue>(general.Tools[3]).Definition);
+            Assert.Collection(
+                general.Tools,
+                value => Assert.IsType<DiffToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
+                value => Assert.IsType<GitCloneToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
+                value => Assert.IsType<RunShellToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
+                value => Assert.IsType<FileAccessToolBlockDefinition>(Assert.IsType<ToolBlockValue>(value).Definition)
+            );
             var location = await context.Agents.SingleAsync(
                 agent => agent.Id == LocationExtractorAgentId,
                 TestContext.Current.CancellationToken
@@ -336,6 +415,22 @@ public class DbSeederTests
         {
             Directory.Delete(paths.Root, recursive: true);
         }
+    }
+
+    private static List<ToolValueObject> CreateLegacyGeneralAgentTools(bool includesFileAccess)
+    {
+        List<ToolValueObject> tools =
+        [
+            new ToolValue { Definition = new DiffToolDefinition() },
+            new ToolValue { Definition = new GitCloneToolDefinition() },
+            new ToolValue { Definition = new BashToolDefinition() },
+        ];
+        if (includesFileAccess)
+        {
+            tools.Add(new ToolBlockValue { Definition = new FileAccessToolBlockDefinition() });
+        }
+
+        return tools;
     }
 
     private static AgwDataPaths CreatePaths()

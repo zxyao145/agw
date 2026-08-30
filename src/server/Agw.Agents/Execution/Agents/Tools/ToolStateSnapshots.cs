@@ -1,4 +1,3 @@
-using Agw.Shared.Contracts.Agents;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 

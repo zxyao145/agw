@@ -1,5 +1,3 @@
-using Agw.Shared.Contracts.Agents;
-
 namespace Agw.Agents.Execution.Turns;
 
 public sealed class HumanInteractionContextAccessor : IHumanInteractionContextAccessor

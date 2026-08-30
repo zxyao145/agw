@@ -1,4 +1,4 @@
-using Agw.Shared.Contracts.Tools;
+using Agw.Tools.Contracts;
 
 namespace Agw.Tools.ContextualTools;
 

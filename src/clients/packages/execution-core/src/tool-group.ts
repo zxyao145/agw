@@ -13,17 +13,22 @@ export type MessageFragmentType = "normal" | "result" | "function-call" | "funct
 export type MessageFragment<T extends ExecutionMessage = ExecutionMessage> = {
   type: MessageFragmentType;
   message: T;
+  callId: string | null;
   groupKey: string | null;
   toolName: string;
 };
 
 type ToolGroup<T extends ExecutionMessage> = {
+  firstCallIndex: number;
   calls: MessageFragment<T>[];
   results: MessageFragment<T>[];
 };
 
 export function isResultMessage(message: ExecutionMessage): boolean {
-  return message.additionalProperties?.type === "result";
+  return (
+    message.additionalProperties?.type === "result" ||
+    message.contents.some((content) => content.additionalProperties?.type === "result")
+  );
 }
 
 function isFunctionCall(content: ExecutionMessageContent): boolean {
@@ -62,14 +67,16 @@ export function createMessageFragments<T extends ExecutionMessage>(
   }
 
   const fragments: MessageFragment<T>[] = [];
+  const scopeId = message.streamingScopeId ?? null;
 
   if (isResultMessage(message)) {
-    fragments.push({ type: "result", message, groupKey: null, toolName: "" });
+    fragments.push({ type: "result", message, callId: null, groupKey: null, toolName: "" });
     messageFragmentCache.set(message, fragments);
     return fragments;
   }
 
-  if ((message.role === "user" && !message.author) || message.contents.length === 0) {
+  if (message.contents.length === 0) {
+    fragments.push({ type: "normal", message, callId: null, groupKey: null, toolName: "" });
     messageFragmentCache.set(message, fragments);
     return fragments;
   }
@@ -83,6 +90,7 @@ export function createMessageFragments<T extends ExecutionMessage>(
     fragments.push({
       type: "normal",
       message: { ...message, contents: normalContents } as T,
+      callId: null,
       groupKey: null,
       toolName: "",
     });
@@ -97,11 +105,11 @@ export function createMessageFragments<T extends ExecutionMessage>(
 
     flushNormalContents();
     const callId = readCallId(content);
-    const groupKey =
-      callId === null ? null : JSON.stringify([message.streamingScopeId ?? null, callId]);
+    const groupKey = callId === null ? null : JSON.stringify([scopeId, callId]);
     fragments.push({
       type: isFunctionCall(content) ? "function-call" : "function-result",
       message: cloneMessage({ ...message, contents: [content] } as T),
+      callId,
       groupKey,
       toolName: readToolName(content),
     });
@@ -118,22 +126,46 @@ export function processMessages<T extends ExecutionMessage>(
   const items: ProcessedMessageItem<T>[] = [];
   const fragments = messages.flatMap(createMessageFragments);
 
-  const toolGroups = new Map<string, ToolGroup<T>>();
-  for (const fragment of fragments) {
-    if (!fragment.groupKey) {
-      continue;
-    }
+  const exactGroups = new Map<string, ToolGroup<T>>();
+  const groupsByCallId = new Map<string, ToolGroup<T>[]>();
+  const callGroups = new Map<MessageFragment<T>, ToolGroup<T>>();
+  // Phase 1: establish every logical Tool use in call order before inspecting results.
+  for (const [index, fragment] of fragments.entries()) {
+    if (fragment.type !== "function-call" || !fragment.callId || !fragment.groupKey) continue;
 
-    const group = toolGroups.get(fragment.groupKey) ?? { calls: [], results: [] };
-    if (fragment.type === "function-call") {
-      group.calls.push(fragment);
-    } else if (fragment.type === "function-result") {
-      group.results.push(fragment);
+    let group = exactGroups.get(fragment.groupKey);
+    if (!group) {
+      group = {
+        firstCallIndex: index,
+        calls: [],
+        results: [],
+      };
+      exactGroups.set(fragment.groupKey, group);
+      const matchingGroups = groupsByCallId.get(fragment.callId) ?? [];
+      matchingGroups.push(group);
+      groupsByCallId.set(fragment.callId, matchingGroups);
     }
-    toolGroups.set(fragment.groupKey, group);
+    group.calls.push(fragment);
+    callGroups.set(fragment, group);
   }
 
-  const renderedGroups = new Set<string>();
+  const resultGroups = new Map<MessageFragment<T>, ToolGroup<T>>();
+  // Result arrival order is independent. Prefer the exact turn, then recover replayed
+  // results whose scope drifted by matching callId to the closest Tool use.
+  for (const [index, fragment] of fragments.entries()) {
+    if (fragment.type !== "function-result" || !fragment.callId) continue;
+
+    const exactGroup = fragment.groupKey ? exactGroups.get(fragment.groupKey) : undefined;
+    const group =
+      exactGroup ?? findClosestCallGroup(groupsByCallId.get(fragment.callId) ?? [], index);
+    if (!group) continue;
+
+    group.results.push(fragment);
+    resultGroups.set(fragment, group);
+  }
+
+  const renderedGroups = new Set<ToolGroup<T>>();
+  // Phase 2: emit each completed group at its first Tool use position.
   for (const fragment of fragments) {
     if (fragment.type === "result") {
       items.push({ type: "result", message: fragment.message });
@@ -145,26 +177,22 @@ export function processMessages<T extends ExecutionMessage>(
       continue;
     }
 
-    const group = fragment.groupKey ? toolGroups.get(fragment.groupKey) : undefined;
     if (fragment.type === "function-result") {
-      if (group && group.calls.length > 0) {
-        continue;
-      }
+      if (resultGroups.has(fragment)) continue;
 
       items.push({ type: "normal", message: fragment.message });
       continue;
     }
 
-    if (!fragment.groupKey || !group || group.results.length === 0) {
+    const group = callGroups.get(fragment);
+    if (!group || group.results.length === 0) {
       items.push({ type: "normal", message: fragment.message });
       continue;
     }
 
-    if (renderedGroups.has(fragment.groupKey)) {
-      continue;
-    }
+    if (renderedGroups.has(group)) continue;
 
-    renderedGroups.add(fragment.groupKey);
+    renderedGroups.add(group);
     items.push({
       type: "accordion",
       messages: [...group.calls, ...group.results].map((item) => item.message),
@@ -173,4 +201,21 @@ export function processMessages<T extends ExecutionMessage>(
   }
 
   return items;
+}
+
+function findClosestCallGroup<T extends ExecutionMessage>(
+  candidates: ToolGroup<T>[],
+  resultIndex: number,
+): ToolGroup<T> | undefined {
+  if (candidates.length === 0) return undefined;
+
+  let closestPreceding: ToolGroup<T> | undefined;
+  for (const candidate of candidates) {
+    if (candidate.firstCallIndex > resultIndex) {
+      return closestPreceding ?? candidate;
+    }
+    closestPreceding = candidate;
+  }
+
+  return closestPreceding;
 }

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using System.Text.Json;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Setting;
@@ -6,11 +7,7 @@ using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Turns;
 using Agw.Infrastructure.Data;
 using Agw.Shared;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Agents;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Coordination;
-using Agw.Shared.Data;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
 using Microsoft.Data.Sqlite;
@@ -21,8 +18,16 @@ using Microsoft.Extensions.Options;
 
 namespace Agw.Agents.Tests;
 
-public sealed class DurableExecutionStoreTests
+public sealed class DurableExecutionStoreTests : IDisposable
 {
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "user-id")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
+
     [Fact]
     public async Task RegisterAsync_SameExecutionAndManifest_IsIdempotent()
     {
@@ -36,7 +41,7 @@ public sealed class DurableExecutionStoreTests
 
         var first = await store.RegisterAsync(
             executionId,
-            "user",
+            "user-id",
             agentId,
             AgentRuntimeType.Agent,
             input,
@@ -46,7 +51,7 @@ public sealed class DurableExecutionStoreTests
         );
         var second = await store.RegisterAsync(
             executionId,
-            "user",
+            "user-id",
             agentId,
             AgentRuntimeType.Agent,
             input,
@@ -70,7 +75,7 @@ public sealed class DurableExecutionStoreTests
         var task = CreateTask();
         var snapshot = await store.RegisterAsync(
             Guid.CreateVersion7(),
-            "stable-user-id",
+            "user-id",
             Guid.CreateVersion7(),
             AgentRuntimeType.Agent,
             CreateInput("hello"),
@@ -79,11 +84,11 @@ public sealed class DurableExecutionStoreTests
             TestContext.Current.CancellationToken
         );
 
-        Assert.Equal("stable-user-id", snapshot.Manifest.ResolveUserId());
+        Assert.Equal("user-id", snapshot.Manifest.ResolveUserId());
         var record = await database.Context.DurableExecutions.SingleAsync(TestContext.Current.CancellationToken);
-        Assert.Equal("stable-user-id", record.UserId);
-        Assert.Equal("stable-user-id", record.CreateBy);
-        Assert.Equal("stable-user-id", record.UpdateBy);
+        Assert.Equal("user-id", record.UserId);
+        Assert.Equal("user-id", record.CreateBy);
+        Assert.Equal("user-id", record.UpdateBy);
         Assert.Equal(Constants.AdminUserId, CreateManifest().ResolveUserId());
     }
 
@@ -107,7 +112,7 @@ public sealed class DurableExecutionStoreTests
         var task = CreateTask();
         await coordinator.StartAsync(
             executionId,
-            "explicit-user-id",
+            "user-id",
             new ExecCommand(AgentRuntimeType.Agent, CreateInput("hello")) { AgentId = Guid.CreateVersion7() },
             task,
             CreateSettings(task.ProjectId, task.ContextId),
@@ -115,7 +120,7 @@ public sealed class DurableExecutionStoreTests
         );
 
         var snapshot = await store.GetAsync(executionId, TestContext.Current.CancellationToken);
-        Assert.Equal("explicit-user-id", snapshot.Manifest.ResolveUserId());
+        Assert.Equal("user-id", snapshot.Manifest.ResolveUserId());
     }
 
     [Fact]
@@ -130,7 +135,7 @@ public sealed class DurableExecutionStoreTests
 
         await store.RegisterAsync(
             executionId,
-            "user",
+            "user-id",
             agentId,
             AgentRuntimeType.Agent,
             CreateInput("first"),
@@ -142,7 +147,7 @@ public sealed class DurableExecutionStoreTests
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
             store.RegisterAsync(
                 executionId,
-                "user",
+                "user-id",
                 agentId,
                 AgentRuntimeType.Agent,
                 CreateInput("different"),
@@ -167,6 +172,59 @@ public sealed class DurableExecutionStoreTests
         );
 
         Assert.Equal(ErrorCodes.DurableExecutionNotFound.Code, exception.Code);
+    }
+
+    [Fact]
+    public async Task GetAuthorizedOutcomeAsync_RunningState_DoesNotDeserializeManifest()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var store = database.CreateStore();
+        var executionId = await RegisterExecutionAsync(store);
+        var record = await database.Context.DurableExecutions.SingleAsync(TestContext.Current.CancellationToken);
+        record.ManifestJson = "not-a-valid-manifest";
+        await database.Context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var outcome = await store.GetAuthorizedOutcomeAsync(
+            executionId,
+            "user-id",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(executionId, outcome.ExecutionId);
+        Assert.Equal(DurableExecutionStatus.Queued, outcome.Status);
+        Assert.Null(outcome.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task GetAuthorizedOutcomeAsync_FailedState_LoadsDecryptedError()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var store = database.CreateStore();
+        var executionId = await RegisterExecutionAsync(store);
+        await store.TryBeginSegmentAsync(
+            executionId,
+            TimeProvider.System.GetUtcNow(),
+            TestContext.Current.CancellationToken
+        );
+        await store.SaveSegmentResultAsync(
+            new DurableExecutionSegmentResult
+            {
+                ExecutionId = executionId,
+                SegmentIndex = 0,
+                Status = DurableExecutionSegmentStatus.Failed,
+                ErrorMessage = "boom",
+            },
+            TestContext.Current.CancellationToken
+        );
+
+        var outcome = await store.GetAuthorizedOutcomeAsync(
+            executionId,
+            "user-id",
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Equal(DurableExecutionStatus.Failed, outcome.Status);
+        Assert.Equal("boom", outcome.ErrorMessage);
     }
 
     [Fact]
@@ -543,6 +601,7 @@ public sealed class DurableExecutionStoreTests
             )
         );
         var executionId = Guid.CreateVersion7();
+        await RegisterExecutionAsync(database.CreateStore(), executionId);
         var firstMessage = TurnMessageFactory.CreateStarted(executionId);
         var secondMessage = TurnMessageFactory.CreateFinished("failed", executionId);
         var thirdMessage = TurnMessageFactory.CreateFinished("completed", executionId);
@@ -605,6 +664,7 @@ public sealed class DurableExecutionStoreTests
             Options.Create(new ExecutionRuntimeOptions())
         );
         var executionId = Guid.CreateVersion7();
+        await RegisterExecutionAsync(database.CreateStore(), executionId);
 
         await stream.AppendAsync(
             executionId,
@@ -647,12 +707,12 @@ public sealed class DurableExecutionStoreTests
         Assert.Equal("turn-finished", append.Message.AdditionalProperties?["type"]);
     }
 
-    private static async Task<Guid> RegisterExecutionAsync(DurableExecutionStore store)
+    private static async Task<Guid> RegisterExecutionAsync(DurableExecutionStore store, Guid? executionId = null)
     {
-        var executionId = Guid.CreateVersion7();
+        var resolvedExecutionId = executionId ?? Guid.CreateVersion7();
         var task = CreateTask();
         await store.RegisterAsync(
-            executionId,
+            resolvedExecutionId,
             "user-id",
             Guid.CreateVersion7(),
             AgentRuntimeType.Agent,
@@ -661,7 +721,7 @@ public sealed class DurableExecutionStoreTests
             CreateSettings(task.ProjectId, task.ContextId),
             TestContext.Current.CancellationToken
         );
-        return executionId;
+        return resolvedExecutionId;
     }
 
     private static DurableExecutionManifest CreateManifest()
@@ -694,7 +754,7 @@ public sealed class DurableExecutionStoreTests
     private static AgwUserInput CreateInput(string content) =>
         new() { MessageId = "message-1", Contents = [new AgwTextContent { Content = content }] };
 
-    private static TaskProjection CreateTask() =>
+    private static AgentExecutionTask CreateTask() =>
         new()
         {
             TaskId = Guid.CreateVersion7(),

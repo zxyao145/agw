@@ -23,6 +23,10 @@ jobs:
     outputs:
       image_name: ${{ steps.release.outputs.image_name }}
       image_tags: ${{ steps.release.outputs.image_tags }}
+      control_plane_image_name: ${{ steps.release.outputs.control_plane_image_name }}
+      control_plane_image_tags: ${{ steps.release.outputs.control_plane_image_tags }}
+      data_plane_image_name: ${{ steps.release.outputs.data_plane_image_name }}
+      data_plane_image_tags: ${{ steps.release.outputs.data_plane_image_tags }}
       prerelease: ${{ steps.release.outputs.prerelease }}
       release_tag: ${{ steps.release.outputs.release_tag }}
       version: ${{ steps.release.outputs.version }}
@@ -65,6 +69,8 @@ jobs:
           fi
 
           image_name="ghcr.io/$(printf '%s' "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]')"
+          control_plane_image_name="$image_name-control-plane"
+          data_plane_image_name="$image_name-data-plane"
           short_sha="${GITHUB_SHA:0:12}"
           if [[ "$prerelease" == "false" ]]; then
             IFS=. read -r major minor _patch <<< "$version"
@@ -74,19 +80,45 @@ jobs:
               "$image_name:$major" \
               "$image_name:latest" \
               "$image_name:sha-$short_sha")
+            control_plane_image_tags=$(printf '%s\n' \
+              "$control_plane_image_name:$version" \
+              "$control_plane_image_name:$major.$minor" \
+              "$control_plane_image_name:$major" \
+              "$control_plane_image_name:latest" \
+              "$control_plane_image_name:sha-$short_sha")
+            data_plane_image_tags=$(printf '%s\n' \
+              "$data_plane_image_name:$version" \
+              "$data_plane_image_name:$major.$minor" \
+              "$data_plane_image_name:$major" \
+              "$data_plane_image_name:latest" \
+              "$data_plane_image_name:sha-$short_sha")
           else
             image_tags=$(printf '%s\n' \
               "$image_name:$version" \
               "$image_name:sha-$short_sha")
+            control_plane_image_tags=$(printf '%s\n' \
+              "$control_plane_image_name:$version" \
+              "$control_plane_image_name:sha-$short_sha")
+            data_plane_image_tags=$(printf '%s\n' \
+              "$data_plane_image_name:$version" \
+              "$data_plane_image_name:sha-$short_sha")
           fi
 
           {
             echo "image_name=$image_name"
+            echo "control_plane_image_name=$control_plane_image_name"
+            echo "data_plane_image_name=$data_plane_image_name"
             echo "prerelease=$prerelease"
             echo "release_tag=$release_tag"
             echo "version=$version"
             echo "image_tags<<EOF"
             echo "$image_tags"
+            echo "EOF"
+            echo "control_plane_image_tags<<EOF"
+            echo "$control_plane_image_tags"
+            echo "EOF"
+            echo "data_plane_image_tags<<EOF"
+            echo "$data_plane_image_tags"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -101,14 +133,21 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: linux/amd64
+        role:
+          - name: standalone
+            target: standalone
+          - name: control-plane
+            target: control-plane
+          - name: data-plane
+            target: data-plane
+        platform:
+          - name: linux/amd64
             runner: ubuntu-24.04
             arch: amd64
-          - platform: linux/arm64
+          - name: linux/arm64
             runner: ubuntu-24.04-arm
             arch: arm64
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ matrix.platform.runner }}
     permissions:
       contents: read
       packages: write
@@ -120,18 +159,35 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resolve image name
+        id: image
+        env:
+          ROLE: ${{ matrix.role.name }}
+          STANDALONE_IMAGE_NAME: ${{ needs.metadata.outputs.image_name }}
+          CONTROL_PLANE_IMAGE_NAME: ${{ needs.metadata.outputs.control_plane_image_name }}
+          DATA_PLANE_IMAGE_NAME: ${{ needs.metadata.outputs.data_plane_image_name }}
+        shell: bash
+        run: |
+          case "$ROLE" in
+            standalone) image_name="$STANDALONE_IMAGE_NAME" ;;
+            control-plane) image_name="$CONTROL_PLANE_IMAGE_NAME" ;;
+            data-plane) image_name="$DATA_PLANE_IMAGE_NAME" ;;
+            *) exit 2 ;;
+          esac
+          echo "image_name=$image_name" >> "$GITHUB_OUTPUT"
       - name: Build and push Docker image by digest
         id: docker
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
-          platforms: ${{ matrix.platform }}
+          platforms: ${{ matrix.platform.name }}
+          target: ${{ matrix.role.target }}
           build-args: APP_VERSION=${{ needs.metadata.outputs.version }}
           labels: org.opencontainers.image.version=${{ needs.metadata.outputs.version }}
-          outputs: type=image,name=${{ needs.metadata.outputs.image_name }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=agw-docker-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=agw-docker-${{ matrix.arch }}
+          outputs: type=image,name=${{ steps.image.outputs.image_name }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=agw-docker-${{ matrix.role.name }}-${{ matrix.platform.arch }}
+          cache-to: type=gha,mode=max,scope=agw-docker-${{ matrix.role.name }}-${{ matrix.platform.arch }}
       - name: Export Docker digest
         env:
           DIGEST: ${{ steps.docker.outputs.digest }}
@@ -142,13 +198,16 @@ jobs:
           touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
       - uses: actions/upload-artifact@v7
         with:
-          name: agw-docker-digest-${{ matrix.arch }}
+          name: agw-docker-digest-${{ matrix.role.name }}-${{ matrix.platform.arch }}
           path: ${{ runner.temp }}/digests/*
           if-no-files-found: error
           retention-days: 1
 
   docker-publish:
     needs: [metadata, docker-build, desktop-build]
+    strategy:
+      matrix:
+        role: [standalone, control-plane, data-plane]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -156,7 +215,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v7
         with:
-          pattern: agw-docker-digest-*
+          pattern: agw-docker-digest-${{ matrix.role }}-*
           path: ${{ runner.temp }}/digests
           merge-multiple: true
       - uses: docker/setup-buildx-action@v4
@@ -165,11 +224,44 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Resolve image metadata
+        id: image
+        env:
+          ROLE: ${{ matrix.role }}
+          STANDALONE_IMAGE_NAME: ${{ needs.metadata.outputs.image_name }}
+          STANDALONE_IMAGE_TAGS: ${{ needs.metadata.outputs.image_tags }}
+          CONTROL_PLANE_IMAGE_NAME: ${{ needs.metadata.outputs.control_plane_image_name }}
+          CONTROL_PLANE_IMAGE_TAGS: ${{ needs.metadata.outputs.control_plane_image_tags }}
+          DATA_PLANE_IMAGE_NAME: ${{ needs.metadata.outputs.data_plane_image_name }}
+          DATA_PLANE_IMAGE_TAGS: ${{ needs.metadata.outputs.data_plane_image_tags }}
+        shell: bash
+        run: |
+          case "$ROLE" in
+            standalone)
+              image_name="$STANDALONE_IMAGE_NAME"
+              image_tags="$STANDALONE_IMAGE_TAGS"
+              ;;
+            control-plane)
+              image_name="$CONTROL_PLANE_IMAGE_NAME"
+              image_tags="$CONTROL_PLANE_IMAGE_TAGS"
+              ;;
+            data-plane)
+              image_name="$DATA_PLANE_IMAGE_NAME"
+              image_tags="$DATA_PLANE_IMAGE_TAGS"
+              ;;
+            *) exit 2 ;;
+          esac
+          {
+            echo "image_name=$image_name"
+            echo "image_tags<<EOF"
+            echo "$image_tags"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
       - name: Publish Docker manifest
         env:
           DIGESTS_DIR: ${{ runner.temp }}/digests
-          IMAGE_NAME: ${{ needs.metadata.outputs.image_name }}
-          IMAGE_TAGS: ${{ needs.metadata.outputs.image_tags }}
+          IMAGE_NAME: ${{ steps.image.outputs.image_name }}
+          IMAGE_TAGS: ${{ steps.image.outputs.image_tags }}
         shell: bash
         run: |
           set -euo pipefail
@@ -194,7 +286,7 @@ jobs:
       - name: Verify published platforms
         run: >-
           docker buildx imagetools inspect
-          "${{ needs.metadata.outputs.image_name }}:${{ needs.metadata.outputs.version }}"
+          "${{ steps.image.outputs.image_name }}:${{ needs.metadata.outputs.version }}"
 
   release:
     needs: [metadata, docker-publish, desktop-build]

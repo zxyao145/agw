@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using Agw.Auth.Contracts;
 using Agw.Infrastructure.Auth;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
@@ -9,9 +11,16 @@ using Xunit;
 
 namespace Agw.Auth.Tests;
 
-public sealed class EfApiTokenStoreTests
+public sealed class EfApiTokenStoreTests : IDisposable
 {
     private static readonly DateTimeOffset CreatedAt = new(2026, 8, 12, 8, 30, 0, TimeSpan.Zero);
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "creator-42")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
 
     [Fact]
     public async Task CreateTokenAsync_PersistsHashCreatorAndUtcCreationTime()

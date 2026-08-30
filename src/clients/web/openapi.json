@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "http://127.0.0.1:31815/"
+      "url": "http://127.0.0.1:39816/"
     }
   ],
   "paths": {
@@ -26,62 +26,6 @@
       "get": {
         "tags": [
           "agw-server"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/.well-known/agents.json": {
-      "get": {
-        "tags": [
-          "A2A"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/a2a/{agentName}/.well-known/agent-card.json": {
-      "get": {
-        "tags": [
-          "A2A"
-        ],
-        "parameters": [
-          {
-            "name": "agentName",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
-    "/a2a/{agentName}": {
-      "post": {
-        "tags": [
-          "A2A"
-        ],
-        "parameters": [
-          {
-            "name": "agentName",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
         ],
         "responses": {
           "200": {
@@ -291,39 +235,54 @@
         }
       }
     },
-    "/api/dashboard/stats": {
+    "/.well-known/agents.json": {
       "get": {
         "tags": [
-          "Dashboard"
+          "A2A"
         ],
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfDashboardStatsResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfDashboardStatsResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfDashboardStatsResponse"
-                }
-              }
-            }
+            "description": "OK"
           }
         }
       }
     },
-    "/api/server-info": {
+    "/a2a/{agentName}/.well-known/agent-card.json": {
       "get": {
         "tags": [
-          "agw-server"
+          "A2A"
+        ],
+        "parameters": [
+          {
+            "name": "agentName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/a2a/{agentName}": {
+      "post": {
+        "tags": [
+          "A2A"
+        ],
+        "parameters": [
+          {
+            "name": "agentName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
         ],
         "responses": {
           "200": {
@@ -2549,6 +2508,47 @@
         }
       }
     },
+    "/api/dashboard/stats": {
+      "get": {
+        "tags": [
+          "Dashboard"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfDashboardStatsResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfDashboardStatsResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfDashboardStatsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/server-info": {
+      "get": {
+        "tags": [
+          "agw-server"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/integrations/connections": {
       "get": {
         "tags": [
@@ -3000,10 +3000,10 @@
         }
       }
     },
-    "/api/projects/{projectId}/contexts": {
+    "/api/projects/{projectId}/conversations": {
       "get": {
         "tags": [
-          "ProjectContexts"
+          "ProjectConversations"
         ],
         "parameters": [
           {
@@ -3022,26 +3022,26 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectContextSummaryResponse[]"
+                  "$ref": "#/components/schemas/ApiResultOfProjectConversationSummaryResponse[]"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectContextSummaryResponse[]"
+                  "$ref": "#/components/schemas/ApiResultOfProjectConversationSummaryResponse[]"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectContextSummaryResponse[]"
+                  "$ref": "#/components/schemas/ApiResultOfProjectConversationSummaryResponse[]"
                 }
               }
             }
           }
         }
       },
-      "delete": {
+      "post": {
         "tags": [
-          "ProjectContexts"
+          "ProjectConversations"
         ],
         "parameters": [
           {
@@ -3051,196 +3051,6 @@
             "schema": {
               "type": "string",
               "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{projectId}/contexts/{contextId}": {
-      "get": {
-        "tags": [
-          "ProjectContexts"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "contextId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectContextResponse"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectContextResponse"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfProjectContextResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "ProjectContexts"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "contextId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{projectId}/contexts/{contextId}/clear-records": {
-      "delete": {
-        "tags": [
-          "ProjectContexts"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "contextId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResult"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{projectId}/contexts/{contextId}/title": {
-      "put": {
-        "tags": [
-          "ProjectContexts"
-        ],
-        "parameters": [
-          {
-            "name": "projectId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "name": "contextId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
             }
           }
         ],
@@ -3248,17 +3058,342 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ProjectContextTitleUpdateRequest"
+                "$ref": "#/components/schemas/ProjectConversationCreateRequest"
               }
             },
             "text/json": {
               "schema": {
-                "$ref": "#/components/schemas/ProjectContextTitleUpdateRequest"
+                "$ref": "#/components/schemas/ProjectConversationCreateRequest"
               }
             },
             "application/*+json": {
               "schema": {
-                "$ref": "#/components/schemas/ProjectContextTitleUpdateRequest"
+                "$ref": "#/components/schemas/ProjectConversationCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectConversationSummaryResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectConversationSummaryResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectConversationSummaryResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ProjectConversations"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/conversations/{conversationId}": {
+      "get": {
+        "tags": [
+          "ProjectConversations"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "conversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectConversationResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectConversationResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectConversationResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ProjectConversations"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "conversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/conversations/{conversationId}/messages": {
+      "get": {
+        "tags": [
+          "ProjectConversations"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "conversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/ProjectConversationMessageDirection"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectConversationMessagePageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectConversationMessagePageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfProjectConversationMessagePageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/conversations/{conversationId}/clear-records": {
+      "delete": {
+        "tags": [
+          "ProjectConversations"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "conversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{projectId}/conversations/{conversationId}/title": {
+      "put": {
+        "tags": [
+          "ProjectConversations"
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "conversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectConversationTitleUpdateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectConversationTitleUpdateRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectConversationTitleUpdateRequest"
               }
             }
           },
@@ -7542,7 +7677,7 @@
           }
         }
       },
-      "ApiResultOfProjectContextResponse": {
+      "ApiResultOfProjectConversationMessagePageResponse": {
         "required": [
           "code",
           "title",
@@ -7557,7 +7692,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/ProjectContextResponse"
+                "$ref": "#/components/schemas/ProjectConversationMessagePageResponse"
               }
             ]
           },
@@ -7576,7 +7711,75 @@
           }
         }
       },
-      "ApiResultOfProjectContextSummaryResponse[]": {
+      "ApiResultOfProjectConversationResponse": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProjectConversationResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfProjectConversationSummaryResponse": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProjectConversationSummaryResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfProjectConversationSummaryResponse[]": {
         "required": [
           "code",
           "title",
@@ -7591,7 +7794,7 @@
               "array"
             ],
             "items": {
-              "$ref": "#/components/schemas/ProjectContextSummaryResponse"
+              "$ref": "#/components/schemas/ProjectConversationSummaryResponse"
             }
           },
           "code": {
@@ -10141,11 +10344,58 @@
           }
         }
       },
-      "ProjectContextResponse": {
+      "ProjectConversationCreateRequest": {
+        "required": [
+          "contextId"
+        ],
+        "type": "object",
+        "properties": {
+          "contextId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ProjectConversationMessageDirection": {
+        "enum": [
+          "newer",
+          "older"
+        ]
+      },
+      "ProjectConversationMessagePageResponse": {
+        "required": [
+          "items",
+          "nextCursor",
+          "hasMore"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgwMessage"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "hasMore": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ProjectConversationResponse": {
         "required": [
           "projectId",
+          "conversationId",
           "contextId",
           "jobId",
+          "title",
           "latestStatus",
           "executionCount",
           "messageCount",
@@ -10153,12 +10403,16 @@
           "updateTime",
           "errorMessage",
           "usage",
-          "messages"
+          "resumeState"
         ],
         "type": "object",
         "properties": {
           "projectId": {
             "type": "string"
+          },
+          "conversationId": {
+            "type": "string",
+            "format": "uuid"
           },
           "contextId": {
             "type": "string"
@@ -10169,6 +10423,9 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "title": {
+            "type": "string"
           },
           "latestStatus": {
             "oneOf": [
@@ -10206,22 +10463,52 @@
             ]
           },
           "usage": {
-            "$ref": "#/components/schemas/ProjectContextUsage"
+            "$ref": "#/components/schemas/ProjectConversationUsage"
           },
-          "messages": {
-            "type": [
-              "null",
-              "array"
-            ],
-            "items": {
-              "$ref": "#/components/schemas/AgwMessage"
-            }
+          "resumeState": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ProjectConversationResumeStateResponse"
+              }
+            ]
           }
         }
       },
-      "ProjectContextSummaryResponse": {
+      "ProjectConversationResumeStateResponse": {
+        "required": [
+          "targetType",
+          "targetId",
+          "agentMode"
+        ],
+        "type": "object",
+        "properties": {
+          "targetType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "targetId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "agentMode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ProjectConversationSummaryResponse": {
         "required": [
           "projectId",
+          "conversationId",
           "contextId",
           "jobId",
           "title",
@@ -10236,6 +10523,10 @@
         "properties": {
           "projectId": {
             "type": "string"
+          },
+          "conversationId": {
+            "type": "string",
+            "format": "uuid"
           },
           "contextId": {
             "type": "string"
@@ -10287,7 +10578,7 @@
           }
         }
       },
-      "ProjectContextTitleUpdateRequest": {
+      "ProjectConversationTitleUpdateRequest": {
         "required": [
           "title"
         ],
@@ -10298,7 +10589,7 @@
           }
         }
       },
-      "ProjectContextUsage": {
+      "ProjectConversationUsage": {
         "required": [
           "inputTokenCount",
           "outputTokenCount",
@@ -11870,13 +12161,10 @@
       "name": "agw-server"
     },
     {
-      "name": "A2A"
-    },
-    {
       "name": "Jobs"
     },
     {
-      "name": "Dashboard"
+      "name": "A2A"
     },
     {
       "name": "Agentflows"
@@ -11897,6 +12185,9 @@
       "name": "Files"
     },
     {
+      "name": "Dashboard"
+    },
+    {
       "name": "Connections"
     },
     {
@@ -11909,7 +12200,7 @@
       "name": "Plugins"
     },
     {
-      "name": "ProjectContexts"
+      "name": "ProjectConversations"
     },
     {
       "name": "Projects"

@@ -4,10 +4,11 @@ using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
 using Agw.Files.Abstracts;
-using Agw.Shared.Contracts.Projects;
+using Agw.Projects.Contracts.Execution;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Runtime;
-using Agw.Skills.Application.Remote;
 using Agw.Skills.Contracts.Registration;
+using Agw.Skills.Contracts.Remote;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -19,11 +20,11 @@ public partial class AgentRuntimeService : IAgentRuntimeService
 {
     private readonly ILogger<AgentRuntimeService> _logger;
     private readonly AgentAppService _agentAppService;
-    private readonly IProjectAppService _projectAppService;
+    private readonly IProjectRuntimeFacade _projectRuntimeFacade;
     private readonly AgentCapabilityComposer _capabilityComposer;
     private readonly ChatHistoryProvider _chatHistoryProvider;
     private readonly IProviderSessionState _providerSessionState;
-    private readonly ITaskSessionBindingService _taskSessionBindingService;
+    private readonly IProjectProviderSessionFacade _providerSessions;
     private readonly AgwDataPaths _dataPaths;
     private readonly IAgwFileSystemResolver _fileSystemResolver;
     private readonly AgentSessionStateStore _sessionStateStore;
@@ -36,6 +37,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
     private readonly HumanInteractionContextAccessor? _humanInteractionContextAccessor;
     private readonly IConversationHandoffProvider? _conversationHandoffProvider;
     private readonly IRuntimeTurnContextAccessor? _turnContextAccessor;
+    private readonly IProjectDefaultResolver? _projectDefaults;
     private readonly TimeProvider _timeProvider;
 
     private readonly ILoggerFactory _loggerFactory;
@@ -43,11 +45,11 @@ public partial class AgentRuntimeService : IAgentRuntimeService
 
     public AgentRuntimeService(
         AgentAppService agentAppService,
-        IProjectAppService projectAppService,
+        IProjectRuntimeFacade projectRuntimeFacade,
         AgentCapabilityComposer capabilityComposer,
         ChatHistoryProvider chatHistoryProvider,
         IProviderSessionState providerSessionState,
-        ITaskSessionBindingService taskSessionBindingService,
+        IProjectProviderSessionFacade providerSessions,
         AgwDataPaths dataPaths,
         IAgwFileSystemResolver fileSystemResolver,
         AgentSessionStateStore sessionStateStore,
@@ -63,15 +65,16 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         HumanInteractionContextAccessor? humanInteractionContextAccessor = null,
         IConversationHandoffProvider? conversationHandoffProvider = null,
         IRuntimeTurnContextAccessor? turnContextAccessor = null,
-        TimeProvider? timeProvider = null
+        TimeProvider? timeProvider = null,
+        IProjectDefaultResolver? projectDefaults = null
     )
     {
         _agentAppService = agentAppService;
-        _projectAppService = projectAppService;
+        _projectRuntimeFacade = projectRuntimeFacade;
         _capabilityComposer = capabilityComposer;
         _chatHistoryProvider = chatHistoryProvider;
         _providerSessionState = providerSessionState;
-        _taskSessionBindingService = taskSessionBindingService;
+        _providerSessions = providerSessions;
         _dataPaths = dataPaths;
         _fileSystemResolver = fileSystemResolver;
         _sessionStateStore = sessionStateStore;
@@ -88,7 +91,30 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         _humanInteractionContextAccessor = humanInteractionContextAccessor;
         _conversationHandoffProvider = conversationHandoffProvider;
         _turnContextAccessor = turnContextAccessor;
+        _projectDefaults = projectDefaults;
         _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
         _services = services ?? new ServiceCollection().BuildServiceProvider();
+    }
+
+    private async Task<Guid?> ResolveProjectIdAsync(Guid? projectId, CancellationToken cancellationToken)
+    {
+        if (
+            projectId.HasValue
+            && projectId.Value != Guid.Empty
+            && projectId.Value != ProjectDefaults.DefaultBuiltInId
+            && projectId.Value != ProjectDefaults.A2AId
+        )
+        {
+            return projectId.Value;
+        }
+
+        if (_projectDefaults == null)
+        {
+            return ProjectDefaults.DefaultBuiltInId;
+        }
+
+        return projectId == ProjectDefaults.A2AId
+            ? await _projectDefaults.ResolveA2AProjectIdAsync(cancellationToken).ConfigureAwait(false)
+            : await _projectDefaults.ResolveDefaultProjectIdAsync(cancellationToken).ConfigureAwait(false);
     }
 }

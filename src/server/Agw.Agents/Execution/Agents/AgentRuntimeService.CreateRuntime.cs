@@ -2,9 +2,9 @@ using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Runtimes;
-using Agw.Shared.Contracts.Projects;
+using Agw.Auth.Contracts;
+using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Utils;
 using Microsoft.Extensions.Logging;
 
 namespace Agw.Agents.Execution.Agents;
@@ -16,7 +16,7 @@ public partial class AgentRuntimeService
     /// </summary>
     public Task<AgentRuntime?> CreateRuntimeAsync(
         Guid agentId,
-        TaskProjection task,
+        AgentExecutionTask task,
         SettingCommand settings,
         CancellationToken cancellationToken = default
     ) => CreateRuntimeCoreAsync(agentId, task, settings, deferHumanInteractions: false, cancellationToken);
@@ -26,7 +26,7 @@ public partial class AgentRuntimeService
     /// </summary>
     internal Task<AgentRuntime?> CreateDurableRuntimeAsync(
         Guid agentId,
-        TaskProjection task,
+        AgentExecutionTask task,
         SettingCommand settings,
         CancellationToken cancellationToken = default
     ) => CreateRuntimeCoreAsync(agentId, task, settings, deferHumanInteractions: true, cancellationToken);
@@ -36,13 +36,13 @@ public partial class AgentRuntimeService
     /// </summary>
     private async Task<AgentRuntime?> CreateRuntimeCoreAsync(
         Guid agentId,
-        TaskProjection task,
+        AgentExecutionTask task,
         SettingCommand settings,
         bool deferHumanInteractions,
         CancellationToken cancellationToken
     )
     {
-        var agent = await _agentAppService.GetAgentAsync(agentId);
+        var agent = await _agentAppService.GetAgentForCurrentUserAsync(agentId);
         if (agent == null)
         {
             return null;
@@ -71,6 +71,10 @@ public partial class AgentRuntimeService
         );
 
         var fs = await _fileSystemResolver.ResolveAsync(projectId, cancellationToken);
+        if (fs == null)
+        {
+            return null;
+        }
         var rootStat = await fs.StatAsync("", cancellationToken);
         if (rootStat == null)
         {
@@ -140,19 +144,16 @@ public partial class AgentRuntimeService
             return null;
         }
 
-        var binding = await _taskSessionBindingService.GetAsync(
-            projectId,
-            contextId,
-            agent.Id,
-            agent.Name,
+        var providerSessionId = await _providerSessions.GetProviderSessionIdAsync(
+            new ProjectProviderSessionReference(projectId, contextId, agent.Id, agent.Name),
             cancellationToken
         );
-        if (binding == null)
+        if (providerSessionId == null)
         {
             return null;
         }
 
-        return Guid.TryParse(binding.ProviderSessionId, out var providerSessionId) ? providerSessionId : null;
+        return Guid.TryParse(providerSessionId, out var parsedProviderSessionId) ? parsedProviderSessionId : null;
     }
 
     internal static (Guid? ProviderSessionId, bool IsResume) ResolveExternalProviderSession(
@@ -176,7 +177,7 @@ public partial class AgentRuntimeService
 
     private Func<string, CancellationToken, ValueTask>? CreateExternalSessionStartedCallback(
         Agent agent,
-        TaskProjection task,
+        AgentExecutionTask task,
         string contextId
     )
     {
@@ -185,17 +186,15 @@ public partial class AgentRuntimeService
             return null;
         }
 
+        var executionUserId = ResolveExecutionUserId();
         return async (providerSessionId, _) =>
         {
             try
             {
-                await _taskSessionBindingService.UpsertAsync(
-                    task.ProjectId,
-                    contextId,
-                    agent.Id,
-                    agent.Name,
+                await _providerSessions.SaveProviderSessionIdAsync(
+                    new ProjectProviderSessionReference(task.ProjectId, contextId, agent.Id, agent.Name),
                     providerSessionId,
-                    _turnContextAccessor?.Current?.UserId ?? Constants.AdminUserId,
+                    executionUserId,
                     CancellationToken.None
                 );
             }
@@ -209,5 +208,16 @@ public partial class AgentRuntimeService
                 );
             }
         };
+    }
+
+    private string ResolveExecutionUserId()
+    {
+        if (UserInfoUtil.IsContextActive)
+        {
+            return UserInfoUtil.RequiredUserId;
+        }
+
+        var userId = _turnContextAccessor?.Current?.UserId;
+        return string.IsNullOrWhiteSpace(userId) ? Constants.AdminUserId : userId.Trim();
     }
 }

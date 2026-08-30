@@ -1,15 +1,16 @@
 using System.IO.Compression;
 using Agw.Agents.ExternalAgents;
+using Agw.Auth.Contracts;
+using Agw.Projects.Contracts;
 using Agw.Shared;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
-using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
+using Agw.Shared.Tooling;
 using Agw.Skills.Contracts.Registration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -83,6 +84,7 @@ public class DbSeeder
     /// </summary>
     public async Task SeedAsync()
     {
+        using var systemScope = UserInfoUtil.PushSystemScope();
         try
         {
             _logger.LogInformation("Starting database seeding");
@@ -94,7 +96,10 @@ public class DbSeeder
             var agents = await SeedDefaultAgentsAsync(defaultModelProvider.Id);
             await SeedBuiltInClassSkillsAsync();
             var skill = await SeedDefaultSkillAsync();
-            await SeedAgentSkillRelationAsync(agents["amap-poi-search"].Id, skill.Id);
+            if (skill != null)
+            {
+                await SeedAgentSkillRelationAsync(agents["amap-poi-search"].Id, skill.Id);
+            }
             await SeedDefaultAgentflowAsync(agents);
 
             await _context.SaveChangesAsync();
@@ -112,7 +117,8 @@ public class DbSeeder
         foreach (var definition in BuiltInProjects)
         {
             var existingProject = await _context.Projects.FirstOrDefaultAsync(project =>
-                project.Id == definition.Id || project.Name == definition.Name
+                project.Id == definition.Id && project.CreateBy == Constants.AdminUserId
+                || project.CreateBy == Constants.AdminUserId && project.Name == definition.Name
             );
 
             if (existingProject == null)
@@ -156,7 +162,7 @@ public class DbSeeder
         {
             var agentName = agent.Name;
             var existingAgent = await _context.Agents.FirstOrDefaultAsync(a =>
-                a.Name == agentName && a.Type == AgentType.External
+                a.Name == agentName && a.Type == AgentType.External && a.CreateBy == Constants.AdminUserId
             );
 
             if (existingAgent != null)
@@ -225,7 +231,9 @@ public class DbSeeder
         foreach (var definition in definitions)
         {
             var provider = await _context.Providers.FirstOrDefaultAsync(p =>
-                p.Name == definition.Name && p.ProviderType == definition.ProviderType
+                p.Name == definition.Name
+                && p.ProviderType == definition.ProviderType
+                && p.CreateBy == Constants.AdminUserId
             );
             if (provider == null)
             {
@@ -258,7 +266,8 @@ public class DbSeeder
     {
         var now = _timeProvider.GetUtcNow();
         var model = await _context.Models.FirstOrDefaultAsync(x =>
-            x.Id == DeepSeekModelId || x.Name == "deepseek-v4-pro"
+            x.Id == DeepSeekModelId && x.CreateBy == Constants.AdminUserId
+            || x.Name == "deepseek-v4-pro" && x.CreateBy == Constants.AdminUserId
         );
         if (model == null)
         {
@@ -301,7 +310,8 @@ public class DbSeeder
     )
     {
         var relation = await _context.ModelProviders.FirstOrDefaultAsync(x =>
-            x.Id == relationId || (x.ModelId == modelId && x.ProviderId == providerId)
+            x.Id == relationId && x.CreateBy == Constants.AdminUserId
+            || x.ModelId == modelId && x.ProviderId == providerId && x.CreateBy == Constants.AdminUserId
         );
         if (relation != null)
         {
@@ -332,7 +342,8 @@ public class DbSeeder
         foreach (var definition in definitions)
         {
             var agent = await _context.Agents.FirstOrDefaultAsync(x =>
-                x.Id == definition.Id || x.Name == definition.Name
+                x.Id == definition.Id && x.CreateBy == Constants.AdminUserId
+                || x.Name == definition.Name && x.CreateBy == Constants.AdminUserId
             );
             if (agent == null)
             {
@@ -369,7 +380,7 @@ public class DbSeeder
                 [
                     new ToolValue { Definition = new DiffToolDefinition() },
                     new ToolValue { Definition = new GitCloneToolDefinition() },
-                    new ToolValue { Definition = new BashToolDefinition() },
+                    new ToolValue { Definition = new RunShellToolDefinition() },
                     new ToolBlockValue { Definition = new FileAccessToolBlockDefinition() },
                 ],
                 CreateBy = Constants.AdminUserId,
@@ -544,18 +555,29 @@ public class DbSeeder
             return;
         }
 
-        IReadOnlyList<ToolValueObject>? obsoleteTools = agent.Id switch
+        IReadOnlyList<IReadOnlyList<ToolValueObject>> obsoleteToolSignatures = agent.Id switch
         {
             var id when id == GeneralAgentId =>
             [
-                new ToolValue { Definition = new DiffToolDefinition() },
-                new ToolValue { Definition = new GitCloneToolDefinition() },
-                new ToolValue { Definition = new BashToolDefinition() },
+                [
+                    new ToolValue { Definition = new DiffToolDefinition() },
+                    new ToolValue { Definition = new GitCloneToolDefinition() },
+                    new ToolValue { Definition = new BashToolDefinition() },
+                ],
+                [
+                    new ToolValue { Definition = new DiffToolDefinition() },
+                    new ToolValue { Definition = new GitCloneToolDefinition() },
+                    new ToolValue { Definition = new BashToolDefinition() },
+                    new ToolBlockValue { Definition = new FileAccessToolBlockDefinition() },
+                ],
             ],
-            var id when id == LocationExtractorAgentId => [new ToolValue { Definition = new WebFetchToolDefinition() }],
-            _ => null,
+            var id when id == LocationExtractorAgentId =>
+            [
+                [new ToolValue { Definition = new WebFetchToolDefinition() }],
+            ],
+            _ => [],
         };
-        if (obsoleteTools == null || !agent.Tools.SequenceEqual(obsoleteTools))
+        if (!obsoleteToolSignatures.Any(agent.Tools.SequenceEqual))
         {
             return;
         }
@@ -565,13 +587,22 @@ public class DbSeeder
         agent.UpdateTime = now;
     }
 
-    private async Task<Skill> SeedDefaultSkillAsync()
+    private async Task<Skill?> SeedDefaultSkillAsync()
     {
         var skill = await _context.Skills.FirstOrDefaultAsync(x =>
-            x.Id == XhsExploreSkillId || x.Name == DefaultSkillName
+            x.CreateBy == Constants.AdminUserId && (x.Id == XhsExploreSkillId || x.Name == DefaultSkillName)
         );
         if (skill == null)
         {
+            if (await _context.Skills.AnyAsync(x => x.Id == XhsExploreSkillId))
+            {
+                _logger.LogWarning(
+                    "Default skill id {SkillId} is already owned by another user; skipping the administrator seed",
+                    XhsExploreSkillId
+                );
+                return null;
+            }
+
             var now = _timeProvider.GetUtcNow();
             skill = new Skill
             {
@@ -614,10 +645,14 @@ public class DbSeeder
     {
         foreach (var registration in _skillRegistrations)
         {
-            var existingById = await _context.Skills.FirstOrDefaultAsync(skill => skill.Id == registration.Id);
+            var existingById = await _context.Skills.FirstOrDefaultAsync(skill =>
+                skill.Id == registration.Id && skill.CreateBy == Constants.AdminUserId
+            );
             if (existingById == null)
             {
-                var nameConflict = await _context.Skills.FirstOrDefaultAsync(skill => skill.Name == registration.Name);
+                var nameConflict = await _context.Skills.FirstOrDefaultAsync(skill =>
+                    skill.Name == registration.Name && skill.CreateBy == Constants.AdminUserId
+                );
                 if (nameConflict != null)
                 {
                     _logger.LogWarning(
@@ -659,7 +694,9 @@ public class DbSeeder
             }
 
             var conflictingName = await _context.Skills.AnyAsync(skill =>
-                skill.Id != registration.Id && skill.Name == registration.Name
+                skill.Id != registration.Id
+                && skill.Name == registration.Name
+                && skill.CreateBy == Constants.AdminUserId
             );
             if (conflictingName)
             {
@@ -694,7 +731,8 @@ public class DbSeeder
     private async Task SeedDefaultAgentflowAsync(IReadOnlyDictionary<string, Agent> agents)
     {
         var existingAgentflow = await _context.Agentflows.FirstOrDefaultAsync(x =>
-            x.Id == XiaohongshuAgentflowId || x.Name == "Xiaohongshu Address Extraction"
+            x.Id == XiaohongshuAgentflowId && x.CreateBy == Constants.AdminUserId
+            || x.Name == "Xiaohongshu Address Extraction" && x.CreateBy == Constants.AdminUserId
         );
         if (existingAgentflow != null)
         {

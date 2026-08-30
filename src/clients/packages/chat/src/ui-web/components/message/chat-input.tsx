@@ -1,13 +1,22 @@
 "use client";
 
 import * as React from "react";
-import { ArrowUp, CornerDownRight, Eraser, RotateCcw, Square, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  CornerDownRight,
+  Eraser,
+  LoaderCircle,
+  RotateCcw,
+  Square,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { QuickTextDialog } from "@agw/projects";
 import { Button } from "@agw/components";
 import { Separator } from "@agw/components";
-import { searchCommand, type CommandSource } from "../../../lib/chat/search-command";
+import { resolveInputSuggestions, type CommandSource } from "@agw/chat-core";
 import { searchFile } from "../../../lib/chat/search-file";
 import {
   createImageAttachments,
@@ -16,16 +25,17 @@ import {
 } from "../../../lib/chat/image-attachments";
 import type { AgentMode, PermissionMode } from "../../../services/execution-hub";
 import { ChatInputToolbar } from "./chat-input-toolbar";
-import { getSuggestionTrigger } from "./suggestion-trigger";
 import { UserInput, type UserInputRef } from "./user-input";
 
 interface ChatInputProps {
   isExecuting: boolean;
   isTransitioning: boolean;
+  isLoadingHistory: boolean;
   hasMessages: boolean;
   onExecute: (value: string, imageAttachments: readonly ChatImageAttachment[]) => void;
   onInterrupt: () => void;
   onClearSession: () => void;
+  onScrollToBottom: () => void;
   onScrollToTop: () => void;
   showResume: boolean;
   canResume: boolean;
@@ -45,10 +55,12 @@ interface ChatInputProps {
 export function ChatInput({
   isExecuting,
   isTransitioning,
+  isLoadingHistory,
   hasMessages,
   onExecute,
   onInterrupt,
   onClearSession,
+  onScrollToBottom,
   onScrollToTop,
   showResume,
   canResume,
@@ -127,18 +139,10 @@ export function ChatInput({
   );
 
   const handleSuggestion = React.useCallback(
-    (input: string, caretIndex: number) => {
-      const trigger = getSuggestionTrigger(input, caretIndex);
-      if (!trigger) {
-        return [];
-      }
-
-      if (trigger.type === "command") {
-        return searchCommand(trigger.query, commandSource);
-      }
-
-      return searchFile(projectId, trigger.query);
-    },
+    (input: string, caretIndex: number) =>
+      resolveInputSuggestions(input, caretIndex, commandSource, (keyword) =>
+        searchFile(projectId, keyword),
+      ),
     [commandSource, projectId],
   );
 
@@ -254,8 +258,34 @@ export function ChatInput({
           <Eraser width={16} />
         </Button>
         <Separator orientation="vertical" />
-        <Button onClick={onScrollToTop} variant="ghost" size="sm">
-          <ArrowUp width={16} />
+        <Button
+          className="has-[>svg]:pl-2"
+          onClick={onScrollToBottom}
+          disabled={!hasMessages || isLoadingHistory}
+          title="Go to latest message"
+          aria-label="Go to latest message"
+          variant="ghost"
+          size="sm"
+        >
+          <ArrowDown width={16} />
+        </Button>
+        <Separator className="data-[orientation=vertical]:h-[60%]" orientation="vertical" />
+        <Button
+          className="has-[>svg]:pr-2"
+          onClick={onScrollToTop}
+          disabled={!hasMessages || isLoadingHistory}
+          title={isLoadingHistory ? "Loading complete conversation history" : "Go to first message"}
+          aria-label={
+            isLoadingHistory ? "Loading complete conversation history" : "Go to first message"
+          }
+          variant="ghost"
+          size="sm"
+        >
+          {isLoadingHistory ? (
+            <LoaderCircle className="animate-spin" width={16} />
+          ) : (
+            <ArrowUp width={16} />
+          )}
         </Button>
       </UserInput.TopRight>
       {isExecuting && !isTransitioning ? (

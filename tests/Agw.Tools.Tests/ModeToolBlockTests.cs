@@ -1,9 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Entities.Tools;
 using Agw.Shared.Exceptions;
 using Agw.Tools.HumanInteraction;
 using Agw.Tools.ToolBlocks.Blocks.Mode;

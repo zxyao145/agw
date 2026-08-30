@@ -1,5 +1,4 @@
 using Agw.Projects.Domain.Services;
-using Agw.Shared.Contracts.Projects;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Projects.Tests;
@@ -45,6 +44,19 @@ public class ProjectConversationChatHistoryMetadataFactoryTests
 
         Assert.NotNull(metadata);
         Assert.Equal(42, metadata![ConversationHandoffMetadata.ThroughSequenceKey].GetInt64());
+    }
+
+    [Fact]
+    public void FromMessage_CopiesSupportedAgentMode()
+    {
+        var message = new ChatMessage(ChatRole.System, string.Empty)
+        {
+            AdditionalProperties = new AdditionalPropertiesDictionary { ["mode"] = "execute" },
+        };
+
+        var metadata = ProjectConversationChatHistoryMetadataFactory.FromMessage(message);
+
+        Assert.Equal("execute", metadata!["agentMode"].GetString());
     }
 
     [Fact]

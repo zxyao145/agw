@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Agw.Auth.Api;
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;
+using Agw.Auth.Security;
 using Agw.Shared;
 using Agw.Shared.Exceptions;
 using Bens.Results;
@@ -127,21 +128,48 @@ public sealed class AuthControllerTests
         Assert.Null(stateStore.CreatedTokenName);
     }
 
+    [Fact]
+    public void Session_Bearer_ReturnsStableUserId()
+    {
+        var controller = CreateController(new StateStoreStub(), AgwAuthDefaults.BearerScheme, userId: "user-42");
+
+        var response = Assert.IsType<SessionResponse>(ReadApiResultData(controller.Session()));
+
+        Assert.True(response.Authenticated);
+        Assert.Equal("bearer", response.AccessMode);
+        Assert.Equal("user-42", response.UserId);
+    }
+
+    private static object ReadApiResultData(IActionResult result)
+    {
+        Assert.StartsWith("Bens.Results.ApiResult", result.GetType().FullName);
+        var property = result.GetType().GetProperty("Data");
+        Assert.NotNull(property);
+        var data = property.GetValue(result);
+        Assert.NotNull(data);
+        return data;
+    }
+
     private static AuthController CreateController(
         StateStoreStub stateStore,
         string? authenticationType,
         AuthenticationServiceStub? authenticationService = null,
         IPasswordHasher<object>? passwordHasher = null,
         AuthenticationAttemptLimiter? attemptLimiter = null,
-        TimeProvider? timeProvider = null
+        TimeProvider? timeProvider = null,
+        string userId = Constants.AdminUserId
     )
     {
         var authentication = authenticationService ?? new AuthenticationServiceStub();
         var services = new ServiceCollection()
             .AddSingleton<IAuthenticationService>(authentication)
             .BuildServiceProvider();
-        var identity = authenticationType == null ? new ClaimsIdentity() : new ClaimsIdentity([], authenticationType);
-        var httpContext = new DefaultHttpContext { RequestServices = services, User = new ClaimsPrincipal(identity) };
+        var identity =
+            authenticationType == null
+                ? new ClaimsIdentity()
+                : new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], authenticationType);
+        var principal = new ClaimsPrincipal(identity);
+        var httpContext = new DefaultHttpContext { RequestServices = services, User = principal };
 
         return new AuthController(
             stateStore,
@@ -149,11 +177,29 @@ public sealed class AuthControllerTests
             passwordHasher ?? new PasswordHasher<object>(),
             null!,
             attemptLimiter ?? new AuthenticationAttemptLimiter(),
-            timeProvider ?? TimeProvider.System
+            timeProvider ?? TimeProvider.System,
+            new UserInfoServiceStub(principal, authenticationType == null ? null : userId)
         )
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
+    }
+
+    private sealed class UserInfoServiceStub : IUserInfoService
+    {
+        public UserInfoServiceStub(ClaimsPrincipal current, string? userId)
+        {
+            Current = current;
+            UserId = userId;
+        }
+
+        public ClaimsPrincipal? Current { get; set; }
+
+        public string? UserId { get; }
+
+        public bool IsAuthenticated => Current?.Identity?.IsAuthenticated == true;
+
+        public string RequiredUserId => UserId ?? throw new AgwException(ErrorCodes.AuthenticationRequired);
     }
 
     private sealed class FixedTimeProvider : TimeProvider

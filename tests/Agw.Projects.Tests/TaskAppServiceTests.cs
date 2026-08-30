@@ -1,7 +1,5 @@
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
-using Agw.Projects.Application;
-using Agw.Shared.Contracts.Projects;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -183,20 +181,24 @@ public class TaskAppServiceTests
     private static TaskAppService CreateService(AgwDbContext dbContext)
     {
         var projectRepository = new EfRepository<Project>(dbContext);
+        var userInfo = new TestUserInfoService();
+        var projectResolver = new ProjectResolver(projectRepository, userInfo);
         var taskExecutionAppService = new TaskExecutionAppService(
             new EfRepository<ProjectConversation>(dbContext),
             new EfRepository<ProjectConversationChatHistory>(dbContext),
             dbContext,
             new Domain.Services.ProjectConversationChatHistoryDomainService(),
-            new ProjectResolver(projectRepository),
-            TimeProvider.System
+            projectResolver,
+            TimeProvider.System,
+            userInfo
         );
 
         return new TaskAppService(
             new EfRepository<ProjectConversation>(dbContext),
             new EfRepository<ProjectConversationChatHistory>(dbContext),
-            new ProjectResolver(projectRepository),
-            taskExecutionAppService
+            projectResolver,
+            taskExecutionAppService,
+            userInfo
         );
     }
 }

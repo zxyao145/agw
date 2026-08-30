@@ -2,7 +2,6 @@ using System.Text.Json;
 using Agw.Files.Abstracts;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Entities.Tools;
 using Agw.Tools.ToolBlocks.Blocks.ProjectMemory;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -126,7 +125,7 @@ public sealed class ProjectMemoryToolBlockTests
 
     private sealed class UnusedFileSystemResolver : IAgwFileSystemResolver
     {
-        public Task<IAgwFileSystem> ResolveAsync(Guid projectId, CancellationToken ct) =>
+        public Task<IAgwFileSystem?> ResolveAsync(Guid projectId, CancellationToken ct) =>
             throw new InvalidOperationException("The resolver should not be used during materialization.");
     }
 }

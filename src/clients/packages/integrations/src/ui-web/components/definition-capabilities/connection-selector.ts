@@ -29,7 +29,7 @@ export function buildConnectionSelectOptions(
       subtitle: [connection.connectorId, connection.status, connection.subject]
         .filter(Boolean)
         .join(" · "),
-      group: connection.status === "Ready" ? "Ready Connections" : "Existing Bindings",
+      group: connection.status === "Ready" ? "Ready integrations" : "Existing bindings",
     }));
 }
 
@@ -48,7 +48,7 @@ export function buildSelectedConnectionItems(
       : {
           id: connectionId,
           title: connectionId,
-          description: "Connection unavailable",
+          description: "Integration unavailable",
         };
   });
 }

@@ -4,13 +4,16 @@ import test from "node:test";
 
 const PAGE_URL = new URL("./page.tsx", import.meta.url);
 
-test("integrations page renders connections above plugin installations", async () => {
+test("integrations page renders configured integrations above available integrations", async () => {
   const source = await readFile(PAGE_URL, "utf8");
 
   assert.match(source, /<ConnectionCard/);
-  assert.match(source, /<h2 className="text-xl font-semibold">Connections<\/h2>/);
+  assert.match(source, /<h2 className="text-xl font-semibold">Configured integrations<\/h2>/);
   assert.match(source, /<PluginCard/);
-  assert.match(source, /Plugin installations/);
+  assert.match(source, /canConfigureInstallation=\{canConfigureInstallations\}/);
+  assert.match(source, /authSessionQuery\.data\?\.authenticated === true/);
+  assert.match(source, /queryFn: getAuthSession/);
+  assert.match(source, /Available integrations/);
   assert.match(source, /<ConnectionDialog/);
   assert.match(source, /<PluginInstallationDialog/);
   assert.match(source, /callbackUrl=\{callbackUrl\}/);

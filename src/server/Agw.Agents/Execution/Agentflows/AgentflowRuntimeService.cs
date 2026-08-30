@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Agw.Agents.Definitions.Domain.Topology;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Store;
@@ -8,14 +9,12 @@ using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Projects;
-using Agw.Shared.Data;
+using Agw.Auth.Contracts;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
-using Agw.Shared.Utils;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -40,7 +39,6 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
     private readonly IRepository<Agentflow> _agentflowRepository;
     private readonly IRepository<AgentflowNode> _agentflowNodeRepository;
     private readonly IRepository<AgentflowEdge> _agentflowEdgeRepository;
-    private readonly AgentflowDomainService _agentflowDomainService;
     private readonly IAgentRuntimeService _agentRuntimeService;
     private readonly IProviderSessionState _providerSessionState;
     private readonly IAgentTurnSummaryService _summaryService;
@@ -48,8 +46,10 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
     private readonly AgentSessionStateStore? _sessionStateStore;
     private readonly HumanInteractionContextAccessor? _humanInteractionContextAccessor;
     private readonly AgentflowCheckpointStore? _checkpointStore;
-    private readonly IRuntimeTurnContextAccessor? _turnContextAccessor;
+    private readonly IRuntimeTurnContextAccessor _turnContextAccessor;
     private readonly IConversationHandoffProvider? _conversationHandoffProvider;
+    private readonly IProjectDefaultResolver _projectDefaults;
+    private readonly IProjectRuntimeFacade _projectRuntimeFacade;
     private readonly AgentflowWorkflowCompiler _workflowCompiler = new();
 
     public AgentflowRuntimeService(
@@ -57,15 +57,16 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         IRepository<Agentflow> agentflowRepository,
         IRepository<AgentflowNode> agentflowNodeRepository,
         IRepository<AgentflowEdge> agentflowEdgeRepository,
-        AgentflowDomainService agentflowDomainService,
         IAgentRuntimeService agentRuntimeService,
         IProviderSessionState providerSessionState,
         IAgentTurnSummaryService summaryService,
+        IRuntimeTurnContextAccessor turnContextAccessor,
+        IProjectDefaultResolver projectDefaults,
+        IProjectRuntimeFacade projectRuntimeFacade,
         AgentSessionStateStore? sessionStateStore = null,
         IConversationHistoryWriter? conversationHistoryWriter = null,
         HumanInteractionContextAccessor? humanInteractionContextAccessor = null,
         AgentflowCheckpointStore? checkpointStore = null,
-        IRuntimeTurnContextAccessor? turnContextAccessor = null,
         IConversationHandoffProvider? conversationHandoffProvider = null
     )
     {
@@ -73,7 +74,6 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         _agentflowRepository = agentflowRepository;
         _agentflowNodeRepository = agentflowNodeRepository;
         _agentflowEdgeRepository = agentflowEdgeRepository;
-        _agentflowDomainService = agentflowDomainService;
         _agentRuntimeService = agentRuntimeService;
         _providerSessionState = providerSessionState;
         _summaryService = summaryService;
@@ -83,11 +83,13 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         _checkpointStore = checkpointStore;
         _turnContextAccessor = turnContextAccessor;
         _conversationHandoffProvider = conversationHandoffProvider;
+        _projectDefaults = projectDefaults;
+        _projectRuntimeFacade = projectRuntimeFacade;
     }
 
     public async Task<string?> GetMermaidAsync(Guid agentflowId, CancellationToken cancellationToken = default)
     {
-        var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
+        var agentflow = await GetVisibleAgentflowAsync(agentflowId);
         if (agentflow == null)
         {
             return null;
@@ -185,23 +187,31 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         AgentflowCheckpointSnapshot? resumeCheckpoint
     )
     {
-        var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
+        var agentflow = await GetVisibleAgentflowAsync(agentflowId);
         if (agentflow == null)
         {
-            yield break;
+            throw new AgwException(ErrorCodes.ResourceNotFound);
         }
 
-        var resolvedProjectId = ProjectDefaults.GetDefaultProjectIdentifier(projectId);
+        var resolvedProjectId = await ResolveProjectIdAsync(projectId, cancellationToken).ConfigureAwait(false);
+        if (!resolvedProjectId.HasValue)
+        {
+            throw new AgwException(ErrorCodes.ResourceNotFound);
+        }
+        if (!await IsProjectVisibleAsync(resolvedProjectId.Value, cancellationToken).ConfigureAwait(false))
+        {
+            throw new AgwException(ErrorCodes.ResourceNotFound);
+        }
+        var executionUserId = ResolveExecutionUserId();
         var resolvedContextId = ContextIdUtil.ResolveContextId(contextId);
-        ;
         var resolvedTaskId = taskId ?? Guid.CreateVersion7();
         var executionTraceContext = new AgentflowExecutionTraceContext(
-            resolvedProjectId,
+            resolvedProjectId.Value,
             resolvedContextId,
             resolvedTaskId
         );
         var sessionScope = await CreateSessionScopeAsync(
-                resolvedProjectId,
+                resolvedProjectId.Value,
                 resolvedContextId,
                 resolvedTaskId,
                 conversationId,
@@ -469,12 +479,12 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                     var checkpointMarkers = CreateCheckpointMarkers(pendingCheckpointRequests.Values);
                     var recorded = await RecordCheckpointAsync(
                             sourceExecutionId,
-                            resolvedProjectId,
+                            resolvedProjectId.Value,
                             sessionScope.ConversationId,
                             resolvedContextId,
                             resolvedTaskId,
                             agentflow.Id,
-                            _turnContextAccessor?.Current?.UserId ?? Constants.AdminUserId,
+                            executionUserId,
                             isDurable: false,
                             definitionFingerprint,
                             checkpointedRun.Store,
@@ -523,21 +533,30 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             return CreateDurableFailure(input, "Human interaction context is unavailable.");
         }
 
-        var agentflow = await _agentflowRepository.GetByIdAsync(manifest.AgentId);
+        var agentflow = await GetVisibleAgentflowAsync(manifest.AgentId);
         if (agentflow == null)
         {
             return CreateDurableFailure(input, "Agentflow could not be found.");
         }
 
-        var resolvedProjectId = ProjectDefaults.GetDefaultProjectIdentifier(manifest.Task.ProjectId);
+        var resolvedProjectId = await ResolveProjectIdAsync(manifest.Task.ProjectId, cancellationToken)
+            .ConfigureAwait(false);
+        if (!resolvedProjectId.HasValue)
+        {
+            return CreateDurableFailure(input, "The default project was not found.");
+        }
+        if (!await IsProjectVisibleAsync(resolvedProjectId.Value, cancellationToken).ConfigureAwait(false))
+        {
+            return CreateDurableFailure(input, "The project was not found.");
+        }
         var resolvedContextId = ContextIdUtil.ResolveContextId(manifest.Task.ContextId);
         var executionTraceContext = new AgentflowExecutionTraceContext(
-            resolvedProjectId,
+            resolvedProjectId.Value,
             resolvedContextId,
             manifest.Task.TaskId
         );
         var sessionScope = await CreateSessionScopeAsync(
-                resolvedProjectId,
+                resolvedProjectId.Value,
                 resolvedContextId,
                 manifest.Task.TaskId,
                 manifest.Task.ProjectConversationId,
@@ -718,7 +737,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                         var waitingCheckpointMarkers = CreateCheckpointMarkers(pendingCheckpointRequests.Values);
                         var waitingCheckpoint = await RecordCheckpointAsync(
                                 input.ExecutionId,
-                                resolvedProjectId,
+                                resolvedProjectId.Value,
                                 sessionScope.ConversationId,
                                 resolvedContextId,
                                 manifest.Task.TaskId,
@@ -780,7 +799,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                         var checkpointMarkers = CreateCheckpointMarkers(pendingCheckpointRequests.Values);
                         var recordedCheckpoint = await RecordCheckpointAsync(
                                 input.ExecutionId,
-                                resolvedProjectId,
+                                resolvedProjectId.Value,
                                 sessionScope.ConversationId,
                                 resolvedContextId,
                                 manifest.Task.TaskId,
@@ -851,14 +870,17 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         string? contextId = null
     )
     {
-        return await ExecuteAsync(
-                agentflowId,
-                ProjectDefaults.GetDefaultProjectIdentifier(projectId),
-                taskId,
-                messages,
-                cancellationToken,
-                contextId
-            )
+        var resolvedProjectId = await ResolveProjectIdAsync(projectId, cancellationToken).ConfigureAwait(false);
+        if (!resolvedProjectId.HasValue)
+        {
+            return null;
+        }
+        if (!await IsProjectVisibleAsync(resolvedProjectId.Value, cancellationToken).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        return await ExecuteAsync(agentflowId, resolvedProjectId.Value, taskId, messages, cancellationToken, contextId)
             .ConfigureAwait(false);
     }
 
@@ -867,7 +889,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         CancellationToken cancellationToken = default
     )
     {
-        var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
+        var agentflow = await GetVisibleAgentflowAsync(agentflowId);
         if (agentflow == null)
         {
             return null;
@@ -928,7 +950,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         bool deferHumanInteractions = false
     )
     {
-        var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
+        var agentflow = await GetVisibleAgentflowAsync(agentflowId);
         if (agentflow == null)
         {
             return null;
@@ -956,7 +978,12 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         string? contextId = null
     )
     {
-        var agentflow = await _agentflowRepository.GetByIdAsync(agentflowId);
+        if (!await IsProjectVisibleAsync(projectId, cancellationToken).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        var agentflow = await GetVisibleAgentflowAsync(agentflowId);
         if (agentflow == null)
         {
             return null;
@@ -1122,7 +1149,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             return null;
         }
 
-        var orderedNodes = _agentflowDomainService.OrderNodesByEdges(agentflowNodes, agentflowEdges);
+        var orderedNodes = AgentflowTopology.OrderNodesByEdges(agentflowNodes, agentflowEdges);
         var nodeIdToAgent = new Dictionary<string, AIAgent>(StringComparer.Ordinal);
         var resources = new AgentResourceLease();
 
@@ -1148,8 +1175,15 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                 }
                 else if (node.Kind == AgentflowNodeKind.WorkflowAsAgent && node.RelateId.HasValue)
                 {
+                    var relatedAgentflow = await GetVisibleAgentflowAsync(node.RelateId.Value).ConfigureAwait(false);
+                    if (relatedAgentflow == null)
+                    {
+                        await DisposeWorkflowResourcesWithoutThrowingAsync(resources).ConfigureAwait(false);
+                        return null;
+                    }
+
                     var flowNode = await CreateAiWorkflow(
-                        node.RelateId.Value,
+                        relatedAgentflow,
                         cancellationToken,
                         sessionScope,
                         executionTraceContext,
@@ -1334,6 +1368,54 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             item => new CheckpointRequestNode(item.NodeId, AgentflowWorkflowCompiler.ResolveCheckpointName(item)),
             StringComparer.Ordinal
         );
+    }
+
+    private async Task<Agentflow?> GetVisibleAgentflowAsync(Guid agentflowId)
+    {
+        var ownerUserId = ResolveExecutionUserId();
+        var flows = await _agentflowRepository
+            .ListAsync(agentflow => agentflow.Id == agentflowId && agentflow.CreateBy == ownerUserId)
+            .ConfigureAwait(false);
+        return flows.FirstOrDefault();
+    }
+
+    private async Task<Guid?> ResolveProjectIdAsync(Guid? projectId, CancellationToken cancellationToken)
+    {
+        if (
+            projectId.HasValue
+            && projectId.Value != Guid.Empty
+            && projectId.Value != ProjectDefaults.DefaultBuiltInId
+            && projectId.Value != ProjectDefaults.A2AId
+        )
+        {
+            return projectId.Value;
+        }
+
+        return projectId == ProjectDefaults.A2AId
+            ? await _projectDefaults.ResolveA2AProjectIdAsync(cancellationToken).ConfigureAwait(false)
+            : await _projectDefaults.ResolveDefaultProjectIdAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private string ResolveExecutionUserId()
+    {
+        return TryResolveExecutionUserId() ?? throw new AgwException(ErrorCodes.AuthenticationRequired);
+    }
+
+    private string? TryResolveExecutionUserId()
+    {
+        if (UserInfoUtil.IsContextActive)
+        {
+            return UserInfoUtil.RequiredUserId;
+        }
+
+        var userId = _turnContextAccessor.Current?.UserId;
+        return string.IsNullOrWhiteSpace(userId) ? null : userId.Trim();
+    }
+
+    private async Task<bool> IsProjectVisibleAsync(Guid projectId, CancellationToken cancellationToken)
+    {
+        return await _projectRuntimeFacade.GetForCurrentUserAsync(projectId, cancellationToken).ConfigureAwait(false)
+            != null;
     }
 
     private static bool TryCreateCheckpointRequest(

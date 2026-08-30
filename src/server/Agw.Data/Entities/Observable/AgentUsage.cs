@@ -11,6 +11,8 @@ public class AgentUsage
 
     public Guid ProjectId { get; set; }
 
+    public string UserId { get; set; } = string.Empty;
+
     public string ContextId { get; set; } = string.Empty;
 
     public string AgentName { get; set; } = string.Empty;

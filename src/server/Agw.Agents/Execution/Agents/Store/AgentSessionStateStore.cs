@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Agw.Auth.Contracts;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agents;
@@ -118,6 +119,12 @@ public sealed class AgentSessionStateStore
             return;
         }
 
+        if (!UserInfoUtil.IsContextActive)
+        {
+            return;
+        }
+
+        var ownerUserId = UserInfoUtil.RequiredUserId;
         var serializedSession = await aiAgent
             .SerializeSessionAsync(session, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
@@ -152,13 +159,31 @@ public sealed class AgentSessionStateStore
 
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
+        if (
+            !await dbContext
+                .Set<Agw.Shared.Data.Entities.Projects.ProjectConversation>()
+                .AnyAsync(
+                    conversation =>
+                        conversation.Id == projectConversationId.Value
+                        && conversation.ProjectId == sessionScope.ProjectId
+                        && conversation.CreateBy == ownerUserId
+                        && conversation.Project!.CreateBy == ownerUserId,
+                    cancellationToken
+                )
+                .ConfigureAwait(false)
+        )
+        {
+            return;
+        }
         var entry = await dbContext
             .Set<AgentSessionStateEntry>()
             .SingleOrDefaultAsync(
                 item =>
                     item.ProjectConversationId == projectConversationId.Value
                     && item.AgentId == sessionScope.AgentId
-                    && item.AgentflowNodeId == sessionScope.AgentflowNodeId,
+                    && item.AgentflowNodeId == sessionScope.AgentflowNodeId
+                    && item.ProjectConversation!.CreateBy == ownerUserId
+                    && item.ProjectConversation.Project!.CreateBy == ownerUserId,
                 cancellationToken
             )
             .ConfigureAwait(false);
@@ -194,6 +219,12 @@ public sealed class AgentSessionStateStore
 
     private async Task<string> ReadAsync(AgentSessionStateScope sessionScope, CancellationToken cancellationToken)
     {
+        if (!UserInfoUtil.IsContextActive)
+        {
+            return string.Empty;
+        }
+
+        var ownerUserId = UserInfoUtil.RequiredUserId;
         if (_serviceScopeFactory == null)
         {
             return await _cache!
@@ -221,6 +252,9 @@ public sealed class AgentSessionStateStore
                     item.ProjectConversationId == projectConversationId.Value
                     && item.AgentId == sessionScope.AgentId
                     && item.AgentflowNodeId == sessionScope.AgentflowNodeId
+                    && item.ProjectConversation!.ProjectId == sessionScope.ProjectId
+                    && item.ProjectConversation.CreateBy == ownerUserId
+                    && item.ProjectConversation.Project!.CreateBy == ownerUserId
                 )
                 .Select(item => item.SerializedSession)
                 .SingleOrDefaultAsync(cancellationToken)
@@ -233,9 +267,33 @@ public sealed class AgentSessionStateStore
         CancellationToken cancellationToken
     )
     {
+        if (!UserInfoUtil.IsContextActive)
+        {
+            return null;
+        }
+
+        var ownerUserId = UserInfoUtil.RequiredUserId;
         if (sessionScope.ProjectConversationId != Guid.Empty)
         {
-            return sessionScope.ProjectConversationId;
+            if (_serviceScopeFactory == null)
+            {
+                return sessionScope.ProjectConversationId;
+            }
+
+            await using var scope = _serviceScopeFactory.CreateAsyncScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
+            return await dbContext
+                .Set<Agw.Shared.Data.Entities.Projects.ProjectConversation>()
+                .AsNoTracking()
+                .Where(context =>
+                    context.Id == sessionScope.ProjectConversationId
+                    && context.ProjectId == sessionScope.ProjectId
+                    && context.CreateBy == ownerUserId
+                    && context.Project!.CreateBy == ownerUserId
+                )
+                .Select(context => (Guid?)context.Id)
+                .SingleOrDefaultAsync(cancellationToken)
+                .ConfigureAwait(false);
         }
 
         return await ResolveProjectConversationIdAsync(
@@ -252,17 +310,23 @@ public sealed class AgentSessionStateStore
         CancellationToken cancellationToken
     )
     {
-        if (_serviceScopeFactory == null)
+        if (!UserInfoUtil.IsContextActive || _serviceScopeFactory == null)
         {
             return null;
         }
 
+        var ownerUserId = UserInfoUtil.RequiredUserId;
         await using var scope = _serviceScopeFactory!.CreateAsyncScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
         return await dbContext
             .Set<Agw.Shared.Data.Entities.Projects.ProjectConversation>()
             .AsNoTracking()
-            .Where(context => context.ProjectId == projectId && context.ContextId == contextId)
+            .Where(context =>
+                context.ProjectId == projectId
+                && context.ContextId == contextId
+                && context.CreateBy == ownerUserId
+                && context.Project!.CreateBy == ownerUserId
+            )
             .Select(context => (Guid?)context.Id)
             .SingleOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -270,6 +334,12 @@ public sealed class AgentSessionStateStore
 
     private async Task<AgentType?> GetAgentTypeAsync(Guid agentId, CancellationToken cancellationToken)
     {
+        if (!UserInfoUtil.IsContextActive)
+        {
+            return null;
+        }
+
+        var ownerUserId = UserInfoUtil.RequiredUserId;
         if (_serviceScopeFactory == null)
         {
             return AgentType.System;
@@ -280,7 +350,7 @@ public sealed class AgentSessionStateStore
         return await dbContext
             .Set<Agent>()
             .AsNoTracking()
-            .Where(agent => agent.Id == agentId)
+            .Where(agent => agent.Id == agentId && agent.CreateBy == ownerUserId)
             .Select(agent => (AgentType?)agent.Type)
             .SingleOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);

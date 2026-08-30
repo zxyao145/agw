@@ -249,7 +249,7 @@ public static class ErrorCodes
     );
     public static readonly ErrorCode IntegrationAliasInvalid = new(
         400_0061,
-        "Connection alias must use lowercase kebab-case.",
+        "Integration alias must use lowercase kebab-case.",
         HttpStatusCode.BadRequest
     );
     public static readonly ErrorCode OAuthReturnPathInvalid = new(
@@ -349,6 +349,11 @@ public static class ErrorCodes
         "Tool is not available in plan mode.",
         HttpStatusCode.Forbidden
     );
+    public static readonly ErrorCode AdministratorRequired = new(
+        403_0004,
+        "Administrator access is required.",
+        HttpStatusCode.Forbidden
+    );
 
     public static readonly ErrorCode FileNotFound = new(404_0001, "File was not found.", HttpStatusCode.NotFound);
     public static readonly ErrorCode DirectoryNotFound = new(
@@ -380,7 +385,7 @@ public static class ErrorCodes
     );
     public static readonly ErrorCode ConnectionNotFound = new(
         404_0009,
-        "Connection was not found.",
+        "Integration was not found.",
         HttpStatusCode.NotFound
     );
     public static readonly ErrorCode GitHubProjectWorkspaceNotFound = new(
@@ -436,12 +441,12 @@ public static class ErrorCodes
     );
     public static readonly ErrorCode ConnectionAliasAlreadyExists = new(
         409_0008,
-        "Connection alias already exists.",
+        "Integration alias already exists.",
         HttpStatusCode.Conflict
     );
     public static readonly ErrorCode ConnectionAliasImmutable = new(
         409_0009,
-        "Connection alias cannot be changed.",
+        "Integration alias cannot be changed.",
         HttpStatusCode.Conflict
     );
     public static readonly ErrorCode IntegrationToolNameConflict = new(
@@ -477,6 +482,11 @@ public static class ErrorCodes
     public static readonly ErrorCode UserMemoryNameAlreadyExists = new(
         409_0016,
         "A user memory with this name already exists.",
+        HttpStatusCode.Conflict
+    );
+    public static readonly ErrorCode JobActiveAttemptConflict = new(
+        409_0017,
+        "A Job with an active attempt cannot be updated or deleted.",
         HttpStatusCode.Conflict
     );
 
@@ -599,6 +609,11 @@ public static class ErrorCodes
     public static readonly ErrorCode RemoteSkillConfigurationInvalid = new(
         500_0025,
         "Stored remote skill configuration is invalid.",
+        HttpStatusCode.InternalServerError
+    );
+    public static readonly ErrorCode ToolExecutionFailed = new(
+        500_0026,
+        "Tool execution failed.",
         HttpStatusCode.InternalServerError
     );
 

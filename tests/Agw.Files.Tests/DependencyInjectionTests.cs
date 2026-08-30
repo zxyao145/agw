@@ -72,6 +72,44 @@ public class DependencyInjectionTests
     }
 
     [Fact]
+    public async Task ResolveAsync_WhenWorkspaceChanges_RebuildsCachedFileSystem()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var projectId = Guid.CreateVersion7();
+        var root = Path.Combine(Path.GetTempPath(), "agw-files-tests", Guid.CreateVersion7().ToString("N"));
+        var firstWorkspace = Path.Combine(root, "first");
+        var secondWorkspace = Path.Combine(root, "second");
+        Directory.CreateDirectory(firstWorkspace);
+        Directory.CreateDirectory(secondWorkspace);
+
+        try
+        {
+            var configuration = new TestProjectFileSystemConfigurationProvider(firstWorkspace);
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.AddSingleton<IProjectFileSystemConfigurationProvider>(configuration);
+            services.AddFiles(new ConfigurationBuilder().Build());
+
+            await using var serviceProvider = services.BuildServiceProvider();
+            var resolver = serviceProvider.GetRequiredService<IAgwFileSystemResolver>();
+            var first = await resolver.ResolveAsync(projectId, cancellationToken);
+
+            configuration.Workspace = secondWorkspace;
+            var second = await resolver.ResolveAsync(projectId, cancellationToken);
+
+            Assert.NotSame(first, second);
+            Assert.Equal(
+                Path.GetFullPath(secondWorkspace).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar,
+                Assert.IsType<LocalFileSystem>(second).NormalizedRoot
+            );
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ResolveAsync_ProjectWithoutWorkspace_CreatesDefaultWorkspaceDirectory()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -80,7 +118,8 @@ public class DependencyInjectionTests
         var expectedWorkspace = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
             ".agw",
-            projectName
+            "projects",
+            projectId.ToString("N")
         );
 
         try
@@ -115,19 +154,19 @@ public class DependencyInjectionTests
 
     private sealed class TestProjectFileSystemConfigurationProvider : IProjectFileSystemConfigurationProvider
     {
-        private readonly string? _workspace;
+        public string? Workspace { get; set; }
         private readonly string _projectName;
 
         public TestProjectFileSystemConfigurationProvider(string? workspace, string projectName = "Test Project")
         {
-            _workspace = workspace;
+            Workspace = workspace;
             _projectName = projectName;
         }
 
         public Task<ProjectFileSystemConfiguration?> GetAsync(Guid projectId, CancellationToken cancellationToken)
         {
             return Task.FromResult<ProjectFileSystemConfiguration?>(
-                new ProjectFileSystemConfiguration(_projectName, _workspace)
+                new ProjectFileSystemConfiguration(_projectName, Workspace, "test-user")
             );
         }
     }

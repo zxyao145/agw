@@ -231,6 +231,20 @@ filesystem, while Project Memory may use either database or workspace storage.
 User Memory automatically injects up to 50 complete bodies. Additional entries
 remain available through `user_memory_list` and `user_memory_read`.
 
+### User Memory management API
+
+Authenticated management endpoints are scoped by the principal's stable user ID and return Bens.Results envelopes:
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/user-memories/paged?pageIndex=1&pageSize=20` | List the current user's summaries without encrypted bodies. |
+| `GET` | `/api/user-memories/detail?id={id}` | Read one owned memory. |
+| `POST` | `/api/user-memories` | Create a memory from `name`, `description`, and Markdown `content`. |
+| `PUT` | `/api/user-memories` | Update an owned memory by body `id`. |
+| `DELETE` | `/api/user-memories?id={id}` | Delete an owned memory. |
+
+An ID owned by another user is never exposed through these queries. API Token requests use the Token creator's user ID.
+
 Tool Approval is an Agent pipeline concern. A Tool or ToolBlock contributes
 auto-approval rules where appropriate, while `AsAgwAgent` applies the approval
 middleware consistently. File writes and shell execution remain approval

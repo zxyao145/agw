@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using Agw.Files.Abstracts;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Entities.Tools;
 using Agw.Tools.ToolBlocks.Blocks.BackgroundAgents;
 using Agw.Tools.ToolBlocks.Blocks.FileAccess;
 using Microsoft.Agents.AI;
@@ -70,7 +69,7 @@ public sealed class PlanModeToolBlockMetadataTests
 
     private sealed class UnusedFileSystemResolver : IAgwFileSystemResolver
     {
-        public Task<IAgwFileSystem> ResolveAsync(Guid projectId, CancellationToken ct) =>
+        public Task<IAgwFileSystem?> ResolveAsync(Guid projectId, CancellationToken ct) =>
             throw new InvalidOperationException("The resolver should not be used during materialization.");
     }
 

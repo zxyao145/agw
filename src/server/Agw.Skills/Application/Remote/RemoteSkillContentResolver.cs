@@ -1,6 +1,7 @@
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
+using Agw.Skills.Contracts.Remote;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -55,7 +56,7 @@ public sealed class RemoteSkillContentResolver : IRemoteSkillContentResolver
 
         await SaveCacheAsync(state.Skill, definition, cancellationToken);
         _logger.LogInformation(
-            "Refreshed shared remote skill cache for {SkillId} from {RemoteUrl}",
+            "Refreshed remote skill cache for {SkillId} from {RemoteUrl}",
             state.Skill.Id,
             state.Skill.RemoteUrl
         );

@@ -1,15 +1,14 @@
 using System.Runtime.CompilerServices;
+using System.Security.Claims;
 using System.Text.Json;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Tools;
 using Agw.Agents.Execution.Runtimes;
-using Agw.Domain.Services;
 using Agw.Infrastructure.Data;
-using Agw.Shared.AgwMsgVm;
-using Agw.Shared.Contracts.Agents;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Compaction;
 using Microsoft.Data.Sqlite;
@@ -21,8 +20,16 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
-public sealed class AgwAgentExtensionsTests
+public sealed class AgwAgentExtensionsTests : IDisposable
 {
+    private readonly IDisposable _userScope = UserInfoUtil.Push(
+        new ClaimsPrincipal(
+            new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], authenticationType: "Test")
+        )
+    );
+
+    public void Dispose() => _userScope.Dispose();
+
     [Fact]
     public async Task AsAgwAgent_OwnedCapabilities_DisposeConfiguredChatClientPipeline()
     {
@@ -95,6 +102,45 @@ public sealed class AgwAgentExtensionsTests
 
         Assert.Equal(3, strategy.InvocationCount);
         Assert.Equal([64_000, 64_000, 64_000], client.MaxOutputTokens);
+    }
+
+    [Fact]
+    public async Task AsAgwAgent_NonStreamingToolException_ReturnsSanitizedResultAndContinuesModelLoop()
+    {
+        // Arrange
+        var function = AIFunctionFactory.Create(
+            (Func<string>)(() => throw new InvalidOperationException("secret implementation detail")),
+            new AIFunctionFactoryOptions { Name = "web_search" }
+        );
+        var client = new FunctionCallingStubChatClient();
+        var agent = client.AsAgwAgent(
+            CreateDefinition(new InMemoryChatHistoryProvider()),
+            CreateCapabilities(tools: [function]),
+            NullLoggerFactory.Instance,
+            new ServiceCollection().BuildServiceProvider()
+        );
+
+        // Act
+        var response = await agent.RunAsync(
+            [new ChatMessage(ChatRole.User, "search")],
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+
+        // Assert
+        Assert.Contains(response.Messages, message => message.Text == "done");
+        Assert.Equal(2, client.Requests.Count);
+        var functionResult = Assert.Single(
+            client
+                .Requests.SelectMany(static messages => messages)
+                .SelectMany(message => message.Contents)
+                .OfType<FunctionResultContent>()
+        );
+        var payload = JsonSerializer.SerializeToElement(functionResult.Result);
+        Assert.True(payload.TryGetProperty("isError", out var isError), payload.GetRawText());
+        Assert.True(isError.GetBoolean());
+        Assert.Equal(ErrorCodes.ToolExecutionFailed.Code, payload.GetProperty("code").GetInt32());
+        Assert.Equal(ErrorCodes.ToolExecutionFailed.Message, payload.GetProperty("message").GetString());
+        Assert.DoesNotContain("secret implementation detail", payload.GetRawText(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -787,6 +833,11 @@ public sealed class AgwAgentExtensionsTests
         Assert.Equal(ChatRole.Tool, secondRequest[functionResultIndex].Role);
         Assert.Equal(ChatRole.Assistant, secondRequest[functionResultIndex - 1].Role);
         Assert.Equal(functionCall.CallId, functionResult.CallId);
+        var errorPayload = JsonSerializer.SerializeToElement(functionResult.Result);
+        Assert.True(errorPayload.GetProperty("isError").GetBoolean());
+        Assert.Equal(ErrorCodes.ToolExecutionFailed.Code, errorPayload.GetProperty("code").GetInt32());
+        Assert.Equal(ErrorCodes.ToolExecutionFailed.Message, errorPayload.GetProperty("message").GetString());
+        Assert.DoesNotContain("old_string not found", errorPayload.GetRawText(), StringComparison.Ordinal);
 
         await using var verifyContext = new AgwDbContext(options);
         var records = await verifyContext

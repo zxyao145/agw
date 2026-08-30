@@ -1,6 +1,5 @@
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Turns;
-using Agw.Shared.AgwMsgVm;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.Logging;
 
@@ -102,6 +101,6 @@ internal sealed class ExecutionStreamMessageSink : IExecutionMessageSink
             is "human-interaction-request"
                 or "tool-approval-request"
                 or "human-gate-request"
-                or "turn-finished";
+                or TurnMessageProtocol.FinishedType;
     }
 }
