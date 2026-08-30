@@ -12,8 +12,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Agw.ControlPlane.Host\Agw.ControlPlane.Host.csproj" />
-    <ProjectReference Include="..\Agw.DataPlane.Host\Agw.DataPlane.Host.csproj" />
+    <ProjectReference
+      Include="..\Agw.ControlPlane.Host\Agw.ControlPlane.Host.csproj"
+      GlobalPropertiesToRemove="SelfContained"
+    />
+    <ProjectReference
+      Include="..\Agw.DataPlane.Host\Agw.DataPlane.Host.csproj"
+      GlobalPropertiesToRemove="SelfContained"
+    />
     <ProjectReference Include="..\Agw.Host\Agw.Host.csproj" />
   </ItemGroup>
 

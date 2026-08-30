@@ -153,7 +153,7 @@ test("deleteAllProjectContexts returns false and skips fetch when project id is 
   assert.equal(fetchCalled, false);
 });
 
-test("getProjectConversations gets conversation list for a project", async (t) => {
+test("getProjectConversations gets the complete conversation list for a project", async (t) => {
   const originalFetch = globalThis.fetch;
   const requests: Array<{ url: string; init?: RequestInit }> = [];
 
@@ -212,15 +212,19 @@ test("getProjectConversations gets conversation list for a project", async (t) =
 
   const result = await getProjectConversations("project-1");
 
-  assert.equal(result.length, 2);
-  assert.equal(result[0].conversationId, "11111111-1111-1111-1111-000000000002");
-  assert.equal(result[0].contextId, "context-1");
-  assert.equal(result[0].jobId, "job-1");
-  assert.equal(result[0].executionCount, 2);
-  assert.equal(result[1].conversationId, "11111111-1111-1111-1111-000000000003");
-  assert.equal(result[1].contextId, "context-cleared");
-  assert.equal(result[1].executionCount, 0);
-  assert.equal(result[1].messageCount, 0);
+  assert.equal(result.length, 3);
+  assert.equal(result[0].conversationId, "11111111-1111-1111-1111-000000000001");
+  assert.equal(result[0].contextId, "context-empty");
+  assert.equal(result[0].executionCount, 1);
+  assert.equal(result[0].messageCount, 0);
+  assert.equal(result[1].conversationId, "11111111-1111-1111-1111-000000000002");
+  assert.equal(result[1].contextId, "context-1");
+  assert.equal(result[1].jobId, "job-1");
+  assert.equal(result[1].executionCount, 2);
+  assert.equal(result[2].conversationId, "11111111-1111-1111-1111-000000000003");
+  assert.equal(result[2].contextId, "context-cleared");
+  assert.equal(result[2].executionCount, 0);
+  assert.equal(result[2].messageCount, 0);
   assert.deepEqual(requests, [
     {
       url: "/api/projects/project-1/conversations",
