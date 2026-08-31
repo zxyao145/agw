@@ -24,6 +24,7 @@ public class DbSeederTests : IDisposable
     private static readonly Guid ModelProviderId = Guid.Parse("11111111-1111-1111-5555-000000000001");
     private static readonly Guid SkillId = Guid.Parse("11111111-1111-1111-8888-000000000001");
     private static readonly Guid JobManagementSkillId = Guid.Parse("11111111-1111-1111-8888-000000000002");
+    private static readonly Guid PiAgentId = Guid.Parse("11111111-1111-1111-2222-000000000004");
     private readonly IDisposable _systemScope = UserInfoUtil.PushSystemScope();
 
     public void Dispose() => _systemScope.Dispose();
@@ -49,6 +50,15 @@ public class DbSeederTests : IDisposable
             );
 
             await seeder.SeedAsync();
+            var seededPi = await context.Agents.SingleAsync(
+                agent => agent.Id == PiAgentId,
+                TestContext.Current.CancellationToken
+            );
+            context.Agents.Remove(seededPi);
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+            // Simulate an upgraded database where older External Agents exist but Pi is missing.
+            await seeder.SeedAsync();
             await seeder.SeedAsync();
 
             var projects = await context.Projects.ToListAsync(TestContext.Current.CancellationToken);
@@ -57,7 +67,14 @@ public class DbSeederTests : IDisposable
             Assert.All(projects, project => Assert.Equal(Constants.AdminUserId, project.UpdateBy));
             Assert.DoesNotContain(projects, project => project.Name == "claude-code");
             Assert.DoesNotContain(projects, project => project.Name == "codex");
-            Assert.Equal(5, await context.Agents.CountAsync(TestContext.Current.CancellationToken));
+            Assert.Equal(6, await context.Agents.CountAsync(TestContext.Current.CancellationToken));
+            var piAgent = await context.Agents.SingleAsync(
+                agent => agent.Id == PiAgentId,
+                TestContext.Current.CancellationToken
+            );
+            Assert.Equal("Pi", piAgent.Name);
+            Assert.Equal(AgentType.External, piAgent.Type);
+            Assert.Equal(Constants.AdminUserId, piAgent.CreateBy);
 
             var model = await context
                 .Models.Include(x => x.Providers)

@@ -3,6 +3,7 @@ using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.ExternalAgents;
 using Agw.Agents.ExternalAgents.ClaudeCode;
+using Agw.Agents.ExternalAgents.Pi;
 using Agw.Files.Utils;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
@@ -14,11 +15,22 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
 using OpenAI.CodexSdk;
 using OpenAI.CodexSdk.MAF;
+using PiAgentSdk;
+using PiAgentSdk.MAF;
 
 namespace Agw.Agents.Execution.Agents;
 
 public partial class AgentRuntimeService
 {
+    private static readonly HashSet<string> PiReservedEnvironmentKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "PI_CODING_AGENT_DIR",
+        "PI_CODING_AGENT_SESSION_DIR",
+        "PI_OFFLINE",
+        "PI_SKIP_VERSION_CHECK",
+        "PI_TELEMETRY",
+    };
+
     private bool TryCreateExternalAgent(
         CreateAiAgentRequest request,
         Project project,
@@ -27,38 +39,50 @@ public partial class AgentRuntimeService
         bool isBackground = false
     )
     {
-        aiAgent = null;
-        if (request.Agent.Type != AgentType.External)
+        var kind = ExternalAgentKindResolver.Resolve(request.Agent);
+        aiAgent = kind switch
         {
-            return false;
-        }
-
-        aiAgent = request.Agent.Name switch
-        {
-            AgentNames.ClaudeCode => CreateClaudeCodeAgent(
+            ExternalAgentKind.ClaudeCode => CreateClaudeCodeAgent(
                 project,
                 request.ProviderSessionId,
                 request.IsResume,
                 environmentVariables,
                 isBackground
             ),
-            AgentNames.Codex => CreateCodexAgent(
+            ExternalAgentKind.Codex => CreateCodexAgent(
                 project,
                 request.ProviderSessionId,
                 request.IsResume,
                 environmentVariables,
                 request.OnExternalSessionStartedAsync
             ),
+            ExternalAgentKind.Pi => CreatePiAgent(
+                project,
+                request.ProviderSessionId,
+                request.IsResume,
+                environmentVariables,
+                request.OnExternalSessionStartedAsync,
+                isBackground
+            ),
             _ => null,
         };
 
-        if (aiAgent != null)
+        if (aiAgent == null)
         {
-            aiAgent = IsClaudeCodeExternalAgent(request.Agent)
-                ? WrapClaudeCodeAgent(aiAgent, isBackground, request.OnExternalSessionStartedAsync)
-                : WrapExternalAgent(aiAgent, isBackground);
+            return false;
         }
 
+        aiAgent = kind switch
+        {
+            ExternalAgentKind.ClaudeCode => WrapClaudeCodeAgent(
+                aiAgent,
+                isBackground,
+                request.OnExternalSessionStartedAsync
+            ),
+            ExternalAgentKind.Codex => WrapExternalAgent(aiAgent, isBackground),
+            ExternalAgentKind.Pi => aiAgent,
+            _ => null,
+        };
         return aiAgent != null;
     }
 
@@ -81,6 +105,11 @@ public partial class AgentRuntimeService
 
         return DecorateExternalAgent(aiAgent, isBackground);
     }
+
+    internal AIAgent WrapPiAgent(AIAgent aiAgent, bool isBackground) => DecorateExternalAgent(aiAgent, isBackground);
+
+    internal AIAgent WrapPiAgent(AIAgent aiAgent, IAsyncDisposable ownedResource, bool isBackground) =>
+        new ResourceOwningAIAgent(WrapPiAgent(aiAgent, isBackground), ownedResource);
 
     private AIAgent DecorateExternalAgent(AIAgent aiAgent, bool isBackground)
     {
@@ -218,6 +247,148 @@ public partial class AgentRuntimeService
 
         options = DisableExternalSdkChatHistoryPersistence(options);
         return new CodexAIAgent(options, _logger);
+    }
+
+    private AIAgent? CreatePiAgent(
+        Project project,
+        Guid? providerSessionId,
+        bool isResume,
+        IReadOnlyDictionary<string, string>? environmentVariables,
+        Func<string, CancellationToken, ValueTask>? onSessionStartedAsync,
+        bool isBackground
+    )
+    {
+        string? extra = project.ExtraSetting;
+        if (string.IsNullOrWhiteSpace(extra) || IsEmptyJsonObject(extra))
+        {
+            extra = JsonUtil.Serialize(new PiAgentAIAgentOptions());
+        }
+
+        var paths = PiRuntimePaths.Create(_dataPaths, ResolveExecutionUserId());
+        paths.EnsureCreated();
+        var interactionBridge = new PiExtensionUiBridge(
+            _humanInteractionContextAccessor,
+            allowInteraction: !isBackground
+        );
+        var options = BuildPiAgentAIAgentOptions(
+            extra,
+            PathUtil.ExpandTilde(project.Workspace),
+            paths.ConfigDirectory,
+            paths.SessionDirectory,
+            providerSessionId,
+            isResume,
+            environmentVariables,
+            new PiChatHistoryProvider(_chatHistoryProvider),
+            interactionBridge.HandleAsync,
+            onSessionStartedAsync,
+            _piExternalAgentOptions.Extensions,
+            _piExternalAgentOptions.HistoryPersistenceTimeout
+        );
+        if (options == null)
+        {
+            _logger.LogError("agent.Extra Deserialize to Pi options error");
+            return null;
+        }
+
+        var piAgent = new PiAgentAIAgent(options, _logger);
+        var interactionAgent = piAgent
+            .AsBuilder()
+            .Use(runFunc: interactionBridge.BindRunAsync, runStreamingFunc: interactionBridge.BindRunStreamingAsync)
+            .Build();
+        // MAF builder proxies do not retain IAsyncDisposable, so keep the concrete process owner outside the full chain.
+        return WrapPiAgent(interactionAgent, piAgent, isBackground);
+    }
+
+    internal static PiAgentAIAgentOptions? BuildPiAgentAIAgentOptions(
+        string extra,
+        string? workspace,
+        string configDirectory,
+        string sessionDirectory,
+        Guid? providerSessionId,
+        bool isResume,
+        IReadOnlyDictionary<string, string>? environmentVariables,
+        ChatHistoryProvider chatHistoryProvider,
+        Func<PiExtensionUiRequest, CancellationToken, ValueTask<PiExtensionUiResponse>> extensionUiHandler,
+        Func<string, CancellationToken, ValueTask>? onSessionStartedAsync,
+        IReadOnlyList<string>? trustedExtensions = null,
+        TimeSpan? historyPersistenceTimeout = null
+    )
+    {
+        var options = JsonUtil.Deserialize<PiAgentAIAgentOptions>(extra);
+        if (options == null)
+        {
+            return null;
+        }
+
+        var globalOptions = options.GlobalOptions ?? new PiAgentOptions();
+        var sessionOptions = options.SessionOptions ?? new PiSessionOptions();
+        var normalizedExtensions = NormalizeTrustedPiExtensions(trustedExtensions);
+        var mergedEnvironment = new Dictionary<string, string>(StringComparer.Ordinal);
+        MergePiEnvironment(mergedEnvironment, globalOptions.EnvironmentVariables);
+        MergePiEnvironment(mergedEnvironment, sessionOptions.EnvironmentVariables);
+        MergePiEnvironment(mergedEnvironment, environmentVariables);
+        mergedEnvironment["PI_CODING_AGENT_DIR"] = configDirectory;
+        mergedEnvironment["PI_CODING_AGENT_SESSION_DIR"] = sessionDirectory;
+        mergedEnvironment["PI_OFFLINE"] = "1";
+        mergedEnvironment["PI_SKIP_VERSION_CHECK"] = "1";
+        mergedEnvironment["PI_TELEMETRY"] = "0";
+
+        globalOptions = globalOptions with { EnvironmentVariables = null };
+        sessionOptions = sessionOptions with
+        {
+            WorkingDirectory = workspace,
+            SessionDir = sessionDirectory,
+            NoSession = false,
+            NoExtensions = true,
+            Extensions = normalizedExtensions,
+            EnvironmentVariables = mergedEnvironment,
+            ExtensionUiHandler = extensionUiHandler,
+        };
+
+        return options with
+        {
+            GlobalOptions = globalOptions,
+            SessionOptions = sessionOptions,
+            SessionId = providerSessionId?.ToString("D"),
+            IsResume = providerSessionId.HasValue && isResume,
+            HistoryPersistenceTimeout = historyPersistenceTimeout ?? options.HistoryPersistenceTimeout,
+            ChatHistoryProvider = chatHistoryProvider,
+            OnSessionStartedAsync = onSessionStartedAsync,
+        };
+    }
+
+    private static IReadOnlyList<string> NormalizeTrustedPiExtensions(IReadOnlyList<string>? extensions)
+    {
+        if (extensions is not { Count: > 0 })
+        {
+            return [];
+        }
+
+        var pathComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        return extensions
+            .Where(extension => !string.IsNullOrWhiteSpace(extension))
+            .Select(extension => Path.GetFullPath(PathUtil.ExpandTilde(extension.Trim())))
+            .Distinct(pathComparer)
+            .ToList();
+    }
+
+    private static void MergePiEnvironment(
+        IDictionary<string, string> target,
+        IReadOnlyDictionary<string, string>? source
+    )
+    {
+        if (source == null)
+        {
+            return;
+        }
+
+        foreach (var (key, value) in source)
+        {
+            if (!PiReservedEnvironmentKeys.Contains(key))
+            {
+                target[key] = value;
+            }
+        }
     }
 
     internal static CodexAIAgentOptions DisableExternalSdkChatHistoryPersistence(CodexAIAgentOptions options) =>
@@ -367,15 +538,7 @@ public partial class AgentRuntimeService
     #endregion
 
     internal static bool UsesProviderSessionBinding(Agent agent) =>
-        IsClaudeCodeExternalAgent(agent) || IsCodexExternalAgent(agent);
-
-    private static bool IsClaudeCodeExternalAgent(Agent agent) =>
-        agent.Type == AgentType.External
-        && string.Equals(agent.Name, AgentNames.ClaudeCode, StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsCodexExternalAgent(Agent agent) =>
-        agent.Type == AgentType.External
-        && string.Equals(agent.Name, AgentNames.Codex, StringComparison.OrdinalIgnoreCase);
+        ExternalAgentKindResolver.Resolve(agent) is not ExternalAgentKind.None;
 
     private static bool IsEmptyJsonObject(string value)
     {
