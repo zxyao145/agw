@@ -184,7 +184,40 @@ internal sealed class AgentRequestContextAgent : DelegatingAIAgent
     }
 
     private static IReadOnlyList<ChatMessage> SelectPersistableRequestMessages(IEnumerable<ChatMessage> messages) =>
-        messages.Where(message => !ConversationHistoryMetadata.IsPersistenceExcluded(message)).ToList();
+        messages
+            .Where(message => !ConversationHistoryMetadata.IsPersistenceExcluded(message))
+            .Select(CreatePersistableRequestMessage)
+            .ToList();
+
+    private static ChatMessage CreatePersistableRequestMessage(ChatMessage message)
+    {
+        if (
+            !message.Contents.Any(static content =>
+                content
+                    is AlwaysApproveToolApprovalResponseContent
+                        or ToolApprovalResponseContent { ToolCall: FunctionCallContent }
+            )
+        )
+        {
+            return message;
+        }
+
+        // Persist standard approval responses for audit, but keep these framework control messages
+        // out of model history and cross-Agent handoff. The MAF wrapper itself is not JSON-serializable.
+        var persistableMessage = message.Clone();
+        if (message.AdditionalProperties != null)
+        {
+            persistableMessage.AdditionalProperties = new AdditionalPropertiesDictionary(message.AdditionalProperties);
+        }
+
+        persistableMessage.Contents = message
+            .Contents.Select(static content =>
+                content is AlwaysApproveToolApprovalResponseContent approval ? approval.InnerResponse : content
+            )
+            .ToList();
+        ConversationHistoryMetadata.ExcludeFromModelHistory(persistableMessage);
+        return persistableMessage;
+    }
 
     private async Task PersistPendingWithoutMaskingExecutionFailureAsync(
         AgentSession session,

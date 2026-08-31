@@ -89,6 +89,7 @@ public static class AgwAgentExtensions
                 .UseAIContextProviders(definition.CompactionProvider);
         }
 
+        chatClientBuilder.Use(static innerClient => new ModelInputFilteringChatClient(innerClient));
         chatClientBuilder.UseOpenTelemetry(
             sourceName: definition.OpenTelemetrySourceName,
             configure: static options => options.EnableSensitiveData = true

@@ -182,6 +182,60 @@ public sealed class AgentRequestContextAgentTests
         Assert.Equal("answer", Assert.Single(historyCall.ResponseMessages).Text);
     }
 
+    [Theory]
+    [InlineData("once")]
+    [InlineData("always-tool")]
+    [InlineData("always-arguments")]
+    public async Task RunAsync_FunctionApprovalResponse_PersistsDisplayOnlyResponseAndForwardsOriginal(
+        string approvalScope
+    )
+    {
+        // Arrange
+        var recordingHistory = new RecordingChatHistoryProvider();
+        var requestHistory = new AgentRequestChatHistoryProvider(recordingHistory);
+        var innerAgent = new HistoryNotifyingAgent(requestHistory);
+        var agent = CreateAgent(innerAgent, requestHistory, memoryText: null);
+        var toolCall = new FunctionCallContent(
+            "call-1",
+            "read_file",
+            new Dictionary<string, object?> { ["path"] = "README.md" }
+        );
+        var approvalRequest = new ToolApprovalRequestContent("approval-1", toolCall);
+        AIContent approval = approvalScope switch
+        {
+            "once" => approvalRequest.CreateResponse(approved: true),
+            "always-tool" => approvalRequest.CreateAlwaysApproveToolResponse(),
+            _ => approvalRequest.CreateAlwaysApproveToolWithArgumentsResponse(),
+        };
+        var persistedApproval = approval is AlwaysApproveToolApprovalResponseContent alwaysApproval
+            ? alwaysApproval.InnerResponse
+            : (ToolApprovalResponseContent)approval;
+        persistedApproval.AdditionalProperties = new AdditionalPropertiesDictionary
+        {
+            ["approvalScope"] = approvalScope,
+        };
+        var request = new ChatMessage(ChatRole.User, [approval]) { MessageId = "approval-response-1" };
+
+        // Act
+        await agent.RunAsync([request], cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var forwardedMessage = Assert.Single(innerAgent.RequestMessages);
+        Assert.Same(approval, Assert.Single(forwardedMessage.Contents));
+        Assert.False(ConversationHistoryMetadata.IsModelHistoryExcluded(forwardedMessage));
+
+        var persistedMessage = Assert.Single(Assert.Single(recordingHistory.Calls).RequestMessages);
+        Assert.True(ConversationHistoryMetadata.IsModelHistoryExcluded(persistedMessage));
+        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var serialized = JsonSerializer.Serialize(persistedMessage, jsonOptions);
+        var restoredMessage = JsonSerializer.Deserialize<ChatMessage>(serialized, jsonOptions);
+        Assert.NotNull(restoredMessage);
+        var restoredApproval = Assert.IsType<ToolApprovalResponseContent>(Assert.Single(restoredMessage.Contents));
+        Assert.True(restoredApproval.Approved);
+        Assert.Equal("approval-1", restoredApproval.RequestId);
+        Assert.Equal(approvalScope, restoredApproval.AdditionalProperties!["approvalScope"]?.ToString());
+    }
+
     [Fact]
     public async Task StageRequest_DoesNotStoreRequestInSessionStateBag()
     {
