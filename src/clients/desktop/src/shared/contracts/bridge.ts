@@ -15,6 +15,7 @@ export type TurnNotificationStatus = "completed" | "failed";
 
 export type TurnNotificationRequest = {
   status: TurnNotificationStatus;
+  title?: string;
 };
 
 export type AgwDesktopBridge = {

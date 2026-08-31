@@ -40,7 +40,7 @@ import {
 import { createLocalDesktopToken } from "./runtime/local-token";
 import { readLocalServerRuntime } from "./runtime/local-server-runtime";
 import { resolveServerExecutablePath } from "./runtime/server-executable-path";
-import { getTurnNotificationText, normalizeTurnNotificationStatus } from "./turn-notification";
+import { getTurnNotificationText, normalizeTurnNotificationRequest } from "./turn-notification";
 import { DesktopSettingsStore, type SecretCodec } from "./settings/settings-store";
 import { checkForDesktopUpdate } from "./update/github-release-updater";
 
@@ -434,10 +434,12 @@ async function showWindow(pathname?: string): Promise<void> {
 }
 
 function showTurnNotification(request: unknown): void {
-  const status = normalizeTurnNotificationStatus(request);
-  if (!status || !Notification.isSupported()) return;
+  const notificationRequest = normalizeTurnNotificationRequest(request);
+  if (!notificationRequest || !Notification.isSupported()) return;
   if (mainWindow?.isFocused()) return;
-  const notification = new Notification(getTurnNotificationText(status));
+  const notification = new Notification(
+    getTurnNotificationText(notificationRequest.status, notificationRequest.title),
+  );
   notification.on("click", () => showWindowSafely());
   notification.show();
 }

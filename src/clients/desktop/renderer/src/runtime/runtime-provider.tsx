@@ -16,6 +16,7 @@ import {
 } from "@agw/chat";
 import { createQueryClient } from "@agw/components";
 import { QueryClientProvider, type QueryClient } from "@agw/components/query";
+import { getProjectConversations } from "@agw/projects";
 import {
   classifyDesktopConnection,
   getActiveServerProfile,
@@ -128,12 +129,21 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
   }, [isDesktop, platform]);
 
   // 后台 turn 进入终态时请求主进程显示系统通知；interrupted 多为用户主动停止，不通知。
+  // preload 随应用启动注入、不支持热更新，需按方法存在性降级以容忍旧版 Electron 进程。
+  // 标题只向事件所属的激活 Server 查询；旧 Server 的残留执行完成时不查，避免打错 Server。
   React.useEffect(() => {
     const bridge = isDesktop ? window.agwDesktop : undefined;
-    if (!bridge) return;
-    return executionSessionManager.subscribeTurnFinished(({ status }) => {
+    if (typeof bridge?.showTurnNotification !== "function") return;
+    return executionSessionManager.subscribeTurnFinished(({ key, status }) => {
       if (status === "interrupted") return;
-      void bridge.showTurnNotification({ status });
+      void resolveTurnNotificationTitle(
+        key.serverId,
+        key.projectId,
+        key.contextId,
+        activeProfileIdRef.current,
+      ).then((title) => {
+        void bridge.showTurnNotification({ status, title });
+      });
     });
   }, [isDesktop]);
 
@@ -268,6 +278,11 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
   );
 
   const activeProfile = runtimeState ? getEffectiveActiveServerProfile(runtimeState) : null;
+  // 通知订阅的 effect 只随 isDesktop 建立一次，经 ref 读取最新的激活 Server。
+  const activeProfileIdRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    activeProfileIdRef.current = activeProfile?.id ?? null;
+  }, [activeProfile]);
   const value = React.useMemo<DesktopRuntimeContextValue>(
     () => ({
       isDesktop,
@@ -319,4 +334,29 @@ export function useDesktopRuntime(): DesktopRuntimeContextValue {
   const value = React.useContext(DesktopRuntimeContext);
   if (!value) throw new Error("useDesktopRuntime must be used within DesktopRuntimeProvider.");
   return value;
+}
+
+const TURN_NOTIFICATION_TITLE_TIMEOUT_MS = 3_000;
+
+async function resolveTurnNotificationTitle(
+  serverId: string,
+  projectId: string,
+  contextId: string,
+  activeServerId: string | null,
+): Promise<string | undefined> {
+  if (!activeServerId || serverId !== activeServerId) return undefined;
+  try {
+    const summaries = await Promise.race([
+      getProjectConversations(projectId),
+      new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Resolving conversation title timed out.")),
+          TURN_NOTIFICATION_TITLE_TIMEOUT_MS,
+        ),
+      ),
+    ]);
+    return summaries.find((summary) => summary.contextId === contextId)?.title?.trim() || undefined;
+  } catch {
+    return undefined;
+  }
 }

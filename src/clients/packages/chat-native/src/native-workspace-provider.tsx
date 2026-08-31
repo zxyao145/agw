@@ -37,6 +37,7 @@ import {
   type AgentMode,
   type PermissionMode,
   type StreamingMessageBatcher,
+  type TurnFinishedStatus,
 } from "@agw/execution-core";
 import {
   createProjectConversationService,
@@ -116,9 +117,11 @@ export type NativeVerifiedServer = {
 
 export function NativeWorkspaceProvider({
   verifiedServer,
+  onTurnFinished,
   children,
 }: {
   verifiedServer: NativeVerifiedServer | null;
+  onTurnFinished?: (status: TurnFinishedStatus) => void;
   children: React.ReactNode;
 }): React.JSX.Element {
   const profileId = verifiedServer?.profile.id ?? null;
@@ -164,6 +167,10 @@ export function NativeWorkspaceProvider({
   const confirmedAgentModeRef = React.useRef<AgentMode>(DEFAULT_AGENT_MODE);
   const batcherRef = React.useRef<StreamingMessageBatcher<AiMessage> | null>(null);
   const resumeBufferRef = React.useRef<AiMessage[] | null>(null);
+  const onTurnFinishedRef = React.useRef(onTurnFinished);
+  React.useEffect(() => {
+    onTurnFinishedRef.current = onTurnFinished;
+  }, [onTurnFinished]);
 
   if (!batcherRef.current) {
     batcherRef.current = createStreamingMessageBatcher((incoming, generation) => {
@@ -327,11 +334,14 @@ export function NativeWorkspaceProvider({
         return;
       }
 
-      if (getTurnFinishedStatus(incoming)) {
+      const finishedStatus = getTurnFinishedStatus(incoming);
+      if (finishedStatus) {
+        const hadActiveTurn = activeStreamingScopeRef.current !== null;
         batcherRef.current?.flush(generation);
         activeStreamingScopeRef.current = null;
         setPendingHumanGate(null);
         setIsExecuting(false);
+        if (hadActiveTurn) onTurnFinishedRef.current?.(finishedStatus);
         return;
       }
       if (isUserTurnMessage(incoming)) return;

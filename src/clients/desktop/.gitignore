@@ -2,3 +2,4 @@ dist/
 out/
 release-artifacts/
 resources/
+*.tsbuildinfo
