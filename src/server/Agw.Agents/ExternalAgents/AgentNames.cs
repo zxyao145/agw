@@ -3,6 +3,7 @@ using Agw.Shared.Utils;
 using ClaudeCodeSdk.MAF;
 using ClaudeCodeSdk.Types;
 using OpenAI.CodexSdk.MAF;
+using PiAgentSdk.MAF;
 
 namespace Agw.Agents.ExternalAgents;
 
@@ -11,10 +12,12 @@ public class AgentNames
     public const string ClaudeCode = "ClaudeCode";
     public const string Codex = "Codex";
     public const string GithubCopilot = "GithubCopilot";
+    public const string Pi = "Pi";
 
     public static readonly Guid ClaudeCodeId = Guid.Parse("11111111-1111-1111-2222-000000000001");
     public static readonly Guid CodexId = Guid.Parse("11111111-1111-1111-2222-000000000002");
     public static readonly Guid GithubCopilotId = Guid.Parse("11111111-1111-1111-2222-000000000003");
+    public static readonly Guid PiId = Guid.Parse("11111111-1111-1111-2222-000000000004");
 
     public static IReadOnlyList<Agent> ExternalAgentNames { get; } =
     [
@@ -37,6 +40,15 @@ public class AgentNames
             Description = "External agent for OpenAI Codex integration",
             Type = AgentType.External,
             Extra = JsonUtil.Serialize(new CodexAIAgentOptions()),
+        },
+        new Agent
+        {
+            Id = PiId,
+            DisplayName = "Pi",
+            Name = Pi,
+            Description = "External agent for the Pi agent integration",
+            Type = AgentType.External,
+            Extra = JsonUtil.Serialize(new PiAgentAIAgentOptions()),
         },
         //new Agent
         //{

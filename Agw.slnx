@@ -48,6 +48,12 @@
     <Project Path="src/server/Agw.Data/Agw.Data.csproj" />
     <Project Path="src/server/Agw.Shared/Agw.Shared.csproj" />
   </Folder>
+  <Folder Name="/6.SDKs/">
+    <Project Path="src/sdks/pi-agent-sdk-csharp/src/PiAgentSdk/PiAgentSdk.csproj" />
+    <Project Path="src/sdks/pi-agent-sdk-csharp/src/PiAgentSdk.MAF/PiAgentSdk.MAF.csproj" />
+    <Project Path="src/sdks/pi-agent-sdk-csharp/tests/PiAgentSdk.Tests/PiAgentSdk.Tests.csproj" />
+    <Project Path="src/sdks/pi-agent-sdk-csharp/tests/PiAgentSdk.MAF.Tests/PiAgentSdk.MAF.Tests.csproj" />
+  </Folder>
   <Folder Name="/Support/">
     <Project Path="src/server/Agw.Auth/Agw.Auth.csproj" />
     <Project Path="src/server/Agw.Setup/Agw.Setup.csproj" />

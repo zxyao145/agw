@@ -1,4 +1,5 @@
 using Agw.Agents.Execution.Durable;
+using Agw.Agents.ExternalAgents.Pi;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,6 +23,50 @@ public sealed class ExecutionRuntimeConfigurationTests
             provider.GetRequiredService<IOptions<ExecutionRuntimeOptions>>().Value.Provider
         );
         Assert.Null(provider.GetService<DurableExecutionCoordinator>());
+    }
+
+    [Fact]
+    public void AddAgents_PiConfiguration_BindsTrustedExtensionsAndPersistenceTimeout()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["ExternalAgents:Pi:Extensions:0"] = "/trusted/extension.ts",
+                    ["ExternalAgents:Pi:HistoryPersistenceTimeout"] = "00:00:12",
+                }
+            )
+            .Build();
+        var services = new ServiceCollection();
+
+        // Act
+        services.AddAgents(configuration);
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<PiExternalAgentOptions>>().Value;
+
+        // Assert
+        Assert.Equal(["/trusted/extension.ts"], options.Extensions);
+        Assert.Equal(TimeSpan.FromSeconds(12), options.HistoryPersistenceTimeout);
+    }
+
+    [Fact]
+    public void AddAgents_NonPositivePiPersistenceTimeout_FailsValidation()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?> { ["ExternalAgents:Pi:HistoryPersistenceTimeout"] = "00:00:00" }
+            )
+            .Build();
+        var services = new ServiceCollection();
+        services.AddAgents(configuration);
+        using var provider = services.BuildServiceProvider();
+
+        // Act & Assert
+        Assert.Throws<OptionsValidationException>(() =>
+            provider.GetRequiredService<IOptions<PiExternalAgentOptions>>().Value
+        );
     }
 
     [Fact]

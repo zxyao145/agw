@@ -2,6 +2,7 @@ using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Runtimes;
+using Agw.Agents.ExternalAgents;
 using Agw.Auth.Contracts;
 using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Agents;
@@ -153,7 +154,20 @@ public partial class AgentRuntimeService
             return null;
         }
 
-        return Guid.TryParse(providerSessionId, out var parsedProviderSessionId) ? parsedProviderSessionId : null;
+        // Pi 0.84.4 emits UUIDv7 Session IDs, although the persisted provider binding is a string. If Pi adopts a
+        // non-Guid format, preserve the raw value through the runtime instead of treating the binding as invalid.
+        if (Guid.TryParse(providerSessionId, out var parsedProviderSessionId))
+        {
+            return parsedProviderSessionId;
+        }
+
+        _logger.LogWarning(
+            "Ignoring an invalid provider session binding for external Agent {AgentName}/{AgentId} in context {ContextId}.",
+            agent.Name,
+            agent.Id,
+            contextId
+        );
+        return null;
     }
 
     internal static (Guid? ProviderSessionId, bool IsResume) ResolveExternalProviderSession(
@@ -162,12 +176,13 @@ public partial class AgentRuntimeService
         bool requestedResume
     )
     {
-        if (IsClaudeCodeExternalAgent(agent))
+        var kind = ExternalAgentKindResolver.Resolve(agent);
+        if (kind == ExternalAgentKind.ClaudeCode)
         {
             return (persistedProviderSessionId ?? Guid.NewGuid(), persistedProviderSessionId.HasValue);
         }
 
-        if (IsCodexExternalAgent(agent))
+        if (kind is ExternalAgentKind.Codex or ExternalAgentKind.Pi)
         {
             return (persistedProviderSessionId, persistedProviderSessionId.HasValue);
         }
@@ -187,7 +202,7 @@ public partial class AgentRuntimeService
         }
 
         var executionUserId = ResolveExecutionUserId();
-        return async (providerSessionId, _) =>
+        return async (providerSessionId, callbackCancellationToken) =>
         {
             try
             {
@@ -195,7 +210,7 @@ public partial class AgentRuntimeService
                     new ProjectProviderSessionReference(task.ProjectId, contextId, agent.Id, agent.Name),
                     providerSessionId,
                     executionUserId,
-                    CancellationToken.None
+                    callbackCancellationToken
                 );
             }
             catch (Exception ex)

@@ -15,6 +15,7 @@ using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Transport.SignalR;
 using Agw.Agents.Execution.Turns;
+using Agw.Agents.ExternalAgents.Pi;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -48,6 +49,14 @@ public static class DependencyInjection
             configuration.GetSection(ExecutionRuntimeOptions.SectionName).Get<ExecutionRuntimeOptions>()
             ?? new ExecutionRuntimeOptions();
         services.Configure<ExecutionRuntimeOptions>(configuration.GetSection(ExecutionRuntimeOptions.SectionName));
+        services
+            .AddOptions<PiExternalAgentOptions>()
+            .Bind(configuration.GetSection(PiExternalAgentOptions.SectionName))
+            .Validate(
+                options => options.HistoryPersistenceTimeout > TimeSpan.Zero,
+                "ExternalAgents:Pi:HistoryPersistenceTimeout must be positive."
+            )
+            .ValidateOnStart();
         services.AddSingleton<IAgentInstructionsSource, ProjectInstructionsSource>();
         services.AddScoped<AgentflowAppService>();
         services.AddScoped<AgentflowTraceAppService>();

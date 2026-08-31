@@ -167,8 +167,8 @@ public class DbSeeder
 
             if (existingAgent != null)
             {
-                _logger.LogInformation("Claude Code Agent already exists, skipping seed");
-                return;
+                _logger.LogInformation("External Agent {AgentName} already exists, skipping seed", agentName);
+                continue;
             }
 
             _logger.LogInformation("Seeding External Agent: {agentName}", agentName);
