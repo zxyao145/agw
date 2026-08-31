@@ -62,7 +62,9 @@ internal sealed class PiChatHistoryProvider : ChatHistoryProvider
     protected override ValueTask InvokedCoreAsync(InvokedContext context, CancellationToken cancellationToken = default)
     {
         // EF already excludes Agw Tool status types; keep Pi's additional role-based policy at the Pi adapter boundary.
-        var requestMessages = SanitizeMessages(context.RequestMessages);
+        var requestMessages = SanitizeMessages(
+            ExternalAgentChatHistoryAgent.CreatePersistableRequestMessages(context.RequestMessages)
+        );
         if (context.InvokeException != null)
         {
 #pragma warning disable MAAI001

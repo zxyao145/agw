@@ -25,9 +25,18 @@ internal sealed class ClaudeCodeChatHistoryProvider : ChatHistoryProvider
 
     protected override ValueTask InvokedCoreAsync(InvokedContext context, CancellationToken cancellationToken = default)
     {
+        var requestMessages = ExternalAgentChatHistoryAgent.CreatePersistableRequestMessages(context.RequestMessages);
         if (context.InvokeException != null)
         {
-            return _innerProvider.InvokedAsync(context, cancellationToken);
+#pragma warning disable MAAI001
+            var failedContext = new InvokedContext(
+                context.Agent,
+                context.Session,
+                requestMessages,
+                context.InvokeException
+            );
+#pragma warning restore MAAI001
+            return _innerProvider.InvokedAsync(failedContext, cancellationToken);
         }
 
         var responseMessages = context
@@ -39,12 +48,7 @@ internal sealed class ClaudeCodeChatHistoryProvider : ChatHistoryProvider
             ConversationHistoryMetadata.ExcludeFromModelHistory(responseMessage);
         }
 #pragma warning disable MAAI001
-        var delegatedContext = new InvokedContext(
-            context.Agent,
-            context.Session,
-            context.RequestMessages,
-            responseMessages
-        );
+        var delegatedContext = new InvokedContext(context.Agent, context.Session, requestMessages, responseMessages);
 #pragma warning restore MAAI001
         return _innerProvider.InvokedAsync(delegatedContext, cancellationToken);
     }

@@ -9,6 +9,7 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
+using Agw.Tools.ToolBlocks.Blocks.UserMemory;
 using ClaudeCodeSdk.MAF;
 using ClaudeCodeSdk.Types;
 using Microsoft.Agents.AI;
@@ -31,10 +32,63 @@ public partial class AgentRuntimeService
         "PI_TELEMETRY",
     };
 
+    private async Task<AIAgent?> CreateExternalAgentAsync(
+        CreateAiAgentRequest request,
+        Project project,
+        IReadOnlyDictionary<string, string> environmentVariables,
+        CancellationToken cancellationToken,
+        bool isBackground = false
+    )
+    {
+        var capabilities = await _capabilityComposer
+            .ComposeAsync(
+                request.Agent,
+                project,
+                environmentVariables,
+                cancellationToken,
+                defaultMode: request.DefaultMode,
+                conversationId: request.ConversationId,
+                deferHumanInteractions: request.DeferHumanInteractions
+            )
+            .ConfigureAwait(false);
+        AIAgent? aiAgent = null;
+        try
+        {
+            var userMemoryProvider = capabilities.ContextProviders.OfType<UserMemoryProvider>().SingleOrDefault();
+            if (
+                !TryCreateExternalAgent(
+                    request,
+                    project,
+                    environmentVariables,
+                    userMemoryProvider,
+                    out aiAgent,
+                    isBackground
+                )
+            )
+            {
+                await DisposeResourceWithoutThrowingAsync(capabilities).ConfigureAwait(false);
+                return null;
+            }
+
+            return new ResourceOwningAIAgent(aiAgent, capabilities);
+        }
+        catch
+        {
+            if (aiAgent != null)
+            {
+                await DisposeAgentWithoutThrowingAsync(aiAgent).ConfigureAwait(false);
+            }
+
+            await DisposeResourceWithoutThrowingAsync(capabilities).ConfigureAwait(false);
+            throw;
+        }
+    }
+
     private bool TryCreateExternalAgent(
         CreateAiAgentRequest request,
         Project project,
         IReadOnlyDictionary<string, string> environmentVariables,
+        AIContextProvider? userMemoryProvider,
         [NotNullWhen(true)] out AIAgent? aiAgent,
         bool isBackground = false
     )
@@ -62,7 +116,8 @@ public partial class AgentRuntimeService
                 request.IsResume,
                 environmentVariables,
                 request.OnExternalSessionStartedAsync,
-                isBackground
+                isBackground,
+                userMemoryProvider
             ),
             _ => null,
         };
@@ -77,25 +132,33 @@ public partial class AgentRuntimeService
             ExternalAgentKind.ClaudeCode => WrapClaudeCodeAgent(
                 aiAgent,
                 isBackground,
-                request.OnExternalSessionStartedAsync
+                request.OnExternalSessionStartedAsync,
+                userMemoryProvider
             ),
-            ExternalAgentKind.Codex => WrapExternalAgent(aiAgent, isBackground),
+            ExternalAgentKind.Codex => WrapExternalAgent(aiAgent, isBackground, userMemoryProvider),
             ExternalAgentKind.Pi => aiAgent,
             _ => null,
         };
         return aiAgent != null;
     }
 
-    internal AIAgent WrapExternalAgent(AIAgent aiAgent, bool isBackground) =>
+    internal AIAgent WrapExternalAgent(
+        AIAgent aiAgent,
+        bool isBackground,
+        AIContextProvider? userMemoryProvider = null
+    ) =>
         DecorateExternalAgent(
             new ExternalAgentChatHistoryAgent(aiAgent, _chatHistoryProvider, _timeProvider, _logger),
-            isBackground
+            ExternalAgentKind.Codex,
+            isBackground,
+            userMemoryProvider
         );
 
     internal AIAgent WrapClaudeCodeAgent(
         AIAgent aiAgent,
         bool isBackground,
-        Func<string, CancellationToken, ValueTask>? onProviderSessionStartedAsync
+        Func<string, CancellationToken, ValueTask>? onProviderSessionStartedAsync,
+        AIContextProvider? userMemoryProvider = null
     )
     {
         if (onProviderSessionStartedAsync != null)
@@ -103,16 +166,31 @@ public partial class AgentRuntimeService
             aiAgent = new ClaudeCodeProviderSessionTrackingAgent(aiAgent, onProviderSessionStartedAsync);
         }
 
-        return DecorateExternalAgent(aiAgent, isBackground);
+        return DecorateExternalAgent(aiAgent, ExternalAgentKind.ClaudeCode, isBackground, userMemoryProvider);
     }
 
-    internal AIAgent WrapPiAgent(AIAgent aiAgent, bool isBackground) => DecorateExternalAgent(aiAgent, isBackground);
+    internal AIAgent WrapPiAgent(AIAgent aiAgent, bool isBackground, AIContextProvider? userMemoryProvider = null) =>
+        DecorateExternalAgent(aiAgent, ExternalAgentKind.Pi, isBackground, userMemoryProvider);
 
-    internal AIAgent WrapPiAgent(AIAgent aiAgent, IAsyncDisposable ownedResource, bool isBackground) =>
-        new ResourceOwningAIAgent(WrapPiAgent(aiAgent, isBackground), ownedResource);
+    internal AIAgent WrapPiAgent(
+        AIAgent aiAgent,
+        IAsyncDisposable ownedResource,
+        bool isBackground,
+        AIContextProvider? userMemoryProvider = null
+    ) => new ResourceOwningAIAgent(WrapPiAgent(aiAgent, isBackground, userMemoryProvider), ownedResource);
 
-    private AIAgent DecorateExternalAgent(AIAgent aiAgent, bool isBackground)
+    private AIAgent DecorateExternalAgent(
+        AIAgent aiAgent,
+        ExternalAgentKind kind,
+        bool isBackground,
+        AIContextProvider? userMemoryProvider
+    )
     {
+        if (userMemoryProvider != null)
+        {
+            aiAgent = new ExternalAgentUserMemoryAgent(aiAgent, userMemoryProvider, kind);
+        }
+
         var agentBuilder = aiAgent
             .AsBuilder()
             .Use(
@@ -255,7 +333,8 @@ public partial class AgentRuntimeService
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables,
         Func<string, CancellationToken, ValueTask>? onSessionStartedAsync,
-        bool isBackground
+        bool isBackground,
+        AIContextProvider? userMemoryProvider
     )
     {
         string? extra = project.ExtraSetting;
@@ -296,7 +375,7 @@ public partial class AgentRuntimeService
             .Use(runFunc: interactionBridge.BindRunAsync, runStreamingFunc: interactionBridge.BindRunStreamingAsync)
             .Build();
         // MAF builder proxies do not retain IAsyncDisposable, so keep the concrete process owner outside the full chain.
-        return WrapPiAgent(interactionAgent, piAgent, isBackground);
+        return WrapPiAgent(interactionAgent, piAgent, isBackground, userMemoryProvider);
     }
 
     internal static PiAgentAIAgentOptions? BuildPiAgentAIAgentOptions(

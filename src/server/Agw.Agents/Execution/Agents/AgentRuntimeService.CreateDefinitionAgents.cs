@@ -249,10 +249,14 @@ public partial class AgentRuntimeService
                         EnvironmentVariables = environmentVariables,
                         IsResume = false,
                     };
-                    if (!TryCreateExternalAgent(request, project, environmentVariables, out agent, isBackground: true))
-                    {
-                        continue;
-                    }
+                    agent = await CreateExternalAgentAsync(
+                            request,
+                            project,
+                            environmentVariables,
+                            cancellationToken,
+                            isBackground: true
+                        )
+                        .ConfigureAwait(false);
                 }
                 else
                 {

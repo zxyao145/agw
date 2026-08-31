@@ -176,6 +176,27 @@ public sealed class PiIntegrationAdapterTests
     }
 
     [Fact]
+    public async Task PiChatHistoryProvider_Request_ExcludesInjectedContextFromHistory()
+    {
+        var inner = new RecordingHistoryProvider();
+        var provider = new PiChatHistoryProvider(inner);
+        var agent = new CallbackAgent(_ => ValueTask.CompletedTask);
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var memory = new ChatMessage(ChatRole.User, "memory context").WithAgentRequestMessageSource(
+            AgentRequestMessageSourceType.AIContextProvider,
+            "UserMemoryProvider"
+        );
+        var request = new ChatMessage(ChatRole.User, "run");
+#pragma warning disable MAAI001
+        var context = new ChatHistoryProvider.InvokedContext(agent, session, [memory, request], []);
+#pragma warning restore MAAI001
+
+        await provider.InvokedAsync(context, TestContext.Current.CancellationToken);
+
+        Assert.Equal("run", Assert.Single(Assert.Single(inner.Stored).Requests).Text);
+    }
+
+    [Fact]
     public async Task PiChatHistoryProvider_Failure_SanitizesRequestAndPreservesException()
     {
         // Arrange

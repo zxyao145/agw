@@ -16,6 +16,7 @@ using Agw.Shared.Tooling;
 using Agw.Tools.ContextualTools.WebSearch;
 using Agw.Tools.Runtime;
 using Agw.Tools.ToolBlocks;
+using Agw.Tools.ToolBlocks.Blocks.UserMemory;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -199,6 +200,99 @@ public class AgentCapabilityComposerTests
         Assert.Empty(composition.PlanModeAllowedToolNames);
         Assert.Empty(resolver.Calls);
         Assert.Empty(materializer.Calls);
+    }
+
+    [Fact]
+    public async Task ComposeAsync_ExternalAgent_UserMemoryConfigured_ContributesOnlyUserMemoryContext()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var database = await TestDatabase.CreateAsync(cancellationToken);
+        using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        var userMemoryBlock = new UserMemoryToolBlock(serviceProvider.GetRequiredService<IServiceScopeFactory>());
+        var unrelatedBlock = new TestToolBlock();
+        var resolver = new StubConnectionCapabilityResolver(
+            (_, _, _) => throw new InvalidOperationException("resolver must not be called")
+        );
+        var materializer = new StubMcpToolMaterializer(
+            (_, _, _) => throw new InvalidOperationException("materializer must not be called")
+        );
+        var composer = CreateComposer(
+            database.Context,
+            CreateToolRegistry(),
+            resolver,
+            materializer,
+            [userMemoryBlock, unrelatedBlock]
+        );
+        var agent = new Agent
+        {
+            Type = AgentType.External,
+            AgentConnectionRelations = [new AgentConnectionRelation { ConnectionId = Guid.CreateVersion7() }],
+        };
+        var project = new Project
+        {
+            Id = Guid.CreateVersion7(),
+            Tools =
+            [
+                new ToolBlockValue { Definition = new UserMemoryToolBlockDefinition() },
+                new ToolBlockValue { Definition = new TestToolBlockDefinition() },
+            ],
+            ProjectMcpToolServers = [new ProjectMcpServerRelation { McpToolServerId = Guid.CreateVersion7() }],
+        };
+
+        await using var composition = await composer.ComposeAsync(
+            agent,
+            project,
+            new Dictionary<string, string>(),
+            cancellationToken
+        );
+
+        Assert.Empty(composition.Tools);
+        Assert.IsType<UserMemoryProvider>(Assert.Single(composition.ContextProviders));
+        Assert.Empty(composition.PlanModeAllowedToolNames);
+        Assert.Null(unrelatedBlock.MaterializedDefaultMode);
+        Assert.Empty(resolver.Calls);
+        Assert.Empty(materializer.Calls);
+    }
+
+    [Fact]
+    public async Task ComposeAsync_ExternalAgent_UnrelatedInvalidToolValues_DoNotBlockUserMemory()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var database = await TestDatabase.CreateAsync(cancellationToken);
+        using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        var userMemoryBlock = new UserMemoryToolBlock(serviceProvider.GetRequiredService<IServiceScopeFactory>());
+        var composer = CreateComposer(
+            database.Context,
+            CreateToolRegistry(),
+            new StubConnectionCapabilityResolver((_, _, _) => CreateResolution()),
+            new StubMcpToolMaterializer((_, _, _) => CreateToolLease([], [])),
+            [userMemoryBlock]
+        );
+        var agent = new Agent { Type = AgentType.External };
+        var project = new Project
+        {
+            Id = Guid.CreateVersion7(),
+            Tools =
+            [
+                new ToolBlockValue { Definition = new UserMemoryToolBlockDefinition() },
+                new ToolBlockValue { Definition = new BackgroundAgentsToolBlockDefinition() },
+                new ToolBlockValue { Definition = new TestToolBlockDefinition() },
+                new ToolBlockValue { Definition = new TestToolBlockDefinition() },
+                new ToolBlockValue { Definition = null! },
+            ],
+        };
+
+        // Act
+        await using var composition = await composer.ComposeAsync(
+            agent,
+            project,
+            new Dictionary<string, string>(),
+            cancellationToken
+        );
+
+        // Assert
+        Assert.IsType<UserMemoryProvider>(Assert.Single(composition.ContextProviders));
     }
 
     [Fact]

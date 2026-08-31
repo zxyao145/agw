@@ -54,7 +54,8 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
     {
         var requestMessages = messages.ToList();
         var safeSession = session ?? await InnerAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
-        await PersistAsync(safeSession, requestMessages, [], CancellationToken.None).ConfigureAwait(false);
+        await PersistAsync(safeSession, CreatePersistableRequestMessages(requestMessages), [], CancellationToken.None)
+            .ConfigureAwait(false);
 
         var response = await InnerAgent
             .RunAsync(requestMessages, safeSession, options, cancellationToken)
@@ -84,7 +85,8 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
         var safeSession = session ?? await InnerAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
 
         // 请求消息必须先于任何响应事件写入，确保长时间运行或中途断开的 Turn 仍可被追溯。
-        await PersistAsync(safeSession, requestMessages, [], CancellationToken.None).ConfigureAwait(false);
+        await PersistAsync(safeSession, CreatePersistableRequestMessages(requestMessages), [], CancellationToken.None)
+            .ConfigureAwait(false);
 
         var responseBuffer = new List<ChatMessage>(ResponseBatchSize);
 
@@ -330,6 +332,16 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
         MarkDisplayOnlyMessage(persistedMessage);
         return persistedMessage;
     }
+
+    /// <summary>
+    /// Removes invocation-only context messages before External Agent requests are persisted.
+    /// </summary>
+    internal static IReadOnlyList<ChatMessage> CreatePersistableRequestMessages(IEnumerable<ChatMessage> messages) =>
+        messages
+            .Where(message =>
+                message.GetAgentRequestMessageSourceType() != AgentRequestMessageSourceType.AIContextProvider
+            )
+            .ToList();
 
     /// <summary>
     /// 将仅用于界面展示的 System、User 或 Tool 响应标记为不参与模型历史和跨 Agent 交接。

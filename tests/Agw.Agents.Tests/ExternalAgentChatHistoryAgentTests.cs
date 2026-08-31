@@ -495,6 +495,27 @@ public class ExternalAgentChatHistoryAgentTests
     }
 
     [Fact]
+    public async Task ClaudeCodeChatHistoryProvider_Invoked_ExcludesInjectedContextFromRequestHistory()
+    {
+        var innerProvider = new RecordingChatHistoryProvider();
+        var provider = new ClaudeCodeChatHistoryProvider(innerProvider);
+        var agent = new PausableExternalAgent();
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var memory = new ChatMessage(ChatRole.User, "memory context").WithAgentRequestMessageSource(
+            AgentRequestMessageSourceType.AIContextProvider,
+            "UserMemoryProvider"
+        );
+        var request = new ChatMessage(ChatRole.User, "request");
+
+        await provider.InvokedAsync(
+            new ChatHistoryProvider.InvokedContext(agent, session, [memory, request], []),
+            TestContext.Current.CancellationToken
+        );
+
+        Assert.Same(request, Assert.Single(Assert.Single(innerProvider.Calls).RequestMessages));
+    }
+
+    [Fact]
     public async Task RunStreamingAsync_WhenFinalPersistenceFailsDuringExecutionFailure_PreservesExecutionFailure()
     {
         var provider = new RecordingChatHistoryProvider { FailureCallNumber = 2 };
