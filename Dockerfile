@@ -16,6 +16,7 @@ ARG APP_VERSION=0.1.0-local
 WORKDIR /src
 COPY src/server/Directory.Build.props src/server/Directory.Packages.props ./src/server/
 COPY src/server/Agw.A2A/Agw.A2A.csproj ./src/server/Agw.A2A/
+COPY src/server/Agw.Agents.Contracts/Agw.Agents.Contracts.csproj ./src/server/Agw.Agents.Contracts/
 COPY src/server/Agw.Agents/Agw.Agents.csproj ./src/server/Agw.Agents/
 COPY src/server/Agw.Auth/Agw.Auth.csproj ./src/server/Agw.Auth/
 COPY src/server/Agw.Data/Agw.Data.csproj ./src/server/Agw.Data/
@@ -25,9 +26,11 @@ COPY src/server/Agw.DataPlane.Host/Agw.DataPlane.Host.csproj ./src/server/Agw.Da
 COPY src/server/Agw.Host/Agw.Host.csproj ./src/server/Agw.Host/
 COPY src/server/Agw.Infrastructure/Agw.Infrastructure.csproj ./src/server/Agw.Infrastructure/
 COPY src/server/Agw.Integrations/Agw.Integrations.csproj ./src/server/Agw.Integrations/
+COPY src/server/Agw.Jobs.Contracts/Agw.Jobs.Contracts.csproj ./src/server/Agw.Jobs.Contracts/
 COPY src/server/Agw.Jobs/Agw.Jobs.csproj ./src/server/Agw.Jobs/
 COPY src/server/Agw.Migrations.Postgres/Agw.Migrations.Postgres.csproj ./src/server/Agw.Migrations.Postgres/
 COPY src/server/Agw.Migrations.Sqlite/Agw.Migrations.Sqlite.csproj ./src/server/Agw.Migrations.Sqlite/
+COPY src/server/Agw.Projects.Contracts/Agw.Projects.Contracts.csproj ./src/server/Agw.Projects.Contracts/
 COPY src/server/Agw.Projects/Agw.Projects.csproj ./src/server/Agw.Projects/
 COPY src/server/Agw.Providers/Agw.Providers.csproj ./src/server/Agw.Providers/
 COPY src/server/Agw.Setup/Agw.Setup.csproj ./src/server/Agw.Setup/
