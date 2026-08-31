@@ -161,7 +161,17 @@ public class EfCoreChatHistoryProviderTests : IDisposable
                     CreateResultMessage("summary"),
                     jsonOptions
                 ),
-                CreateRecord(projectConversationId, Guid.CreateVersion7(), 2, CreateCheckpointMessage(), jsonOptions)
+                CreateRecord(projectConversationId, Guid.CreateVersion7(), 2, CreateCheckpointMessage(), jsonOptions),
+                CreateRecord(
+                    projectConversationId,
+                    Guid.CreateVersion7(),
+                    3,
+                    new ChatMessage(ChatRole.User, "legacy memory").WithAgentRequestMessageSource(
+                        AgentRequestMessageSourceType.AIContextProvider,
+                        ConversationHistoryMetadata.LegacyUserMemorySourceId
+                    ),
+                    jsonOptions
+                )
             );
             await seedContext.SaveChangesAsync(cancellationToken);
         }
@@ -1190,13 +1200,15 @@ public class EfCoreChatHistoryProviderTests : IDisposable
                 },
             ]
         );
+        var transientContext = new ChatMessage(ChatRole.User, "private memory") { MessageId = "memory-1" };
+        ConversationHistoryMetadata.ExcludeFromPersistence(transientContext);
 
         await InvokeStoreChatHistoryAsync(
             provider,
             new ChatHistoryProvider.InvokedContext(
                 new FakeAgent(),
                 session,
-                [new ChatMessage(ChatRole.User, "question") { MessageId = "user-1" }],
+                [new ChatMessage(ChatRole.User, "question") { MessageId = "user-1" }, transientContext],
                 [new ChatMessage(ChatRole.Assistant, "answer") { MessageId = "assistant-1" }]
             ),
             cancellationToken

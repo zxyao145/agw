@@ -157,6 +157,7 @@ public class AgentRuntimeServiceCompositionTests
         var agent = service.WrapExternalAgent(new StubAIAgent(), isBackground: false);
 
         Assert.NotNull(agent.GetService<ExternalAgentChatHistoryAgent>());
+        Assert.NotNull(agent.GetService<AgentRequestContextAgent>());
         Assert.NotNull(agent.GetService<StubAIAgent>());
     }
 
@@ -170,7 +171,7 @@ public class AgentRuntimeServiceCompositionTests
         var agent = service.WrapExternalAgent(
             innerAgent,
             isBackground: false,
-            userMemoryProvider: new StaticContextProvider("private memory")
+            createMemoryContextAsync: CreateMemoryContextAsync
         );
         var request = new ChatMessage(ChatRole.User, "current request");
 
@@ -184,7 +185,10 @@ public class AgentRuntimeServiceCompositionTests
                 .GetProperty("Input")
         );
         Assert.Equal(["current request"], loggedInput.Select(message => message.Text));
-        Assert.Equal(["private memory", "current request"], innerAgent.RequestMessages.Select(message => message.Text));
+        Assert.Equal(
+            ["private memory\n\n## Current Request\n\ncurrent request"],
+            innerAgent.RequestMessages.Select(message => message.Text)
+        );
     }
 
     [Fact]
@@ -197,7 +201,7 @@ public class AgentRuntimeServiceCompositionTests
         var agent = service.WrapExternalAgent(
             innerAgent,
             isBackground: false,
-            userMemoryProvider: new StaticContextProvider("private memory")
+            createMemoryContextAsync: CreateMemoryContextAsync
         );
         var request = new ChatMessage(ChatRole.User, "current request");
 
@@ -213,7 +217,10 @@ public class AgentRuntimeServiceCompositionTests
                 .GetProperty("Input")
         );
         Assert.Equal(["current request"], loggedInput.Select(message => message.Text));
-        Assert.Equal(["private memory", "current request"], innerAgent.RequestMessages.Select(message => message.Text));
+        Assert.Equal(
+            ["private memory\n\n## Current Request\n\ncurrent request"],
+            innerAgent.RequestMessages.Select(message => message.Text)
+        );
     }
 
     [Fact]
@@ -254,6 +261,7 @@ public class AgentRuntimeServiceCompositionTests
         );
 
         Assert.NotNull(agent.GetService<ClaudeCodeProviderSessionTrackingAgent>());
+        Assert.NotNull(agent.GetService<AgentRequestContextAgent>());
         Assert.Null(agent.GetService<ExternalAgentChatHistoryAgent>());
         Assert.NotNull(agent.GetService<StubAIAgent>());
     }
@@ -267,6 +275,7 @@ public class AgentRuntimeServiceCompositionTests
 
         Assert.Null(agent.GetService<ExternalAgentChatHistoryAgent>());
         Assert.Null(agent.GetService<ClaudeCodeProviderSessionTrackingAgent>());
+        Assert.NotNull(agent.GetService<AgentRequestContextAgent>());
         Assert.NotNull(agent.GetService<StubAIAgent>());
     }
 
@@ -804,22 +813,8 @@ public class AgentRuntimeServiceCompositionTests
         }
     }
 
-    private sealed class StaticContextProvider : AIContextProvider
-    {
-        private readonly string _text;
-
-        public StaticContextProvider(string text)
-        {
-            _text = text;
-        }
-
-        public override IReadOnlyList<string> StateKeys => [];
-
-        protected override ValueTask<AIContext> ProvideAIContextAsync(
-            InvokingContext context,
-            CancellationToken cancellationToken = default
-        ) => ValueTask.FromResult(new AIContext { Messages = [new ChatMessage(ChatRole.User, _text)] });
-    }
+    private static ValueTask<ChatMessage?> CreateMemoryContextAsync(CancellationToken cancellationToken) =>
+        ValueTask.FromResult<ChatMessage?>(new ChatMessage(ChatRole.User, "private memory"));
 
     private sealed class CapturingLogger<T> : ILogger<T>
     {

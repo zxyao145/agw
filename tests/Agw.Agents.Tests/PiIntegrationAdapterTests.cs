@@ -150,7 +150,7 @@ public sealed class PiIntegrationAdapterTests
     }
 
     [Fact]
-    public async Task PiChatHistoryProvider_Request_RemovesTransportDataAndMarksUserDisplayOnly()
+    public async Task PiChatHistoryProvider_Request_IsIgnoredByResponseOnlyAdapter()
     {
         // Arrange
         var inner = new RecordingHistoryProvider();
@@ -169,10 +169,7 @@ public sealed class PiIntegrationAdapterTests
         await provider.InvokedAsync(context, TestContext.Current.CancellationToken);
 
         // Assert
-        var persisted = Assert.Single(Assert.Single(inner.Stored).Requests);
-        Assert.Null(persisted.RawRepresentation);
-        Assert.Null(Assert.Single(persisted.Contents).RawRepresentation);
-        Assert.True(ConversationHistoryMetadata.IsModelHistoryExcluded(persisted));
+        Assert.Empty(Assert.Single(inner.Stored).Requests);
     }
 
     [Fact]
@@ -193,7 +190,7 @@ public sealed class PiIntegrationAdapterTests
 
         await provider.InvokedAsync(context, TestContext.Current.CancellationToken);
 
-        Assert.Equal("run", Assert.Single(Assert.Single(inner.Stored).Requests).Text);
+        Assert.Empty(Assert.Single(inner.Stored).Requests);
     }
 
     [Fact]
@@ -216,7 +213,7 @@ public sealed class PiIntegrationAdapterTests
         // Assert
         var stored = Assert.Single(inner.Stored);
         Assert.Same(failure, stored.InvokeException);
-        Assert.Null(Assert.Single(Assert.Single(stored.Requests).Contents).RawRepresentation);
+        Assert.Empty(stored.Requests);
     }
 
     private sealed class CallbackAgent : AIAgent

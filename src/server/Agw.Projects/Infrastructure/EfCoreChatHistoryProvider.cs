@@ -255,6 +255,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         ArgumentNullException.ThrowIfNull(messages);
         var persistableMessages = messages
             .Where(message => !ConversationHandoffMetadata.IsHandoffMessage(message))
+            .Where(message => !ConversationHistoryMetadata.IsPersistenceExcluded(message))
             .Select(RemoveBlankTextualContent)
             .OfType<ChatMessage>()
             .ToList();
@@ -383,6 +384,8 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
     private static bool IsExcludedFromModelHistory(ChatMessage message) =>
         ConversationHistoryMetadata.IsModelHistoryExcluded(message)
+        || ConversationHistoryMetadata.IsPersistenceExcluded(message)
+        || ConversationHistoryMetadata.IsUserMemoryContext(message)
         || IsResult(message)
         || IsCheckpoint(message)
         || IsToolMessage(message);

@@ -177,15 +177,16 @@ Catalog 构建和运行时组合都会校验名称：
   Workspace 的多个 Project 共享该目录。
 - User Memory 始终存储在数据库中，并按认证用户 ID 隔离。只有 Markdown
   正文加密，名称和描述保持可检索。
-- User Memory Context Provider 最多注入 50 条名称及完整 Markdown 正文；描述仅用于
-  管理界面和 `user_memory_list` 展示，不注入模型上下文。
+- System 与 External Agent 共用的请求上下文管线最多注入 50 条 User Memory 名称及
+  完整 Markdown 正文；注入内容是瞬时上下文，不写入会话历史。描述仅用于管理界面和
+  `user_memory_list` 展示。
 - Background relation 与结果由对应 runtime 持久化。
 
 ### Memory 作用域与隐私边界
 
 个人偏好和需要跨项目跟随同一用户的上下文应使用 User Memory；属于某一项目、
 需要由参与该项目的 Agent 或用户共享的知识应使用 Project Memory。User Memory
-不会使用文件系统，Project Memory 则可以选择数据库或 Workspace 存储。两种
+不会使用文件系统，Project Memory 则可以选择数据库或 Workspace 存储。
 User Memory 会自动注入最多 50 条完整正文；超出范围的条目可通过
 `user_memory_list` 和 `user_memory_read` 获取。
 

@@ -217,9 +217,10 @@ State belongs to the runtime behavior that needs it, not to the catalog:
 - User Memory is always stored in the database and isolated by the authenticated
   user ID. Only its Markdown content is encrypted; names and descriptions stay
   searchable.
-- The User Memory context provider contributes at most 50 names and complete
-  Markdown bodies. Descriptions are display metadata for management UI and
-  `user_memory_list`; they are not injected into model context.
+- The shared Agent request-context pipeline injects at most 50 User Memory names
+  and complete Markdown bodies for System and External Agents. The injected
+  context is transient and is not persisted as conversation history. Descriptions
+  remain display metadata for management UI and `user_memory_list`.
 - Background relations and results are persisted by their owning runtime.
 
 ### Memory scope and privacy

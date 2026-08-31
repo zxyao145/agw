@@ -40,38 +40,44 @@ public sealed class UserMemoryProvider : AIContextProvider
 
     public override IReadOnlyList<string> StateKeys => [];
 
-    protected override async ValueTask<AIContext> ProvideAIContextAsync(
+    protected override ValueTask<AIContext> ProvideAIContextAsync(
         InvokingContext context,
         CancellationToken cancellationToken = default
     )
     {
-        var result = new AIContext { Instructions = Instructions, Tools = _tools ??= CreateTools() };
-        var memories = await ListContextAsync(MaxContextEntries, cancellationToken).ConfigureAwait(false);
-        if (memories.Count > 0)
-        {
-            var content = new StringBuilder("# User Memories\n\n");
-            foreach (var memory in memories)
-            {
-                content.Append("## ").Append(SingleLine(memory.Name)).AppendLine().AppendLine().Append(memory.Content);
-                if (!memory.Content.EndsWith('\n'))
-                {
-                    content.AppendLine();
-                }
-                content.AppendLine();
-            }
+        return ValueTask.FromResult(new AIContext { Instructions = Instructions, Tools = _tools ??= CreateTools() });
+    }
 
-            result.Messages =
-            [
-                new ChatMessage(
-                    ChatRole.User,
-                    "The following Markdown is the current user's private memory content. "
-                        + "Apply it as user-provided context.\n\n"
-                        + content
-                ),
-            ];
+    public async ValueTask<ChatMessage?> CreateContextMessageAsync(CancellationToken cancellationToken = default)
+    {
+        var memories = await ListContextAsync(MaxContextEntries, cancellationToken).ConfigureAwait(false);
+        if (memories.Count == 0)
+        {
+            return null;
         }
 
-        return result;
+        var content = new StringBuilder("# User Memories\n\n");
+        foreach (var memory in memories)
+        {
+            content.Append("## ").Append(SingleLine(memory.Name)).AppendLine().AppendLine().Append(memory.Content);
+            if (!memory.Content.EndsWith('\n'))
+            {
+                content.AppendLine();
+            }
+            content.AppendLine();
+        }
+
+        var message = new ChatMessage(
+            ChatRole.User,
+            "The following Markdown is the current user's private memory content. "
+                + "Apply it as user-provided context.\n\n"
+                + content
+        ).WithAgentRequestMessageSource(
+            AgentRequestMessageSourceType.AIContextProvider,
+            ConversationHistoryMetadata.UserMemorySourceId
+        );
+        ConversationHistoryMetadata.ExcludeFromPersistence(message);
+        return message;
     }
 
     [Description(

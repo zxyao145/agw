@@ -6,6 +6,7 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Exceptions;
+using Agw.Tools.ToolBlocks.Blocks.UserMemory;
 using Anthropic;
 using Anthropic.Core;
 using Microsoft.Agents.AI;
@@ -82,6 +83,7 @@ public partial class AgentRuntimeService
         AIAgent? aiAgent = null;
         try
         {
+            var requestHistoryProvider = new AgentRequestChatHistoryProvider(_chatHistoryProvider);
             var skillsProvider = await CreateSkillsProviderAsync(agentDefinition, project, capabilities.PluginSkills)
                 .ConfigureAwait(false);
             if (skillsProvider != null)
@@ -117,7 +119,7 @@ public partial class AgentRuntimeService
                     SystemPrompt = agentDefinition.SystemPrompt,
                     ModelId = model.Name,
                     OpenTelemetrySourceName = provider.Name,
-                    ChatHistoryProvider = _chatHistoryProvider,
+                    ChatHistoryProvider = requestHistoryProvider,
                     CompactionProvider = new CompactionProvider(
                         new ContextWindowCompactionStrategy(model.MaxContextWindowTokens, model.MaxOutputTokens),
                         stateKey: $"agw.compaction.{agentDefinition.Id:N}",
@@ -129,6 +131,10 @@ public partial class AgentRuntimeService
                 _loggerFactory,
                 _services
             );
+            var userMemoryProvider = capabilities.ContextProviders.OfType<UserMemoryProvider>().SingleOrDefault();
+            Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync =
+                userMemoryProvider == null ? null : userMemoryProvider.CreateContextMessageAsync;
+            aiAgent = new AgentRequestContextAgent(aiAgent, requestHistoryProvider, createMemoryContextAsync, _logger);
             var agentBuilder = aiAgent
                 .AsBuilder()
                 .Use(

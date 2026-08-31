@@ -15,7 +15,7 @@ only interpret upward movement outside that tolerance as a pause request.
 Claude Code MAF consumes only the first User message, while Codex and Pi consume multiple User messages.
 Also, `AIContextProvider` source attribution alone does not prevent External Agent history adapters from
 persisting injected context.
-**Files:** `src/server/Agw.Agents/Execution/Agents/ExternalAgentUserMemoryAgent.cs`,
-`src/server/Agw.Agents/Execution/Agents/ExternalAgentChatHistoryAgent.cs`
-**Resolution:** Give Claude Code an attributed composite first prompt while retaining the original request,
-prepend an attributed memory message for Codex/Pi, and filter attributed context at every External history boundary.
+**Files:** `src/server/Agw.Agents/Execution/Agents/AgentRequestContextAgent.cs`,
+`src/server/Agw.Agents/Execution/Agents/AgentRequestChatHistoryProvider.cs`
+**Resolution:** Stage the original request once for every Agent type, forward one transient composite request to
+the model, and let response-only history adapters consume the staged request independently of SDK request callbacks.
