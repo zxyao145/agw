@@ -5,7 +5,7 @@ using Microsoft.Extensions.AI;
 namespace Agw.Agents.ExternalAgents.ClaudeCode;
 
 /// <summary>
-/// Delegates Claude Code history to Agw after removing transport-only data from completed SDK messages.
+/// Delegates Claude Code response history to Agw after removing transport-only SDK data.
 /// </summary>
 internal sealed class ClaudeCodeChatHistoryProvider : ChatHistoryProvider
 {
@@ -27,7 +27,10 @@ internal sealed class ClaudeCodeChatHistoryProvider : ChatHistoryProvider
     {
         if (context.InvokeException != null)
         {
-            return _innerProvider.InvokedAsync(context, cancellationToken);
+#pragma warning disable MAAI001
+            var failedContext = new InvokedContext(context.Agent, context.Session, [], context.InvokeException);
+#pragma warning restore MAAI001
+            return _innerProvider.InvokedAsync(failedContext, cancellationToken);
         }
 
         var responseMessages = context
@@ -39,12 +42,7 @@ internal sealed class ClaudeCodeChatHistoryProvider : ChatHistoryProvider
             ConversationHistoryMetadata.ExcludeFromModelHistory(responseMessage);
         }
 #pragma warning disable MAAI001
-        var delegatedContext = new InvokedContext(
-            context.Agent,
-            context.Session,
-            context.RequestMessages,
-            responseMessages
-        );
+        var delegatedContext = new InvokedContext(context.Agent, context.Session, [], responseMessages);
 #pragma warning restore MAAI001
         return _innerProvider.InvokedAsync(delegatedContext, cancellationToken);
     }

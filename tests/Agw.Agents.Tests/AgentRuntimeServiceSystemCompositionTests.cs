@@ -271,6 +271,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             var aiAgent = await agentTask;
 
             Assert.NotNull(aiAgent);
+            Assert.NotNull(aiAgent!.GetService<AgentRequestContextAgent>());
             var agentOptions = FindInObjectGraph<ChatClientAgentOptions>(aiAgent!);
             var chatOptions = Assert.IsType<ChatOptions>(agentOptions.ChatOptions);
             Assert.Equal("You are a helpful agent.", chatOptions.Instructions);
@@ -510,7 +511,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 NullLogger<AgentCapabilityComposer>.Instance,
                 [new ProjectInstructionsSource()]
             ),
-            chatHistoryProvider: null!,
+            chatHistoryProvider: new InMemoryChatHistoryProvider(),
             providerSessionState: null!,
             providerSessions: null!,
             dataPaths,

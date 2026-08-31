@@ -56,10 +56,14 @@ public sealed class UserMemoryProviderTests
         );
 
         var refreshed = await InvokeProviderAsync(provider);
-        var memoryContext = Assert.Single(refreshed.Messages!).Text;
+        var memoryMessage = Assert.IsType<ChatMessage>(await provider.CreateContextMessageAsync(cancellationToken));
+        var memoryContext = memoryMessage.Text;
         Assert.Contains("Profile", memoryContext);
         Assert.Contains("Secret full content", memoryContext);
         Assert.DoesNotContain("Answer preferences", memoryContext);
+        Assert.True(ConversationHistoryMetadata.IsPersistenceExcluded(memoryMessage));
+        Assert.Equal(ConversationHistoryMetadata.UserMemorySourceId, memoryMessage.GetAgentRequestMessageSourceId());
+        Assert.Null(refreshed.Messages);
 
         var read = GetFunction(refreshed, UserMemoryProvider.ReadToolName);
         Assert.Equal(
@@ -137,8 +141,10 @@ public sealed class UserMemoryProviderTests
             }
         }
 
-        var context = await InvokeProviderAsync(new UserMemoryProvider(fixture.ScopeFactory));
-        var contextMessage = Assert.Single(context.Messages!).Text;
+        var provider = new UserMemoryProvider(fixture.ScopeFactory);
+        var contextMessage = Assert
+            .IsType<ChatMessage>(await provider.CreateContextMessageAsync(cancellationToken))
+            .Text;
 
         Assert.Equal(50, contextMessage.Split("## Memory ", StringSplitOptions.None).Length - 1);
         Assert.Contains("Memory 49", contextMessage);

@@ -6,6 +6,7 @@ using Agw.Integrations.Mcp;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Tooling;
 using Agw.Tools;
 using Agw.Tools.Runtime;
 using Agw.Tools.ToolBlocks;
@@ -15,16 +16,18 @@ using Microsoft.Extensions.Logging;
 namespace Agw.Agents.Execution.Agents;
 
 /// <summary>
-/// Composes the runtime capabilities required by a System Agent.
-/// 聚合 System Agent 运行时所需的各类 Capability。
+/// Composes the runtime capabilities required by an Agent.
+/// 聚合 Agent 运行时所需的各类 Capability。
 /// </summary>
 /// <remarks>
 /// Resolves tools, connections, MCP tool servers, and Agent/Project Tool Blocks,
 /// validates tool-name conflicts, and returns their tools, providers, evaluators,
 /// approval rules, warnings, and owned resources as one <see cref="AgentCapabilityComposition"/>.
+/// External Agents materialize only the User Memory context provider and ignore all other capability sources.
 /// 负责解析 Tool、Connection、MCP Tool Server 以及 Agent/Project ToolBlock，
 /// 校验工具名称冲突，并将工具、Provider、Evaluator、审批规则、警告和所拥有的资源
 /// 汇总为一个 <see cref="AgentCapabilityComposition"/>。
+/// External Agent 仅物化 User Memory 上下文 Provider，并忽略其他 Capability 来源。
 /// The returned composition owns all materialized resources and must be disposed with the Agent.
 /// 返回的组合对象拥有所有物化资源，必须随 Agent 一同释放。
 /// </remarks>
@@ -87,8 +90,51 @@ public sealed class AgentCapabilityComposer
 
         try
         {
+            var resolvedToolValues =
+                agent.Type == AgentType.External
+                    ? ToolValueResolution.Resolve(
+                        SelectUserMemoryValues(agent.Tools),
+                        SelectUserMemoryValues(project.Tools)
+                    )
+                    : ToolValueResolution.Resolve(agent.Tools, project.Tools);
+            var materializationContext = new ToolMaterializationContext
+            {
+                Agent = agent,
+                Project = project,
+                ConversationId = conversationId,
+                Workspace = project.Workspace ?? string.Empty,
+                DefaultMode = defaultMode,
+                EnvironmentVariables = environmentVariables,
+                BackgroundAgentFactory = backgroundAgentFactory,
+                SupportsHostedWebSearch = supportsHostedWebSearch,
+                DeferHumanInteractions = deferHumanInteractions,
+            };
+
             if (agent.Type == AgentType.External)
             {
+                var userMemoryDefinitions = resolvedToolValues
+                    .ToolBlocks.Where(definition =>
+                        string.Equals(
+                            definition.GetDefinitionName(),
+                            ToolBlockNames.UserMemory,
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                    )
+                    .ToArray();
+                if (userMemoryDefinitions.Length > 0)
+                {
+                    var userMemoryContribution = await _toolBlockRegistry
+                        .MaterializeAsync(
+                            userMemoryDefinitions,
+                            ToolBlockScope.Agent | ToolBlockScope.Project,
+                            materializationContext,
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false);
+                    lease.Add(userMemoryContribution);
+                    contextProviders.AddRange(userMemoryContribution.ContextProviders);
+                }
+
                 return new AgentCapabilityComposition(
                     tools,
                     pluginSkills,
@@ -105,7 +151,6 @@ public sealed class AgentCapabilityComposer
 
             contextProviders.Add(new AgwWorkspaceProvider(agent, project, _instructionSources, _logger));
 
-            var resolvedToolValues = ToolValueResolution.Resolve(agent.Tools, project.Tools);
             var toolBlockDefinitions = resolvedToolValues
                 .ToolBlocks.Where(definition =>
                     backgroundAgentFactory != null
@@ -116,19 +161,6 @@ public sealed class AgentCapabilityComposer
                     )
                 )
                 .ToArray();
-
-            var materializationContext = new ToolMaterializationContext
-            {
-                Agent = agent,
-                Project = project,
-                ConversationId = conversationId,
-                Workspace = project.Workspace ?? string.Empty,
-                DefaultMode = defaultMode,
-                EnvironmentVariables = environmentVariables,
-                BackgroundAgentFactory = backgroundAgentFactory,
-                SupportsHostedWebSearch = supportsHostedWebSearch,
-                DeferHumanInteractions = deferHumanInteractions,
-            };
 
             var toolContribution = await _toolRegistry
                 .MaterializeAsync(resolvedToolValues.Tools, materializationContext, cancellationToken)
@@ -384,4 +416,8 @@ public sealed class AgentCapabilityComposer
         }
         catch { }
     }
+
+    private static IReadOnlyList<ToolValueObject> SelectUserMemoryValues(IReadOnlyList<ToolValueObject>? values) =>
+        values?.Where(static value => value is ToolBlockValue { Definition: UserMemoryToolBlockDefinition }).ToArray()
+        ?? [];
 }

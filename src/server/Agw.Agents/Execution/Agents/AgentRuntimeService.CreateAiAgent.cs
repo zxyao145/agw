@@ -160,8 +160,8 @@ public partial class AgentRuntimeService
 
         if (request.Agent.Type == AgentType.External)
         {
-            TryCreateExternalAgent(request, project, environmentVariables, out var externalAgent);
-            return externalAgent;
+            return await CreateExternalAgentAsync(request, project, environmentVariables, cancellationToken)
+                .ConfigureAwait(false);
         }
 
         return await CreateDefinitionAgentAsync(

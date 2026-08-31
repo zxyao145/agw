@@ -9,9 +9,11 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
+using Agw.Tools.ToolBlocks.Blocks.UserMemory;
 using ClaudeCodeSdk.MAF;
 using ClaudeCodeSdk.Types;
 using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using OpenAI.CodexSdk;
 using OpenAI.CodexSdk.MAF;
@@ -31,10 +33,68 @@ public partial class AgentRuntimeService
         "PI_TELEMETRY",
     };
 
+    private async Task<AIAgent?> CreateExternalAgentAsync(
+        CreateAiAgentRequest request,
+        Project project,
+        IReadOnlyDictionary<string, string> environmentVariables,
+        CancellationToken cancellationToken,
+        bool isBackground = false
+    )
+    {
+        var capabilities = await _capabilityComposer
+            .ComposeAsync(
+                request.Agent,
+                project,
+                environmentVariables,
+                cancellationToken,
+                defaultMode: request.DefaultMode,
+                conversationId: request.ConversationId,
+                deferHumanInteractions: request.DeferHumanInteractions
+            )
+            .ConfigureAwait(false);
+        AIAgent? aiAgent = null;
+        try
+        {
+            var userMemoryProvider = capabilities.ContextProviders.OfType<UserMemoryProvider>().SingleOrDefault();
+            Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync =
+                userMemoryProvider == null ? null : userMemoryProvider.CreateContextMessageAsync;
+            var requestHistoryProvider = new AgentRequestChatHistoryProvider(_chatHistoryProvider);
+            if (
+                !TryCreateExternalAgent(
+                    request,
+                    project,
+                    environmentVariables,
+                    requestHistoryProvider,
+                    createMemoryContextAsync,
+                    out aiAgent,
+                    isBackground
+                )
+            )
+            {
+                await DisposeResourceWithoutThrowingAsync(capabilities).ConfigureAwait(false);
+                return null;
+            }
+
+            return new ResourceOwningAIAgent(aiAgent!, capabilities);
+        }
+        catch
+        {
+            if (aiAgent != null)
+            {
+                await DisposeAgentWithoutThrowingAsync(aiAgent).ConfigureAwait(false);
+            }
+
+            await DisposeResourceWithoutThrowingAsync(capabilities).ConfigureAwait(false);
+            throw;
+        }
+    }
+
     private bool TryCreateExternalAgent(
         CreateAiAgentRequest request,
         Project project,
         IReadOnlyDictionary<string, string> environmentVariables,
+        AgentRequestChatHistoryProvider requestHistoryProvider,
+        Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync,
         [NotNullWhen(true)] out AIAgent? aiAgent,
         bool isBackground = false
     )
@@ -47,7 +107,8 @@ public partial class AgentRuntimeService
                 request.ProviderSessionId,
                 request.IsResume,
                 environmentVariables,
-                isBackground
+                isBackground,
+                requestHistoryProvider
             ),
             ExternalAgentKind.Codex => CreateCodexAgent(
                 project,
@@ -62,7 +123,9 @@ public partial class AgentRuntimeService
                 request.IsResume,
                 environmentVariables,
                 request.OnExternalSessionStartedAsync,
-                isBackground
+                isBackground,
+                requestHistoryProvider,
+                createMemoryContextAsync
             ),
             _ => null,
         };
@@ -76,26 +139,68 @@ public partial class AgentRuntimeService
         {
             ExternalAgentKind.ClaudeCode => WrapClaudeCodeAgent(
                 aiAgent,
+                requestHistoryProvider,
                 isBackground,
-                request.OnExternalSessionStartedAsync
+                request.OnExternalSessionStartedAsync,
+                createMemoryContextAsync
             ),
-            ExternalAgentKind.Codex => WrapExternalAgent(aiAgent, isBackground),
+            ExternalAgentKind.Codex => WrapExternalAgent(
+                aiAgent,
+                requestHistoryProvider,
+                isBackground,
+                createMemoryContextAsync
+            ),
             ExternalAgentKind.Pi => aiAgent,
             _ => null,
         };
         return aiAgent != null;
     }
 
-    internal AIAgent WrapExternalAgent(AIAgent aiAgent, bool isBackground) =>
+    internal AIAgent WrapExternalAgent(
+        AIAgent aiAgent,
+        bool isBackground,
+        Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync = null
+    ) =>
+        WrapExternalAgent(
+            aiAgent,
+            new AgentRequestChatHistoryProvider(_chatHistoryProvider),
+            isBackground,
+            createMemoryContextAsync
+        );
+
+    private AIAgent WrapExternalAgent(
+        AIAgent aiAgent,
+        AgentRequestChatHistoryProvider requestHistoryProvider,
+        bool isBackground,
+        Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync
+    ) =>
         DecorateExternalAgent(
-            new ExternalAgentChatHistoryAgent(aiAgent, _chatHistoryProvider, _timeProvider, _logger),
-            isBackground
+            new ExternalAgentChatHistoryAgent(aiAgent, requestHistoryProvider, _timeProvider, _logger),
+            requestHistoryProvider,
+            isBackground,
+            createMemoryContextAsync
         );
 
     internal AIAgent WrapClaudeCodeAgent(
         AIAgent aiAgent,
         bool isBackground,
-        Func<string, CancellationToken, ValueTask>? onProviderSessionStartedAsync
+        Func<string, CancellationToken, ValueTask>? onProviderSessionStartedAsync,
+        Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync = null
+    ) =>
+        WrapClaudeCodeAgent(
+            aiAgent,
+            new AgentRequestChatHistoryProvider(_chatHistoryProvider),
+            isBackground,
+            onProviderSessionStartedAsync,
+            createMemoryContextAsync
+        );
+
+    private AIAgent WrapClaudeCodeAgent(
+        AIAgent aiAgent,
+        AgentRequestChatHistoryProvider requestHistoryProvider,
+        bool isBackground,
+        Func<string, CancellationToken, ValueTask>? onProviderSessionStartedAsync,
+        Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync
     )
     {
         if (onProviderSessionStartedAsync != null)
@@ -103,16 +208,51 @@ public partial class AgentRuntimeService
             aiAgent = new ClaudeCodeProviderSessionTrackingAgent(aiAgent, onProviderSessionStartedAsync);
         }
 
-        return DecorateExternalAgent(aiAgent, isBackground);
+        return DecorateExternalAgent(aiAgent, requestHistoryProvider, isBackground, createMemoryContextAsync);
     }
 
-    internal AIAgent WrapPiAgent(AIAgent aiAgent, bool isBackground) => DecorateExternalAgent(aiAgent, isBackground);
+    internal AIAgent WrapPiAgent(
+        AIAgent aiAgent,
+        bool isBackground,
+        Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync = null
+    ) =>
+        DecorateExternalAgent(
+            aiAgent,
+            new AgentRequestChatHistoryProvider(_chatHistoryProvider),
+            isBackground,
+            createMemoryContextAsync
+        );
 
     internal AIAgent WrapPiAgent(AIAgent aiAgent, IAsyncDisposable ownedResource, bool isBackground) =>
-        new ResourceOwningAIAgent(WrapPiAgent(aiAgent, isBackground), ownedResource);
+        WrapPiAgent(
+            aiAgent,
+            ownedResource,
+            new AgentRequestChatHistoryProvider(_chatHistoryProvider),
+            isBackground,
+            createMemoryContextAsync: null
+        );
 
-    private AIAgent DecorateExternalAgent(AIAgent aiAgent, bool isBackground)
+    private AIAgent WrapPiAgent(
+        AIAgent aiAgent,
+        IAsyncDisposable ownedResource,
+        AgentRequestChatHistoryProvider requestHistoryProvider,
+        bool isBackground,
+        Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync
+    ) =>
+        new ResourceOwningAIAgent(
+            DecorateExternalAgent(aiAgent, requestHistoryProvider, isBackground, createMemoryContextAsync),
+            ownedResource
+        );
+
+    private AIAgent DecorateExternalAgent(
+        AIAgent aiAgent,
+        AgentRequestChatHistoryProvider requestHistoryProvider,
+        bool isBackground,
+        Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync
+    )
     {
+        aiAgent = new AgentRequestContextAgent(aiAgent, requestHistoryProvider, createMemoryContextAsync, _logger);
+
         var agentBuilder = aiAgent
             .AsBuilder()
             .Use(
@@ -140,7 +280,8 @@ public partial class AgentRuntimeService
         Guid? providerSessionId,
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables,
-        bool isBackground
+        bool isBackground,
+        AgentRequestChatHistoryProvider requestHistoryProvider
     )
     {
         string? extra = project.ExtraSetting;
@@ -157,7 +298,7 @@ public partial class AgentRuntimeService
             providerSessionId,
             isResume,
             environmentVariables,
-            new ClaudeCodeChatHistoryProvider(_chatHistoryProvider)
+            new ClaudeCodeChatHistoryProvider(requestHistoryProvider)
         );
         if (options == null)
         {
@@ -255,7 +396,9 @@ public partial class AgentRuntimeService
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables,
         Func<string, CancellationToken, ValueTask>? onSessionStartedAsync,
-        bool isBackground
+        bool isBackground,
+        AgentRequestChatHistoryProvider requestHistoryProvider,
+        Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync
     )
     {
         string? extra = project.ExtraSetting;
@@ -278,7 +421,7 @@ public partial class AgentRuntimeService
             providerSessionId,
             isResume,
             environmentVariables,
-            new PiChatHistoryProvider(_chatHistoryProvider),
+            new PiChatHistoryProvider(requestHistoryProvider),
             interactionBridge.HandleAsync,
             onSessionStartedAsync,
             _piExternalAgentOptions.Extensions,
@@ -296,7 +439,7 @@ public partial class AgentRuntimeService
             .Use(runFunc: interactionBridge.BindRunAsync, runStreamingFunc: interactionBridge.BindRunStreamingAsync)
             .Build();
         // MAF builder proxies do not retain IAsyncDisposable, so keep the concrete process owner outside the full chain.
-        return WrapPiAgent(interactionAgent, piAgent, isBackground);
+        return WrapPiAgent(interactionAgent, piAgent, requestHistoryProvider, isBackground, createMemoryContextAsync);
     }
 
     internal static PiAgentAIAgentOptions? BuildPiAgentAIAgentOptions(

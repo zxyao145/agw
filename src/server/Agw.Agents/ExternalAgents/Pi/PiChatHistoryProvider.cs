@@ -5,7 +5,7 @@ using Microsoft.Extensions.AI;
 namespace Agw.Agents.ExternalAgents.Pi;
 
 /// <summary>
-/// Adapts Pi request and authoritative response messages to Agw history semantics before delegating persistence.
+/// Adapts authoritative Pi response messages to Agw history semantics before delegating persistence.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -55,30 +55,24 @@ internal sealed class PiChatHistoryProvider : ChatHistoryProvider
     /// <inheritdoc />
     /// <remarks>
     /// Unlike the generic EF write path, this boundary applies Pi role-based display-only metadata before persistence. It
-    /// complements rather than replaces the EF provider's existing exclusion of Agw Tool status message types. Requests
-    /// and successful responses are sanitized before delegation. Failed invocation contexts retain the original
-    /// <see cref="ChatHistoryProvider.InvokedContext.InvokeException"/> while forwarding their sanitized request messages.
+    /// complements rather than replaces the EF provider's existing exclusion of Agw Tool status message types. SDK request
+    /// callbacks are ignored because the shared request-context pipeline owns request persistence. Failed invocation
+    /// contexts retain the original <see cref="ChatHistoryProvider.InvokedContext.InvokeException"/>.
     /// </remarks>
     protected override ValueTask InvokedCoreAsync(InvokedContext context, CancellationToken cancellationToken = default)
     {
         // EF already excludes Agw Tool status types; keep Pi's additional role-based policy at the Pi adapter boundary.
-        var requestMessages = SanitizeMessages(context.RequestMessages);
         if (context.InvokeException != null)
         {
 #pragma warning disable MAAI001
-            var failedContext = new InvokedContext(
-                context.Agent,
-                context.Session,
-                requestMessages,
-                context.InvokeException
-            );
+            var failedContext = new InvokedContext(context.Agent, context.Session, [], context.InvokeException);
 #pragma warning restore MAAI001
             return _innerProvider.InvokedAsync(failedContext, cancellationToken);
         }
 
         var responseMessages = SanitizeMessages(context.ResponseMessages ?? []);
 #pragma warning disable MAAI001
-        var delegated = new InvokedContext(context.Agent, context.Session, requestMessages, responseMessages);
+        var delegated = new InvokedContext(context.Agent, context.Session, [], responseMessages);
 #pragma warning restore MAAI001
         return _innerProvider.InvokedAsync(delegated, cancellationToken);
     }

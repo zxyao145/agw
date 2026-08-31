@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace Agw.Agents.Execution.Agents;
 
 /// <summary>
-/// Persists External Agent requests immediately and response updates in bounded streaming batches.
+/// Persists External Agent response updates in bounded streaming batches.
 /// </summary>
 internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
 {
@@ -38,7 +38,7 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
     }
 
     /// <summary>
-    /// 执行非流式调用，并分别持久化请求消息和最终响应消息。
+    /// 执行非流式调用并持久化最终响应消息。
     /// </summary>
     /// <param name="messages">本轮请求消息。</param>
     /// <param name="session">本轮使用的 Agent 会话；为空时创建新会话。</param>
@@ -54,7 +54,6 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
     {
         var requestMessages = messages.ToList();
         var safeSession = session ?? await InnerAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
-        await PersistAsync(safeSession, requestMessages, [], CancellationToken.None).ConfigureAwait(false);
 
         var response = await InnerAgent
             .RunAsync(requestMessages, safeSession, options, cancellationToken)
@@ -66,7 +65,7 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
     }
 
     /// <summary>
-    /// 执行流式调用，将请求立即持久化，并按数量或时间间隔批量持久化响应更新。
+    /// 执行流式调用，并按数量或时间间隔批量持久化响应更新。
     /// </summary>
     /// <param name="messages">本轮请求消息。</param>
     /// <param name="session">本轮使用的 Agent 会话；为空时创建新会话。</param>
@@ -82,9 +81,6 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
     {
         var requestMessages = messages.ToList();
         var safeSession = session ?? await InnerAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
-
-        // 请求消息必须先于任何响应事件写入，确保长时间运行或中途断开的 Turn 仍可被追溯。
-        await PersistAsync(safeSession, requestMessages, [], CancellationToken.None).ConfigureAwait(false);
 
         var responseBuffer = new List<ChatMessage>(ResponseBatchSize);
 

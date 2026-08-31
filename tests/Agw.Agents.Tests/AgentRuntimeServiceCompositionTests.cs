@@ -13,6 +13,7 @@ using Agw.Shared.Utils;
 using ClaudeCodeSdk.MAF;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenAI.CodexSdk.MAF;
 using PiAgentSdk;
@@ -156,7 +157,96 @@ public class AgentRuntimeServiceCompositionTests
         var agent = service.WrapExternalAgent(new StubAIAgent(), isBackground: false);
 
         Assert.NotNull(agent.GetService<ExternalAgentChatHistoryAgent>());
+        Assert.NotNull(agent.GetService<AgentRequestContextAgent>());
         Assert.NotNull(agent.GetService<StubAIAgent>());
+    }
+
+    [Fact]
+    public async Task WrapExternalAgent_UserMemory_LogsOriginalRequestAndInjectsMemoryOnlyIntoSdk()
+    {
+        // Arrange
+        var logger = new CapturingLogger<ObservabilityMiddleware>();
+        var innerAgent = new CapturingStubAIAgent();
+        var service = CreateRuntimeService(new InMemoryChatHistoryProvider(), logger);
+        var agent = service.WrapExternalAgent(
+            innerAgent,
+            isBackground: false,
+            createMemoryContextAsync: CreateMemoryContextAsync
+        );
+        var request = new ChatMessage(ChatRole.User, "current request");
+
+        // Act
+        await agent.RunAsync([request], cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var loggedInput = Assert.IsAssignableFrom<IEnumerable<ChatMessage>>(
+            Assert
+                .Single(logger.Entries, entry => entry.Level == LogLevel.Debug && entry.GetProperty("Input") != null)
+                .GetProperty("Input")
+        );
+        Assert.Equal(["current request"], loggedInput.Select(message => message.Text));
+        Assert.Equal(
+            ["private memory\n\n## Current Request\n\ncurrent request"],
+            innerAgent.RequestMessages.Select(message => message.Text)
+        );
+    }
+
+    [Fact]
+    public async Task WrapExternalAgent_UserMemory_StreamingLogsOriginalRequestAndInjectsMemoryOnlyIntoSdk()
+    {
+        // Arrange
+        var logger = new CapturingLogger<ObservabilityMiddleware>();
+        var innerAgent = new CapturingStubAIAgent();
+        var service = CreateRuntimeService(new InMemoryChatHistoryProvider(), logger);
+        var agent = service.WrapExternalAgent(
+            innerAgent,
+            isBackground: false,
+            createMemoryContextAsync: CreateMemoryContextAsync
+        );
+        var request = new ChatMessage(ChatRole.User, "current request");
+
+        // Act
+        await foreach (
+            var _ in agent.RunStreamingAsync([request], cancellationToken: TestContext.Current.CancellationToken)
+        ) { }
+
+        // Assert
+        var loggedInput = Assert.IsAssignableFrom<IEnumerable<ChatMessage>>(
+            Assert
+                .Single(logger.Entries, entry => entry.Level == LogLevel.Debug && entry.GetProperty("Input") != null)
+                .GetProperty("Input")
+        );
+        Assert.Equal(["current request"], loggedInput.Select(message => message.Text));
+        Assert.Equal(
+            ["private memory\n\n## Current Request\n\ncurrent request"],
+            innerAgent.RequestMessages.Select(message => message.Text)
+        );
+    }
+
+    [Fact]
+    public void ClaudeCodeSdkContract_MultipleUserMessages_UsesFirstUserMessage()
+    {
+        // Arrange
+        var promptBuilder = typeof(ClaudeCodeAIAgent).Assembly.GetType("ClaudeCodeSdk.MAF.ClaudeMafPromptBuilder");
+        var create = promptBuilder?.GetMethod(
+            "Create",
+            System.Reflection.BindingFlags.Public
+                | System.Reflection.BindingFlags.NonPublic
+                | System.Reflection.BindingFlags.Static
+        );
+        var messages = new[]
+        {
+            new ChatMessage(ChatRole.User, "first request"),
+            new ChatMessage(ChatRole.User, "second request"),
+        };
+
+        // Act
+        var prompt = create?.Invoke(null, [messages, "session-id"]);
+
+        // Assert
+        Assert.NotNull(promptBuilder);
+        Assert.NotNull(create);
+        Assert.Equal("first request", prompt);
     }
 
     [Fact]
@@ -171,6 +261,7 @@ public class AgentRuntimeServiceCompositionTests
         );
 
         Assert.NotNull(agent.GetService<ClaudeCodeProviderSessionTrackingAgent>());
+        Assert.NotNull(agent.GetService<AgentRequestContextAgent>());
         Assert.Null(agent.GetService<ExternalAgentChatHistoryAgent>());
         Assert.NotNull(agent.GetService<StubAIAgent>());
     }
@@ -184,6 +275,7 @@ public class AgentRuntimeServiceCompositionTests
 
         Assert.Null(agent.GetService<ExternalAgentChatHistoryAgent>());
         Assert.Null(agent.GetService<ClaudeCodeProviderSessionTrackingAgent>());
+        Assert.NotNull(agent.GetService<AgentRequestContextAgent>());
         Assert.NotNull(agent.GetService<StubAIAgent>());
     }
 
@@ -619,7 +711,10 @@ public class AgentRuntimeServiceCompositionTests
         );
     }
 
-    private static AgentRuntimeService CreateRuntimeService(ChatHistoryProvider historyProvider) =>
+    private static AgentRuntimeService CreateRuntimeService(
+        ChatHistoryProvider historyProvider,
+        ILogger<ObservabilityMiddleware>? observabilityLogger = null
+    ) =>
         new(
             agentAppService: null!,
             projectRuntimeFacade: null!,
@@ -631,7 +726,7 @@ public class AgentRuntimeServiceCompositionTests
             fileSystemResolver: null!,
             sessionStateStore: null!,
             NullLogger<AgentRuntimeService>.Instance,
-            new ObservabilityMiddleware(NullLogger<ObservabilityMiddleware>.Instance),
+            new ObservabilityMiddleware(observabilityLogger ?? NullLogger<ObservabilityMiddleware>.Instance),
             new UsageTrackingMiddleware(
                 providerSessionState: null!,
                 usageRecorder: null!,
@@ -688,5 +783,66 @@ public class AgentRuntimeServiceCompositionTests
             DisposeCount++;
             return ValueTask.CompletedTask;
         }
+    }
+
+    private sealed class CapturingStubAIAgent : StubAIAgent
+    {
+        public IReadOnlyList<ChatMessage> RequestMessages { get; private set; } = [];
+
+        protected override Task<AgentResponse> RunCoreAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session,
+            AgentRunOptions? options,
+            CancellationToken cancellationToken
+        )
+        {
+            RequestMessages = messages.ToList();
+            return Task.FromResult(new AgentResponse());
+        }
+
+        protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
+            IEnumerable<ChatMessage> messages,
+            AgentSession? session,
+            AgentRunOptions? options,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken
+        )
+        {
+            RequestMessages = messages.ToList();
+            await Task.CompletedTask;
+            yield break;
+        }
+    }
+
+    private static ValueTask<ChatMessage?> CreateMemoryContextAsync(CancellationToken cancellationToken) =>
+        ValueTask.FromResult<ChatMessage?>(new ChatMessage(ChatRole.User, "private memory"));
+
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        public List<LogEntry> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter
+        )
+        {
+            var properties = state as IEnumerable<KeyValuePair<string, object?>> ?? [];
+            Entries.Add(new LogEntry(logLevel, properties.ToList()));
+        }
+    }
+
+    private sealed record LogEntry(LogLevel Level, IReadOnlyList<KeyValuePair<string, object?>> Properties)
+    {
+        public object? GetProperty(string name) =>
+            Properties
+                .FirstOrDefault(property => string.Equals(property.Key.TrimStart('@'), name, StringComparison.Ordinal))
+                .Value;
     }
 }
