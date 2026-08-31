@@ -12,6 +12,7 @@ import {
   Menu,
   nativeImage,
   net,
+  Notification,
   protocol,
   safeStorage,
   session,
@@ -39,6 +40,7 @@ import {
 import { createLocalDesktopToken } from "./runtime/local-token";
 import { readLocalServerRuntime } from "./runtime/local-server-runtime";
 import { resolveServerExecutablePath } from "./runtime/server-executable-path";
+import { getTurnNotificationText, normalizeTurnNotificationStatus } from "./turn-notification";
 import { DesktopSettingsStore, type SecretCodec } from "./settings/settings-store";
 import { checkForDesktopUpdate } from "./update/github-release-updater";
 
@@ -431,6 +433,15 @@ async function showWindow(pathname?: string): Promise<void> {
   mainWindow.focus();
 }
 
+function showTurnNotification(request: unknown): void {
+  const status = normalizeTurnNotificationStatus(request);
+  if (!status || !Notification.isSupported()) return;
+  if (mainWindow?.isFocused()) return;
+  const notification = new Notification(getTurnNotificationText(status));
+  notification.on("click", () => showWindowSafely());
+  notification.show();
+}
+
 function showWindowSafely(pathname?: string): void {
   void showWindow(pathname).catch((error) =>
     reportMainProcessError("Unable to open Agw Desktop", error),
@@ -618,6 +629,10 @@ function registerIpc(): void {
   ipcMain.handle("agw:show-window", async (event) => {
     assertTrustedSender(senderUrl(event));
     await showWindow();
+  });
+  ipcMain.handle("agw:show-turn-notification", async (event, request: unknown) => {
+    assertTrustedSender(senderUrl(event));
+    showTurnNotification(request);
   });
   ipcMain.handle("agw:quit-desktop", async (event) => {
     assertTrustedSender(senderUrl(event));

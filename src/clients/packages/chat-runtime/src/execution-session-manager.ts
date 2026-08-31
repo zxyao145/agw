@@ -10,6 +10,7 @@ import {
   type ExecutionSetting,
   type ExecutionConfigurationResult,
   type AgentflowCheckpointAvailability,
+  type TurnFinishedStatus,
 } from "./execution-session";
 import type { AiMessage } from "@agw/api";
 import {
@@ -60,6 +61,11 @@ type ActiveTurnState = ActiveTurnSnapshot & {
 export type ActiveTurnSnapshot = {
   streamingScopeId: string;
   messages: AiMessage[];
+};
+
+export type TurnFinishedEvent = {
+  key: ExecutionSessionKey;
+  status: TurnFinishedStatus;
 };
 
 export type ManagedExecutionHandle = {
@@ -238,7 +244,18 @@ export class ExecutionSessionManager {
     await entry.client.retryConnection();
   }
 
+  private readonly turnFinishedListeners = new Set<(event: TurnFinishedEvent) => void>();
+
   public subscribe = this.activity.subscribe;
+
+  /**
+   * 订阅 turn 进入终态的一次性事件。
+   * 仅在执行从 active 转为终态时触发；重复终态消息、回放与水合不会重复触发。
+   */
+  public subscribeTurnFinished = (listener: (event: TurnFinishedEvent) => void): (() => void) => {
+    this.turnFinishedListeners.add(listener);
+    return () => this.turnFinishedListeners.delete(listener);
+  };
 
   public getSnapshot = this.activity.getSnapshot;
 
@@ -256,8 +273,10 @@ export class ExecutionSessionManager {
       const terminalStatus = getTurnFinishedStatus(message);
       if (terminalStatus) {
         this.clearPendingHumanGate(entry);
+        const wasActive = this.activity.isActive(entry.key);
         this.activity.turnFinished(entry.key, terminalStatus);
         entry.activeTurn = null;
+        if (wasActive) this.emitTurnFinished(entry.key, terminalStatus);
       }
     }
     if (entry.handler) {
@@ -333,6 +352,10 @@ export class ExecutionSessionManager {
     };
   }
 
+  private emitTurnFinished(key: ExecutionSessionKey, status: TurnFinishedStatus): void {
+    for (const listener of this.turnFinishedListeners) listener({ key, status });
+  }
+
   private handleClose(entry: Entry, error?: Error): void {
     entry.reconnectState = null;
     this.activity.connectionClosed(entry.key, error);
@@ -358,6 +381,7 @@ export class ExecutionSessionManager {
       this.activity.turnStarted(entry.key);
     } else if (this.activity.isActive(entry.key)) {
       this.activity.turnFinished(entry.key, "completed");
+      this.emitTurnFinished(entry.key, "completed");
     }
     entry.handler?.onReconnected?.();
   }

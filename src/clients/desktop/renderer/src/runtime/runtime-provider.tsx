@@ -9,7 +9,11 @@ import type {
   ServerProfile,
 } from "@desktop/shared/contracts";
 import { configureApiRuntime, resetApiRuntime } from "@agw/api";
-import { configureExecutionRuntime, ExecutionPlatformProvider } from "@agw/chat";
+import {
+  configureExecutionRuntime,
+  executionSessionManager,
+  ExecutionPlatformProvider,
+} from "@agw/chat";
 import { createQueryClient } from "@agw/components";
 import { QueryClientProvider, type QueryClient } from "@agw/components/query";
 import {
@@ -122,6 +126,16 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
       delete root.dataset.agwPlatform;
     };
   }, [isDesktop, platform]);
+
+  // 后台 turn 进入终态时请求主进程显示系统通知；interrupted 多为用户主动停止，不通知。
+  React.useEffect(() => {
+    const bridge = isDesktop ? window.agwDesktop : undefined;
+    if (!bridge) return;
+    return executionSessionManager.subscribeTurnFinished(({ status }) => {
+      if (status === "interrupted") return;
+      void bridge.showTurnNotification({ status });
+    });
+  }, [isDesktop]);
 
   const connect = React.useCallback(
     async (providedState?: DesktopRuntimeState) => {

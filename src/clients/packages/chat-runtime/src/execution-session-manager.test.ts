@@ -369,3 +369,150 @@ test("manager drops a buffered question interaction when the turn finishes", asy
 
   assert.deepEqual(replayed, [turnFinished]);
 });
+
+function createTurnStartMessage(): AiMessage {
+  return {
+    messageId: "turn-start-1",
+    role: "system",
+    author: "$agw",
+    contents: [],
+    additionalProperties: { type: "turn-start" },
+  };
+}
+
+test("manager notifies once when an active turn finishes", () => {
+  let clientHandlers: ExecutionHubHandlers | undefined;
+  const manager = new ExecutionSessionManager((handlers) => {
+    clientHandlers = handlers;
+    return createExecutionClient();
+  });
+  manager.attach(sessionKey, { onMessage: () => undefined });
+  const events: { key: typeof sessionKey; status: string }[] = [];
+  manager.subscribeTurnFinished((event) => events.push(event));
+
+  clientHandlers?.onMessage(createTurnStartMessage());
+  clientHandlers?.onMessage(createTurnFinishedMessage());
+  clientHandlers?.onMessage(createTurnFinishedMessage());
+
+  assert.equal(events.length, 1);
+  assert.deepEqual(events[0]?.key, sessionKey);
+  assert.equal(events[0]?.status, "completed");
+});
+
+test("manager notifies with the failed status", () => {
+  let clientHandlers: ExecutionHubHandlers | undefined;
+  const manager = new ExecutionSessionManager((handlers) => {
+    clientHandlers = handlers;
+    return createExecutionClient();
+  });
+  manager.attach(sessionKey, { onMessage: () => undefined });
+  const events: { status: string }[] = [];
+  manager.subscribeTurnFinished((event) => events.push(event));
+
+  clientHandlers?.onMessage(createTurnStartMessage());
+  clientHandlers?.onMessage({
+    ...createTurnFinishedMessage(),
+    additionalProperties: { type: "turn-finished", status: "failed" },
+  });
+
+  assert.deepEqual(events, [{ key: sessionKey, status: "failed" }]);
+});
+
+test("manager does not notify for a terminal message without an active turn", () => {
+  let clientHandlers: ExecutionHubHandlers | undefined;
+  const manager = new ExecutionSessionManager((handlers) => {
+    clientHandlers = handlers;
+    return createExecutionClient();
+  });
+  manager.attach(sessionKey, { onMessage: () => undefined });
+  const events: { status: string }[] = [];
+  manager.subscribeTurnFinished((event) => events.push(event));
+
+  clientHandlers?.onMessage(createTurnFinishedMessage());
+
+  assert.equal(events.length, 0);
+});
+
+test("manager notifies again when a new turn finishes", () => {
+  let clientHandlers: ExecutionHubHandlers | undefined;
+  const manager = new ExecutionSessionManager((handlers) => {
+    clientHandlers = handlers;
+    return createExecutionClient();
+  });
+  manager.attach(sessionKey, { onMessage: () => undefined });
+  const events: { status: string }[] = [];
+  manager.subscribeTurnFinished((event) => events.push(event));
+
+  clientHandlers?.onMessage(createTurnStartMessage());
+  clientHandlers?.onMessage(createTurnFinishedMessage());
+  clientHandlers?.onMessage(createTurnStartMessage());
+  clientHandlers?.onMessage(createTurnFinishedMessage());
+
+  assert.equal(events.length, 2);
+});
+
+test("manager stops notifying after the turn finished listener unsubscribes", () => {
+  let clientHandlers: ExecutionHubHandlers | undefined;
+  const manager = new ExecutionSessionManager((handlers) => {
+    clientHandlers = handlers;
+    return createExecutionClient();
+  });
+  manager.attach(sessionKey, { onMessage: () => undefined });
+  const events: { status: string }[] = [];
+  const unsubscribe = manager.subscribeTurnFinished((event) => events.push(event));
+  unsubscribe();
+
+  clientHandlers?.onMessage(createTurnStartMessage());
+  clientHandlers?.onMessage(createTurnFinishedMessage());
+
+  assert.equal(events.length, 0);
+});
+
+test("manager notifies when reconnect finds the execution finished", async () => {
+  let clientHandlers: ExecutionHubHandlers | undefined;
+  let activeExecution = true;
+  const manager = new ExecutionSessionManager((handlers) => {
+    clientHandlers = handlers;
+    return {
+      ...createExecutionClient(),
+      configure: async () => ({ restoredDurableExecution: true }),
+      hasActiveExecution: () => activeExecution,
+    };
+  });
+  const handle = manager.attach(sessionKey, { onMessage: () => undefined });
+  const events: { status: string }[] = [];
+  manager.subscribeTurnFinished((event) => events.push(event));
+
+  await handle.configure({ projectId: "project-1", contextId: "context-1" });
+  activeExecution = false;
+  clientHandlers?.onReconnected?.();
+
+  assert.deepEqual(events, [{ key: sessionKey, status: "completed" }]);
+});
+
+test("manager does not notify when the execute command fails", async () => {
+  const manager = new ExecutionSessionManager(() => ({
+    ...createExecutionClient(),
+    execute: async () => {
+      throw new Error("dispatch failed");
+    },
+  }));
+  const handle = manager.attach(sessionKey, { onMessage: () => undefined });
+  const events: { status: string }[] = [];
+  manager.subscribeTurnFinished((event) => events.push(event));
+
+  await assert.rejects(
+    handle.execute({
+      agentId: "agent-1",
+      agentType: 0,
+      input: {
+        messageId: "user-1",
+        author: "$agw",
+        contents: [{ type: "TextContent", content: "run" }],
+      },
+    }),
+    /dispatch failed/,
+  );
+
+  assert.equal(events.length, 0);
+});
