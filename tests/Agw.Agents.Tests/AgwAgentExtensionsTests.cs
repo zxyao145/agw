@@ -233,6 +233,83 @@ public sealed class AgwAgentExtensionsTests : IDisposable
     }
 
     [Fact]
+    public async Task AsAgwAgent_StreamingFunctionLoop_RemovesEmptyTextContentBeforeNextModelRequest()
+    {
+        // Arrange
+        var function = AIFunctionFactory.Create(
+            (Func<string>)(() => "search result"),
+            new AIFunctionFactoryOptions { Name = "web_search" }
+        );
+        var client = new FunctionCallingStubChatClient(functionRoundCount: 2, includeEmptyTextContent: true);
+        var agent = client.AsAgwAgent(
+            CreateDefinition(
+                new InMemoryChatHistoryProvider(),
+                new CompactionProvider(new CountingCompactionStrategy(), stateKey: "empty-text-function-loop")
+            ),
+            CreateCapabilities(tools: [function]),
+            NullLoggerFactory.Instance,
+            new ServiceCollection().BuildServiceProvider()
+        );
+
+        // Act
+        await foreach (
+            var _ in agent.RunStreamingAsync(
+                [new ChatMessage(ChatRole.User, "review changes")],
+                cancellationToken: TestContext.Current.CancellationToken
+            )
+        ) { }
+
+        // Assert
+        Assert.Equal(3, client.Requests.Count);
+        Assert.Equal(
+            [0, 1, 2],
+            client.Requests.Select(request =>
+                request.SelectMany(message => message.Contents).OfType<FunctionResultContent>().Count()
+            )
+        );
+        Assert.All(
+            client.Requests,
+            request =>
+                Assert.DoesNotContain(
+                    request.SelectMany(message => message.Contents).OfType<TextContent>(),
+                    content => string.IsNullOrEmpty(content.Text)
+                )
+        );
+    }
+
+    [Fact]
+    public async Task ModelInputFiltering_EmptyTextAndFunctionApproval_RemovesUnsupportedContent()
+    {
+        // Arrange
+        var innerClient = new RecordingResponseChatClient();
+        using var client = new ModelInputFilteringChatClient(innerClient);
+        var functionCall = new FunctionCallContent("call-1", "run_shell", new Dictionary<string, object?>());
+        var approvalRequest = new ToolApprovalRequestContent("approval-1", functionCall);
+        var mcpApproval = new ToolApprovalResponseContent(
+            "mcp-approval-1",
+            approved: true,
+            new McpServerToolCallContent("mcp-call-1", "read_repository", "github")
+        );
+
+        // Act
+        await client.GetResponseAsync(
+            [
+                new ChatMessage(ChatRole.User, [approvalRequest.CreateResponse(approved: true), mcpApproval]),
+                new ChatMessage(ChatRole.Assistant, [new TextContent(string.Empty), functionCall]),
+                new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call-1", "done")]),
+            ],
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+
+        // Assert
+        var request = Assert.Single(innerClient.Requests);
+        Assert.Equal([ChatRole.User, ChatRole.Assistant, ChatRole.Tool], request.Select(message => message.Role));
+        Assert.Same(mcpApproval, Assert.Single(request[0].Contents));
+        Assert.Same(functionCall, Assert.Single(request[1].Contents));
+        Assert.IsType<FunctionResultContent>(Assert.Single(request[2].Contents));
+    }
+
+    [Fact]
     public async Task ContextWindowCompactionStrategy_LongHistory_PreservesSystemAndRecentMessages()
     {
         const string toolCallId = "old-tool-call";
@@ -1206,11 +1283,17 @@ public sealed class AgwAgentExtensionsTests : IDisposable
     {
         private readonly int _functionCallCount;
         private readonly int _functionRoundCount;
+        private readonly bool _includeEmptyTextContent;
 
-        public FunctionCallingStubChatClient(int functionCallCount = 1, int functionRoundCount = 1)
+        public FunctionCallingStubChatClient(
+            int functionCallCount = 1,
+            int functionRoundCount = 1,
+            bool includeEmptyTextContent = false
+        )
         {
             _functionCallCount = functionCallCount;
             _functionRoundCount = functionRoundCount;
+            _includeEmptyTextContent = includeEmptyTextContent;
         }
 
         public List<List<ChatMessage>> Requests { get; } = [];
@@ -1265,19 +1348,24 @@ public sealed class AgwAgentExtensionsTests : IDisposable
             request.SelectMany(message => message.Contents).OfType<FunctionResultContent>().Count()
             / _functionCallCount;
 
-        private ChatMessage CreateFunctionCallMessage(int round) =>
-            new(
-                ChatRole.Assistant,
-                Enumerable
-                    .Range(1, _functionCallCount)
-                    .Select(index => new FunctionCallContent(
-                        $"web-search-call-{round}-{index}",
-                        "web_search",
-                        new Dictionary<string, object?>()
-                    ))
-                    .Cast<AIContent>()
-                    .ToList()
-            );
+        private ChatMessage CreateFunctionCallMessage(int round)
+        {
+            var contents = Enumerable
+                .Range(1, _functionCallCount)
+                .Select(index => new FunctionCallContent(
+                    $"web-search-call-{round}-{index}",
+                    "web_search",
+                    new Dictionary<string, object?>()
+                ))
+                .Cast<AIContent>()
+                .ToList();
+            if (_includeEmptyTextContent)
+            {
+                contents.Insert(0, new TextContent(string.Empty));
+            }
+
+            return new ChatMessage(ChatRole.Assistant, contents);
+        }
     }
 
     private sealed class RecordingResponseChatClient : IChatClient

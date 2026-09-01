@@ -11,6 +11,13 @@ export type UninstallResult = {
   message: string;
 };
 
+export type TurnNotificationStatus = "completed" | "failed";
+
+export type TurnNotificationRequest = {
+  status: TurnNotificationStatus;
+  title?: string;
+};
+
 export type AgwDesktopBridge = {
   getRuntimeState(): Promise<DesktopRuntimeState>;
   checkForUpdates(): Promise<DesktopUpdateCheckResult>;
@@ -23,5 +30,6 @@ export type AgwDesktopBridge = {
   setActiveTaskCount(count: number): Promise<void>;
   prepareUninstall(request: UninstallRequest): Promise<UninstallResult>;
   showWindow(): Promise<void>;
+  showTurnNotification(request: TurnNotificationRequest): Promise<void>;
   quitDesktop(): Promise<void>;
 };

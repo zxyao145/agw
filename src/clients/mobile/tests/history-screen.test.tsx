@@ -1,4 +1,5 @@
 import { fireEvent, render } from "@testing-library/react-native";
+import { router } from "expo-router";
 import React from "react";
 
 import { HistoryScreen } from "@/features/history/history-screen";
@@ -7,6 +8,7 @@ import { useWorkspace } from "@/features/workspace/workspace-provider";
 jest.mock("expo-router", () => ({
   router: {
     back: jest.fn(),
+    canGoBack: jest.fn(),
     push: jest.fn(),
     replace: jest.fn(),
   },
@@ -50,7 +52,45 @@ const conversations = [
   },
 ];
 
+beforeEach(() => {
+  jest.clearAllMocks();
+  jest.mocked(useWorkspace).mockReturnValue({
+    projects: [{ id: "project-1", name: "Agw" }],
+    conversations,
+    selectedProjectId: "project-1",
+    selectedProject: { id: "project-1", name: "Agw" },
+    selectedConversationId: "11111111-1111-1111-1111-000000000001",
+    selectedContextId: "context-1",
+    isExecuting: false,
+    selectConversation: jest.fn(),
+    selectProject: jest.fn(),
+    refreshConversations: jest.fn(),
+    renameConversation: jest.fn(),
+    deleteConversation: jest.fn(),
+  } as never);
+});
+
 describe("HistoryScreen conversation actions", () => {
+  test("returns to Chat when history has no previous route", async () => {
+    jest.mocked(router.canGoBack).mockReturnValue(false);
+    const view = await render(<HistoryScreen />);
+
+    await fireEvent.press(view.getByLabelText("Close history"));
+
+    expect(router.back).not.toHaveBeenCalled();
+    expect(router.replace).toHaveBeenCalledWith("/chat");
+  });
+
+  test("returns to the previous route when history was pushed", async () => {
+    jest.mocked(router.canGoBack).mockReturnValue(true);
+    const view = await render(<HistoryScreen />);
+
+    await fireEvent.press(view.getByLabelText("Close history"));
+
+    expect(router.back).toHaveBeenCalledTimes(1);
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
   test("shows rename and delete actions for inactive conversations", async () => {
     jest.mocked(useWorkspace).mockReturnValue({
       projects: [{ id: "project-1", name: "Agw" }],

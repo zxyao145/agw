@@ -14,7 +14,10 @@ export function HistoryScreen(): React.JSX.Element {
       <NativeConversationList
         safeTop={insets.top}
         safeBottom={insets.bottom}
-        onClose={() => router.back()}
+        onClose={() => {
+          if (router.canGoBack()) router.back();
+          else router.replace("/chat");
+        }}
         onOpenChat={() => router.replace("/chat")}
         onOpenSettings={() => router.push("/settings")}
       />

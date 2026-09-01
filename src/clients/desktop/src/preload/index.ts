@@ -5,6 +5,7 @@ import type {
   DesktopRuntimeState,
   DesktopSettings,
   DesktopUpdateCheckResult,
+  TurnNotificationRequest,
   UninstallRequest,
   UninstallResult,
 } from "../shared/contracts";
@@ -28,6 +29,8 @@ const bridge: AgwDesktopBridge = {
   prepareUninstall: (request: UninstallRequest) =>
     ipcRenderer.invoke("agw:prepare-uninstall", request) as Promise<UninstallResult>,
   showWindow: () => ipcRenderer.invoke("agw:show-window") as Promise<void>,
+  showTurnNotification: (request: TurnNotificationRequest) =>
+    ipcRenderer.invoke("agw:show-turn-notification", request) as Promise<void>,
   quitDesktop: () => ipcRenderer.invoke("agw:quit-desktop") as Promise<void>,
 };
 
