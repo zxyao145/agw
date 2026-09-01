@@ -11,6 +11,7 @@ public class Agentflow : BaseEntity, IAggregateRoot
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
+    public bool Enable { get; set; } = true;
     public string SystemPrompt { get; set; } = string.Empty;
     public Guid? SummaryModelProviderId { get; set; }
 

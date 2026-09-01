@@ -702,6 +702,49 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/agentflows/enabled": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["AgentflowEnabledUpdateRequest"];
+          "text/json": components["schemas"]["AgentflowEnabledUpdateRequest"];
+          "application/*+json": components["schemas"]["AgentflowEnabledUpdateRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfAgentflow"];
+            "application/json": components["schemas"]["ApiResultOfAgentflow"];
+            "text/json": components["schemas"]["ApiResultOfAgentflow"];
+          };
+        };
+      };
+    };
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/agents": {
     parameters: {
       query?: never;
@@ -930,6 +973,49 @@ export interface paths {
       };
     };
     put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/agents/enabled": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["AgentEnabledUpdateRequest"];
+          "text/json": components["schemas"]["AgentEnabledUpdateRequest"];
+          "application/*+json": components["schemas"]["AgentEnabledUpdateRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfAgentResponse"];
+            "application/json": components["schemas"]["ApiResultOfAgentResponse"];
+            "text/json": components["schemas"]["ApiResultOfAgentResponse"];
+          };
+        };
+      };
+    };
     post?: never;
     delete?: never;
     options?: never;
@@ -4062,6 +4148,7 @@ export interface components {
       displayName: string;
       name: string;
       description: string;
+      enable: boolean;
       /** @description System prompt / instructions for the agent's LLM. */
       systemPrompt: string;
       /**
@@ -4121,11 +4208,17 @@ export interface components {
       /** Format: uuid */
       summaryModelProviderId?: null | string;
     };
+    AgentEnabledUpdateRequest: {
+      /** Format: uuid */
+      agentId: string;
+      enable: boolean;
+    };
     Agentflow: {
       /** Format: uuid */
       id: string;
       name: string;
       description: null | string;
+      enable: boolean;
       systemPrompt: string;
       /** Format: uuid */
       summaryModelProviderId?: null | string;
@@ -4174,6 +4267,11 @@ export interface components {
       label: null | string;
       conditionJson: null | string;
       configJson: null | string;
+    };
+    AgentflowEnabledUpdateRequest: {
+      /** Format: uuid */
+      agentflowId: string;
+      enable: boolean;
     };
     AgentflowNode: {
       /** Format: uuid */
@@ -4259,6 +4357,7 @@ export interface components {
       displayName: string;
       name: string;
       description: string;
+      enable: boolean;
       systemPrompt: string;
       /** Format: uuid */
       modelProviderId: null | string;

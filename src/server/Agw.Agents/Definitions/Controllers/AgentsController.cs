@@ -120,6 +120,23 @@ public class AgentsController : ControllerBase
             : ApiResult.Ok(AgentResponse.FromDomain(updated));
     }
 
+    [HttpPut("enabled")]
+    [ProducesApiResult(typeof(AgentResponse))]
+    public async Task<IActionResult> UpdateEnabledAsync(
+        [FromBody] AgentEnabledUpdateRequest request,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var updated = await _agentAppService.UpdateAgentEnabledAsync(
+            request.AgentId,
+            request.Enable,
+            cancellationToken
+        );
+        return updated == null
+            ? ErrorCodes.ResourceNotFound.ToApiResult()
+            : ApiResult.Ok(AgentResponse.FromDomain(updated));
+    }
+
     [HttpDelete("{id:guid}")]
     [ProducesApiResult]
     public async Task<IActionResult> DeleteAsync(Guid id)

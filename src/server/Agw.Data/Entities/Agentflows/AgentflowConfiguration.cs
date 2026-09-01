@@ -10,6 +10,7 @@ public class AgentflowConfiguration : IEntityTypeConfiguration<Agentflow>
         builder.HasKey(e => e.Id);
         builder.Property(e => e.Name).IsRequired().HasMaxLength(200);
         builder.Property(e => e.Description).HasMaxLength(1000);
+        builder.Property(e => e.Enable).HasDefaultValue(true);
         builder.Property(e => e.SystemPrompt).HasMaxLength(4000);
     }
 }

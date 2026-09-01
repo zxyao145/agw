@@ -14,6 +14,7 @@ public class Agent : BaseEntity, IAggregateRoot
     public string DisplayName { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    public bool Enable { get; set; } = true;
 
     /// <summary>
     /// System prompt / instructions for the agent's LLM.

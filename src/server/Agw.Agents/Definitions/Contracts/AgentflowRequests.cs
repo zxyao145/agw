@@ -30,6 +30,8 @@ public record AgentflowCreateRequest(
     Guid? SummaryModelProviderId = null
 );
 
+public sealed record AgentflowEnabledUpdateRequest(Guid AgentflowId, bool Enable);
+
 public record AgentflowUpdateRequest(
     string Name,
     string? Description,

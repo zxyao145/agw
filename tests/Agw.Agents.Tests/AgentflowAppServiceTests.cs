@@ -178,6 +178,73 @@ public sealed class AgentflowAppServiceTests
         Assert.Equal("original", persisted.Description);
     }
 
+    [Fact]
+    public async Task ListAsync_ExcludesDisabledWhilePagedListIncludesAll()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
+        dbContext.Agentflows.AddRange(
+            new Agentflow
+            {
+                Id = Guid.CreateVersion7(),
+                Name = "enabled-flow",
+                Enable = true,
+                CreateBy = "tester",
+                CreateTime = UtcNow,
+            },
+            new Agentflow
+            {
+                Id = Guid.CreateVersion7(),
+                Name = "disabled-flow",
+                Enable = false,
+                CreateBy = "tester",
+                CreateTime = UtcNow,
+            }
+        );
+        await dbContext.SaveChangesAsync(cancellationToken);
+        var service = CreateService(dbContext);
+
+        // Act
+        var selectable = await service.ListAsync();
+        var managed = await service.ListPageAsync(1, 10, cancellationToken);
+
+        // Assert
+        Assert.Equal("enabled-flow", Assert.Single(selectable).Name);
+        Assert.Equal(2, managed.Total);
+    }
+
+    [Fact]
+    public async Task UpdateEnabledAsync_OwnedAgentflow_PersistsEnabledState()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = await OpenConnectionAsync(cancellationToken);
+        await using var dbContext = await CreateDbContextAsync(connection, cancellationToken);
+        var agentflow = new Agentflow
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "disabled-flow",
+            Enable = false,
+            CreateBy = "tester",
+            CreateTime = UtcNow,
+        };
+        dbContext.Agentflows.Add(agentflow);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        dbContext.ChangeTracker.Clear();
+        var service = CreateService(dbContext);
+
+        // Act
+        var updated = await service.UpdateEnabledAsync(agentflow.Id, true, cancellationToken);
+
+        // Assert
+        Assert.NotNull(updated);
+        Assert.True(updated.Enable);
+        dbContext.ChangeTracker.Clear();
+        Assert.True((await dbContext.Agentflows.AsNoTracking().SingleAsync(cancellationToken)).Enable);
+    }
+
     private static AgentflowAppService CreateService(AgwDbContext dbContext) =>
         new(
             dbContext,

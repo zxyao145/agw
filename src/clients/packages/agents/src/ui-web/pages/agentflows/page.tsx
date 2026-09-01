@@ -5,7 +5,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@agw/co
 import mermaid from "mermaid";
 import { toast } from "sonner";
 
-import { apiDelete, apiGet, apiPost, getApiErrorMessage } from "@agw/api";
+import { apiDelete, apiGet, apiPost, apiPut, getApiErrorMessage } from "@agw/api";
 import { PaginatedTable } from "@agw/components";
 import { Button } from "@agw/components";
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle } from "@agw/components";
@@ -28,11 +28,19 @@ import {
 } from "./components/mermaid-viewport";
 import { createAgentflowCopyRequest } from "../copy-requests";
 
+type AgentflowEnabledUpdateRequest = {
+  agentflowId: string;
+  enable: boolean;
+};
+
 export default function AgentflowsPage() {
   const queryClient = useQueryClient();
   const [pageIndex, setPageIndex] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
   const [visualOpen, setVisualOpen] = React.useState(false);
+  const [pendingEnabledAgentflowIds, setPendingEnabledAgentflowIds] = React.useState<Set<string>>(
+    () => new Set(),
+  );
 
   const agentflowsQuery = useQuery({
     queryKey: ["agentflows", "paged", pageIndex, pageSize],
@@ -212,6 +220,25 @@ export default function AgentflowsPage() {
     },
   });
 
+  const updateAgentflowEnabledMutation = useMutation({
+    mutationFn: async (body: AgentflowEnabledUpdateRequest) => {
+      return (await apiPut("/api/agentflows/enabled", { body })) as unknown as AgentflowDto;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["agentflows"] });
+    },
+    onError: (error) => {
+      toast.error(`Update failed: ${getApiErrorMessage(error)}`);
+    },
+    onSettled: (_data, _error, variables) => {
+      setPendingEnabledAgentflowIds((current) => {
+        const next = new Set(current);
+        next.delete(variables.agentflowId);
+        return next;
+      });
+    },
+  });
+
   const handleDelete = React.useCallback(
     (agentflow: AgentflowDto) => {
       if (window.confirm(`Are you sure you want to delete "${agentflow.name}"?`)) {
@@ -262,6 +289,16 @@ export default function AgentflowsPage() {
     setExecutingAgentflow(agentflow);
     setExecuteOpen(true);
   }, []);
+
+  const handleEnabledChange = React.useCallback(
+    (agentflow: AgentflowDto, enable: boolean) => {
+      if (pendingEnabledAgentflowIds.has(agentflow.id)) return;
+
+      setPendingEnabledAgentflowIds((current) => new Set(current).add(agentflow.id));
+      updateAgentflowEnabledMutation.mutate({ agentflowId: agentflow.id, enable });
+    },
+    [pendingEnabledAgentflowIds, updateAgentflowEnabledMutation],
+  );
 
   const handleViewMermaid = React.useCallback(async (agentflow: AgentflowDto) => {
     const requestId = mermaidRequestIdRef.current + 1;
@@ -462,6 +499,8 @@ export default function AgentflowsPage() {
           onDelete={handleDelete}
           onExecute={handleExecute}
           onViewMermaid={handleViewMermaid}
+          onEnabledChange={handleEnabledChange}
+          pendingEnabledAgentflowIds={pendingEnabledAgentflowIds}
           isCopying={copyAgentflowMutation.isPending}
         />
       </PaginatedTable>

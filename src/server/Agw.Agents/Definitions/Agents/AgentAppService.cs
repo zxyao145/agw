@@ -86,7 +86,7 @@ public class AgentAppService
     public async Task<IReadOnlyList<Agent>> ListAgentsForCurrentUserAsync()
     {
         var user = _userInfoService.RequiredUserId;
-        var agents = await CreateAgentQuery(user).ToListAsync();
+        var agents = await CreateAgentQuery(user).Where(agent => agent.Enable).ToListAsync();
         await FilterVisibleSkillRelationsAsync(agents, user).ConfigureAwait(false);
         return agents.OrderBy(x => x.Name).ThenByDescending(x => x.CreateTime).ToList();
     }
@@ -293,6 +293,27 @@ public class AgentAppService
         }
 
         await _unitOfWork.SaveChangesAsync();
+        return existing;
+    }
+
+    public async Task<Agent?> UpdateAgentEnabledAsync(
+        Guid id,
+        bool enable,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var ownerUserId = _userInfoService.RequiredUserId;
+        var existing = await _agentRepository.Queryable.FirstOrDefaultAsync(
+            agent => agent.Id == id && agent.CreateBy == ownerUserId,
+            cancellationToken
+        );
+        if (existing == null)
+        {
+            return null;
+        }
+
+        existing.Enable = enable;
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
         return existing;
     }
 

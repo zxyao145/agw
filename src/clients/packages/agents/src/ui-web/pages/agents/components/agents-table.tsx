@@ -10,6 +10,7 @@ import { StaticTable } from "@agw/components";
 import { Empty } from "@agw/components";
 import { formatLocalDateTime } from "@agw/components";
 import type { PagedResult } from "@agw/components";
+import { Switch } from "@agw/components";
 
 interface AgentsTableProps {
   embedded?: boolean;
@@ -18,6 +19,8 @@ interface AgentsTableProps {
   onCopy: (agent: AgentDto) => void;
   onDelete: (agent: AgentDto) => void;
   onExecute: (agent: AgentDto) => void;
+  onEnabledChange: (agent: AgentDto, enable: boolean) => void;
+  pendingEnabledAgentIds: ReadonlySet<string>;
   isCopying: boolean;
 }
 
@@ -28,6 +31,8 @@ export function AgentsTable({
   onCopy,
   onDelete,
   onExecute,
+  onEnabledChange,
+  pendingEnabledAgentIds,
   isCopying,
 }: AgentsTableProps) {
   const agents = agentsQuery.data?.items ?? [];
@@ -59,6 +64,7 @@ export function AgentsTable({
           <TableHead>Description</TableHead>
           <TableHead>Instructions</TableHead>
           <TableHead>Tools</TableHead>
+          <TableHead>Enabled</TableHead>
           <TableHead>Updated</TableHead>
           <TableHead className="text-right">Actions</TableHead>
         </TableRow>
@@ -116,6 +122,15 @@ export function AgentsTable({
                 ) : (
                   <span className="text-muted-foreground">-</span>
                 )}
+              </TableCell>
+              <TableCell>
+                <Switch
+                  className="cursor-pointer"
+                  checked={agent.enable}
+                  onCheckedChange={(enable) => onEnabledChange(agent, enable)}
+                  disabled={pendingEnabledAgentIds.has(agent.id)}
+                  aria-label={`${agent.displayName || agent.name} enabled`}
+                />
               </TableCell>
               <TableCell className="text-xs text-muted-foreground">
                 {formatLocalDateTime(agent.updateTime ?? agent.createTime)}

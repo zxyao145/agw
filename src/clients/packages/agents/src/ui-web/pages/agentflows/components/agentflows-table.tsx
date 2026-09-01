@@ -7,6 +7,7 @@ import { Copy, Pencil, Trash2, Play, Waypoints } from "lucide-react";
 import type { AgentflowDto } from "../../../../types/agentflow";
 import { getApiErrorMessage } from "@agw/api";
 import { formatLocalDateTime } from "@agw/components";
+import { Switch } from "@agw/components";
 
 interface AgentflowsTableProps {
   embedded?: boolean;
@@ -20,6 +21,8 @@ interface AgentflowsTableProps {
   onDelete: (agentflow: AgentflowDto) => void;
   onExecute: (agentflow: AgentflowDto) => void;
   onViewMermaid: (agentflow: AgentflowDto) => void;
+  onEnabledChange: (agentflow: AgentflowDto, enable: boolean) => void;
+  pendingEnabledAgentflowIds: ReadonlySet<string>;
   isCopying: boolean;
 }
 
@@ -35,6 +38,8 @@ export function AgentflowsTable({
   onDelete,
   onExecute,
   onViewMermaid,
+  onEnabledChange,
+  pendingEnabledAgentflowIds,
   isCopying,
 }: AgentflowsTableProps) {
   if (isLoading) {
@@ -64,6 +69,7 @@ export function AgentflowsTable({
           <TableRow>
             <TableHead>Name</TableHead>
             <TableHead>Description</TableHead>
+            <TableHead>Enabled</TableHead>
             <TableHead>Updated</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
@@ -78,6 +84,15 @@ export function AgentflowsTable({
                 </div>
               </TableCell>
               <TableCell className="max-w-xs truncate">{agentflow.description || "-"}</TableCell>
+              <TableCell>
+                <Switch
+                  className="cursor-pointer"
+                  checked={agentflow.enable}
+                  onCheckedChange={(enable) => onEnabledChange(agentflow, enable)}
+                  disabled={pendingEnabledAgentflowIds.has(agentflow.id)}
+                  aria-label={`${agentflow.name} enabled`}
+                />
+              </TableCell>
               <TableCell className="text-xs text-muted-foreground">
                 {formatLocalDateTime(agentflow.updateTime ?? agentflow.createTime)}
               </TableCell>

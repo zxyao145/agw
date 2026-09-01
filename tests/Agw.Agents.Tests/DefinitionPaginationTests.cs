@@ -3,7 +3,9 @@ using Agw.Agents.Definitions.Controllers;
 using Agw.Agents.Definitions.Facades;
 using Agw.Domain.Services.Skills;
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Repositories;
+using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
@@ -13,6 +15,7 @@ using Agw.Shared.Runtime;
 using Agw.Skills.Application;
 using Agw.Skills.Application.Remote;
 using Agw.Skills.Controllers;
+using Agw.Testing;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -109,6 +112,98 @@ public class DefinitionPaginationTests
     }
 
     [Fact]
+    public async Task AgentLists_ExcludeDisabledFromSelectableListAndKeepThemInPagedManagementList()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var database = await TestDatabase.CreateAsync(cancellationToken);
+        var now = new DateTimeOffset(2026, 7, 16, 8, 0, 0, TimeSpan.Zero);
+        var enabledAgent = new Agent
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "enabled-agent",
+            DisplayName = "Enabled Agent",
+            Type = AgentType.External,
+            Enable = true,
+            CreateBy = "tester",
+            CreateTime = now,
+        };
+        var disabledAgent = new Agent
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "disabled-agent",
+            DisplayName = "Disabled Agent",
+            Type = AgentType.External,
+            Enable = false,
+            CreateBy = "tester",
+            CreateTime = now,
+        };
+        database.Context.Agents.AddRange(enabledAgent, disabledAgent);
+        await database.Context.SaveChangesAsync(cancellationToken);
+        var service = CreateAgentAppService(database.Context);
+
+        // Act
+        var selectable = await service.ListAgentsForCurrentUserAsync();
+        var managed = await service.ListAgentPageForCurrentUserAsync(1, 10, cancellationToken);
+
+        // Assert
+        Assert.Equal(enabledAgent.Id, Assert.Single(selectable).Id);
+        Assert.Equal(2, managed.Total);
+    }
+
+    [Fact]
+    public async Task UpdateAgentEnabledAsync_OwnedAgent_PersistsEnabledStateAndRefreshesAuditMetadata()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var originalUpdateTime = new DateTimeOffset(2026, 7, 16, 8, 0, 0, TimeSpan.Zero);
+        var expectedUpdateTime = originalUpdateTime.AddMinutes(5);
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .AddInterceptors(
+                new EntityModifierInterceptor(
+                    new TestAuditUserIdProvider("tester"),
+                    new TestTimeProvider(expectedUpdateTime)
+                )
+            )
+            .Options;
+        await using var dbContext = new AgwDbContext(options);
+        await dbContext.Database.EnsureCreatedAsync(cancellationToken);
+        var agent = new Agent
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "disabled-agent",
+            DisplayName = "Disabled Agent",
+            Type = AgentType.External,
+            Enable = false,
+            CreateBy = "tester",
+            CreateTime = originalUpdateTime.AddDays(-1),
+            UpdateBy = "original-user",
+            UpdateTime = originalUpdateTime,
+        };
+        dbContext.Agents.Add(agent);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        dbContext.ChangeTracker.Clear();
+        var service = CreateAgentAppService(dbContext);
+
+        // Act
+        var updated = await service.UpdateAgentEnabledAsync(agent.Id, true, cancellationToken);
+
+        // Assert
+        Assert.NotNull(updated);
+        Assert.True(updated.Enable);
+        Assert.Equal("tester", updated.UpdateBy);
+        Assert.Equal(expectedUpdateTime, updated.UpdateTime);
+        dbContext.ChangeTracker.Clear();
+        var persisted = await dbContext.Agents.AsNoTracking().SingleAsync(cancellationToken);
+        Assert.True(persisted.Enable);
+        Assert.Equal("tester", persisted.UpdateBy);
+        Assert.Equal(expectedUpdateTime, persisted.UpdateTime);
+    }
+
+    [Fact]
     public async Task ListSkillPageAsync_IncludesAgentIds()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -198,6 +293,18 @@ public class DefinitionPaginationTests
     {
         public Task<IAsyncDisposable> AcquireAsync(Guid skillId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
+    }
+
+    private sealed class TestAuditUserIdProvider : IEntityAuditUserIdProvider
+    {
+        private readonly string _userId;
+
+        public TestAuditUserIdProvider(string userId)
+        {
+            _userId = userId;
+        }
+
+        public string GetUserId() => _userId;
     }
 
     private sealed class TestDatabase : IAsyncDisposable
