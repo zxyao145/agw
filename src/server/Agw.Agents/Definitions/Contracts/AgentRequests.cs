@@ -19,6 +19,8 @@ public record AgentCreateRequest(
     Guid? SummaryModelProviderId = null
 );
 
+public sealed record AgentEnabledUpdateRequest(Guid AgentId, bool Enable);
+
 /// <summary>
 /// Updates an agent. External agents support partial updates for displayName, description,
 /// modelProviderId, extra, and environmentVariables only. When supplied for an External agent,
@@ -201,6 +203,7 @@ public sealed record AgentResponse(
     string DisplayName,
     string Name,
     string Description,
+    bool Enable,
     string SystemPrompt,
     Guid? ModelProviderId,
     Guid? SummaryModelProviderId,
@@ -224,6 +227,7 @@ public sealed record AgentResponse(
             agent.DisplayName,
             agent.Name,
             agent.Description,
+            agent.Enable,
             agent.SystemPrompt,
             agent.ModelProviderId,
             agent.SummaryModelProviderId,

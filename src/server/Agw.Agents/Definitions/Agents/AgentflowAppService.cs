@@ -34,7 +34,9 @@ public class AgentflowAppService
     public async Task<IReadOnlyList<Agentflow>> ListAsync()
     {
         var ownerUserId = ResolveOwnerUserId();
-        return await _dbContext.Agentflows.Where(agentflow => agentflow.CreateBy == ownerUserId).ToListAsync();
+        return await _dbContext
+            .Agentflows.Where(agentflow => agentflow.CreateBy == ownerUserId && agentflow.Enable)
+            .ToListAsync();
     }
 
     public Task<PagedResult<Agentflow>> ListPageAsync(
@@ -205,6 +207,27 @@ public class AgentflowAppService
         }
 
         await _dbContext.SaveChangesAsync();
+        return existing;
+    }
+
+    public async Task<Agentflow?> UpdateEnabledAsync(
+        Guid id,
+        bool enable,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var ownerUserId = ResolveOwnerUserId();
+        var existing = await _dbContext.Agentflows.FirstOrDefaultAsync(
+            agentflow => agentflow.Id == id && agentflow.CreateBy == ownerUserId,
+            cancellationToken
+        );
+        if (existing == null)
+        {
+            return null;
+        }
+
+        existing.Enable = enable;
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return existing;
     }
 

@@ -73,11 +73,13 @@ type AgentDto = {
   id: string;
   displayName: string;
   name: string;
+  enable: boolean;
 };
 
 type AgentflowDto = {
   id: string;
   name: string;
+  enable: boolean;
 };
 
 const DEFAULT_PROJECT_VALUE = "default-built-in";

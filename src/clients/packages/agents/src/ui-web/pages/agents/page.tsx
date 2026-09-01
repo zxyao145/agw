@@ -32,10 +32,18 @@ import { AgentsTable } from "./components/agents-table";
 import { parseToolValues, type ToolValueObject } from "@agw/tools";
 import { createAgentCopyRequest } from "../copy-requests";
 
+type AgentEnabledUpdateRequest = {
+  agentId: string;
+  enable: boolean;
+};
+
 export default function AgentsPage() {
   const queryClient = useQueryClient();
   const [pageIndex, setPageIndex] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
+  const [pendingEnabledAgentIds, setPendingEnabledAgentIds] = React.useState<Set<string>>(
+    () => new Set(),
+  );
 
   const agentsQuery = useQuery({
     queryKey: ["agents", "paged", pageIndex, pageSize],
@@ -204,6 +212,25 @@ export default function AgentsPage() {
     },
   });
 
+  const updateAgentEnabledMutation = useMutation({
+    mutationFn: async (body: AgentEnabledUpdateRequest) => {
+      return (await apiPut("/api/agents/enabled", { body })) as unknown as AgentDto;
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["agents"] });
+    },
+    onError: (error) => {
+      toast.error(`Update failed: ${getApiErrorMessage(error)}`);
+    },
+    onSettled: (_data, _error, variables) => {
+      setPendingEnabledAgentIds((current) => {
+        const next = new Set(current);
+        next.delete(variables.agentId);
+        return next;
+      });
+    },
+  });
+
   const deleteAgentMutation = useMutation({
     mutationFn: async (id: string) => {
       return await apiDelete("/api/agents/{id}", {
@@ -262,6 +289,13 @@ export default function AgentsPage() {
   const handleExecute = (agent: AgentDto) => {
     setExecutingAgent(agent);
     setExecuteOpen(true);
+  };
+
+  const handleEnabledChange = (agent: AgentDto, enable: boolean) => {
+    if (pendingEnabledAgentIds.has(agent.id)) return;
+
+    setPendingEnabledAgentIds((current) => new Set(current).add(agent.id));
+    updateAgentEnabledMutation.mutate({ agentId: agent.id, enable });
   };
 
   const toggleSkill = (skillId: string, isEdit: boolean = false) => {
@@ -354,7 +388,7 @@ export default function AgentsPage() {
             selectedConnectionIds={selectedConnectionIds}
             tools={tools}
             setTools={setTools}
-            agentOptions={agentsQuery.data?.items ?? []}
+            agentOptions={(agentsQuery.data?.items ?? []).filter((agent) => agent.enable)}
             modelProvidersQuery={modelProvidersQuery}
             skillsQuery={skillsQuery}
             toolsQuery={toolsQuery}
@@ -386,6 +420,8 @@ export default function AgentsPage() {
           onCopy={handleCopy}
           onDelete={handleDelete}
           onExecute={handleExecute}
+          onEnabledChange={handleEnabledChange}
+          pendingEnabledAgentIds={pendingEnabledAgentIds}
           isCopying={copyAgentMutation.isPending}
         />
       </PaginatedTable>
@@ -417,7 +453,7 @@ export default function AgentsPage() {
         selectedConnectionIds={editSelectedConnectionIds}
         tools={editTools}
         setTools={setEditTools}
-        agentOptions={agentsQuery.data?.items ?? []}
+        agentOptions={(agentsQuery.data?.items ?? []).filter((agent) => agent.enable)}
         modelProvidersQuery={modelProvidersQuery}
         skillsQuery={skillsQuery}
         toolsQuery={toolsQuery}

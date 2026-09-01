@@ -24,7 +24,7 @@ public sealed class InitialMigrationTests
         using var dbContext = new AgwDbContext(options.Options);
 
         var migrations = dbContext.Database.GetMigrations().ToArray();
-        Assert.Equal(9, migrations.Length);
+        Assert.Equal(10, migrations.Length);
         Assert.EndsWith("_Init", migrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", migrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", migrations[2], StringComparison.Ordinal);
@@ -34,6 +34,7 @@ public sealed class InitialMigrationTests
         Assert.EndsWith("_AddJobActiveAttempt", migrations[6], StringComparison.Ordinal);
         Assert.EndsWith("_EnforceUserOwnedConnections", migrations[7], StringComparison.Ordinal);
         Assert.EndsWith("_EnforceUserDataIsolation", migrations[8], StringComparison.Ordinal);
+        Assert.EndsWith("_AddAgentAndAgentflowEnable", migrations[9], StringComparison.Ordinal);
 
         var script = dbContext
             .GetService<IMigrator>()
@@ -89,11 +90,13 @@ public sealed class InitialMigrationTests
                 script,
                 StringComparison.OrdinalIgnoreCase
             );
+            Assert.Contains("ADD enable boolean NOT NULL DEFAULT TRUE", script, StringComparison.OrdinalIgnoreCase);
         }
         else
         {
             Assert.Contains("\"metadata\" TEXT", script, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("jsonb", script, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("ADD \"enable\" INTEGER NOT NULL DEFAULT 1", script, StringComparison.OrdinalIgnoreCase);
         }
 
         Assert.DoesNotContain("agent_file_memory", script, StringComparison.OrdinalIgnoreCase);
@@ -122,7 +125,7 @@ public sealed class InitialMigrationTests
         await dbContext.Database.MigrateAsync(cancellationToken);
 
         var appliedMigrations = (await dbContext.Database.GetAppliedMigrationsAsync(cancellationToken)).ToArray();
-        Assert.Equal(9, appliedMigrations.Length);
+        Assert.Equal(10, appliedMigrations.Length);
         Assert.EndsWith("_Init", appliedMigrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", appliedMigrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", appliedMigrations[2], StringComparison.Ordinal);
@@ -132,6 +135,7 @@ public sealed class InitialMigrationTests
         Assert.EndsWith("_AddJobActiveAttempt", appliedMigrations[6], StringComparison.Ordinal);
         Assert.EndsWith("_EnforceUserOwnedConnections", appliedMigrations[7], StringComparison.Ordinal);
         Assert.EndsWith("_EnforceUserDataIsolation", appliedMigrations[8], StringComparison.Ordinal);
+        Assert.EndsWith("_AddAgentAndAgentflowEnable", appliedMigrations[9], StringComparison.Ordinal);
         Assert.True(await TableExistsAsync(connection, "integration_connection", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "plugin_installation", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "project_memory", cancellationToken));
@@ -151,6 +155,12 @@ public sealed class InitialMigrationTests
         Assert.True(await ColumnExistsAsync(connection, "job", "active_attempt_started_at", cancellationToken));
         Assert.True(await IndexIsUniqueAsync(connection, "job", "ix_job_active_execution_id", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "agent", "tools", cancellationToken));
+        Assert.True(await ColumnExistsAsync(connection, "agent", "enable", cancellationToken));
+        Assert.True(await ColumnExistsAsync(connection, "agentflow", "enable", cancellationToken));
+        Assert.True(await ColumnIsNotNullAsync(connection, "agent", "enable", cancellationToken));
+        Assert.True(await ColumnIsNotNullAsync(connection, "agentflow", "enable", cancellationToken));
+        Assert.Equal("1", await ColumnDefaultAsync(connection, "agent", "enable", cancellationToken));
+        Assert.Equal("1", await ColumnDefaultAsync(connection, "agentflow", "enable", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "project", "tools", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "model", "max_context_window_tokens", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "model", "max_output_tokens", cancellationToken));
@@ -366,9 +376,17 @@ public sealed class InitialMigrationTests
         await dbContext.Database.MigrateAsync(cancellationToken);
 
         var migrations = dbContext.Database.GetMigrations().ToArray();
+        var userIsolationMigration = migrations.Single(migration =>
+            migration.EndsWith("_EnforceUserDataIsolation", StringComparison.Ordinal)
+        );
+        var userIsolationIndex = Array.IndexOf(migrations, userIsolationMigration);
         var userIsolationScript = dbContext
             .GetService<IMigrator>()
-            .GenerateScript(migrations[^2], migrations[^1], MigrationsSqlGenerationOptions.NoTransactions);
+            .GenerateScript(
+                migrations[userIsolationIndex - 1],
+                userIsolationMigration,
+                MigrationsSqlGenerationOptions.NoTransactions
+            );
 
         Assert.True(
             await IndexHasColumnsAsync(
@@ -457,7 +475,11 @@ public sealed class InitialMigrationTests
         await using var dbContext = new AgwDbContext(options);
         var migrations = dbContext.Database.GetMigrations().ToArray();
         var migrator = dbContext.GetService<IMigrator>();
-        await migrator.MigrateAsync(migrations[^2], cancellationToken);
+        var userIsolationMigration = migrations.Single(migration =>
+            migration.EndsWith("_EnforceUserDataIsolation", StringComparison.Ordinal)
+        );
+        var userIsolationIndex = Array.IndexOf(migrations, userIsolationMigration);
+        await migrator.MigrateAsync(migrations[userIsolationIndex - 1], cancellationToken);
 
         var projectId = Guid.CreateVersion7();
         var usageId = Guid.CreateVersion7();
@@ -482,7 +504,7 @@ public sealed class InitialMigrationTests
             await insert.ExecuteNonQueryAsync(cancellationToken);
         }
 
-        await migrator.MigrateAsync(migrations[^1], cancellationToken);
+        await migrator.MigrateAsync(userIsolationMigration, cancellationToken);
 
         await using var select = connection.CreateCommand();
         select.CommandText = "SELECT user_id FROM agent_usage WHERE id = $usageId;";

@@ -11,6 +11,7 @@ export interface AgentDto extends BaseDto {
   id: string;
   displayName: string;
   name: string;
+  enable: boolean;
   systemPrompt: string;
   modelProviderId: string | null;
   summaryModelProviderId: string | null;
@@ -125,6 +126,7 @@ export interface AgentflowDto extends BaseDto {
   id: string;
   name: string;
   description: string | null;
+  enable: boolean;
   systemPrompt: string;
   summaryModelProviderId: string | null;
 }

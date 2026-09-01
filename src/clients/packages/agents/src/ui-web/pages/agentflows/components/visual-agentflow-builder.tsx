@@ -513,18 +513,20 @@ export function VisualAgentflowBuilder({
     instance: ReactFlowInstance<DagNodeData, DagEdgeData>;
   } | null>(null);
 
+  const selectableAgents = React.useMemo(() => agents.filter((agent) => agent.enable), [agents]);
   const availableAgentflows = React.useMemo(() => {
-    if (!editingAgentflow) return agentflows;
-    return agentflows.filter((agentflow) => agentflow.id !== editingAgentflow.id);
+    const enabledAgentflows = agentflows.filter((agentflow) => agentflow.enable);
+    if (!editingAgentflow) return enabledAgentflows;
+    return enabledAgentflows.filter((agentflow) => agentflow.id !== editingAgentflow.id);
   }, [agentflows, editingAgentflow]);
   const agentSelectOptions = React.useMemo<SearchableSelectOption[]>(
     () =>
-      agents.map((agent) => ({
+      selectableAgents.map((agent) => ({
         value: agent.id,
         title: agent.name,
         subtitle: agent.description?.trim() || undefined,
       })),
-    [agents],
+    [selectableAgents],
   );
   const agentflowSelectOptions = React.useMemo<SearchableSelectOption[]>(
     () =>

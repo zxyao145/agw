@@ -183,6 +183,21 @@ public class AgentflowsController : ControllerBase
         return updated == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(updated);
     }
 
+    [HttpPut("enabled")]
+    [ProducesApiResult(typeof(Agentflow))]
+    public async Task<IActionResult> UpdateEnabledAsync(
+        [FromBody] AgentflowEnabledUpdateRequest request,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var updated = await _agentflowAppService.UpdateEnabledAsync(
+            request.AgentflowId,
+            request.Enable,
+            cancellationToken
+        );
+        return updated == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(updated);
+    }
+
     [HttpDelete("{id:guid}")]
     [ProducesApiResult]
     public async Task<IActionResult> DeleteAsync(Guid id)

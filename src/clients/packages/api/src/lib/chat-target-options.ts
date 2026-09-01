@@ -9,11 +9,13 @@ type ChatAgentTargetSource = {
   id: string;
   name: string;
   displayName?: string | null;
+  enable?: boolean;
 };
 
 type ChatAgentflowTargetSource = {
   id: string;
   name: string;
+  enable?: boolean;
 };
 
 type BuildChatTargetOptionsInput = {
@@ -64,9 +66,10 @@ export function buildChatTargetOptions({
   const restrictedAgentName =
     typeof projectId === "string" ? RESTRICTED_PROJECT_AGENT_MAP[projectId] : undefined;
 
+  const enabledAgents = agents.filter((agent) => agent.enable !== false);
   const filteredAgents = restrictedAgentName
-    ? agents.filter((agent) => agent.name === restrictedAgentName)
-    : agents;
+    ? enabledAgents.filter((agent) => agent.name === restrictedAgentName)
+    : enabledAgents;
 
   const agentOptions = filteredAgents.map((agent) => ({
     id: agent.id,
@@ -76,11 +79,13 @@ export function buildChatTargetOptions({
 
   const agentflowOptions = restrictedAgentName
     ? []
-    : agentflows.map((agentflow) => ({
-        id: agentflow.id,
-        label: agentflow.name,
-        type: "agentflow" as const,
-      }));
+    : agentflows
+        .filter((agentflow) => agentflow.enable !== false)
+        .map((agentflow) => ({
+          id: agentflow.id,
+          label: agentflow.name,
+          type: "agentflow" as const,
+        }));
 
   agentOptions.sort((left, right) => left.label.localeCompare(right.label));
   agentflowOptions.sort((left, right) => left.label.localeCompare(right.label));

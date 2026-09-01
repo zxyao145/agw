@@ -12,12 +12,13 @@ type AgentDto = {
   id: string;
   displayName: string;
   name: string;
+  enable: boolean;
 };
 
 type AgentflowDto = {
   id: string;
   name: string;
-  enable?: boolean;
+  enable: boolean;
 };
 
 export type AgentSelection = {
