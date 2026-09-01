@@ -82,7 +82,8 @@ export function buildChatTargetOptions({
         type: "agentflow" as const,
       }));
 
-  return [...agentOptions, ...agentflowOptions].sort((left, right) =>
-    left.label.localeCompare(right.label),
-  );
+  agentOptions.sort((left, right) => left.label.localeCompare(right.label));
+  agentflowOptions.sort((left, right) => left.label.localeCompare(right.label));
+
+  return [...agentOptions, ...agentflowOptions];
 }

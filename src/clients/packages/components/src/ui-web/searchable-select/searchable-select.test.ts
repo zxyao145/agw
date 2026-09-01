@@ -31,6 +31,13 @@ test("SearchableSelect preserves controlled multiple selection behavior", async 
   assert.match(source, /details\.reason !== "item-press"/);
 });
 
+test("SearchableSelect includes optional keywords in its search index", async () => {
+  const source = await readFile(COMPONENT_URL, "utf8");
+
+  assert.match(source, /keywords\?: string\[\];/);
+  assert.match(source, /option\.keywords\?\.join\(" "\) \?\? ""/);
+});
+
 test("SearchableSelect composes the current Shadcn Combobox", async () => {
   const source = await readFile(COMPONENT_URL, "utf8");
   const comboboxSource = await readFile(COMBOBOX_URL, "utf8");

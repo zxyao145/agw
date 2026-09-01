@@ -55,19 +55,23 @@ export function AgentSelector({
     queryFn: async () => (await apiGet("/api/agentflows")) as AgentflowDto[],
   });
 
-  const options = React.useMemo<SearchableSelectOption[]>(
-    () =>
-      buildChatTargetOptions({
-        projectId: projectId ?? null,
-        agents: agentsQuery.data ?? [],
-        agentflows: agentflowsQuery.data ?? [],
-      }).map((option) => ({
-        value: getTargetValue(option),
-        title: option.label,
-        group: option.type === "agent" ? "Agent" : "Agentflow",
-      })),
-    [agentflowsQuery.data, agentsQuery.data, projectId],
-  );
+  const options = React.useMemo<SearchableSelectOption[]>(() => {
+    const agentSearchKeywords = new Map<string, string[]>();
+    for (const agent of agentsQuery.data ?? []) {
+      agentSearchKeywords.set(agent.id, [agent.name, agent.displayName]);
+    }
+
+    return buildChatTargetOptions({
+      projectId: projectId ?? null,
+      agents: agentsQuery.data ?? [],
+      agentflows: agentflowsQuery.data ?? [],
+    }).map((option) => ({
+      value: getTargetValue(option),
+      title: option.label,
+      keywords: option.type === "agent" ? agentSearchKeywords.get(option.id) : undefined,
+      group: option.type === "agent" ? "Agent" : "Agentflow",
+    }));
+  }, [agentflowsQuery.data, agentsQuery.data, projectId]);
 
   const selectedValue = value
     ? getTargetValue({

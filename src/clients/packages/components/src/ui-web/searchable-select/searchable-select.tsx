@@ -24,6 +24,7 @@ export type SearchableSelectOption = {
   value: string;
   title: string;
   subtitle?: string;
+  keywords?: string[];
   group?: string;
 };
 
@@ -254,7 +255,7 @@ export function SearchableSelect(props: SearchableSelectProps) {
       if (!option) return false;
 
       const haystack =
-        `${option.title} ${option.subtitle ?? ""} ${option.group ?? ""} ${option.value}`.toLowerCase();
+        `${option.title} ${option.subtitle ?? ""} ${option.keywords?.join(" ") ?? ""} ${option.group ?? ""} ${option.value}`.toLowerCase();
       return haystack.includes(query.trim().toLowerCase());
     },
     itemToStringLabel: (optionValue: string) =>

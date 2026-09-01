@@ -16,7 +16,7 @@ test("restricted project only exposes the ClaudeCode agent", () => {
   assert.deepEqual(result, [{ id: "agent-2", label: "Claude Code", type: "agent" }]);
 });
 
-test("normal project exposes all agents and agentflows sorted by label", () => {
+test("normal project exposes agents first and sorts each target group by label", () => {
   const result = buildChatTargetOptions({
     projectId: "11111111-1111-1111-1111-000000000099",
     agents: [
@@ -31,10 +31,10 @@ test("normal project exposes all agents and agentflows sorted by label", () => {
   });
 
   assert.deepEqual(result, [
-    { id: "flow-1", label: "Alpha Flow", type: "agentflow" },
-    { id: "flow-3", label: "Beta Flow", type: "agentflow" },
     { id: "agent-2", label: "Claude Code", type: "agent" },
     { id: "agent-1", label: "General Agent", type: "agent" },
+    { id: "flow-1", label: "Alpha Flow", type: "agentflow" },
+    { id: "flow-3", label: "Beta Flow", type: "agentflow" },
     { id: "flow-2", label: "Zeta Flow", type: "agentflow" },
   ]);
 });

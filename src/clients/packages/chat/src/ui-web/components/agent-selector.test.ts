@@ -26,3 +26,11 @@ test("AgentSelector supports an optional unassigned state", async () => {
   assert.match(source, /clearable=\{clearable\}/);
   assert.match(source, /placeholder=\{placeholder\}/);
 });
+
+test("AgentSelector indexes agent names and display names for search", async () => {
+  const source = await readFile(COMPONENT_URL, "utf8");
+
+  assert.match(source, /agentSearchKeywords/);
+  assert.match(source, /\[agent\.name, agent\.displayName\]/);
+  assert.match(source, /keywords:/);
+});
