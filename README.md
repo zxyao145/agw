@@ -246,13 +246,18 @@ Prereleases use `vX.Y.Z-preview.N`, `vX.Y.Z-alpha.N`, or `vX.Y.Z-beta.N`. The [r
 
 The following screenshots show the main Agw interfaces:
 
+### Desktop
+
+![Desktop Chat](medias/desktop-chat.png)
+
+![Desktop Dashboard](medias/desktop-dashboard.png)
+
 ### Providers
 ![Providers](medias/provider.png)
 
 ### Agents
-![Agents](medias/agents.png)
 
-![Agent Details](medias/agents2.png)
+![Agent Editor](medias/agent-edit.png)
 
 ### Tools & MCP
 ![MCP](medias/mcp.png)
@@ -279,6 +284,14 @@ The following screenshots show the main Agw interfaces:
 
 ### Agentflows
 ![Agentflows](medias/agent-workflow.png)
+
+### Mobile
+
+<p align="center">
+  <img src="medias/mobile-converssations.png" alt="Mobile conversations" width="31%">
+  <img src="medias/mobile-chat.png" alt="Mobile chat" width="31%">
+  <img src="medias/mobile-server-config.png" alt="Mobile server configuration" width="31%">
+</p>
 
 ## Architecture
 
