@@ -249,13 +249,18 @@ git push origin v0.1.0
 
 以下是 Agw 主要界面的截图：
 
+### Desktop（桌面端）
+
+![Desktop Chat](medias/desktop-chat.png)
+
+![Desktop 概览](medias/desktop-dashboard.png)
+
 ### Providers（供应商）
 ![Providers](medias/provider.png)
 
 ### Agents（代理）
-![Agents](medias/agents.png)
 
-![Agents 详情](medias/agents2.png)
+![Agent 编辑](medias/agent-edit.png)
 
 ### Tools & MCP（工具与 MCP）
 ![MCP](medias/mcp.png)
@@ -282,6 +287,14 @@ git push origin v0.1.0
 
 ### Agentflows（代理编排）
 ![Agentflows](medias/agent-workflow.png)
+
+### Mobile（移动端）
+
+<p align="center">
+  <img src="medias/mobile-converssations.png" alt="Mobile 会话列表" width="31%">
+  <img src="medias/mobile-chat.png" alt="Mobile 对话" width="31%">
+  <img src="medias/mobile-server-config.png" alt="Mobile Server 配置" width="31%">
+</p>
 
 ## 架构
 
