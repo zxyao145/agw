@@ -29,6 +29,7 @@ import type {
   UninstallResult,
 } from "../shared/contracts";
 import { DaemonManager } from "./daemon/daemon-manager";
+import { getExternalHttpUrl } from "./external-navigation";
 import { DESKTOP_OAUTH_PROTOCOL, findOAuthDeepLink, parseOAuthDeepLink } from "./oauth-deep-link";
 import { parseDesktopPackageMetadata, type DesktopPackageMetadata } from "./package-metadata";
 import { resolveRendererFile } from "./renderer-path";
@@ -309,7 +310,15 @@ function createMainWindow(): BrowserWindow {
     },
   });
 
-  window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    const externalUrl = getExternalHttpUrl(url);
+    if (externalUrl) {
+      void shell
+        .openExternal(externalUrl)
+        .catch((error) => reportMainProcessError("Unable to open external link", error));
+    }
+    return { action: "deny" };
+  });
   window.webContents.on("will-navigate", (event, target) => {
     if (!isTrustedRenderer(target)) event.preventDefault();
   });
@@ -603,11 +612,11 @@ function registerIpc(): void {
   });
   ipcMain.handle("agw:open-external", async (event, value: string) => {
     assertTrustedSender(senderUrl(event));
-    const url = new URL(value);
-    if (url.protocol !== "https:" && url.protocol !== "http:") {
+    const url = getExternalHttpUrl(value);
+    if (!url) {
       throw new Error("Agw Desktop can only open HTTP(S) external URLs.");
     }
-    await shell.openExternal(url.toString());
+    await shell.openExternal(url);
   });
   ipcMain.handle("agw:open-setup", async (event, baseUrl: string) => {
     assertTrustedSender(senderUrl(event));
