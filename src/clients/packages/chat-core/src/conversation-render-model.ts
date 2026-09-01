@@ -332,21 +332,40 @@ function createPresentedTool(
   };
 }
 
-export function formatToolContent(value: unknown): string {
+function formatJsonToolContent(value: unknown): string | null {
   const original = stringifyContentValue(value);
-  if (original.trim().length === 0) return original;
+  if (original.trim().length === 0) return null;
 
   let parsed = value;
   if (typeof value === "string") {
     try {
       parsed = JSON.parse(value.trim());
     } catch {
-      return value;
+      return null;
     }
   }
 
-  if (typeof parsed !== "object" || parsed === null) return original;
+  if (typeof parsed !== "object" || parsed === null) return null;
   return `\n\`\`\`json\n${JSON.stringify(parsed, null, 2)}\n\`\`\``;
+}
+
+export function formatToolContent(value: unknown): string {
+  return formatJsonToolContent(value) ?? stringifyContentValue(value);
+}
+
+// 纯文本结果包成围栏代码块，围栏长度避开内容中的反引号
+function fencePlainToolText(text: string): string {
+  const longestRun = Math.max(0, ...[...text.matchAll(/`+/g)].map((match) => match[0].length));
+  const fence = "`".repeat(Math.max(3, longestRun + 1));
+  return `\n${fence}\n${text}\n${fence}`;
+}
+
+export function formatToolResultContent(value: unknown): string {
+  const json = formatJsonToolContent(value);
+  if (json) return json;
+
+  const text = stringifyContentValue(value);
+  return text.trim() ? fencePlainToolText(text) : text;
 }
 
 export function presentMessage(message: AiMessage): PresentedMessage | null {
@@ -593,7 +612,10 @@ function presentContent(message: AiMessage, content: AiMessageContent): Presente
     content.type === MessageContentType.FunctionCallContent ||
     content.type === MessageContentType.FunctionResultContent
   ) {
-    const markdown = formatToolContent(content.content);
+    const markdown =
+      content.type === MessageContentType.FunctionResultContent
+        ? formatToolResultContent(content.content)
+        : formatToolContent(content.content);
     return markdown.trim() ? [{ type: "markdown", markdown, sourceType: content.type }] : [];
   }
   if (message.additionalProperties?.type === "turn.started") {

@@ -60,14 +60,89 @@ test("markdown code uses the chat code background", () => {
   assert.match(body, /rounded/);
 });
 
-test("markdown code blocks keep one visible background layer", () => {
+test("markdown code blocks use a header and one visible background layer", () => {
+  const blockBody = getRuleBody(".msg-content-md-code-block");
+  const headerBody = getRuleBody(".msg-content-md-code-header");
+  const preBody = getRuleBody("pre.msg-content-md-code-block-body");
+  const nestedCodeBody = getRuleBody(
+    "pre.msg-content-md-code-block-body > code.msg-content-md-code",
+  );
+
+  assert.match(blockBody, /overflow-hidden/);
+  assert.match(headerBody, /border-b/);
+  assert.match(preBody, /overflow-x-auto/);
+  assert.match(preBody, /p-4/);
+  assert.match(nestedCodeBody, /bg-transparent/);
+  assert.match(nestedCodeBody, /p-0/);
+  assert.match(mdCardSource, /<MarkdownCodeBlock>\{children\}<\/MarkdownCodeBlock>/);
+});
+
+test("fenced markdown code shows its language and block actions", async () => {
+  const fence = String.fromCharCode(96).repeat(3);
+  const html = await renderMdCard(
+    [fence + "typescript", "const answer: number = 42;", fence].join("\n"),
+  );
+
+  assert.match(html, /msg-content-md-code-block/);
+  assert.match(html, />typescript<\/span>/);
+  assert.match(html, /aria-label="Disable word wrap"/);
+  assert.match(html, /aria-pressed="true"/);
+  assert.match(html, /aria-label="Copy code"/);
+});
+
+test("fenced markdown code without a language falls back to plain", async () => {
+  const fence = String.fromCharCode(96).repeat(3);
+  const html = await renderMdCard([fence, "agentName = claude-code", fence].join("\n"));
+
+  assert.match(html, />plain<\/span>/);
+});
+
+test("indented code blocks render plainly without the block header", async () => {
+  const html = await renderMdCard(["some text", "", "    const answer = 42;", ""].join("\n"));
+
+  assert.match(html, /<pre class="msg-content-md-code overflow-x-auto agw-scrollbar">/);
+  assert.doesNotMatch(html, /msg-content-md-code-block/);
+  assert.doesNotMatch(html, /Copy code|word wrap/);
+});
+
+test("unfenced diff text does not produce per-line code block headers", async () => {
+  const html = await renderMdCard(
+    [
+      "+function getTextContent(node: React.ReactNode): string {",
+      "- return React.Children.toArray(node)",
+      "",
+      "      return String(child);",
+    ].join("\n"),
+  );
+
+  assert.match(html, /<pre class="msg-content-md-code/);
+  assert.doesNotMatch(html, /msg-content-md-code-block/);
+});
+
+test("indented code blocks keep plain pre styling", () => {
   const preBody = getRuleBody("pre.msg-content-md-code");
   const nestedCodeBody = getRuleBody("pre.msg-content-md-code > code.msg-content-md-code");
 
   assert.match(preBody, /p-3/);
   assert.match(nestedCodeBody, /bg-transparent/);
   assert.match(nestedCodeBody, /p-0/);
-  assert.match(mdCardSource, /msg-content-md-code overflow-x-auto agw-scrollbar/);
+});
+
+test("inline markdown code keeps the inline renderer without block controls", async () => {
+  const html = await renderMdCard("Use `agentName` in this sentence.");
+
+  assert.match(html, /<code class="msg-content-md-code">agentName<\/code>/);
+  assert.doesNotMatch(html, /msg-content-md-code-block/);
+  assert.doesNotMatch(html, /Copy code|word wrap/);
+});
+
+test("markdown code blocks toggle wrapping and copy only their code text", () => {
+  assert.match(mdCardSource, /data-wrap=\{isWrapped\}/);
+  assert.match(mdCardSource, /setIsWrapped\(\(current\) => !current\)/);
+  assert.match(mdCardSource, /navigator\.clipboard\.writeText\(code\)/);
+  assert.match(mdCardSource, /aria-label=\{copyLabel\}/);
+  assert.match(mdCardSource, /<Copy/);
+  assert.match(mdCardSource, /<Check/);
 });
 
 test("markdown lists collapse parser whitespace between list items and paragraphs", () => {

@@ -577,11 +577,41 @@ div[role="option"]:hover {
 }
 
 pre.msg-content-md-code {
-  @apply rounded-md p-3;
+  @apply p-3;
 }
 
 pre.msg-content-md-code > code.msg-content-md-code {
-  @apply rounded-none bg-transparent p-0;
+  @apply block rounded-none bg-transparent p-0;
+  color: inherit;
+  white-space: inherit;
+}
+
+.msg-content-md-code-block {
+  @apply max-w-full overflow-hidden rounded-lg bg-[#f4f4f4] text-[#17191d] shadow-xs whitespace-normal dark:bg-[#202124] dark:text-[#f1f3f4];
+}
+
+.msg-content-md-code-header {
+  @apply flex min-h-11 items-center justify-between gap-3 border-b border-black/10 px-4 text-sm text-[#5f6368] dark:border-white/10 dark:text-[#bdc1c6];
+}
+
+pre.msg-content-md-code-block-body {
+  @apply m-0 max-w-full overflow-x-auto bg-transparent p-4 font-mono text-[13px] leading-6;
+  overflow-wrap: normal;
+  tab-size: 2;
+  white-space: pre;
+}
+
+pre.msg-content-md-code-block-body[data-wrap="true"] {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+pre.msg-content-md-code-block-body > code.msg-content-md-code {
+  @apply block rounded-none bg-transparent p-0;
+  color: inherit;
+  font: inherit;
+  overflow-wrap: inherit;
+  white-space: inherit;
 }
 
 .msg-content-md-ol {
