@@ -120,6 +120,26 @@ test("markdown math remains enabled by default", async () => {
   assert.match(html, /class="katex"/);
 });
 
+test("markdown links open outside the current application", async () => {
+  const html = await renderMdCard("[Agw](https://github.com/zxyao145/agw)");
+
+  assert.match(html, /href="https:\/\/github\.com\/zxyao145\/agw"/);
+  assert.match(html, /target="_blank"/);
+  assert.match(html, /rel="noreferrer"/);
+  assert.match(html, /text-\[#2e82d2\]/);
+  assert.match(html, /hover:underline/);
+  assert.match(html, /lucide-external-link/);
+});
+
+test("non-web markdown links render as non-navigating file references", async () => {
+  const html = await renderMdCard("[Chat.tsx](/Users/example/Chat.tsx:434)");
+
+  assert.doesNotMatch(html, /href=/);
+  assert.doesNotMatch(html, /target=/);
+  assert.doesNotMatch(html, /lucide-external-link/);
+  assert.match(html, /lucide-file-text[\s\S]*Chat\.tsx/);
+});
+
 test("reasoning text can render without KaTeX", async () => {
   const html = await renderMdCard("$PATH and \\alpha plus `\\beta`", false);
 

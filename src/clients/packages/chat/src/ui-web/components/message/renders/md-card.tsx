@@ -1,3 +1,4 @@
+import { ExternalLink, FileText } from "lucide-react";
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
@@ -9,6 +10,16 @@ type MdCardProps = {
   mdText: string;
   enableMath?: boolean;
 };
+
+function isHttpLink(href: string | undefined): href is string {
+  if (!href) return false;
+  try {
+    const url = new URL(href);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 
 const MdCard = React.memo(function MdCard({ mdText, enableMath = true }: MdCardProps) {
   const normalizedText = React.useMemo(
@@ -31,6 +42,30 @@ const MdCard = React.memo(function MdCard({ mdText, enableMath = true }: MdCardP
         ul: ({ children }) => <ul className="msg-content-md-ul">{children}</ul>,
         li: ({ children }) => <li className="msg-content-md-li">{children}</li>,
         p: ({ children }) => <p className="msg-content-md-p">{children}</p>,
+        a: ({ children, href, title }) =>
+          isHttpLink(href) ? (
+            <a
+              href={href}
+              title={title}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[#2e82d2] underline-offset-2 hover:underline focus-visible:underline dark:text-[#74b8f7]"
+            >
+              {children}
+              <ExternalLink
+                aria-hidden="true"
+                className="ml-1 inline-block size-[0.85em] align-[-0.06em]"
+              />
+            </a>
+          ) : (
+            <span title={title ?? href} className="text-[#2e82d2] dark:text-[#74b8f7]">
+              <FileText
+                aria-hidden="true"
+                className="mr-1 inline-block size-[0.9em] align-[-0.08em]"
+              />
+              {children}
+            </span>
+          ),
         table: ({ children }) => (
           <div
             className="msg-content-md-table-wrap agw-scrollbar"

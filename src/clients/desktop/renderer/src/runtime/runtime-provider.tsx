@@ -17,6 +17,7 @@ import {
 import { createQueryClient } from "@agw/components";
 import { QueryClientProvider, type QueryClient } from "@agw/components/query";
 import { getProjectConversations } from "@agw/projects";
+import { toast } from "sonner";
 import {
   classifyDesktopConnection,
   getActiveServerProfile,
@@ -127,6 +128,32 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
       delete root.dataset.agwPlatform;
     };
   }, [isDesktop, platform]);
+
+  React.useEffect(() => {
+    const bridge = isDesktop ? window.agwDesktop : undefined;
+    if (!bridge) return;
+
+    const openExternalLink = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      const link = target?.closest<HTMLAnchorElement>('a[target="_blank"][href]');
+      if (!link) return;
+
+      const url = new URL(link.href);
+      if (url.protocol !== "http:" && url.protocol !== "https:") return;
+
+      event.preventDefault();
+      void bridge.openExternal(url.toString()).catch((openError) => {
+        toast.error(
+          openError instanceof Error
+            ? openError.message
+            : "Unable to open the link in your system browser.",
+        );
+      });
+    };
+
+    document.addEventListener("click", openExternalLink, true);
+    return () => document.removeEventListener("click", openExternalLink, true);
+  }, [isDesktop]);
 
   // 后台 turn 进入终态时请求主进程显示系统通知；interrupted 多为用户主动停止，不通知。
   // preload 随应用启动注入、不支持热更新，需按方法存在性降级以容忍旧版 Electron 进程。
