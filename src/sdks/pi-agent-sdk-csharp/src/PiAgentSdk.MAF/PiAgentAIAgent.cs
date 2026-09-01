@@ -121,7 +121,7 @@ public sealed class PiAgentAIAgent : AIAgent, IAsyncDisposable
         var responseMessages = new List<ChatMessage>();
         var usage = new PiUsage();
         var hasUsage = false;
-        var eventMapper = new PiEventMapper();
+        var eventMapper = new PiEventMapper(_options.SessionOptions.Model);
 
         await foreach (
             var evt in piSession.RunStreamingAsync(prompt.Text, prompt.Images, cancellationToken).ConfigureAwait(false)
@@ -129,7 +129,7 @@ public sealed class PiAgentAIAgent : AIAgent, IAsyncDisposable
         {
             if (evt is PiTurnEndEvent turnEnd)
             {
-                var history = PiEventMapper.ToHistoryMessages(turnEnd);
+                var history = PiEventMapper.ToHistoryMessages(turnEnd, _options.SessionOptions.Model);
                 responseMessages.AddRange(history);
                 await PersistWithTimeoutAsync(safeSession, [], history).ConfigureAwait(false);
                 AddTurnUsage(turnEnd, ref usage, ref hasUsage);
@@ -187,14 +187,14 @@ public sealed class PiAgentAIAgent : AIAgent, IAsyncDisposable
 
         await PersistWithTimeoutAsync(safeSession, requestMessages, []).ConfigureAwait(false);
         var piSession = await GetOrCreatePiSessionAsync(safeSession, cancellationToken).ConfigureAwait(false);
-        var eventMapper = new PiEventMapper();
+        var eventMapper = new PiEventMapper(_options.SessionOptions.Model);
         await foreach (
             var evt in piSession.RunStreamingAsync(prompt.Text, prompt.Images, cancellationToken).ConfigureAwait(false)
         )
         {
             if (evt is PiTurnEndEvent turnEnd)
             {
-                var history = PiEventMapper.ToHistoryMessages(turnEnd);
+                var history = PiEventMapper.ToHistoryMessages(turnEnd, _options.SessionOptions.Model);
                 await PersistWithTimeoutAsync(safeSession, [], history).ConfigureAwait(false);
             }
 

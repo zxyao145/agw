@@ -37,6 +37,10 @@ public sealed class PiUsage
     /// <summary>Gets the number of input tokens written to cache.</summary>
     public long CacheWrite { get; init; }
 
+    /// <summary>Gets the number of reasoning tokens when reported by the provider.</summary>
+    /// <remarks>Reasoning tokens are already included in <see cref="Output"/>.</remarks>
+    public long? Reasoning { get; init; }
+
     /// <summary>Gets the provider-reported total token count.</summary>
     public long TotalTokens { get; init; }
 
@@ -54,6 +58,10 @@ public sealed class PiUsage
             Output = left.Output + right.Output,
             CacheRead = left.CacheRead + right.CacheRead,
             CacheWrite = left.CacheWrite + right.CacheWrite,
+            Reasoning =
+                left.Reasoning.HasValue || right.Reasoning.HasValue
+                    ? (left.Reasoning ?? 0) + (right.Reasoning ?? 0)
+                    : null,
             TotalTokens = left.TotalTokens + right.TotalTokens,
             Cost = AddCost(left.Cost, right.Cost),
         };

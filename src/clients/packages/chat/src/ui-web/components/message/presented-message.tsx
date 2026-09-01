@@ -91,7 +91,7 @@ function PresentedMessageView({
           "min-w-0 max-w-full",
           isUser
             ? "msg-pos-right rounded-lg bg-[#f3f3f4] px-2 py-1 text-[#17191d]"
-            : "msg-pos-left",
+            : "msg-pos-left w-full",
           isResult ? "w-full rounded-md border border-[#e4e4e5] bg-card p-3" : "",
           message.width === "full" ? "w-full" : "",
         )}

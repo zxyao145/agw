@@ -150,16 +150,47 @@ test("keeps the Desktop nested hook output format", () => {
   assert.equal(getClaudeSystemEventName(content), "SessionStart");
 });
 
-test("restores Desktop agent name and author metadata", () => {
+test("uses AuthorName as the canonical External Agent name", () => {
   assert.deepEqual(
     getMessageMeta({
       messageId: "message-1",
       role: "assistant",
-      author: "kimi-k3",
+      author: "pi",
+      contents: [],
+      additionalProperties: {
+        modelName: "deepseek-v4-flash-vision-exp",
+      },
+    }),
+    { name: "pi", author: null, model: "deepseek-v4-flash-vision-exp" },
+  );
+});
+
+test("keeps legacy External Agent history that stored the model in AuthorName", () => {
+  assert.deepEqual(
+    getMessageMeta({
+      messageId: "message-1",
+      role: "assistant",
+      author: "claude-sonnet",
       contents: [],
       additionalProperties: { agentName: "claude-code" },
     }),
-    { name: "claude-code", author: "kimi-k3" },
+    { name: "claude-code", author: "claude-sonnet", model: null },
+  );
+});
+
+test("renders Agentflow node, canonical agent, and model independently", () => {
+  assert.deepEqual(
+    getMessageMeta({
+      messageId: "message-1",
+      role: "assistant",
+      author: "pi",
+      contents: [],
+      additionalProperties: {
+        nodeName: "Review Node",
+        modelName: "deepseek-v4-flash-vision-exp",
+      },
+    }),
+    { name: "Review Node", author: "pi", model: "deepseek-v4-flash-vision-exp" },
   );
 });
 
@@ -172,7 +203,7 @@ test("prefers an explicit author over the persisted Agentflow agent name", () =>
       contents: [],
       additionalProperties: { nodeName: "Review Node", agentName: "historical-agent" },
     }),
-    { name: "Review Node", author: "live-agent" },
+    { name: "Review Node", author: "live-agent", model: null },
   );
 });
 
@@ -185,7 +216,7 @@ test("uses the persisted agent name when historical Agentflow messages have no a
       contents: [],
       additionalProperties: { nodeName: "Review Node", agentName: "general-agent" },
     }),
-    { name: "Review Node", author: "general-agent" },
+    { name: "Review Node", author: "general-agent", model: null },
   );
 });
 
@@ -198,7 +229,20 @@ test("does not duplicate a standalone agent name", () => {
       contents: [],
       additionalProperties: { agentName: "general-agent" },
     }),
-    { name: "general-agent", author: null },
+    { name: "general-agent", author: null, model: null },
+  );
+});
+
+test("does not duplicate matching agent name and author", () => {
+  assert.deepEqual(
+    getMessageMeta({
+      messageId: "message-1",
+      role: "assistant",
+      author: "PI",
+      contents: [],
+      additionalProperties: { agentName: "pi" },
+    }),
+    { name: "PI", author: null, model: null },
   );
 });
 
@@ -211,7 +255,7 @@ test("does not add historical agent metadata to tool messages", () => {
       contents: [],
       additionalProperties: { nodeName: "Review Node", agentName: "general-agent" },
     }),
-    { name: "Review Node", author: null },
+    { name: "Review Node", author: null, model: null },
   );
 });
 

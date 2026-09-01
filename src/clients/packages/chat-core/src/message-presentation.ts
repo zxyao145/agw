@@ -5,10 +5,11 @@ import { isSystemInjectedMessage } from "./message-source";
 export type MessageMeta = {
   name: string | null;
   author: string | null;
+  model: string | null;
 };
 
 export const MESSAGE_PREVIEW_MAX_LENGTH = 72;
-const AGENT_NAME_KEYS = ["nodeName", "name", "agentName", "displayName", "agentDisplayName"];
+const DISPLAY_NAME_KEYS = ["name", "displayName", "agentDisplayName"];
 const HISTORY_CONTROL_MESSAGE_TYPES = new Set([
   "turn-start",
   "turn-finished",
@@ -53,19 +54,45 @@ export function getMessageMeta(message: AiMessage): MessageMeta | null {
 
   const agentAuthor = readString(message.author);
   if (message.role === "user") {
-    return agentAuthor ? { name: null, author: agentAuthor } : null;
+    return agentAuthor ? { name: null, author: agentAuthor, model: null } : null;
   }
 
   const nodeName = readStringProperty(message, ["nodeName"]);
-  const agentName = readStringProperty(message, AGENT_NAME_KEYS);
-  const persistedAgentName = readStringProperty(message, ["agentName"]);
-  const displayAuthor =
-    agentAuthor ?? (message.role !== "tool" && nodeName ? persistedAgentName : null);
-  if (!agentName && !displayAuthor) return null;
+  const explicitDisplayName = readStringProperty(message, DISPLAY_NAME_KEYS);
+  const legacyAgentName = readStringProperty(message, ["agentName"]);
+  const modelName = readStringProperty(message, ["modelName"]);
+  let displayName: string | null;
+  let displayAuthor: string | null = null;
+
+  if (nodeName || explicitDisplayName) {
+    displayName = nodeName ?? explicitDisplayName;
+    const canonicalAgentName = agentAuthor ?? legacyAgentName;
+    if (
+      message.role !== "tool" &&
+      canonicalAgentName &&
+      canonicalAgentName.toLowerCase() !== displayName?.toLowerCase()
+    ) {
+      displayAuthor = canonicalAgentName;
+    }
+  } else if (modelName) {
+    displayName = agentAuthor ?? legacyAgentName;
+  } else if (
+    legacyAgentName &&
+    agentAuthor &&
+    legacyAgentName.toLowerCase() !== agentAuthor.toLowerCase()
+  ) {
+    displayName = legacyAgentName;
+    displayAuthor = agentAuthor;
+  } else {
+    displayName = agentAuthor ?? legacyAgentName;
+  }
+
+  if (!displayName && !displayAuthor && !modelName) return null;
 
   return {
-    name: agentName,
+    name: displayName,
     author: displayAuthor,
+    model: modelName,
   };
 }
 

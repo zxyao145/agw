@@ -76,7 +76,40 @@ public sealed class PiAgentAIAgentTests
         Assert.Empty(history.Stored[1].Requests);
         var assistant = Assert.Single(history.Stored[1].Responses);
         Assert.Equal("done", assistant.Text);
-        Assert.Contains(updates, update => update.Contents.OfType<TextContent>().Any(content => content.Text == "do"));
+        Assert.False(assistant.AdditionalProperties!.ContainsKey("agentName"));
+        Assert.Equal("deepseek-v4-flash-vision-exp", assistant.AdditionalProperties!["modelName"]);
+        var textUpdate = Assert.Single(
+            updates,
+            update => update.Contents.OfType<TextContent>().Any(content => content.Text == "do")
+        );
+        Assert.False(textUpdate.AdditionalProperties!.ContainsKey("agentName"));
+        Assert.Equal("deepseek-v4-flash-vision-exp", textUpdate.AdditionalProperties!["modelName"]);
+    }
+
+    [Fact]
+    public async Task RunAsync_ProviderReportsReasoning_MapsReasoningUsage()
+    {
+        // Arrange
+        var transport = new FakePiTransport();
+        transport.OnWrite = line => EmitRun(transport, line);
+        var piAgent = new PiAgent(
+            new PiAgentOptions { CommandTimeout = TimeSpan.FromSeconds(2) },
+            logger: null,
+            (_, _) => transport
+        );
+        await using var agent = new PiAgentAIAgent(new PiAgentAIAgentOptions(), logger: null, piAgent);
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+
+        // Act
+        var response = await agent.RunAsync(
+            [new ChatMessage(ChatRole.User, "hello")],
+            session,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+
+        // Assert
+        Assert.NotNull(response.Usage);
+        Assert.Equal(1, response.Usage.ReasoningTokenCount);
     }
 
     [Fact]
@@ -282,10 +315,13 @@ public sealed class PiAgentAIAgentTests
 
         transport.Emit($"{{\"type\":\"response\",\"id\":\"{id}\",\"command\":\"prompt\",\"success\":true}}");
         transport.Emit(
+            """{"type":"message_start","message":{"role":"assistant","content":[],"provider":"deepseek","model":"deepseek-v4-flash-vision-exp","timestamp":1}}"""
+        );
+        transport.Emit(
             """{"type":"message_update","usage":{"input":1,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":2},"assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"do"}}"""
         );
         transport.Emit(
-            """{"type":"turn_end","message":{"role":"assistant","content":[{"type":"text","text":"done"}],"usage":{"input":2,"output":1,"cacheRead":0,"cacheWrite":0,"totalTokens":3},"stopReason":"stop","timestamp":1},"toolResults":[]}"""
+            """{"type":"turn_end","message":{"role":"assistant","content":[{"type":"text","text":"done"}],"provider":"deepseek","model":"deepseek-v4-flash-vision-exp","usage":{"input":2,"output":1,"cacheRead":0,"cacheWrite":0,"reasoning":1,"totalTokens":3},"stopReason":"stop","timestamp":1},"toolResults":[]}"""
         );
         transport.Emit("""{"type":"agent_settled"}""");
     }

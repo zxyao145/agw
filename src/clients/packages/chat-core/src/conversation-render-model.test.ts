@@ -6,6 +6,7 @@ import { scopeMessagesByUserTurn } from "@agw/execution-core";
 import {
   buildConversationRenderModel,
   formatToolContent,
+  formatToolResultContent,
   isSupportedImageDataUrl,
   prepareVisibleMessages,
 } from "./conversation-render-model";
@@ -708,6 +709,56 @@ test("Claude pseudo-user tool results pair with their assistant calls after hist
   );
   const tool = items[1];
   assert.equal(tool.type === "tool-accordion" ? tool.messages.length : 0, 2);
+});
+
+test("tool result formatting fences plain text and keeps JSON blocks", () => {
+  assert.equal(formatToolResultContent("line 1\nline 2"), "\n```\nline 1\nline 2\n```");
+  assert.match(formatToolResultContent('{"a":1}'), /^\n```json\n/);
+  assert.equal(formatToolResultContent(""), "");
+  assert.equal(
+    formatToolResultContent("```ts\nconst x = 1;\n```"),
+    "\n````\n```ts\nconst x = 1;\n```\n````",
+  );
+});
+
+test("plain text tool results render as fenced code in presented messages", () => {
+  const items = buildConversationRenderModel([
+    {
+      messageId: "shell-call",
+      role: "assistant",
+      streamingScopeId: "user-1",
+      contents: [
+        {
+          type: "FunctionCallContent",
+          content: "plain args",
+          additionalProperties: { callId: "shell-1", toolName: "run_shell" },
+        },
+      ],
+    },
+    {
+      messageId: "shell-result",
+      role: "tool",
+      streamingScopeId: "user-1",
+      contents: [
+        {
+          type: "FunctionResultContent",
+          content: "i tests 151\ni pass 151",
+          additionalProperties: { callId: "shell-1" },
+        },
+      ],
+    },
+  ]);
+
+  const tool = items.find((item) => item.type === "tool-accordion");
+  const markdowns =
+    tool?.type === "tool-accordion"
+      ? tool.messages.flatMap((toolMessage) =>
+          toolMessage.contents.map((content) =>
+            content.type === "markdown" ? content.markdown : "",
+          ),
+        )
+      : [];
+  assert.deepEqual(markdowns, ["plain args", "\n```\ni tests 151\ni pass 151\n```"]);
 });
 
 test("tool formatting wraps only object and array JSON", () => {
