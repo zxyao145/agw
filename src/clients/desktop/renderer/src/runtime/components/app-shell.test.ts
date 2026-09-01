@@ -17,9 +17,25 @@ test("Desktop shell opens Projects through the title-bar picker", async () => {
 
   assert.match(source, /<DesktopProjectPicker/);
   assert.match(source, /onSelect=\{openProject\}/);
-  assert.match(source, /normalizeProjectTabs\(tabs, projectIds, projectId\)/);
+  assert.match(source, /normalizeProjectTabs\(tabs, availableProjectIds, projectId\)/);
   assert.match(source, /persistTabs\(nextTabs\)/);
   assert.match(source, /router\.push\(buildChatHref\("\/desktop\/chat",/);
+});
+
+test("Desktop shell quick-creates and opens a Project", async () => {
+  const source = await readFile(APP_SHELL_URL, "utf8");
+
+  assert.match(source, /apiPost\("\/api\/projects"/);
+  assert.match(source, /description: null/);
+  assert.match(source, /extraSetting: null/);
+  assert.match(source, /mcpToolServerIds: \[\]/);
+  assert.match(source, /skillIds: \[\]/);
+  assert.match(source, /connectionIds: \[\]/);
+  assert.match(source, /environmentVariables: \{\}/);
+  assert.match(source, /queryClient\.setQueryData<ProjectSummary\[]>\(\["projects", serverId\]/);
+  assert.match(source, /openProject\(created\.id\)/);
+  assert.match(source, /invalidateQueries\(\{ queryKey: \["projects"\] \}\)/);
+  assert.match(source, /onCreate=\{createProject\}/);
 });
 
 test("Desktop shell keeps every Chat action on the dedicated route", async () => {

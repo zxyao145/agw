@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useQuery } from "@agw/components/query";
+import { useQuery, useQueryClient } from "@agw/components/query";
 import {
   ArrowLeft,
   Blocks,
@@ -31,8 +31,9 @@ import {
   X,
 } from "lucide-react";
 import { useTheme } from "next-themes";
+import { toast } from "sonner";
 
-import { apiGet } from "@agw/api";
+import { apiGet, apiPost } from "@agw/api";
 import { getApiErrorMessage } from "@agw/api";
 import {
   AgwLogo,
@@ -51,7 +52,11 @@ import { DEFAULT_PROJECT_ID, normalizeProjectTabs } from "@agw/projects";
 import { cn } from "@agw/components";
 import { useDesktopRuntime } from "../runtime-provider";
 import { buildSettingsHref, getDesktopChatReturnHref } from "./app-shell-routing";
-import { DesktopProjectPicker, type DesktopProjectOption } from "./project-picker";
+import {
+  DesktopProjectPicker,
+  type DesktopProjectCreateInput,
+  type DesktopProjectOption,
+} from "./project-picker";
 
 type ProjectSummary = DesktopProjectOption;
 
@@ -135,6 +140,7 @@ function StatusDot({ status }: { status: ExecutionStatus }) {
 function ChatShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const desktop = useDesktopRuntime();
   const activity = useExecutionActivity();
   const [serverPickerOpen, setServerPickerOpen] = React.useState(false);
@@ -227,9 +233,36 @@ function ChatShell({ children }: { children: React.ReactNode }) {
   };
 
   const openProject = (projectId: string) => {
-    const nextTabs = normalizeProjectTabs(tabs, projectIds, projectId);
+    const availableProjectIds = projectIds.includes(projectId)
+      ? projectIds
+      : [...projectIds, projectId];
+    const nextTabs = normalizeProjectTabs(tabs, availableProjectIds, projectId);
     persistTabs(nextTabs);
     router.push(buildChatHref("/desktop/chat", { projectId, conversationId: null }));
+  };
+
+  const createProject = async ({ name, workspace }: DesktopProjectCreateInput) => {
+    const created = (await apiPost("/api/projects", {
+      body: {
+        name,
+        description: null,
+        workspace,
+        extraSetting: null,
+        tools: [],
+        mcpToolServerIds: [],
+        skillIds: [],
+        connectionIds: [],
+        environmentVariables: {},
+      },
+    })) as ProjectSummary;
+
+    queryClient.setQueryData<ProjectSummary[]>(["projects", serverId], (currentProjects) => [
+      created,
+      ...(currentProjects ?? projects).filter((project) => project.id !== created.id),
+    ]);
+    openProject(created.id);
+    toast.success(`Project "${created.name}" created`);
+    void queryClient.invalidateQueries({ queryKey: ["projects"] });
   };
 
   const switchServer = (nextServerId: string) => {
@@ -279,6 +312,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
               isLoading={projectsQuery.isLoading}
               errorMessage={projectsQuery.isError ? getApiErrorMessage(projectsQuery.error) : null}
               onSelect={openProject}
+              onCreate={createProject}
             />
           </div>
         </nav>
