@@ -30,7 +30,10 @@ public sealed class PiEventMapperTests
         var update = mapper.ToUpdate(evt);
 
         // Assert
-        var call = Assert.IsType<FunctionCallContent>(Assert.Single(update!.Contents));
+        Assert.Equal("pi", update!.AuthorName);
+        Assert.False(update.AdditionalProperties!.ContainsKey("agentName"));
+        Assert.Equal(string.Empty, update.AdditionalProperties["modelName"]);
+        var call = Assert.IsType<FunctionCallContent>(Assert.Single(update.Contents));
         Assert.True(call.InformationalOnly);
         Assert.Equal(JsonValueKind.Number, Assert.IsType<JsonElement>(call.Arguments!["count"]).ValueKind);
         Assert.Equal(JsonValueKind.True, Assert.IsType<JsonElement>(call.Arguments["force"]).ValueKind);
@@ -60,7 +63,7 @@ public sealed class PiEventMapperTests
         {
             Message = new PiAssistantMessage { StopReason = "error", ErrorMessage = "boom" },
         };
-        var mapper = new PiEventMapper();
+        var mapper = new PiEventMapper("configured-model");
 
         // Act
         var update = mapper.ToUpdate(evt);
@@ -68,6 +71,9 @@ public sealed class PiEventMapperTests
         // Assert
         var error = Assert.IsType<ErrorContent>(Assert.Single(update!.Contents));
         Assert.True(Assert.IsType<bool>(error.AdditionalProperties!["isFatalError"]));
+        Assert.Equal("pi", update.AuthorName);
+        Assert.False(update.AdditionalProperties!.ContainsKey("agentName"));
+        Assert.Equal("configured-model", update.AdditionalProperties["modelName"]);
     }
 
     [Fact]
@@ -78,10 +84,12 @@ public sealed class PiEventMapperTests
         {
             Message = new PiAssistantMessage
             {
+                Model = "turn-model",
                 Usage = new PiUsage
                 {
                     Input = 10,
                     Output = 2,
+                    Reasoning = 2,
                     TotalTokens = 12,
                 },
             },
@@ -93,6 +101,7 @@ public sealed class PiEventMapperTests
                     {
                         Input = 3,
                         Output = 1,
+                        Reasoning = 1,
                         TotalTokens = 4,
                     },
                 },
@@ -107,7 +116,11 @@ public sealed class PiEventMapperTests
         var usage = Assert.IsType<UsageContent>(Assert.Single(update!.Contents));
         Assert.Equal(13, usage.Details.InputTokenCount);
         Assert.Equal(3, usage.Details.OutputTokenCount);
+        Assert.Equal(3, usage.Details.ReasoningTokenCount);
         Assert.Equal(16, usage.Details.TotalTokenCount);
+        Assert.Equal("pi", update.AuthorName);
+        Assert.False(update.AdditionalProperties!.ContainsKey("agentName"));
+        Assert.Equal("turn-model", update.AdditionalProperties["modelName"]);
     }
 
     [Fact]
@@ -174,5 +187,38 @@ public sealed class PiEventMapperTests
 
         // Act & Assert
         Assert.Throws<PiProtocolException>(() => PiEventMapper.ToHistoryMessages(evt));
+    }
+
+    [Fact]
+    public void ToHistoryMessages_AssistantAndTool_UseCanonicalMetadata()
+    {
+        // Arrange
+        var evt = new PiTurnEndEvent
+        {
+            Message = new PiAssistantMessage { Model = "turn-model", Content = [new PiTextContent { Text = "done" }] },
+            ToolResults =
+            [
+                new PiToolResultMessage
+                {
+                    ToolCallId = "call-1",
+                    ToolName = "bash",
+                    Content = [new PiTextContent { Text = "result" }],
+                },
+            ],
+        };
+
+        // Act
+        var messages = PiEventMapper.ToHistoryMessages(evt);
+
+        // Assert
+        Assert.All(
+            messages,
+            message =>
+            {
+                Assert.Equal("pi", message.AuthorName);
+                Assert.False(message.AdditionalProperties!.ContainsKey("agentName"));
+                Assert.Equal("turn-model", message.AdditionalProperties["modelName"]);
+            }
+        );
     }
 }

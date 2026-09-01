@@ -7,17 +7,27 @@ namespace PiAgentSdk.MAF.Internal;
 internal sealed class PiEventMapper
 {
     private const string AgentName = "pi";
+    private const string ModelNamePropertyName = "modelName";
     private readonly string _responseId = Guid.CreateVersion7().ToString("N");
     private readonly HashSet<int> _emittedAssistantContentIndexes = [];
+    private readonly string _configuredModelName;
     private string? _activeAssistantMessageId;
+    private string _activeModelName;
     private int _messageSequence;
     private bool _assistantErrorEmitted;
 
+    public PiEventMapper(string? configuredModelName = null)
+    {
+        _configuredModelName = NormalizeModelName(configuredModelName);
+        _activeModelName = _configuredModelName;
+    }
+
     public AgentResponseUpdate? ToUpdate(PiEvent evt)
     {
-        if (evt is PiMessageEvent { Type: "message_start", Message: PiAssistantMessage })
+        if (evt is PiMessageEvent { Type: "message_start", Message: PiAssistantMessage startingAssistant })
         {
             _activeAssistantMessageId = CreateMessageId("assistant");
+            _activeModelName = ResolveModelName(startingAssistant.Model, _configuredModelName);
             ResetAssistantTracking();
             return null;
         }
@@ -52,6 +62,7 @@ internal sealed class PiEventMapper
             update.AuthorName = AgentName;
             update.ResponseId = _responseId;
             update.MessageId = ResolveMessageId(evt, update.Role);
+            SetModelName(update.AdditionalProperties, ResolveModelName(evt));
         }
 
         if (endsAssistantMessage)
@@ -62,15 +73,20 @@ internal sealed class PiEventMapper
         if (evt is PiTurnEndEvent)
         {
             _activeAssistantMessageId = null;
+            _activeModelName = _configuredModelName;
             ResetAssistantTracking();
         }
 
         return update;
     }
 
-    public static IReadOnlyList<ChatMessage> ToHistoryMessages(PiTurnEndEvent turnEnd)
+    public static IReadOnlyList<ChatMessage> ToHistoryMessages(
+        PiTurnEndEvent turnEnd,
+        string? configuredModelName = null
+    )
     {
         var messages = new List<ChatMessage>();
+        var modelName = ResolveModelName((turnEnd.Message as PiAssistantMessage)?.Model, configuredModelName);
         if (turnEnd.Message is PiAssistantMessage assistant)
         {
             var contents = assistant.Content.Select(MapContent).OfType<AIContent>().ToList();
@@ -81,11 +97,13 @@ internal sealed class PiEventMapper
 
             if (contents.Count > 0)
             {
+                var additionalProperties = new AdditionalPropertiesDictionary { [ModelNamePropertyName] = modelName };
                 messages.Add(
                     new ChatMessage(ChatRole.Assistant, contents)
                     {
                         AuthorName = AgentName,
                         MessageId = Guid.CreateVersion7().ToString("N"),
+                        AdditionalProperties = additionalProperties,
                     }
                 );
             }
@@ -107,6 +125,7 @@ internal sealed class PiEventMapper
                 {
                     AuthorName = AgentName,
                     MessageId = Guid.CreateVersion7().ToString("N"),
+                    AdditionalProperties = new AdditionalPropertiesDictionary { [ModelNamePropertyName] = modelName },
                 }
             );
         }
@@ -121,6 +140,7 @@ internal sealed class PiEventMapper
             OutputTokenCount = usage.Output,
             TotalTokenCount = usage.TotalTokens,
             CachedInputTokenCount = usage.CacheRead,
+            ReasoningTokenCount = usage.Reasoning,
             AdditionalCounts = new AdditionalPropertiesDictionary<long> { ["cache_write"] = usage.CacheWrite },
         };
 
@@ -371,8 +391,40 @@ internal sealed class PiEventMapper
             Role = role,
             AuthorName = AgentName,
             Contents = contents.ToList(),
-            AdditionalProperties = new AdditionalPropertiesDictionary { ["agentName"] = AgentName, ["type"] = type },
+            AdditionalProperties = new AdditionalPropertiesDictionary { ["type"] = type },
         };
+
+    private string ResolveModelName(PiEvent evt) =>
+        evt switch
+        {
+            PiMessageUpdateEvent => _activeModelName,
+            PiMessageEvent { Message: PiAssistantMessage assistant } => ResolveModelName(
+                assistant.Model,
+                _configuredModelName
+            ),
+            PiTurnEndEvent { Message: PiAssistantMessage assistant } => ResolveModelName(
+                assistant.Model,
+                _configuredModelName
+            ),
+            _ => _activeModelName,
+        };
+
+    private static string ResolveModelName(string? reportedModelName, string? configuredModelName)
+    {
+        var modelName = NormalizeModelName(reportedModelName);
+        return modelName.Length > 0 ? modelName : NormalizeModelName(configuredModelName);
+    }
+
+    private static string NormalizeModelName(string? modelName) =>
+        string.IsNullOrWhiteSpace(modelName) ? string.Empty : modelName.Trim();
+
+    private static void SetModelName(AdditionalPropertiesDictionary? properties, string modelName)
+    {
+        if (properties != null)
+        {
+            properties[ModelNamePropertyName] = modelName;
+        }
+    }
 
     private string ResolveMessageId(PiEvent evt, ChatRole? role)
     {

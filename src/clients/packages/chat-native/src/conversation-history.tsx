@@ -385,7 +385,9 @@ function NativeMessage({
   const isUser = message.alignment === "right";
   const hasPlan = message.contents.some((content) => content.type === "plan");
   const full = compact || result || hasPlan || message.width === "full";
-  const meta = [message.meta?.name, message.meta?.author].filter(Boolean).join(" / ");
+  const meta = [message.meta?.name, message.meta?.author, message.meta?.model]
+    .filter(Boolean)
+    .join(" / ");
   return (
     <View style={styles.messageBlock}>
       {meta && !result ? (

@@ -64,7 +64,11 @@ test("agent metadata keeps name priority and independent author", () => {
         agentName: "general-agent",
       },
     }),
-    { name: "Review Node", author: "model-author" },
+    {
+      name: "Review Node",
+      author: "model-author",
+      model: null,
+    },
   );
   assert.deepEqual(
     getMessageMeta({
@@ -73,8 +77,27 @@ test("agent metadata keeps name priority and independent author", () => {
       contents: [],
       additionalProperties: { agentName: "general-agent" },
     }),
-    { name: "general-agent", author: null },
+    { name: "general-agent", author: null, model: null },
   );
+});
+
+test("conversation appends model metadata to the agent header", async () => {
+  const source = await readFile(CONVERSATION_URL, "utf8");
+
+  assert.deepEqual(
+    getMessageMeta({
+      messageId: "message-3",
+      role: "assistant",
+      author: "pi",
+      contents: [],
+      additionalProperties: {
+        modelName: "deepseek-v4-flash-vision-exp",
+      },
+    }),
+    { name: "pi", author: null, model: "deepseek-v4-flash-vision-exp" },
+  );
+  assert.match(source, /message\.meta\.model/);
+  assert.match(source, /title=\{message\.meta\.model\}/);
 });
 
 test("shared model provides stable per-turn tool groups to the renderer", () => {

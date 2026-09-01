@@ -15,7 +15,7 @@ public sealed class ProtocolTests
               "message":{
                 "role":"assistant",
                 "content":[{"type":"toolCall","id":"call-1","name":"bash","arguments":{"count":2,"force":true}}],
-                "usage":{"input":10,"output":3,"cacheRead":1,"cacheWrite":2,"totalTokens":16},
+                "usage":{"input":10,"output":3,"cacheRead":1,"cacheWrite":2,"reasoning":2,"totalTokens":16},
                 "stopReason":"error",
                 "errorMessage":"provider failed",
                 "timestamp":1
@@ -31,6 +31,7 @@ public sealed class ProtocolTests
         var turn = Assert.IsType<PiTurnEndEvent>(evt);
         var assistant = Assert.IsType<PiAssistantMessage>(turn.Message);
         Assert.Equal("provider failed", assistant.ErrorMessage);
+        Assert.Equal(2, assistant.Usage!.Reasoning);
         var call = Assert.IsType<PiToolCallContent>(Assert.Single(assistant.Content));
         Assert.Equal(2, call.Arguments.GetProperty("count").GetInt32());
         Assert.True(call.Arguments.GetProperty("force").GetBoolean());
