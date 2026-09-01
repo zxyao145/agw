@@ -40,7 +40,7 @@ test("buildChatTargetOptions preserves restricted-project filtering and sorting"
   );
 });
 
-test("buildChatTargetOptions includes all agentflows and sorts normal projects by label", () => {
+test("buildChatTargetOptions puts agents first and sorts each target group by label", () => {
   assert.deepEqual(
     buildChatTargetOptions({
       projectId: "11111111-1111-1111-1111-000000000099",
@@ -55,10 +55,10 @@ test("buildChatTargetOptions includes all agentflows and sorts normal projects b
       ],
     }),
     [
-      { id: "flow-1", label: "Alpha Flow", type: "agentflow" },
-      { id: "flow-3", label: "Beta Flow", type: "agentflow" },
       { id: "agent-2", label: "Claude Code", type: "agent" },
       { id: "agent-1", label: "General Agent", type: "agent" },
+      { id: "flow-1", label: "Alpha Flow", type: "agentflow" },
+      { id: "flow-3", label: "Beta Flow", type: "agentflow" },
       { id: "flow-2", label: "Zeta Flow", type: "agentflow" },
     ],
   );
