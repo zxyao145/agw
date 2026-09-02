@@ -33,12 +33,15 @@ test("Web and Desktop routes compose one shared Chat workspace", async () => {
 
   assert.match(webPageSource, /<ChatWorkspace routeBasePath="\/chat" showProjectSelect\s*\/>/);
   assert.doesNotMatch(webPageSource, /compactToolbar/);
+  assert.doesNotMatch(webPageSource, /showUserInputNavigation/);
   assert.match(
     desktopPageSource,
-    /<ChatWorkspace[\s\S]*routeBasePath="\/desktop\/chat"[\s\S]*showProjectSelect=\{false\}[\s\S]*compactToolbar[\s\S]*\/>/,
+    /<ChatWorkspace[\s\S]*routeBasePath="\/desktop\/chat"[\s\S]*showProjectSelect=\{false\}[\s\S]*compactToolbar[\s\S]*showUserInputNavigation[\s\S]*\/>/,
   );
   assert.match(workspaceSource, /export function ChatWorkspace\(/);
   assert.match(workspaceSource, /compactToolbar\?: boolean/);
+  assert.match(workspaceSource, /showUserInputNavigation\?: boolean/);
+  assert.match(workspaceSource, /showUserInputNavigation=\{showUserInputNavigation\}/);
   assert.match(workspaceSource, /size=\{compactToolbar \? "sm" : "default"\}/);
   assert.match(workspaceSource, /compactToolbar && "h-8 p-2"/);
   assert.equal(workspaceSource.match(/compactToolbar && "h-6 px-2\.5 py-0 text-xs"/g)?.length, 2);

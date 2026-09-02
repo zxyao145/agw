@@ -22,7 +22,6 @@ import { Chat, type ChatSessionSeed } from "../../components/message/chat";
 import { ExecutionReconnectingDialog } from "../../components/message/execution-reconnecting-dialog";
 import { ConversationList } from "@agw/projects";
 import { Button } from "@agw/components";
-import { Card } from "@agw/components";
 import {
   Dialog,
   DialogClose,
@@ -89,6 +88,7 @@ export type ChatWorkspaceProps = {
   routeBasePath: ChatRouteBasePath;
   showProjectSelect: boolean;
   compactToolbar?: boolean;
+  showUserInputNavigation?: boolean;
 };
 
 function getResumeTargetValue(resumeState: ConversationResumeState | null): string | null {
@@ -298,6 +298,7 @@ export function ChatWorkspace({
   routeBasePath,
   showProjectSelect,
   compactToolbar = false,
+  showUserInputNavigation = false,
 }: ChatWorkspaceProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1189,6 +1190,7 @@ export function ChatWorkspace({
                     projectId={selectedProjectId}
                     conversationId={conversationId}
                     sessionSeed={chatSessionSeed}
+                    showUserInputNavigation={showUserInputNavigation}
                     restoreDurableExecution={
                       Number(chatSessionSeed.revision) > 0 &&
                       queryProjectId === selectedProjectId &&
