@@ -2,9 +2,15 @@
 
 import * as React from "react";
 import { CheckCircle2, CircleAlert, LoaderCircle } from "lucide-react";
+import { createPortal } from "react-dom";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
-import type { ConversationRenderItem, PresentedTool, ToolCallStatus } from "@agw/chat-core";
+import {
+  CHAT_BOTTOM_TOLERANCE_PX,
+  type ConversationRenderItem,
+  type PresentedTool,
+  type ToolCallStatus,
+} from "@agw/chat-core";
 import type { PermissionMode } from "@agw/execution-core";
 import {
   Accordion,
@@ -27,6 +33,12 @@ import { HumanInteractionPanel } from "./human-interaction-panel";
 import { HumanInteractionQuestionResultView } from "./human-interaction-question-result";
 import { PresentedMessageComponent } from "./presented-message";
 import { ToolState } from "./tool-state";
+import {
+  buildUserInputAnchors,
+  getActiveUserInputMarkerKey,
+  layoutUserInputMarkers,
+} from "./user-input-navigation";
+import { UserInputNavigator } from "./user-input-navigator";
 
 export type HumanResponseInput = {
   approved: boolean;
@@ -41,6 +53,8 @@ export interface ChatSessionProps {
   hasOlderMessages?: boolean;
   isLoadingOlderMessages?: boolean;
   onLoadOlderMessages?: () => void;
+  userInputNavigationHost?: HTMLDivElement | null;
+  onUserInputNavigate?: () => void;
   permissionMode?: PermissionMode;
   showCheckpointResume?: boolean;
   checkpointResumeDisabled?: boolean;
@@ -54,6 +68,8 @@ export function Conversation({
   hasOlderMessages = false,
   isLoadingOlderMessages = false,
   onLoadOlderMessages,
+  userInputNavigationHost = null,
+  onUserInputNavigate,
   permissionMode,
   showCheckpointResume = false,
   checkpointResumeDisabled = false,
@@ -77,6 +93,39 @@ export function Conversation({
     overscan: 6,
   });
   const virtualRows = virtualizer.getVirtualItems();
+  const viewportHeight = virtualizer.scrollRect?.height ?? 0;
+  const totalSize = virtualizer.getTotalSize() + 144;
+  const navigationHeight = Math.max(viewportHeight - 168, 0);
+  const userInputAnchors = React.useMemo(
+    () => (userInputNavigationHost ? buildUserInputAnchors(items) : []),
+    [items, userInputNavigationHost],
+  );
+  const userInputMarkers = userInputNavigationHost
+    ? layoutUserInputMarkers(userInputAnchors, virtualizer.measurementsCache, rowOffset)
+    : [];
+  const scrollElement = scrollElementRef.current;
+  const isAtBottom =
+    scrollElement !== null &&
+    scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight <=
+      CHAT_BOTTOM_TOLERANCE_PX;
+  const activeUserInputKey = getActiveUserInputMarkerKey(
+    userInputMarkers,
+    virtualizer.scrollOffset ?? scrollElement?.scrollTop ?? 0,
+    isAtBottom,
+  );
+  const showNavigation =
+    userInputNavigationHost !== null &&
+    userInputMarkers.length > 0 &&
+    navigationHeight > 0 &&
+    totalSize > viewportHeight + 1;
+
+  const handleUserInputSelect = React.useCallback(
+    (rowIndex: number) => {
+      onUserInputNavigate?.();
+      virtualizer.scrollToIndex(rowIndex, { align: "start", behavior: "auto" });
+    },
+    [onUserInputNavigate, virtualizer],
+  );
 
   if (items.length === 0 && !hasHistoryLoader) {
     return (
@@ -91,10 +140,25 @@ export function Conversation({
   }
 
   return (
-    <div className="min-h-full w-full flex-1" role="list" aria-label="Conversation messages">
+    <div className="min-h-full w-full flex-1">
+      {showNavigation && userInputNavigationHost
+        ? createPortal(
+            <div className="absolute top-6 left-0">
+              <UserInputNavigator
+                markers={userInputMarkers}
+                activeKey={activeUserInputKey}
+                height={navigationHeight}
+                onSelect={handleUserInputSelect}
+              />
+            </div>,
+            userInputNavigationHost,
+          )
+        : null}
       <div
         className="relative mx-auto w-full max-w-225 pb-36"
-        style={{ height: virtualizer.getTotalSize() + 144 }}
+        style={{ height: totalSize }}
+        role="list"
+        aria-label="Conversation messages"
       >
         {virtualRows.map((virtualRow) => {
           const isLoader = hasHistoryLoader && virtualRow.index === 0;

@@ -12,7 +12,7 @@ export default function DataContent({ node }: { node: MessageNode }) {
       <img
         src={node.content}
         alt={node.name ?? "Image attachment"}
-        className="max-h-80 max-w-full rounded-lg border bg-muted object-contain shadow-xs"
+        className="max-h-[300px] max-w-full rounded-lg border bg-muted object-contain shadow-xs"
         loading="lazy"
         decoding="async"
       />

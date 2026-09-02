@@ -4,7 +4,12 @@ import { ChatWorkspace } from "./chat/chat-workspace";
 export function DesktopChatPage() {
   return (
     <ChatRouteBoundary>
-      <ChatWorkspace routeBasePath="/desktop/chat" showProjectSelect={false} compactToolbar />
+      <ChatWorkspace
+        routeBasePath="/desktop/chat"
+        showProjectSelect={false}
+        compactToolbar
+        showUserInputNavigation
+      />
     </ChatRouteBoundary>
   );
 }

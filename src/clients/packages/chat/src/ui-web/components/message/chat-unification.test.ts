@@ -77,6 +77,31 @@ test("auto-scroll state is shared through chat-core", async () => {
   assert.match(source, /shouldAutoScroll/);
 });
 
+test("user-input navigation pauses automatic bottom following before it jumps", async () => {
+  const source = await readFile(CHAT_URL, "utf8");
+
+  assert.match(source, /const handleUserInputNavigate = React\.useCallback/);
+  assert.match(
+    source,
+    /handleUserInputNavigate[\s\S]*?shouldAutoScroll: false[\s\S]*?<Conversation[\s\S]*?onUserInputNavigate=\{handleUserInputNavigate\}/,
+  );
+});
+
+test("user-input navigation is the first child of the conversation content", async () => {
+  const source = await readFile(CHAT_URL, "utf8");
+  const contentStart = source.indexOf("<div ref={conversationContentRef}");
+  const navigationHost = source.indexOf("ref={setUserInputNavigationHost}", contentStart);
+  const conversationColumn = source.indexOf(
+    '<div className="relative flex min-h-full min-w-0 max-w-5xl flex-1">',
+    contentStart,
+  );
+
+  assert.ok(contentStart >= 0);
+  assert.ok(navigationHost > contentStart && navigationHost < conversationColumn);
+  assert.match(source, /userInputNavigationHost=\{userInputNavigationHost\}/);
+  assert.match(source, /w-6 shrink-0 self-start @min-\[56rem\]:block/);
+});
+
 test("auto-scroll follows delayed virtual row measurements", async () => {
   const source = await readFile(CHAT_URL, "utf8");
 

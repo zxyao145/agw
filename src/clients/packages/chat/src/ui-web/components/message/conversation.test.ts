@@ -31,6 +31,28 @@ test("conversation virtualizes dynamically measured message rows", async () => {
   assert.match(source, /Loading earlier messages/);
 });
 
+test("conversation maps Desktop user-input navigation to measured virtual rows", async () => {
+  const source = await readFile(CONVERSATION_URL, "utf8");
+
+  assert.match(source, /buildUserInputAnchors\(items\)/);
+  assert.match(source, /layoutUserInputMarkers\(/);
+  assert.match(source, /virtualizer\.measurementsCache/);
+  assert.match(
+    source,
+    /virtualizer\.scrollToIndex\(rowIndex, \{ align: "start", behavior: "auto" \}\)/,
+  );
+  assert.match(source, /createPortal\(/);
+  assert.match(source, /userInputNavigationHost/);
+  assert.match(source, /userInputNavigationHost \? buildUserInputAnchors\(items\) : \[\]/);
+  assert.match(source, /userInputNavigationHost\s*\? layoutUserInputMarkers\(/);
+  assert.doesNotMatch(source, /@min-\[56rem\]:pl-12/);
+  assert.match(
+    source,
+    /scrollElement\.scrollHeight - scrollElement\.scrollTop - scrollElement\.clientHeight/,
+  );
+  assert.match(source, /getActiveUserInputMarkerKey\([\s\S]*?isAtBottom/);
+});
+
 test("tool rows constrain long summaries without pushing status off screen", async () => {
   const [conversation, trigger] = await Promise.all([
     readFile(CONVERSATION_URL, "utf8"),

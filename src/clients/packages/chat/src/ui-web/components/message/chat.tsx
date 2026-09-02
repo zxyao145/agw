@@ -88,6 +88,7 @@ export interface ChatProps {
   onExecutionError?: (error: unknown) => void;
   pendingFileComments?: readonly LineComment[];
   onPendingFileCommentsRemove?: (commentIds: readonly string[]) => void;
+  showUserInputNavigation?: boolean;
   /** 将 SignalR 重连状态同步给更高层的工作区遮罩。 */
   onReconnectStateChange?: (state: ExecutionReconnectState | null) => void;
   /** 历史水合完成后，允许仅对已有 durable attachment 自动重订阅。 */
@@ -160,6 +161,7 @@ export function Chat({
   onExecutionError,
   pendingFileComments = EMPTY_FILE_COMMENTS,
   onPendingFileCommentsRemove,
+  showUserInputNavigation = false,
   onReconnectStateChange,
   restoreDurableExecution = false,
 }: ChatProps) {
@@ -195,6 +197,8 @@ export function Chat({
   const conversationIdRef = React.useRef<string | null>(conversationId);
   const conversationScrollRef = React.useRef<HTMLDivElement>(null);
   const conversationContentRef = React.useRef<HTMLDivElement>(null);
+  const [userInputNavigationHost, setUserInputNavigationHost] =
+    React.useState<HTMLDivElement | null>(null);
   const userInputRef = React.useRef<UserInputRef | null>(null);
   const executionClientRef = React.useRef<ManagedExecutionHandle | null>(null);
   const configuredSessionRef = React.useRef<string | null>(null);
@@ -1486,6 +1490,13 @@ export function Chat({
     [loadOlderMessages],
   );
 
+  const handleUserInputNavigate = React.useCallback(() => {
+    autoScrollStateRef.current = {
+      ...autoScrollStateRef.current,
+      shouldAutoScroll: false,
+    };
+  }, []);
+
   return (
     <div className={cn("@container relative h-full min-h-0 w-full overflow-hidden", className)}>
       <div
@@ -1496,11 +1507,19 @@ export function Chat({
         onScroll={handleConversationScroll}
       >
         <div ref={conversationContentRef} className="mx-auto flex min-h-full w-full justify-center">
+          {showUserInputNavigation ? (
+            <div
+              ref={setUserInputNavigationHost}
+              className="pointer-events-none sticky top-0 z-20 hidden h-0 w-6 shrink-0 self-start @min-[56rem]:block"
+            />
+          ) : null}
           <div className="relative flex min-h-full min-w-0 max-w-5xl flex-1">
             {/* 对话列表 */}
             <Conversation
               items={renderItems}
               scrollElementRef={conversationScrollRef}
+              userInputNavigationHost={userInputNavigationHost}
+              onUserInputNavigate={handleUserInputNavigate}
               hasOlderMessages={hasOlderMessages}
               isLoadingOlderMessages={isLoadingOlderMessages}
               onLoadOlderMessages={() => void loadOlderMessages()}
