@@ -39,6 +39,7 @@ test("shared execution commands match the server contract", () => {
   );
   assert.deepEqual(
     buildExecCommand({
+      conversationId: "conversation-1",
       agentId: "agent-1",
       agentType: 0,
       executionId: "execution-1",
@@ -46,6 +47,7 @@ test("shared execution commands match the server contract", () => {
     }),
     {
       type: "ExecCommand",
+      conversationId: "conversation-1",
       agentId: "agent-1",
       agentType: 0,
       executionId: "execution-1",

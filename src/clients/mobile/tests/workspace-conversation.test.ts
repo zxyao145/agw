@@ -38,20 +38,24 @@ test("Mobile sends the next message through the preserved execution context id",
 
   expect(sendHandlerStart).toBeGreaterThan(-1);
   expect(sendHandlerEnd).toBeGreaterThan(-1);
+  expect(sendHandler).toMatch(/const conversationId = ensureConversationId\(\)/);
   expect(sendHandler).toMatch(/const contextId = ensureContextId\(\)/);
   expect(sendHandler).toMatch(/ensureConfiguredSession\(contextId, permissionMode\)/);
+  expect(sendHandler).toMatch(/conversationId,/);
+  expect(sendHandler).toMatch(/conversation\.conversationId === conversationId/);
+  expect(sendHandler).not.toMatch(/conversation\.contextId === contextId/);
 });
 
-test("Mobile persists a new conversation before selecting it", () => {
+test("Mobile resets a new chat locally without pre-creating a conversation", () => {
   const newChatStart = source.indexOf("const newChat = React.useCallback");
   const newChatEnd = source.indexOf("const selectProject = React.useCallback", newChatStart);
   const newChatHandler = source.slice(newChatStart, newChatEnd);
 
   expect(newChatStart).toBeGreaterThan(-1);
   expect(newChatEnd).toBeGreaterThan(-1);
-  expect(newChatHandler).toMatch(
-    /conversationService\.createProjectConversation\(selectedProjectId\)/,
-  );
-  expect(newChatHandler).toMatch(/setSelectedConversationId\(conversation\?\.conversationId/);
-  expect(newChatHandler).toMatch(/setSelectedContextId\(conversation\?\.contextId/);
+  expect(newChatHandler).not.toMatch(/createProjectConversation/);
+  expect(newChatHandler).toMatch(/selectedConversationIdRef\.current = null/);
+  expect(newChatHandler).toMatch(/selectedContextIdRef\.current = null/);
+  expect(newChatHandler).toMatch(/setSelectedConversationId\(null\)/);
+  expect(newChatHandler).toMatch(/setSelectedContextId\(null\)/);
 });

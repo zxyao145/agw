@@ -143,7 +143,7 @@ Execution/
 | Command | 作用 | 是否改变 connection 状态 |
 | --- | --- | --- |
 | `SettingCommand` | 设置 project、context、环境变量和默认权限策略 | 是；settings 变化时清理旧 runtime、task 和 target |
-| `ExecCommand` | 指定 Agent/Agentflow 目标和用户输入，启动一个 turn | 是；解析 task，并创建或复用 runtime |
+| `ExecCommand` | 指定 conversation、Agent/Agentflow 目标和用户输入，启动一个 turn | 是；持久化 conversation/task 后创建或复用 runtime |
 | `InterruptCommand` | 请求中断当前 turn | 否；只转发给当前 `ActiveTurn` |
 | `SetModeCommand` | 切换支持 mode 的 Agent | 是；空闲时立即应用，活动 turn 结束后应用最后一次请求 |
 | `SetPermissionModeCommand` | 切换工具审批策略 | 是；立即更新 settings 和当前活动 turn，不重建 runtime |
@@ -329,13 +329,14 @@ sequenceDiagram
 
 1. `ExecCommandHandler` 校验 `agentId`，然后把命令交给 connection context。
 2. Context 拒绝同一条 connection 上的并发 turn；没有 settings 时创建内置 project 的默认快照。
-3. 首次执行通过 `IProjectTaskFacade` 解析或创建 task，并通过 `IProjectRuntimeFacade` 解析 workspace；后续 turn 复用两者。
-4. target 改变时释放旧 runtime；同一 target 则尝试复用。
-5. Context 从当前 connection 状态创建包含 settings、task、target、用户、workspace 和 message sink 的 `RuntimeTurnContext` 快照。
-6. `RuntimeFactory` 确保 workspace 存在，并创建 `AgentRuntime` 或 `AgentflowRuntime`。
-7. `RuntimeBase.StartTurn` 先注册 `ActiveTurn`，再启动实际执行，避免 turn 已运行但尚未对 interrupt 可见的竞态。
-8. 后台任务进入 `RuntimeTurnContextAccessor` 作用域，并把输出交给 `TurnPipeline`。
-9. turn 结束后，runtime 清理 `ActiveTurn`；runtime 本身仍留在 connection context 中，供下一轮复用。
+3. 首次执行要求客户端提供 `conversationId`。`IProjectTaskFacade` 按当前用户和 Project 创建或校验该 conversation，在同一次提交中写入初始 task record；提交完成后才通过 `IProjectRuntimeFacade` 解析 workspace 并进入 runtime。后续 turn 复用已解析的 conversation/task。
+4. `contextId` 继续用于 Agent session、provider session、trace、usage 和 checkpoint，并必须与 conversation 一致；它不再替代 conversation 资源主键。
+5. target 改变时释放旧 runtime；同一 target 则尝试复用。
+6. Context 从当前 connection 状态创建包含 settings、task、target、用户、workspace 和 message sink 的 `RuntimeTurnContext` 快照。
+7. `RuntimeFactory` 确保 workspace 存在，并创建 `AgentRuntime` 或 `AgentflowRuntime`。
+8. `RuntimeBase.StartTurn` 先注册 `ActiveTurn`，再启动实际执行，避免 turn 已运行但尚未对 interrupt 可见的竞态。
+9. 后台任务进入 `RuntimeTurnContextAccessor` 作用域，并把输出交给 `TurnPipeline`。
+10. turn 结束后，runtime 清理 `ActiveTurn`；runtime 本身仍留在 connection context 中，供下一轮复用。
 
 Agent 执行结束时，`AgentRuntimeService` 会在 `finally` 中保存 SDK session state。External Agent 不持久化通用 SDK session state；Claude Code 与 Codex 通过 project conversation 作用域内的 task-session binding 保存 provider session id。Codex 从 `OnThreadStartedAsync` 获取 thread id，并以 `ThreadId + IsResume` 恢复；Claude Code 首次运行使用 `SessionId + IsResume=false`，从 `subtype=init` 消息确认真实 `session_id` 后保存，后续以 `Resume=<session_id> + IsResume=true` 恢复。
 
@@ -473,7 +474,7 @@ sequenceDiagram
     participant L as PG DistributedLock
     participant E as Event Stream (PG / Redis)
 
-    C->>P: ExecCommand(stable executionId)
+    C->>P: ExecCommand(conversationId, stable executionId)
     P->>PG: INSERT manifest + status=Queued
     W->>PG: poll runnable execution
     W->>L: acquire(executionId)

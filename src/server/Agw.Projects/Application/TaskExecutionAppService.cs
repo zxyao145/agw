@@ -3,6 +3,7 @@ using Agw.Auth.Contracts;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
+using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Projects.Application;
@@ -135,18 +136,30 @@ public class TaskExecutionAppService
         string user
     )
     {
-        return CreateAsync(projectId, request, user, TaskExecutionStatus.Pending, taskId);
+        return CreateAsync(projectId, request, user, TaskExecutionStatus.Pending, taskId, conversationId: null);
+    }
+
+    internal Task<ApplicationResult<TaskExecutionSnapshot>> CreateForExecutionAsync(
+        Guid projectId,
+        Guid? conversationId,
+        Guid? taskId,
+        TaskCreateRequest request,
+        string user
+    )
+    {
+        return CreateAsync(projectId, request, user, TaskExecutionStatus.Pending, taskId, conversationId);
     }
 
     /// <summary>
-    /// 创建任务上下文和初始记录，并统一解析请求中的 context ID。
+    /// 创建或复用 Project Conversation 和初始记录，并统一解析请求中的 context ID。
     /// </summary>
     private async Task<ApplicationResult<TaskExecutionSnapshot>> CreateAsync(
         Guid projectId,
         TaskCreateRequest request,
         string user,
         TaskExecutionStatus initialStatus,
-        Guid? taskIdOverride = null
+        Guid? taskIdOverride = null,
+        Guid? conversationId = null
     )
     {
         var project = await _projectResolver.ResolveForUserAsync(projectId, user).ConfigureAwait(false);
@@ -167,11 +180,19 @@ public class TaskExecutionAppService
             ? TaskTitleFactory.Create(request.Input)
             : request.Title.Trim();
 
-        var context = await GetOrCreateContextAsync(project.Id, contextId, request.JobId, title, user, now);
+        var (conversation, conversationCreated) = await GetOrCreateConversationAsync(
+            project.Id,
+            conversationId,
+            contextId,
+            request.JobId,
+            title,
+            user,
+            now
+        );
         var record = new ProjectConversationChatHistory
         {
             Id = Guid.CreateVersion7(),
-            ConversationId = context.Id,
+            ConversationId = conversation.Id,
             TaskId = taskId,
             JobId = request.JobId,
             Status = initialStatus,
@@ -180,9 +201,41 @@ public class TaskExecutionAppService
         };
 
         await _recordRepository.AddAsync(record);
-        await _unitOfWork.SaveChangesAsync();
+        try
+        {
+            await _unitOfWork.SaveChangesAsync();
+        }
+        catch (DbUpdateException exception) when (conversationCreated && conversationId.HasValue)
+        {
+            // SaveChanges is atomic. Detach the failed graph before an owner-scoped requery so an exact concurrent
+            // insert can be reused without treating a foreign or mismatched identity as available.
+            _recordRepository.Remove(record);
+            _contextRepository.Remove(conversation);
+            record.ProjectConversation = null;
 
-        var task = TaskExecutionMapper.ToTask(context, [record]);
+            var concurrentConversation = await _contextRepository.SingleOrDefaultAsync(item =>
+                item.Id == conversationId.Value
+                && item.ProjectId == project.Id
+                && item.ContextId == contextId
+                && item.CreateBy == user
+            );
+            if (concurrentConversation == null)
+            {
+                throw new AgwException(
+                    ErrorCodes.InvalidParam,
+                    "The supplied conversation identity is unavailable.",
+                    exception
+                );
+            }
+
+            conversation = concurrentConversation;
+            UpdateExistingConversation(conversation, request.JobId, title, user, now);
+            _contextRepository.Update(conversation);
+            await _recordRepository.AddAsync(record);
+            await _unitOfWork.SaveChangesAsync();
+        }
+
+        var task = TaskExecutionMapper.ToTask(conversation, [record]);
         return ApplicationResult<TaskExecutionSnapshot>.Success(TaskExecutionMapper.ToSnapshot(task, [record], null));
     }
 
@@ -326,10 +379,11 @@ public class TaskExecutionAppService
     }
 
     /// <summary>
-    /// 获取或创建项目上下文，并复用及规范化 SQLite 中仅 GUID 大小写不同的旧记录。
+    /// 获取或创建 Project Conversation，并复用及规范化 SQLite 中仅 GUID 大小写不同的 context ID。
     /// </summary>
-    private async Task<ProjectConversation> GetOrCreateContextAsync(
+    private async Task<(ProjectConversation Conversation, bool Created)> GetOrCreateConversationAsync(
         Guid projectId,
+        Guid? conversationId,
         string contextId,
         Guid? jobId,
         string title,
@@ -337,42 +391,68 @@ public class TaskExecutionAppService
         DateTimeOffset now
     )
     {
-        var context = await _contextRepository.SingleOrDefaultAsync(item =>
+        if (conversationId == Guid.Empty)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "conversationId is required.");
+        }
+
+        ProjectConversation? conversation = null;
+        if (conversationId.HasValue)
+        {
+            conversation = await _contextRepository.SingleOrDefaultAsync(item =>
+                item.Id == conversationId.Value && item.CreateBy == user
+            );
+            if (conversation != null)
+            {
+                var existingContextId = ContextIdUtil.NormalizeContextId(conversation.ContextId);
+                if (
+                    conversation.ProjectId != projectId
+                    || !string.Equals(existingContextId, contextId, StringComparison.Ordinal)
+                )
+                {
+                    throw new AgwException(
+                        ErrorCodes.InvalidParam,
+                        "The supplied conversation identity does not match the execution context."
+                    );
+                }
+
+                conversation.ContextId = existingContextId;
+            }
+        }
+
+        conversation ??= await _contextRepository.SingleOrDefaultAsync(item =>
             item.ProjectId == projectId && item.ContextId == contextId && item.CreateBy == user
         );
-        if (context == null && Guid.TryParse(contextId, out _))
+        if (conversation == null && Guid.TryParse(contextId, out _))
         {
             var legacyContexts = await _contextRepository.ListAsync(item =>
                 item.ProjectId == projectId && item.ContextId.ToLower() == contextId && item.CreateBy == user
             );
-            context = legacyContexts.OrderBy(item => item.CreateTime).FirstOrDefault();
-            if (context != null)
+            conversation = legacyContexts.OrderBy(item => item.CreateTime).FirstOrDefault();
+            if (conversation != null)
             {
-                context.ContextId = contextId;
+                conversation.ContextId = contextId;
             }
         }
 
-        if (context != null)
+        if (conversation != null && conversationId.HasValue && conversation.Id != conversationId.Value)
         {
-            if (!string.IsNullOrWhiteSpace(title) && string.Equals(context.Title, "Untitled", StringComparison.Ordinal))
-            {
-                context.Title = title;
-            }
-
-            if (context.JobId == null && jobId.HasValue)
-            {
-                context.JobId = jobId.Value;
-            }
-
-            context.UpdateBy = user;
-            context.UpdateTime = now;
-            _contextRepository.Update(context);
-            return context;
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "The supplied conversation identity does not match the execution context."
+            );
         }
 
-        context = new ProjectConversation
+        if (conversation != null)
         {
-            Id = Guid.CreateVersion7(),
+            UpdateExistingConversation(conversation, jobId, title, user, now);
+            _contextRepository.Update(conversation);
+            return (conversation, false);
+        }
+
+        conversation = new ProjectConversation
+        {
+            Id = conversationId ?? Guid.CreateVersion7(),
             ProjectId = projectId,
             JobId = jobId,
             ContextId = contextId,
@@ -382,8 +462,32 @@ public class TaskExecutionAppService
             UpdateBy = user,
             UpdateTime = now,
         };
-        await _contextRepository.AddAsync(context);
-        return context;
+        await _contextRepository.AddAsync(conversation);
+        return (conversation, true);
+    }
+
+    private static void UpdateExistingConversation(
+        ProjectConversation conversation,
+        Guid? jobId,
+        string title,
+        string user,
+        DateTimeOffset now
+    )
+    {
+        if (
+            !string.IsNullOrWhiteSpace(title) && string.Equals(conversation.Title, "Untitled", StringComparison.Ordinal)
+        )
+        {
+            conversation.Title = title;
+        }
+
+        if (conversation.JobId == null && jobId.HasValue)
+        {
+            conversation.JobId = jobId.Value;
+        }
+
+        conversation.UpdateBy = user;
+        conversation.UpdateTime = now;
     }
 
     private async Task<ProjectConversation?> GetContextByTaskAsync(Guid projectId, Guid taskId)

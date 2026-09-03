@@ -67,13 +67,23 @@ test("buildExecCommand includes target and streaming mode", async () => {
   const { buildExecCommand } = await import("./execution-hub" + ".ts");
   const input = { messageId: "message-1", author: "$agw", contents: [] };
 
-  assert.deepEqual(buildExecCommand({ agentId: "agent-1", agentType: 0, stream: false, input }), {
-    type: "ExecCommand",
-    agentId: "agent-1",
-    agentType: 0,
-    stream: false,
-    input,
-  });
+  assert.deepEqual(
+    buildExecCommand({
+      conversationId: "conversation-1",
+      agentId: "agent-1",
+      agentType: 0,
+      stream: false,
+      input,
+    }),
+    {
+      type: "ExecCommand",
+      conversationId: "conversation-1",
+      agentId: "agent-1",
+      agentType: 0,
+      stream: false,
+      input,
+    },
+  );
 });
 
 test("buildExecCommand includes a durable execution identity when supplied", async () => {
@@ -82,6 +92,7 @@ test("buildExecCommand includes a durable execution identity when supplied", asy
 
   assert.deepEqual(
     buildExecCommand({
+      conversationId: "conversation-1",
       executionId: "execution-1",
       agentId: "agent-1",
       agentType: 0,
@@ -89,6 +100,7 @@ test("buildExecCommand includes a durable execution identity when supplied", asy
     }),
     {
       type: "ExecCommand",
+      conversationId: "conversation-1",
       executionId: "execution-1",
       agentId: "agent-1",
       agentType: 0,
@@ -228,6 +240,7 @@ test("execution session keeps tool rendering scope across handler replacement an
   try {
     await client.configure({ projectId: "project-1", contextId: "context-1" });
     await client.execute({
+      conversationId: "conversation-1",
       agentId: "agent-1",
       agentType: 0,
       input: { messageId: "user-1", author: "$agw", contents: [] },
@@ -261,6 +274,7 @@ test("execution session keeps tool rendering scope across handler replacement an
     assert.equal(transportMessages.at(-1)?.streamingScopeId, "late-message");
 
     await client.execute({
+      conversationId: "conversation-1",
       agentId: "agent-1",
       agentType: 0,
       input: { messageId: "user-2", author: "$agw", contents: [] },

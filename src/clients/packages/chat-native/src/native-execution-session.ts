@@ -20,6 +20,7 @@ export type NativeExecutionSetting = {
 };
 
 export type NativeExecutionRequest = {
+  conversationId: string;
   agentId: string;
   agentType: 0 | 1;
   executionId: string;

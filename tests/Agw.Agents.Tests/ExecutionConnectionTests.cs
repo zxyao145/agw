@@ -96,7 +96,11 @@ public class ExecutionConnectionTests
     }
 
     private static ExecCommand CreateExecCommand() =>
-        new(AgentRuntimeType.Agent, new AgwUserInput { Contents = [] }) { AgentId = Guid.CreateVersion7() };
+        new(AgentRuntimeType.Agent, new AgwUserInput { Contents = [] })
+        {
+            AgentId = Guid.CreateVersion7(),
+            ConversationId = Guid.CreateVersion7(),
+        };
 
     private sealed record ConnectionFixture(
         ExecutionConnection Connection,
@@ -152,7 +156,7 @@ public class ExecutionConnectionTests
         public Task<ProjectTaskSnapshot> ResolveAsync(
             ResolveProjectTaskRequest request,
             CancellationToken cancellationToken = default
-        ) => Task.FromResult(_task);
+        ) => Task.FromResult(_task with { ProjectConversationId = request.ConversationId });
 
         public Task<ProjectTaskSnapshot?> GetAsync(Guid taskId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();

@@ -7,8 +7,6 @@ namespace Agw.Projects.Contracts;
 
 public record TaskCreateRequest(Guid? JobId, string Input, string? Title = null, string? ContextId = null);
 
-public sealed record ProjectConversationCreateRequest(string? ContextId = null);
-
 public record ProjectConversationTitleUpdateRequest(string Title);
 
 [JsonConverter(typeof(JsonStringEnumConverter<ProjectConversationMessageDirection>))]

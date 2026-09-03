@@ -68,16 +68,31 @@ test("chat page refreshes the conversation list after an execution completes", a
   assert.match(pageSource, /onConversationChange=\{refreshConversationList\}/);
 });
 
-test("new chat persists its conversation before selecting the local session", async () => {
+test("new chat resets local state without pre-creating a conversation", async () => {
   const workspaceSource = await readFile(CHAT_WORKSPACE_URL, "utf8");
 
-  assert.match(workspaceSource, /const startNewConversation = React\.useCallback\(async/);
-  assert.match(
-    workspaceSource,
-    /const conversation = await createProjectConversation\(selectedProjectId\)/,
+  assert.match(workspaceSource, /const startNewConversation = React\.useCallback\(\(\) =>/);
+  assert.match(workspaceSource, /clearLocalSessionState\(\)/);
+  assert.match(workspaceSource, /syncRoute\(selectedProjectId, null\)/);
+  assert.doesNotMatch(workspaceSource, /createProjectConversation/);
+});
+
+test("first execution sends a client-generated conversation id", async () => {
+  const [chatSource, workspaceSource] = await Promise.all([
+    readFile(CHAT_COMPONENT_URL, "utf8"),
+    readFile(CHAT_WORKSPACE_URL, "utf8"),
+  ]);
+
+  assert.match(chatSource, /const nextConversationId = ensureConversationId\(\)/);
+  assert.match(chatSource, /client\.execute\(\{[\s\S]*?conversationId: nextConversationId/);
+  assert.match(chatSource, /onConversationIdChange\?\.\(nextConversationId\)/);
+  assert.match(chatSource, /onConversationAccepted\?\.\(nextConversationId\)/);
+  assert.ok(
+    chatSource.indexOf("onConversationAccepted?.(nextConversationId)") >
+      chatSource.indexOf("await client.execute"),
   );
-  assert.match(workspaceSource, /setConversationId\(conversation\.conversationId\)/);
-  assert.match(workspaceSource, /setContextId\(conversation\.contextId\)/);
+  assert.match(workspaceSource, /onConversationAccepted=\{handleConversationAccepted\}/);
+  assert.match(workspaceSource, /syncRoute\(selectedProjectId, acceptedConversationId\)/);
 });
 
 test("chat file explorer starts with diff mode disabled", async () => {
@@ -170,13 +185,14 @@ test("chat page keeps conversation resource id separate from execution context i
 
   assert.doesNotMatch(conversationListSource, new RegExp("current" + "Task" + "Id"));
   assert.doesNotMatch(conversationListSource, new RegExp("latest" + "Task" + "Id"));
-  assert.match(conversationListSource, /conversation\.contextId === currentContextId/);
+  assert.match(conversationListSource, /conversation\.conversationId === currentConversationId/);
+  assert.doesNotMatch(conversationListSource, /currentContextId/);
   assert.match(conversationListSource, /onActiveConversationResolved/);
-  assert.match(pageSource, /currentContextId=\{contextId\}/);
   assert.match(pageSource, /currentConversationId=\{conversationId\}/);
   assert.match(pageSource, /setContextId\(details\.contextId\)/);
   assert.match(pageSource, /setConversationId\(conversation\.conversationId\)/);
   assert.match(pageSource, /conversationId=\{conversationId\}/);
+  assert.match(pageSource, /onConversationIdChange=\{handleChatConversationIdChange\}/);
   assert.match(pageSource, /onContextIdChange=\{handleChatContextIdChange\}/);
   assert.match(pageSource, /syncRoute\(selectedProjectId, conversation\.conversationId\)/);
 });

@@ -39,6 +39,7 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
             .ResolveTaskAsync(
                 new ExecutionTaskRequest(
                     request.TaskId,
+                    request.ConversationId,
                     request.ProjectId,
                     request.ContextId,
                     request.Input,

@@ -25,6 +25,7 @@ public sealed record ProjectTaskSnapshot(
 
 public sealed record ResolveProjectTaskRequest(
     Guid? TaskId,
+    Guid ConversationId,
     Guid? ProjectId,
     string? ContextId,
     string Input,

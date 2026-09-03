@@ -110,7 +110,12 @@ test("manager restores the complete active turn instead of replaying capped delt
     contents: [{ type: "TextContent", content: "run" }],
   };
 
-  await first.execute({ agentId: "agent-1", agentType: 0, input });
+  await first.execute({
+    conversationId: "conversation-1",
+    agentId: "agent-1",
+    agentType: 0,
+    input,
+  });
   clientHandlers?.onMessage({
     messageId: "turn-start-1",
     role: "system",
@@ -503,6 +508,7 @@ test("manager does not notify when the execute command fails", async () => {
 
   await assert.rejects(
     handle.execute({
+      conversationId: "conversation-1",
       agentId: "agent-1",
       agentType: 0,
       input: {

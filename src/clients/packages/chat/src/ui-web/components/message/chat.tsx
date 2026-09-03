@@ -83,6 +83,8 @@ export interface ChatProps {
   environmentVariables?: Record<string, string>;
   placeholder?: string;
   className?: string;
+  onConversationIdChange?: (conversationId: string | null) => void;
+  onConversationAccepted?: (conversationId: string) => void;
   onContextIdChange?: (contextId: string | null) => void;
   onConversationChange?: () => void | Promise<void>;
   onExecutionError?: (error: unknown) => void;
@@ -156,6 +158,8 @@ export function Chat({
   environmentVariables,
   placeholder = "Type your message...",
   className,
+  onConversationIdChange,
+  onConversationAccepted,
   onContextIdChange,
   onConversationChange,
   onExecutionError,
@@ -195,6 +199,7 @@ export function Chat({
   const contextIdRef = React.useRef<string | null>(sessionSeed.contextId);
   const announcedContextIdRef = React.useRef<string | null>(sessionSeed.contextId);
   const conversationIdRef = React.useRef<string | null>(conversationId);
+  const announcedConversationIdRef = React.useRef<string | null>(conversationId);
   const conversationScrollRef = React.useRef<HTMLDivElement>(null);
   const conversationContentRef = React.useRef<HTMLDivElement>(null);
   const [userInputNavigationHost, setUserInputNavigationHost] =
@@ -255,6 +260,7 @@ export function Chat({
 
   React.useEffect(() => {
     conversationIdRef.current = conversationId;
+    announcedConversationIdRef.current = conversationId;
   }, [conversationId]);
 
   const suggestionQueryParams = React.useMemo(
@@ -919,6 +925,18 @@ export function Chat({
     [onContextIdChange],
   );
 
+  const ensureConversationId = React.useCallback(() => {
+    const nextConversationId = conversationIdRef.current ?? createUuidV7();
+    if (conversationIdRef.current == null) {
+      conversationIdRef.current = nextConversationId;
+    }
+    if (announcedConversationIdRef.current !== nextConversationId) {
+      announcedConversationIdRef.current = nextConversationId;
+      onConversationIdChange?.(nextConversationId);
+    }
+    return nextConversationId;
+  }, [onConversationIdChange]);
+
   const handleExecute = React.useCallback(
     async (value: string, imageAttachments: readonly ChatImageAttachment[]) => {
       if (isHydratingSession || reconnectState) return;
@@ -942,6 +960,7 @@ export function Chat({
         return;
       }
 
+      const nextConversationId = ensureConversationId();
       const nextId = ensureContextId(true);
 
       const userMessage = createUserMessage(resolvedInput, imageAttachments);
@@ -983,6 +1002,7 @@ export function Chat({
           return;
         }
         await client.execute({
+          conversationId: nextConversationId,
           agentId: target.id,
           agentType: target.type === "agent" ? 0 : 1,
           stream: true,
@@ -994,6 +1014,7 @@ export function Chat({
         ) {
           return;
         }
+        onConversationAccepted?.(nextConversationId);
         if (submittedFileComments.length > 0) {
           onPendingFileCommentsRemove?.(submittedFileComments.map((comment) => comment.id));
         }
@@ -1009,10 +1030,12 @@ export function Chat({
     },
     [
       ensureConfiguredClient,
+      ensureConversationId,
       ensureContextId,
       isHydratingSession,
       isTransitioning,
       notifyExecutionError,
+      onConversationAccepted,
       onConversationChange,
       onPendingFileCommentsRemove,
       pendingFileComments,

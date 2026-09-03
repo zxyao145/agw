@@ -153,6 +153,20 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         {
             throw new AgwException(ErrorCodes.InvalidParam, "ExecCommand.agentId is required.");
         }
+        var conversationId =
+            command.ConversationId
+            ?? throw new AgwException(ErrorCodes.InvalidParam, "ExecCommand.conversationId is required.");
+        if (conversationId == Guid.Empty)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "ExecCommand.conversationId is required.");
+        }
+        if (_resolvedTask != null && _resolvedTask.ProjectConversationId != conversationId)
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "ExecCommand.conversationId does not match the active conversation."
+            );
+        }
         command.ExecutionId ??= Guid.CreateVersion7();
 
         Settings ??= ExecutionSettings.CreateDefault();
@@ -407,6 +421,12 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 "The selected in-process checkpoint is no longer available."
             );
         }
+        var resolvedTask =
+            _resolvedTask
+            ?? throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "The execution task is not available for checkpoint resume."
+            );
 
         var snapshot = await checkpointStore
             .PrepareInProcessResumeAsync(
@@ -423,6 +443,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 new ExecCommand(AgentRuntimeType.Agentflow, new AgwUserInput { Contents = [] })
                 {
                     AgentId = command.AgentflowId,
+                    ConversationId = resolvedTask.ProjectConversationId,
                     ExecutionId = command.ResumeExecutionId,
                     Stream = true,
                     ResumeCheckpoint = snapshot,
@@ -492,6 +513,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             var task = await _projectTasks.ResolveAsync(
                 new ResolveProjectTaskRequest(
                     TaskId: null,
+                    ConversationId: command.ConversationId!.Value,
                     ProjectId: Settings!.ProjectId,
                     ContextId: Settings.ContextId,
                     Input: AgwMessageUtil.ExtractInputText(command.Input),
@@ -501,6 +523,13 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 cancellationToken
             );
             _resolvedTask = ProjectTaskProjectionMapper.Map(task);
+            if (_resolvedTask.ProjectConversationId != command.ConversationId)
+            {
+                throw new AgwException(
+                    ErrorCodes.InvalidParam,
+                    "The resolved task does not match ExecCommand.conversationId."
+                );
+            }
         }
 
         if (_workspace != null)

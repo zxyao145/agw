@@ -18,6 +18,7 @@ export type ExecutionSettingCommandInput = {
 };
 
 export type ExecutionCommandRequest<TInput = ExecutionUserInput> = {
+  conversationId: string;
   agentId: string;
   agentType: number;
   executionId?: string;
@@ -64,6 +65,7 @@ export function buildSettingCommand(setting: ExecutionSettingCommandInput) {
 export function buildExecCommand<TInput>(request: ExecutionCommandRequest<TInput>) {
   return {
     type: "ExecCommand" as const,
+    conversationId: request.conversationId,
     agentId: request.agentId,
     agentType: request.agentType,
     ...(request.executionId ? { executionId: request.executionId } : {}),

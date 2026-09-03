@@ -90,7 +90,7 @@ export type NativeWorkspaceContextValue = {
   setPermissionMode(mode: PermissionMode): void;
   setAgentMode(mode: AgentMode): void;
   selectConversation(conversationId: string): void;
-  newChat(): Promise<void>;
+  newChat(): void;
   sendMessage(text: string, attachments: readonly ChatImageAttachment[]): Promise<void>;
   stopExecution(): void;
   submitHumanResponse(response: {
@@ -379,6 +379,15 @@ export function NativeWorkspaceProvider({
     return contextId;
   }, []);
 
+  const ensureConversationId = React.useCallback(() => {
+    const conversationId = selectedConversationIdRef.current ?? createUuidV7();
+    if (selectedConversationIdRef.current === null) {
+      selectedConversationIdRef.current = conversationId;
+      setSelectedConversationId(conversationId);
+    }
+    return conversationId;
+  }, []);
+
   const ensureConfiguredSession = React.useCallback(
     async (
       contextId: string,
@@ -562,42 +571,25 @@ export function NativeWorkspaceProvider({
     if (isExecuting) throw new Error("Stop the current execution before switching context.");
   }, [isExecuting]);
 
-  const newChat = React.useCallback(async () => {
+  const newChat = React.useCallback(() => {
     ensureIdle();
-
-    const conversation =
-      conversationService && selectedProjectId
-        ? await conversationService.createProjectConversation(selectedProjectId)
-        : null;
-
     executionGenerationRef.current += 1;
     modeChangeGenerationRef.current += 1;
     batcherRef.current?.discard();
     disposeExecutionSession();
-    hydratedConversationRef.current = conversation
-      ? `${selectedProjectId}:${conversation.conversationId}`
-      : null;
-    selectedConversationIdRef.current = conversation?.conversationId ?? null;
-    selectedContextIdRef.current = conversation?.contextId ?? null;
+    hydratedConversationRef.current = null;
+    selectedConversationIdRef.current = null;
+    selectedContextIdRef.current = null;
     confirmedAgentModeRef.current = DEFAULT_AGENT_MODE;
-    setSelectedConversationId(conversation?.conversationId ?? null);
-    setSelectedContextId(conversation?.contextId ?? null);
+    setSelectedConversationId(null);
+    setSelectedContextId(null);
     setMessages([]);
     setClaudeCommands([]);
     setAgentModeState(DEFAULT_AGENT_MODE);
     setPendingHumanGate(null);
     setCheckpointAvailability([]);
     setOperationError(null);
-    if (conversation) {
-      await conversationsQuery.refetch();
-    }
-  }, [
-    conversationService,
-    conversationsQuery,
-    disposeExecutionSession,
-    ensureIdle,
-    selectedProjectId,
-  ]);
+  }, [disposeExecutionSession, ensureIdle]);
 
   const selectProject = React.useCallback(
     (projectId: string) => {
@@ -732,6 +724,7 @@ export function NativeWorkspaceProvider({
       ) {
         return;
       }
+      const conversationId = ensureConversationId();
       const contextId = ensureContextId();
       const executionId = createUuidV7();
       const userMessage = createUserMessage(text, attachments);
@@ -748,6 +741,7 @@ export function NativeWorkspaceProvider({
         const configured = await ensureConfiguredSession(contextId, permissionMode);
         if (!configured || generation !== executionGenerationRef.current) return;
         await configured.session.execute({
+          conversationId,
           agentId: selectedTarget.id,
           agentType: selectedTarget.type === "agentflow" ? 1 : 0,
           executionId,
@@ -755,21 +749,27 @@ export function NativeWorkspaceProvider({
         });
         if (generation !== executionGenerationRef.current) return;
         batcherRef.current?.flush(generation);
-        const refreshedConversations = await conversationsQuery.refetch();
-        const persistedConversation = refreshedConversations.data?.find(
-          (conversation) => conversation.contextId === contextId,
-        );
-        if (persistedConversation && selectedContextIdRef.current === contextId) {
-          selectedConversationIdRef.current = persistedConversation.conversationId;
-          setSelectedConversationId(persistedConversation.conversationId);
-          hydratedConversationRef.current = `${selectedProjectId}:${persistedConversation.conversationId}`;
-        }
       } catch (caught) {
         if (generation !== executionGenerationRef.current) return;
         batcherRef.current?.flush(generation);
         setOperationError(getErrorMessage(caught));
       } finally {
         if (generation === executionGenerationRef.current) {
+          try {
+            const refreshedConversations = await conversationsQuery.refetch();
+            const persistedConversation = refreshedConversations.data?.find(
+              (conversation) => conversation.conversationId === conversationId,
+            );
+            if (
+              persistedConversation &&
+              selectedConversationIdRef.current === conversationId &&
+              selectedContextIdRef.current === contextId
+            ) {
+              hydratedConversationRef.current = `${selectedProjectId}:${persistedConversation.conversationId}`;
+            }
+          } catch {
+            // Conversation refresh must not replace the execution outcome.
+          }
           if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
           stopTimerRef.current = null;
           activeStreamingScopeRef.current = null;
@@ -781,6 +781,7 @@ export function NativeWorkspaceProvider({
     [
       conversationsQuery,
       ensureConfiguredSession,
+      ensureConversationId,
       ensureContextId,
       isExecuting,
       permissionMode,
@@ -967,7 +968,7 @@ export function NativeWorkspaceProvider({
       if (!conversationService || !selectedProjectId) return;
       ensureIdle();
       await conversationService.deleteProjectConversation(selectedProjectId, conversationId);
-      if (selectedConversationId === conversationId) await newChat();
+      if (selectedConversationId === conversationId) newChat();
       await conversationsQuery.refetch();
     },
     [

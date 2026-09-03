@@ -4,7 +4,6 @@ import test from "node:test";
 import { clearAntiforgeryToken } from "@agw/api";
 import {
   clearProjectConversationRecords,
-  createProjectConversation,
   deleteAllProjectConversations,
   deleteProjectConversation,
   getProjectConversationDetails,
@@ -231,58 +230,6 @@ test("getProjectConversations gets the complete conversation list for a project"
       init: {
         method: "GET",
         headers: {},
-        signal: undefined,
-        credentials: "same-origin",
-      },
-    },
-  ]);
-});
-
-test("createProjectConversation persists a blank conversation immediately", async (t) => {
-  const originalFetch = globalThis.fetch;
-  const requests: Array<{ url: string; init?: RequestInit }> = [];
-
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    requests.push({ url: String(input), init });
-    if (String(input) === "/api/auth/antiforgery") return createAntiforgeryResponse();
-    return Response.json({
-      code: 200,
-      title: "OK",
-      data: {
-        projectId: "project-1",
-        conversationId: "11111111-1111-1111-1111-000000000003",
-        contextId: "context-new",
-        title: "New Chat",
-        executionCount: 0,
-        messageCount: 0,
-        createTime: "2026-08-21T00:00:00Z",
-        updateTime: "2026-08-21T00:00:00Z",
-        errorMessage: null,
-      },
-    });
-  }) as typeof fetch;
-
-  t.after(() => {
-    globalThis.fetch = originalFetch;
-  });
-
-  const result = await createProjectConversation("project-1");
-
-  assert.equal(result.contextId, "context-new");
-  assert.deepEqual(requests, [
-    {
-      url: "/api/auth/antiforgery",
-      init: { credentials: "same-origin" },
-    },
-    {
-      url: "/api/projects/project-1/conversations",
-      init: {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "X-CSRF-TOKEN": "csrf-projects",
-        },
-        body: '{"contextId":null}',
         signal: undefined,
         credentials: "same-origin",
       },

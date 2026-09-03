@@ -7,9 +7,13 @@ import { ConversationController } from "./conversation-controller";
 
 test("conversation controller owns raw messages, control state, usage, and render items", async () => {
   let handlers!: ExecutionHubHandlers;
+  let announcedConversationId: string | null = null;
+  let executionRequest: Parameters<ExecutionSession["execute"]>[0] | null = null;
   const fakeSession = {
     configure: async () => ({ restoredDurableExecution: false }),
-    execute: async () => undefined,
+    execute: async (request: Parameters<ExecutionSession["execute"]>[0]) => {
+      executionRequest = request;
+    },
     interrupt: async () => undefined,
     setMode: async () => undefined,
     setPermissionMode: async () => undefined,
@@ -25,13 +29,24 @@ test("conversation controller owns raw messages, control state, usage, and rende
         handlers = nextHandlers;
         return fakeSession;
       },
+      onConversationIdChange: (conversationId) => {
+        announcedConversationId = conversationId;
+      },
     },
     projectId: "project-1",
     target: { id: "agent-1", type: "agent" },
-    sessionSeed: { revision: 1, contextId: "context-1", messages: [] },
+    sessionSeed: {
+      revision: 1,
+      conversationId: null,
+      contextId: "context-1",
+      messages: [],
+    },
   });
 
   await controller.send("hello", []);
+  assert.match(controller.getSnapshot().conversationId ?? "", /^[0-9a-f-]{36}$/u);
+  assert.equal(announcedConversationId, controller.getSnapshot().conversationId);
+  assert.equal(executionRequest?.conversationId, controller.getSnapshot().conversationId);
   assert.equal(controller.getSnapshot().isExecuting, true);
   assert.equal(controller.getSnapshot().items[0]?.alignment, "right");
 
