@@ -38,8 +38,12 @@ COPY src/server/Agw.Shared/Agw.Shared.csproj ./src/server/Agw.Shared/
 COPY src/server/Agw.Skills/Agw.Skills.csproj ./src/server/Agw.Skills/
 COPY src/server/Agw.Standalone.Host/Agw.Standalone.Host.csproj ./src/server/Agw.Standalone.Host/
 COPY src/server/Agw.Tools/Agw.Tools.csproj ./src/server/Agw.Tools/
+COPY src/sdks/pi-agent-sdk-csharp/Directory.Build.props src/sdks/pi-agent-sdk-csharp/Directory.Packages.props ./src/sdks/pi-agent-sdk-csharp/
+COPY src/sdks/pi-agent-sdk-csharp/src/PiAgentSdk/PiAgentSdk.csproj ./src/sdks/pi-agent-sdk-csharp/src/PiAgentSdk/
+COPY src/sdks/pi-agent-sdk-csharp/src/PiAgentSdk.MAF/PiAgentSdk.MAF.csproj ./src/sdks/pi-agent-sdk-csharp/src/PiAgentSdk.MAF/
 RUN dotnet restore src/server/Agw.Standalone.Host/Agw.Standalone.Host.csproj
 COPY src/server ./src/server
+COPY src/sdks ./src/sdks
 RUN dotnet publish src/server/Agw.Standalone.Host/Agw.Standalone.Host.csproj -c Release \
     -o /out/standalone --no-restore --self-contained false -p:Version="$APP_VERSION" && \
     dotnet publish src/server/Agw.ControlPlane.Host/Agw.ControlPlane.Host.csproj -c Release \
