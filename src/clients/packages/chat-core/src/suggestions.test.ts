@@ -49,6 +49,12 @@ test("replaces only the trigger and returns the restored caret", () => {
     value: "Open @src/app.ts later",
     caretIndex: "Open @src/app.ts ".length,
   });
+
+  const spacedPath = '@"post/agw/Agw 介绍.md"';
+  assert.deepEqual(replaceSuggestion("Open @Agw", spacedPath, "Open @Agw".length), {
+    value: `Open ${spacedPath} `,
+    caretIndex: `Open ${spacedPath} `.length,
+  });
 });
 
 test("searches system and Claude commands while preserving the five item limit", () => {
@@ -110,6 +116,18 @@ test("maps file results and routes file suggestions through the shared resolver"
     text: "@src/file-0.ts",
     description: "/workspace/src/file-0.ts",
   });
+  assert.deepEqual(
+    toFileSuggestions([
+      {
+        relativePath: "post/agw/Agw 介绍.md",
+        fullPath: "/workspace/post/agw/Agw 介绍.md",
+      },
+    ]).at(0),
+    {
+      text: '@"post/agw/Agw 介绍.md"',
+      description: "/workspace/post/agw/Agw 介绍.md",
+    },
+  );
   assert.equal(toFileSuggestions(candidates).length, 5);
 
   let query = "";
@@ -126,4 +144,20 @@ test("maps file results and routes file suggestions through the shared resolver"
   assert.equal(resolved.length, 5);
   const email = "email@example.com";
   assert.deepEqual(resolveInputSuggestions(email, email.length, { mode: "unsupported" }), []);
+});
+
+test("routes an explicitly entered hidden path to file search", async () => {
+  let query = "";
+
+  await resolveInputSuggestions(
+    "Open @./.github/w",
+    "Open @./.github/w".length,
+    { mode: "unsupported" },
+    async (keyword) => {
+      query = keyword;
+      return [];
+    },
+  );
+
+  assert.equal(query, "./.github/w");
 });

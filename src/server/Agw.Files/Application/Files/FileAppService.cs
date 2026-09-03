@@ -380,14 +380,25 @@ public sealed class FileAppService
             return FileOperationResult<FileSearchOutput>.Missing("Directory not found");
         }
 
-        keyword ??= string.Empty;
+        keyword = NormalizeSearchKeyword(keyword ?? string.Empty);
         if (limit <= 0 || IsIgnoredDirectoryPath(path))
         {
             return FileOperationResult<FileSearchOutput>.Succeeded(new FileSearchOutput([]));
         }
 
         var results = new List<FileSearchEntry>();
-        await SearchDirectoryAsync(fileSystem, path, path, keyword, limit, recursive, results, cancellationToken);
+        var keywordSegments = keyword.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        await SearchDirectoryAsync(
+            fileSystem,
+            path,
+            path,
+            keyword,
+            keywordSegments,
+            limit,
+            recursive,
+            results,
+            cancellationToken
+        );
 
         var sortedResults = results
             .OrderBy(result => result.Type == "file")
@@ -610,6 +621,7 @@ public sealed class FileAppService
         string rootPath,
         string currentPath,
         string keyword,
+        string[] keywordSegments,
         int limit,
         bool recursive,
         List<FileSearchEntry> results,
@@ -632,7 +644,7 @@ public sealed class FileAppService
         {
             cancellationToken.ThrowIfCancellationRequested();
             var relativePath = GetPathRelativeTo(entry.Path, rootPath);
-            if (ShouldIgnoreSearchEntry(relativePath, isDirectory: true, recursive: recursive))
+            if (ShouldIgnoreSearchEntry(relativePath, isDirectory: true, recursive: recursive, keywordSegments))
             {
                 continue;
             }
@@ -649,7 +661,7 @@ public sealed class FileAppService
         {
             cancellationToken.ThrowIfCancellationRequested();
             var relativePath = GetPathRelativeTo(entry.Path, rootPath);
-            if (ShouldIgnoreSearchEntry(relativePath, isDirectory: false, recursive: recursive))
+            if (ShouldIgnoreSearchEntry(relativePath, isDirectory: false, recursive: recursive, keywordSegments))
             {
                 continue;
             }
@@ -673,6 +685,7 @@ public sealed class FileAppService
                 rootPath,
                 directory.Path,
                 keyword,
+                keywordSegments,
                 limit,
                 recursive: true,
                 results,
@@ -716,20 +729,57 @@ public sealed class FileAppService
             .Any(segment => segment.StartsWith('.') || IgnoreDirectories.Contains(segment));
     }
 
-    private static bool ShouldIgnoreSearchEntry(string relativePath, bool isDirectory, bool recursive)
+    private static bool ShouldIgnoreSearchEntry(
+        string relativePath,
+        bool isDirectory,
+        bool recursive,
+        string[] keywordSegments
+    )
     {
         var segments = NormalizePath(relativePath).Split('/', StringSplitOptions.RemoveEmptyEntries);
         var directorySegmentCount = isDirectory ? segments.Length : Math.Max(0, segments.Length - 1);
-        if (
-            segments
-                .Take(directorySegmentCount)
-                .Any(segment => segment.StartsWith('.') || IgnoreDirectories.Contains(segment))
-        )
+        for (var index = 0; index < directorySegmentCount; index++)
         {
-            return true;
+            var segment = segments[index];
+            if (IgnoreDirectories.Contains(segment))
+            {
+                return true;
+            }
+
+            if (segment.StartsWith('.') && !IsExplicitlyRequestedHiddenDirectory(segments, index, keywordSegments))
+            {
+                return true;
+            }
         }
 
         return recursive && !isDirectory && segments.Length > 0 && ShouldIgnoreFile(segments[^1]);
+    }
+
+    private static bool IsExplicitlyRequestedHiddenDirectory(string[] pathSegments, int index, string[] keywordSegments)
+    {
+        if (keywordSegments.Length <= index)
+        {
+            return false;
+        }
+
+        for (var parentIndex = 0; parentIndex < index; parentIndex++)
+        {
+            if (
+                !string.Equals(
+                    pathSegments[parentIndex],
+                    keywordSegments[parentIndex],
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+            {
+                return false;
+            }
+        }
+
+        var requestedSegment = keywordSegments[index];
+        return requestedSegment != ".."
+            && requestedSegment.StartsWith('.')
+            && pathSegments[index].StartsWith(requestedSegment, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool ShouldIgnoreFile(string fileName)
@@ -792,5 +842,16 @@ public sealed class FileAppService
     private static string NormalizePath(string path)
     {
         return path.Replace('\\', '/');
+    }
+
+    private static string NormalizeSearchKeyword(string keyword)
+    {
+        var normalized = NormalizePath(keyword);
+        while (normalized.StartsWith("./", StringComparison.Ordinal))
+        {
+            normalized = normalized[2..];
+        }
+
+        return normalized;
     }
 }
