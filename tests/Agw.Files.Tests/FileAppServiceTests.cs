@@ -520,6 +520,41 @@ public class FileAppServiceTests
         );
     }
 
+    [Theory]
+    [InlineData(".github/")]
+    [InlineData("./.github/")]
+    public async Task SearchAsync_Recursive_WhenHiddenPathIsExplicit_ReturnsMatchingDescendants(string keyword)
+    {
+        // Arrange
+        using var scope = TempDirectoryScope.Create();
+        var workflowsDirectory = Directory.CreateDirectory(Path.Combine(scope.Path, ".github", "workflows"));
+        await File.WriteAllTextAsync(
+            Path.Combine(workflowsDirectory.FullName, "build.yml"),
+            "content",
+            TestContext.Current.CancellationToken
+        );
+        var service = CreateService(scope.Path);
+
+        // Act
+        var result = await service.SearchAsync(
+            ProjectId,
+            "",
+            keyword,
+            limit: 10,
+            recursive: true,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+
+        // Assert
+        Assert.Equal(FileOperationStatus.Success, result.Status);
+        Assert.Collection(
+            result.Value!.Results,
+            item => AssertSearchEntry(item, ".github/", "directory"),
+            item => AssertSearchEntry(item, ".github/workflows/", "directory"),
+            item => AssertSearchEntry(item, ".github/workflows/build.yml", "file")
+        );
+    }
+
     [Fact]
     public async Task SearchAsync_NonRecursive_ReturnsOnlyDirectMatches()
     {
