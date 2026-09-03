@@ -32,7 +32,7 @@ Commands are registered through the typed handler and JSON-discriminator seam. T
 | Command | Purpose |
 | --- | --- |
 | `SettingCommand` | Sets Project, context, environment variables, and the initial permission policy. |
-| `ExecCommand` | Selects an Agent or Agentflow and starts a turn; distributed clients should supply a stable `executionId`, and distributed execution requires `stream=true`. |
+| `ExecCommand` | Selects an Agent or Agentflow and starts a turn. Clients must supply a client-generated, non-empty GUID `conversationId` (official clients use UUIDv7); distributed clients also supply a stable `executionId`, and distributed execution requires `stream=true`. |
 | `InterruptCommand` | Interrupts the active in-process turn or the identified durable execution. |
 | `SetModeCommand` | Changes the mode of an Agent that supports runtime modes. |
 | `SetPermissionModeCommand` | Changes the Tool approval policy without rebuilding the runtime. |
@@ -41,6 +41,10 @@ Commands are registered through the typed handler and JSON-discriminator seam. T
 | `ResumeCheckpointCommand` | Starts a new Agentflow branch from one exact checkpoint occurrence. |
 
 `SettingCommand.Resume` and `ExecCommand.ResumeCheckpoint` are Server-only properties and are not part of the wire contract. Without a prior Setting command, the Server uses the built-in Project, a generated context, no environment variables, and the default permission mode.
+
+`conversationId` is the persisted Project Conversation identity. `contextId` remains the runtime continuity identity used by Agent sessions, provider sessions, traces, usage, and checkpoints; it is validated against the conversation but is not used as a substitute resource ID.
+
+This is a breaking wire-contract change: the removed conversation-creation POST and the required `ExecCommand.conversationId` mean the Server and Web, Desktop, and Mobile clients must be upgraded together. Older clients are not supported by this contract.
 
 ## Turn lifecycle
 
@@ -52,13 +56,16 @@ sequenceDiagram
     participant Hub as ExecutionHub
     participant Connection as ExecutionConnection
     participant Context as ExecutionConnectionContext
+    participant Projects as Projects task resolution
     participant Runtime as Agent or Agentflow runtime
 
     Client->>Hub: DispatchCommand(SettingCommand)
     Hub->>Connection: dispatch serialized command
     Connection->>Context: apply immutable settings
     Client->>Hub: DispatchCommand(ExecCommand)
-    Connection->>Context: resolve task, workspace, target, and user
+    Connection->>Context: validate conversationId and resolve execution
+    Context->>Projects: create or validate conversation and task
+    Projects-->>Context: persisted conversation/task snapshot
     Context->>Runtime: create or reuse runtime and start turn
     Runtime-->>Client: turn-start
     loop runtime output

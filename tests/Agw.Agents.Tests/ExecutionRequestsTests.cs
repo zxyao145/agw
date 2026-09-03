@@ -111,10 +111,12 @@ public class ExecutionRequestsTests
     public void Deserialize_ExecCommand_ReturnsExecutionCommand()
     {
         var agentId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
         const string json = """
             {
               "type": "ExecCommand",
               "agentId": "__AGENT_ID__",
+              "conversationId": "__CONVERSATION_ID__",
               "agentType": 0,
               "stream": false,
               "input": {
@@ -130,10 +132,14 @@ public class ExecutionRequestsTests
             }
             """;
 
-        var request = Deserialize(json.Replace("__AGENT_ID__", agentId.ToString("D")));
+        var request = Deserialize(
+            json.Replace("__AGENT_ID__", agentId.ToString("D"))
+                .Replace("__CONVERSATION_ID__", conversationId.ToString("D"))
+        );
 
         var executionRequest = Assert.IsType<ExecCommand>(request);
         Assert.Equal(agentId, executionRequest.AgentId);
+        Assert.Equal(conversationId, executionRequest.ConversationId);
         Assert.Equal(AgentRuntimeType.Agent, executionRequest.AgentType);
         Assert.False(executionRequest.Stream);
         var textContent = Assert.IsType<AgwTextContent>(Assert.Single(executionRequest.Input.Contents));

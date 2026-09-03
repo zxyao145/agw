@@ -126,6 +126,7 @@ test("sets mode only when requested and reuses the connection across turns", asy
   await session.setMode("agent-1", "plan");
 
   const firstTurn = session.execute({
+    conversationId: "conversation-1",
     agentId: "agent-1",
     agentType: 0,
     executionId: "execution-1",
@@ -148,6 +149,7 @@ test("sets mode only when requested and reuses the connection across turns", asy
   await firstTurn;
 
   const secondTurn = session.execute({
+    conversationId: "conversation-1",
     agentId: "agent-1",
     agentType: 0,
     executionId: "execution-2",
@@ -190,6 +192,7 @@ test("reconnect restores settings and the active turn without resending mode", a
   await session.setPermissionMode("alwaysAsk");
   await session.setMode("agent-1", "plan");
   const turn = session.execute({
+    conversationId: "conversation-1",
     agentId: "agent-1",
     agentType: 0,
     executionId: "execution-1",
@@ -241,6 +244,7 @@ test("interrupt targets the active execution", async () => {
     permissionMode: "fullAccess",
   });
   const turn = session.execute({
+    conversationId: "conversation-1",
     agentId: "agent-1",
     agentType: 0,
     executionId: "execution-1",

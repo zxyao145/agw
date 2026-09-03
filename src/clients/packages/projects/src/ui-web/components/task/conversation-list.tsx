@@ -27,7 +27,6 @@ import { cn } from "@agw/components";
 
 interface ConversationListProps {
   projectId: string;
-  currentContextId: string | null;
   currentConversationId: string | null;
   refreshSignal?: number;
   onConversationSelect: (conversation: ConversationSummary) => void;
@@ -39,7 +38,6 @@ interface ConversationListProps {
 
 export function ConversationList({
   projectId,
-  currentContextId,
   currentConversationId,
   refreshSignal,
   onConversationSelect,
@@ -58,10 +56,11 @@ export function ConversationList({
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const didObserveRefreshSignalRef = React.useRef(false);
   const refreshRequestIdRef = React.useRef(0);
+  const resolvedConversationIdRef = React.useRef<string | null>(null);
 
   const matchesCurrentSession = React.useCallback(
-    (conversation: ConversationSummary) => conversation.contextId === currentContextId,
-    [currentContextId],
+    (conversation: ConversationSummary) => conversation.conversationId === currentConversationId,
+    [currentConversationId],
   );
 
   const refreshConversations = React.useCallback(async (): Promise<ConversationSummary[]> => {
@@ -110,7 +109,7 @@ export function ConversationList({
   }, [refreshSignal, refreshConversations]);
 
   React.useEffect(() => {
-    if (!projectId || !currentContextId) {
+    if (!projectId || !currentConversationId) {
       return;
     }
 
@@ -118,7 +117,7 @@ export function ConversationList({
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     let attempts = 0;
 
-    const refreshUntilCurrentContextAppears = async () => {
+    const refreshUntilCurrentConversationAppears = async () => {
       attempts += 1;
       const latestConversations = await refreshConversations();
       if (cancelled || attempts >= 5 || latestConversations.some(matchesCurrentSession)) {
@@ -126,11 +125,11 @@ export function ConversationList({
       }
 
       timeoutId = setTimeout(() => {
-        void refreshUntilCurrentContextAppears();
+        void refreshUntilCurrentConversationAppears();
       }, 500);
     };
 
-    void refreshUntilCurrentContextAppears();
+    void refreshUntilCurrentConversationAppears();
 
     return () => {
       cancelled = true;
@@ -138,27 +137,28 @@ export function ConversationList({
         clearTimeout(timeoutId);
       }
     };
-  }, [currentContextId, matchesCurrentSession, projectId, refreshConversations]);
+  }, [currentConversationId, matchesCurrentSession, projectId, refreshConversations]);
 
   const activeConversation = React.useMemo(() => {
-    if (!currentContextId) {
+    if (!currentConversationId) {
       return null;
     }
 
     return conversations.find(matchesCurrentSession) ?? null;
-  }, [conversations, currentContextId, matchesCurrentSession]);
+  }, [conversations, currentConversationId, matchesCurrentSession]);
 
   React.useEffect(() => {
     if (
       !activeConversation ||
       !onActiveConversationResolved ||
-      activeConversation.conversationId === currentConversationId
+      resolvedConversationIdRef.current === activeConversation.conversationId
     ) {
       return;
     }
 
+    resolvedConversationIdRef.current = activeConversation.conversationId;
     onActiveConversationResolved(activeConversation);
-  }, [activeConversation, currentConversationId, onActiveConversationResolved]);
+  }, [activeConversation, onActiveConversationResolved]);
 
   const handleClearAll = async () => {
     try {
@@ -182,10 +182,7 @@ export function ConversationList({
       }
 
       toast.success("Conversation deleted");
-      if (
-        conversation.conversationId === currentConversationId ||
-        conversation.contextId === currentContextId
-      ) {
+      if (conversation.conversationId === currentConversationId) {
         onAllConversationsDeleted();
       }
       await refreshConversations();

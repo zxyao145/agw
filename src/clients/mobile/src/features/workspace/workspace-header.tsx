@@ -23,9 +23,9 @@ export function WorkspaceHeader({
   const workspace = useWorkspace();
   const composer = useComposer();
 
-  const newChat = async () => {
+  const newChat = () => {
     try {
-      await workspace.newChat();
+      workspace.newChat();
       onTabChange("chat");
     } catch (error) {
       Alert.alert(

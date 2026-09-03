@@ -40,6 +40,7 @@ import {
 export type ConversationTarget = { id: string; type: "agent" | "agentflow" };
 export type ConversationSessionSeed = {
   revision: string | number;
+  conversationId: string | null;
   contextId: string | null;
   messages: AiMessage[];
   usage?: TokenUsage;
@@ -48,6 +49,7 @@ export type ConversationSessionSeed = {
 export type ConversationRuntimeAdapter = {
   execution: ExecutionRuntimeConfig;
   clearRecords?(projectId: string, contextId: string): Promise<void>;
+  onConversationIdChange?(conversationId: string | null): void;
   onContextIdChange?(contextId: string | null): void;
   onConversationChange?(): void | Promise<void>;
   onError?(error: unknown): void;
@@ -64,6 +66,7 @@ export type ConversationControllerOptions = {
 };
 
 export type ConversationControllerState = {
+  conversationId: string | null;
   contextId: string | null;
   rawMessages: AiMessage[];
   items: ConversationRenderItem[];
@@ -94,6 +97,7 @@ export class ConversationController {
     this.options = options;
     const history = prepareHistory(options.sessionSeed.messages);
     this.state = {
+      conversationId: options.sessionSeed.conversationId,
       contextId: options.sessionSeed.contextId,
       rawMessages: history,
       items: [],
@@ -131,6 +135,7 @@ export class ConversationController {
     this.activeStreamingScopeId = null;
     this.resumeBuffer = null;
     this.patch({
+      conversationId: seed.conversationId,
       contextId: seed.contextId,
       rawMessages: prepareHistory(seed.messages),
       usage: seed.usage ?? EMPTY_TOKEN_USAGE,
@@ -154,6 +159,7 @@ export class ConversationController {
       return;
     }
 
+    const conversationId = this.ensureConversationId();
     const contextId = this.ensureContextId();
     const userMessage = createUserMessage(text, attachments);
     const scopedUserMessage = scopeStreamingMessage(userMessage, userMessage.messageId);
@@ -168,6 +174,7 @@ export class ConversationController {
     try {
       const session = await this.ensureSession(contextId);
       await session.execute({
+        conversationId,
         agentId: this.options.target.id,
         agentType: this.options.target.type === "agentflow" ? 1 : 0,
         executionId: createUuidV7(),
@@ -385,6 +392,14 @@ export class ConversationController {
     this.patch({ contextId });
     this.options.adapter.onContextIdChange?.(contextId);
     return contextId;
+  }
+
+  private ensureConversationId(): string {
+    if (this.state.conversationId) return this.state.conversationId;
+    const conversationId = createUuidV7();
+    this.patch({ conversationId });
+    this.options.adapter.onConversationIdChange?.(conversationId);
+    return conversationId;
   }
 
   private rebuildItems(): void {

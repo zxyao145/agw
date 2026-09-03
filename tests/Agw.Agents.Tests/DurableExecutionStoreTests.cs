@@ -113,7 +113,11 @@ public sealed class DurableExecutionStoreTests : IDisposable
         await coordinator.StartAsync(
             executionId,
             "user-id",
-            new ExecCommand(AgentRuntimeType.Agent, CreateInput("hello")) { AgentId = Guid.CreateVersion7() },
+            new ExecCommand(AgentRuntimeType.Agent, CreateInput("hello"))
+            {
+                AgentId = Guid.CreateVersion7(),
+                ConversationId = Guid.CreateVersion7(),
+            },
             task,
             CreateSettings(task.ProjectId, task.ContextId),
             TestContext.Current.CancellationToken

@@ -22,17 +22,13 @@ public class ProjectConversationsControllerTests
     }
 
     [Fact]
-    public void CreateAsync_UsesCollectionPostRoute()
+    public void ProjectConversationsController_DoesNotExposePostRoute()
     {
-        var method = typeof(ProjectConversationsController).GetMethod(
-            "CreateAsync",
-            [typeof(Guid), typeof(ProjectConversationCreateRequest), typeof(CancellationToken)]
-        );
+        var postRoutes = typeof(ProjectConversationsController)
+            .GetMethods()
+            .SelectMany(method => method.GetCustomAttributes<HttpPostAttribute>());
 
-        Assert.NotNull(method);
-        var attribute = Assert.Single(method.GetCustomAttributes<HttpPostAttribute>());
-
-        Assert.Null(attribute.Template);
+        Assert.Empty(postRoutes);
     }
 
     [Fact]

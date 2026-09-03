@@ -9,7 +9,6 @@ import { toast } from "sonner";
 import { getFileDiff, readFile, type GitDiffResponse, type GitDiffScope } from "@agw/projects";
 import { apiGet } from "@agw/api";
 import {
-  createProjectConversation,
   getProjectConversationDetails,
   getProjectConversationMessages,
   type ConversationResumeState,
@@ -591,33 +590,10 @@ export function ChatWorkspace({
     syncRoute(selectedProjectId, null);
   }, [clearLocalSessionState, selectedProjectId, syncRoute]);
 
-  const startNewConversation = React.useCallback(async () => {
-    if (!selectedProjectId) {
-      return;
-    }
-
-    try {
-      const conversation = await createProjectConversation(selectedProjectId);
-      clearLocalSessionState();
-      hydratedConversationKeyRef.current = getConversationHydrationKey(
-        selectedProjectId,
-        conversation.conversationId,
-      );
-      setConversationId(conversation.conversationId);
-      setContextId(conversation.contextId);
-      replaceChatSession({
-        contextId: conversation.contextId,
-        messages: [],
-        usage: EMPTY_TOKEN_USAGE,
-        olderMessagesCursor: null,
-        hasOlderMessages: false,
-        agentMode: null,
-      });
-      syncRoute(selectedProjectId, conversation.conversationId);
-    } catch (error) {
-      toast.error(`Failed to create conversation: ${getApiErrorMessage(error)}`);
-    }
-  }, [clearLocalSessionState, replaceChatSession, selectedProjectId, syncRoute]);
+  const startNewConversation = React.useCallback(() => {
+    clearLocalSessionState();
+    syncRoute(selectedProjectId, null);
+  }, [clearLocalSessionState, selectedProjectId, syncRoute]);
 
   const loadConversationHistory = React.useCallback(
     async (projectId: string, nextConversationId: string, signal?: AbortSignal) => {
@@ -902,6 +878,26 @@ export function ChatWorkspace({
     [selectedProjectId, syncRoute],
   );
 
+  const handleChatConversationIdChange = React.useCallback((nextConversationId: string | null) => {
+    setConversationId(nextConversationId);
+  }, []);
+
+  const handleConversationAccepted = React.useCallback(
+    (acceptedConversationId: string) => {
+      if (!selectedProjectId) {
+        return;
+      }
+
+      hydratedConversationKeyRef.current = getConversationHydrationKey(
+        selectedProjectId,
+        acceptedConversationId,
+      );
+      setConversationId(acceptedConversationId);
+      syncRoute(selectedProjectId, acceptedConversationId);
+    },
+    [selectedProjectId, syncRoute],
+  );
+
   const handleConversationSelect = React.useCallback(
     async (conversation: ConversationSummary) => {
       if (!selectedProjectId) {
@@ -939,8 +935,8 @@ export function ChatWorkspace({
     [selectedProjectId, syncRoute],
   );
 
-  const handleNewConversation = React.useCallback(async () => {
-    await startNewConversation();
+  const handleNewConversation = React.useCallback(() => {
+    startNewConversation();
     setIsDrawerOpen(false);
   }, [startNewConversation]);
 
@@ -1007,7 +1003,6 @@ export function ChatWorkspace({
     () => (
       <ConversationList
         projectId={selectedProjectId ?? ""}
-        currentContextId={contextId}
         currentConversationId={conversationId}
         refreshSignal={conversationListRefreshSignal}
         onConversationSelect={(nextConversation) => {
@@ -1027,7 +1022,6 @@ export function ChatWorkspace({
     ),
     [
       getActiveSettingsDraft,
-      contextId,
       conversationId,
       conversationListRefreshSignal,
       handleActiveConversationResolved,
@@ -1198,6 +1192,8 @@ export function ChatWorkspace({
                       chatSessionSeed.contextId === contextId
                     }
                     environmentVariables={environmentVariables}
+                    onConversationIdChange={handleChatConversationIdChange}
+                    onConversationAccepted={handleConversationAccepted}
                     onContextIdChange={handleChatContextIdChange}
                     onConversationChange={refreshConversationList}
                     pendingFileComments={comments}

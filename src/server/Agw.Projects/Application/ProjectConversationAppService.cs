@@ -47,47 +47,6 @@ public class ProjectConversationAppService
         _timeProvider = timeProvider;
     }
 
-    public async Task<ApplicationResult<ProjectConversationSummaryResponse>> CreateAsync(
-        Guid projectId,
-        ProjectConversationCreateRequest request,
-        string user,
-        CancellationToken cancellationToken = default
-    )
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        var project = await _projectResolver.ResolveRequiredAsync(projectId, cancellationToken);
-        if (project == null || !string.Equals(project.CreateBy, user, StringComparison.Ordinal))
-        {
-            return ApplicationResult<ProjectConversationSummaryResponse>.NotFound();
-        }
-
-        var contextId = ContextIdUtil.ResolveContextId(request.ContextId);
-        var conversation = await _conversationRepository.SingleOrDefaultAsync(
-            item => item.ProjectId == project.Id && item.ContextId == contextId && item.CreateBy == user,
-            cancellationToken
-        );
-        if (conversation == null)
-        {
-            var now = _timeProvider.GetUtcNow();
-            conversation = new ProjectConversation
-            {
-                Id = Guid.CreateVersion7(),
-                ProjectId = project.Id,
-                ContextId = contextId,
-                Title = TaskTitleFactory.DefaultTitle,
-                CreateBy = user,
-                CreateTime = now,
-                UpdateBy = user,
-                UpdateTime = now,
-            };
-            await _conversationRepository.AddAsync(conversation);
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-
-        return ApplicationResult<ProjectConversationSummaryResponse>.Success(ToSummaryResponse(conversation, []));
-    }
-
     public async Task<IReadOnlyList<ProjectConversationSummaryResponse>> ListResponsesAsync(Guid projectId)
     {
         var project = await _projectResolver.ResolveRequiredAsync(projectId);

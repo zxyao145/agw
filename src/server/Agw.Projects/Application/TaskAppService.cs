@@ -36,13 +36,32 @@ public class TaskAppService : ITaskAppService
     public Task<TaskProjection?> GetTaskAsync(Guid id, string? ownerUserId) =>
         _taskExecutionAppService.GetTaskAsync(id, ownerUserId);
 
-    public async Task<TaskProjection?> CreateTaskForExecutionAsync(
+    public Task<TaskProjection?> CreateTaskForExecutionAsync(
         Guid projectId,
         Guid? taskId,
         string input,
         string user,
         string? contextId = null,
         CancellationToken cancellationToken = default
+    ) =>
+        CreateTaskForExecutionCoreAsync(
+            projectId,
+            conversationId: null,
+            taskId,
+            input,
+            user,
+            contextId,
+            cancellationToken
+        );
+
+    private async Task<TaskProjection?> CreateTaskForExecutionCoreAsync(
+        Guid projectId,
+        Guid? conversationId,
+        Guid? taskId,
+        string input,
+        string user,
+        string? contextId,
+        CancellationToken cancellationToken
     )
     {
         var normalizedInput = input.Trim();
@@ -53,7 +72,13 @@ public class TaskAppService : ITaskAppService
             ContextId: contextId
         );
 
-        var result = await _taskExecutionAppService.CreateForExecutionAsync(projectId, taskId, request, user);
+        var result = await _taskExecutionAppService.CreateForExecutionAsync(
+            projectId,
+            conversationId,
+            taskId,
+            request,
+            user
+        );
         if (result.Value == null)
         {
             return null;
@@ -98,6 +123,14 @@ public class TaskAppService : ITaskAppService
         CancellationToken cancellationToken
     )
     {
+        if (request.ConversationId == Guid.Empty)
+        {
+            return new ExecutionTaskResolutionResult(
+                null,
+                ApiResult.BadRequest("ConversationId is required.", ErrorCodes.InvalidParam.Code)
+            );
+        }
+
         var ownerUserId = string.IsNullOrWhiteSpace(request.User) ? ResolveOwnerUserId() : request.User.Trim();
         var resolvedProjectId = await _projectResolver
             .ResolveProjectIdForUserAsync(request.ProjectId, ownerUserId, cancellationToken)
@@ -123,12 +156,16 @@ public class TaskAppService : ITaskAppService
                     );
                 }
 
-                if (existingTask.ProjectId != resolvedProjectId.Value)
+                if (
+                    existingTask.ProjectId != resolvedProjectId.Value
+                    || existingTask.ProjectConversationId != request.ConversationId
+                    || !MatchesContext(existingTask, request.ContextId)
+                )
                 {
                     return new ExecutionTaskResolutionResult(
                         null,
                         ApiResult.BadRequest(
-                            "Task does not belong to the supplied projectId.",
+                            "Task does not belong to the supplied project conversation.",
                             ErrorCodes.InvalidParam.Code
                         )
                     );
@@ -145,8 +182,9 @@ public class TaskAppService : ITaskAppService
                 );
             }
 
-            var latestTask = await GetLatestTaskByContextAsync(
+            var latestTask = await GetLatestTaskByConversationAsync(
                 resolvedProjectId.Value,
+                request.ConversationId,
                 request.ContextId,
                 ownerUserId,
                 cancellationToken
@@ -155,7 +193,7 @@ public class TaskAppService : ITaskAppService
             {
                 return new ExecutionTaskResolutionResult(
                     null,
-                    ApiResult.BadRequest("ProjectContext not found.", ErrorCodes.InvalidParam.Code)
+                    ApiResult.BadRequest("ProjectConversation not found.", ErrorCodes.InvalidParam.Code)
                 );
             }
             return new ExecutionTaskResolutionResult(latestTask, null);
@@ -165,6 +203,7 @@ public class TaskAppService : ITaskAppService
         {
             return await CreateTaskAsync(
                 resolvedProjectId.Value,
+                request.ConversationId,
                 null,
                 request.ContextId,
                 request.Input,
@@ -178,6 +217,7 @@ public class TaskAppService : ITaskAppService
         {
             return await CreateTaskAsync(
                 resolvedProjectId.Value,
+                request.ConversationId,
                 request.TaskId,
                 request.ContextId,
                 request.Input,
@@ -186,11 +226,18 @@ public class TaskAppService : ITaskAppService
             );
         }
 
-        if (task.ProjectId != resolvedProjectId.Value)
+        if (
+            task.ProjectId != resolvedProjectId.Value
+            || task.ProjectConversationId != request.ConversationId
+            || !MatchesContext(task, request.ContextId)
+        )
         {
             return new ExecutionTaskResolutionResult(
                 null,
-                ApiResult.BadRequest("Task does not belong to the supplied projectId.", ErrorCodes.InvalidParam.Code)
+                ApiResult.BadRequest(
+                    "Task does not belong to the supplied project conversation.",
+                    ErrorCodes.InvalidParam.Code
+                )
             );
         }
 
@@ -198,25 +245,33 @@ public class TaskAppService : ITaskAppService
     }
 
     /// <summary>
-    /// 根据项目和规范化 context ID 查找该上下文中最新的任务投影。
+    /// 根据 Project Conversation ID 查找该会话中最新的任务投影，并校验执行 context。
     /// </summary>
-    private async Task<TaskProjection?> GetLatestTaskByContextAsync(
+    private async Task<TaskProjection?> GetLatestTaskByConversationAsync(
         Guid projectId,
+        Guid conversationId,
         string contextId,
         string? ownerUserId,
         CancellationToken cancellationToken
     )
     {
         var normalizedContextId = ContextIdUtil.NormalizeContextId(contextId);
-        var context = await _contextRepository.SingleOrDefaultAsync(item =>
-            item.ProjectId == projectId && item.ContextId == normalizedContextId && item.CreateBy == ownerUserId
+        var conversation = await _contextRepository.SingleOrDefaultAsync(item =>
+            item.Id == conversationId && item.ProjectId == projectId && item.CreateBy == ownerUserId
         );
-        if (context == null)
+        if (
+            conversation == null
+            || !string.Equals(
+                ContextIdUtil.NormalizeContextId(conversation.ContextId),
+                normalizedContextId,
+                StringComparison.Ordinal
+            )
+        )
         {
             return null;
         }
 
-        var records = await _recordRepository.ListAsync(record => record.ConversationId == context.Id);
+        var records = await _recordRepository.ListAsync(record => record.ConversationId == conversation.Id);
         if (records.Count == 0)
         {
             return null;
@@ -224,7 +279,7 @@ public class TaskAppService : ITaskAppService
 
         return records
             .GroupBy(record => record.TaskId)
-            .Select(group => TaskExecutionMapper.ToTask(context, group.ToList()))
+            .Select(group => TaskExecutionMapper.ToTask(conversation, group.ToList()))
             .OrderByDescending(task => task.UpdateTime ?? task.CreateTime)
             .ThenByDescending(task => task.CreateTime)
             .ThenByDescending(task => task.TaskId)
@@ -233,6 +288,7 @@ public class TaskAppService : ITaskAppService
 
     private async Task<ExecutionTaskResolutionResult> CreateTaskAsync(
         Guid projectId,
+        Guid conversationId,
         Guid? taskId,
         string? contextId,
         string input,
@@ -240,7 +296,15 @@ public class TaskAppService : ITaskAppService
         CancellationToken cancellationToken
     )
     {
-        var task = await CreateTaskForExecutionAsync(projectId, taskId, input, user, contextId, cancellationToken);
+        var task = await CreateTaskForExecutionCoreAsync(
+            projectId,
+            conversationId,
+            taskId,
+            input,
+            user,
+            contextId,
+            cancellationToken
+        );
         if (task == null)
         {
             return new ExecutionTaskResolutionResult(
@@ -253,6 +317,10 @@ public class TaskAppService : ITaskAppService
     }
 
     private string ResolveOwnerUserId() => _userInfoService.RequiredUserId;
+
+    private static bool MatchesContext(TaskProjection task, string? contextId) =>
+        string.IsNullOrWhiteSpace(contextId)
+        || string.Equals(task.ContextId, ContextIdUtil.NormalizeContextId(contextId), StringComparison.Ordinal);
 
     #endregion
 }

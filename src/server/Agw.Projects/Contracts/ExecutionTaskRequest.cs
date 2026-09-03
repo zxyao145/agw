@@ -4,6 +4,7 @@ namespace Agw.Projects.Application;
 
 public sealed record ExecutionTaskRequest(
     Guid? TaskId,
+    Guid ConversationId,
     Guid? ProjectId,
     string? ContextId,
     string Input,

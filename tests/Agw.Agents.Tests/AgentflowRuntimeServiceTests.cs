@@ -562,7 +562,10 @@ public class AgentflowRuntimeServiceTests : IDisposable
         var command = new ExecCommand(
             AgentRuntimeType.Agentflow,
             new AgwUserInput { Contents = [new AgwTextContent { Content = "run" }] }
-        );
+        )
+        {
+            ConversationId = conversationId,
+        };
 
         await foreach (
             var _ in runtime.ExecuteStreamingAsync(

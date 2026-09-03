@@ -24,6 +24,11 @@ public class ExecCommand : AgentRunCommand
     /// </summary>
     public Guid? ExecutionId { get; set; }
 
+    /// <summary>
+    /// 获取或设置客户端生成的 Project Conversation 标识。
+    /// </summary>
+    public Guid? ConversationId { get; set; }
+
     public bool Stream { get; set; } = true;
 
     public AgwUserInput Input { get; set; }

@@ -337,18 +337,13 @@ public class ExecutionCommandHandlerTests
         var runtimeFactory = new FakeRuntimeFactory();
         await using var context = CreateContext(runtimeFactory, CreateTask("resolved"));
         var handler = new ExecCommandHandler();
+        var firstCommand = CreateExecCommand(Guid.CreateVersion7());
 
-        await handler.HandleAsync(
-            CreateExecCommand(Guid.CreateVersion7()),
-            context,
-            TestContext.Current.CancellationToken
-        );
+        await handler.HandleAsync(firstCommand, context, TestContext.Current.CancellationToken);
         var previous = runtimeFactory.CreatedRuntimes[0];
-        await handler.HandleAsync(
-            CreateExecCommand(Guid.CreateVersion7()),
-            context,
-            TestContext.Current.CancellationToken
-        );
+        var secondCommand = CreateExecCommand(Guid.CreateVersion7());
+        secondCommand.ConversationId = firstCommand.ConversationId;
+        await handler.HandleAsync(secondCommand, context, TestContext.Current.CancellationToken);
 
         Assert.True(previous.Disposed);
         Assert.Null(runtimeFactory.StartRequests[1].CurrentRuntime);
@@ -367,12 +362,9 @@ public class ExecutionCommandHandlerTests
             projectTasks: projectTasks,
             projects: new FakeProjectRuntimeFacade(configuredWorkspace)
         );
+        var command = CreateExecCommand(Guid.CreateVersion7());
 
-        await new ExecCommandHandler().HandleAsync(
-            CreateExecCommand(Guid.CreateVersion7()),
-            context,
-            TestContext.Current.CancellationToken
-        );
+        await new ExecCommandHandler().HandleAsync(command, context, TestContext.Current.CancellationToken);
 
         var expectedWorkspace = Path.GetFullPath(PathUtil.ExpandTilde(configuredWorkspace));
         var turnContext = Assert.Single(runtimeFactory.StartRequests).TurnContext;
@@ -385,6 +377,45 @@ public class ExecutionCommandHandlerTests
         Assert.Equal("user-id", context.UserId);
         Assert.Equal("user-id", turnContext.UserId);
         Assert.Equal("user-id", projectTasks.LastRequest?.OwnerUserId);
+        Assert.Equal(command.ConversationId, projectTasks.LastRequest?.ConversationId);
+    }
+
+    [Fact]
+    public async Task ExecCommand_WithoutConversationId_DoesNotResolveTaskOrStartRuntime()
+    {
+        var task = CreateTask("resolved");
+        var projectTasks = new FakeProjectTaskFacade(task);
+        var runtimeFactory = new FakeRuntimeFactory();
+        await using var context = CreateContext(runtimeFactory, task, projectTasks: projectTasks);
+        var command = CreateExecCommand(Guid.CreateVersion7());
+        command.ConversationId = null;
+
+        var exception = await Assert.ThrowsAsync<Agw.Shared.Exceptions.AgwException>(() =>
+            context.StartTurnAsync(command, TestContext.Current.CancellationToken)
+        );
+
+        Assert.Equal(Agw.Shared.Exceptions.ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.Equal(0, projectTasks.ResolveCount);
+        Assert.Empty(runtimeFactory.StartRequests);
+    }
+
+    [Fact]
+    public async Task ExecCommand_WithEmptyConversationId_DoesNotResolveTaskOrStartRuntime()
+    {
+        var task = CreateTask("resolved");
+        var projectTasks = new FakeProjectTaskFacade(task);
+        var runtimeFactory = new FakeRuntimeFactory();
+        await using var context = CreateContext(runtimeFactory, task, projectTasks: projectTasks);
+        var command = CreateExecCommand(Guid.CreateVersion7());
+        command.ConversationId = Guid.Empty;
+
+        var exception = await Assert.ThrowsAsync<Agw.Shared.Exceptions.AgwException>(() =>
+            context.StartTurnAsync(command, TestContext.Current.CancellationToken)
+        );
+
+        Assert.Equal(Agw.Shared.Exceptions.ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.Equal(0, projectTasks.ResolveCount);
+        Assert.Empty(runtimeFactory.StartRequests);
     }
 
     private static ExecutionConnectionContext CreateContext(
@@ -407,6 +438,7 @@ public class ExecutionCommandHandlerTests
         new(AgentRuntimeType.Agent, new AgwUserInput { Contents = [new AgwTextContent { Content = "hello" }] })
         {
             AgentId = agentId,
+            ConversationId = Guid.CreateVersion7(),
         };
 
     private static AgentExecutionTask CreateTask(string contextId) =>
@@ -479,7 +511,7 @@ public class ExecutionCommandHandlerTests
         {
             ResolveCount++;
             LastRequest = request;
-            return Task.FromResult(_task);
+            return Task.FromResult(_task with { ProjectConversationId = request.ConversationId });
         }
 
         public Task<ProjectTaskSnapshot?> GetAsync(Guid taskId, CancellationToken cancellationToken = default) =>

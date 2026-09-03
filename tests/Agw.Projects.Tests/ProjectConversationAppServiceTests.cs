@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
-using Agw.Projects.Domain.Services;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Executions;
@@ -17,81 +16,6 @@ namespace Agw.Projects.Tests;
 
 public class ProjectConversationAppServiceTests
 {
-    [Fact]
-    public async Task CreateAsync_PersistsEmptyConversationImmediately()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(cancellationToken);
-
-        var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
-
-        var projectId = Guid.CreateVersion7();
-        await using (var seedContext = new AgwDbContext(options))
-        {
-            seedContext.Projects.Add(CreateProject(projectId, "Project"));
-            await seedContext.SaveChangesAsync(cancellationToken);
-        }
-
-        await using var dbContext = new AgwDbContext(options);
-        var service = CreateService(dbContext);
-
-        var result = await service.CreateAsync(
-            projectId,
-            new ProjectConversationCreateRequest(),
-            "tester",
-            cancellationToken
-        );
-
-        var response = Assert.IsType<ProjectConversationSummaryResponse>(result.Value);
-        var conversation = await dbContext.ProjectConversations.SingleAsync(cancellationToken);
-
-        Assert.Equal(ApplicationResultType.Success, result.Type);
-        Assert.Equal(projectId.Normalize(), response.ProjectId);
-        Assert.Equal(conversation.Id, response.ConversationId);
-        Assert.Equal(conversation.ContextId, response.ContextId);
-        Assert.Equal(TaskTitleFactory.DefaultTitle, conversation.Title);
-        Assert.Equal("tester", conversation.CreateBy);
-        Assert.Equal(0, response.ExecutionCount);
-        Assert.Equal(0, response.MessageCount);
-        Assert.Empty(await dbContext.ProjectConversationChatHistories.ToListAsync(cancellationToken));
-    }
-
-    [Fact]
-    public async Task CreateAsync_WithExistingContextId_ReusesConversation()
-    {
-        var cancellationToken = TestContext.Current.CancellationToken;
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync(cancellationToken);
-
-        var options = CreateOptions(connection);
-        await EnsureCreatedAsync(options, cancellationToken);
-
-        var projectId = Guid.CreateVersion7();
-        var conversationId = Guid.CreateVersion7();
-        await using (var seedContext = new AgwDbContext(options))
-        {
-            seedContext.Projects.Add(CreateProject(projectId, "Project"));
-            seedContext.ProjectConversations.Add(CreateContext(conversationId, projectId, "context-1", "New Chat"));
-            await seedContext.SaveChangesAsync(cancellationToken);
-        }
-
-        await using var dbContext = new AgwDbContext(options);
-        var service = CreateService(dbContext);
-
-        var result = await service.CreateAsync(
-            projectId,
-            new ProjectConversationCreateRequest("context-1"),
-            "tester",
-            cancellationToken
-        );
-
-        Assert.Equal(ApplicationResultType.Success, result.Type);
-        Assert.Equal(conversationId, result.Value!.ConversationId);
-        Assert.Single(await dbContext.ProjectConversations.ToListAsync(cancellationToken));
-    }
-
     [Fact]
     public async Task ListResponsesAsync_GroupsTasksFromRecordsByContext()
     {

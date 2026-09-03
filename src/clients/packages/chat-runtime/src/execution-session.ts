@@ -118,6 +118,8 @@ export type ExecutionTarget = {
 };
 
 export type ExecutionRequest = ExecutionTarget & {
+  /** 客户端生成的 Project Conversation 标识。 */
+  conversationId: string;
   /** 客户端生成的稳定执行标识，用于 durable 启动幂等和断线恢复。 */
   executionId?: string;
   stream?: boolean;
