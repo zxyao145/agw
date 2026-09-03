@@ -1003,7 +1003,7 @@ function createStyles(theme: NativeChatTheme) {
     linkRow: { flexDirection: "row", alignItems: "center", gap: 7 },
     linkText: { flex: 1, color: theme.primary, fontFamily: theme.fontMedium, fontSize: 13 },
     reasoningHeader: { flexDirection: "row", alignItems: "flex-start", gap: 5 },
-    collapsibleContent: { flex: 1, minWidth: 0 },
+    collapsibleContent: { flexShrink: 1, minWidth: 0 },
     planCard: {
       width: "100%",
       padding: 14,

@@ -36,6 +36,15 @@ test("native renderer consumes the shared render-item union and native markdown"
   assert.doesNotMatch(source, /processMessages|collapseConsecutiveSystemMessages/);
 });
 
+test("native reasoning markdown keeps its intrinsic width in compact agent bubbles", async () => {
+  const source = await readFile(HISTORY_URL, "utf8");
+  const collapsibleContentStyle = /collapsibleContent:\s*\{([^}]*)\}/.exec(source)?.[1];
+
+  assert.ok(collapsibleContentStyle);
+  assert.match(collapsibleContentStyle, /flexShrink:\s*1/);
+  assert.doesNotMatch(collapsibleContentStyle, /\bflex:\s*1/);
+});
+
 test("native markdown uses the borderless Web code style", async () => {
   const [historySource, themeSource] = await Promise.all([
     readFile(HISTORY_URL, "utf8"),
