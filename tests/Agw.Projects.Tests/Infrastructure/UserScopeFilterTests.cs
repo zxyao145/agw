@@ -20,6 +20,26 @@ namespace Agw.Infrastructure.Tests;
 public sealed class UserScopeFilterTests
 {
     [Fact]
+    public void UserScopeFilter_AllTableEntities_HaveNamedFilter()
+    {
+        // Arrange
+        var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite("Data Source=:memory:").Options;
+        using var context = new AgwDbContext(options);
+
+        // Act
+        var unfilteredEntities = context
+            .Model.GetEntityTypes()
+            .Where(entityType => entityType.GetTableName() != null)
+            .Where(entityType => entityType.FindDeclaredQueryFilter(UserScopeQueryFilterNames.UserScope) == null)
+            .Select(entityType => entityType.ClrType.FullName ?? entityType.Name)
+            .OrderBy(static entityName => entityName, StringComparer.Ordinal)
+            .ToArray();
+
+        // Assert
+        Assert.Empty(unfilteredEntities);
+    }
+
+    [Fact]
     public async Task UserScopeFilter_AuthenticatedUser_SeesOnlyOwnedRoots()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
