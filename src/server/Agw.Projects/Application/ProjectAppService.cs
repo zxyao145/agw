@@ -3,8 +3,8 @@ using Agw.Agents.Contracts.Catalog;
 using Agw.Auth.Contracts;
 using Agw.Files.Abstracts;
 using Agw.Files.Utils;
+using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Services;
-using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Skills;
@@ -23,7 +23,7 @@ public class ProjectAppService : IProjectAppService
     private readonly IRepository<Skill> _skillRepository;
     private readonly IRepository<ProjectConnectionRelation> _projectConnectionRelationRepository;
     private readonly IRepository<Connection> _connectionRepository;
-    private readonly IRepository<AgentflowTrace> _traceRepository;
+    private readonly IProjectDeletionCoordinator _deletionCoordinator;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ProjectDomainService _projectDomainService;
     private readonly ProjectResolver _projectResolver;
@@ -38,7 +38,7 @@ public class ProjectAppService : IProjectAppService
         IRepository<Skill> skillRepository,
         IRepository<ProjectConnectionRelation> projectConnectionRelationRepository,
         IRepository<Connection> connectionRepository,
-        IRepository<AgentflowTrace> traceRepository,
+        IProjectDeletionCoordinator deletionCoordinator,
         IUnitOfWork unitOfWork,
         ProjectDomainService projectDomainService,
         ProjectResolver projectResolver,
@@ -53,7 +53,7 @@ public class ProjectAppService : IProjectAppService
         _skillRepository = skillRepository;
         _projectConnectionRelationRepository = projectConnectionRelationRepository;
         _connectionRepository = connectionRepository;
-        _traceRepository = traceRepository;
+        _deletionCoordinator = deletionCoordinator;
         _unitOfWork = unitOfWork;
         _projectDomainService = projectDomainService;
         _projectResolver = projectResolver;
@@ -184,9 +184,14 @@ public class ProjectAppService : IProjectAppService
             return false;
         }
 
-        await _traceRepository.Queryable.Where(trace => trace.ProjectId == id).ExecuteDeleteAsync();
-        _projectRepository.Remove(existing);
-        await _unitOfWork.SaveChangesAsync();
+        var deleted = await _deletionCoordinator.DeleteProjectAsync(
+            new ProjectDeletionTarget(existing.Id, existing.CreateBy!)
+        );
+        if (!deleted)
+        {
+            return false;
+        }
+
         _fileSystemCache?.Invalidate(id);
         return true;
     }

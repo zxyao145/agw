@@ -1,9 +1,8 @@
 using System.Reflection;
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Projects;
 using Agw.Infrastructure.Repositories;
 using Agw.Projects.Controllers;
-using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
@@ -346,18 +345,10 @@ public class ProjectConversationsControllerTests
         return new ProjectConversationAppService(
             new EfRepository<ProjectConversation>(dbContext),
             new EfRepository<ProjectConversationChatHistory>(dbContext),
-            new EfRepository<AgentflowCheckpointRecord>(dbContext),
-            new EfRepository<AgentflowTrace>(dbContext),
             new EfRepository<AgentUsage>(dbContext),
             dbContext,
             projectResolver,
-            new TaskSessionBindingService(
-                new EfRepository<TaskSessionBinding>(dbContext),
-                new EfRepository<ProjectConversation>(dbContext),
-                dbContext,
-                TimeProvider.System,
-                userInfo
-            ),
+            new ProjectDeletionCoordinator(dbContext),
             TimeProvider.System
         );
     }

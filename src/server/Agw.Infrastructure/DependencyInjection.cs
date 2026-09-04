@@ -1,6 +1,7 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Auth.Application.Persistence;
 using Agw.Auth.Contracts;
+using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Auth;
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Coordination;
@@ -8,6 +9,7 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Jobs;
+using Agw.Infrastructure.Projects;
 using Agw.Infrastructure.Repositories;
 using Agw.Infrastructure.Skills;
 using Agw.Integrations.Application.Persistence;
@@ -114,6 +116,9 @@ public static class DependencyInjection
         services.AddScoped<IProvidersDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<ISkillsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IToolsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<IAgentflowCheckpointPersistence, AgentflowCheckpointPersistence>();
+        services.AddScoped<IAgentSessionStatePersistence, AgentSessionStatePersistence>();
+        services.AddScoped<IProjectDeletionCoordinator, ProjectDeletionCoordinator>();
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
         services.AddScoped<JobRepo>();
         services.AddScoped<IRepository<Job>, JobRepo>(sp => sp.GetRequiredService<JobRepo>());

@@ -1,8 +1,9 @@
 using System.Text.Json;
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Projects;
 using Agw.Infrastructure.Repositories;
+using Agw.Projects.Application.Persistence;
 using Agw.Shared;
-using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
@@ -619,17 +620,17 @@ public class ProjectConversationAppServiceTests
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
             seedContext.ProjectConversations.Add(CreateContext(contextId, projectId, "context-1", "Trip"));
+            seedContext.TaskSessionBindings.Add(CreateBinding(contextId));
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
-        var bindingService = new CapturingTaskSessionBindingService();
         await using var dbContext = new AgwDbContext(options);
-        var service = CreateService(dbContext, bindingService);
+        var service = CreateService(dbContext);
 
         var deleted = await service.DeleteAsync(projectId, contextId);
 
         Assert.True(deleted);
-        Assert.Equal([contextId], bindingService.DeletedConversationIds);
+        Assert.Empty(await dbContext.TaskSessionBindings.ToListAsync(cancellationToken));
     }
 
     [Fact]
@@ -652,21 +653,18 @@ public class ProjectConversationAppServiceTests
                 CreateContext(firstContextId, projectId, "context-1", "Trip"),
                 CreateContext(secondContextId, projectId, "context-2", "Plan")
             );
+            seedContext.TaskSessionBindings.AddRange(CreateBinding(firstContextId), CreateBinding(secondContextId));
             seedContext.AgentUsages.Add(CreateUsage(projectId, "context-1", "planner", 10, 20, 30, 4, 5));
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
-        var bindingService = new CapturingTaskSessionBindingService();
         await using var dbContext = new AgwDbContext(options);
-        var service = CreateService(dbContext, bindingService);
+        var service = CreateService(dbContext);
 
         var result = await service.DeleteAllAsync(projectId);
 
         Assert.Equal(ApplicationResultType.Success, result.Type);
-        Assert.Equal(
-            new[] { firstContextId, secondContextId }.OrderBy(id => id),
-            bindingService.DeletedConversationIds.OrderBy(id => id)
-        );
+        Assert.Empty(await dbContext.TaskSessionBindings.ToListAsync(cancellationToken));
         Assert.Single(await dbContext.AgentUsages.ToListAsync(cancellationToken));
     }
 
@@ -873,6 +871,18 @@ public class ProjectConversationAppServiceTests
             UpdateTime = createTime,
         };
 
+    private static TaskSessionBinding CreateBinding(Guid conversationId) =>
+        new()
+        {
+            Id = Guid.CreateVersion7(),
+            ProjectConversationId = conversationId,
+            AgentId = Guid.CreateVersion7(),
+            ExternalAgentName = "codex",
+            ProviderSessionId = Guid.CreateVersion7().Normalize(),
+            CreateBy = "tester",
+            CreateTime = TimeProvider.System.GetUtcNow(),
+        };
+
     private static ProjectConversationChatHistory CreateRecord(
         Guid contextId,
         Guid taskId,
@@ -896,7 +906,7 @@ public class ProjectConversationAppServiceTests
 
     private static ProjectConversationAppService CreateService(
         AgwDbContext dbContext,
-        ITaskSessionBindingService? taskSessionBindingService = null
+        IProjectDeletionCoordinator? deletionCoordinator = null
     )
     {
         var projectRepository = new EfRepository<Project>(dbContext);
@@ -905,49 +915,11 @@ public class ProjectConversationAppServiceTests
         return new ProjectConversationAppService(
             new EfRepository<ProjectConversation>(dbContext),
             new EfRepository<ProjectConversationChatHistory>(dbContext),
-            new EfRepository<AgentflowCheckpointRecord>(dbContext),
-            new EfRepository<AgentflowTrace>(dbContext),
             new EfRepository<AgentUsage>(dbContext),
             dbContext,
             new ProjectResolver(projectRepository, userInfo),
-            taskSessionBindingService
-                ?? new TaskSessionBindingService(
-                    new EfRepository<TaskSessionBinding>(dbContext),
-                    new EfRepository<ProjectConversation>(dbContext),
-                    dbContext,
-                    TimeProvider.System,
-                    userInfo
-                ),
+            deletionCoordinator ?? new ProjectDeletionCoordinator(dbContext),
             TimeProvider.System
         );
-    }
-
-    private sealed class CapturingTaskSessionBindingService : ITaskSessionBindingService
-    {
-        public List<Guid> DeletedConversationIds { get; } = [];
-
-        public Task<TaskSessionBinding?> GetAsync(
-            Guid projectId,
-            string contextId,
-            Guid agentId,
-            string externalAgentName,
-            CancellationToken cancellationToken = default
-        ) => Task.FromResult<TaskSessionBinding?>(null);
-
-        public Task<TaskSessionBinding> UpsertAsync(
-            Guid projectId,
-            string contextId,
-            Guid agentId,
-            string externalAgentName,
-            string providerSessionId,
-            string user,
-            CancellationToken cancellationToken = default
-        ) => throw new NotSupportedException();
-
-        public Task DeleteByConversationAsync(Guid conversationId, CancellationToken cancellationToken = default)
-        {
-            DeletedConversationIds.Add(conversationId);
-            return Task.CompletedTask;
-        }
     }
 }

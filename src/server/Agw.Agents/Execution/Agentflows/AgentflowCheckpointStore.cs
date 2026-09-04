@@ -1,11 +1,11 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Durable;
 using Agw.Auth.Contracts;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Data.Entities.Executions;
-using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -92,93 +92,82 @@ public sealed class AgentflowCheckpointStore
             .AcquireAsync(GetHistoryLockName(projectId, contextId), cancellationToken)
             .ConfigureAwait(false);
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
-        var existing = await dbContext
-            .Set<AgentflowCheckpointRecord>()
-            .AsNoTracking()
-            .SingleOrDefaultAsync(item => item.Id == occurrenceId, cancellationToken)
-            .ConfigureAwait(false);
-        if (existing != null)
-        {
-            if (!string.Equals(existing.UserId, userId, StringComparison.Ordinal))
-            {
-                throw new AgwException(ErrorCodes.InvalidParam, "Agentflow checkpoint owner does not match.");
-            }
-            return new RecordedAgentflowCheckpoint(ToSnapshot(existing), messages);
-        }
+        var persistence = scope.ServiceProvider.GetRequiredService<IAgentflowCheckpointPersistence>();
+        return await persistence
+            .ExecuteAsync(
+                async (session, token) =>
+                {
+                    var existing = await session
+                        .Agents.AgentflowCheckpoints.AsNoTracking()
+                        .SingleOrDefaultAsync(item => item.Id == occurrenceId, token)
+                        .ConfigureAwait(false);
+                    if (existing != null)
+                    {
+                        if (!string.Equals(existing.UserId, userId, StringComparison.Ordinal))
+                        {
+                            throw new AgwException(
+                                ErrorCodes.InvalidParam,
+                                "Agentflow checkpoint owner does not match."
+                            );
+                        }
+                        return new RecordedAgentflowCheckpoint(ToSnapshot(existing), messages);
+                    }
 
-        var conversationExists = await dbContext
-            .Set<ProjectConversation>()
-            .AsNoTracking()
-            .AnyAsync(
-                item =>
-                    item.Id == conversationId
-                    && item.ProjectId == projectId
-                    && item.ContextId == contextId
-                    && item.CreateBy == userId,
+                    if (
+                        !await session
+                            .ProjectConversationExistsAsync(projectId, conversationId, contextId, userId, token)
+                            .ConfigureAwait(false)
+                    )
+                    {
+                        return null;
+                    }
+
+                    var nextSequence = await session
+                        .GetLastConversationSequenceAsync(conversationId, token)
+                        .ConfigureAwait(false);
+                    var now = _timeProvider.GetUtcNow();
+                    foreach (var message in chatMessages)
+                    {
+                        nextSequence++;
+                        session.AddConversationHistory(
+                            new AgentflowCheckpointHistoryWrite(
+                                Guid.CreateVersion7(),
+                                conversationId,
+                                taskId,
+                                message.AuthorName,
+                                nextSequence,
+                                JsonSerializer.Serialize(message, JsonOptions),
+                                now
+                            )
+                        );
+                    }
+
+                    var record = new AgentflowCheckpointRecord
+                    {
+                        Id = occurrenceId,
+                        SourceExecutionId = sourceExecutionId,
+                        ProjectId = projectId,
+                        ProjectConversationId = conversationId,
+                        ContextId = contextId,
+                        TaskId = taskId,
+                        AgentflowId = agentflowId,
+                        UserId = userId,
+                        IsDurable = isDurable,
+                        BoundarySequence = nextSequence,
+                        DefinitionFingerprint = definitionFingerprint,
+                        MarkersJson = JsonSerializer.Serialize(markers, JsonOptions),
+                        CheckpointJson = DurableExecutionJson.Serialize(checkpoint),
+                        CreateBy = userId,
+                        CreateTime = now,
+                        UpdateBy = userId,
+                        UpdateTime = now,
+                    };
+                    session.Agents.AgentflowCheckpoints.Add(record);
+                    return new RecordedAgentflowCheckpoint(ToSnapshot(record), messages);
+                },
                 cancellationToken
             )
             .ConfigureAwait(false);
-        if (!conversationExists)
-        {
-            return null;
-        }
-
-        await using var transaction = await dbContext
-            .Database.BeginTransactionAsync(cancellationToken)
-            .ConfigureAwait(false);
-        var nextSequence =
-            await dbContext
-                .Set<ProjectConversationChatHistory>()
-                .Where(item => item.ConversationId == conversationId)
-                .Select(item => item.ConversationSequence)
-                .MaxAsync(cancellationToken)
-                .ConfigureAwait(false)
-            ?? -1;
-        var now = _timeProvider.GetUtcNow();
-        foreach (var message in chatMessages)
-        {
-            nextSequence++;
-            dbContext.Add(
-                new ProjectConversationChatHistory
-                {
-                    Id = Guid.CreateVersion7(),
-                    ConversationId = conversationId,
-                    TaskId = taskId,
-                    Status = TaskExecutionStatus.Succeeded,
-                    AgentName = message.AuthorName,
-                    ConversationSequence = nextSequence,
-                    ConversationPayload = JsonSerializer.Serialize(message, JsonOptions),
-                    CreateTime = now,
-                    UpdateTime = now,
-                }
-            );
-        }
-
-        var record = new AgentflowCheckpointRecord
-        {
-            Id = occurrenceId,
-            SourceExecutionId = sourceExecutionId,
-            ProjectId = projectId,
-            ProjectConversationId = conversationId,
-            ContextId = contextId,
-            TaskId = taskId,
-            AgentflowId = agentflowId,
-            UserId = userId,
-            IsDurable = isDurable,
-            BoundarySequence = nextSequence,
-            DefinitionFingerprint = definitionFingerprint,
-            MarkersJson = JsonSerializer.Serialize(markers, JsonOptions),
-            CheckpointJson = DurableExecutionJson.Serialize(checkpoint),
-            CreateBy = userId,
-            CreateTime = now,
-            UpdateBy = userId,
-            UpdateTime = now,
-        };
-        dbContext.Add(record);
-        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        return new RecordedAgentflowCheckpoint(ToSnapshot(record), messages);
     }
 
     internal async Task<IReadOnlyList<AgentflowCheckpointAvailability>> ListAsync(
@@ -191,7 +180,7 @@ public sealed class AgentflowCheckpointStore
     )
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IAgentsDbContext>();
         var fingerprint = await AgentflowDefinitionFingerprint
             .CreateAsync(dbContext, agentflowId, cancellationToken)
             .ConfigureAwait(false);
@@ -201,8 +190,7 @@ public sealed class AgentflowCheckpointStore
         }
 
         var records = await dbContext
-            .Set<AgentflowCheckpointRecord>()
-            .AsNoTracking()
+            .AgentflowCheckpoints.AsNoTracking()
             .Where(item =>
                 item.ProjectId == projectId
                 && item.ContextId == contextId
@@ -230,7 +218,7 @@ public sealed class AgentflowCheckpointStore
     internal async Task<string?> GetDefinitionFingerprintAsync(Guid agentflowId, CancellationToken cancellationToken)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IAgentsDbContext>();
         return await AgentflowDefinitionFingerprint
             .CreateAsync(dbContext, agentflowId, cancellationToken)
             .ConfigureAwait(false);
@@ -282,10 +270,9 @@ public sealed class AgentflowCheckpointStore
     )
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IAgentsDbContext>();
         return await dbContext
-            .Set<AgentflowCheckpointRecord>()
-            .AsNoTracking()
+            .AgentflowCheckpoints.AsNoTracking()
             .Where(item => item.Id == occurrenceId && item.UserId == userId)
             .Select(item => item.SourceExecutionId)
             .SingleOrDefaultAsync(cancellationToken)
@@ -306,125 +293,135 @@ public sealed class AgentflowCheckpointStore
             .AcquireAsync(GetHistoryLockName(projectId, contextId), cancellationToken)
             .ConfigureAwait(false);
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
-        await using var transaction = await dbContext
-            .Database.BeginTransactionAsync(cancellationToken)
-            .ConfigureAwait(false);
-        var record =
-            await dbContext
-                .Set<AgentflowCheckpointRecord>()
-                .SingleOrDefaultAsync(item => item.Id == occurrenceId, cancellationToken)
-                .ConfigureAwait(false)
-            ?? throw new AgwException(ErrorCodes.InvalidParam, "Agentflow checkpoint was not found.");
-        if (
-            record.ProjectId != projectId
-            || !string.Equals(record.ContextId, contextId, StringComparison.Ordinal)
-            || record.AgentflowId != agentflowId
-            || !string.Equals(record.UserId, userId, StringComparison.Ordinal)
-        )
-        {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                "Agentflow checkpoint does not match the current conversation target."
-            );
-        }
-        if (record.IsDurable != resumeExecutionId.HasValue)
-        {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                record.IsDurable
-                    ? "The selected checkpoint requires distributed execution."
-                    : "The selected checkpoint belongs to an in-process runtime."
-            );
-        }
-
-        var fingerprint = await AgentflowDefinitionFingerprint
-            .CreateAsync(dbContext, agentflowId, cancellationToken)
-            .ConfigureAwait(false);
-        if (!string.Equals(record.DefinitionFingerprint, fingerprint, StringComparison.Ordinal))
-        {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                "Agentflow definition changed after this checkpoint was created."
-            );
-        }
-
-        // 在任何删除前验证快照可解密、可反序列化；失败时事务内不修改聊天历史。
-        var snapshot = ToSnapshot(record);
-
-        if (resumeExecutionId.HasValue)
-        {
-            var existingResume = await dbContext
-                .Set<DurableExecutionRecord>()
-                .AsNoTracking()
-                .SingleOrDefaultAsync(item => item.Id == resumeExecutionId.Value, cancellationToken)
-                .ConfigureAwait(false);
-            if (existingResume != null)
-            {
-                var existingManifest = DurableExecutionJson.DeserializeRequired<DurableExecutionManifest>(
-                    existingResume.ManifestJson,
-                    "durable resume manifest"
-                );
-                if (existingResume.UserId == userId && existingManifest.ResumeCheckpointOccurrenceId == record.Id)
+        var persistence = scope.ServiceProvider.GetRequiredService<IAgentflowCheckpointPersistence>();
+        return await persistence
+            .ExecuteAsync(
+                async (session, token) =>
                 {
+                    var record =
+                        await session
+                            .Agents.AgentflowCheckpoints.SingleOrDefaultAsync(item => item.Id == occurrenceId, token)
+                            .ConfigureAwait(false)
+                        ?? throw new AgwException(ErrorCodes.InvalidParam, "Agentflow checkpoint was not found.");
+                    if (
+                        record.ProjectId != projectId
+                        || !string.Equals(record.ContextId, contextId, StringComparison.Ordinal)
+                        || record.AgentflowId != agentflowId
+                        || !string.Equals(record.UserId, userId, StringComparison.Ordinal)
+                    )
+                    {
+                        throw new AgwException(
+                            ErrorCodes.InvalidParam,
+                            "Agentflow checkpoint does not match the current conversation target."
+                        );
+                    }
+                    if (record.IsDurable != resumeExecutionId.HasValue)
+                    {
+                        throw new AgwException(
+                            ErrorCodes.InvalidParam,
+                            record.IsDurable
+                                ? "The selected checkpoint requires distributed execution."
+                                : "The selected checkpoint belongs to an in-process runtime."
+                        );
+                    }
+
+                    var fingerprint = await AgentflowDefinitionFingerprint
+                        .CreateAsync(session.Agents, agentflowId, token)
+                        .ConfigureAwait(false);
+                    if (!string.Equals(record.DefinitionFingerprint, fingerprint, StringComparison.Ordinal))
+                    {
+                        throw new AgwException(
+                            ErrorCodes.InvalidParam,
+                            "Agentflow definition changed after this checkpoint was created."
+                        );
+                    }
+
+                    // 在任何删除前验证快照可解密、可反序列化；失败时事务内不修改聊天历史。
+                    var snapshot = ToSnapshot(record);
+
+                    if (resumeExecutionId.HasValue)
+                    {
+                        var existingResume = await session
+                            .Agents.DurableExecutions.AsNoTracking()
+                            .SingleOrDefaultAsync(item => item.Id == resumeExecutionId.Value, token)
+                            .ConfigureAwait(false);
+                        if (existingResume != null)
+                        {
+                            var existingManifest = DurableExecutionJson.DeserializeRequired<DurableExecutionManifest>(
+                                existingResume.ManifestJson,
+                                "durable resume manifest"
+                            );
+                            if (
+                                existingResume.UserId == userId
+                                && existingManifest.ResumeCheckpointOccurrenceId == record.Id
+                            )
+                            {
+                                return snapshot;
+                            }
+
+                            throw new AgwException(ErrorCodes.DurableExecutionConflict);
+                        }
+
+                        var activeExecutions = await session
+                            .Agents.DurableExecutions.AsNoTracking()
+                            .Where(item =>
+                                item.UserId == userId
+                                && item.Status != DurableExecutionStatus.Completed
+                                && item.Status != DurableExecutionStatus.Failed
+                                && item.Status != DurableExecutionStatus.Interrupted
+                            )
+                            .ToArrayAsync(token)
+                            .ConfigureAwait(false);
+                        if (
+                            activeExecutions.Any(item =>
+                                DurableExecutionJson
+                                    .DeserializeRequired<DurableExecutionManifest>(
+                                        item.ManifestJson,
+                                        "durable execution manifest"
+                                    )
+                                    .Task.ProjectConversationId == record.ProjectConversationId
+                            )
+                        )
+                        {
+                            throw new AgwException(
+                                ErrorCodes.DurableExecutionConflict,
+                                "Stop the active Agentflow execution before resuming a checkpoint."
+                            );
+                        }
+
+                        await RegisterResumeExecutionAsync(
+                                session.Agents,
+                                record,
+                                resumeExecutionId.Value,
+                                userId,
+                                token
+                            )
+                            .ConfigureAwait(false);
+                    }
+
+                    await session
+                        .DeleteConversationHistoryAfterAsync(
+                            record.ProjectConversationId,
+                            record.BoundarySequence,
+                            token
+                        )
+                        .ConfigureAwait(false);
+                    await session
+                        .Agents.AgentflowCheckpoints.Where(item =>
+                            item.ProjectConversationId == record.ProjectConversationId
+                            && item.BoundarySequence > record.BoundarySequence
+                        )
+                        .ExecuteDeleteAsync(token)
+                        .ConfigureAwait(false);
                     return snapshot;
-                }
-
-                throw new AgwException(ErrorCodes.DurableExecutionConflict);
-            }
-
-            var activeExecutions = await dbContext
-                .Set<DurableExecutionRecord>()
-                .AsNoTracking()
-                .Where(item =>
-                    item.UserId == userId
-                    && item.Status != DurableExecutionStatus.Completed
-                    && item.Status != DurableExecutionStatus.Failed
-                    && item.Status != DurableExecutionStatus.Interrupted
-                )
-                .ToArrayAsync(cancellationToken)
-                .ConfigureAwait(false);
-            if (
-                activeExecutions.Any(item =>
-                    DurableExecutionJson
-                        .DeserializeRequired<DurableExecutionManifest>(item.ManifestJson, "durable execution manifest")
-                        .Task.ProjectConversationId == record.ProjectConversationId
-                )
+                },
+                cancellationToken
             )
-            {
-                throw new AgwException(
-                    ErrorCodes.DurableExecutionConflict,
-                    "Stop the active Agentflow execution before resuming a checkpoint."
-                );
-            }
-
-            await RegisterResumeExecutionAsync(dbContext, record, resumeExecutionId.Value, userId, cancellationToken)
-                .ConfigureAwait(false);
-        }
-
-        await dbContext
-            .Set<ProjectConversationChatHistory>()
-            .Where(item =>
-                item.ConversationId == record.ProjectConversationId
-                && item.ConversationSequence > record.BoundarySequence
-            )
-            .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
-        await dbContext
-            .Set<AgentflowCheckpointRecord>()
-            .Where(item =>
-                item.ProjectConversationId == record.ProjectConversationId
-                && item.BoundarySequence > record.BoundarySequence
-            )
-            .ExecuteDeleteAsync(cancellationToken)
-            .ConfigureAwait(false);
-        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        return snapshot;
     }
 
     private async Task RegisterResumeExecutionAsync(
-        DbContext dbContext,
+        IAgentsDbContext dbContext,
         AgentflowCheckpointRecord checkpointRecord,
         Guid resumeExecutionId,
         string userId,
@@ -441,8 +438,7 @@ public sealed class AgentflowCheckpointStore
         }
 
         var existing = await dbContext
-            .Set<DurableExecutionRecord>()
-            .AsNoTracking()
+            .DurableExecutions.AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == resumeExecutionId, cancellationToken)
             .ConfigureAwait(false);
         if (existing != null)
@@ -461,8 +457,7 @@ public sealed class AgentflowCheckpointStore
 
         var source =
             await dbContext
-                .Set<DurableExecutionRecord>()
-                .AsNoTracking()
+                .DurableExecutions.AsNoTracking()
                 .SingleOrDefaultAsync(
                     item => item.Id == checkpointRecord.SourceExecutionId.Value && item.UserId == userId,
                     cancellationToken
@@ -495,7 +490,7 @@ public sealed class AgentflowCheckpointStore
                 .ToArray(),
         };
         var now = _timeProvider.GetUtcNow();
-        dbContext.Add(
+        dbContext.DurableExecutions.Add(
             new DurableExecutionRecord
             {
                 Id = resumeExecutionId,

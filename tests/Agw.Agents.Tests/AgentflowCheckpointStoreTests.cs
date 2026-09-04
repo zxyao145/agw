@@ -1,9 +1,11 @@
 using System.Security.Claims;
 using System.Text.Json;
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Durable;
+using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agentflows;
@@ -155,6 +157,74 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
             .Select(item => item.ConversationSequence!.Value)
             .ToArrayAsync(cancellationToken);
         Assert.Equal([1L, 2L], checkpointSequences);
+    }
+
+    [Fact]
+    public async Task RecordAsync_MissingConversation_ReturnsNullWithoutPersistence()
+    {
+        // Arrange
+        await using var database = await TestDatabase.CreateAsync();
+        var fixture = await database.SeedAsync();
+        var store = database.CreateStore();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var fingerprint = await store.GetDefinitionFingerprintAsync(fixture.AgentflowId, cancellationToken);
+
+        // Act
+        var recorded = await store.RecordAsync(
+            Guid.CreateVersion7(),
+            fixture.ProjectId,
+            Guid.CreateVersion7(),
+            fixture.ContextId,
+            fixture.TaskId,
+            fixture.AgentflowId,
+            "user-id",
+            isDurable: false,
+            fingerprint!,
+            CreateCheckpoint("missing-conversation"),
+            new Dictionary<string, string> { ["checkpoint-node"] = "Saved" },
+            cancellationToken
+        );
+
+        // Assert
+        Assert.Null(recorded);
+        await using var context = database.CreateContext();
+        Assert.Single(await context.ProjectConversationChatHistories.ToListAsync(cancellationToken));
+        Assert.Empty(await context.AgentflowCheckpoints.ToListAsync(cancellationToken));
+    }
+
+    [Fact]
+    public async Task RecordAsync_CheckpointInsertFails_RollsBackConversationHistory()
+    {
+        // Arrange
+        await using var database = await TestDatabase.CreateAsync();
+        var fixture = await database.SeedAsync();
+        var store = database.CreateStore();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var fingerprint = await store.GetDefinitionFingerprintAsync(fixture.AgentflowId, cancellationToken);
+        await database.RejectCheckpointInsertsAsync(cancellationToken);
+
+        // Act
+        await Assert.ThrowsAsync<DbUpdateException>(() =>
+            store.RecordAsync(
+                Guid.CreateVersion7(),
+                fixture.ProjectId,
+                fixture.ConversationId,
+                fixture.ContextId,
+                fixture.TaskId,
+                fixture.AgentflowId,
+                "user-id",
+                isDurable: false,
+                fingerprint!,
+                CreateCheckpoint("rejected-checkpoint"),
+                new Dictionary<string, string> { ["checkpoint-node"] = "Saved" },
+                cancellationToken
+            )
+        );
+
+        // Assert
+        await using var context = database.CreateContext();
+        Assert.Single(await context.ProjectConversationChatHistories.ToListAsync(cancellationToken));
+        Assert.Empty(await context.AgentflowCheckpoints.ToListAsync(cancellationToken));
     }
 
     [Fact]
@@ -372,7 +442,10 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
             }
 
             var services = new ServiceCollection();
-            services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+            services.AddScoped(_ => new AgwDbContext(options));
+            services.AddScoped<DbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
+            services.AddScoped<IAgentsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
+            services.AddScoped<IAgentflowCheckpointPersistence, AgentflowCheckpointPersistence>();
             var serviceProvider = services.BuildServiceProvider();
             return new TestDatabase(connection, options, serviceProvider);
         }
@@ -482,6 +555,21 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
             );
             agentflow.SystemPrompt = "changed";
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        public async Task RejectCheckpointInsertsAsync(CancellationToken cancellationToken)
+        {
+            await using var context = CreateContext();
+            await context.Database.ExecuteSqlRawAsync(
+                """
+                CREATE TRIGGER reject_agentflow_checkpoint_insert
+                BEFORE INSERT ON agentflow_checkpoint
+                BEGIN
+                    SELECT RAISE(ABORT, 'checkpoint insert rejected');
+                END;
+                """,
+                cancellationToken
+            );
         }
 
         public async Task AddDurableExecutionAsync(Fixture fixture, Guid executionId, DurableExecutionStatus status)

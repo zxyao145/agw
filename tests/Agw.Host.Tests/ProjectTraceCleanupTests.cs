@@ -1,11 +1,11 @@
 using Agw.Agents.Definitions.Facades;
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Projects;
 using Agw.Infrastructure.Repositories;
 using Agw.Projects.Application;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Skills;
@@ -181,18 +181,10 @@ public class ProjectTraceCleanupTests
         return new ProjectConversationAppService(
             new EfRepository<ProjectConversation>(dbContext),
             new EfRepository<ProjectConversationChatHistory>(dbContext),
-            new EfRepository<AgentflowCheckpointRecord>(dbContext),
-            new EfRepository<AgentflowTrace>(dbContext),
             new EfRepository<AgentUsage>(dbContext),
             dbContext,
             new ProjectResolver(projectRepository, userInfo),
-            new TaskSessionBindingService(
-                new EfRepository<TaskSessionBinding>(dbContext),
-                new EfRepository<ProjectConversation>(dbContext),
-                dbContext,
-                TimeProvider.System,
-                userInfo
-            ),
+            new ProjectDeletionCoordinator(dbContext),
             TimeProvider.System
         );
     }
@@ -216,7 +208,7 @@ public class ProjectTraceCleanupTests
             new EfRepository<Skill>(dbContext),
             new EfRepository<ProjectConnectionRelation>(dbContext),
             new EfRepository<Connection>(dbContext),
-            new EfRepository<AgentflowTrace>(dbContext),
+            new ProjectDeletionCoordinator(dbContext),
             dbContext,
             new ProjectDomainService(TimeProvider.System),
             new ProjectResolver(projectRepository, userInfo),

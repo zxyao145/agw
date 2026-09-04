@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using Agw.Shared.Data.Entities.Agentflows;
+using Agw.Agents.Application.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Agents.Execution.Agentflows;
@@ -11,14 +11,13 @@ internal static class AgentflowDefinitionFingerprint
     private const int CheckpointRuntimeVersion = 2;
 
     public static async Task<string?> CreateAsync(
-        DbContext dbContext,
+        IAgentsDbContext dbContext,
         Guid agentflowId,
         CancellationToken cancellationToken
     )
     {
         var agentflow = await dbContext
-            .Set<Agentflow>()
-            .AsNoTracking()
+            .Agentflows.AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == agentflowId, cancellationToken)
             .ConfigureAwait(false);
         if (agentflow == null)
@@ -27,8 +26,7 @@ internal static class AgentflowDefinitionFingerprint
         }
 
         var nodes = await dbContext
-            .Set<AgentflowNode>()
-            .AsNoTracking()
+            .AgentflowNodes.AsNoTracking()
             .Where(item => item.AgentflowId == agentflowId)
             .OrderBy(item => item.NodeId)
             .Select(item => new
@@ -43,8 +41,7 @@ internal static class AgentflowDefinitionFingerprint
             .ToArrayAsync(cancellationToken)
             .ConfigureAwait(false);
         var edges = await dbContext
-            .Set<AgentflowEdge>()
-            .AsNoTracking()
+            .AgentflowEdges.AsNoTracking()
             .Where(item => item.AgentflowId == agentflowId)
             .OrderBy(item => item.EdgeId)
             .Select(item => new

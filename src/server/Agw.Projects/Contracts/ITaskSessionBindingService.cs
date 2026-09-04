@@ -21,6 +21,4 @@ public interface ITaskSessionBindingService
         string user,
         CancellationToken cancellationToken = default
     );
-
-    Task DeleteByConversationAsync(Guid conversationId, CancellationToken cancellationToken = default);
 }

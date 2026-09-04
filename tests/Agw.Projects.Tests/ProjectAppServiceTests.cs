@@ -1,9 +1,10 @@
 using System.Security.Claims;
 using Agw.Files.Abstracts;
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Projects;
 using Agw.Infrastructure.Repositories;
+using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Services;
-using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
@@ -409,6 +410,35 @@ public class ProjectAppServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task DeleteAsync_WhenDeletionCoordinatorRejects_DoesNotInvalidateFileSystemCache()
+    {
+        // Arrange
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        await using var dbContext = new AgwDbContext(options);
+        await dbContext.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+        var cache = new RecordingFileSystemCacheInvalidator();
+        var service = CreateService(
+            dbContext,
+            fileSystemCache: cache,
+            deletionCoordinator: new RejectingProjectDeletionCoordinator()
+        );
+        var project = await service.CreateAsync(CreateProject("Project A"));
+
+        // Act
+        var deleted = await service.DeleteAsync(project!.Id);
+
+        // Assert
+        Assert.False(deleted);
+        Assert.Empty(cache.InvalidatedProjectIds);
+        Assert.NotNull(await service.GetForCurrentUserAsync(project.Id));
+    }
+
+    [Fact]
     public async Task CreateAsync_WhenWorkspaceDoesNotExist_CreatesWorkspaceDirectory()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -457,7 +487,8 @@ public class ProjectAppServiceTests : IDisposable
     private static ProjectAppService CreateService(
         AgwDbContext dbContext,
         TestUserInfoService? userInfo = null,
-        IProjectFileSystemCacheInvalidator? fileSystemCache = null
+        IProjectFileSystemCacheInvalidator? fileSystemCache = null,
+        IProjectDeletionCoordinator? deletionCoordinator = null
     )
     {
         var projectRepository = new EfRepository<Project>(dbContext);
@@ -471,7 +502,7 @@ public class ProjectAppServiceTests : IDisposable
             new EfRepository<Skill>(dbContext),
             new EfRepository<ProjectConnectionRelation>(dbContext),
             new EfRepository<Connection>(dbContext),
-            new EfRepository<AgentflowTrace>(dbContext),
+            deletionCoordinator ?? new ProjectDeletionCoordinator(dbContext),
             dbContext,
             new ProjectDomainService(TimeProvider.System),
             new ProjectResolver(projectRepository, userInfo),
@@ -500,6 +531,29 @@ public class ProjectAppServiceTests : IDisposable
         public List<Guid> InvalidatedProjectIds { get; } = [];
 
         public void Invalidate(Guid projectId) => InvalidatedProjectIds.Add(projectId);
+    }
+
+    private sealed class RejectingProjectDeletionCoordinator : IProjectDeletionCoordinator
+    {
+        public Task<bool> ClearConversationRecordsAsync(
+            ProjectConversationDeletionTarget target,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(false);
+
+        public Task<bool> DeleteConversationAsync(
+            ProjectConversationDeletionTarget target,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(false);
+
+        public Task<bool> DeleteAllConversationsAsync(
+            ProjectDeletionTarget target,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(false);
+
+        public Task<bool> DeleteProjectAsync(
+            ProjectDeletionTarget target,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(false);
     }
 
     private sealed class ProjectAppServiceTestScope : IAsyncDisposable

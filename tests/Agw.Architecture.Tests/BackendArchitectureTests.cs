@@ -613,14 +613,8 @@ public sealed partial class BackendArchitectureTests
             ["Agw.Agents/Definitions/Agents/AgentAppService.cs:IRepository<Skill>"] = 2,
             ["Agw.Agents/Definitions/Agents/AgentSuggestionAppService.cs:IRepository<Skill>"] = 2,
             ["Agw.Agents/Definitions/Agents/AgentflowAppService.cs:IRepository<ModelProviderRelation>"] = 2,
-            ["Agw.Agents/Execution/Agentflows/AgentflowCheckpointStore.cs:DbSet<ProjectConversation>"] = 1,
-            ["Agw.Agents/Execution/Agentflows/AgentflowCheckpointStore.cs:DbSet<ProjectConversationChatHistory>"] = 2,
-            ["Agw.Agents/Execution/Agents/Store/AgentSessionStateStore.cs:DbSet<ProjectConversation>"] = 3,
-            ["Agw.Projects/Application/ProjectAppService.cs:IRepository<AgentflowTrace>"] = 2,
             ["Agw.Projects/Application/ProjectAppService.cs:IRepository<Connection>"] = 2,
             ["Agw.Projects/Application/ProjectAppService.cs:IRepository<Skill>"] = 2,
-            ["Agw.Projects/Application/ProjectConversationAppService.cs:IRepository<AgentflowCheckpointRecord>"] = 2,
-            ["Agw.Projects/Application/ProjectConversationAppService.cs:IRepository<AgentflowTrace>"] = 2,
             ["Agw.Tools/ToolBlocks/Storage/EfProjectMemoryStore.cs:DbSet<Project>"] = 2,
         };
 

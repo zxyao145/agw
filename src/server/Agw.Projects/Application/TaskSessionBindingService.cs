@@ -170,26 +170,6 @@ public class TaskSessionBindingService : ITaskSessionBindingService
         return binding;
     }
 
-    public async Task DeleteByConversationAsync(Guid conversationId, CancellationToken cancellationToken = default)
-    {
-        var ownerUserId = ResolveOwnerUserId();
-        if (
-            !await _contextRepository.Queryable.AnyAsync(
-                conversation => conversation.Id == conversationId && conversation.CreateBy == ownerUserId,
-                cancellationToken
-            )
-        )
-        {
-            return;
-        }
-
-        await _bindingRepository
-            .Queryable.Where(binding => binding.ProjectConversationId == conversationId)
-            .ExecuteDeleteAsync(cancellationToken);
-
-        await _unitOfWork.SaveChangesAsync();
-    }
-
     private string ResolveOwnerUserId() => _userInfoService.RequiredUserId;
 
     /// <summary>
