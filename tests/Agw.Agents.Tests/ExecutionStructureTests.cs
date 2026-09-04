@@ -52,11 +52,11 @@ public class ExecutionStructureTests
         var assembly = typeof(AgentRuntimeService).Assembly;
         var controllerType = assembly.GetType("Agw.Agents.Definitions.Controllers.AgentflowsController");
         var appServiceType = assembly.GetType("Agw.Agents.Definitions.Agents.AgentflowAppService");
-        var domainServiceType = assembly.GetType("Agw.Agents.Definitions.Domain.AgentflowDomainService");
+        var legacyDomainServiceType = assembly.GetType("Agw.Agents.Definitions.Domain.AgentflowDomainService");
 
         Assert.NotNull(controllerType);
         Assert.NotNull(appServiceType);
-        Assert.NotNull(domainServiceType);
+        Assert.Null(legacyDomainServiceType);
 
         var parameterTypes = Assert
             .Single(controllerType!.GetConstructors())
@@ -65,6 +65,5 @@ public class ExecutionStructureTests
             .ToArray();
 
         Assert.Contains(appServiceType!, parameterTypes);
-        Assert.DoesNotContain(domainServiceType!, parameterTypes);
     }
 }

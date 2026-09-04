@@ -222,6 +222,29 @@ public sealed partial class BackendArchitectureTests
     }
 
     [Fact]
+    public void ModuleSource_ForeignPersistenceAccessesMatchLegacyAllowlist()
+    {
+        // Arrange
+        var serverRoot = GetServerRoot();
+
+        // Act
+        var actualCounts = GetSourceFiles(serverRoot)
+            .SelectMany(path => FindForeignPersistenceAccesses(serverRoot, path))
+            .GroupBy(static access => access.InventoryKey, StringComparer.Ordinal)
+            .ToDictionary(static group => group.Key, static group => group.Count(), StringComparer.Ordinal);
+
+        // Assert
+        Assert.Equal(
+            AllowedLegacyForeignPersistenceAccessCounts.Keys.OrderBy(static access => access, StringComparer.Ordinal),
+            actualCounts.Keys.OrderBy(static access => access, StringComparer.Ordinal)
+        );
+        foreach (var (access, expectedCount) in AllowedLegacyForeignPersistenceAccessCounts)
+        {
+            Assert.Equal(expectedCount, actualCounts[access]);
+        }
+    }
+
+    [Fact]
     public void ModuleSource_CrossModuleConcreteServicesOrOwnedRepositories_HasNoViolations()
     {
         // Arrange
@@ -334,7 +357,14 @@ public sealed partial class BackendArchitectureTests
         }
 
         var relativePath = NormalizePath(Path.GetRelativePath(serverRoot, sourceFile));
-        var allowsForeignPersistence = AllowedForeignPersistenceAccessFiles.Contains(relativePath);
+        foreach (var access in FindForeignPersistenceAccesses(serverRoot, sourceFile))
+        {
+            if (!AllowedLegacyForeignPersistenceAccessCounts.ContainsKey(access.InventoryKey))
+            {
+                yield return access.Violation;
+            }
+        }
+
         var lineNumber = 0;
         foreach (var line in File.ReadLines(sourceFile))
         {
@@ -361,14 +391,35 @@ public sealed partial class BackendArchitectureTests
                     yield return $"{relativePath}:{lineNumber}: {owningProject} references legacy {type} owned by {owner}";
                 }
             }
+        }
+    }
 
+    private static IEnumerable<(string InventoryKey, string Violation)> FindForeignPersistenceAccesses(
+        string serverRoot,
+        string sourceFile
+    )
+    {
+        var owningProject = GetOwningProject(serverRoot, sourceFile);
+        if (owningProject == "Agw.Infrastructure")
+        {
+            yield break;
+        }
+
+        var relativePath = NormalizePath(Path.GetRelativePath(serverRoot, sourceFile));
+        var lineNumber = 0;
+        foreach (var line in File.ReadLines(sourceFile))
+        {
+            lineNumber++;
             foreach (Match match in OwnedRepositoryRegex().Matches(line))
             {
                 var entity = match.Groups["entity"].Value;
                 var owner = EntityOwners.GetValueOrDefault(entity);
-                if (owner != null && owner != owningProject && !allowsForeignPersistence)
+                if (owner != null && owner != owningProject)
                 {
-                    yield return $"{relativePath}:{lineNumber}: {owningProject} references IRepository<{entity}> owned by {owner}";
+                    yield return (
+                        $"{relativePath}:IRepository<{entity}>",
+                        $"{relativePath}:{lineNumber}: {owningProject} references IRepository<{entity}> owned by {owner}"
+                    );
                 }
             }
 
@@ -376,9 +427,12 @@ public sealed partial class BackendArchitectureTests
             {
                 var entity = match.Groups["entity"].Value;
                 var owner = EntityOwners.GetValueOrDefault(entity);
-                if (owner != null && owner != owningProject && !allowsForeignPersistence)
+                if (owner != null && owner != owningProject)
                 {
-                    yield return $"{relativePath}:{lineNumber}: {owningProject} accesses {entity} DbSet owned by {owner}";
+                    yield return (
+                        $"{relativePath}:DbSet<{entity}>",
+                        $"{relativePath}:{lineNumber}: {owningProject} accesses {entity} DbSet owned by {owner}"
+                    );
                 }
             }
         }
@@ -549,16 +603,26 @@ public sealed partial class BackendArchitectureTests
         ["UserMemory"] = "Agw.Tools",
     };
 
-    private static readonly IReadOnlySet<string> AllowedForeignPersistenceAccessFiles = Set(
-        "Agw.Agents/Definitions/Agents/AgentAppService.cs",
-        "Agw.Agents/Definitions/Agents/AgentSuggestionAppService.cs",
-        "Agw.Agents/Definitions/Agents/AgentflowAppService.cs",
-        "Agw.Agents/Execution/Agentflows/AgentflowCheckpointStore.cs",
-        "Agw.Agents/Execution/Agents/Store/AgentSessionStateStore.cs",
-        "Agw.Projects/Application/ProjectAppService.cs",
-        "Agw.Projects/Application/ProjectConversationAppService.cs",
-        "Agw.Tools/ToolBlocks/Storage/EfProjectMemoryStore.cs"
-    );
+    private static readonly IReadOnlyDictionary<string, int> AllowedLegacyForeignPersistenceAccessCounts =
+        new Dictionary<string, int>(StringComparer.Ordinal)
+        {
+            ["Agw.Agents/Definitions/Agents/AgentAppService.cs:IRepository<AgwAiModel>"] = 2,
+            ["Agw.Agents/Definitions/Agents/AgentAppService.cs:IRepository<Connection>"] = 2,
+            ["Agw.Agents/Definitions/Agents/AgentAppService.cs:IRepository<ModelProviderRelation>"] = 2,
+            ["Agw.Agents/Definitions/Agents/AgentAppService.cs:IRepository<Provider>"] = 2,
+            ["Agw.Agents/Definitions/Agents/AgentAppService.cs:IRepository<Skill>"] = 2,
+            ["Agw.Agents/Definitions/Agents/AgentSuggestionAppService.cs:IRepository<Skill>"] = 2,
+            ["Agw.Agents/Definitions/Agents/AgentflowAppService.cs:IRepository<ModelProviderRelation>"] = 2,
+            ["Agw.Agents/Execution/Agentflows/AgentflowCheckpointStore.cs:DbSet<ProjectConversation>"] = 1,
+            ["Agw.Agents/Execution/Agentflows/AgentflowCheckpointStore.cs:DbSet<ProjectConversationChatHistory>"] = 2,
+            ["Agw.Agents/Execution/Agents/Store/AgentSessionStateStore.cs:DbSet<ProjectConversation>"] = 3,
+            ["Agw.Projects/Application/ProjectAppService.cs:IRepository<AgentflowTrace>"] = 2,
+            ["Agw.Projects/Application/ProjectAppService.cs:IRepository<Connection>"] = 2,
+            ["Agw.Projects/Application/ProjectAppService.cs:IRepository<Skill>"] = 2,
+            ["Agw.Projects/Application/ProjectConversationAppService.cs:IRepository<AgentflowCheckpointRecord>"] = 2,
+            ["Agw.Projects/Application/ProjectConversationAppService.cs:IRepository<AgentflowTrace>"] = 2,
+            ["Agw.Tools/ToolBlocks/Storage/EfProjectMemoryStore.cs:DbSet<Project>"] = 2,
+        };
 
     private static readonly IReadOnlyDictionary<string, string> LegacyCrossModuleServiceOwners = new Dictionary<
         string,
@@ -600,9 +664,15 @@ public sealed partial class BackendArchitectureTests
     )]
     private static partial Regex LegacyCrossModuleServiceReferenceRegex();
 
-    [GeneratedRegex(@"\bIRepository\s*<\s*(?<entity>[A-Za-z_][A-Za-z0-9_]*)\s*>", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(
+        @"\bIRepository\s*<\s*(?:global::)?(?:[A-Za-z_][A-Za-z0-9_]*\.)*(?<entity>[A-Za-z_][A-Za-z0-9_]*)\s*>",
+        RegexOptions.CultureInvariant
+    )]
     private static partial Regex OwnedRepositoryRegex();
 
-    [GeneratedRegex(@"\b(?:DbSet|Set)\s*<\s*(?<entity>[A-Za-z_][A-Za-z0-9_]*)\s*>", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(
+        @"\b(?:DbSet|Set)\s*<\s*(?:global::)?(?:[A-Za-z_][A-Za-z0-9_]*\.)*(?<entity>[A-Za-z_][A-Za-z0-9_]*)\s*>",
+        RegexOptions.CultureInvariant
+    )]
     private static partial Regex OwnedDbSetAccessRegex();
 }

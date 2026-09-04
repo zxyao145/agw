@@ -291,13 +291,13 @@ public sealed partial class BackendArchitectureTests
         int
     >(StringComparer.Ordinal)
     {
-        ["Agw.Agents"] = 77,
+        ["Agw.Agents"] = 70,
         ["Agw.Auth"] = 0,
         ["Agw.Integrations"] = 28,
         ["Agw.Jobs"] = 12,
         ["Agw.Projects"] = 62,
         ["Agw.Providers"] = 14,
-        ["Agw.Setup"] = 6,
+        ["Agw.Setup"] = 4,
         ["Agw.Skills"] = 8,
         ["Agw.Tools"] = 10,
     };

@@ -240,7 +240,6 @@ public sealed partial class BackendArchitectureTests
 
     private static readonly IReadOnlySet<string> AllowedLegacyEntityDomainServices = Set(
         "Agw.Agents/Definitions/Domain/AgentDomainService.cs:AgentDomainService",
-        "Agw.Agents/Definitions/Domain/AgentflowDomainService.cs:AgentflowDomainService",
         "Agw.Agents/Definitions/Domain/McpToolServerDomainService.cs:McpToolServerDomainService",
         "Agw.Projects/Domain/Services/ProjectConversationChatHistoryDomainService.cs:ProjectConversationChatHistoryDomainService",
         "Agw.Projects/Domain/Services/ProjectDomainService.cs:ProjectDomainService",
