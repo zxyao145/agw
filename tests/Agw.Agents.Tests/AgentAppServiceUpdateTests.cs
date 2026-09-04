@@ -333,20 +333,29 @@ public class AgentAppServiceUpdateTests
         var modelProviders = (modelProviderIds ?? [])
             .Select(id => new ModelProviderRelation { Id = id, CreateBy = "tester" })
             .ToArray();
+        var connectionRepository = new TestRepository<Connection>();
+        var modelProviderRepository = new TestRepository<ModelProviderRelation>(modelProviders, item => item.Id);
+        var modelRepository = new TestRepository<AgwAiModel>();
+        var providerRepository = new TestRepository<Provider>();
+        var skillRepository = new TestRepository<Skill>();
+        var userInfo = new TestUserInfoService();
         return new AgentAppService(
             new TestRepository<Agent>([agent], item => item.Id),
             connectionRelationRepository ?? new TestRepository<AgentConnectionRelation>(),
-            new TestRepository<Connection>(),
-            new TestRepository<ModelProviderRelation>(modelProviders, item => item.Id),
-            new TestRepository<AgwAiModel>(),
-            new TestRepository<Provider>(),
+            new TestConnectionReferenceFacade(connectionRepository, userInfo),
+            new TestModelProviderReferenceFacade(
+                modelProviderRepository,
+                modelRepository,
+                providerRepository,
+                userInfo
+            ),
             new TestRepository<McpServer>(),
             mcpRelationRepository ?? new TestRepository<AgentMcpServerRelation>(),
-            new TestRepository<Skill>(),
+            new TestSkillReferenceFacade(skillRepository, userInfo),
             skillRelationRepository ?? new TestRepository<AgentSkillRelation>(),
             unitOfWork ?? new TestUnitOfWork(),
             new AgentDomainService(TimeProvider.System),
-            new TestUserInfoService()
+            userInfo
         );
     }
 

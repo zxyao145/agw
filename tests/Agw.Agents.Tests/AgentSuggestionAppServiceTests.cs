@@ -314,12 +314,14 @@ public class AgentSuggestionAppServiceTests
             [new WebSearchContextualTool(), new ShellContextualTool(new ConfigurationBuilder().Build())],
             new ToolBlockRegistry([new TodoToolBlock(), new ModeToolBlock()])
         );
+        var skillRepository = new TestRepository<Skill>(ownedSkills);
+        var userInfo = new TestUserInfoService();
         return new AgentSuggestionAppService(
             new TestRepository<Agent>(ownedAgents),
             new TestProjectRuntimeFacade(projects),
-            new TestRepository<Skill>(ownedSkills),
+            new TestSkillReferenceFacade(skillRepository, userInfo),
             registry,
-            new TestUserInfoService()
+            userInfo
         );
     }
 

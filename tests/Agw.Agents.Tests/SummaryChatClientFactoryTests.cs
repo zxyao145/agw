@@ -60,20 +60,24 @@ public class SummaryChatClientFactoryTests
         dbContext.AddRange(provider, model, modelProvider);
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        var userInfo = new TestUserInfoService();
         var appService = new AgentAppService(
             null!,
             null!,
             null!,
-            new EfRepository<ModelProviderRelation>(dbContext),
-            new EfRepository<AgwAiModel>(dbContext),
-            new EfRepository<Provider>(dbContext),
+            new TestModelProviderReferenceFacade(
+                new EfRepository<ModelProviderRelation>(dbContext),
+                new EfRepository<AgwAiModel>(dbContext),
+                new EfRepository<Provider>(dbContext),
+                userInfo
+            ),
             null!,
             null!,
             null!,
             null!,
             null!,
             null!,
-            new TestUserInfoService()
+            userInfo
         );
         var factory = new SummaryChatClientFactory(appService, NullLogger<SummaryChatClientFactory>.Instance);
 

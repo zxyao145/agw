@@ -2,6 +2,7 @@ using System.ClientModel;
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Tools;
+using Agw.Providers.Contracts.References;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
@@ -169,7 +170,11 @@ public partial class AgentRuntimeService
         }
     }
 
-    private IChatClient CreateOpenAiChatClient(AgwAiModel model, Provider provider, ProviderAuthConfig authConfig)
+    private IChatClient CreateOpenAiChatClient(
+        ModelProviderModelSnapshot model,
+        ModelProviderProviderSnapshot provider,
+        ProviderAuthConfigSnapshot authConfig
+    )
     {
         var apiKey = ResolveApiKey(authConfig);
         var credential = new ApiKeyCredential(apiKey);
@@ -179,7 +184,11 @@ public partial class AgentRuntimeService
         return chatCompletionClient.AsIChatClient();
     }
 
-    private IChatClient CreateAnthropicChatClient(AgwAiModel model, Provider provider, ProviderAuthConfig authConfig)
+    private IChatClient CreateAnthropicChatClient(
+        ModelProviderModelSnapshot model,
+        ModelProviderProviderSnapshot provider,
+        ProviderAuthConfigSnapshot authConfig
+    )
     {
         var anthropicClientOptions = new ClientOptions
         {
@@ -191,9 +200,9 @@ public partial class AgentRuntimeService
     }
 
     private IChatClient CreateOpenAiResponsesChatClient(
-        AgwAiModel model,
-        Provider provider,
-        ProviderAuthConfig authConfig
+        ModelProviderModelSnapshot model,
+        ModelProviderProviderSnapshot provider,
+        ProviderAuthConfigSnapshot authConfig
     )
     {
         var apiKey = ResolveApiKey(authConfig);
@@ -205,7 +214,7 @@ public partial class AgentRuntimeService
 #pragma warning restore OPENAI001
     }
 
-    private string ResolveApiKey(ProviderAuthConfig authConfig)
+    private string ResolveApiKey(ProviderAuthConfigSnapshot authConfig)
     {
         return authConfig.ApiKey!;
     }

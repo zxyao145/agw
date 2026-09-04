@@ -3,6 +3,7 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
+using Agw.Skills.Contracts.References;
 using Agw.Skills.Contracts.Registration;
 using Agw.Skills.Execution;
 using Microsoft.Agents.AI;
@@ -158,7 +159,7 @@ public partial class AgentRuntimeService
         return builder.Build();
     }
 
-    private string GetSkillAbsolutePath(Skill skill)
+    private string GetSkillAbsolutePath(SkillReferenceSnapshot skill)
     {
         var relativePath = string.IsNullOrWhiteSpace(skill.ContentPath)
             ? Path.Combine("skills", skill.Name)

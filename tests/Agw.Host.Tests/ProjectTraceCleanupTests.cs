@@ -2,13 +2,13 @@ using Agw.Agents.Definitions.Facades;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Projects;
 using Agw.Infrastructure.Repositories;
+using Agw.Integrations.Application.Facades;
 using Agw.Projects.Application;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Entities.Skills;
+using Agw.Skills.Application.Facades;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -205,9 +205,9 @@ public class ProjectTraceCleanupTests
                 userInfo
             ),
             new EfRepository<ProjectSkillRelation>(dbContext),
-            new EfRepository<Skill>(dbContext),
+            new SkillReferenceFacade(dbContext, userInfo),
             new EfRepository<ProjectConnectionRelation>(dbContext),
-            new EfRepository<Connection>(dbContext),
+            new ConnectionReferenceFacade(dbContext, userInfo),
             new ProjectDeletionCoordinator(dbContext),
             dbContext,
             new ProjectDomainService(TimeProvider.System),

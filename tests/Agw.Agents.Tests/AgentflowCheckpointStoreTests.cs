@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Security.Claims;
 using System.Text.Json;
 using Agw.Agents.Application.Persistence;
@@ -14,6 +15,7 @@ using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Agents.Tests;
@@ -306,6 +308,7 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
             "user-id",
             cancellationToken
         );
+        database.ResetTransactionCount();
         await store.PrepareDistributedResumeAsync(
             recorded.Snapshot.OccurrenceId,
             resumeExecutionId,
@@ -315,6 +318,7 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
             "user-id",
             cancellationToken
         );
+        Assert.Equal(0, database.TransactionCount);
 
         await using (var context = database.CreateContext())
         {
@@ -416,25 +420,30 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
         private readonly SqliteConnection _connection;
         private readonly DbContextOptions<AgwDbContext> _options;
         private readonly ServiceProvider _serviceProvider;
+        private readonly CountingTransactionInterceptor _transactionInterceptor;
 
         private TestDatabase(
             SqliteConnection connection,
             DbContextOptions<AgwDbContext> options,
-            ServiceProvider serviceProvider
+            ServiceProvider serviceProvider,
+            CountingTransactionInterceptor transactionInterceptor
         )
         {
             _connection = connection;
             _options = options;
             _serviceProvider = serviceProvider;
+            _transactionInterceptor = transactionInterceptor;
         }
 
         public static async Task<TestDatabase> CreateAsync()
         {
             var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
             await connection.OpenAsync(TestContext.Current.CancellationToken);
+            var transactionInterceptor = new CountingTransactionInterceptor();
             var options = new DbContextOptionsBuilder<AgwDbContext>()
                 .UseSqlite(connection)
                 .UseSnakeCaseNamingConvention()
+                .AddInterceptors(transactionInterceptor)
                 .Options;
             await using (var context = new AgwDbContext(options))
             {
@@ -447,8 +456,12 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
             services.AddScoped<IAgentsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
             services.AddScoped<IAgentflowCheckpointPersistence, AgentflowCheckpointPersistence>();
             var serviceProvider = services.BuildServiceProvider();
-            return new TestDatabase(connection, options, serviceProvider);
+            return new TestDatabase(connection, options, serviceProvider, transactionInterceptor);
         }
+
+        public int TransactionCount => _transactionInterceptor.TransactionCount;
+
+        public void ResetTransactionCount() => _transactionInterceptor.Reset();
 
         public AgwDbContext CreateContext() => new(_options);
 
@@ -612,6 +625,26 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
         {
             await _serviceProvider.DisposeAsync();
             await _connection.DisposeAsync();
+        }
+    }
+
+    private sealed class CountingTransactionInterceptor : DbTransactionInterceptor
+    {
+        private int _transactionCount;
+
+        public int TransactionCount => Volatile.Read(ref _transactionCount);
+
+        public void Reset() => Volatile.Write(ref _transactionCount, 0);
+
+        public override ValueTask<DbTransaction> TransactionStartedAsync(
+            DbConnection connection,
+            TransactionEndEventData eventData,
+            DbTransaction result,
+            CancellationToken cancellationToken = default
+        )
+        {
+            Interlocked.Increment(ref _transactionCount);
+            return ValueTask.FromResult(result);
         }
     }
 }

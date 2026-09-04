@@ -1,4 +1,6 @@
 using Agw.Providers.Application;
+using Agw.Providers.Application.Facades;
+using Agw.Providers.Contracts.References;
 using Agw.Providers.Domain.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -17,6 +19,7 @@ public static class DependencyInjection
         services.AddScoped<IProviderAppService, ProviderAppService>();
         services.AddScoped<IModelProviderAppService, ModelProviderAppService>();
         services.AddScoped<IProviderModelDiscoveryService, ProviderModelDiscoveryService>();
+        services.AddScoped<IModelProviderReferenceFacade, ModelProviderReferenceFacade>();
 
         return services;
     }

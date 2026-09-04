@@ -427,20 +427,29 @@ public class AgentCapabilityComposerTests
 
     private static AgentAppService CreateAgentAppService(AgwDbContext dbContext)
     {
+        var connectionRepository = new EfRepository<Connection>(dbContext);
+        var modelProviderRepository = new EfRepository<ModelProviderRelation>(dbContext);
+        var modelRepository = new EfRepository<AgwAiModel>(dbContext);
+        var providerRepository = new EfRepository<Provider>(dbContext);
+        var skillRepository = new EfRepository<Skill>(dbContext);
+        var userInfo = new TestUserInfoService();
         return new AgentAppService(
             new EfRepository<Agent>(dbContext),
             new EfRepository<AgentConnectionRelation>(dbContext),
-            new EfRepository<Connection>(dbContext),
-            new EfRepository<ModelProviderRelation>(dbContext),
-            new EfRepository<AgwAiModel>(dbContext),
-            new EfRepository<Provider>(dbContext),
+            new TestConnectionReferenceFacade(connectionRepository, userInfo),
+            new TestModelProviderReferenceFacade(
+                modelProviderRepository,
+                modelRepository,
+                providerRepository,
+                userInfo
+            ),
             new EfRepository<McpServer>(dbContext),
             new EfRepository<AgentMcpServerRelation>(dbContext),
-            new EfRepository<Skill>(dbContext),
+            new TestSkillReferenceFacade(skillRepository, userInfo),
             new EfRepository<AgentSkillRelation>(dbContext),
             dbContext,
             new AgentDomainService(TimeProvider.System),
-            new TestUserInfoService()
+            userInfo
         );
     }
 

@@ -12,6 +12,7 @@ using Agw.Infrastructure.Jobs;
 using Agw.Infrastructure.Projects;
 using Agw.Infrastructure.Repositories;
 using Agw.Infrastructure.Skills;
+using Agw.Infrastructure.Tools;
 using Agw.Integrations.Application.Persistence;
 using Agw.Jobs.Application.Persistence;
 using Agw.Jobs.Scheduling;
@@ -119,6 +120,7 @@ public static class DependencyInjection
         services.AddScoped<IAgentflowCheckpointPersistence, AgentflowCheckpointPersistence>();
         services.AddScoped<IAgentSessionStatePersistence, AgentSessionStatePersistence>();
         services.AddScoped<IProjectDeletionCoordinator, ProjectDeletionCoordinator>();
+        services.AddScoped<IProjectMemoryPersistence, ProjectMemoryPersistence>();
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
         services.AddScoped<JobRepo>();
         services.AddScoped<IRepository<Job>, JobRepo>(sp => sp.GetRequiredService<JobRepo>());

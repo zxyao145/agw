@@ -1,5 +1,7 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Projects;
+using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,7 +17,11 @@ public sealed class AgentflowCheckpointPersistence : IAgentflowCheckpointPersist
     }
 
     public async Task<TResult> ExecuteAsync<TResult>(
-        Func<IAgentflowCheckpointPersistenceSession, CancellationToken, Task<TResult>> operation,
+        Func<
+            IAgentflowCheckpointPersistenceSession,
+            CancellationToken,
+            Task<AgentflowCheckpointPersistenceResult<TResult>>
+        > operation,
         CancellationToken cancellationToken = default
     )
     {
@@ -25,10 +31,37 @@ public sealed class AgentflowCheckpointPersistence : IAgentflowCheckpointPersist
             .Database.BeginTransactionAsync(cancellationToken)
             .ConfigureAwait(false);
         var result = await operation(new Session(_dbContext), cancellationToken).ConfigureAwait(false);
+        if (!result.Commit)
+        {
+            return result.Result;
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-        return result;
+        return result.Result;
     }
+
+    public Task<AgentflowCheckpointRecord?> FindCheckpointAsync(
+        Guid occurrenceId,
+        CancellationToken cancellationToken = default
+    ) =>
+        _dbContext
+            .AgentflowCheckpoints.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == occurrenceId, cancellationToken);
+
+    public Task<bool> ProjectConversationExistsAsync(
+        Guid projectId,
+        Guid conversationId,
+        string contextId,
+        string ownerUserId,
+        CancellationToken cancellationToken = default
+    ) =>
+        _dbContext
+            .OwnedProjectConversations(projectId, ownerUserId)
+            .AnyAsync(
+                conversation => conversation.Id == conversationId && conversation.ContextId == contextId,
+                cancellationToken
+            );
 
     private sealed class Session : IAgentflowCheckpointPersistenceSession
     {
@@ -40,27 +73,6 @@ public sealed class AgentflowCheckpointPersistence : IAgentflowCheckpointPersist
         }
 
         public IAgentsDbContext Agents => _dbContext;
-
-        public Task<bool> ProjectConversationExistsAsync(
-            Guid projectId,
-            Guid conversationId,
-            string contextId,
-            string ownerUserId,
-            CancellationToken cancellationToken = default
-        ) =>
-            _dbContext
-                .ProjectConversations.AsNoTracking()
-                .AnyAsync(
-                    conversation =>
-                        conversation.Id == conversationId
-                        && conversation.ProjectId == projectId
-                        && conversation.ContextId == contextId
-                        && conversation.CreateBy == ownerUserId
-                        && _dbContext.Projects.Any(project =>
-                            project.Id == conversation.ProjectId && project.CreateBy == ownerUserId
-                        ),
-                    cancellationToken
-                );
 
         public async Task<long> GetLastConversationSequenceAsync(
             Guid conversationId,

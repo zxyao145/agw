@@ -118,6 +118,12 @@ public class InfrastructureRegistrationTests
                 descriptor.ServiceType == typeof(IProjectDeletionCoordinator)
                 && descriptor.Lifetime == ServiceLifetime.Scoped
         );
+        Assert.Contains(
+            services,
+            descriptor =>
+                descriptor.ServiceType == typeof(IProjectMemoryPersistence)
+                && descriptor.Lifetime == ServiceLifetime.Scoped
+        );
     }
 
     [Fact]

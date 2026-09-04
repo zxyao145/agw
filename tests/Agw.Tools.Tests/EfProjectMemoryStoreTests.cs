@@ -1,8 +1,10 @@
 using System.Security.Claims;
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Tools;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
+using Agw.Tools.Application.Persistence;
 using Agw.Tools.ToolBlocks.Storage;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -33,7 +35,8 @@ public sealed class EfProjectMemoryStoreTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<AgwDbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectMemoryPersistence, ProjectMemoryPersistence>();
         await using var serviceProvider = services.BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var projectId = Guid.CreateVersion7();
@@ -63,7 +66,8 @@ public sealed class EfProjectMemoryStoreTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<AgwDbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectMemoryPersistence, ProjectMemoryPersistence>();
         await using var serviceProvider = services.BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var firstProjectId = Guid.CreateVersion7();
@@ -92,7 +96,8 @@ public sealed class EfProjectMemoryStoreTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<AgwDbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectMemoryPersistence, ProjectMemoryPersistence>();
         await using var serviceProvider = services.BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var projectId = Guid.CreateVersion7();
@@ -134,7 +139,8 @@ public sealed class EfProjectMemoryStoreTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<AgwDbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectMemoryPersistence, ProjectMemoryPersistence>();
         await using var serviceProvider = services.BuildServiceProvider();
         var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
         var applicationLock = new InMemoryApplicationLock();
@@ -160,6 +166,51 @@ public sealed class EfProjectMemoryStoreTests : IDisposable
             directoryFirstStore.WriteAsync("foo", "file", cancellationToken)
         );
         Assert.Equal(ErrorCodes.InvalidParam.Code, ancestorException.Code);
+    }
+
+    [Fact]
+    public async Task WriteAsync_ProjectOwnedByAnotherUser_ThrowsNotFoundWithoutCreatingMemory()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options;
+        var projectId = Guid.CreateVersion7();
+        await using (var database = new AgwDbContext(options))
+        {
+            await database.Database.EnsureCreatedAsync(cancellationToken);
+            database.Projects.Add(
+                new Project
+                {
+                    Id = projectId,
+                    Name = "foreign-project",
+                    CreateBy = "foreign",
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                }
+            );
+            await database.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<AgwDbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectMemoryPersistence, ProjectMemoryPersistence>();
+        await using var serviceProvider = services.BuildServiceProvider();
+        var store = new EfProjectMemoryStore(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            TimeProvider.System,
+            projectId
+        );
+
+        // Act
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            store.WriteAsync("notes.md", "foreign content", cancellationToken)
+        );
+
+        // Assert
+        Assert.Equal(ErrorCodes.ResourceNotFound.Code, exception.Code);
+        await using var verification = new AgwDbContext(options);
+        Assert.Empty(await verification.ProjectMemories.ToListAsync(cancellationToken));
     }
 
     private static async Task SeedProjectsAsync(

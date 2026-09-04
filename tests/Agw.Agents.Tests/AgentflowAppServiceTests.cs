@@ -245,13 +245,21 @@ public sealed class AgentflowAppServiceTests
         Assert.True((await dbContext.Agentflows.AsNoTracking().SingleAsync(cancellationToken)).Enable);
     }
 
-    private static AgentflowAppService CreateService(AgwDbContext dbContext) =>
-        new(
+    private static AgentflowAppService CreateService(AgwDbContext dbContext)
+    {
+        var userInfo = new TestUserInfoService();
+        return new AgentflowAppService(
             dbContext,
-            new EfRepository<ModelProviderRelation>(dbContext),
+            new TestModelProviderReferenceFacade(
+                new EfRepository<ModelProviderRelation>(dbContext),
+                new EfRepository<AgwAiModel>(dbContext),
+                new EfRepository<Provider>(dbContext),
+                userInfo
+            ),
             new TestTimeProvider(UtcNow),
-            new TestUserInfoService()
+            userInfo
         );
+    }
 
     private static async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken)
     {

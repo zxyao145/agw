@@ -137,6 +137,9 @@ public sealed class AgentSessionStateStore
             return;
         }
 
+        await using var lifecycleLease = await _applicationLock!
+            .AcquireAsync(ProjectLifecycleLock.GetResourceName(sessionScope.ProjectId), cancellationToken)
+            .ConfigureAwait(false);
         var projectConversationId = await ResolveProjectConversationIdAsync(sessionScope, cancellationToken)
             .ConfigureAwait(false);
         if (!projectConversationId.HasValue)

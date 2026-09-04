@@ -58,7 +58,8 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Jobs",
                 "Agw.Projects",
                 "Agw.Providers",
-                "Agw.Skills"
+                "Agw.Skills",
+                "Agw.Tools"
             ),
 
             ["Agw.Agents"] = Set(
@@ -92,7 +93,9 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Auth",
                 "Agw.Data",
                 "Agw.Files",
+                "Agw.Integrations",
                 "Agw.Projects.Contracts",
+                "Agw.Skills",
                 "Agw.Shared"
             ),
             ["Agw.Projects.Contracts"] = Set("Agw.Shared"),
@@ -604,19 +607,7 @@ public sealed partial class BackendArchitectureTests
     };
 
     private static readonly IReadOnlyDictionary<string, int> AllowedLegacyForeignPersistenceAccessCounts =
-        new Dictionary<string, int>(StringComparer.Ordinal)
-        {
-            ["Agw.Agents/Definitions/Agents/AgentAppService.cs:IRepository<AgwAiModel>"] = 2,
-            ["Agw.Agents/Definitions/Agents/AgentAppService.cs:IRepository<Connection>"] = 2,
-            ["Agw.Agents/Definitions/Agents/AgentAppService.cs:IRepository<ModelProviderRelation>"] = 2,
-            ["Agw.Agents/Definitions/Agents/AgentAppService.cs:IRepository<Provider>"] = 2,
-            ["Agw.Agents/Definitions/Agents/AgentAppService.cs:IRepository<Skill>"] = 2,
-            ["Agw.Agents/Definitions/Agents/AgentSuggestionAppService.cs:IRepository<Skill>"] = 2,
-            ["Agw.Agents/Definitions/Agents/AgentflowAppService.cs:IRepository<ModelProviderRelation>"] = 2,
-            ["Agw.Projects/Application/ProjectAppService.cs:IRepository<Connection>"] = 2,
-            ["Agw.Projects/Application/ProjectAppService.cs:IRepository<Skill>"] = 2,
-            ["Agw.Tools/ToolBlocks/Storage/EfProjectMemoryStore.cs:DbSet<Project>"] = 2,
-        };
+        new Dictionary<string, int>(StringComparer.Ordinal);
 
     private static readonly IReadOnlyDictionary<string, string> LegacyCrossModuleServiceOwners = new Dictionary<
         string,

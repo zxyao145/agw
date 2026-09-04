@@ -1,16 +1,22 @@
+using Agw.Shared.Data.Entities.Executions;
+
 namespace Agw.Agents.Application.Persistence;
 
 public interface IAgentflowCheckpointPersistence
 {
     Task<TResult> ExecuteAsync<TResult>(
-        Func<IAgentflowCheckpointPersistenceSession, CancellationToken, Task<TResult>> operation,
+        Func<
+            IAgentflowCheckpointPersistenceSession,
+            CancellationToken,
+            Task<AgentflowCheckpointPersistenceResult<TResult>>
+        > operation,
         CancellationToken cancellationToken = default
     );
-}
 
-public interface IAgentflowCheckpointPersistenceSession
-{
-    IAgentsDbContext Agents { get; }
+    Task<AgentflowCheckpointRecord?> FindCheckpointAsync(
+        Guid occurrenceId,
+        CancellationToken cancellationToken = default
+    );
 
     Task<bool> ProjectConversationExistsAsync(
         Guid projectId,
@@ -19,6 +25,13 @@ public interface IAgentflowCheckpointPersistenceSession
         string ownerUserId,
         CancellationToken cancellationToken = default
     );
+}
+
+public sealed record AgentflowCheckpointPersistenceResult<TResult>(TResult Result, bool Commit);
+
+public interface IAgentflowCheckpointPersistenceSession
+{
+    IAgentsDbContext Agents { get; }
 
     Task<long> GetLastConversationSequenceAsync(Guid conversationId, CancellationToken cancellationToken = default);
 

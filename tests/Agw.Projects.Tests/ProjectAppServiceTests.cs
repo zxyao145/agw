@@ -3,6 +3,7 @@ using Agw.Files.Abstracts;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Projects;
 using Agw.Infrastructure.Repositories;
+using Agw.Integrations.Application.Facades;
 using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Agents;
@@ -10,6 +11,7 @@ using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
+using Agw.Skills.Application.Facades;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -499,9 +501,9 @@ public class ProjectAppServiceTests : IDisposable
             new EfRepository<ProjectMcpServerRelation>(dbContext),
             new TestAgentCatalogFacade(new EfRepository<McpServer>(dbContext)),
             new EfRepository<ProjectSkillRelation>(dbContext),
-            new EfRepository<Skill>(dbContext),
+            new SkillReferenceFacade(dbContext, userInfo),
             new EfRepository<ProjectConnectionRelation>(dbContext),
-            new EfRepository<Connection>(dbContext),
+            new ConnectionReferenceFacade(dbContext, userInfo),
             deletionCoordinator ?? new ProjectDeletionCoordinator(dbContext),
             dbContext,
             new ProjectDomainService(TimeProvider.System),

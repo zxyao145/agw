@@ -266,6 +266,9 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
         contextId = ContextIdUtil.NormalizeContextId(contextId);
 
+        await using var lifecycleLease = await _applicationLock
+            .AcquireAsync(ProjectLifecycleLock.GetResourceName(projectId), cancellationToken)
+            .ConfigureAwait(false);
         await using var mutationLease = await _applicationLock
             .AcquireAsync($"conversation-history:{projectId:D}:{contextId}", cancellationToken)
             .ConfigureAwait(false);

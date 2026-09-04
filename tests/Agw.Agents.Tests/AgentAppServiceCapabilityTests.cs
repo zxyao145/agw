@@ -140,21 +140,30 @@ public class AgentAppServiceCapabilityTests
             .Distinct()
             .Select(id => new Agent { Id = id, CreateBy = "tester" })
             .ToArray();
+        var connectionRepository = new TestRepository<Connection>();
+        var modelProviderRepository = new TestRepository<ModelProviderRelation>();
+        var modelRepository = new TestRepository<AgwAiModel>();
+        var providerRepository = new TestRepository<Provider>();
+        var skillRepository = new TestRepository<Skill>(skillItems);
+        var userInfo = new TestUserInfoService();
 
         return new AgentAppService(
             new TestRepository<Agent>(agents),
             new TestRepository<AgentConnectionRelation>(),
-            new TestRepository<Connection>(),
-            new TestRepository<ModelProviderRelation>(),
-            new TestRepository<AgwAiModel>(),
-            new TestRepository<Provider>(),
+            new TestConnectionReferenceFacade(connectionRepository, userInfo),
+            new TestModelProviderReferenceFacade(
+                modelProviderRepository,
+                modelRepository,
+                providerRepository,
+                userInfo
+            ),
             new TestRepository<McpServer>(serverItems),
             new TestRepository<AgentMcpServerRelation>(mcpRelations),
-            new TestRepository<Skill>(skillItems),
+            new TestSkillReferenceFacade(skillRepository, userInfo),
             new TestRepository<AgentSkillRelation>(skillRelations),
             new TestUnitOfWork(),
             new AgentDomainService(TimeProvider.System),
-            new TestUserInfoService()
+            userInfo
         );
     }
 

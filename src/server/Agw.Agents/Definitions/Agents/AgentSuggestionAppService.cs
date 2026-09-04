@@ -3,9 +3,9 @@ using Agw.Agents.ExternalAgents;
 using Agw.Auth.Contracts;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
+using Agw.Skills.Contracts.References;
 using Agw.Tools;
 
 namespace Agw.Agents.Definitions.Agents;
@@ -14,21 +14,21 @@ public class AgentSuggestionAppService
 {
     private readonly IRepository<Agent> _agentRepository;
     private readonly IProjectRuntimeFacade _projects;
-    private readonly IRepository<Skill> _skillRepository;
+    private readonly ISkillReferenceFacade _skillReferences;
     private readonly ToolRegistryService _toolRegistryService;
     private readonly IUserInfoService _userInfoService;
 
     public AgentSuggestionAppService(
         IRepository<Agent> agentRepository,
         IProjectRuntimeFacade projects,
-        IRepository<Skill> skillRepository,
+        ISkillReferenceFacade skillReferences,
         ToolRegistryService toolRegistryService,
         IUserInfoService userInfoService
     )
     {
         _agentRepository = agentRepository;
         _projects = projects;
-        _skillRepository = skillRepository;
+        _skillReferences = skillReferences;
         _toolRegistryService = toolRegistryService;
         _userInfoService = userInfoService;
     }
@@ -71,9 +71,7 @@ public class AgentSuggestionAppService
         var skillIds = relatedSkillIds.Where(id => id != Guid.Empty).Distinct().ToArray();
         if (skillIds.Length > 0)
         {
-            var skills = await _skillRepository.ListAsync(skill =>
-                skillIds.Contains(skill.Id) && (skill.Kind == SkillKind.BuiltIn || skill.CreateBy == ownerUserId)
-            );
+            var skills = await _skillReferences.DescribeVisibleSkillsAsync(skillIds).ConfigureAwait(false);
             suggestions.AddRange(
                 skills
                     .Where(skill => !string.IsNullOrWhiteSpace(skill.Name))

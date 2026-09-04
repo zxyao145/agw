@@ -1,5 +1,6 @@
 using System.ClientModel;
 using Agw.Agents.Definitions.Agents;
+using Agw.Providers.Contracts.References;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Exceptions;
 using Anthropic;
@@ -52,7 +53,7 @@ public sealed class SummaryChatClientFactory : ISummaryChatClientFactory
 
     private static IChatClient CreateOpenAiClient(
         AgentModelRuntimeConfiguration configuration,
-        ProviderAuthConfig authConfig
+        ProviderAuthConfigSnapshot authConfig
     )
     {
         var client = new OpenAIClient(
@@ -64,7 +65,7 @@ public sealed class SummaryChatClientFactory : ISummaryChatClientFactory
 
     private static IChatClient CreateAnthropicClient(
         AgentModelRuntimeConfiguration configuration,
-        ProviderAuthConfig authConfig
+        ProviderAuthConfigSnapshot authConfig
     )
     {
         var client = new AnthropicClient(
@@ -73,7 +74,7 @@ public sealed class SummaryChatClientFactory : ISummaryChatClientFactory
         return client.AsIChatClient(configuration.Model.Name);
     }
 
-    private static string ResolveApiKey(ProviderAuthConfig authConfig)
+    private static string ResolveApiKey(ProviderAuthConfigSnapshot authConfig)
     {
         return authConfig.ApiKey!;
     }

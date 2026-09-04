@@ -1,6 +1,8 @@
 using System.Security.Claims;
 using Agw.Agents.Execution.Connections;
 using Agw.Auth.Contracts;
+using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -89,14 +91,20 @@ internal sealed class DurableExecutionStore
 {
     private readonly DbContext _dbContext;
     private readonly TimeProvider _timeProvider;
+    private readonly IApplicationLock _applicationLock;
 
     /// <summary>
     /// 创建使用当前 scope DbContext 和统一时钟的 execution 状态仓储。
     /// </summary>
-    public DurableExecutionStore(DbContext dbContext, TimeProvider timeProvider)
+    public DurableExecutionStore(
+        DbContext dbContext,
+        TimeProvider timeProvider,
+        IApplicationLock? applicationLock = null
+    )
     {
         _dbContext = dbContext;
         _timeProvider = timeProvider;
+        _applicationLock = applicationLock ?? InMemoryApplicationLock.Shared;
     }
 
     /// <summary>
@@ -146,6 +154,9 @@ internal sealed class DurableExecutionStore
             Settings = DurableExecutionSettings.FromSettings(settings),
         };
         var manifestJson = DurableExecutionJson.Serialize(manifest);
+        await using var lifecycleLease = await _applicationLock
+            .AcquireAsync(ProjectLifecycleLock.GetResourceName(task.ProjectId), cancellationToken)
+            .ConfigureAwait(false);
         DurableExecutionRecord? existing;
         using (UserInfoUtil.PushSystemScope())
         {

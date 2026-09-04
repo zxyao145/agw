@@ -1,5 +1,6 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Projects;
 using Agw.Shared.Data.Entities.Agents;
 using Microsoft.EntityFrameworkCore;
 
@@ -22,7 +23,7 @@ public sealed class AgentSessionStatePersistence : IAgentSessionStatePersistence
         CancellationToken cancellationToken = default
     )
     {
-        var query = OwnedProjectConversations(projectId, ownerUserId);
+        var query = _dbContext.OwnedProjectConversations(projectId, ownerUserId);
         query =
             projectConversationId.HasValue && projectConversationId.Value != Guid.Empty
                 ? query.Where(conversation => conversation.Id == projectConversationId.Value)
@@ -41,28 +42,21 @@ public sealed class AgentSessionStatePersistence : IAgentSessionStatePersistence
         string agentflowNodeId,
         string ownerUserId,
         CancellationToken cancellationToken = default
-    )
-    {
-        if (
-            !await OwnedProjectConversations(projectId, ownerUserId)
-                .AnyAsync(conversation => conversation.Id == projectConversationId, cancellationToken)
-                .ConfigureAwait(false)
-        )
-        {
-            return null;
-        }
-
-        return await _dbContext
+    ) =>
+        await _dbContext
             .AgentSessionStates.AsNoTracking()
             .Where(entry =>
                 entry.ProjectConversationId == projectConversationId
                 && entry.AgentId == agentId
                 && entry.AgentflowNodeId == agentflowNodeId
+                && entry.Agent!.CreateBy == ownerUserId
+                && entry.ProjectConversation!.ProjectId == projectId
+                && entry.ProjectConversation.CreateBy == ownerUserId
+                && entry.ProjectConversation.Project!.CreateBy == ownerUserId
             )
             .Select(entry => entry.SerializedSession)
             .SingleOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
-    }
 
     public async Task<bool> SaveAsync(
         Guid projectId,
@@ -79,7 +73,8 @@ public sealed class AgentSessionStatePersistence : IAgentSessionStatePersistence
             .Database.BeginTransactionAsync(cancellationToken)
             .ConfigureAwait(false);
         if (
-            !await OwnedProjectConversations(projectId, ownerUserId)
+            !await _dbContext
+                .OwnedProjectConversations(projectId, ownerUserId)
                 .AnyAsync(conversation => conversation.Id == projectConversationId, cancellationToken)
                 .ConfigureAwait(false)
         )
@@ -125,18 +120,4 @@ public sealed class AgentSessionStatePersistence : IAgentSessionStatePersistence
             .Select(agent => (AgentType?)agent.Type)
             .SingleOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
-
-    private IQueryable<Agw.Shared.Data.Entities.Projects.ProjectConversation> OwnedProjectConversations(
-        Guid projectId,
-        string ownerUserId
-    ) =>
-        _dbContext
-            .ProjectConversations.AsNoTracking()
-            .Where(conversation =>
-                conversation.ProjectId == projectId
-                && conversation.CreateBy == ownerUserId
-                && _dbContext.Projects.Any(project =>
-                    project.Id == conversation.ProjectId && project.CreateBy == ownerUserId
-                )
-            );
 }

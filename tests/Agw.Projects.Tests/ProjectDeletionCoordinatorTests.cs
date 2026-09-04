@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Projects;
 using Agw.Projects.Application.Persistence;
@@ -10,6 +11,7 @@ using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Agw.Projects.Tests;
 
@@ -29,12 +31,19 @@ public sealed class ProjectDeletionCoordinatorTests
         var otherProjectId = Guid.CreateVersion7();
         var otherConversationId = Guid.CreateVersion7();
         var jobId = await SeedProjectGraphAsync(options, projectId, conversationId, "tester", "context-1");
+        var executionId = await SeedDurableExecutionAsync(options, projectId, conversationId, "tester");
         var otherJobId = await SeedProjectGraphAsync(
             options,
             otherProjectId,
             otherConversationId,
             "other-user",
             "context-2"
+        );
+        var otherExecutionId = await SeedDurableExecutionAsync(
+            options,
+            otherProjectId,
+            otherConversationId,
+            "other-user"
         );
         await using var dbContext = new AgwDbContext(options);
         var coordinator = new ProjectDeletionCoordinator(dbContext);
@@ -115,6 +124,22 @@ public sealed class ProjectDeletionCoordinatorTests
             job => job.ProjectId == otherProjectId
         );
         Assert.Contains(await assertContext.JobLogs.ToListAsync(cancellationToken), log => log.JobId == otherJobId);
+        Assert.DoesNotContain(
+            await assertContext.DurableExecutions.ToListAsync(cancellationToken),
+            execution => execution.Id == executionId
+        );
+        Assert.DoesNotContain(
+            await assertContext.DurableExecutionEvents.ToListAsync(cancellationToken),
+            entry => entry.ExecutionId == executionId
+        );
+        Assert.Contains(
+            await assertContext.DurableExecutions.ToListAsync(cancellationToken),
+            execution => execution.Id == otherExecutionId
+        );
+        Assert.Contains(
+            await assertContext.DurableExecutionEvents.ToListAsync(cancellationToken),
+            entry => entry.ExecutionId == otherExecutionId
+        );
         Assert.Contains(
             await assertContext.ProjectConversations.ToListAsync(cancellationToken),
             conversation => conversation.Id == otherConversationId
@@ -173,6 +198,114 @@ public sealed class ProjectDeletionCoordinatorTests
         Assert.Contains(
             await assertContext.AgentflowNodeExecutionTraces.ToListAsync(cancellationToken),
             trace => trace.ProjectId == projectId
+        );
+    }
+
+    [Fact]
+    public async Task DeleteConversationAsync_DurableExecutionForConversation_RemovesExecutionAndStreamEntries()
+    {
+        // Arrange
+        using var userScope = PushUser("tester");
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = await OpenConnectionAsync();
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options);
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        await SeedProjectGraphAsync(options, projectId, conversationId, "tester", "context-1");
+        var executionId = await SeedDurableExecutionAsync(options, projectId, conversationId, "tester");
+        var otherConversationId = Guid.CreateVersion7();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.ProjectConversations.Add(
+                new ProjectConversation
+                {
+                    Id = otherConversationId,
+                    ProjectId = projectId,
+                    ContextId = "context-2",
+                    Title = "context-2",
+                    CreateBy = "tester",
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                }
+            );
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+        var otherExecutionId = await SeedDurableExecutionAsync(options, projectId, otherConversationId, "tester");
+        await using var dbContext = new AgwDbContext(options);
+        var coordinator = new ProjectDeletionCoordinator(dbContext);
+
+        // Act
+        var deleted = await coordinator.DeleteConversationAsync(
+            new ProjectConversationDeletionTarget(projectId, conversationId, "context-1", "tester"),
+            cancellationToken
+        );
+
+        // Assert
+        Assert.True(deleted);
+        using var systemScope = UserInfoUtil.PushSystemScope();
+        await using var assertContext = new AgwDbContext(options);
+        Assert.DoesNotContain(
+            await assertContext.DurableExecutions.ToListAsync(cancellationToken),
+            execution => execution.Id == executionId
+        );
+        Assert.DoesNotContain(
+            await assertContext.DurableExecutionEvents.ToListAsync(cancellationToken),
+            entry => entry.ExecutionId == executionId
+        );
+        Assert.Contains(
+            await assertContext.DurableExecutions.ToListAsync(cancellationToken),
+            execution => execution.Id == otherExecutionId
+        );
+        Assert.Contains(
+            await assertContext.DurableExecutionEvents.ToListAsync(cancellationToken),
+            entry => entry.ExecutionId == otherExecutionId
+        );
+        Assert.Contains(
+            await assertContext.Projects.ToListAsync(cancellationToken),
+            project => project.Id == projectId
+        );
+    }
+
+    [Fact]
+    public async Task DeleteProjectAsync_InvalidDurableManifest_LogsExecutionIdWithoutManifestContent()
+    {
+        // Arrange
+        using var userScope = PushUser("tester");
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = await OpenConnectionAsync();
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options);
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        await SeedProjectGraphAsync(options, projectId, conversationId, "tester", "context-1");
+        const string invalidManifest = "sensitive-invalid-manifest";
+        var executionId = await SeedDurableExecutionAsync(
+            options,
+            projectId,
+            conversationId,
+            "tester",
+            invalidManifest
+        );
+        await using var dbContext = new AgwDbContext(options);
+        var logger = new ListLogger<ProjectDeletionCoordinator>();
+        var coordinator = new ProjectDeletionCoordinator(dbContext, logger: logger);
+
+        // Act
+        var deleted = await coordinator.DeleteProjectAsync(
+            new ProjectDeletionTarget(projectId, "tester"),
+            cancellationToken
+        );
+
+        // Assert
+        Assert.True(deleted);
+        var warning = Assert.Single(logger.Messages);
+        Assert.Contains(executionId.ToString(), warning, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(invalidManifest, warning, StringComparison.Ordinal);
+        using var systemScope = UserInfoUtil.PushSystemScope();
+        await using var assertContext = new AgwDbContext(options);
+        Assert.Contains(
+            await assertContext.DurableExecutions.ToListAsync(cancellationToken),
+            execution => execution.Id == executionId
         );
     }
 
@@ -431,6 +564,50 @@ public sealed class ProjectDeletionCoordinatorTests
         return jobId;
     }
 
+    private static async Task<Guid> SeedDurableExecutionAsync(
+        DbContextOptions<AgwDbContext> options,
+        Guid projectId,
+        Guid conversationId,
+        string ownerUserId,
+        string? manifestJson = null
+    )
+    {
+        await using var context = new AgwDbContext(options);
+        var executionId = Guid.CreateVersion7();
+        var now = TimeProvider.System.GetUtcNow();
+        context.DurableExecutions.Add(
+            new DurableExecutionRecord
+            {
+                Id = executionId,
+                UserId = ownerUserId,
+                ManifestJson =
+                    manifestJson
+                    ?? JsonSerializer.Serialize(
+                        new { task = new { projectId, projectConversationId = conversationId } }
+                    ),
+                Status = DurableExecutionStatus.Queued,
+                StateChangedAt = now,
+                StateVersion = Guid.CreateVersion7(),
+                CreateBy = ownerUserId,
+                CreateTime = now,
+                UpdateBy = ownerUserId,
+                UpdateTime = now,
+            }
+        );
+        context.DurableExecutionEvents.Add(
+            new DurableExecutionEventRecord
+            {
+                Id = Guid.CreateVersion7(),
+                ExecutionId = executionId,
+                SegmentIndex = 0,
+                Sequence = 0,
+                PayloadJson = "{}",
+            }
+        );
+        await context.SaveChangesAsync(TestContext.Current.CancellationToken);
+        return executionId;
+    }
+
     private static async Task<SqliteConnection> OpenConnectionAsync()
     {
         var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=False");
@@ -453,4 +630,28 @@ public sealed class ProjectDeletionCoordinatorTests
                 new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], authenticationType: "Test")
             )
         );
+
+    private sealed class ListLogger<T> : ILogger<T>
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter
+        )
+        {
+            if (logLevel == LogLevel.Warning)
+            {
+                Messages.Add(formatter(state, exception));
+            }
+        }
+    }
 }

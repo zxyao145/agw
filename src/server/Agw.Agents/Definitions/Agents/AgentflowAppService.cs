@@ -2,11 +2,10 @@ using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Domain.Behaviors;
 using Agw.Agents.Definitions.Domain.Policies;
 using Agw.Auth.Contracts;
+using Agw.Providers.Contracts.References;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Pagination;
-using Agw.Shared.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Agents.Definitions.Agents;
@@ -14,19 +13,19 @@ namespace Agw.Agents.Definitions.Agents;
 public class AgentflowAppService
 {
     private readonly IAgentsDbContext _dbContext;
-    private readonly IRepository<ModelProviderRelation> _modelProviderRepository;
+    private readonly IModelProviderReferenceFacade _modelProviderReferences;
     private readonly TimeProvider _timeProvider;
     private readonly IUserInfoService _userInfoService;
 
     public AgentflowAppService(
         IAgentsDbContext dbContext,
-        IRepository<ModelProviderRelation> modelProviderRepository,
+        IModelProviderReferenceFacade modelProviderReferences,
         TimeProvider timeProvider,
         IUserInfoService userInfoService
     )
     {
         _dbContext = dbContext;
-        _modelProviderRepository = modelProviderRepository;
+        _modelProviderReferences = modelProviderReferences;
         _timeProvider = timeProvider;
         _userInfoService = userInfoService;
     }
@@ -93,7 +92,7 @@ public class AgentflowAppService
         var candidateId = agentflow.Id == Guid.Empty ? Guid.CreateVersion7() : agentflow.Id;
         var existingAgents = await ListExistingAgentsAsync(nodes, user);
         var existingAgentflows = await ListExistingAgentflowsAsync(nodes, user, candidateId);
-        var existingModelProviderIds = await ListExistingModelProviderIdsAsync(agentflow.SummaryModelProviderId, user);
+        var existingModelProviderIds = await ListExistingModelProviderIdsAsync(agentflow.SummaryModelProviderId);
         var definitionPolicy = new AgentflowDefinitionPolicy();
         var decision = definitionPolicy.Evaluate(
             nodes,
@@ -162,10 +161,7 @@ public class AgentflowAppService
 
             var existingAgents = await ListExistingAgentsAsync(nodes, user);
             var existingAgentflows = await ListExistingAgentflowsAsync(nodes, user, existing.Id);
-            var existingModelProviderIds = await ListExistingModelProviderIdsAsync(
-                existing.SummaryModelProviderId,
-                user
-            );
+            var existingModelProviderIds = await ListExistingModelProviderIdsAsync(existing.SummaryModelProviderId);
             var definitionPolicy = new AgentflowDefinitionPolicy();
             var decision = definitionPolicy.Evaluate(
                 nodes,
@@ -282,20 +278,16 @@ public class AgentflowAppService
         return existingAgents.ToDictionary(x => x.Id, x => x.Name);
     }
 
-    private async Task<IReadOnlyCollection<Guid>> ListExistingModelProviderIdsAsync(
-        Guid? modelProviderId,
-        string ownerUserId
-    )
+    private async Task<IReadOnlyCollection<Guid>> ListExistingModelProviderIdsAsync(Guid? modelProviderId)
     {
         if (!modelProviderId.HasValue)
         {
             return Array.Empty<Guid>();
         }
 
-        var existing = await _modelProviderRepository.Queryable.FirstOrDefaultAsync(item =>
-            item.Id == modelProviderId.Value && item.CreateBy == ownerUserId
-        );
-        return existing == null ? Array.Empty<Guid>() : [existing.Id];
+        return await _modelProviderReferences
+            .FilterVisibleModelProviderIdsAsync([modelProviderId.Value])
+            .ConfigureAwait(false);
     }
 
     private async Task<IReadOnlyCollection<Guid>> ListExistingAgentflowsAsync(

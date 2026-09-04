@@ -4,12 +4,14 @@ using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Definitions.Domain;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
+using Agw.Integrations.Application.Facades;
 using Agw.Projects.Tests;
+using Agw.Providers.Application.Facades;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;
-using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
+using Agw.Skills.Application.Facades;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -311,13 +313,11 @@ public class AgentConnectionRelationTests : IDisposable
             new(
                 new EfRepository<Agent>(dbContext),
                 new EfRepository<AgentConnectionRelation>(dbContext),
-                new EfRepository<Connection>(dbContext),
-                new EfRepository<ModelProviderRelation>(dbContext),
-                new EfRepository<AgwAiModel>(dbContext),
-                new EfRepository<Provider>(dbContext),
+                new ConnectionReferenceFacade(dbContext, userInfo),
+                new ModelProviderReferenceFacade(dbContext, userInfo),
                 new EfRepository<McpServer>(dbContext),
                 new EfRepository<AgentMcpServerRelation>(dbContext),
-                new EfRepository<Skill>(dbContext),
+                new SkillReferenceFacade(dbContext, userInfo),
                 new EfRepository<AgentSkillRelation>(dbContext),
                 dbContext,
                 new AgentDomainService(TimeProvider.System),

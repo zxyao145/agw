@@ -1,25 +1,39 @@
+using System.Text.Json;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Application.Persistence;
+using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Infrastructure.Projects;
 
 public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
 {
     private readonly AgwDbContext _dbContext;
+    private readonly IApplicationLock _applicationLock;
+    private readonly ILogger<ProjectDeletionCoordinator> _logger;
 
-    public ProjectDeletionCoordinator(AgwDbContext dbContext)
+    public ProjectDeletionCoordinator(
+        AgwDbContext dbContext,
+        IApplicationLock? applicationLock = null,
+        ILogger<ProjectDeletionCoordinator>? logger = null
+    )
     {
         _dbContext = dbContext;
+        _applicationLock = applicationLock ?? InMemoryApplicationLock.Shared;
+        _logger = logger ?? NullLogger<ProjectDeletionCoordinator>.Instance;
     }
 
     public Task<bool> ClearConversationRecordsAsync(
         ProjectConversationDeletionTarget target,
         CancellationToken cancellationToken = default
     ) =>
-        ExecuteAsync(
+        ExecuteProjectAsync(
+            target.ProjectId,
             async token =>
             {
                 if (!await ConversationExistsAsync(target, token).ConfigureAwait(false))
@@ -54,7 +68,8 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
         ProjectConversationDeletionTarget target,
         CancellationToken cancellationToken = default
     ) =>
-        ExecuteAsync(
+        ExecuteProjectAsync(
+            target.ProjectId,
             async token =>
             {
                 if (!await ConversationExistsAsync(target, token).ConfigureAwait(false))
@@ -62,6 +77,8 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
                     return false;
                 }
 
+                await DeleteDurableExecutionsAsync(target.ProjectId, target.ConversationId, target.OwnerUserId, token)
+                    .ConfigureAwait(false);
                 await DeleteConversationDependentsAsync([target.ConversationId], token).ConfigureAwait(false);
                 await _dbContext
                     .AgentflowNodeExecutionTraces.Where(trace =>
@@ -86,7 +103,8 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
         ProjectDeletionTarget target,
         CancellationToken cancellationToken = default
     ) =>
-        ExecuteAsync(
+        ExecuteProjectAsync(
+            target.ProjectId,
             async token =>
             {
                 if (!await ProjectExistsAsync(target, token).ConfigureAwait(false))
@@ -94,6 +112,8 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
                     return false;
                 }
 
+                await DeleteDurableExecutionsAsync(target.ProjectId, null, target.OwnerUserId, token)
+                    .ConfigureAwait(false);
                 await DeleteAllProjectConversationsAsync(target, token).ConfigureAwait(false);
                 return true;
             },
@@ -101,14 +121,21 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
         );
 
     public Task<bool> DeleteProjectAsync(ProjectDeletionTarget target, CancellationToken cancellationToken = default) =>
-        ExecuteAsync(
+        ExecuteProjectAsync(
+            target.ProjectId,
             async token =>
             {
-                if (!await ProjectExistsAsync(target, token).ConfigureAwait(false))
+                if (
+                    !await _dbContext
+                        .LockOwnedProjectAsync(target.ProjectId, target.OwnerUserId, token)
+                        .ConfigureAwait(false)
+                )
                 {
                     return false;
                 }
 
+                await DeleteDurableExecutionsAsync(target.ProjectId, null, target.OwnerUserId, token)
+                    .ConfigureAwait(false);
                 await DeleteJobsAsync(target, token).ConfigureAwait(false);
                 await DeleteAllProjectConversationsAsync(target, token).ConfigureAwait(false);
                 await _dbContext
@@ -238,18 +265,121 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
         CancellationToken cancellationToken
     ) =>
         _dbContext
-            .ProjectConversations.AsNoTracking()
+            .OwnedProjectConversations(target.ProjectId, target.OwnerUserId)
             .AnyAsync(
-                conversation =>
-                    conversation.Id == target.ConversationId
-                    && conversation.ProjectId == target.ProjectId
-                    && conversation.ContextId == target.ContextId
-                    && conversation.CreateBy == target.OwnerUserId
-                    && _dbContext.Projects.Any(project =>
-                        project.Id == conversation.ProjectId && project.CreateBy == target.OwnerUserId
-                    ),
+                conversation => conversation.Id == target.ConversationId && conversation.ContextId == target.ContextId,
                 cancellationToken
             );
+
+    private async Task DeleteDurableExecutionsAsync(
+        Guid projectId,
+        Guid? conversationId,
+        string ownerUserId,
+        CancellationToken cancellationToken
+    )
+    {
+        // ManifestJson is decrypted by the entity materialization interceptor; a projection would retain ciphertext.
+        var candidates = await _dbContext
+            .DurableExecutions.AsNoTracking()
+            .Where(execution => execution.UserId == ownerUserId)
+            .ToArrayAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var executionIds = new List<Guid>();
+        foreach (var candidate in candidates)
+        {
+            if (!TryGetDurableExecutionScope(candidate.ManifestJson, out var scope))
+            {
+                _logger.LogWarning(
+                    "Skipped durable execution {ExecutionId} during project-scoped deletion because its manifest scope could not be read.",
+                    candidate.Id
+                );
+                continue;
+            }
+
+            if (
+                scope.ProjectId == projectId
+                && (!conversationId.HasValue || scope.ProjectConversationId == conversationId.Value)
+            )
+            {
+                executionIds.Add(candidate.Id);
+            }
+        }
+
+        if (executionIds.Count == 0)
+        {
+            return;
+        }
+
+        await _dbContext
+            .DurableExecutionEvents.Where(entry => executionIds.Contains(entry.ExecutionId))
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await _dbContext
+            .DurableExecutions.Where(execution => executionIds.Contains(execution.Id))
+            .ExecuteDeleteAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static bool TryGetDurableExecutionScope(string manifestJson, out DurableExecutionProjectScope scope)
+    {
+        scope = default;
+        try
+        {
+            using var document = JsonDocument.Parse(manifestJson);
+            if (
+                !TryGetProperty(document.RootElement, "task", out var task)
+                || !TryGetGuidProperty(task, "projectId", out var projectId)
+                || !TryGetGuidProperty(task, "projectConversationId", out var projectConversationId)
+            )
+            {
+                return false;
+            }
+
+            scope = new DurableExecutionProjectScope(projectId, projectConversationId);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryGetProperty(JsonElement element, string name, out JsonElement value)
+    {
+        foreach (var property in element.EnumerateObject())
+        {
+            if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+            {
+                value = property.Value;
+                return true;
+            }
+        }
+
+        value = default;
+        return false;
+    }
+
+    private static bool TryGetGuidProperty(JsonElement element, string name, out Guid value)
+    {
+        value = Guid.Empty;
+        return TryGetProperty(element, name, out var property)
+            && property.ValueKind == JsonValueKind.String
+            && Guid.TryParse(property.GetString(), out value);
+    }
+
+    private readonly record struct DurableExecutionProjectScope(Guid ProjectId, Guid ProjectConversationId);
+
+    private async Task<bool> ExecuteProjectAsync(
+        Guid projectId,
+        Func<CancellationToken, Task<bool>> operation,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var lifecycleLease = await _applicationLock
+            .AcquireAsync(ProjectLifecycleLock.GetResourceName(projectId), cancellationToken)
+            .ConfigureAwait(false);
+        return await ExecuteAsync(operation, cancellationToken).ConfigureAwait(false);
+    }
 
     private async Task<bool> ExecuteAsync(
         Func<CancellationToken, Task<bool>> operation,

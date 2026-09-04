@@ -3,13 +3,13 @@ using Agw.Agents.Contracts.Catalog;
 using Agw.Auth.Contracts;
 using Agw.Files.Abstracts;
 using Agw.Files.Utils;
+using Agw.Integrations.Contracts.References;
 using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Services;
-using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
+using Agw.Skills.Contracts.References;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Projects.Application;
@@ -20,9 +20,9 @@ public class ProjectAppService : IProjectAppService
     private readonly IRepository<ProjectMcpServerRelation> _projectMcpToolServerRepository;
     private readonly IAgentCatalogFacade _agentCatalog;
     private readonly IRepository<ProjectSkillRelation> _projectSkillRelationRepository;
-    private readonly IRepository<Skill> _skillRepository;
+    private readonly ISkillReferenceFacade _skillReferences;
     private readonly IRepository<ProjectConnectionRelation> _projectConnectionRelationRepository;
-    private readonly IRepository<Connection> _connectionRepository;
+    private readonly IConnectionReferenceFacade _connectionReferences;
     private readonly IProjectDeletionCoordinator _deletionCoordinator;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ProjectDomainService _projectDomainService;
@@ -35,9 +35,9 @@ public class ProjectAppService : IProjectAppService
         IRepository<ProjectMcpServerRelation> projectMcpToolServerRepository,
         IAgentCatalogFacade agentCatalog,
         IRepository<ProjectSkillRelation> projectSkillRelationRepository,
-        IRepository<Skill> skillRepository,
+        ISkillReferenceFacade skillReferences,
         IRepository<ProjectConnectionRelation> projectConnectionRelationRepository,
-        IRepository<Connection> connectionRepository,
+        IConnectionReferenceFacade connectionReferences,
         IProjectDeletionCoordinator deletionCoordinator,
         IUnitOfWork unitOfWork,
         ProjectDomainService projectDomainService,
@@ -50,9 +50,9 @@ public class ProjectAppService : IProjectAppService
         _projectMcpToolServerRepository = projectMcpToolServerRepository;
         _agentCatalog = agentCatalog;
         _projectSkillRelationRepository = projectSkillRelationRepository;
-        _skillRepository = skillRepository;
+        _skillReferences = skillReferences;
         _projectConnectionRelationRepository = projectConnectionRelationRepository;
-        _connectionRepository = connectionRepository;
+        _connectionReferences = connectionReferences;
         _deletionCoordinator = deletionCoordinator;
         _unitOfWork = unitOfWork;
         _projectDomainService = projectDomainService;
@@ -69,23 +69,40 @@ public class ProjectAppService : IProjectAppService
             query = query.Where(predicate);
         }
         var projects = await query.ToListAsync();
+        await FilterVisibleReferenceRelationsAsync(projects).ConfigureAwait(false);
         return projects.OrderByDescending(project => project.CreateTime).ThenBy(project => project.Name).ToList();
     }
 
     public async Task<IReadOnlyList<Project>> ListForCurrentUserAsync()
     {
         var projects = await CreateProjectQuery(_userInfoService.RequiredUserId).ToListAsync();
+        await FilterVisibleReferenceRelationsAsync(projects).ConfigureAwait(false);
         return projects.OrderByDescending(project => project.CreateTime).ThenBy(project => project.Name).ToList();
     }
 
     public async Task<Project?> GetAsync(Guid id)
     {
-        return await CreateProjectQuery(_userInfoService.RequiredUserId)
+        var project = await CreateProjectQuery(_userInfoService.RequiredUserId)
             .FirstOrDefaultAsync(project => project.Id == id);
+        if (project != null)
+        {
+            await FilterVisibleReferenceRelationsAsync([project]).ConfigureAwait(false);
+        }
+
+        return project;
     }
 
-    public Task<Project?> GetForCurrentUserAsync(Guid id) =>
-        CreateProjectQuery(_userInfoService.RequiredUserId).FirstOrDefaultAsync(project => project.Id == id);
+    public async Task<Project?> GetForCurrentUserAsync(Guid id)
+    {
+        var project = await CreateProjectQuery(_userInfoService.RequiredUserId)
+            .FirstOrDefaultAsync(project => project.Id == id);
+        if (project != null)
+        {
+            await FilterVisibleReferenceRelationsAsync([project]).ConfigureAwait(false);
+        }
+
+        return project;
+    }
 
     public Task<Project?> CreateAsync(Project project) => CreateAsync(project, null, null, null);
 
@@ -258,7 +275,6 @@ public class ProjectAppService : IProjectAppService
 
     private async Task SyncProjectSkillRelationsAsync(Guid projectId, IEnumerable<Guid>? skillIds)
     {
-        var user = _userInfoService.RequiredUserId;
         var currentIds = await _projectSkillRelationRepository
             .Queryable.Where(relation => relation.ProjectId == projectId)
             .Select(relation => relation.SkillId)
@@ -267,14 +283,8 @@ public class ProjectAppService : IProjectAppService
         var requestedIds = NormalizeRelationIds(skillIds);
         var validIds =
             requestedIds.Count == 0
-                ? []
-                : (
-                    await _skillRepository.ListAsync(skill =>
-                        requestedIds.Contains(skill.Id) && (skill.Kind == SkillKind.BuiltIn || skill.CreateBy == user)
-                    )
-                )
-                    .Select(skill => skill.Id)
-                    .ToList();
+                ? new HashSet<Guid>()
+                : await _skillReferences.FilterVisibleSkillIdsAsync(requestedIds).ConfigureAwait(false);
         if (validIds.Count != requestedIds.Count)
         {
             throw new AgwException(ErrorCodes.InvalidParam);
@@ -302,40 +312,26 @@ public class ProjectAppService : IProjectAppService
     private IQueryable<Project> CreateProjectQuery(string ownerUserId)
     {
         IQueryable<Project> query = _projectRepository
-            .Queryable.Include(project =>
-                project.ProjectMcpToolServers.Where(relation => relation.McpToolServer.CreateBy == ownerUserId)
-            )
-            .Include(project =>
-                project.ProjectSkillRelations.Where(relation =>
-                    relation.Skill.Kind == SkillKind.BuiltIn || relation.Skill.CreateBy == ownerUserId
-                )
-            )
-            .Include(project =>
-                project.ProjectConnectionRelations.Where(relation => relation.Connection.CreateBy == ownerUserId)
-            )
+            .Queryable.Include(project => project.ProjectMcpToolServers)
+            .Include(project => project.ProjectSkillRelations)
+            .Include(project => project.ProjectConnectionRelations)
             .Where(project => project.CreateBy == ownerUserId);
         return query.AsNoTracking().AsSplitQuery();
     }
 
     private async Task SyncProjectConnectionRelationsAsync(Guid projectId, IEnumerable<Guid>? connectionIds)
     {
-        var user = _userInfoService.RequiredUserId;
-        var currentIds = await _projectConnectionRelationRepository
-            .Queryable.Where(relation => relation.ProjectId == projectId && relation.Connection.CreateBy == user)
+        var relationIds = await _projectConnectionRelationRepository
+            .Queryable.Where(relation => relation.ProjectId == projectId)
             .Select(relation => relation.ConnectionId)
             .ToListAsync();
+        var currentIds = await _connectionReferences.FilterOwnedConnectionIdsAsync(relationIds).ConfigureAwait(false);
 
         var requestedIds = NormalizeRelationIds(connectionIds);
         var validIds =
             requestedIds.Count == 0
-                ? []
-                : (
-                    await _connectionRepository.ListAsync(connection =>
-                        requestedIds.Contains(connection.Id) && connection.CreateBy == user
-                    )
-                )
-                    .Select(connection => connection.Id)
-                    .ToList();
+                ? new HashSet<Guid>()
+                : await _connectionReferences.FilterOwnedConnectionIdsAsync(requestedIds).ConfigureAwait(false);
         if (validIds.Count != requestedIds.Count)
         {
             throw new AgwException(ErrorCodes.InvalidParam);
@@ -345,9 +341,7 @@ public class ProjectAppService : IProjectAppService
         {
             var removedRelations = await _projectConnectionRelationRepository
                 .Queryable.Where(relation =>
-                    relation.ProjectId == projectId
-                    && relation.Connection.CreateBy == user
-                    && removedIds.Contains(relation.ConnectionId)
+                    relation.ProjectId == projectId && removedIds.Contains(relation.ConnectionId)
                 )
                 .ToListAsync();
             foreach (var relation in removedRelations)
@@ -361,6 +355,54 @@ public class ProjectAppService : IProjectAppService
             await _projectConnectionRelationRepository.AddAsync(
                 new ProjectConnectionRelation { ProjectId = projectId, ConnectionId = resourceId }
             );
+        }
+    }
+
+    private async Task FilterVisibleReferenceRelationsAsync(IReadOnlyList<Project> projects)
+    {
+        var mcpToolServerIds = projects
+            .SelectMany(project => project.ProjectMcpToolServers)
+            .Select(relation => relation.McpToolServerId)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToArray();
+        var skillIds = projects
+            .SelectMany(project => project.ProjectSkillRelations)
+            .Select(relation => relation.SkillId)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToArray();
+        var connectionIds = projects
+            .SelectMany(project => project.ProjectConnectionRelations)
+            .Select(relation => relation.ConnectionId)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToArray();
+
+        var visibleMcpToolServerIds =
+            mcpToolServerIds.Length == 0
+                ? new HashSet<Guid>()
+                : await _agentCatalog.FilterExistingMcpServerIdsAsync(mcpToolServerIds).ConfigureAwait(false);
+        var visibleSkillIds =
+            skillIds.Length == 0
+                ? new HashSet<Guid>()
+                : await _skillReferences.FilterVisibleSkillIdsAsync(skillIds).ConfigureAwait(false);
+        var visibleConnectionIds =
+            connectionIds.Length == 0
+                ? new HashSet<Guid>()
+                : await _connectionReferences.FilterOwnedConnectionIdsAsync(connectionIds).ConfigureAwait(false);
+
+        foreach (var project in projects)
+        {
+            project.ProjectMcpToolServers = project
+                .ProjectMcpToolServers.Where(relation => visibleMcpToolServerIds.Contains(relation.McpToolServerId))
+                .ToList();
+            project.ProjectSkillRelations = project
+                .ProjectSkillRelations.Where(relation => visibleSkillIds.Contains(relation.SkillId))
+                .ToList();
+            project.ProjectConnectionRelations = project
+                .ProjectConnectionRelations.Where(relation => visibleConnectionIds.Contains(relation.ConnectionId))
+                .ToList();
         }
     }
 
