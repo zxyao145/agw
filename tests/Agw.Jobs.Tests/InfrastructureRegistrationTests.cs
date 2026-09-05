@@ -109,6 +109,12 @@ public class InfrastructureRegistrationTests
         Assert.Contains(
             services,
             descriptor =>
+                descriptor.ServiceType == typeof(IDurableExecutionScopeMaintenance)
+                && descriptor.Lifetime == ServiceLifetime.Scoped
+        );
+        Assert.Contains(
+            services,
+            descriptor =>
                 descriptor.ServiceType == typeof(IAgentSessionStatePersistence)
                 && descriptor.Lifetime == ServiceLifetime.Scoped
         );

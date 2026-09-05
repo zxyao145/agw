@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using Agw.Files.Abstracts;
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Projects;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Application.Facades;
 using Agw.Projects.Application.Persistence;
@@ -504,7 +503,7 @@ public class ProjectAppServiceTests : IDisposable
             new SkillReferenceFacade(dbContext, userInfo),
             new EfRepository<ProjectConnectionRelation>(dbContext),
             new ConnectionReferenceFacade(dbContext, userInfo),
-            deletionCoordinator ?? new ProjectDeletionCoordinator(dbContext),
+            deletionCoordinator ?? TestProjectPersistence.CreateDeletionCoordinator(dbContext),
             dbContext,
             new ProjectDomainService(TimeProvider.System),
             new ProjectResolver(projectRepository, userInfo),

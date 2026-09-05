@@ -87,6 +87,9 @@ public sealed class DurableExecutionStoreTests : IDisposable
         Assert.Equal("user-id", snapshot.Manifest.ResolveUserId());
         var record = await database.Context.DurableExecutions.SingleAsync(TestContext.Current.CancellationToken);
         Assert.Equal("user-id", record.UserId);
+        Assert.Equal(task.ProjectId, record.ProjectId);
+        Assert.Equal(task.ProjectConversationId, record.ProjectConversationId);
+        Assert.True(record.ScopeBackfilled);
         Assert.Equal("user-id", record.CreateBy);
         Assert.Equal("user-id", record.UpdateBy);
         Assert.Equal(Constants.AdminUserId, CreateManifest().ResolveUserId());
@@ -799,7 +802,13 @@ public sealed class DurableExecutionStoreTests : IDisposable
             return new TestDatabase(connection, options, context);
         }
 
-        public DurableExecutionStore CreateStore() => new(Context, TimeProvider.System);
+        public DurableExecutionStore CreateStore() =>
+            new(
+                Context,
+                TimeProvider.System,
+                Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+                TestDurablePersistence.Create(Context)
+            );
 
         public ServiceProvider CreateServiceProvider()
         {

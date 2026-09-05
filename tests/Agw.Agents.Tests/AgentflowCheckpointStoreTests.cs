@@ -272,6 +272,77 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task DistributedResume_IdempotentRetry_DoesNotRecoverUnrelatedRows()
+    {
+        // Arrange
+        var token = TestContext.Current.CancellationToken;
+        await using var database = await TestDatabase.CreateAsync();
+        var fixture = await database.SeedAsync();
+        var store = database.CreateStore();
+        var sourceId = Guid.CreateVersion7();
+        await database.AddDurableExecutionAsync(fixture, sourceId, DurableExecutionStatus.Completed);
+        var fingerprint = await store.GetDefinitionFingerprintAsync(fixture.AgentflowId, token);
+        var recorded = await store.RecordAsync(
+            sourceId,
+            fixture.ProjectId,
+            fixture.ConversationId,
+            fixture.ContextId,
+            fixture.TaskId,
+            fixture.AgentflowId,
+            "user-id",
+            true,
+            fingerprint!,
+            CreateCheckpoint("checkpoint-1"),
+            new Dictionary<string, string> { ["checkpoint-node"] = "Saved" },
+            token
+        );
+        Assert.NotNull(recorded);
+        var resumeId = Guid.CreateVersion7();
+        await store.PrepareDistributedResumeAsync(
+            recorded.Snapshot.OccurrenceId,
+            resumeId,
+            fixture.ProjectId,
+            fixture.ContextId,
+            fixture.AgentflowId,
+            "user-id",
+            token
+        );
+        var unrelated = DurableExecutionScopeMaintenanceTests.CreateExecution(
+            Guid.CreateVersion7(),
+            Guid.CreateVersion7(),
+            "user-id",
+            "broken"
+        );
+        await using (var seed = database.CreateContext())
+        {
+            seed.Add(unrelated);
+            await seed.SaveChangesAsync(token);
+        }
+        database.ResetTransactionCount();
+
+        // Act
+        await store.PrepareDistributedResumeAsync(
+            recorded.Snapshot.OccurrenceId,
+            resumeId,
+            fixture.ProjectId,
+            fixture.ContextId,
+            fixture.AgentflowId,
+            "user-id",
+            token
+        );
+
+        // Assert
+        await using var context = database.CreateContext();
+        var unchanged = await context
+            .DurableExecutions.Where(row => row.Id == unrelated.Id)
+            .Select(row => new { row.ScopeBackfilled, row.Status })
+            .SingleAsync(token);
+        Assert.False(unchanged.ScopeBackfilled);
+        Assert.Equal(DurableExecutionStatus.Queued, unchanged.Status);
+        Assert.Equal(0, database.TransactionCount);
+    }
+
+    [Fact]
     public async Task DistributedResume_RetryIsIdempotent_AndAllowsLaterBranch()
     {
         await using var database = await TestDatabase.CreateAsync();
@@ -331,6 +402,9 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
                 "resume branch manifest"
             );
             Assert.Equal(DurableExecutionStatus.Resuming, branch.Status);
+            Assert.Equal(fixture.ProjectId, branch.ProjectId);
+            Assert.Equal(fixture.ConversationId, branch.ProjectConversationId);
+            Assert.True(branch.ScopeBackfilled);
             Assert.Equal(1, branch.SegmentIndex);
             Assert.Equal("user-id", branch.UserId);
             Assert.Equal("user-id", branch.CreateBy);
@@ -413,6 +487,107 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
             Payload = JsonSerializer.SerializeToElement(new { checkpointId }),
         };
 
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    [InlineData(true, true, true)]
+    public async Task DistributedResume_CorruptExecution_DoesNotPoisonOtherCheckpoints(
+        bool indexed,
+        bool sameConversation,
+        bool corruptCiphertext
+    )
+    {
+        // Arrange
+        var token = TestContext.Current.CancellationToken;
+        await using var database = await TestDatabase.CreateAsync();
+        var fixture = await database.SeedAsync();
+        var store = database.CreateStore();
+        var sourceId = Guid.CreateVersion7();
+        await database.AddDurableExecutionAsync(fixture, sourceId, DurableExecutionStatus.Completed);
+        var fingerprint = await store.GetDefinitionFingerprintAsync(fixture.AgentflowId, token);
+        var checkpoint = await store.RecordAsync(
+            sourceId,
+            fixture.ProjectId,
+            fixture.ConversationId,
+            fixture.ContextId,
+            fixture.TaskId,
+            fixture.AgentflowId,
+            "user-id",
+            true,
+            fingerprint!,
+            CreateCheckpoint("poison-test"),
+            new Dictionary<string, string> { ["checkpoint-node"] = "Saved" },
+            token
+        );
+        Assert.NotNull(checkpoint);
+        var brokenId = Guid.CreateVersion7();
+        await using (var seed = database.CreateContext())
+        {
+            seed.DurableExecutions.Add(
+                new DurableExecutionRecord
+                {
+                    Id = brokenId,
+                    UserId = "user-id",
+                    ManifestJson = "broken-manifest",
+                    ProjectId = indexed ? (sameConversation ? fixture.ProjectId : Guid.CreateVersion7()) : null,
+                    ProjectConversationId = indexed
+                        ? (sameConversation ? fixture.ConversationId : Guid.CreateVersion7())
+                        : null,
+                    ScopeBackfilled = indexed,
+                    Status = DurableExecutionStatus.WaitingForHuman,
+                    StateVersion = Guid.CreateVersion7(),
+                    StateChangedAt = TimeProvider.System.GetUtcNow(),
+                }
+            );
+            await seed.SaveChangesAsync(token);
+            if (corruptCiphertext)
+            {
+                await seed.Database.ExecuteSqlInterpolatedAsync(
+                    $"UPDATE durable_execution SET manifest_json = 'agwenc:v1:corrupt' WHERE id = {brokenId}",
+                    token
+                );
+            }
+        }
+
+        // Act
+        var resumeId = Guid.CreateVersion7();
+        await store.PrepareDistributedResumeAsync(
+            checkpoint.Snapshot.OccurrenceId,
+            resumeId,
+            fixture.ProjectId,
+            fixture.ContextId,
+            fixture.AgentflowId,
+            "user-id",
+            token
+        );
+
+        // Assert
+        await using var verification = database.CreateContext();
+        var resumed = await verification
+            .DurableExecutions.Where(row => row.Id == resumeId)
+            .Select(row => new
+            {
+                row.Status,
+                row.ProjectId,
+                row.ProjectConversationId,
+            })
+            .SingleAsync(token);
+        Assert.Equal(DurableExecutionStatus.Resuming, resumed.Status);
+        Assert.Equal(fixture.ProjectId, resumed.ProjectId);
+        Assert.Equal(fixture.ConversationId, resumed.ProjectConversationId);
+        var broken = await verification
+            .DurableExecutions.Where(row => row.Id == brokenId)
+            .Select(row => new { row.Status, row.ScopeBackfilled })
+            .SingleAsync(token);
+        Assert.True(broken.ScopeBackfilled);
+        Assert.Equal(
+            indexed && !sameConversation ? DurableExecutionStatus.WaitingForHuman : DurableExecutionStatus.Failed,
+            broken.Status
+        );
+    }
+
     private sealed record Fixture(Guid ProjectId, Guid ConversationId, string ContextId, Guid TaskId, Guid AgentflowId);
 
     private sealed class TestDatabase : IAsyncDisposable
@@ -455,6 +630,9 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
             services.AddScoped<DbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
             services.AddScoped<IAgentsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
             services.AddScoped<IAgentflowCheckpointPersistence, AgentflowCheckpointPersistence>();
+            services.AddScoped<IDurableExecutionScopeMaintenance>(provider =>
+                TestDurablePersistence.Create(provider.GetRequiredService<AgwDbContext>())
+            );
             var serviceProvider = services.BuildServiceProvider();
             return new TestDatabase(connection, options, serviceProvider, transactionInterceptor);
         }

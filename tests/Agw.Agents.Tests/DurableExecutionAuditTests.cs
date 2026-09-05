@@ -31,7 +31,12 @@ public sealed class DurableExecutionAuditTests
             .Options;
         await using var context = new AgwDbContext(options);
         await context.Database.EnsureCreatedAsync(cancellationToken);
-        var store = new DurableExecutionStore(context, TimeProvider.System);
+        var store = new DurableExecutionStore(
+            context,
+            TimeProvider.System,
+            Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+            TestDurablePersistence.Create(context)
+        );
         var executionId = Guid.CreateVersion7();
         var projectId = Guid.CreateVersion7();
 

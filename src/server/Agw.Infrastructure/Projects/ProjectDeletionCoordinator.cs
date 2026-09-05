@@ -1,4 +1,4 @@
-using System.Text.Json;
+using Agw.Agents.Application.Persistence;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Application.Persistence;
 using Agw.Shared.Contracts.Coordination;
@@ -6,8 +6,6 @@ using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Infrastructure.Projects;
 
@@ -15,17 +13,17 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
 {
     private readonly AgwDbContext _dbContext;
     private readonly IApplicationLock _applicationLock;
-    private readonly ILogger<ProjectDeletionCoordinator> _logger;
+    private readonly IDurableExecutionScopeMaintenance _scopeMaintenance;
 
     public ProjectDeletionCoordinator(
         AgwDbContext dbContext,
-        IApplicationLock? applicationLock = null,
-        ILogger<ProjectDeletionCoordinator>? logger = null
+        IApplicationLock applicationLock,
+        IDurableExecutionScopeMaintenance scopeMaintenance
     )
     {
         _dbContext = dbContext;
-        _applicationLock = applicationLock ?? InMemoryApplicationLock.Shared;
-        _logger = logger ?? NullLogger<ProjectDeletionCoordinator>.Instance;
+        _applicationLock = applicationLock;
+        _scopeMaintenance = scopeMaintenance;
     }
 
     public Task<bool> ClearConversationRecordsAsync(
@@ -278,96 +276,18 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
         CancellationToken cancellationToken
     )
     {
-        // ManifestJson is decrypted by the entity materialization interceptor; a projection would retain ciphertext.
-        var candidates = await _dbContext
-            .DurableExecutions.AsNoTracking()
-            .Where(execution => execution.UserId == ownerUserId)
-            .ToArrayAsync(cancellationToken)
-            .ConfigureAwait(false);
-        var executionIds = new List<Guid>();
-        foreach (var candidate in candidates)
-        {
-            if (!TryGetDurableExecutionScope(candidate.ManifestJson, out var scope))
-            {
-                _logger.LogWarning(
-                    "Skipped durable execution {ExecutionId} during project-scoped deletion because its manifest scope could not be read.",
-                    candidate.Id
-                );
-                continue;
-            }
-
-            if (
-                scope.ProjectId == projectId
-                && (!conversationId.HasValue || scope.ProjectConversationId == conversationId.Value)
-            )
-            {
-                executionIds.Add(candidate.Id);
-            }
-        }
-
-        if (executionIds.Count == 0)
-        {
-            return;
-        }
-
+        var executions = _dbContext.DurableExecutions.Where(execution =>
+            execution.UserId == ownerUserId
+            && execution.ProjectId == projectId
+            && (!conversationId.HasValue || execution.ProjectConversationId == conversationId.Value)
+        );
+        var executionIds = executions.Select(execution => execution.Id);
         await _dbContext
             .DurableExecutionEvents.Where(entry => executionIds.Contains(entry.ExecutionId))
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
-        await _dbContext
-            .DurableExecutions.Where(execution => executionIds.Contains(execution.Id))
-            .ExecuteDeleteAsync(cancellationToken)
-            .ConfigureAwait(false);
+        await executions.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
     }
-
-    private static bool TryGetDurableExecutionScope(string manifestJson, out DurableExecutionProjectScope scope)
-    {
-        scope = default;
-        try
-        {
-            using var document = JsonDocument.Parse(manifestJson);
-            if (
-                !TryGetProperty(document.RootElement, "task", out var task)
-                || !TryGetGuidProperty(task, "projectId", out var projectId)
-                || !TryGetGuidProperty(task, "projectConversationId", out var projectConversationId)
-            )
-            {
-                return false;
-            }
-
-            scope = new DurableExecutionProjectScope(projectId, projectConversationId);
-            return true;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-    }
-
-    private static bool TryGetProperty(JsonElement element, string name, out JsonElement value)
-    {
-        foreach (var property in element.EnumerateObject())
-        {
-            if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
-            {
-                value = property.Value;
-                return true;
-            }
-        }
-
-        value = default;
-        return false;
-    }
-
-    private static bool TryGetGuidProperty(JsonElement element, string name, out Guid value)
-    {
-        value = Guid.Empty;
-        return TryGetProperty(element, name, out var property)
-            && property.ValueKind == JsonValueKind.String
-            && Guid.TryParse(property.GetString(), out value);
-    }
-
-    private readonly record struct DurableExecutionProjectScope(Guid ProjectId, Guid ProjectConversationId);
 
     private async Task<bool> ExecuteProjectAsync(
         Guid projectId,
@@ -378,6 +298,14 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
         await using var lifecycleLease = await _applicationLock
             .AcquireAsync(ProjectLifecycleLock.GetResourceName(projectId), cancellationToken)
             .ConfigureAwait(false);
+        var backfill = await _scopeMaintenance.BackfillAsync(cancellationToken).ConfigureAwait(false);
+        if (backfill.HasPending)
+        {
+            throw new AgwException(
+                ErrorCodes.DurableExecutionConflict,
+                "Execution scope recovery is still pending. Retry after recovery completes."
+            );
+        }
         return await ExecuteAsync(operation, cancellationToken).ConfigureAwait(false);
     }
 

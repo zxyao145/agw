@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Projects;
 using Agw.Infrastructure.Repositories;
 using Agw.Projects.Application.Persistence;
 using Agw.Shared;
@@ -918,7 +917,7 @@ public class ProjectConversationAppServiceTests
             new EfRepository<AgentUsage>(dbContext),
             dbContext,
             new ProjectResolver(projectRepository, userInfo),
-            deletionCoordinator ?? new ProjectDeletionCoordinator(dbContext),
+            deletionCoordinator ?? TestProjectPersistence.CreateDeletionCoordinator(dbContext),
             TimeProvider.System
         );
     }

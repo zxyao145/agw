@@ -6,17 +6,6 @@ using Agw.Shared.Data.Entities.Executions;
 namespace Agw.Agents.Execution.Durable;
 
 /// <summary>
-/// 定义所有 Server 共享的 execution 分布式锁资源命名规则。
-/// </summary>
-internal static class DurableExecutionLock
-{
-    /// <summary>
-    /// 为 execution 生成稳定的 PostgreSQL advisory lock 资源名。
-    /// </summary>
-    public static string GetResourceName(Guid executionId) => $"distributed-execution:{executionId:N}";
-}
-
-/// <summary>
 /// 单次可恢复分段的结果类型。
 /// </summary>
 internal enum DurableExecutionSegmentStatus

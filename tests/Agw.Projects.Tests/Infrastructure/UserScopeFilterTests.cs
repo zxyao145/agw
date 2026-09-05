@@ -51,6 +51,7 @@ public sealed class UserScopeFilterTests
             typeof(AgentUsage), // Intentional retention: usage is user-scoped analytics.
             typeof(AgentflowCheckpointRecord),
             typeof(AgentflowTrace),
+            typeof(DurableExecutionRecord),
             typeof(Job),
             typeof(ProjectConnectionRelation),
             typeof(ProjectConversation),
@@ -62,7 +63,6 @@ public sealed class UserScopeFilterTests
         var expectedIndirectProjectScopedTypes = new[]
         {
             typeof(DurableExecutionEventRecord), // Deleted through matching durable execution IDs.
-            typeof(DurableExecutionRecord), // Project scope is stored in the encrypted manifest.
             typeof(JobLog), // Deleted through project Job IDs.
             typeof(ProjectConversationChatHistory), // Deleted through project Conversation IDs.
         };

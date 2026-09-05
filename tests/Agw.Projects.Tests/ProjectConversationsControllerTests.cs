@@ -1,6 +1,5 @@
 using System.Reflection;
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Projects;
 using Agw.Infrastructure.Repositories;
 using Agw.Projects.Controllers;
 using Agw.Shared.Data.Entities.Projects;
@@ -348,7 +347,7 @@ public class ProjectConversationsControllerTests
             new EfRepository<AgentUsage>(dbContext),
             dbContext,
             projectResolver,
-            new ProjectDeletionCoordinator(dbContext),
+            TestProjectPersistence.CreateDeletionCoordinator(dbContext),
             TimeProvider.System
         );
     }

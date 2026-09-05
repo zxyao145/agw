@@ -118,6 +118,8 @@ public static class DependencyInjection
         services.AddScoped<ISkillsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IToolsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IAgentflowCheckpointPersistence, AgentflowCheckpointPersistence>();
+        services.AddScoped<IDurableExecutionScopeMaintenance, DurableExecutionScopeMaintenance>();
+        services.AddHostedService<DurableExecutionScopeRecoveryService>();
         services.AddScoped<IAgentSessionStatePersistence, AgentSessionStatePersistence>();
         services.AddScoped<IProjectDeletionCoordinator, ProjectDeletionCoordinator>();
         services.AddScoped<IProjectMemoryPersistence, ProjectMemoryPersistence>();

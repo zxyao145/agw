@@ -20,5 +20,18 @@ public sealed class DurableExecutionRecordConfiguration : IEntityTypeConfigurati
         builder.Property(item => item.StateChangedAt).IsRequired();
         builder.Property(item => item.StateVersion).IsConcurrencyToken().IsRequired();
         builder.HasIndex(item => new { item.Status, item.StateChangedAt });
+        builder.HasIndex(item => new
+        {
+            item.UserId,
+            item.ProjectId,
+            item.ProjectConversationId,
+            item.Status,
+        });
+        builder.HasIndex(item => new
+        {
+            item.ScopeBackfilled,
+            item.UserId,
+            item.Id,
+        });
     }
 }

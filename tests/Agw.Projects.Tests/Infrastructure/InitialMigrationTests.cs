@@ -1,10 +1,17 @@
+using System.Security.Claims;
+using System.Text.Json;
+using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Data.Encryption;
 using Agw.Shared;
 using Agw.Shared.Configuration;
+using Agw.Shared.Coordination;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Infrastructure.Tests;
 
@@ -23,8 +30,10 @@ public sealed class InitialMigrationTests
         AgwDbContextOptionsConfigurator.Configure(options, provider, connectionString);
         using var dbContext = new AgwDbContext(options.Options);
 
+        Assert.False(dbContext.Database.HasPendingModelChanges());
+
         var migrations = dbContext.Database.GetMigrations().ToArray();
-        Assert.Equal(10, migrations.Length);
+        Assert.Equal(11, migrations.Length);
         Assert.EndsWith("_Init", migrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", migrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", migrations[2], StringComparison.Ordinal);
@@ -35,6 +44,7 @@ public sealed class InitialMigrationTests
         Assert.EndsWith("_EnforceUserOwnedConnections", migrations[7], StringComparison.Ordinal);
         Assert.EndsWith("_EnforceUserDataIsolation", migrations[8], StringComparison.Ordinal);
         Assert.EndsWith("_AddAgentAndAgentflowEnable", migrations[9], StringComparison.Ordinal);
+        Assert.EndsWith("_AddDurableExecutionScope", migrations[10], StringComparison.Ordinal);
 
         var script = dbContext
             .GetService<IMigrator>()
@@ -47,6 +57,9 @@ public sealed class InitialMigrationTests
         Assert.Contains("project_conversation", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("project_conversation_chat_history", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("durable_execution", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("scope_backfilled", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ix_durable_execution_scope_backfilled_user_id_id", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ix_durable_execution_user_id_project_id", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("execution_stream_entry", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("agentflow_checkpoint", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("api_token", script, StringComparison.OrdinalIgnoreCase);
@@ -125,7 +138,7 @@ public sealed class InitialMigrationTests
         await dbContext.Database.MigrateAsync(cancellationToken);
 
         var appliedMigrations = (await dbContext.Database.GetAppliedMigrationsAsync(cancellationToken)).ToArray();
-        Assert.Equal(10, appliedMigrations.Length);
+        Assert.Equal(11, appliedMigrations.Length);
         Assert.EndsWith("_Init", appliedMigrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", appliedMigrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", appliedMigrations[2], StringComparison.Ordinal);
@@ -136,6 +149,12 @@ public sealed class InitialMigrationTests
         Assert.EndsWith("_EnforceUserOwnedConnections", appliedMigrations[7], StringComparison.Ordinal);
         Assert.EndsWith("_EnforceUserDataIsolation", appliedMigrations[8], StringComparison.Ordinal);
         Assert.EndsWith("_AddAgentAndAgentflowEnable", appliedMigrations[9], StringComparison.Ordinal);
+        Assert.EndsWith("_AddDurableExecutionScope", appliedMigrations[10], StringComparison.Ordinal);
+        Assert.True(await ColumnExistsAsync(connection, "durable_execution", "project_id", cancellationToken));
+        Assert.True(
+            await ColumnExistsAsync(connection, "durable_execution", "project_conversation_id", cancellationToken)
+        );
+        Assert.True(await ColumnExistsAsync(connection, "durable_execution", "scope_backfilled", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "integration_connection", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "plugin_installation", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "project_memory", cancellationToken));
@@ -184,6 +203,84 @@ public sealed class InitialMigrationTests
         Assert.False(await TableExistsAsync(connection, "agent_file_memory", cancellationToken));
         Assert.False(await TableExistsAsync(connection, "project_context", cancellationToken));
         Assert.False(await TableExistsAsync(connection, "project_task_record", cancellationToken));
+    }
+
+    [Fact]
+    public async Task MigrateAsync_DurableScope_PreservesEncryptedLegacyRowsAndBackfillsThem()
+    {
+        // Arrange
+        var token = TestContext.Current.CancellationToken;
+        using var user = UserInfoUtil.Push(
+            new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], "test"))
+        );
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(token);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(
+                connection,
+                migrations => migrations.MigrationsAssembly(AgwDbContextOptionsConfigurator.SqliteMigrationsAssembly)
+            )
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        var protector = new DataProtectionEncryptedDataProtector(new EphemeralDataProtectionProvider());
+        await using var context = new AgwDbContext(options, protector);
+        var migrator = context.GetService<IMigrator>();
+        var migrations = context.Database.GetMigrations().ToArray();
+        await migrator.MigrateAsync(migrations[^2], token);
+        var executionId = Guid.CreateVersion7();
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        var manifest = JsonSerializer.Serialize(
+            new
+            {
+                schemaVersion = 1,
+                executionId,
+                userId = "tester",
+                agentId = Guid.CreateVersion7(),
+                agentType = 0,
+                input = new { contents = Array.Empty<object>() },
+                settings = new { environmentVariables = new { }, resume = false },
+                task = new
+                {
+                    taskId = Guid.CreateVersion7(),
+                    projectId,
+                    projectConversationId = conversationId,
+                    contextId = "context",
+                },
+            }
+        );
+        var ciphertext = protector.Protect("durable_execution", executionId, manifest);
+        var now = TimeProvider.System.GetUtcNow();
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO durable_execution (id, user_id, manifest_json, status, segment_index, state_changed_at, state_version, create_time) VALUES ({executionId}, 'tester', {ciphertext}, 0, 0, {now}, {Guid.CreateVersion7()}, {now})",
+            token
+        );
+
+        // Act
+        await migrator.MigrateAsync(migrations[^1], token);
+        var pending = await context.DurableExecutions.AsNoTracking().SingleAsync(token);
+        Assert.Null(pending.ProjectId);
+        Assert.False(pending.ScopeBackfilled);
+        await new DurableExecutionScopeMaintenance(
+            context,
+            new InMemoryApplicationLock(),
+            TimeProvider.System,
+            NullLogger<DurableExecutionScopeMaintenance>.Instance
+        ).BackfillAsync(token);
+
+        // Assert
+        var row = await context.DurableExecutions.AsNoTracking().SingleAsync(token);
+        Assert.Equal(projectId, row.ProjectId);
+        Assert.Equal(conversationId, row.ProjectConversationId);
+        Assert.True(row.ScopeBackfilled);
+        Assert.Equal(manifest, row.ManifestJson);
+        Assert.Equal(ciphertext, await context.DurableExecutions.Select(item => item.ManifestJson).SingleAsync(token));
+        Assert.False(context.Database.HasPendingModelChanges());
+        await migrator.MigrateAsync(migrations[^2], token);
+        Assert.False(await ColumnExistsAsync(connection, "durable_execution", "project_id", token));
+        await using var read = connection.CreateCommand();
+        read.CommandText = "SELECT manifest_json FROM durable_execution";
+        Assert.Equal(ciphertext, await read.ExecuteScalarAsync(token));
     }
 
     [Fact]

@@ -5,6 +5,7 @@ using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
+using static Agw.Agents.Application.Persistence.DurableExecutionQueries;
 
 namespace Agw.Agents.Execution.Durable;
 
@@ -331,13 +332,4 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
     /// </summary>
     private static AgwMessage CreateMessage(AgwContent content) =>
         new(Guid.CreateVersion7().ToString("D"), Constants.DefaultAgentAuthor, AiRole.System, [content]);
-
-    /// <summary>
-    /// 判断状态是否已结束，不应再启动消息订阅。
-    /// </summary>
-    private static bool IsTerminal(DurableExecutionStatus status) =>
-        status
-            is DurableExecutionStatus.Completed
-                or DurableExecutionStatus.Failed
-                or DurableExecutionStatus.Interrupted;
 }

@@ -61,6 +61,9 @@ public class SetupInitializationService : ISetupInitializationService
 
         await using var context = new AgwDbContext(dbOptions.Options, _encryptedDataProtector);
         await context.Database.MigrateAsync(cancellationToken);
+        // Seeding does not recover execution scopes. Configured setup is followed by the Host recovery pass;
+        // interactive setup wakes the mode-independent recovery service once initialization is persisted.
+        // Do not create a fallback in-memory lock for the newly selected database here.
         var seeder = new DbSeeder(
             context,
             _loggerFactory.CreateLogger<DbSeeder>(),

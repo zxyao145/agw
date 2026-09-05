@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.ExternalAgents;
 using Agw.Auth.Contracts;
 using Agw.Projects.Contracts;
@@ -13,6 +14,7 @@ using Agw.Shared.Runtime;
 using Agw.Shared.Tooling;
 using Agw.Skills.Contracts.Registration;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Agw.Infrastructure.Data;
@@ -110,6 +112,23 @@ public class DbSeeder
             _logger.LogError(ex, "Error occurred during database seeding");
             throw;
         }
+    }
+
+    /// <summary>
+    /// Runs a bounded data-recovery pass from the Host startup scope, separately from first-run seed insertion.
+    /// The trusted database bootstrap owns the system scope; maintenance and locks remain required DI services.
+    /// </summary>
+    public static async Task<DurableExecutionScopeBackfillResult> RecoverDurableExecutionScopesAsync(
+        IServiceProvider scopedServices,
+        CancellationToken cancellationToken = default,
+        DurableExecutionScopeCursor? after = null
+    )
+    {
+        using var systemScope = UserInfoUtil.PushSystemScope();
+        return await scopedServices
+            .GetRequiredService<IDurableExecutionScopeMaintenance>()
+            .BackfillAsync(cancellationToken, after)
+            .ConfigureAwait(false);
     }
 
     private async Task SeedBuiltInProjectsAsync()

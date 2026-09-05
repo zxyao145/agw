@@ -1,8 +1,10 @@
 using System.Security.Claims;
 using System.Text.Json;
+using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Projects;
 using Agw.Projects.Application.Persistence;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Executions;
@@ -46,7 +48,7 @@ public sealed class ProjectDeletionCoordinatorTests
             "other-user"
         );
         await using var dbContext = new AgwDbContext(options);
-        var coordinator = new ProjectDeletionCoordinator(dbContext);
+        var coordinator = TestProjectPersistence.CreateDeletionCoordinator(dbContext);
 
         // Act
         var deleted = await coordinator.DeleteProjectAsync(
@@ -169,7 +171,7 @@ public sealed class ProjectDeletionCoordinatorTests
             """,
             cancellationToken
         );
-        var coordinator = new ProjectDeletionCoordinator(dbContext);
+        var coordinator = TestProjectPersistence.CreateDeletionCoordinator(dbContext);
 
         // Act
         await Assert.ThrowsAsync<SqliteException>(() =>
@@ -199,6 +201,107 @@ public sealed class ProjectDeletionCoordinatorTests
             await assertContext.AgentflowNodeExecutionTraces.ToListAsync(cancellationToken),
             trace => trace.ProjectId == projectId
         );
+    }
+
+    [Fact]
+    public async Task DeleteProjectAsync_PendingBusyExecution_DoesNotDeleteProject()
+    {
+        // Arrange
+        using var userScope = PushUser("tester");
+        var token = TestContext.Current.CancellationToken;
+        await using var connection = await OpenConnectionAsync();
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options);
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        await SeedProjectGraphAsync(options, projectId, conversationId, "tester", "context-1");
+        var executionId = await SeedDurableExecutionAsync(options, projectId, conversationId, "tester", "broken");
+        await using var context = new AgwDbContext(options);
+        var coordinator = TestProjectPersistence.CreateDeletionCoordinator(context);
+        await using var lease = await InMemoryApplicationLock.Shared.AcquireAsync(
+            DurableExecutionLock.GetResourceName(executionId),
+            token
+        );
+
+        // Act
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            coordinator.DeleteProjectAsync(new ProjectDeletionTarget(projectId, "tester"), token)
+        );
+
+        // Assert
+        Assert.Equal(ErrorCodes.DurableExecutionConflict.Code, exception.Code);
+        Assert.True(await context.Projects.AnyAsync(row => row.Id == projectId, token));
+        Assert.True(await context.ProjectConversations.AnyAsync(row => row.Id == conversationId, token));
+        Assert.False(
+            await context
+                .DurableExecutions.Where(row => row.Id == executionId)
+                .Select(row => row.ScopeBackfilled)
+                .SingleAsync(token)
+        );
+    }
+
+    [Fact]
+    public async Task DeleteProjectAsync_QuarantinedWrongIndex_PreservesExecutionAndEvents()
+    {
+        // Arrange
+        using var userScope = PushUser("tester");
+        var token = TestContext.Current.CancellationToken;
+        await using var connection = await OpenConnectionAsync();
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options);
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        var wrongProjectId = Guid.CreateVersion7();
+        await SeedProjectGraphAsync(options, projectId, conversationId, "tester", "actual");
+        await SeedProjectGraphAsync(options, wrongProjectId, Guid.CreateVersion7(), "tester", "wrong");
+        var executionId = await SeedDurableExecutionAsync(options, projectId, conversationId, "tester");
+        await using var context = new AgwDbContext(options);
+        await context
+            .DurableExecutions.Where(row => row.Id == executionId)
+            .ExecuteUpdateAsync(
+                setters =>
+                    setters
+                        .SetProperty(row => row.ProjectId, wrongProjectId)
+                        .SetProperty(row => row.ProjectConversationId, conversationId)
+                        .SetProperty(row => row.ScopeBackfilled, true),
+                token
+            );
+        var maintenance = new DurableExecutionScopeMaintenance(
+            context,
+            InMemoryApplicationLock.Shared,
+            TimeProvider.System,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<DurableExecutionScopeMaintenance>.Instance
+        );
+        await using (
+            var lease = await InMemoryApplicationLock.Shared.AcquireAsync(
+                DurableExecutionLock.GetResourceName(executionId),
+                token
+            )
+        )
+        {
+            Assert.False(await maintenance.ValidateLockedExecutionAsync(executionId, token));
+        }
+        var coordinator = new ProjectDeletionCoordinator(context, InMemoryApplicationLock.Shared, maintenance);
+
+        // Act
+        var deleted = await coordinator.DeleteProjectAsync(new ProjectDeletionTarget(wrongProjectId, "tester"), token);
+
+        // Assert
+        Assert.True(deleted);
+        var retained = await context
+            .DurableExecutions.Where(row => row.Id == executionId)
+            .Select(row => new
+            {
+                row.ProjectId,
+                row.ProjectConversationId,
+                row.Status,
+            })
+            .SingleAsync(token);
+        Assert.Null(retained.ProjectId);
+        Assert.Null(retained.ProjectConversationId);
+        Assert.Equal(DurableExecutionStatus.Failed, retained.Status);
+        Assert.True(await context.DurableExecutionEvents.AnyAsync(row => row.ExecutionId == executionId, token));
+        Assert.True(await context.Projects.AnyAsync(row => row.Id == projectId, token));
     }
 
     [Fact]
@@ -232,7 +335,7 @@ public sealed class ProjectDeletionCoordinatorTests
         }
         var otherExecutionId = await SeedDurableExecutionAsync(options, projectId, otherConversationId, "tester");
         await using var dbContext = new AgwDbContext(options);
-        var coordinator = new ProjectDeletionCoordinator(dbContext);
+        var coordinator = TestProjectPersistence.CreateDeletionCoordinator(dbContext);
 
         // Act
         var deleted = await coordinator.DeleteConversationAsync(
@@ -287,8 +390,17 @@ public sealed class ProjectDeletionCoordinatorTests
             invalidManifest
         );
         await using var dbContext = new AgwDbContext(options);
-        var logger = new ListLogger<ProjectDeletionCoordinator>();
-        var coordinator = new ProjectDeletionCoordinator(dbContext, logger: logger);
+        var logger = new ListLogger<DurableExecutionScopeMaintenance>();
+        var coordinator = new ProjectDeletionCoordinator(
+            dbContext,
+            InMemoryApplicationLock.Shared,
+            scopeMaintenance: new DurableExecutionScopeMaintenance(
+                dbContext,
+                InMemoryApplicationLock.Shared,
+                TimeProvider.System,
+                logger
+            )
+        );
 
         // Act
         var deleted = await coordinator.DeleteProjectAsync(
@@ -343,7 +455,7 @@ public sealed class ProjectDeletionCoordinatorTests
             await seedContext.SaveChangesAsync(cancellationToken);
         }
         await using var dbContext = new AgwDbContext(options);
-        var coordinator = new ProjectDeletionCoordinator(dbContext);
+        var coordinator = TestProjectPersistence.CreateDeletionCoordinator(dbContext);
 
         // Act
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
@@ -389,7 +501,7 @@ public sealed class ProjectDeletionCoordinatorTests
             """,
             cancellationToken
         );
-        var coordinator = new ProjectDeletionCoordinator(dbContext);
+        var coordinator = TestProjectPersistence.CreateDeletionCoordinator(dbContext);
 
         // Act
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
@@ -406,6 +518,52 @@ public sealed class ProjectDeletionCoordinatorTests
         );
         Assert.Contains(await assertContext.Jobs.ToListAsync(cancellationToken), job => job.Id == jobId);
         Assert.Contains(await assertContext.JobLogs.ToListAsync(cancellationToken), log => log.JobId == jobId);
+    }
+
+    [Fact]
+    public async Task DeleteProjectAsync_IndexedExecutionWithCorruptCiphertext_DeletesWithoutReadingManifest()
+    {
+        // Arrange
+        using var userScope = PushUser("tester");
+        var token = TestContext.Current.CancellationToken;
+        await using var connection = await OpenConnectionAsync();
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options);
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        await SeedProjectGraphAsync(options, projectId, conversationId, "tester", "context-1");
+        var executionId = await SeedDurableExecutionAsync(options, projectId, conversationId, "tester");
+        var unrelatedProjectId = Guid.CreateVersion7();
+        var unrelatedConversationId = Guid.CreateVersion7();
+        var unrelated = await SeedDurableExecutionAsync(options, unrelatedProjectId, unrelatedConversationId, "tester");
+        await using var dbContext = new AgwDbContext(options);
+        foreach (
+            var row in new[]
+            {
+                (Id: executionId, Project: projectId, Conversation: conversationId),
+                (Id: unrelated, Project: unrelatedProjectId, Conversation: unrelatedConversationId),
+            }
+        )
+        {
+            await dbContext.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE durable_execution SET project_id = {row.Project}, project_conversation_id = {row.Conversation}, scope_backfilled = 1, manifest_json = 'agwenc:v1:corrupt' WHERE id = {row.Id}",
+                token
+            );
+        }
+
+        // Act
+        var deleted = await TestProjectPersistence
+            .CreateDeletionCoordinator(dbContext)
+            .DeleteProjectAsync(new ProjectDeletionTarget(projectId, "tester"), token);
+
+        // Assert
+        Assert.True(deleted);
+        using var system = UserInfoUtil.PushSystemScope();
+        Assert.Equal(new[] { unrelated }, await dbContext.DurableExecutions.Select(row => row.Id).ToArrayAsync(token));
+        Assert.Equal(
+            new[] { unrelated },
+            await dbContext.DurableExecutionEvents.Select(row => row.ExecutionId).ToArrayAsync(token)
+        );
     }
 
     private static async Task<Guid> SeedProjectGraphAsync(
@@ -583,7 +741,23 @@ public sealed class ProjectDeletionCoordinatorTests
                 ManifestJson =
                     manifestJson
                     ?? JsonSerializer.Serialize(
-                        new { task = new { projectId, projectConversationId = conversationId } }
+                        new
+                        {
+                            schemaVersion = 1,
+                            executionId,
+                            userId = ownerUserId,
+                            agentId = Guid.CreateVersion7(),
+                            agentType = 0,
+                            input = new { contents = Array.Empty<object>() },
+                            settings = new { environmentVariables = new { }, resume = false },
+                            task = new
+                            {
+                                taskId = Guid.CreateVersion7(),
+                                projectId,
+                                projectConversationId = conversationId,
+                                contextId = "context-1",
+                            },
+                        }
                     ),
                 Status = DurableExecutionStatus.Queued,
                 StateChangedAt = now,

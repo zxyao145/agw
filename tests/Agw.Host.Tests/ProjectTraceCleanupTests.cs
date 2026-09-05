@@ -184,7 +184,21 @@ public class ProjectTraceCleanupTests
             new EfRepository<AgentUsage>(dbContext),
             dbContext,
             new ProjectResolver(projectRepository, userInfo),
-            new ProjectDeletionCoordinator(dbContext),
+            new ProjectDeletionCoordinator(
+                dbContext,
+                Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+                new Agw.Infrastructure.Agents.DurableExecutionScopeMaintenance(
+                    dbContext,
+                    Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+                    TimeProvider.System,
+                    Microsoft
+                        .Extensions
+                        .Logging
+                        .Abstractions
+                        .NullLogger<Agw.Infrastructure.Agents.DurableExecutionScopeMaintenance>
+                        .Instance
+                )
+            ),
             TimeProvider.System
         );
     }
@@ -208,7 +222,21 @@ public class ProjectTraceCleanupTests
             new SkillReferenceFacade(dbContext, userInfo),
             new EfRepository<ProjectConnectionRelation>(dbContext),
             new ConnectionReferenceFacade(dbContext, userInfo),
-            new ProjectDeletionCoordinator(dbContext),
+            new ProjectDeletionCoordinator(
+                dbContext,
+                Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+                new Agw.Infrastructure.Agents.DurableExecutionScopeMaintenance(
+                    dbContext,
+                    Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+                    TimeProvider.System,
+                    Microsoft
+                        .Extensions
+                        .Logging
+                        .Abstractions
+                        .NullLogger<Agw.Infrastructure.Agents.DurableExecutionScopeMaintenance>
+                        .Instance
+                )
+            ),
             dbContext,
             new ProjectDomainService(TimeProvider.System),
             new ProjectResolver(projectRepository, userInfo),

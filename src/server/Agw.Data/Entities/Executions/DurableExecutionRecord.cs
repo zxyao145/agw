@@ -63,6 +63,14 @@ public sealed class DurableExecutionRecord : BaseEntity
     /// </summary>
     public string UserId { get; set; } = string.Empty;
 
+    public Guid? ProjectId { get; set; }
+
+    public Guid? ProjectConversationId { get; set; }
+
+    // False only for legacy rows awaiting application-level decryption and backfill.
+    // True with null IDs identifies retained, quarantined rows whose scope is unknown or no longer trusted.
+    public bool ScopeBackfilled { get; set; }
+
     /// <summary>
     /// 重建执行所需的不可变清单；可能包含输入和环境变量，必须加密落库。
     /// </summary>

@@ -3,12 +3,14 @@ using System.Security.Claims;
 using Agw.Agents.Execution.Turns;
 using Agw.Auth.Contracts;
 using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Runtime;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using static Agw.Agents.Application.Persistence.DurableExecutionQueries;
 
 namespace Agw.Agents.Execution.Durable;
 
@@ -168,7 +170,8 @@ internal sealed class DistributedExecutionWorker : BackgroundService
                     .AcquireAsync(DurableExecutionLock.GetResourceName(executionId), lockCancellation.Token)
                     .ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException)
+                when (timeoutCancellation.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
             {
                 // 其他 Server 正持有该 execution 的 PostgreSQL advisory lock，本轮直接跳过。
                 return;
@@ -368,15 +371,6 @@ internal sealed class DistributedExecutionWorker : BackgroundService
         }
         catch (OperationCanceledException) { }
     }
-
-    /// <summary>
-    /// 判断执行状态是否已经终止。
-    /// </summary>
-    private static bool IsTerminal(DurableExecutionStatus status) =>
-        status
-            is DurableExecutionStatus.Completed
-                or DurableExecutionStatus.Failed
-                or DurableExecutionStatus.Interrupted;
 
     private static ClaimsPrincipal CreateUserPrincipal(string userId) =>
         new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], "DistributedExecution"));

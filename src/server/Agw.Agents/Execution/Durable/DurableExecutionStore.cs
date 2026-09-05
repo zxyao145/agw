@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Connections;
 using Agw.Auth.Contracts;
 using Agw.Shared.Contracts.Coordination;
@@ -92,6 +93,7 @@ internal sealed class DurableExecutionStore
     private readonly DbContext _dbContext;
     private readonly TimeProvider _timeProvider;
     private readonly IApplicationLock _applicationLock;
+    private readonly IDurableExecutionScopeMaintenance _scopeMaintenance;
 
     /// <summary>
     /// 创建使用当前 scope DbContext 和统一时钟的 execution 状态仓储。
@@ -99,12 +101,14 @@ internal sealed class DurableExecutionStore
     public DurableExecutionStore(
         DbContext dbContext,
         TimeProvider timeProvider,
-        IApplicationLock? applicationLock = null
+        IApplicationLock applicationLock,
+        IDurableExecutionScopeMaintenance scopeMaintenance
     )
     {
         _dbContext = dbContext;
         _timeProvider = timeProvider;
-        _applicationLock = applicationLock ?? InMemoryApplicationLock.Shared;
+        _applicationLock = applicationLock;
+        _scopeMaintenance = scopeMaintenance;
     }
 
     /// <summary>
@@ -174,6 +178,9 @@ internal sealed class DurableExecutionStore
             Id = executionId,
             UserId = userId,
             CreateBy = userId,
+            ProjectId = task.ProjectId,
+            ProjectConversationId = task.ProjectConversationId,
+            ScopeBackfilled = true,
             UpdateBy = userId,
             ManifestJson = manifestJson,
             Status = DurableExecutionStatus.Queued,
@@ -281,6 +288,7 @@ internal sealed class DurableExecutionStore
         var candidates = _dbContext
             .Set<DurableExecutionRecord>()
             .AsNoTracking()
+            .Where(item => item.ScopeBackfilled && item.ProjectId != null && item.ProjectConversationId != null)
             .Where(item =>
                 item.Status == DurableExecutionStatus.Queued
                 || item.Status == DurableExecutionStatus.Resuming
@@ -336,9 +344,13 @@ internal sealed class DurableExecutionStore
     )
     {
         _dbContext.ChangeTracker.Clear();
-        var record =
-            await FindAsync(executionId, userId: null, tracking: true, cancellationToken).ConfigureAwait(false)
-            ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
+        var record = await _scopeMaintenance
+            .LoadValidatedExecutionAsync(executionId, cancellationToken)
+            .ConfigureAwait(false);
+        if (record == null)
+        {
+            return null;
+        }
         var runnable =
             record.Status is DurableExecutionStatus.Queued or DurableExecutionStatus.Resuming
             || record.Status == DurableExecutionStatus.Running && record.StateChangedAt <= staleRunningBefore;
@@ -347,6 +359,7 @@ internal sealed class DurableExecutionStore
             return null;
         }
 
+        _dbContext.Attach(record);
         record.Status = DurableExecutionStatus.Running;
         record.ErrorMessage = null;
         try
@@ -493,13 +506,8 @@ internal sealed class DurableExecutionStore
         var now = _timeProvider.GetUtcNow();
         var updatedCount = await _dbContext
             .Set<DurableExecutionRecord>()
-            .Where(item =>
-                item.Id == executionId
-                && item.UserId == userId
-                && item.Status != DurableExecutionStatus.Completed
-                && item.Status != DurableExecutionStatus.Failed
-                && item.Status != DurableExecutionStatus.Interrupted
-            )
+            .Where(item => item.Id == executionId && item.UserId == userId)
+            .Where(DurableExecutionQueries.Active)
             .ExecuteUpdateAsync(
                 setters =>
                     setters

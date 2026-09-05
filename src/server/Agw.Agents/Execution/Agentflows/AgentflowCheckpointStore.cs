@@ -322,6 +322,35 @@ public sealed class AgentflowCheckpointStore
                 EnsureExistingResumeMatches(existingResume, validated.Record.Id, userId);
                 return validated.Snapshot;
             }
+
+            var target = await LoadValidatedResumeCheckpointAsync(
+                    dbContext,
+                    occurrenceId,
+                    projectId,
+                    contextId,
+                    agentflowId,
+                    userId,
+                    expectsDurable: true,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            await persistence.BackfillExecutionScopesAsync(cancellationToken).ConfigureAwait(false);
+            if (
+                await persistence
+                    .RepairAndCheckActiveExecutionsAsync(
+                        projectId,
+                        target.Record.ProjectConversationId,
+                        userId,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false)
+            )
+            {
+                throw new AgwException(
+                    ErrorCodes.DurableExecutionConflict,
+                    "Stop the active Agentflow execution before resuming a checkpoint."
+                );
+            }
         }
 
         return await persistence
@@ -357,25 +386,16 @@ public sealed class AgentflowCheckpointStore
                             );
                         }
 
-                        var activeExecutions = await session
-                            .Agents.DurableExecutions.AsNoTracking()
-                            .Where(item =>
-                                item.UserId == userId
-                                && item.Status != DurableExecutionStatus.Completed
-                                && item.Status != DurableExecutionStatus.Failed
-                                && item.Status != DurableExecutionStatus.Interrupted
-                            )
-                            .ToArrayAsync(token)
-                            .ConfigureAwait(false);
                         if (
-                            activeExecutions.Any(item =>
-                                DurableExecutionJson
-                                    .DeserializeRequired<DurableExecutionManifest>(
-                                        item.ManifestJson,
-                                        "durable execution manifest"
-                                    )
-                                    .Task.ProjectConversationId == record.ProjectConversationId
-                            )
+                            await session
+                                .Agents.DurableExecutions.InConversation(
+                                    projectId,
+                                    record.ProjectConversationId,
+                                    userId
+                                )
+                                .Where(DurableExecutionQueries.Active)
+                                .AnyAsync(token)
+                                .ConfigureAwait(false)
                         )
                         {
                             throw new AgwException(
@@ -568,6 +588,9 @@ public sealed class AgentflowCheckpointStore
             {
                 Id = resumeExecutionId,
                 UserId = userId,
+                ProjectId = checkpointRecord.ProjectId,
+                ProjectConversationId = checkpointRecord.ProjectConversationId,
+                ScopeBackfilled = true,
                 ManifestJson = DurableExecutionJson.Serialize(manifest),
                 Status = DurableExecutionStatus.Resuming,
                 SegmentIndex = 1,
