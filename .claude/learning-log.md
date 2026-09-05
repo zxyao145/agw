@@ -19,3 +19,9 @@ persisting injected context.
 `src/server/Agw.Agents/Execution/Agents/AgentRequestChatHistoryProvider.cs`
 **Resolution:** Stage the original request once for every Agent type, forward one transient composite request to
 the model, and let response-only history adapters consume the staged request independently of SDK request callbacks.
+
+
+## 2026-09-05 | Bug Root Cause | A Second TurnToken Restarts a Restored Workflow
+MAF 1.15.0 restores pending messages and requests from checkpoints; sending a new TurnToken after ResumeStreamingAsync restarts the entry executor and can duplicate Agent calls and output. The old path called the restored Agent twice; restricting the token to fresh runs passed 800 parallel restore cases.
+**Files:** `src/server/Agw.Agents/Execution/Agentflows/DurableAgentflowSegmentRunner.cs`, `src/server/Agw.Agents/Execution/Agentflows/InProcessAgentflowRunner.cs`
+**Resolution:** Send the startup token only for a fresh run. Assert restored Agent invocation counts and that upstream nodes/checkpoint occurrences are not replayed; do not infer correctness only from a sometimes-stable output count.

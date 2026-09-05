@@ -60,8 +60,15 @@ public static class DependencyInjection
         services.AddSingleton<IAgentInstructionsSource, ProjectInstructionsSource>();
         services.AddScoped<AgentflowAppService>();
         services.AddScoped<AgentflowTraceAppService>();
+        services.AddScoped<AgentflowWorkflowFactory>();
+        services.AddScoped<AgentflowExecutionContextFactory>();
+        services.AddScoped<AgentflowCheckpointSupport>();
+        services.AddScoped<DurableAgentflowSegmentRunner>();
+        services.AddScoped<InProcessAgentflowRunner>();
         services.AddScoped<AgentflowRuntimeService>();
-        services.AddScoped<IAgentflowRuntimeService, AgentflowRuntimeService>();
+        services.AddScoped<IAgentflowRuntimeService>(provider =>
+            provider.GetRequiredService<AgentflowRuntimeService>()
+        );
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<AgentflowCheckpointStore>();
         services.AddScoped<McpToolServerDomainService>();

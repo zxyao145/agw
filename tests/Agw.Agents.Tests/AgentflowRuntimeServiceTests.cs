@@ -24,7 +24,7 @@ using RuntimeAgentExecutionResult = Agw.Agents.Execution.Agents.Dtos.AgentExecut
 namespace Agw.Agents.Tests;
 
 [Collection(AgentflowExecutionTraceTestCollection.Name)]
-public class AgentflowRuntimeServiceTests : IDisposable
+public partial class AgentflowRuntimeServiceTests : IDisposable
 {
     private readonly IDisposable _userScope;
 
@@ -992,7 +992,7 @@ public class AgentflowRuntimeServiceTests : IDisposable
     {
         var output = new List<ChatMessage> { new(ChatRole.Assistant, "Bonjour") { AuthorName = "french-translator" } };
 
-        var messages = AgentflowRuntimeService.CreateWorkflowOutputMessages(output);
+        var messages = AgentflowMessageMapper.CreateWorkflowOutputMessages(output);
 
         var message = Assert.Single(messages);
         Assert.Equal("french-translator", message.Author);
@@ -1001,20 +1001,27 @@ public class AgentflowRuntimeServiceTests : IDisposable
     }
 
     [Fact]
-    public void CreateWorkflowInputMessages_SetsDefaultUserAuthor()
+    public async Task ExecuteAsync_StringInput_PreservesDefaultUserAuthor()
     {
+        var agent = new ScriptedAgent(["done"]);
+        var fixture = CreateCharacterizationFixture([AgentflowNodeKind.Agent, AgentflowNodeKind.Output], _ => agent);
         var input = "Translate Hello World";
 
-        var messages = AgentflowRuntimeService.CreateWorkflowInputMessages(input);
+        await fixture.Service.ExecuteAsync(
+            fixture.Flow.Id,
+            Guid.CreateVersion7(),
+            input,
+            TestContext.Current.CancellationToken
+        );
 
-        var message = Assert.Single(messages);
+        var message = Assert.Single(Assert.Single(agent.Inputs));
         Assert.Equal(ChatRole.User, message.Role);
         Assert.Equal(Constants.DefaultInputAuthor, message.AuthorName);
         Assert.Equal(input, message.Text);
     }
 
     [Fact]
-    public void CreateWorkflowInputMessages_Handoff_PrependsContextAndStampsTargetCursor()
+    public void CreateExecutionInputMessages_Handoff_PrependsContextAndStampsTargetCursor()
     {
         var agentflowId = Guid.CreateVersion7();
         var handoffMessage = new ChatMessage(ChatRole.Assistant, "approved plan");
@@ -1025,8 +1032,9 @@ public class AgentflowRuntimeServiceTests : IDisposable
             Contents = [new AgwTextContent { Content = "start implementation" }],
         };
 
-        var messages = AgentflowRuntimeService.CreateWorkflowInputMessages(
+        var messages = AgwMessageUtil.CreateExecutionInputMessages(
             input,
+            AgentRuntimeType.Agentflow,
             agentflowId,
             new ConversationHandoff([handoffMessage], 29)
         );
@@ -1053,25 +1061,42 @@ public class AgentflowRuntimeServiceTests : IDisposable
         HumanInteractionContextAccessor? humanInteractionContextAccessor = null,
         AgentflowCheckpointStore? checkpointStore = null,
         IConversationHandoffProvider? conversationHandoffProvider = null,
-        IProjectRuntimeFacade? projectRuntimeFacade = null
-    ) =>
-        new(
+        IProjectRuntimeFacade? projectRuntimeFacade = null,
+        IProjectDefaultResolver? projectDefaults = null,
+        IRuntimeTurnContextAccessor? turnContextAccessor = null
+    )
+    {
+        var workflowFactory = new AgentflowWorkflowFactory(
             logger,
             agentflowRepository,
             nodeRepository,
             edgeRepository,
             agentRuntimeService,
-            providerSessionState,
             summaryService,
-            new RuntimeTurnContextAccessor(),
-            new TestProjectDefaultResolver(),
-            projectRuntimeFacade ?? new TestProjectRuntimeFacade(),
+            turnContextAccessor ?? new RuntimeTurnContextAccessor()
+        );
+        var executionContextFactory = new AgentflowExecutionContextFactory(
+            providerSessionState,
             sessionStateStore,
             conversationHistoryWriter,
-            humanInteractionContextAccessor,
-            checkpointStore,
             conversationHandoffProvider
         );
+        var checkpointSupport = new AgentflowCheckpointSupport(logger, checkpointStore);
+        var durableRunner = new DurableAgentflowSegmentRunner(
+            executionContextFactory,
+            checkpointSupport,
+            humanInteractionContextAccessor
+        );
+        var inProcessRunner = new InProcessAgentflowRunner(logger, executionContextFactory, checkpointSupport);
+        return new AgentflowRuntimeService(
+            workflowFactory,
+            executionContextFactory,
+            inProcessRunner,
+            durableRunner,
+            projectDefaults ?? new TestProjectDefaultResolver(),
+            projectRuntimeFacade ?? new TestProjectRuntimeFacade()
+        );
+    }
 
     private sealed class TestProjectDefaultResolver : IProjectDefaultResolver
     {
@@ -1200,6 +1225,8 @@ public class AgentflowRuntimeServiceTests : IDisposable
             _getId = getId;
         }
 
+        public int ListCallCount { get; private set; }
+
         public IQueryable<TEntity> Queryable => _items.AsQueryable();
 
         public Task<TEntity?> GetByIdAsync(object id) =>
@@ -1215,6 +1242,7 @@ public class AgentflowRuntimeServiceTests : IDisposable
             Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
         )
         {
+            ListCallCount++;
             IQueryable<TEntity> query = _items.AsQueryable();
             if (predicate != null)
             {
@@ -1390,6 +1418,8 @@ public class AgentflowRuntimeServiceTests : IDisposable
 
     private sealed class ApprovalRequestAgent : AIAgent
     {
+        public int RunCount { get; private set; }
+
         protected override string? IdCore => "approval-agent";
 
         public override string? Name => "Approval Agent";
@@ -1423,6 +1453,7 @@ public class AgentflowRuntimeServiceTests : IDisposable
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
         )
         {
+            RunCount++;
             await Task.Yield();
             var response = messages
                 .SelectMany(message => message.Contents)

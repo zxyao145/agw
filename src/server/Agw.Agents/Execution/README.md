@@ -17,6 +17,32 @@ Connection 生命周期、Command Handler 扩展方式与状态所有权的决�
 
 `Microsoft.Agents.AI.AgentSession` 只存在于 `AgentRuntime` 内部，不承担 SignalR connection 或 turn 的职责。
 
+## Agentflow Runtime 协作边界
+
+`IAgentflowRuntimeService` 保持稳定入口。`AgentflowRuntimeService` 解析执行目标与 Project，通过 Execution Context Factory 准备会话，委托 Workflow Factory 构建 Workflow，再调用对应 Runner，并在执行结束或枚举器释放时释放 Workflow Lease。
+
+| 组件 | 职责 | 生命周期 |
+| --- | --- | --- |
+| `AgentflowRuntimeService` | 目标解析、Runner 分派、顶层资源编排 | Scoped；接口与具体类型解析为同一实例 |
+| `AgentflowWorkflowFactory` | 当前用户可见的图与嵌套 Workflow、Agent 资源及不可变节点元数据；Mermaid 使用同一构建路径 | Scoped；每次构建返回独立 Lease |
+| `AgentflowExecutionContextFactory` | Conversation 解析、Provider / Agent Session Scope、Handoff 加载和初始消息准备 | Scoped；不保留单次执行状态 |
+| `InProcessAgentflowRunner` | 流式/非流式事件消费、交互审批、Checkpoint Continue | Scoped；执行状态是方法局部变量 |
+| `DurableAgentflowSegmentRunner` | 首段与恢复、持久化回答匹配、pending/consumed、Checkpoint 捕获、Segment Result | Scoped；每个分段独立持有可变状态 |
+| `AgentflowCheckpointSupport` | Checkpoint 启动/恢复、Marker 映射、记录、Continue 与日志 | Scoped；不保存执行状态 |
+| `AgentflowMessageMapper` | Framework 内容事件、HumanGate 和失败结果的协议映射；新控制消息 ID 由调用方提供 | 无服务依赖的确定性静态映射 |
+
+构建图、HumanGate 元数据和 Checkpoint 节点名共用一次节点查询。Lease 携带这些元数据的不可变快照，Runner 使用该次构建的快照；下一次执行重新构建，不建立跨执行缓存。Checkpoint 指纹验证仍使用既有持久化读取。
+
+Runtime 拥有 Workflow Lease，Runner 拥有当前 `StreamingRun`；Durable Runner 还拥有该段的人工交互作用域。释放顺序为 Run、人工交互作用域、Workflow Lease。Factory 构建失败时清理已经创建的 Agent 和嵌套 Lease，清理异常不能覆盖构建异常。
+
+流式执行保持既有 Error/Finished 顺序；非流式执行保持原有输出集合与非交互审批错误。Durable Runner 逐条等待 sink 写入，返回分段状态；pending 与 terminal 控制消息仍由持久化提交后的协调层发布。Checkpoint 恢复会还原未完成 turn 的消息和待处理请求；只有首次执行发送启动 `TurnToken`，恢复时不能再次发送。Worker 故障后的整个 segment 重试仍为至少一次执行，不增加跨故障的恰好一次保证。
+
+InProcess 的每次显式恢复都携带当前 occurrence 的 Marker；Durable 只在新恢复分支的首段（`SegmentIndex == 1` 且 Manifest 含恢复 occurrence）自动继续这些 Marker，后续 HITL 分段保留自己的等待边界。两者的恢复条件对应不同的输入协议。
+
+JSON 配置解析及 HumanGate 默认 mode / prompt 是确定性转换。随机 ID 分配和可能生成输入 ID 的会话准备位于执行边界，Mapper 不分配 ID。非流式字符串入口继续使用原有 ChatMessage 语义。
+
+Checkpoint 和 Agent Session 的持久化仍经过既有 Application Port / Infrastructure Adapter。Factory 中的 Repository 查询仅访问 Agents 所有的数据；这次拆分没有改变持久化边界、格式或项目引用。
+
 ## 两套执行提供者
 
 实时执行保留两套实现，并通过 `Execution:Provider` 在进程启动时二选一。它不是按请求动态切换；同一套部署中的所有 Host 必须使用相同配置。拆分部署中，Data Plane 映射 SignalR/A2A 并运行 worker，Control Plane 只为 Jobs 注册 durable client，Standalone 同时组合两者。
@@ -44,6 +70,12 @@ Connection 生命周期、Command Handler 扩展方式与状态所有权的决�
 Execution/
 ├── Agentflows/
 │   ├── AgentflowRuntimeService.cs
+│   ├── AgentflowWorkflowFactory.cs
+│   ├── AgentflowExecutionContextFactory.cs
+│   ├── InProcessAgentflowRunner.cs
+│   ├── DurableAgentflowSegmentRunner.cs
+│   ├── AgentflowMessageMapper.cs
+│   ├── AgentflowCheckpointSupport.cs
 │   ├── AgentflowWorkflowCompiler.cs
 │   ├── AgentflowCheckpointStore.cs
 │   ├── AgentflowNodeScopedAgent.cs
