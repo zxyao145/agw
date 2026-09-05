@@ -1,7 +1,8 @@
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Repositories;
 using Agw.Providers.Application;
-using Agw.Providers.Domain.Services;
+using Agw.Providers.Contracts.Manager;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Providers;
@@ -13,6 +14,49 @@ namespace Agw.Projects.Tests;
 
 public class ModelProviderAppServiceTests
 {
+    [Fact]
+    public async Task CreateAsync_ForeignIdsAndLegacyActorArgument_CannotBypassCurrentOwner()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var user = new TestUserInfoService("tester");
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .AddInterceptors(new EntityCreatorInterceptor(new TestAuditUserIdProvider(), TimeProvider.System))
+            .Options;
+        await using var context = new AgwDbContext(options);
+        await context.Database.EnsureCreatedAsync(cancellationToken);
+        var provider = new Provider { Name = "foreign-provider" };
+        var model = new AgwAiModel { Name = "foreign-model" };
+        user.UserId = "other-user";
+        context.AddRange(provider, model);
+        await context.SaveChangesAsync(cancellationToken);
+        context.ChangeTracker.Clear();
+        user.UserId = "tester";
+        var guard = new ModelProviderUsageGuard(
+            new TestAgentReferenceFacade(new EfRepository<Agent>(context), new EfRepository<Agentflow>(context))
+        );
+        var service = new ModelProviderAppService(
+            new EfRepository<ModelProviderRelation>(context),
+            context,
+            guard,
+            user,
+            new EfRepository<Provider>(context),
+            new EfRepository<AgwAiModel>(context)
+        );
+
+        // Act
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            service.CreateAsync(new ModelProviderCreateRequest(model.Id, provider.Id, 0, 0, 0, 0, 0), "other-user")
+        );
+
+        // Assert
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+        Assert.Empty(await context.ModelProviders.ToListAsync(cancellationToken));
+    }
+
     [Fact]
     public async Task DeleteAsync_ReferencedRelation_ThrowsAndPreservesRelation()
     {
@@ -87,7 +131,6 @@ public class ModelProviderAppServiceTests
             var service = new ModelProviderAppService(
                 new EfRepository<ModelProviderRelation>(deleteContext),
                 deleteContext,
-                new ModelProviderDomainService(TimeProvider.System),
                 usageGuard,
                 new TestUserInfoService("seed"),
                 new EfRepository<Provider>(deleteContext),

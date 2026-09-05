@@ -5,7 +5,6 @@ using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Attempts;
 using Agw.Projects.Application;
 using Agw.Projects.Application.Facades;
-using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Testing;
@@ -66,7 +65,6 @@ public sealed class JobAttemptOutcomeRecorderTests
             contextRepository,
             historyRepository,
             dbContext,
-            new ProjectConversationChatHistoryDomainService(),
             projectResolver,
             new TestTimeProvider(FinishedAt),
             userInfo

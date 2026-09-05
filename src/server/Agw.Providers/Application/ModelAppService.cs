@@ -1,5 +1,5 @@
 using Agw.Providers.Contracts.Manager;
-using Agw.Providers.Domain.Services;
+using Agw.Providers.Domain.Rules;
 using Agw.Shared.Contracts;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Repositories;
@@ -11,19 +11,12 @@ public class ModelAppService : IModelAppService
 {
     private readonly IRepository<AgwAiModel> _modelRepository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly ModelDomainService _modelDomainService;
     private readonly ICurrentUser _currentUser;
 
-    public ModelAppService(
-        IRepository<AgwAiModel> modelRepository,
-        IUnitOfWork unitOfWork,
-        ModelDomainService modelDomainService,
-        ICurrentUser currentUser
-    )
+    public ModelAppService(IRepository<AgwAiModel> modelRepository, IUnitOfWork unitOfWork, ICurrentUser currentUser)
     {
         _modelRepository = modelRepository;
         _unitOfWork = unitOfWork;
-        _modelDomainService = modelDomainService;
         _currentUser = currentUser;
     }
 
@@ -41,16 +34,17 @@ public class ModelAppService : IModelAppService
 
     public async Task<AgwAiModel> CreateAsync(ModelCreateRequest request, string user)
     {
-        _modelDomainService.ValidateTokenLimits(request.MaxContextWindowTokens, request.MaxOutputTokens);
+        _ = ResolveOwnerUserId();
+        ModelRules.ValidateTokenLimits(request.MaxContextWindowTokens, request.MaxOutputTokens);
         var model = new AgwAiModel
         {
+            Id = Guid.CreateVersion7(),
             Name = request.Name,
             Description = request.Description,
             MaxContextWindowTokens = request.MaxContextWindowTokens,
             MaxOutputTokens = request.MaxOutputTokens,
         };
 
-        _modelDomainService.PrepareForCreate(model, user);
         await _modelRepository.AddAsync(model);
         await _unitOfWork.SaveChangesAsync();
         return model;
@@ -67,18 +61,11 @@ public class ModelAppService : IModelAppService
             return null;
         }
 
-        _modelDomainService.ValidateTokenLimits(request.MaxContextWindowTokens, request.MaxOutputTokens);
-        _modelDomainService.ApplyUpdate(
-            existing,
-            model =>
-            {
-                model.Name = request.Name;
-                model.Description = request.Description;
-                model.MaxContextWindowTokens = request.MaxContextWindowTokens;
-                model.MaxOutputTokens = request.MaxOutputTokens;
-            },
-            user
-        );
+        ModelRules.ValidateTokenLimits(request.MaxContextWindowTokens, request.MaxOutputTokens);
+        existing.Name = request.Name;
+        existing.Description = request.Description;
+        existing.MaxContextWindowTokens = request.MaxContextWindowTokens;
+        existing.MaxOutputTokens = request.MaxOutputTokens;
 
         _modelRepository.Update(existing);
         await _unitOfWork.SaveChangesAsync();

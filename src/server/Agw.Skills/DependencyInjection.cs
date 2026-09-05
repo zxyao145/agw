@@ -1,4 +1,3 @@
-using Agw.Domain.Services.Skills;
 using Agw.Skills.Application;
 using Agw.Skills.Application.Facades;
 using Agw.Skills.Application.Remote;
@@ -14,7 +13,6 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddSkills(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddScoped<SkillDomainService>();
         services.AddScoped<SkillAppService>();
         services.AddScoped<ISkillReferenceFacade, SkillReferenceFacade>();
         services.AddSingleton<IRemoteSkillClient, RemoteSkillHttpClient>();

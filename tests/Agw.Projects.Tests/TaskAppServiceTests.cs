@@ -444,7 +444,6 @@ public class TaskAppServiceTests
             new EfRepository<ProjectConversation>(dbContext),
             new EfRepository<ProjectConversationChatHistory>(dbContext),
             unitOfWork ?? dbContext,
-            new Domain.Services.ProjectConversationChatHistoryDomainService(),
             projectResolver,
             TimeProvider.System,
             userInfo

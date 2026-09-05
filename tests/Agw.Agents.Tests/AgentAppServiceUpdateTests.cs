@@ -354,7 +354,6 @@ public class AgentAppServiceUpdateTests
             new TestSkillReferenceFacade(skillRepository, userInfo),
             skillRelationRepository ?? new TestRepository<AgentSkillRelation>(),
             unitOfWork ?? new TestUnitOfWork(),
-            new AgentDomainService(TimeProvider.System),
             userInfo
         );
     }

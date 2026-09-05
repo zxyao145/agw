@@ -1,5 +1,5 @@
 using Agw.Providers.Contracts.Manager;
-using Agw.Providers.Domain.Services;
+using Agw.Providers.Domain.Behaviors;
 using Agw.Shared.Contracts;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Repositories;
@@ -13,9 +13,6 @@ public class ProviderAppService : IProviderAppService
     private readonly IRepository<AgwAiModel> _modelRepository;
     private readonly IRepository<ModelProviderRelation> _modelProviderRepository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly ProviderDomainService _providerDomainService;
-    private readonly ModelDomainService _modelDomainService;
-    private readonly ModelProviderDomainService _modelProviderDomainService;
     private readonly ModelProviderUsageGuard _modelProviderUsageGuard;
     private readonly ICurrentUser _currentUser;
 
@@ -24,9 +21,6 @@ public class ProviderAppService : IProviderAppService
         IRepository<AgwAiModel> modelRepository,
         IRepository<ModelProviderRelation> modelProviderRepository,
         IUnitOfWork unitOfWork,
-        ProviderDomainService providerDomainService,
-        ModelDomainService modelDomainService,
-        ModelProviderDomainService modelProviderDomainService,
         ModelProviderUsageGuard modelProviderUsageGuard,
         ICurrentUser currentUser
     )
@@ -35,9 +29,6 @@ public class ProviderAppService : IProviderAppService
         _modelRepository = modelRepository;
         _modelProviderRepository = modelProviderRepository;
         _unitOfWork = unitOfWork;
-        _providerDomainService = providerDomainService;
-        _modelDomainService = modelDomainService;
-        _modelProviderDomainService = modelProviderDomainService;
         _modelProviderUsageGuard = modelProviderUsageGuard;
         _currentUser = currentUser;
     }
@@ -63,18 +54,19 @@ public class ProviderAppService : IProviderAppService
 
     public async Task<Provider> CreateAsync(ProviderCreateRequest request, string user)
     {
+        var ownerUserId = ResolveOwnerUserId();
         var provider = new Provider
         {
+            Id = Guid.CreateVersion7(),
             Name = request.Name,
             ProviderType = request.ProviderType,
             Description = request.Description,
             Endpoint = request.Endpoint,
-            AuthConfigs = BuildAuthConfigs(request.AuthConfigs),
         };
 
-        _providerDomainService.PrepareForCreate(provider, user);
+        new ProviderBehavior(provider).ApplyAuthConfigs(BuildAuthConfigs(request.AuthConfigs));
         await _providerRepository.AddAsync(provider);
-        await SyncModelRelationsAsync(provider.Id, [], NormalizeModelNames(request.ModelNames) ?? [], user);
+        await SyncModelRelationsAsync(provider.Id, [], NormalizeModelNames(request.ModelNames) ?? [], ownerUserId);
         await _unitOfWork.SaveChangesAsync();
         return provider;
     }
@@ -102,34 +94,18 @@ public class ProviderAppService : IProviderAppService
             await _modelProviderUsageGuard.EnsureNotInUseAsync(removedRelations.Select(relation => relation.Id));
         }
 
-        _providerDomainService.ApplyUpdate(
-            existing,
-            provider =>
-            {
-                provider.Name = request.Name;
-                provider.ProviderType = request.ProviderType;
-                provider.Description = request.Description;
-                provider.Endpoint = request.Endpoint;
-
-                if (provider.AuthConfigs == null)
-                {
-                    provider.AuthConfigs = new List<ProviderAuthConfig>();
-                }
-
-                provider.AuthConfigs.Clear();
-                foreach (var authConfig in BuildAuthConfigs(request.AuthConfigs))
-                {
-                    provider.AuthConfigs.Add(authConfig);
-                }
-            },
-            user
-        );
+        existing.Name = request.Name;
+        existing.ProviderType = request.ProviderType;
+        existing.Description = request.Description;
+        existing.Endpoint = request.Endpoint;
+        new ProviderBehavior(existing).ApplyAuthConfigs(BuildAuthConfigs(request.AuthConfigs));
 
         if (normalizedModelNames != null)
         {
-            await SyncModelRelationsAsync(existing.Id, existing.Models.ToList(), normalizedModelNames, user);
+            await SyncModelRelationsAsync(existing.Id, existing.Models.ToList(), normalizedModelNames, ownerUserId);
         }
 
+        _providerRepository.Update(existing);
         await _unitOfWork.SaveChangesAsync();
         return existing;
     }
@@ -203,12 +179,12 @@ public class ProviderAppService : IProviderAppService
 
             var model = new AgwAiModel
             {
+                Id = Guid.CreateVersion7(),
                 Name = modelName,
                 Description = null,
                 MaxContextWindowTokens = AgwAiModel.DefaultMaxContextWindowTokens,
                 MaxOutputTokens = AgwAiModel.DefaultMaxOutputTokens,
             };
-            _modelDomainService.PrepareForCreate(model, user);
             await _modelRepository.AddAsync(model);
             modelByName.Add(modelName, model);
         }
@@ -225,8 +201,12 @@ public class ProviderAppService : IProviderAppService
                 continue;
             }
 
-            var relation = new ModelProviderRelation { ProviderId = providerId, ModelId = model.Id };
-            _modelProviderDomainService.PrepareForCreate(relation, user);
+            var relation = new ModelProviderRelation
+            {
+                Id = Guid.CreateVersion7(),
+                ProviderId = providerId,
+                ModelId = model.Id,
+            };
             await _modelProviderRepository.AddAsync(relation);
         }
     }

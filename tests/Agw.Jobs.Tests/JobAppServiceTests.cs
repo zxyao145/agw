@@ -10,7 +10,6 @@ using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Application;
 using Agw.Projects.Application.Facades;
 using Agw.Projects.Contracts.Runtime;
-using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
@@ -277,7 +276,6 @@ public class JobAppServiceTests : IDisposable
                 conversationRepository,
                 historyRepository,
                 dbContext,
-                new ProjectConversationChatHistoryDomainService(),
                 projectResolver,
                 timeProvider,
                 userInfo

@@ -1,16 +1,17 @@
 using System.Security.Claims;
 using Agw.Files.Abstracts;
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Application.Facades;
 using Agw.Projects.Application.Persistence;
-using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
 using Agw.Skills.Application.Facades;
+using Agw.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -76,6 +77,10 @@ public class ProjectAppServiceTests : IDisposable
         await connection.OpenAsync(cancellationToken);
         var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite(connection)
+            .AddInterceptors(
+                new EntityCreatorInterceptor(new TestAuditUserIdProvider(), TimeProvider.System),
+                new EntityModifierInterceptor(new TestAuditUserIdProvider(), TimeProvider.System)
+            )
             .UseSnakeCaseNamingConvention()
             .Options;
         await using var dbContext = new AgwDbContext(options);
@@ -324,6 +329,9 @@ public class ProjectAppServiceTests : IDisposable
         var foreignConnectionId = Guid.CreateVersion7();
         await using (var seedContext = scope.CreateDbContext())
         {
+            using var foreignUserScope = UserInfoUtil.Push(
+                new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "other-user")], "Test"))
+            );
             seedContext.Connections.Add(
                 new Connection
                 {
@@ -418,6 +426,10 @@ public class ProjectAppServiceTests : IDisposable
         await connection.OpenAsync(TestContext.Current.CancellationToken);
         var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite(connection)
+            .AddInterceptors(
+                new EntityCreatorInterceptor(new TestAuditUserIdProvider(), TimeProvider.System),
+                new EntityModifierInterceptor(new TestAuditUserIdProvider(), TimeProvider.System)
+            )
             .UseSnakeCaseNamingConvention()
             .Options;
         await using var dbContext = new AgwDbContext(options);
@@ -453,6 +465,10 @@ public class ProjectAppServiceTests : IDisposable
 
             var options = new DbContextOptionsBuilder<AgwDbContext>()
                 .UseSqlite(connection)
+                .AddInterceptors(
+                    new EntityCreatorInterceptor(new TestAuditUserIdProvider(), TimeProvider.System),
+                    new EntityModifierInterceptor(new TestAuditUserIdProvider(), TimeProvider.System)
+                )
                 .UseSnakeCaseNamingConvention()
                 .Options;
 
@@ -485,6 +501,72 @@ public class ProjectAppServiceTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task CreateAndUpdateAsync_DefaultProject_PreservesProtectionAndPersistsAudit()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var root = Path.Combine(Path.GetTempPath(), $"agw-project-audit-{Guid.CreateVersion7():N}");
+        var createdAt = new DateTimeOffset(2026, 9, 5, 1, 0, 0, TimeSpan.Zero);
+        var clock = new TestTimeProvider(createdAt);
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .AddInterceptors(
+                new EntityCreatorInterceptor(new TestAuditUserIdProvider(), clock),
+                new EntityModifierInterceptor(new TestAuditUserIdProvider(), clock)
+            )
+            .Options;
+        try
+        {
+            await using var context = new AgwDbContext(options);
+            await context.Database.EnsureCreatedAsync(cancellationToken);
+            var service = CreateService(context);
+
+            // Act
+            var project = await service.CreateAsync(
+                new Project
+                {
+                    Name = "default-built-in",
+                    Type = ProjectType.DefaultBuiltIn,
+                    Workspace = root,
+                }
+            );
+
+            // Assert
+            Assert.NotNull(project);
+            Assert.Equal("tester", project.CreateBy);
+            Assert.Equal(createdAt, project.CreateTime);
+            for (var update = 1; update <= 2; update++)
+            {
+                context.ChangeTracker.Clear();
+                var updatedAt = createdAt.AddMinutes(update);
+                clock.SetUtcNow(updatedAt);
+                var updated = await service.UpdateAsync(project.Id, current => current.Description = "updated");
+                Assert.NotNull(updated);
+                Assert.Equal("tester", updated.CreateBy);
+                Assert.Equal(createdAt, updated.CreateTime);
+                Assert.Equal("tester", updated.UpdateBy);
+                Assert.Equal(updatedAt, updated.UpdateTime);
+            }
+
+            Assert.Null(await service.UpdateAsync(project.Id, current => current.Name = "renamed"));
+            Assert.Null(await service.UpdateAsync(project.Id, current => current.Type = ProjectType.UserDefined));
+            Assert.False(await service.DeleteAsync(project.Id));
+            context.ChangeTracker.Clear();
+            var persisted = await context.Projects.SingleAsync(cancellationToken);
+            Assert.Equal("default-built-in", persisted.Name);
+            Assert.Equal(ProjectType.DefaultBuiltIn, persisted.Type);
+            Assert.Equal(root, persisted.Workspace);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+                Directory.Delete(root, recursive: true);
+        }
+    }
+
     private static ProjectAppService CreateService(
         AgwDbContext dbContext,
         TestUserInfoService? userInfo = null,
@@ -505,7 +587,6 @@ public class ProjectAppServiceTests : IDisposable
             new ConnectionReferenceFacade(dbContext, userInfo),
             deletionCoordinator ?? TestProjectPersistence.CreateDeletionCoordinator(dbContext),
             dbContext,
-            new ProjectDomainService(TimeProvider.System),
             new ProjectResolver(projectRepository, userInfo),
             userInfo,
             fileSystemCache
@@ -591,6 +672,10 @@ public class ProjectAppServiceTests : IDisposable
             await connection.OpenAsync(cancellationToken);
             var options = new DbContextOptionsBuilder<AgwDbContext>()
                 .UseSqlite(connection)
+                .AddInterceptors(
+                    new EntityCreatorInterceptor(new TestAuditUserIdProvider(), TimeProvider.System),
+                    new EntityModifierInterceptor(new TestAuditUserIdProvider(), TimeProvider.System)
+                )
                 .UseSnakeCaseNamingConvention()
                 .Options;
             var dbContext = new AgwDbContext(options);

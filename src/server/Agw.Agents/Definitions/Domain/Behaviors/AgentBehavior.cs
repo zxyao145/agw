@@ -3,32 +3,31 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 
-namespace Agw.Agents.Definitions.Domain;
+namespace Agw.Agents.Definitions.Domain.Behaviors;
 
-public class AgentDomainService
+public sealed class AgentBehavior
 {
-    private readonly TimeProvider _timeProvider;
+    private readonly Agent _agent;
 
-    public AgentDomainService(TimeProvider timeProvider)
-    {
-        _timeProvider = timeProvider;
-    }
-
-    public void PrepareForCreate(Agent agent, string user)
+    public AgentBehavior(Agent agent)
     {
         ArgumentNullException.ThrowIfNull(agent);
+        _agent = agent;
+    }
+
+    public void PrepareForCreate()
+    {
+        var agent = _agent;
 
         EnsureModelProviderIsPresentWhenRequired(agent);
         NormalizeEnvironmentVariables(agent);
         agent.Id = agent.Id == Guid.Empty ? Guid.CreateVersion7() : agent.Id;
         agent.Name = string.IsNullOrWhiteSpace(agent.Name) ? agent.Id.Normalize() : agent.Name;
-        agent.CreateBy = user;
-        agent.CreateTime = _timeProvider.GetUtcNow();
     }
 
-    public void ApplyUpdate(Agent existing, Action<Agent> updateAction, string user)
+    public void ApplyUpdate(Action<Agent> updateAction)
     {
-        ArgumentNullException.ThrowIfNull(existing);
+        var existing = _agent;
         ArgumentNullException.ThrowIfNull(updateAction);
 
         var originalExtra = existing.Extra;
@@ -59,13 +58,6 @@ public class AgentDomainService
         NormalizeEnvironmentVariables(existing);
         EnsureModelProviderIsPresentWhenRequired(existing);
         existing.Name = string.IsNullOrWhiteSpace(existing.Name) ? existing.Id.Normalize() : existing.Name;
-        existing.UpdateBy = user;
-        existing.UpdateTime = _timeProvider.GetUtcNow();
-    }
-
-    public IReadOnlyList<Guid> NormalizeMcpToolServerIds(IEnumerable<Guid>? mcpToolServerIds)
-    {
-        return (mcpToolServerIds ?? []).Where(id => id != Guid.Empty).Distinct().ToList();
     }
 
     private static void EnsureModelProviderIsPresentWhenRequired(Agent agent)

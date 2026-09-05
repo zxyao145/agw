@@ -5,7 +5,7 @@ using Agw.Files.Abstracts;
 using Agw.Files.Utils;
 using Agw.Integrations.Contracts.References;
 using Agw.Projects.Application.Persistence;
-using Agw.Projects.Domain.Services;
+using Agw.Projects.Domain.Behaviors;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
@@ -25,7 +25,6 @@ public class ProjectAppService : IProjectAppService
     private readonly IConnectionReferenceFacade _connectionReferences;
     private readonly IProjectDeletionCoordinator _deletionCoordinator;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly ProjectDomainService _projectDomainService;
     private readonly ProjectResolver _projectResolver;
     private readonly IUserInfoService _userInfoService;
     private readonly IProjectFileSystemCacheInvalidator? _fileSystemCache;
@@ -40,7 +39,6 @@ public class ProjectAppService : IProjectAppService
         IConnectionReferenceFacade connectionReferences,
         IProjectDeletionCoordinator deletionCoordinator,
         IUnitOfWork unitOfWork,
-        ProjectDomainService projectDomainService,
         ProjectResolver projectResolver,
         IUserInfoService userInfoService,
         IProjectFileSystemCacheInvalidator? fileSystemCache = null
@@ -55,7 +53,6 @@ public class ProjectAppService : IProjectAppService
         _connectionReferences = connectionReferences;
         _deletionCoordinator = deletionCoordinator;
         _unitOfWork = unitOfWork;
-        _projectDomainService = projectDomainService;
         _projectResolver = projectResolver;
         _userInfoService = userInfoService;
         _fileSystemCache = fileSystemCache;
@@ -113,8 +110,8 @@ public class ProjectAppService : IProjectAppService
         IEnumerable<Guid>? connectionIds
     )
     {
-        var user = _userInfoService.RequiredUserId;
-        if (!_projectDomainService.TryPrepareForCreate(project, user))
+        _ = _userInfoService.RequiredUserId;
+        if (!new ProjectBehavior(project).TryPrepareForCreate())
         {
             return null;
         }
@@ -151,7 +148,7 @@ public class ProjectAppService : IProjectAppService
 
         var originalType = existing.Type;
         var originalName = existing.Name;
-        if (!_projectDomainService.TryApplyUpdate(existing, updateAction, user))
+        if (!new ProjectBehavior(existing).TryApplyUpdate(updateAction))
         {
             return null;
         }

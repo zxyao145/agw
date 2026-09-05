@@ -1,5 +1,4 @@
 using System.Linq.Expressions;
-using Agw.Domain.Services.Skills;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
@@ -42,8 +41,6 @@ public class SkillAppServiceRemoteTests
         Assert.Equal(SkillKind.Remote, result.Skill.Kind);
         Assert.Equal(string.Empty, result.Skill.ContentPath);
         Assert.Equal("https://example.com/skills/expense-report", result.Skill.RemoteUrl);
-        Assert.Equal("remote-admin", result.Skill.CreateBy);
-        Assert.Equal(UtcNow, result.Skill.CreateTime);
         var cache = Assert.Single(fixture.CacheRepository.Items);
         Assert.Equal(result.Skill.Id, cache.SkillId);
         Assert.Equal(result.Skill.RemoteUrl, cache.SourceUrl);
@@ -159,8 +156,6 @@ public class SkillAppServiceRemoteTests
         Assert.Equal("Updated description", result.Skill.Description);
         Assert.Equal("https://new.example.com/skill", result.Skill.RemoteUrl);
         Assert.Equal(SkillKind.Remote, result.Skill.Kind);
-        Assert.Equal("remote-admin", result.Skill.UpdateBy);
-        Assert.Equal(UtcNow, result.Skill.UpdateTime);
         Assert.Equal(1, fixture.RefreshLock.AcquireCount);
         Assert.Equal(result.Skill.RemoteUrl, cache.SourceUrl);
         Assert.Equal(
@@ -260,7 +255,6 @@ public class SkillAppServiceRemoteTests
                 new TestAgentReferenceFacade(new TestRepository<AgentSkillRelation>([], _ => Guid.Empty), unitOfWork),
                 CacheRepository,
                 unitOfWork,
-                new SkillDomainService(new TestTimeProvider(UtcNow)),
                 dataPaths,
                 Logger,
                 new TestRemoteSkillClient(definition),

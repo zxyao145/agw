@@ -1,7 +1,6 @@
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Controllers;
 using Agw.Agents.Definitions.Facades;
-using Agw.Domain.Services.Skills;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Repositories;
@@ -245,7 +244,6 @@ public class DefinitionPaginationTests
             ),
             new EfRepository<RemoteSkillCache>(database.Context),
             database.Context,
-            new SkillDomainService(TimeProvider.System),
             AgwDataPaths.Resolve(Path.Combine(Path.GetTempPath(), "agw-pagination-tests"), Path.GetTempPath()),
             NullLogger<SkillAppService>.Instance,
             new TestRemoteSkillClient(),
@@ -258,6 +256,84 @@ public class DefinitionPaginationTests
         var listed = Assert.Single(result.Items);
 
         Assert.Equal(new[] { agent.Id }, listed.AgentIds);
+    }
+
+    [Fact]
+    public async Task CreateAndUpdateAgentAsync_ExternalAgent_PersistsOwnerAndRefreshesAudit()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var createdAt = new DateTimeOffset(2026, 9, 5, 1, 0, 0, TimeSpan.Zero);
+        var clock = new TestTimeProvider(createdAt);
+        var auditUser = new TestAuditUserIdProvider("tester");
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .AddInterceptors(
+                new EntityCreatorInterceptor(auditUser, clock),
+                new EntityModifierInterceptor(auditUser, clock)
+            )
+            .Options;
+        await using var context = new AgwDbContext(options);
+        await context.Database.EnsureCreatedAsync(cancellationToken);
+        var service = CreateAgentAppService(context);
+
+        // Act
+        var agent = await service.CreateAgentAsync(
+            new Agent
+            {
+                Type = AgentType.External,
+                Name = "",
+                DisplayName = "before",
+            },
+            [],
+            [],
+            []
+        );
+
+        // Assert
+        Assert.NotNull(agent);
+        Assert.NotEqual(Guid.Empty, agent.Id);
+        Assert.Equal(agent.Id.ToString(), agent.Name);
+        Assert.Equal("tester", agent.CreateBy);
+        Assert.Equal(createdAt, agent.CreateTime);
+
+        for (var update = 1; update <= 2; update++)
+        {
+            context.ChangeTracker.Clear();
+            var updatedAt = createdAt.AddMinutes(update);
+            clock.SetUtcNow(updatedAt);
+            var command = new AgentUpdateCommand(
+                $"name-{update}",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "  {\"enabled\":true}  ",
+                new Dictionary<string, string> { [" KEY "] = $"{update}" },
+                null,
+                null,
+                [AgentUpdateField.DisplayName, AgentUpdateField.Extra, AgentUpdateField.EnvironmentVariables]
+            );
+
+            var updated = await service.UpdateAgentAsync(agent.Id, command);
+            Assert.NotNull(updated);
+            context.ChangeTracker.Clear();
+            var persisted = await context.Agents.SingleAsync(cancellationToken);
+
+            Assert.Equal($"name-{update}", persisted.DisplayName);
+            Assert.Equal(agent.Name, persisted.Name);
+            Assert.Equal("{\"enabled\":true}", persisted.Extra);
+            Assert.Equal($"{update}", persisted.EnvironmentVariables["KEY"]);
+            Assert.Equal("tester", persisted.CreateBy);
+            Assert.Equal(createdAt, persisted.CreateTime);
+            Assert.Equal("tester", persisted.UpdateBy);
+            Assert.Equal(updatedAt, persisted.UpdateTime);
+        }
     }
 
     private static AgentAppService CreateAgentAppService(AgwDbContext dbContext)
@@ -283,7 +359,6 @@ public class DefinitionPaginationTests
             new TestSkillReferenceFacade(skillRepository, userInfo),
             new EfRepository<AgentSkillRelation>(dbContext),
             dbContext,
-            new AgentDomainService(TimeProvider.System),
             userInfo
         );
     }

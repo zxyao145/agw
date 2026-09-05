@@ -1,3 +1,4 @@
+using Agw.Agents.Definitions.Domain.Behaviors;
 using Agw.Auth.Contracts;
 using Agw.Integrations.Contracts.References;
 using Agw.Providers.Contracts.References;
@@ -38,7 +39,6 @@ public class AgentAppService
     private readonly ISkillReferenceFacade _skillReferences;
     private readonly IRepository<AgentSkillRelation> _agentSkillRelationRepository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly AgentDomainService _agentDomainService;
     private readonly IUserInfoService _userInfoService;
 
     public AgentAppService(
@@ -51,7 +51,6 @@ public class AgentAppService
         ISkillReferenceFacade skillReferences,
         IRepository<AgentSkillRelation> agentSkillRelationRepository,
         IUnitOfWork unitOfWork,
-        AgentDomainService agentDomainService,
         IUserInfoService userInfoService
     )
     {
@@ -64,7 +63,6 @@ public class AgentAppService
         _skillReferences = skillReferences;
         _agentSkillRelationRepository = agentSkillRelationRepository;
         _unitOfWork = unitOfWork;
-        _agentDomainService = agentDomainService;
         _userInfoService = userInfoService;
     }
 
@@ -213,7 +211,7 @@ public class AgentAppService
             return null;
         }
 
-        _agentDomainService.PrepareForCreate(agent, user);
+        new AgentBehavior(agent).PrepareForCreate();
         await _agentRepository.AddAsync(agent);
         await SyncAgentMcpToolServerRelationsAsync(agent.Id, mcpToolServerIds, user);
         await SyncAgentSkillRelationsAsync(agent.Id, skillIds);
@@ -227,9 +225,7 @@ public class AgentAppService
         ArgumentNullException.ThrowIfNull(command);
         var user = _userInfoService.RequiredUserId;
 
-        var existing = (
-            await _agentRepository.ListAsync(agent => agent.Id == id && agent.CreateBy == user)
-        ).FirstOrDefault();
+        var existing = await _agentRepository.SingleOrDefaultAsync(agent => agent.Id == id && agent.CreateBy == user);
         if (existing == null)
         {
             return null;
@@ -238,12 +234,12 @@ public class AgentAppService
         if (existing.Type == AgentType.External)
         {
             ValidateExternalAgentUpdate(command);
-            _agentDomainService.ApplyUpdate(existing, agent => ApplyExternalAgentUpdate(agent, command), user);
+            new AgentBehavior(existing).ApplyUpdate(agent => ApplyExternalAgentUpdate(agent, command));
         }
         else
         {
             ValidateSystemAgentUpdate(command);
-            _agentDomainService.ApplyUpdate(existing, agent => ApplySystemAgentUpdate(agent, command), user);
+            new AgentBehavior(existing).ApplyUpdate(agent => ApplySystemAgentUpdate(agent, command));
         }
 
         if (
@@ -452,7 +448,7 @@ public class AgentAppService
             _agentMcpToolServerRepository.Remove(link);
         }
 
-        var requestedIds = _agentDomainService.NormalizeMcpToolServerIds(mcpToolServerIds);
+        var requestedIds = (mcpToolServerIds ?? []).Where(id => id != Guid.Empty).Distinct().ToList();
         if (requestedIds.Count == 0)
         {
             return;

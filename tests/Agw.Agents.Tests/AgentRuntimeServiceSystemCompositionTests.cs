@@ -492,7 +492,6 @@ public class AgentRuntimeServiceSystemCompositionTests
             new TestSkillReferenceFacade(skillRepository, userInfo),
             new EfRepository<AgentSkillRelation>(dbContext),
             dbContext,
-            new AgentDomainService(TimeProvider.System),
             userInfo
         );
     }

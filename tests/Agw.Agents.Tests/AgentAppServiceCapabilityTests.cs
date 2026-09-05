@@ -162,7 +162,6 @@ public class AgentAppServiceCapabilityTests
             new TestSkillReferenceFacade(skillRepository, userInfo),
             new TestRepository<AgentSkillRelation>(skillRelations),
             new TestUnitOfWork(),
-            new AgentDomainService(TimeProvider.System),
             userInfo
         );
     }

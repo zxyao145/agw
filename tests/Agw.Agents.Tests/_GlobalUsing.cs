@@ -2,7 +2,6 @@ global using System;
 global using System.Collections.Generic;
 global using Agw.Agents.Contracts.Execution;
 global using Agw.Agents.Contracts.Messages;
-global using Agw.Agents.Definitions.Domain;
 global using Agw.Agents.Execution;
 global using Agw.Auth.Contracts;
 global using Agw.Integrations.Contracts.Capabilities;

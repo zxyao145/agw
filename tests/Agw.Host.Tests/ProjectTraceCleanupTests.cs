@@ -4,7 +4,6 @@ using Agw.Infrastructure.Projects;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Application.Facades;
 using Agw.Projects.Application;
-using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
@@ -238,7 +237,6 @@ public class ProjectTraceCleanupTests
                 )
             ),
             dbContext,
-            new ProjectDomainService(TimeProvider.System),
             new ProjectResolver(projectRepository, userInfo),
             userInfo
         );

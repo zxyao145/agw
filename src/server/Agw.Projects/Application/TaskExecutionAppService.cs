@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Agw.Auth.Contracts;
+using Agw.Projects.Domain.Rules;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
@@ -13,7 +14,6 @@ public class TaskExecutionAppService
     private readonly IRepository<ProjectConversation> _contextRepository;
     private readonly IRepository<ProjectConversationChatHistory> _recordRepository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly ProjectConversationChatHistoryDomainService _chatHistoryDomainService;
     private readonly ProjectResolver _projectResolver;
     private readonly TimeProvider _timeProvider;
     private readonly IUserInfoService _userInfoService;
@@ -22,7 +22,6 @@ public class TaskExecutionAppService
         IRepository<ProjectConversation> contextRepository,
         IRepository<ProjectConversationChatHistory> recordRepository,
         IUnitOfWork unitOfWork,
-        ProjectConversationChatHistoryDomainService chatHistoryDomainService,
         ProjectResolver projectResolver,
         TimeProvider timeProvider,
         IUserInfoService userInfoService
@@ -31,7 +30,6 @@ public class TaskExecutionAppService
         _contextRepository = contextRepository;
         _recordRepository = recordRepository;
         _unitOfWork = unitOfWork;
-        _chatHistoryDomainService = chatHistoryDomainService;
         _projectResolver = projectResolver;
         _timeProvider = timeProvider;
         _userInfoService = userInfoService;
@@ -316,7 +314,7 @@ public class TaskExecutionAppService
     public async Task<ProjectConversationChatHistory?> GetLatestRecordAsync(Guid taskId)
     {
         var records = await GetOrderedRecordsByTaskIdAsync(taskId, ResolveOwnerUserId());
-        return _chatHistoryDomainService.GetLatest(records);
+        return ProjectConversationChatHistoryRules.GetLatest(records);
     }
 
     public Task<TaskProjection?> MarkSucceededAsync(Guid id, string user) =>
@@ -332,7 +330,7 @@ public class TaskExecutionAppService
         string user
     )
     {
-        var records = _chatHistoryDomainService.Order(
+        var records = ProjectConversationChatHistoryRules.Order(
             await _recordRepository
                 .Queryable.Where(record =>
                     record.TaskId == id
@@ -547,7 +545,7 @@ public class TaskExecutionAppService
     )
     {
         var records = await GetRecordsByTaskIdAsync(taskId, ownerUserId).ConfigureAwait(false);
-        return _chatHistoryDomainService.Order(records);
+        return ProjectConversationChatHistoryRules.Order(records);
     }
 
     private async Task<IReadOnlyList<ProjectConversationChatHistory>> GetRecordsByTaskIdAsync(

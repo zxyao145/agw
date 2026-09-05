@@ -1,5 +1,4 @@
 using System.Linq.Expressions;
-using Agw.Domain.Services.Skills;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
@@ -39,7 +38,6 @@ public class SkillAppServiceBuiltInTests
                 new TestAgentReferenceFacade(new TestRepository<AgentSkillRelation>([], _ => Guid.Empty), unitOfWork),
                 new TestRepository<RemoteSkillCache>([], entity => entity.SkillId),
                 unitOfWork,
-                new SkillDomainService(TimeProvider.System),
                 dataPaths,
                 NullLogger<SkillAppService>.Instance,
                 new TestRemoteSkillClient(),

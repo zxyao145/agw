@@ -71,8 +71,6 @@ public static class DependencyInjection
         );
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<AgentflowCheckpointStore>();
-        services.AddScoped<McpToolServerDomainService>();
-        services.AddScoped<AgentDomainService>();
         services.AddScoped<AgentAppService>();
         services.AddScoped<AgentCatalogFacade>();
         services.AddScoped<IAgentCatalogFacade>(provider => provider.GetRequiredService<AgentCatalogFacade>());

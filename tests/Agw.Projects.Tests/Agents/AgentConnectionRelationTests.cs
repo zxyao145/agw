@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
-using Agw.Agents.Definitions.Domain;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Application.Facades;
@@ -320,7 +319,6 @@ public class AgentConnectionRelationTests : IDisposable
                 new SkillReferenceFacade(dbContext, userInfo),
                 new EfRepository<AgentSkillRelation>(dbContext),
                 dbContext,
-                new AgentDomainService(TimeProvider.System),
                 userInfo
             );
     }

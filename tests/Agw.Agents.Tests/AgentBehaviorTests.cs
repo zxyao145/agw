@@ -1,17 +1,16 @@
+using Agw.Agents.Definitions.Domain.Behaviors;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Tooling;
-using Agw.Testing;
 
 namespace Agw.Agents.Tests;
 
-public class AgentDomainServiceTests
+public class AgentBehaviorTests
 {
     private static readonly DateTimeOffset UtcNow = new(2026, 7, 13, 9, 0, 0, TimeSpan.Zero);
-    private readonly AgentDomainService _service = new(new TestTimeProvider(UtcNow));
 
     [Fact]
-    public void PrepareForCreate_AssignsIdDefaultNameAndCreateMetadata()
+    public void PrepareForCreate_AssignsIdAndDefaultNameWithoutAuditStamping()
     {
         var agent = new Agent
         {
@@ -21,12 +20,12 @@ public class AgentDomainServiceTests
             EnvironmentVariables = null!,
         };
 
-        _service.PrepareForCreate(agent, "tester");
+        new AgentBehavior(agent).PrepareForCreate();
 
         Assert.NotEqual(Guid.Empty, agent.Id);
         Assert.Equal(agent.Id.ToString(), agent.Name);
-        Assert.Equal("tester", agent.CreateBy);
-        Assert.Equal(UtcNow, agent.CreateTime);
+        Assert.Null(agent.CreateBy);
+        Assert.Equal(default, agent.CreateTime);
         Assert.Empty(agent.EnvironmentVariables);
     }
 
@@ -44,7 +43,7 @@ public class AgentDomainServiceTests
             },
         };
 
-        _service.PrepareForCreate(agent, "tester");
+        new AgentBehavior(agent).PrepareForCreate();
 
         Assert.Equal("secret", agent.EnvironmentVariables["AGW_TOKEN"]);
         Assert.Equal("", agent.EnvironmentVariables["EMPTY_VALUE"]);
@@ -64,7 +63,7 @@ public class AgentDomainServiceTests
             },
         };
 
-        var exception = Assert.Throws<AgwException>(() => _service.PrepareForCreate(agent, "tester"));
+        var exception = Assert.Throws<AgwException>(() => new AgentBehavior(agent).PrepareForCreate());
 
         Assert.Equal(ErrorCodes.InvalidAgentEnvironmentVariableName.Code, exception.Code);
     }
@@ -83,7 +82,7 @@ public class AgentDomainServiceTests
             EnvironmentVariables = new Dictionary<string, string> { [name] = "value" },
         };
 
-        var exception = Assert.Throws<AgwException>(() => _service.PrepareForCreate(agent, "tester"));
+        var exception = Assert.Throws<AgwException>(() => new AgentBehavior(agent).PrepareForCreate());
 
         Assert.Equal(ErrorCodes.InvalidAgentEnvironmentVariableName.Code, exception.Code);
     }
@@ -93,7 +92,7 @@ public class AgentDomainServiceTests
     {
         var agent = new Agent { Type = AgentType.System, ModelProviderId = null };
 
-        var exception = Assert.Throws<AgwException>(() => _service.PrepareForCreate(agent, "tester"));
+        var exception = Assert.Throws<AgwException>(() => new AgentBehavior(agent).PrepareForCreate());
         Assert.Equal(ErrorCodes.SystemAgentRequiresModelProvider.Code, exception.Code);
     }
 
@@ -109,7 +108,7 @@ public class AgentDomainServiceTests
             SummaryModelProviderId = summaryModelProviderId,
         };
 
-        _service.PrepareForCreate(agent, "tester");
+        new AgentBehavior(agent).PrepareForCreate();
 
         Assert.True(agent.EnableSummary);
         Assert.Equal(summaryModelProviderId, agent.SummaryModelProviderId);
@@ -126,7 +125,7 @@ public class AgentDomainServiceTests
             SummaryModelProviderId = null,
         };
 
-        var exception = Assert.Throws<AgwException>(() => _service.PrepareForCreate(agent, "tester"));
+        var exception = Assert.Throws<AgwException>(() => new AgentBehavior(agent).PrepareForCreate());
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
     }
@@ -142,7 +141,7 @@ public class AgentDomainServiceTests
             SummaryModelProviderId = null,
         };
 
-        _service.PrepareForCreate(agent, "tester");
+        new AgentBehavior(agent).PrepareForCreate();
 
         Assert.True(agent.EnableSummary);
         Assert.Null(agent.SummaryModelProviderId);
@@ -160,14 +159,14 @@ public class AgentDomainServiceTests
         };
 
         var exception = Assert.Throws<AgwException>(() =>
-            _service.ApplyUpdate(agent, current => current.ModelProviderId = null, "tester")
+            new AgentBehavior(agent).ApplyUpdate(current => current.ModelProviderId = null)
         );
 
         Assert.Equal(ErrorCodes.SystemAgentRequiresModelProvider.Code, exception.Code);
     }
 
     [Fact]
-    public void ApplyUpdate_ExternalAgent_PreservesImmutableFieldsWhileUpdatingMetadata()
+    public void ApplyUpdate_ExternalAgent_PreservesImmutableFieldsAndAuditWhileUpdatingConfiguration()
     {
         var originalId = Guid.CreateVersion7();
         var originalCreateTime = UtcNow.AddDays(-1);
@@ -187,22 +186,18 @@ public class AgentDomainServiceTests
         var updatedModelProviderId = Guid.CreateVersion7();
         var updatedSummaryModelProviderId = Guid.CreateVersion7();
 
-        _service.ApplyUpdate(
-            agent,
-            current =>
-            {
-                current.Id = Guid.CreateVersion7();
-                current.Name = "updated-name";
-                current.SystemPrompt = "updated-prompt";
-                current.Tools = [new ToolValue { Definition = new WebFetchToolDefinition() }];
-                current.EnableSummary = true;
-                current.Type = AgentType.System;
-                current.DisplayName = "After";
-                current.ModelProviderId = updatedModelProviderId;
-                current.SummaryModelProviderId = updatedSummaryModelProviderId;
-            },
-            "updater"
-        );
+        new AgentBehavior(agent).ApplyUpdate(current =>
+        {
+            current.Id = Guid.CreateVersion7();
+            current.Name = "updated-name";
+            current.SystemPrompt = "updated-prompt";
+            current.Tools = [new ToolValue { Definition = new WebFetchToolDefinition() }];
+            current.EnableSummary = true;
+            current.Type = AgentType.System;
+            current.DisplayName = "After";
+            current.ModelProviderId = updatedModelProviderId;
+            current.SummaryModelProviderId = updatedSummaryModelProviderId;
+        });
 
         Assert.Equal(originalId, agent.Id);
         Assert.Equal("original-name", agent.Name);
@@ -213,8 +208,10 @@ public class AgentDomainServiceTests
         Assert.Equal("After", agent.DisplayName);
         Assert.Equal(updatedModelProviderId, agent.ModelProviderId);
         Assert.Equal(updatedSummaryModelProviderId, agent.SummaryModelProviderId);
-        Assert.Equal("updater", agent.UpdateBy);
-        Assert.Equal(UtcNow, agent.UpdateTime);
+        Assert.Equal("creator", agent.CreateBy);
+        Assert.Equal(originalCreateTime, agent.CreateTime);
+        Assert.Null(agent.UpdateBy);
+        Assert.Null(agent.UpdateTime);
     }
 
     [Fact]
@@ -228,7 +225,7 @@ public class AgentDomainServiceTests
             Extra = "{\"before\":true}",
         };
 
-        _service.ApplyUpdate(agent, current => current.Extra = "  {\"sandbox\":false}  ", "updater");
+        new AgentBehavior(agent).ApplyUpdate(current => current.Extra = "  {\"sandbox\":false}  ");
 
         Assert.Equal("{\"sandbox\":false}", agent.Extra);
     }
@@ -244,7 +241,7 @@ public class AgentDomainServiceTests
             Extra = "{\"before\":true}",
         };
 
-        _service.ApplyUpdate(agent, current => current.Extra = "   ", "updater");
+        new AgentBehavior(agent).ApplyUpdate(current => current.Extra = "   ");
 
         Assert.Null(agent.Extra);
     }
@@ -266,7 +263,7 @@ public class AgentDomainServiceTests
         };
 
         var exception = Assert.Throws<AgwException>(() =>
-            _service.ApplyUpdate(agent, current => current.Extra = extra, "updater")
+            new AgentBehavior(agent).ApplyUpdate(current => current.Extra = extra)
         );
 
         Assert.Equal(ErrorCodes.InvalidAgentExtraSettings.Code, exception.Code);
@@ -284,7 +281,7 @@ public class AgentDomainServiceTests
             Extra = "{\"managed\":true}",
         };
 
-        _service.ApplyUpdate(agent, current => current.Extra = "{\"managed\":false}", "updater");
+        new AgentBehavior(agent).ApplyUpdate(current => current.Extra = "{\"managed\":false}");
 
         Assert.Equal("{\"managed\":true}", agent.Extra);
     }
@@ -301,24 +298,11 @@ public class AgentDomainServiceTests
             EnvironmentVariables = new Dictionary<string, string> { ["BEFORE"] = "value" },
         };
 
-        _service.ApplyUpdate(
-            agent,
-            current => current.EnvironmentVariables = new Dictionary<string, string> { ["AFTER"] = "" },
-            "updater"
+        new AgentBehavior(agent).ApplyUpdate(current =>
+            current.EnvironmentVariables = new Dictionary<string, string> { ["AFTER"] = "" }
         );
 
         Assert.Single(agent.EnvironmentVariables);
         Assert.Equal("", agent.EnvironmentVariables["AFTER"]);
-    }
-
-    [Fact]
-    public void NormalizeMcpToolServerIds_RemovesEmptyValuesAndDuplicates()
-    {
-        var first = Guid.CreateVersion7();
-        var second = Guid.CreateVersion7();
-
-        var result = _service.NormalizeMcpToolServerIds([Guid.Empty, first, second, first]);
-
-        Assert.Equal([first, second], result);
     }
 }

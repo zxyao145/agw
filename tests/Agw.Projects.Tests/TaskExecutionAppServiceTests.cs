@@ -1,6 +1,5 @@
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
-using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
 using Microsoft.Data.Sqlite;
@@ -346,7 +345,6 @@ public class TaskExecutionAppServiceTests
             new EfRepository<ProjectConversation>(dbContext),
             new EfRepository<ProjectConversationChatHistory>(dbContext),
             dbContext,
-            new ProjectConversationChatHistoryDomainService(),
             projectResolver,
             TimeProvider.System,
             userInfo

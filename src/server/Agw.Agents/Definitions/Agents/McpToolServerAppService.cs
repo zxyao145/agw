@@ -1,3 +1,4 @@
+using Agw.Agents.Definitions.Domain.Behaviors;
 using Agw.Auth.Contracts;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
@@ -15,7 +16,6 @@ public class McpToolServerAppService
     private readonly IRepository<McpServer> _mcpToolServerRepository;
     private readonly IRepository<AgentMcpServerRelation> _agentMcpToolServerRepository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly McpToolServerDomainService _mcpToolServerDomainService;
     private readonly IUserInfoService _userInfoService;
 
     public McpToolServerAppService(
@@ -23,7 +23,6 @@ public class McpToolServerAppService
         IRepository<McpServer> mcpToolServerRepository,
         IRepository<AgentMcpServerRelation> agentMcpToolServerRepository,
         IUnitOfWork unitOfWork,
-        McpToolServerDomainService mcpToolServerDomainService,
         IUserInfoService userInfoService
     )
     {
@@ -31,7 +30,6 @@ public class McpToolServerAppService
         _mcpToolServerRepository = mcpToolServerRepository;
         _agentMcpToolServerRepository = agentMcpToolServerRepository;
         _unitOfWork = unitOfWork;
-        _mcpToolServerDomainService = mcpToolServerDomainService;
         _userInfoService = userInfoService;
     }
 
@@ -64,9 +62,11 @@ public class McpToolServerAppService
 
     public async Task<McpServer> CreateMcpToolServerAsync(McpServer server, IEnumerable<Guid>? agentIds, string user)
     {
-        _mcpToolServerDomainService.PrepareForCreate(server, user);
+        var ownerUserId = ResolveOwnerUserId();
+        new McpServerBehavior(server).NormalizeCollections();
+        server.Id = server.Id == Guid.Empty ? Guid.CreateVersion7() : server.Id;
         await _mcpToolServerRepository.AddAsync(server);
-        await SyncMcpToolServerAgentRelationsAsync(server.Id, agentIds, user);
+        await SyncMcpToolServerAgentRelationsAsync(server.Id, agentIds, ownerUserId);
         await _unitOfWork.SaveChangesAsync();
         return server;
     }
@@ -82,7 +82,9 @@ public class McpToolServerAppService
             return null;
         }
 
-        _mcpToolServerDomainService.ApplyUpdate(existing, updateAction, user);
+        ArgumentNullException.ThrowIfNull(updateAction);
+        updateAction(existing);
+        new McpServerBehavior(existing).NormalizeCollections();
         _mcpToolServerRepository.Update(existing);
         await _unitOfWork.SaveChangesAsync();
         return existing;
@@ -133,7 +135,7 @@ public class McpToolServerAppService
             _agentMcpToolServerRepository.Remove(link);
         }
 
-        var requestedIds = _mcpToolServerDomainService.NormalizeAgentIds(agentIds);
+        var requestedIds = (agentIds ?? []).Where(id => id != Guid.Empty).Distinct().ToList();
         if (requestedIds.Count == 0)
         {
             return;
