@@ -56,11 +56,12 @@ public static class EndpointRouteBuilderExtensions
     private static async Task<HttpResult> CreateAsync(
         JobCreateRequest request,
         JobAppService jobAppService,
-        ClaimsPrincipal user
+        ClaimsPrincipal user,
+        CancellationToken cancellationToken
     )
     {
         var userId = user.GetUserId();
-        var job = await jobAppService.CreateAsync(request, userId);
+        var job = await jobAppService.CreateAsync(request, userId, cancellationToken);
         return ApiResult.Ok(job);
     }
 
@@ -68,11 +69,12 @@ public static class EndpointRouteBuilderExtensions
         Guid id,
         JobUpdateRequest request,
         JobAppService jobAppService,
-        ClaimsPrincipal user
+        ClaimsPrincipal user,
+        CancellationToken cancellationToken
     )
     {
         var userId = user.GetUserId();
-        var job = await jobAppService.UpdateAsync(id, request, userId);
+        var job = await jobAppService.UpdateAsync(id, request, userId, cancellationToken);
         return job == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(job);
     }
 

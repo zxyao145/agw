@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
 using Agw.Shared.Data.Entities.Executions;
@@ -83,6 +84,9 @@ internal sealed record DurableExecutionManifest
 /// </summary>
 internal sealed record DurableProjectTaskSnapshot
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int Generation { get; init; }
+
     /// <summary>
     /// 获取任务标识。
     /// </summary>
@@ -110,6 +114,7 @@ internal sealed record DurableProjectTaskSnapshot
         new()
         {
             TaskId = task.TaskId,
+            Generation = task.Generation,
             ProjectConversationId = task.ProjectConversationId,
             ProjectId = task.ProjectId,
             ContextId = task.ContextId,
@@ -122,6 +127,7 @@ internal sealed record DurableProjectTaskSnapshot
         new()
         {
             TaskId = TaskId,
+            Generation = Generation,
             ProjectConversationId = ProjectConversationId,
             ProjectId = ProjectId,
             ContextId = ContextId,

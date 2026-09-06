@@ -203,7 +203,7 @@ public class TaskExecutionAppService
         await _dbContext.ProjectConversationChatHistories.AddAsync(record);
         try
         {
-            await _dbContext.SaveChangesAsync();
+            await _dbContext.SaveConversationChangesAsync(conversation.Id, conversation.Generation);
         }
         catch (DbUpdateException exception) when (conversationCreated && conversationId.HasValue)
         {
@@ -231,7 +231,7 @@ public class TaskExecutionAppService
             conversation = concurrentConversation;
             UpdateExistingConversation(conversation, request.JobId, title, user, now);
             await _dbContext.ProjectConversationChatHistories.AddAsync(record);
-            await _dbContext.SaveChangesAsync();
+            await _dbContext.SaveConversationChangesAsync(conversation.Id, conversation.Generation);
         }
 
         var task = TaskExecutionMapper.ToTask(conversation, [record]);
@@ -448,6 +448,13 @@ public class TaskExecutionAppService
 
         if (conversation != null)
         {
+            // A SignalR scope may still track the root from a turn preceding a reset on another process.
+            await _dbContext.ProjectConversations.Entry(conversation).ReloadAsync();
+            if (_dbContext.ProjectConversations.Entry(conversation).State == EntityState.Detached)
+            {
+                throw new AgwException(ErrorCodes.ResourceNotFound);
+            }
+            conversation.ContextId = contextId;
             UpdateExistingConversation(conversation, jobId, title, user, now);
             return (conversation, false);
         }

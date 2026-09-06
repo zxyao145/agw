@@ -50,7 +50,9 @@ public sealed class AgentflowCheckpointPersistence : IAgentflowCheckpointPersist
             CancellationToken,
             Task<AgentflowCheckpointPersistenceResult<TResult>>
         > operation,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        Guid? conversationId = null,
+        int expectedGeneration = 0
     )
     {
         ArgumentNullException.ThrowIfNull(operation);
@@ -64,7 +66,14 @@ public sealed class AgentflowCheckpointPersistence : IAgentflowCheckpointPersist
             return result.Result;
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        if (conversationId.HasValue)
+        {
+            await _dbContext.SaveConversationChangesAsync(conversationId.Value, expectedGeneration, cancellationToken);
+        }
+        else
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return result.Result;
     }

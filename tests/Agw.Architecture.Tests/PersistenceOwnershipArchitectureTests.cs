@@ -207,6 +207,8 @@ public sealed partial class BackendArchitectureTests
             [
                 "Agw.Infrastructure/Auth/EfApiTokenStore.cs",
                 "Agw.Infrastructure/Repositories/JobRepo.cs",
+                "Agw.Infrastructure/Projects/ProjectDeletionCoordinator.cs",
+                "Agw.Infrastructure/Agents/AgentDeletionCoordinator.cs",
                 "Agw.Infrastructure/Data/UserScopeModelBuilderExtensions.cs",
             ],
             StringComparer.Ordinal

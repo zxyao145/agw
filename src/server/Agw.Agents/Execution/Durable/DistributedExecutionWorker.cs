@@ -150,7 +150,7 @@ internal sealed class DistributedExecutionWorker : BackgroundService
     /// </summary>
     private async Task RunExecutionAsync(Guid executionId, CancellationToken cancellationToken)
     {
-        IAsyncDisposable executionLock;
+        IApplicationLockLease executionLock;
         using (
             var timeoutCancellation = new CancellationTokenSource(
                 TimeSpan.FromMilliseconds(_options.LockAcquireTimeoutMilliseconds),
@@ -180,15 +180,20 @@ internal sealed class DistributedExecutionWorker : BackgroundService
 
         await using (executionLock.ConfigureAwait(false))
         {
+            using var ownershipCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken,
+                executionLock.HandleLostToken
+            );
+            var ownershipToken = ownershipCancellation.Token;
             await using var scope = _scopeFactory.CreateAsyncScope();
             var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-            var executor = scope.ServiceProvider.GetRequiredService<DurableExecutionSegmentExecutor>();
+            var executor = scope.ServiceProvider.GetRequiredService<IDurableExecutionSegmentExecutor>();
             var staleBefore = _timeProvider.GetUtcNow() - TimeSpan.FromSeconds(_options.RecoveryProbeSeconds);
             DurableExecutionSnapshot? snapshot;
             using (UserInfoUtil.PushSystemScope())
             {
                 snapshot = await store
-                    .TryBeginSegmentAsync(executionId, staleBefore, cancellationToken)
+                    .TryBeginSegmentAsync(executionId, staleBefore, ownershipToken)
                     .ConfigureAwait(false);
             }
             if (snapshot == null)
@@ -196,9 +201,14 @@ internal sealed class DistributedExecutionWorker : BackgroundService
                 return;
             }
 
-            using var segmentCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            using var monitorCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var interruptMonitor = MonitorInterruptAsync(executionId, segmentCancellation, monitorCancellation.Token);
+            using var segmentCancellation = CancellationTokenSource.CreateLinkedTokenSource(ownershipToken);
+            using var monitorCancellation = CancellationTokenSource.CreateLinkedTokenSource(ownershipToken);
+            var interruptMonitor = MonitorInterruptAsync(
+                executionId,
+                snapshot.StateVersion,
+                segmentCancellation,
+                monitorCancellation.Token
+            );
             DurableExecutionSegmentResult result;
             try
             {
@@ -254,7 +264,9 @@ internal sealed class DistributedExecutionWorker : BackgroundService
             using var ownerScope = UserInfoUtil.Push(CreateUserPrincipal(snapshot.Manifest.ResolveUserId()));
             using (UserInfoUtil.PushSystemScope())
             {
-                persisted = await store.SaveSegmentResultAsync(result, cancellationToken).ConfigureAwait(false);
+                persisted = await store
+                    .SaveSegmentResultAsync(result, snapshot.StateVersion, segmentCancellation.Token)
+                    .ConfigureAwait(false);
             }
             if (IsTerminal(persisted.Status))
             {
@@ -271,6 +283,7 @@ internal sealed class DistributedExecutionWorker : BackgroundService
 
     private async Task MonitorInterruptAsync(
         Guid executionId,
+        Guid expectedStateVersion,
         CancellationTokenSource segmentCancellation,
         CancellationToken cancellationToken
     )
@@ -285,7 +298,7 @@ internal sealed class DistributedExecutionWorker : BackgroundService
             {
                 snapshot = await store.GetAsync(executionId, cancellationToken).ConfigureAwait(false);
             }
-            if (snapshot.Status != DurableExecutionStatus.Interrupted)
+            if (snapshot.Status == DurableExecutionStatus.Running && snapshot.StateVersion == expectedStateVersion)
             {
                 continue;
             }

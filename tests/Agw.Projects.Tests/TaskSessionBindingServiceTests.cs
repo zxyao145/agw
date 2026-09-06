@@ -1,4 +1,5 @@
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Repositories;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -56,7 +57,12 @@ public class TaskSessionBindingServiceTests
         }
 
         await using var dbContext = new AgwDbContext(options);
-        var service = new TaskSessionBindingService(dbContext, TimeProvider.System, new TestUserInfoService());
+        var service = new TaskSessionBindingService(
+            dbContext,
+            TimeProvider.System,
+            new TestUserInfoService(),
+            new TestAgentCatalogFacade(new EfRepository<Agw.Shared.Data.Entities.Agents.McpServer>(dbContext))
+        );
 
         await service.UpsertAsync(
             projectId,
@@ -139,7 +145,12 @@ public class TaskSessionBindingServiceTests
         }
 
         await using var dbContext = new AgwDbContext(options);
-        var service = new TaskSessionBindingService(dbContext, TimeProvider.System, new TestUserInfoService());
+        var service = new TaskSessionBindingService(
+            dbContext,
+            TimeProvider.System,
+            new TestUserInfoService(),
+            new TestAgentCatalogFacade(new EfRepository<Agw.Shared.Data.Entities.Agents.McpServer>(dbContext))
+        );
 
         await service.UpsertAsync(
             projectId,
@@ -216,7 +227,10 @@ public class TaskSessionBindingServiceTests
                     var service = new TaskSessionBindingService(
                         dbContext,
                         TimeProvider.System,
-                        new TestUserInfoService()
+                        new TestUserInfoService(),
+                        new TestAgentCatalogFacade(
+                            new EfRepository<Agw.Shared.Data.Entities.Agents.McpServer>(dbContext)
+                        )
                     );
 
                     return await service.UpsertAsync(

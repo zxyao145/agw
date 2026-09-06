@@ -226,7 +226,15 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             return;
         }
 
-        await AppendAsync(state.ProjectId, state.ContextId, newMessages, state.HistoryScope, cancellationToken)
+        await AppendAsync(
+                state.ProjectId,
+                state.ContextId,
+                newMessages,
+                state.HistoryScope,
+                cancellationToken,
+                state.Generation,
+                state.IsExecutionBound
+            )
             .ConfigureAwait(false);
     }
 
@@ -240,7 +248,16 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         CancellationToken cancellationToken = default
     )
     {
-        await AppendAsync(projectId, contextId, messages, historyScope: null, cancellationToken).ConfigureAwait(false);
+        await AppendAsync(
+                projectId,
+                contextId,
+                messages,
+                historyScope: null,
+                cancellationToken,
+                ConversationSessionContext.GetGeneration(projectId, contextId),
+                ConversationSessionContext.IsBound(projectId, contextId)
+            )
+            .ConfigureAwait(false);
     }
 
     private async Task AppendAsync(
@@ -248,7 +265,9 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         string contextId,
         IReadOnlyList<ChatMessage> messages,
         string? historyScope,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        int expectedGeneration,
+        bool isExecutionBound
     )
     {
         ArgumentNullException.ThrowIfNull(messages);
@@ -317,6 +336,8 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
         if (projectConversation == null)
         {
+            if (isExecutionBound)
+                throw new AgwException(ErrorCodes.ResourceNotFound);
             projectConversation = new ProjectConversation
             {
                 Id = Guid.CreateVersion7(),
@@ -377,7 +398,9 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             );
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await dbContext
+            .SaveConversationChangesAsync(projectConversation.Id, expectedGeneration, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static bool IsResult(ChatMessage message) =>
@@ -670,6 +693,10 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
     public sealed record State
     {
+        public int Generation { get; init; }
+
+        public bool IsExecutionBound { get; init; }
+
         public string ContextId { get; init; }
 
         public Guid ProjectId { get; init; }
@@ -681,6 +708,8 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         public State(string contextId, Guid projectId, string? historyScope = null, string? nodeName = null)
         {
             ContextId = contextId;
+            Generation = ConversationSessionContext.GetGeneration(projectId, contextId);
+            IsExecutionBound = ConversationSessionContext.IsBound(projectId, contextId);
             ProjectId = projectId;
             HistoryScope = historyScope;
             NodeName = string.IsNullOrWhiteSpace(nodeName) ? null : nodeName.Trim();

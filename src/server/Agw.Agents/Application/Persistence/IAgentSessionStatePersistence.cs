@@ -18,7 +18,8 @@ public interface IAgentSessionStatePersistence
         Guid agentId,
         string agentflowNodeId,
         string ownerUserId,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        int expectedGeneration = 0
     );
 
     Task<bool> SaveAsync(
@@ -29,7 +30,8 @@ public interface IAgentSessionStatePersistence
         string serializedSession,
         string ownerUserId,
         DateTimeOffset updatedAt,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        int expectedGeneration = 0
     );
 
     Task<AgentType?> GetAgentTypeAsync(Guid agentId, string ownerUserId, CancellationToken cancellationToken = default);

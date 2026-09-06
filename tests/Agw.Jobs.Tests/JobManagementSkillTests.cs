@@ -518,6 +518,9 @@ public class JobManagementSkillTests : IDisposable
 
         private sealed class NoopProjectTaskFacade : IProjectTaskFacade
         {
+            public Task<int?> GetGenerationAsync(Guid conversationId, CancellationToken cancellationToken = default) =>
+                Task.FromResult<int?>(0);
+
             public Task<ProjectTaskSnapshot> ResolveAsync(
                 ResolveProjectTaskRequest request,
                 CancellationToken cancellationToken = default

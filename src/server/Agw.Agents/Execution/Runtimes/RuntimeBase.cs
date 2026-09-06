@@ -206,6 +206,11 @@ public abstract class RuntimeBase : IAsyncDisposable
     {
         await registration;
         using var scope = turnContextAccessor.Push(turnContext);
+        using var sessionContext = ConversationSessionContext.Push(
+            turnContext.ProjectId,
+            turnContext.ContextId,
+            turnContext.Task.Generation
+        );
         await executeAsync(cancellationToken);
     }
 }

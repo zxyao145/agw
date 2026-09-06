@@ -1504,6 +1504,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("create_time");
 
+                    b.Property<int>("Generation")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0)
+                        .HasColumnName("generation");
+
                     b.Property<Guid?>("JobId")
                         .HasColumnType("TEXT")
                         .HasColumnName("job_id");

@@ -9,7 +9,8 @@ public interface ITaskSessionBindingService
         string contextId,
         Guid agentId,
         string externalAgentName,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        int expectedGeneration = 0
     );
 
     Task<TaskSessionBinding> UpsertAsync(
@@ -19,6 +20,7 @@ public interface ITaskSessionBindingService
         string externalAgentName,
         string providerSessionId,
         string user,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        int expectedGeneration = 0
     );
 }

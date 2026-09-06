@@ -43,7 +43,7 @@ public sealed class AgentflowWorkflowFactory
 
     public async Task<string?> GetMermaidAsync(Guid agentflowId, CancellationToken cancellationToken = default)
     {
-        var agentflow = await GetVisibleAgentflowAsync(agentflowId);
+        var agentflow = await GetVisibleAgentflowAsync(agentflowId, cancellationToken);
         if (agentflow == null)
         {
             return null;
@@ -68,7 +68,7 @@ public sealed class AgentflowWorkflowFactory
         CancellationToken cancellationToken = default
     )
     {
-        var agentflow = await GetVisibleAgentflowAsync(agentflowId);
+        var agentflow = await GetVisibleAgentflowAsync(agentflowId, cancellationToken);
         if (agentflow == null)
         {
             return null;
@@ -86,7 +86,7 @@ public sealed class AgentflowWorkflowFactory
         bool deferHumanInteractions = false
     )
     {
-        var agentflow = await GetVisibleAgentflowAsync(agentflowId);
+        var agentflow = await GetVisibleAgentflowAsync(agentflowId, cancellationToken);
         if (agentflow == null)
         {
             return null;
@@ -108,9 +108,16 @@ public sealed class AgentflowWorkflowFactory
         AgentflowAgentSessionScope? sessionScope = null,
         AgentflowExecutionTraceContext? executionTraceContext = null,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
-        bool deferHumanInteractions = false
+        bool deferHumanInteractions = false,
+        IReadOnlySet<Guid>? ancestors = null
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (ancestors?.Contains(agentflow.Id) == true)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, $"Nested Agentflow cycle at '{agentflow.Id}'.");
+        }
+        var path = new HashSet<Guid>(ancestors ?? Enumerable.Empty<Guid>()) { agentflow.Id };
         var agentflowNodes = await _definitions.ListNodesAsync(agentflow.Id, cancellationToken);
         var agentflowEdges = await _definitions.ListEdgesAsync(agentflow.Id, cancellationToken);
         if (agentflowNodes.Count == 0)
@@ -144,7 +151,8 @@ public sealed class AgentflowWorkflowFactory
                 }
                 else if (node.Kind == AgentflowNodeKind.WorkflowAsAgent && node.RelateId.HasValue)
                 {
-                    var relatedAgentflow = await GetVisibleAgentflowAsync(node.RelateId.Value).ConfigureAwait(false);
+                    var relatedAgentflow = await GetVisibleAgentflowAsync(node.RelateId.Value, cancellationToken)
+                        .ConfigureAwait(false);
                     if (relatedAgentflow == null)
                     {
                         await DisposeWorkflowResourcesWithoutThrowingAsync(resources).ConfigureAwait(false);
@@ -157,7 +165,8 @@ public sealed class AgentflowWorkflowFactory
                         sessionScope,
                         executionTraceContext,
                         environmentVariables,
-                        deferHumanInteractions
+                        deferHumanInteractions,
+                        path
                     );
                     if (flowNode == null)
                     {
@@ -249,10 +258,13 @@ public sealed class AgentflowWorkflowFactory
         catch { }
     }
 
-    internal async Task<Agentflow?> GetVisibleAgentflowAsync(Guid agentflowId)
+    internal async Task<Agentflow?> GetVisibleAgentflowAsync(
+        Guid agentflowId,
+        CancellationToken cancellationToken = default
+    )
     {
         var ownerUserId = ResolveExecutionUserId();
-        return await _definitions.FindVisibleAsync(agentflowId, ownerUserId).ConfigureAwait(false);
+        return await _definitions.FindVisibleAsync(agentflowId, ownerUserId, cancellationToken).ConfigureAwait(false);
     }
 
     internal string ResolveExecutionUserId()

@@ -25,7 +25,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Agw.Infrastructure.Data;
 
-public class AgwDbContext
+public partial class AgwDbContext
     : EFContext,
         IAgentsDbContext,
         IProjectsDbContext,

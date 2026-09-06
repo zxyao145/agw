@@ -35,4 +35,7 @@ public class ExecCommand : AgentRunCommand
 
     [JsonIgnore]
     internal AgentflowCheckpointSnapshot? ResumeCheckpoint { get; set; }
+
+    [JsonIgnore]
+    internal int? ResumeGeneration { get; set; }
 }

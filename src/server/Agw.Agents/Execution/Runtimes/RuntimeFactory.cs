@@ -7,6 +7,8 @@ using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Turns;
 using Agw.Files.Abstracts;
+using Agw.Projects.Contracts.Execution;
+using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Agents.Execution.Runtimes;
@@ -43,6 +45,7 @@ public interface IRuntimeFactory
 public sealed class RuntimeFactory : IRuntimeFactory
 {
     private readonly IAgentRuntimeService _agentRuntimeService;
+    private readonly IConversationExecutionGate? _conversationGate;
     private readonly AgentflowRuntimeService _agentflowRuntimeService;
     private readonly IAgwFileSystemResolver _fileSystemResolver;
     private readonly RuntimeTurnContextAccessor _turnContextAccessor;
@@ -53,7 +56,8 @@ public sealed class RuntimeFactory : IRuntimeFactory
         AgentflowRuntimeService agentflowRuntimeService,
         IAgwFileSystemResolver fileSystemResolver,
         RuntimeTurnContextAccessor turnContextAccessor,
-        HumanInteractionContextAccessor humanInteractionContextAccessor
+        HumanInteractionContextAccessor humanInteractionContextAccessor,
+        IConversationExecutionGate? conversationGate = null
     )
     {
         _agentRuntimeService = agentRuntimeService;
@@ -61,9 +65,77 @@ public sealed class RuntimeFactory : IRuntimeFactory
         _fileSystemResolver = fileSystemResolver;
         _turnContextAccessor = turnContextAccessor;
         _humanInteractionContextAccessor = humanInteractionContextAccessor;
+        _conversationGate = conversationGate;
     }
 
     public async Task<RuntimeStartResult> StartAsync(RuntimeStartRequest request, CancellationToken cancellationToken)
+    {
+        using var sessionContext = ConversationSessionContext.Push(
+            request.Task.ProjectId,
+            request.Task.ContextId,
+            request.Task.Generation
+        );
+        var lease =
+            _conversationGate == null
+                ? null
+                : await _conversationGate.AcquireAsync(
+                    request.Task.ProjectConversationId,
+                    request.Task.Generation,
+                    cancellationToken
+                );
+        var ownership = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            lease?.HandleLostToken ?? CancellationToken.None
+        );
+        try
+        {
+            var result = await StartCoreAsync(request, ownership.Token);
+            if (result.ActiveTurn == null)
+            {
+                if (lease != null)
+                    await lease.DisposeAsync();
+                ownership.Dispose();
+            }
+            else
+            {
+                _ = ReleaseExecutionLeaseAsync(result.Runtime!.WhenIdleAsync(), lease, ownership);
+            }
+            return result;
+        }
+        catch
+        {
+            if (lease != null)
+                await lease.DisposeAsync();
+            ownership.Dispose();
+            throw;
+        }
+    }
+
+    private static async Task ReleaseExecutionLeaseAsync(
+        Task completion,
+        IApplicationLockLease? lease,
+        CancellationTokenSource ownership
+    )
+    {
+        try
+        {
+            await completion;
+        }
+        catch (Exception)
+        { /* TurnPipeline owns execution error reporting. */
+        }
+        finally
+        {
+            if (lease != null)
+                await lease.DisposeAsync();
+            ownership.Dispose();
+        }
+    }
+
+    private async Task<RuntimeStartResult> StartCoreAsync(
+        RuntimeStartRequest request,
+        CancellationToken cancellationToken
+    )
     {
         var executionCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         await EnsureWorkspaceAsync(request.TurnContext.ProjectId, cancellationToken);
@@ -78,7 +150,8 @@ public sealed class RuntimeFactory : IRuntimeFactory
                         session,
                         request.Task.ProjectId,
                         request.TurnContext.Settings,
-                        request.Task.ContextId
+                        request.Task.ContextId,
+                        request.Task.Generation
                     )
                 )
                 {
@@ -319,7 +392,8 @@ public sealed class RuntimeFactory : IRuntimeFactory
         AgentRuntime? session,
         Guid projectId,
         ExecutionSettings settings,
-        string resolvedContextId
+        string resolvedContextId,
+        int generation
     )
     {
         if (session == null)
@@ -328,7 +402,8 @@ public sealed class RuntimeFactory : IRuntimeFactory
             string.IsNullOrWhiteSpace(settings.ContextId) ? resolvedContextId : settings.ContextId
         );
         return string.Equals(session._contextId, contextId, StringComparison.Ordinal)
-            && session._projectId == projectId;
+            && session._projectId == projectId
+            && (session.SessionStateScope?.Generation ?? 0) == generation;
     }
 
     private sealed class MessageSinkApprovalHandler : IHumanGateApprovalHandler

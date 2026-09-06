@@ -31,6 +31,7 @@ public class AgentAppService
     ];
 
     private readonly IAgentsDbContext _dbContext;
+    private readonly IAgentDeletionCoordinator _deletionCoordinator;
     private readonly IConnectionReferenceFacade _connectionReferences;
     private readonly IModelProviderReferenceFacade _modelProviderReferences;
     private readonly ISkillReferenceFacade _skillReferences;
@@ -41,7 +42,8 @@ public class AgentAppService
         IConnectionReferenceFacade connectionReferences,
         IModelProviderReferenceFacade modelProviderReferences,
         ISkillReferenceFacade skillReferences,
-        IUserInfoService userInfoService
+        IUserInfoService userInfoService,
+        IAgentDeletionCoordinator deletionCoordinator
     )
     {
         _dbContext = dbContext;
@@ -49,6 +51,7 @@ public class AgentAppService
         _modelProviderReferences = modelProviderReferences;
         _skillReferences = skillReferences;
         _userInfoService = userInfoService;
+        _deletionCoordinator = deletionCoordinator;
     }
 
     public async Task<IReadOnlyList<Agent>> ListAgentsAsync()
@@ -276,39 +279,8 @@ public class AgentAppService
         return existing;
     }
 
-    public async Task<bool> DeleteAgentAsync(Guid id)
-    {
-        var ownerUserId = _userInfoService.RequiredUserId;
-        var existing = await _dbContext.Agents.FirstOrDefaultAsync(agent =>
-            agent.Id == id && agent.CreateBy == ownerUserId
-        );
-        if (existing == null)
-        {
-            return false;
-        }
-
-        var skillRelations = await _dbContext.AgentSkillRelations.Where(x => x.AgentId == id).ToListAsync();
-        foreach (var relation in skillRelations)
-        {
-            _dbContext.AgentSkillRelations.Remove(relation);
-        }
-
-        var connectionRelations = await _dbContext.AgentConnectionRelations.Where(x => x.AgentId == id).ToListAsync();
-        foreach (var relation in connectionRelations)
-        {
-            _dbContext.AgentConnectionRelations.Remove(relation);
-        }
-
-        var mcpRelations = await _dbContext.AgentMcpToolServers.Where(x => x.AgentId == id).ToListAsync();
-        foreach (var relation in mcpRelations)
-        {
-            _dbContext.AgentMcpToolServers.Remove(relation);
-        }
-
-        _dbContext.Agents.Remove(existing);
-        await _dbContext.SaveChangesAsync();
-        return true;
-    }
+    public Task<bool> DeleteAgentAsync(Guid id, CancellationToken cancellationToken = default) =>
+        _deletionCoordinator.DeleteAsync(id, _userInfoService.RequiredUserId, cancellationToken);
 
     private async Task<bool> HasInvalidModelProviderAsync(Guid? modelProviderId)
     {

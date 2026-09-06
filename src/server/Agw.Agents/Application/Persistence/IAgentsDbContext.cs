@@ -8,6 +8,12 @@ namespace Agw.Agents.Application.Persistence;
 
 public interface IAgentsDbContext : IModuleDbContext
 {
+    Task<int> SaveConversationChangesAsync(
+        Guid conversationId,
+        int expectedGeneration,
+        CancellationToken cancellationToken = default
+    );
+
     DbSet<Agent> Agents { get; }
 
     DbSet<AgentConnectionRelation> AgentConnectionRelations { get; }

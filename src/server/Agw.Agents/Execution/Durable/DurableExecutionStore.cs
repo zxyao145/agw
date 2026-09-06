@@ -30,6 +30,8 @@ internal sealed record DurableExecutionSnapshot
     /// </summary>
     public required int SegmentIndex { get; init; }
 
+    public Guid StateVersion { get; init; }
+
     /// <summary>
     /// 获取恢复 Agentflow 所需的最新 checkpoint。
     /// </summary>
@@ -169,6 +171,11 @@ internal sealed class DurableExecutionStore
         }
         if (existing != null)
         {
+            await _dbContext.SaveConversationChangesAsync(
+                task.ProjectConversationId,
+                task.Generation,
+                cancellationToken
+            );
             return EnsureIdempotentRegistration(existing, userId, manifestJson);
         }
 
@@ -191,7 +198,9 @@ internal sealed class DurableExecutionStore
         _dbContext.DurableExecutions.Add(record);
         try
         {
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await _dbContext
+                .SaveConversationChangesAsync(task.ProjectConversationId, task.Generation, cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (DbUpdateException)
         {
@@ -236,7 +245,9 @@ internal sealed class DurableExecutionStore
         var record =
             await FindAsync(executionId, userId, tracking: false, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
-        return ToSnapshot(record);
+        var snapshot = ToSnapshot(record);
+        await EnsureSessionCurrentAsync(snapshot, cancellationToken);
+        return snapshot;
     }
 
     /// <summary>
@@ -375,6 +386,7 @@ internal sealed class DurableExecutionStore
     /// </summary>
     internal async Task<DurableExecutionSnapshot> SaveSegmentResultAsync(
         DurableExecutionSegmentResult result,
+        Guid expectedStateVersion,
         CancellationToken cancellationToken
     )
     {
@@ -383,7 +395,11 @@ internal sealed class DurableExecutionStore
         var record =
             await FindAsync(result.ExecutionId, userId: null, tracking: true, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
-        if (record.Status != DurableExecutionStatus.Running || record.SegmentIndex != result.SegmentIndex)
+        if (
+            record.Status != DurableExecutionStatus.Running
+            || record.SegmentIndex != result.SegmentIndex
+            || record.StateVersion != expectedStateVersion
+        )
         {
             if (record.Status == DurableExecutionStatus.Interrupted)
             {
@@ -426,6 +442,7 @@ internal sealed class DurableExecutionStore
             await FindAsync(request.ExecutionId, userId, tracking: true, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
         var snapshot = ToSnapshot(record);
+        await EnsureSessionCurrentAsync(snapshot, cancellationToken);
         var response = new DurableHumanResponseEnvelope
         {
             ExecutionId = request.ExecutionId,
@@ -680,6 +697,7 @@ internal sealed class DurableExecutionStore
             Manifest = manifest,
             Status = record.Status,
             SegmentIndex = record.SegmentIndex,
+            StateVersion = record.StateVersion,
             Checkpoint = string.IsNullOrWhiteSpace(record.CheckpointJson)
                 ? null
                 : DurableExecutionJson.DeserializeRequired<DurableAgentflowCheckpoint>(
@@ -748,7 +766,27 @@ internal sealed class DurableExecutionStore
         }
 
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal(record.UserId));
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        var task = ToSnapshot(record).Manifest.Task;
+        await _dbContext
+            .SaveConversationChangesAsync(task.ProjectConversationId, task.Generation, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task EnsureSessionCurrentAsync(DurableExecutionSnapshot snapshot, CancellationToken cancellationToken)
+    {
+        var task = snapshot.Manifest.Task;
+        if (
+            !await _scopeMaintenance.IsSessionCurrentAsync(
+                task.ProjectId,
+                task.ProjectConversationId,
+                snapshot.Manifest.ResolveUserId(),
+                task.Generation,
+                cancellationToken
+            )
+        )
+        {
+            throw new AgwException(ErrorCodes.ConversationSessionConflict);
+        }
     }
 
     private static ClaimsPrincipal CreateUserPrincipal(string userId) =>

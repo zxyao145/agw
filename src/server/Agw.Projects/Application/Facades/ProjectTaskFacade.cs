@@ -27,6 +27,17 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
         _userInfoService = userInfoService;
     }
 
+    public Task<int?> GetGenerationAsync(Guid conversationId, CancellationToken cancellationToken = default) =>
+        _dbContext
+            .ProjectConversations.AsNoTracking()
+            .Where(conversation =>
+                conversation.Id == conversationId
+                && conversation.CreateBy == _userInfoService.RequiredUserId
+                && conversation.Project!.CreateBy == _userInfoService.RequiredUserId
+            )
+            .Select(conversation => (int?)conversation.Generation)
+            .SingleOrDefaultAsync(cancellationToken);
+
     public async Task<ProjectTaskSnapshot> ResolveAsync(
         ResolveProjectTaskRequest request,
         CancellationToken cancellationToken = default
@@ -167,7 +178,8 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
             task.ErrorMessage,
             task.CreateTime,
             task.UpdateTime,
-            task.FinishedTime
+            task.FinishedTime,
+            task.Generation
         );
 
     internal static ProjectTaskStatus Map(TaskExecutionStatus status) =>

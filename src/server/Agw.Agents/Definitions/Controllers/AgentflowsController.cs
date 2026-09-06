@@ -93,7 +93,10 @@ public class AgentflowsController : ControllerBase
 
     [HttpPost]
     [ProducesApiResult(typeof(Agentflow))]
-    public async Task<IActionResult> CreateAsync([FromBody] AgentflowCreateRequest request)
+    public async Task<IActionResult> CreateAsync(
+        [FromBody] AgentflowCreateRequest request,
+        CancellationToken cancellationToken = default
+    )
     {
         var user = User.GetUserId();
         var agentflow = new Agentflow
@@ -128,7 +131,7 @@ public class AgentflowsController : ControllerBase
             })
             .ToList();
 
-        var created = await _agentflowAppService.CreateAsync(agentflow, nodes, edges, user);
+        var created = await _agentflowAppService.CreateAsync(agentflow, nodes, edges, user, cancellationToken);
         return created == null
             ? ApiResult.BadRequest(
                 "Failed to create agentflow (validation failed or referenced resources not found).",
@@ -139,7 +142,11 @@ public class AgentflowsController : ControllerBase
 
     [HttpPut("{id:guid}")]
     [ProducesApiResult(typeof(Agentflow))]
-    public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] AgentflowUpdateRequest request)
+    public async Task<IActionResult> UpdateAsync(
+        Guid id,
+        [FromBody] AgentflowUpdateRequest request,
+        CancellationToken cancellationToken = default
+    )
     {
         var user = User.GetUserId();
         var nodes = request
@@ -177,7 +184,8 @@ public class AgentflowsController : ControllerBase
             },
             nodes,
             edges,
-            user
+            user,
+            cancellationToken
         );
 
         return updated == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(updated);
@@ -200,9 +208,9 @@ public class AgentflowsController : ControllerBase
 
     [HttpDelete("{id:guid}")]
     [ProducesApiResult]
-    public async Task<IActionResult> DeleteAsync(Guid id)
+    public async Task<IActionResult> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var deleted = await _agentflowAppService.DeleteAsync(id);
+        var deleted = await _agentflowAppService.DeleteAsync(id, cancellationToken);
         return deleted ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
     }
 }

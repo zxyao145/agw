@@ -167,7 +167,9 @@ public sealed class AgentflowCheckpointStore
                         Commit: true
                     );
                 },
-                cancellationToken
+                cancellationToken,
+                conversationId,
+                ConversationSessionContext.GetGeneration(projectId, contextId)
             )
             .ConfigureAwait(false);
     }
@@ -291,14 +293,37 @@ public sealed class AgentflowCheckpointStore
         CancellationToken cancellationToken
     )
     {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var persistence = scope.ServiceProvider.GetRequiredService<IAgentflowCheckpointPersistence>();
+        var checkpoint =
+            await persistence.FindCheckpointAsync(occurrenceId, cancellationToken)
+            ?? throw new AgwException(ErrorCodes.InvalidParam, "Agentflow checkpoint was not found.");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(100), _timeProvider);
+        using var acquisition = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
+        IApplicationLockLease executionLease;
+        try
+        {
+            executionLease = await _applicationLock.AcquireAsync(
+                ConversationExecutionLock.GetResourceName(checkpoint.ProjectConversationId),
+                acquisition.Token
+            );
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new AgwException(ErrorCodes.ConversationSessionConflict);
+        }
+        await using var heldExecutionLease = executionLease;
+        using var mutation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            executionLease.HandleLostToken
+        );
+        cancellationToken = mutation.Token;
         await using var lifecycleLock = await _applicationLock
             .AcquireAsync(ProjectLifecycleLock.GetResourceName(projectId), cancellationToken)
             .ConfigureAwait(false);
         await using var historyLock = await _applicationLock
             .AcquireAsync(GetHistoryLockName(projectId, contextId), cancellationToken)
             .ConfigureAwait(false);
-        await using var scope = _scopeFactory.CreateAsyncScope();
-        var persistence = scope.ServiceProvider.GetRequiredService<IAgentflowCheckpointPersistence>();
         if (resumeExecutionId.HasValue)
         {
             var dbContext = scope.ServiceProvider.GetRequiredService<IAgentsDbContext>();

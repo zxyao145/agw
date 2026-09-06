@@ -127,6 +127,9 @@ public static class DependencyInjection
             services.AddScoped<DurableExecutionStore>();
             services.AddScoped<DurableAgentSegmentRunner>();
             services.AddScoped<DurableExecutionSegmentExecutor>();
+            services.AddScoped<IDurableExecutionSegmentExecutor>(sp =>
+                sp.GetRequiredService<DurableExecutionSegmentExecutor>()
+            );
             AddExecutionEventStream(services, executionOptions);
             services.AddSingleton<DurableExecutionCoordinator>();
             services.AddSingleton<IDurableExecutionClient, DurableExecutionClient>();

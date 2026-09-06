@@ -17,9 +17,25 @@ public sealed class AgentflowDefinitionPolicy
         Guid? summaryModelProviderId = null,
         IReadOnlyCollection<Guid>? existingModelProviderIds = null,
         IReadOnlyDictionary<Guid, string>? existingAgentNames = null,
-        IReadOnlyCollection<Guid>? existingAgentflowIds = null
+        IReadOnlyCollection<Guid>? existingAgentflowIds = null,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<Guid>>? nestedReferences = null
     )
     {
+        if (
+            nestedReferences != null
+            && AgentflowReferenceTopology.HasCycle(
+                agentflowId,
+                (nodes ?? [])
+                    .Where(node => node.Kind == AgentflowNodeKind.WorkflowAsAgent && node.RelateId.HasValue)
+                    .Select(node => node.RelateId!.Value)
+                    .ToArray(),
+                nestedReferences
+            )
+        )
+        {
+            return new AgentflowDefinitionDecision { Nodes = null, Edges = null };
+        }
+
         var (normalizedNodes, normalizedEdges) = ValidateAndNormalizeGraph(
             nodes,
             edges,

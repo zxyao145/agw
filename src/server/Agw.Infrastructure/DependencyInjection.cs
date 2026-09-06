@@ -127,7 +127,9 @@ public static class DependencyInjection
         services.AddScoped<IDurableExecutionScopeMaintenance, DurableExecutionScopeMaintenance>();
         services.AddHostedService<DurableExecutionScopeRecoveryService>();
         services.AddScoped<IAgentSessionStatePersistence, AgentSessionStatePersistence>();
+        services.AddScoped<IAgentDeletionCoordinator, AgentDeletionCoordinator>();
         services.AddScoped<IProjectDeletionCoordinator, ProjectDeletionCoordinator>();
+        services.AddScoped<Agw.Projects.Contracts.Execution.IConversationExecutionGate, ConversationExecutionGate>();
         services.AddScoped<IProjectMemoryPersistence, ProjectMemoryPersistence>();
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
         services.AddScoped<JobRepo>();

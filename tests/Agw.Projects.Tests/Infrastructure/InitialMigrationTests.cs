@@ -15,7 +15,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Infrastructure.Tests;
 
-public sealed class InitialMigrationTests
+public sealed partial class InitialMigrationTests
 {
     [Theory]
     [InlineData(false)]
@@ -33,7 +33,7 @@ public sealed class InitialMigrationTests
         Assert.False(dbContext.Database.HasPendingModelChanges());
 
         var migrations = dbContext.Database.GetMigrations().ToArray();
-        Assert.Equal(11, migrations.Length);
+        Assert.Equal(12, migrations.Length);
         Assert.EndsWith("_Init", migrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", migrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", migrations[2], StringComparison.Ordinal);
@@ -45,6 +45,7 @@ public sealed class InitialMigrationTests
         Assert.EndsWith("_EnforceUserDataIsolation", migrations[8], StringComparison.Ordinal);
         Assert.EndsWith("_AddAgentAndAgentflowEnable", migrations[9], StringComparison.Ordinal);
         Assert.EndsWith("_AddDurableExecutionScope", migrations[10], StringComparison.Ordinal);
+        Assert.EndsWith("_ConversationSessionGeneration", migrations[11], StringComparison.Ordinal);
 
         var script = dbContext
             .GetService<IMigrator>()
@@ -58,6 +59,7 @@ public sealed class InitialMigrationTests
         Assert.Contains("project_conversation_chat_history", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("durable_execution", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("scope_backfilled", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("generation", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("ix_durable_execution_scope_backfilled_user_id_id", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("ix_durable_execution_user_id_project_id", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("execution_stream_entry", script, StringComparison.OrdinalIgnoreCase);
@@ -138,7 +140,7 @@ public sealed class InitialMigrationTests
         await dbContext.Database.MigrateAsync(cancellationToken);
 
         var appliedMigrations = (await dbContext.Database.GetAppliedMigrationsAsync(cancellationToken)).ToArray();
-        Assert.Equal(11, appliedMigrations.Length);
+        Assert.Equal(12, appliedMigrations.Length);
         Assert.EndsWith("_Init", appliedMigrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", appliedMigrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", appliedMigrations[2], StringComparison.Ordinal);
@@ -150,6 +152,7 @@ public sealed class InitialMigrationTests
         Assert.EndsWith("_EnforceUserDataIsolation", appliedMigrations[8], StringComparison.Ordinal);
         Assert.EndsWith("_AddAgentAndAgentflowEnable", appliedMigrations[9], StringComparison.Ordinal);
         Assert.EndsWith("_AddDurableExecutionScope", appliedMigrations[10], StringComparison.Ordinal);
+        Assert.EndsWith("_ConversationSessionGeneration", appliedMigrations[11], StringComparison.Ordinal);
         Assert.True(await ColumnExistsAsync(connection, "durable_execution", "project_id", cancellationToken));
         Assert.True(
             await ColumnExistsAsync(connection, "durable_execution", "project_conversation_id", cancellationToken)
@@ -159,6 +162,10 @@ public sealed class InitialMigrationTests
         Assert.True(await TableExistsAsync(connection, "plugin_installation", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "project_memory", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "project_conversation", cancellationToken));
+        Assert.True(await ColumnExistsAsync(connection, "project_conversation", "generation", cancellationToken));
+        Assert.False(
+            await ColumnExistsAsync(connection, "project_conversation", "session_generation", cancellationToken)
+        );
         Assert.True(await TableExistsAsync(connection, "project_conversation_chat_history", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "durable_execution", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "execution_stream_entry", cancellationToken));
@@ -226,7 +233,11 @@ public sealed class InitialMigrationTests
         await using var context = new AgwDbContext(options, protector);
         var migrator = context.GetService<IMigrator>();
         var migrations = context.Database.GetMigrations().ToArray();
-        await migrator.MigrateAsync(migrations[^2], token);
+        var scopeMigrationIndex = Array.FindIndex(
+            migrations,
+            name => name.EndsWith("_AddDurableExecutionScope", StringComparison.Ordinal)
+        );
+        await migrator.MigrateAsync(migrations[scopeMigrationIndex - 1], token);
         var executionId = Guid.CreateVersion7();
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
@@ -257,7 +268,7 @@ public sealed class InitialMigrationTests
         );
 
         // Act
-        await migrator.MigrateAsync(migrations[^1], token);
+        await migrator.MigrateAsync(migrations[scopeMigrationIndex], token);
         var pending = await context.DurableExecutions.AsNoTracking().SingleAsync(token);
         Assert.Null(pending.ProjectId);
         Assert.False(pending.ScopeBackfilled);
@@ -276,7 +287,7 @@ public sealed class InitialMigrationTests
         Assert.Equal(manifest, row.ManifestJson);
         Assert.Equal(ciphertext, await context.DurableExecutions.Select(item => item.ManifestJson).SingleAsync(token));
         Assert.False(context.Database.HasPendingModelChanges());
-        await migrator.MigrateAsync(migrations[^2], token);
+        await migrator.MigrateAsync(migrations[scopeMigrationIndex - 1], token);
         Assert.False(await ColumnExistsAsync(connection, "durable_execution", "project_id", token));
         await using var read = connection.CreateCommand();
         read.CommandText = "SELECT manifest_json FROM durable_execution";

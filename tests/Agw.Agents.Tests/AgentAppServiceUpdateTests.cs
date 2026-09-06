@@ -370,7 +370,11 @@ public class AgentAppServiceUpdateTests : IDisposable
                 userInfo
             ),
             new TestSkillReferenceFacade(skillRepository, userInfo),
-            userInfo
+            userInfo,
+            new Agw.Infrastructure.Agents.AgentDeletionCoordinator(
+                _database.Context,
+                Agw.Shared.Coordination.InMemoryApplicationLock.Shared
+            )
         );
     }
 

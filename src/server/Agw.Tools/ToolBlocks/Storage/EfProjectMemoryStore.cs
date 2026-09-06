@@ -193,7 +193,7 @@ public sealed class EfProjectMemoryStore : AgentFileStore
         return UserInfoUtil.RequiredUserId;
     }
 
-    private Task<IAsyncDisposable> AcquireMutationLockAsync(CancellationToken cancellationToken) =>
+    private Task<IApplicationLockLease> AcquireMutationLockAsync(CancellationToken cancellationToken) =>
         _applicationLock.AcquireAsync($"project-memory-store:{_projectId:D}", cancellationToken);
 
     private static string DirectoryPrefix(string directory)

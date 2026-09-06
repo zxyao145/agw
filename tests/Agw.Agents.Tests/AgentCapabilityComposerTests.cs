@@ -443,7 +443,11 @@ public class AgentCapabilityComposerTests
                 userInfo
             ),
             new TestSkillReferenceFacade(skillRepository, userInfo),
-            userInfo
+            userInfo,
+            new Agw.Infrastructure.Agents.AgentDeletionCoordinator(
+                dbContext,
+                Agw.Shared.Coordination.InMemoryApplicationLock.Shared
+            )
         );
     }
 

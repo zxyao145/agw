@@ -139,9 +139,9 @@ public class AgentsController : ControllerBase
 
     [HttpDelete("{id:guid}")]
     [ProducesApiResult]
-    public async Task<IActionResult> DeleteAsync(Guid id)
+    public async Task<IActionResult> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var deleted = await _agentAppService.DeleteAgentAsync(id);
+        var deleted = await _agentAppService.DeleteAgentAsync(id, cancellationToken);
         return deleted ? ApiResult.Ok() : ErrorCodes.ResourceNotFound.ToApiResult();
     }
 }

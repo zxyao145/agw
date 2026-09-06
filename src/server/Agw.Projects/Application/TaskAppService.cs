@@ -187,6 +187,29 @@ public class TaskAppService : ITaskAppService
             );
             if (latestTask == null)
             {
+                var resetContext = await _dbContext
+                    .ProjectConversations.AsNoTracking()
+                    .AnyAsync(
+                        conversation =>
+                            conversation.Id == request.ConversationId
+                            && conversation.ProjectId == resolvedProjectId.Value
+                            && conversation.CreateBy == ownerUserId
+                            && conversation.ContextId == ContextIdUtil.NormalizeContextId(request.ContextId)
+                            && conversation.Generation > 0,
+                        cancellationToken
+                    );
+                if (resetContext)
+                {
+                    return await CreateTaskAsync(
+                        resolvedProjectId.Value,
+                        request.ConversationId,
+                        null,
+                        request.ContextId,
+                        request.Input,
+                        ownerUserId,
+                        cancellationToken
+                    );
+                }
                 return new ExecutionTaskResolutionResult(
                     null,
                     ApiResult.BadRequest("ProjectConversation not found.", ErrorCodes.InvalidParam.Code)

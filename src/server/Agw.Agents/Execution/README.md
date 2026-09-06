@@ -43,6 +43,16 @@ JSON 配置解析及 HumanGate 默认 mode / prompt 是确定性转换。随机 
 
 Checkpoint 和 Agent Session 的持久化仍经过既有 Application Port / Infrastructure Adapter。Factory 中的 Repository 查询仅访问 Agents 所有的数据；这次拆分没有改变持久化边界、格式或项目引用。
 
+## 领取权与会话重置
+
+`TryBeginSegmentAsync` 返回持久化后的领取 `StateVersion`。worker 用该版本调用 `SaveSegmentResultAsync`，同时依靠 EF 并发条件拒绝迟到结果；读取最新记录不能替换原领取凭据。`IApplicationLockLease.HandleLostToken` 与 host、状态监测取消信号传到分段执行器，失去领取权后不发布该 attempt 的 terminal marker。外部工具已经发生的副作用仍可能在故障恢复中重复。
+
+`ProjectConversation.Generation` 初始为 0，清空时在事务内递增，同时删除历史、trace、checkpoint、TaskSessionBinding 和 AgentSessionState，保留 ID、ContextId、标题和用量。InProcess 执行与清空共享 conversation execution lease；Durable 的 Queued、Running、WaitingForHuman 状态阻止清空。下一轮重新读取代次，释放旧 runtime 和解析任务缓存；Resume 指向已清空会话时创建新代次的任务。
+
+任务快照和 durable manifest 携带代次。`ConversationSessionContext` 通过执行的异步上下文传递不可变代次，SDK history provider 把它保存在 session state，外部 SDK 回调显式捕获 `ProjectProviderSessionReference.Generation`。这些写入使用原代次；不能在迟到回调中读取当前值作为凭据。`SaveConversationChangesAsync` 在同一事务中按 Project → Conversation 锁顺序验证存活根、owner 和代次，再提交子记录。旧 manifest 缺少代次时按 0 读取；序列化省略默认 0，保留既有幂等比较。
+
+部署与隔离 PostgreSQL 验证见 [运行时一致性维护说明](../../../../docs/operations/backend-runtime-consistency.md)。
+
 ## 两套执行提供者
 
 实时执行保留两套实现，并通过 `Execution:Provider` 在进程启动时二选一。它不是按请求动态切换；同一套部署中的所有 Host 必须使用相同配置。拆分部署中，Data Plane 映射 SignalR/A2A 并运行 worker，Control Plane 只为 Jobs 注册 durable client，Standalone 同时组合两者。

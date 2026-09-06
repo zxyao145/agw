@@ -7,6 +7,8 @@ using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
+using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +18,7 @@ namespace Agw.Jobs.Application.Services;
 public class JobAppService
 {
     private readonly IJobsDbContext _dbContext;
+    private readonly IApplicationLock _applicationLock;
     private readonly IProjectTaskFacade _projectTasks;
     private readonly JobScheduleCalculator _jobScheduleCalculator;
     private readonly JobSchedulerWakeSignal _schedulerWakeSignal;
@@ -32,7 +35,8 @@ public class JobAppService
         TimeProvider timeProvider,
         IUserInfoService userInfoService,
         IProjectRuntimeFacade projects,
-        IAgentCatalogFacade agentCatalog
+        IAgentCatalogFacade agentCatalog,
+        IApplicationLock? applicationLock = null
     )
     {
         _dbContext = dbContext;
@@ -43,6 +47,7 @@ public class JobAppService
         _userInfoService = userInfoService;
         _projects = projects;
         _agentCatalog = agentCatalog;
+        _applicationLock = applicationLock ?? InMemoryApplicationLock.Shared;
     }
 
     public async Task<IReadOnlyList<Job>> ListAsync(CancellationToken cancellationToken = default)
@@ -129,8 +134,19 @@ public class JobAppService
             .ToList();
     }
 
-    public async Task<Job> CreateAsync(JobCreateRequest request, string user)
+    public async Task<Job> CreateAsync(
+        JobCreateRequest request,
+        string user,
+        CancellationToken cancellationToken = default
+    )
     {
+        await using var lease = await _applicationLock.AcquireAsync(
+            AgentDefinitionLock.GetResourceName(ResolveOwnerUserId()),
+            cancellationToken
+        );
+        using var mutation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lease.HandleLostToken);
+        cancellationToken = mutation.Token;
+
         await EnsureProjectVisibleAsync(request.ProjectId, user).ConfigureAwait(false);
         await EnsureAgentTargetVisibleAsync(request.AgentType, request.AgentId, user).ConfigureAwait(false);
         var now = _timeProvider.GetUtcNow();
@@ -155,14 +171,26 @@ public class JobAppService
         };
         entity.NextRunTime = ResolveNextRunTime(entity, now);
 
-        await _dbContext.Jobs.AddAsync(entity);
-        await _dbContext.SaveChangesAsync();
+        await _dbContext.Jobs.AddAsync(entity, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
         _schedulerWakeSignal.NotifyCreated(entity);
         return entity;
     }
 
-    public async Task<Job?> UpdateAsync(Guid id, JobUpdateRequest request, string user)
+    public async Task<Job?> UpdateAsync(
+        Guid id,
+        JobUpdateRequest request,
+        string user,
+        CancellationToken cancellationToken = default
+    )
     {
+        await using var lease = await _applicationLock.AcquireAsync(
+            AgentDefinitionLock.GetResourceName(ResolveOwnerUserId()),
+            cancellationToken
+        );
+        using var mutation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lease.HandleLostToken);
+        cancellationToken = mutation.Token;
+
         var entity = await _dbContext.Jobs.FirstOrDefaultAsync(job => job.Id == id && job.CreateBy == user);
         if (entity == null)
         {
@@ -171,7 +199,7 @@ public class JobAppService
 
         await EnsureProjectVisibleAsync(request.ProjectId, user).ConfigureAwait(false);
         await EnsureAgentTargetVisibleAsync(request.AgentType, request.AgentId, user).ConfigureAwait(false);
-        return await UpdateEntityAsync(entity, request, user, recalculateSchedule: true);
+        return await UpdateEntityAsync(entity, request, user, recalculateSchedule: true, cancellationToken);
     }
 
     public async Task<Job?> UpdateByProjectAsync(
@@ -183,6 +211,13 @@ public class JobAppService
         CancellationToken cancellationToken = default
     )
     {
+        await using var lease = await _applicationLock.AcquireAsync(
+            AgentDefinitionLock.GetResourceName(ResolveOwnerUserId()),
+            cancellationToken
+        );
+        using var mutation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lease.HandleLostToken);
+        cancellationToken = mutation.Token;
+
         var entity = await GetByProjectAsync(id, projectId, cancellationToken);
         if (entity == null)
         {

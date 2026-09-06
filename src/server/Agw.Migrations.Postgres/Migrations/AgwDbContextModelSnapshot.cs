@@ -1509,6 +1509,13 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("create_time");
 
+                    b.Property<int>("Generation")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("generation");
+
                     b.Property<Guid?>("JobId")
                         .HasColumnType("uuid")
                         .HasColumnName("job_id");

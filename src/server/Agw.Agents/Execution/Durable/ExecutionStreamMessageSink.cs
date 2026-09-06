@@ -33,6 +33,7 @@ internal sealed class ExecutionStreamMessageSink : IExecutionMessageSink
     /// </summary>
     public async ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (IsDeferredControlMessage(message))
         {
             // pending 和 terminal 必须在 PostgreSQL 状态落盘后由协调层发布，不能抢跑。
@@ -64,6 +65,7 @@ internal sealed class ExecutionStreamMessageSink : IExecutionMessageSink
     /// </summary>
     private async ValueTask AppendBestEffortAsync(int sequence, AgwMessage message, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         try
         {
             await _stream

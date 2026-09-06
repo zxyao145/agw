@@ -34,7 +34,11 @@ public class JobAppServiceTests : IDisposable
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var fixture = await JobAppServiceFixture.CreateAsync(2, cancellationToken);
 
-        var job = await fixture.Service.CreateAsync(CreateRequest("   "), "test-user");
+        var job = await fixture.Service.CreateAsync(
+            CreateRequest("   "),
+            "test-user",
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
         Assert.Equal("job-3-20260715", job.Name);
     }
@@ -45,7 +49,11 @@ public class JobAppServiceTests : IDisposable
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var fixture = await JobAppServiceFixture.CreateAsync(0, cancellationToken);
 
-        var job = await fixture.Service.CreateAsync(CreateRequest("  Nightly Job  "), "test-user");
+        var job = await fixture.Service.CreateAsync(
+            CreateRequest("  Nightly Job  "),
+            "test-user",
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
         Assert.Equal("Nightly Job", job.Name);
     }
@@ -68,7 +76,8 @@ public class JobAppServiceTests : IDisposable
                 IsEnabled = true,
                 Status = JobStatus.Pending,
             },
-            "test-user"
+            "test-user",
+            cancellationToken: TestContext.Current.CancellationToken
         );
 
         Assert.NotNull(job);
@@ -140,7 +149,12 @@ public class JobAppServiceTests : IDisposable
         await fixture.SetActiveAttemptAsync(fixture.FirstJobId, cancellationToken);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            fixture.Service.UpdateAsync(fixture.FirstJobId, CreateUpdateRequest(), "test-user")
+            fixture.Service.UpdateAsync(
+                fixture.FirstJobId,
+                CreateUpdateRequest(),
+                "test-user",
+                cancellationToken: TestContext.Current.CancellationToken
+            )
         );
 
         Assert.Equal(ErrorCodes.JobActiveAttemptConflict.Code, exception.Code);

@@ -9,7 +9,7 @@ public sealed class InMemoryApplicationLock : IApplicationLock
 
     private readonly ConcurrentDictionary<string, Entry> _locks = new(StringComparer.Ordinal);
 
-    public async Task<IAsyncDisposable> AcquireAsync(string resourceName, CancellationToken cancellationToken)
+    public async Task<IApplicationLockLease> AcquireAsync(string resourceName, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(resourceName);
 
@@ -73,7 +73,7 @@ public sealed class InMemoryApplicationLock : IApplicationLock
         public bool Retired { get; set; }
     }
 
-    private sealed class Lease : IAsyncDisposable
+    private sealed class Lease : IApplicationLockLease
     {
         private readonly InMemoryApplicationLock _owner;
         private readonly string _resourceName;
@@ -85,6 +85,8 @@ public sealed class InMemoryApplicationLock : IApplicationLock
             _resourceName = resourceName;
             _entry = entry;
         }
+
+        public CancellationToken HandleLostToken => CancellationToken.None;
 
         public ValueTask DisposeAsync()
         {

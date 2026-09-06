@@ -5,5 +5,10 @@ namespace Agw.Shared.Contracts.Coordination;
 /// </summary>
 public interface IApplicationLock
 {
-    Task<IAsyncDisposable> AcquireAsync(string resourceName, CancellationToken cancellationToken);
+    Task<IApplicationLockLease> AcquireAsync(string resourceName, CancellationToken cancellationToken);
+}
+
+public interface IApplicationLockLease : IAsyncDisposable
+{
+    CancellationToken HandleLostToken { get; }
 }

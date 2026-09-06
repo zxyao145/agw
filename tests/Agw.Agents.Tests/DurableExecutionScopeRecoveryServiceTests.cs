@@ -300,6 +300,14 @@ public sealed class DurableExecutionScopeRecoveryServiceTests
 
     private sealed class StubMaintenance : IDurableExecutionScopeMaintenance
     {
+        public Task<bool> IsSessionCurrentAsync(
+            Guid projectId,
+            Guid conversationId,
+            string ownerUserId,
+            int expectedGeneration,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult(true);
+
         private readonly Func<
             DurableExecutionScopeCursor?,
             CancellationToken,

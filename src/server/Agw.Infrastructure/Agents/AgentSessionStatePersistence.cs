@@ -1,7 +1,10 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Projects;
+using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Infrastructure.Agents;
@@ -9,10 +12,12 @@ namespace Agw.Infrastructure.Agents;
 public sealed class AgentSessionStatePersistence : IAgentSessionStatePersistence
 {
     private readonly AgwDbContext _dbContext;
+    private readonly IApplicationLock _applicationLock;
 
-    public AgentSessionStatePersistence(AgwDbContext dbContext)
+    public AgentSessionStatePersistence(AgwDbContext dbContext, IApplicationLock? applicationLock = null)
     {
         _dbContext = dbContext;
+        _applicationLock = applicationLock ?? InMemoryApplicationLock.Shared;
     }
 
     public async Task<Guid?> ResolveProjectConversationIdAsync(
@@ -41,7 +46,8 @@ public sealed class AgentSessionStatePersistence : IAgentSessionStatePersistence
         Guid agentId,
         string agentflowNodeId,
         string ownerUserId,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        int expectedGeneration = 0
     ) =>
         await _dbContext
             .AgentSessionStates.AsNoTracking()
@@ -51,6 +57,7 @@ public sealed class AgentSessionStatePersistence : IAgentSessionStatePersistence
                 && entry.AgentflowNodeId == agentflowNodeId
                 && entry.Agent!.CreateBy == ownerUserId
                 && entry.ProjectConversation!.ProjectId == projectId
+                && entry.ProjectConversation.Generation == expectedGeneration
                 && entry.ProjectConversation.CreateBy == ownerUserId
                 && entry.ProjectConversation.Project!.CreateBy == ownerUserId
             )
@@ -66,20 +73,42 @@ public sealed class AgentSessionStatePersistence : IAgentSessionStatePersistence
         string serializedSession,
         string ownerUserId,
         DateTimeOffset updatedAt,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        int expectedGeneration = 0
     )
     {
-        await using var transaction = await _dbContext
-            .Database.BeginTransactionAsync(cancellationToken)
-            .ConfigureAwait(false);
+        await using var lease = await _applicationLock.AcquireAsync(
+            AgentDefinitionLock.GetResourceName(ownerUserId),
+            cancellationToken
+        );
+        using var mutation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lease.HandleLostToken);
+        cancellationToken = mutation.Token;
         if (
-            !await _dbContext
-                .OwnedProjectConversations(projectId, ownerUserId)
-                .AnyAsync(conversation => conversation.Id == projectConversationId, cancellationToken)
-                .ConfigureAwait(false)
+            !await _dbContext.Agents.AnyAsync(
+                agent => agent.Id == agentId && agent.CreateBy == ownerUserId,
+                cancellationToken
+            )
         )
         {
             return false;
+        }
+
+        await using var transaction = await _dbContext
+            .Database.BeginTransactionAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var currentGeneration = await _dbContext
+            .OwnedProjectConversations(projectId, ownerUserId)
+            .Where(conversation => conversation.Id == projectConversationId)
+            .Select(conversation => (int?)conversation.Generation)
+            .SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (!currentGeneration.HasValue)
+        {
+            return false;
+        }
+        if (currentGeneration.Value != expectedGeneration)
+        {
+            throw new AgwException(ErrorCodes.ConversationSessionConflict);
         }
 
         var entry = await _dbContext
@@ -104,7 +133,9 @@ public sealed class AgentSessionStatePersistence : IAgentSessionStatePersistence
 
         entry.SerializedSession = serializedSession;
         entry.UpdatedAt = updatedAt;
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await _dbContext
+            .SaveConversationChangesAsync(projectConversationId, expectedGeneration, cancellationToken)
+            .ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
         return true;
     }

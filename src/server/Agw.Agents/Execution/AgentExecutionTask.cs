@@ -8,6 +8,8 @@ public sealed class AgentExecutionTask
 
     public Guid ProjectConversationId { get; init; }
 
+    public int Generation { get; init; }
+
     public Guid ProjectId { get; init; }
 
     public string ContextId { get; init; } = string.Empty;

@@ -1,5 +1,8 @@
+using Agw.Agents.Contracts.Catalog;
 using Agw.Auth.Contracts;
 using Agw.Projects.Application.Persistence;
+using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -9,18 +12,24 @@ namespace Agw.Projects.Application;
 public class TaskSessionBindingService : ITaskSessionBindingService
 {
     private readonly IProjectsDbContext _dbContext;
+    private readonly IAgentCatalogFacade _agentCatalog;
+    private readonly IApplicationLock _applicationLock;
     private readonly TimeProvider _timeProvider;
     private readonly IUserInfoService _userInfoService;
 
     public TaskSessionBindingService(
         IProjectsDbContext dbContext,
         TimeProvider timeProvider,
-        IUserInfoService userInfoService
+        IUserInfoService userInfoService,
+        IAgentCatalogFacade agentCatalog,
+        IApplicationLock? applicationLock = null
     )
     {
         _dbContext = dbContext;
         _timeProvider = timeProvider;
         _userInfoService = userInfoService;
+        _agentCatalog = agentCatalog;
+        _applicationLock = applicationLock ?? InMemoryApplicationLock.Shared;
     }
 
     public async Task<TaskSessionBinding?> GetAsync(
@@ -28,7 +37,8 @@ public class TaskSessionBindingService : ITaskSessionBindingService
         string contextId,
         Guid agentId,
         string externalAgentName,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        int expectedGeneration = 0
     )
     {
         var normalizedAgentName = NormalizeExternalAgentName(externalAgentName);
@@ -45,7 +55,11 @@ public class TaskSessionBindingService : ITaskSessionBindingService
                 context =>
                     context.ProjectId == projectId
                     && context.ContextId == normalizedContextId
-                    && context.CreateBy == ownerUserId,
+                    && context.Generation == expectedGeneration
+                    && context.CreateBy == ownerUserId
+                    && _dbContext.Projects.Any(project =>
+                        project.Id == context.ProjectId && project.CreateBy == ownerUserId
+                    ),
                 cancellationToken
             );
 
@@ -72,7 +86,8 @@ public class TaskSessionBindingService : ITaskSessionBindingService
         string externalAgentName,
         string providerSessionId,
         string user,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        int expectedGeneration = 0
     )
     {
         var normalizedAgentName = NormalizeExternalAgentName(externalAgentName);
@@ -83,6 +98,24 @@ public class TaskSessionBindingService : ITaskSessionBindingService
         if (!string.Equals(ownerUserId, normalizedUser, StringComparison.Ordinal))
         {
             throw new AgwException(ErrorCodes.InvalidParam);
+        }
+        await using var projectLease = await _applicationLock.AcquireAsync(
+            ProjectLifecycleLock.GetResourceName(projectId),
+            cancellationToken
+        );
+        await using var definitionLease = await _applicationLock.AcquireAsync(
+            AgentDefinitionLock.GetResourceName(ownerUserId),
+            cancellationToken
+        );
+        using var mutation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            projectLease.HandleLostToken,
+            definitionLease.HandleLostToken
+        );
+        cancellationToken = mutation.Token;
+        if (!await _agentCatalog.IsOwnedTargetAsync(AgentRuntimeType.Agent, agentId, ownerUserId, cancellationToken))
+        {
+            throw new AgwException(ErrorCodes.ResourceNotFound);
         }
         var now = _timeProvider.GetUtcNow();
 
@@ -100,7 +133,11 @@ public class TaskSessionBindingService : ITaskSessionBindingService
             context =>
                 context.ProjectId == projectId
                 && context.ContextId == normalizedContextId
-                && context.CreateBy == ownerUserId,
+                && context.Generation == expectedGeneration
+                && context.CreateBy == ownerUserId
+                && _dbContext.Projects.Any(project =>
+                    project.Id == context.ProjectId && project.CreateBy == ownerUserId
+                ),
             cancellationToken
         );
 
@@ -132,7 +169,11 @@ public class TaskSessionBindingService : ITaskSessionBindingService
             await _dbContext.TaskSessionBindings.AddAsync(binding, cancellationToken);
             try
             {
-                await _dbContext.SaveChangesAsync(cancellationToken);
+                await _dbContext.SaveConversationChangesAsync(
+                    projectConversation.Id,
+                    expectedGeneration,
+                    cancellationToken
+                );
                 return binding;
             }
             catch (DbUpdateException)
@@ -159,7 +200,7 @@ public class TaskSessionBindingService : ITaskSessionBindingService
             binding.UpdateTime = now;
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await _dbContext.SaveConversationChangesAsync(projectConversation.Id, expectedGeneration, cancellationToken);
         return binding;
     }
 

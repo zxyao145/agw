@@ -6,6 +6,7 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Shared;
 using Agw.Shared.Data.Abstractions;
+using Agw.Shared.Data.Entities.Projects;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -39,9 +40,21 @@ public sealed class DurableExecutionAuditTests
         );
         var executionId = Guid.CreateVersion7();
         var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
 
         using (UserInfoUtil.Push(CreatePrincipal("owner")))
         {
+            context.Projects.Add(new Project { Id = projectId, CreateBy = "owner" });
+            context.ProjectConversations.Add(
+                new ProjectConversation
+                {
+                    Id = conversationId,
+                    ProjectId = projectId,
+                    ContextId = "context-1",
+                    CreateBy = "owner",
+                }
+            );
+            await context.SaveChangesAsync(cancellationToken);
             await store.RegisterAsync(
                 executionId,
                 "owner",
@@ -51,7 +64,7 @@ public sealed class DurableExecutionAuditTests
                 new AgentExecutionTask
                 {
                     TaskId = Guid.CreateVersion7(),
-                    ProjectConversationId = Guid.CreateVersion7(),
+                    ProjectConversationId = conversationId,
                     ProjectId = projectId,
                     ContextId = "context-1",
                     Title = "Audit test",

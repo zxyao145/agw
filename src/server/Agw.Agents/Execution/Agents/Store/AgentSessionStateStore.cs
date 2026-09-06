@@ -171,7 +171,8 @@ public sealed class AgentSessionStateStore
                 serialized,
                 ownerUserId,
                 _timeProvider.GetUtcNow(),
-                cancellationToken
+                cancellationToken,
+                sessionScope.Generation
             )
             .ConfigureAwait(false);
     }
@@ -225,7 +226,8 @@ public sealed class AgentSessionStateStore
                     sessionScope.AgentId,
                     sessionScope.AgentflowNodeId,
                     ownerUserId,
-                    cancellationToken
+                    cancellationToken,
+                    sessionScope.Generation
                 )
                 .ConfigureAwait(false)
             ?? string.Empty;

@@ -32,6 +32,25 @@ public sealed class DurableExecutionScopeMaintenance : IDurableExecutionScopeMai
         _logger = logger;
     }
 
+    public Task<bool> IsSessionCurrentAsync(
+        Guid projectId,
+        Guid conversationId,
+        string ownerUserId,
+        int expectedGeneration,
+        CancellationToken cancellationToken = default
+    ) =>
+        _dbContext
+            .ProjectConversations.AsNoTracking()
+            .AnyAsync(
+                conversation =>
+                    conversation.Id == conversationId
+                    && conversation.ProjectId == projectId
+                    && conversation.CreateBy == ownerUserId
+                    && conversation.Project!.CreateBy == ownerUserId
+                    && conversation.Generation == expectedGeneration,
+                cancellationToken
+            );
+
     public async Task<DurableExecutionScopeBackfillResult> BackfillAsync(
         CancellationToken cancellationToken = default,
         DurableExecutionScopeCursor? after = null

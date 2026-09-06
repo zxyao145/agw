@@ -355,7 +355,7 @@ public sealed class UserMemoryAppService
         }
     }
 
-    private Task<IAsyncDisposable> AcquireMutationLockAsync(string userId, CancellationToken cancellationToken) =>
+    private Task<IApplicationLockLease> AcquireMutationLockAsync(string userId, CancellationToken cancellationToken) =>
         _applicationLock.AcquireAsync($"user-memory:{userId}", cancellationToken);
 
     private string GetCurrentUserId()

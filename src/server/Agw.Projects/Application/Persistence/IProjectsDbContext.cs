@@ -6,6 +6,12 @@ namespace Agw.Projects.Application.Persistence;
 
 public interface IProjectsDbContext : IModuleDbContext
 {
+    Task<int> SaveConversationChangesAsync(
+        Guid conversationId,
+        int expectedGeneration,
+        CancellationToken cancellationToken = default
+    );
+
     DbSet<Project> Projects { get; }
 
     DbSet<ProjectSkillRelation> ProjectSkillRelations { get; }

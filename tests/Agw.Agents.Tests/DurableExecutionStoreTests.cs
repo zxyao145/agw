@@ -10,6 +10,7 @@ using Agw.Infrastructure.Data;
 using Agw.Shared;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Executions;
+using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -19,7 +20,7 @@ using Microsoft.Extensions.Options;
 
 namespace Agw.Agents.Tests;
 
-public sealed class DurableExecutionStoreTests : IDisposable
+public sealed partial class DurableExecutionStoreTests : IDisposable
 {
     private readonly IDisposable _userScope = UserInfoUtil.Push(
         new ClaimsPrincipal(
@@ -29,6 +30,48 @@ public sealed class DurableExecutionStoreTests : IDisposable
 
     public void Dispose() => _userScope.Dispose();
 
+    [Theory]
+    [InlineData("Completed")]
+    [InlineData("Failed")]
+    [InlineData("WaitingForHuman")]
+    public async Task SaveSegmentResultAsync_ReclaimedSegment_RejectsOldWorker(string outcome)
+    {
+        // Arrange
+        var token = TestContext.Current.CancellationToken;
+        await using var database = await TestDatabase.CreateAsync();
+        var oldWorker = database.CreateStore();
+        var executionId = await RegisterExecutionAsync(database, oldWorker);
+        var first = await oldWorker.TryBeginSegmentAsync(executionId, DateTimeOffset.MaxValue, token);
+        Assert.NotNull(first);
+        await using var secondContext = database.CreateContext();
+        var newWorker = new DurableExecutionStore(
+            secondContext,
+            TimeProvider.System,
+            InMemoryApplicationLock.Shared,
+            TestDurablePersistence.Create(secondContext)
+        );
+        var second = await newWorker.TryBeginSegmentAsync(executionId, DateTimeOffset.MaxValue, token);
+        Assert.NotNull(second);
+        var result = new DurableExecutionSegmentResult
+        {
+            ExecutionId = executionId,
+            SegmentIndex = first.SegmentIndex,
+            Status = Enum.Parse<DurableExecutionSegmentStatus>(outcome),
+            PendingInteractions = [CreateInteraction("request-1")],
+        };
+
+        // Act
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            oldWorker.SaveSegmentResultAsync(result, first.StateVersion, token)
+        );
+
+        // Assert
+        Assert.Equal(ErrorCodes.DurableExecutionConflict.Code, exception.Code);
+        Assert.Equal(DurableExecutionStatus.Running, (await newWorker.GetAsync(executionId, token)).Status);
+        var accepted = await newWorker.SaveSegmentResultAsync(result, second.StateVersion, token);
+        Assert.NotEqual(DurableExecutionStatus.Running, accepted.Status);
+    }
+
     [Fact]
     public async Task RegisterAsync_SameExecutionAndManifest_IsIdempotent()
     {
@@ -37,7 +80,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
         var executionId = Guid.CreateVersion7();
         var agentId = Guid.CreateVersion7();
         var input = CreateInput("hello");
-        var task = CreateTask();
+        var task = CreateTask(database);
         var settings = CreateSettings(task.ProjectId, task.ContextId);
 
         var first = await store.RegisterAsync(
@@ -73,7 +116,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
     {
         await using var database = await TestDatabase.CreateAsync();
         var store = database.CreateStore();
-        var task = CreateTask();
+        var task = CreateTask(database);
         var snapshot = await store.RegisterAsync(
             Guid.CreateVersion7(),
             "user-id",
@@ -113,7 +156,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
             NullLogger<DurableExecutionCoordinator>.Instance
         );
         var executionId = Guid.CreateVersion7();
-        var task = CreateTask();
+        var task = CreateTask(database);
         await coordinator.StartAsync(
             executionId,
             "user-id",
@@ -138,7 +181,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
         var store = database.CreateStore();
         var executionId = Guid.CreateVersion7();
         var agentId = Guid.CreateVersion7();
-        var task = CreateTask();
+        var task = CreateTask(database);
         var settings = CreateSettings(task.ProjectId, task.ContextId);
 
         await store.RegisterAsync(
@@ -173,7 +216,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
     {
         await using var database = await TestDatabase.CreateAsync();
         var store = database.CreateStore();
-        var executionId = await RegisterExecutionAsync(store);
+        var executionId = await RegisterExecutionAsync(database, store);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
             store.GetAuthorizedAsync(executionId, "another-user", TestContext.Current.CancellationToken)
@@ -187,7 +230,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
     {
         await using var database = await TestDatabase.CreateAsync();
         var store = database.CreateStore();
-        var executionId = await RegisterExecutionAsync(store);
+        var executionId = await RegisterExecutionAsync(database, store);
         var record = await database.Context.DurableExecutions.SingleAsync(TestContext.Current.CancellationToken);
         record.ManifestJson = "not-a-valid-manifest";
         await database.Context.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -208,7 +251,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
     {
         await using var database = await TestDatabase.CreateAsync();
         var store = database.CreateStore();
-        var executionId = await RegisterExecutionAsync(store);
+        var executionId = await RegisterExecutionAsync(database, store);
         await store.TryBeginSegmentAsync(
             executionId,
             TimeProvider.System.GetUtcNow(),
@@ -222,6 +265,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
                 Status = DurableExecutionSegmentStatus.Failed,
                 ErrorMessage = "boom",
             },
+            (await store.GetAsync(executionId, TestContext.Current.CancellationToken)).StateVersion,
             TestContext.Current.CancellationToken
         );
 
@@ -240,7 +284,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
     {
         await using var database = await TestDatabase.CreateAsync();
         var store = database.CreateStore();
-        var executionId = await RegisterExecutionAsync(store);
+        var executionId = await RegisterExecutionAsync(database, store);
         var running = await store.TryBeginSegmentAsync(
             executionId,
             TimeProvider.System.GetUtcNow(),
@@ -263,6 +307,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
                 PendingInteractions = [CreateInteraction("request-1")],
                 Checkpoint = checkpoint,
             },
+            (await store.GetAsync(executionId, TestContext.Current.CancellationToken)).StateVersion,
             TestContext.Current.CancellationToken
         );
 
@@ -328,7 +373,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
     {
         await using var database = await TestDatabase.CreateAsync();
         var store = database.CreateStore();
-        var executionId = await RegisterExecutionAsync(store);
+        var executionId = await RegisterExecutionAsync(database, store);
         var running = await store.TryBeginSegmentAsync(
             executionId,
             TimeProvider.System.GetUtcNow(),
@@ -348,6 +393,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
                 SegmentIndex = 0,
                 Status = DurableExecutionSegmentStatus.Completed,
             },
+            (await store.GetAsync(executionId, TestContext.Current.CancellationToken)).StateVersion,
             TestContext.Current.CancellationToken
         );
 
@@ -365,7 +411,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
     {
         await using var database = await TestDatabase.CreateAsync();
         var store = database.CreateStore();
-        var executionId = await RegisterExecutionAsync(store);
+        var executionId = await RegisterExecutionAsync(database, store);
         await store.TryBeginSegmentAsync(
             executionId,
             TimeProvider.System.GetUtcNow(),
@@ -379,6 +425,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
                 Status = DurableExecutionSegmentStatus.WaitingForHuman,
                 PendingInteractions = [CreateInteraction("request-1")],
             },
+            (await store.GetAsync(executionId, TestContext.Current.CancellationToken)).StateVersion,
             TestContext.Current.CancellationToken
         );
         var request = new SubmitDurableHumanResponseRequest(
@@ -401,7 +448,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
     {
         await using var database = await TestDatabase.CreateAsync();
         var store = database.CreateStore();
-        var executionId = await RegisterExecutionAsync(store);
+        var executionId = await RegisterExecutionAsync(database, store);
 
         var candidates = await store.GetRunnableExecutionIdsAsync(
             TimeProvider.System.GetUtcNow(),
@@ -417,7 +464,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
     {
         await using var database = await TestDatabase.CreateAsync();
         var store = database.CreateStore();
-        var executionId = await RegisterExecutionAsync(store);
+        var executionId = await RegisterExecutionAsync(database, store);
         await store.TryBeginSegmentAsync(
             executionId,
             TimeProvider.System.GetUtcNow(),
@@ -431,6 +478,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
                 Status = DurableExecutionSegmentStatus.WaitingForHuman,
                 PendingInteractions = [CreateInteraction("request-1")],
             },
+            (await store.GetAsync(executionId, TestContext.Current.CancellationToken)).StateVersion,
             TestContext.Current.CancellationToken
         );
 
@@ -448,7 +496,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
     {
         await using var database = await TestDatabase.CreateAsync();
         var store = database.CreateStore();
-        var executionId = await RegisterExecutionAsync(store);
+        var executionId = await RegisterExecutionAsync(database, store);
         var running = await store.TryBeginSegmentAsync(
             executionId,
             TimeProvider.System.GetUtcNow(),
@@ -470,7 +518,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
     {
         await using var database = await TestDatabase.CreateAsync();
         var store = database.CreateStore();
-        var executionId = await RegisterExecutionAsync(store);
+        var executionId = await RegisterExecutionAsync(database, store);
         await store.TryBeginSegmentAsync(
             executionId,
             TimeProvider.System.GetUtcNow(),
@@ -483,6 +531,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
                 SegmentIndex = 0,
                 Status = DurableExecutionSegmentStatus.Completed,
             },
+            (await store.GetAsync(executionId, TestContext.Current.CancellationToken)).StateVersion,
             TestContext.Current.CancellationToken
         );
 
@@ -609,7 +658,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
             )
         );
         var executionId = Guid.CreateVersion7();
-        await RegisterExecutionAsync(database.CreateStore(), executionId);
+        await RegisterExecutionAsync(database, database.CreateStore(), executionId);
         var firstMessage = TurnMessageFactory.CreateStarted(executionId);
         var secondMessage = TurnMessageFactory.CreateFinished("failed", executionId);
         var thirdMessage = TurnMessageFactory.CreateFinished("completed", executionId);
@@ -672,7 +721,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
             Options.Create(new ExecutionRuntimeOptions())
         );
         var executionId = Guid.CreateVersion7();
-        await RegisterExecutionAsync(database.CreateStore(), executionId);
+        await RegisterExecutionAsync(database, database.CreateStore(), executionId);
 
         await stream.AppendAsync(
             executionId,
@@ -715,10 +764,14 @@ public sealed class DurableExecutionStoreTests : IDisposable
         Assert.Equal("turn-finished", append.Message.AdditionalProperties?["type"]);
     }
 
-    private static async Task<Guid> RegisterExecutionAsync(DurableExecutionStore store, Guid? executionId = null)
+    private static async Task<Guid> RegisterExecutionAsync(
+        TestDatabase database,
+        DurableExecutionStore store,
+        Guid? executionId = null
+    )
     {
         var resolvedExecutionId = executionId ?? Guid.CreateVersion7();
-        var task = CreateTask();
+        var task = CreateTask(database);
         await store.RegisterAsync(
             resolvedExecutionId,
             "user-id",
@@ -762,8 +815,9 @@ public sealed class DurableExecutionStoreTests : IDisposable
     private static AgwUserInput CreateInput(string content) =>
         new() { MessageId = "message-1", Contents = [new AgwTextContent { Content = content }] };
 
-    private static AgentExecutionTask CreateTask() =>
-        new()
+    private static AgentExecutionTask CreateTask(TestDatabase? database = null)
+    {
+        var task = new AgentExecutionTask()
         {
             TaskId = Guid.CreateVersion7(),
             ProjectConversationId = Guid.CreateVersion7(),
@@ -772,6 +826,22 @@ public sealed class DurableExecutionStoreTests : IDisposable
             Title = "Durable test",
             CreateTime = TimeProvider.System.GetUtcNow(),
         };
+        if (database != null)
+        {
+            database.Context.Projects.Add(new Project { Id = task.ProjectId, CreateBy = "user-id" });
+            database.Context.ProjectConversations.Add(
+                new ProjectConversation
+                {
+                    Id = task.ProjectConversationId,
+                    ProjectId = task.ProjectId,
+                    ContextId = task.ContextId,
+                    CreateBy = "user-id",
+                }
+            );
+            database.Context.SaveChanges();
+        }
+        return task;
+    }
 
     private static ExecutionSettings CreateSettings(Guid projectId, string contextId) =>
         ExecutionSettings.FromCommand(new SettingCommand(projectId, contextId: contextId));
@@ -789,6 +859,8 @@ public sealed class DurableExecutionStoreTests : IDisposable
         }
 
         public AgwDbContext Context { get; }
+
+        public AgwDbContext CreateContext() => new(_options);
 
         public static async Task<TestDatabase> CreateAsync()
         {

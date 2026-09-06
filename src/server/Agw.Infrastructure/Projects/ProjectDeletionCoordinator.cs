@@ -26,41 +26,76 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
         _scopeMaintenance = scopeMaintenance;
     }
 
-    public Task<bool> ClearConversationRecordsAsync(
+    public async Task<bool> ClearConversationRecordsAsync(
         ProjectConversationDeletionTarget target,
         CancellationToken cancellationToken = default
-    ) =>
-        ExecuteProjectAsync(
+    )
+    {
+        var generation = await _dbContext
+            .OwnedProjectConversations(target.ProjectId, target.OwnerUserId)
+            .Where(conversation =>
+                conversation.Id == target.ConversationId && conversation.ContextId == target.ContextId
+            )
+            .Select(conversation => (int?)conversation.Generation)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (generation == null)
+            return false;
+        var gate = new ConversationExecutionGate(_dbContext, _applicationLock, TimeProvider.System);
+        await using var resetLease = await gate.AcquireAsync(
+            target.ConversationId,
+            generation.Value,
+            cancellationToken
+        );
+        using var resetCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            resetLease.HandleLostToken
+        );
+        return await ExecuteProjectAsync(
             target.ProjectId,
+            target.OwnerUserId,
             async token =>
             {
                 if (!await ConversationExistsAsync(target, token).ConfigureAwait(false))
-                {
                     return false;
+                if (
+                    await _scopeMaintenance.RepairAndCheckActiveExecutionsAsync(
+                        target.ProjectId,
+                        target.ConversationId,
+                        target.OwnerUserId,
+                        token
+                    )
+                )
+                {
+                    throw new AgwException(ErrorCodes.ConversationSessionConflict);
                 }
-
-                await _dbContext
-                    .ProjectConversationChatHistories.Where(history => history.ConversationId == target.ConversationId)
-                    .ExecuteDeleteAsync(token)
-                    .ConfigureAwait(false);
-                await _dbContext
-                    .AgentflowCheckpoints.Where(checkpoint => checkpoint.ProjectConversationId == target.ConversationId)
-                    .ExecuteDeleteAsync(token)
-                    .ConfigureAwait(false);
+                var changed = await _dbContext
+                    .OwnedProjectConversations(target.ProjectId, target.OwnerUserId)
+                    .Where(conversation =>
+                        conversation.Id == target.ConversationId
+                        && conversation.Generation == generation.Value
+                        && conversation.Generation < int.MaxValue
+                    )
+                    .ExecuteUpdateAsync(
+                        setters =>
+                            setters.SetProperty(
+                                conversation => conversation.Generation,
+                                conversation => conversation.Generation + 1
+                            ),
+                        token
+                    );
+                if (changed != 1)
+                    throw new AgwException(ErrorCodes.ConversationSessionConflict);
+                await DeleteConversationDependentsAsync([target.ConversationId], target.OwnerUserId, token);
                 await _dbContext
                     .AgentflowNodeExecutionTraces.Where(trace =>
                         trace.ProjectId == target.ProjectId && trace.ContextId == target.ContextId
                     )
-                    .ExecuteDeleteAsync(token)
-                    .ConfigureAwait(false);
-                await _dbContext
-                    .TaskSessionBindings.Where(binding => binding.ProjectConversationId == target.ConversationId)
-                    .ExecuteDeleteAsync(token)
-                    .ConfigureAwait(false);
+                    .ExecuteDeleteAsync(token);
                 return true;
             },
-            cancellationToken
+            resetCancellation.Token
         );
+    }
 
     public Task<bool> DeleteConversationAsync(
         ProjectConversationDeletionTarget target,
@@ -68,6 +103,7 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
     ) =>
         ExecuteProjectAsync(
             target.ProjectId,
+            target.OwnerUserId,
             async token =>
             {
                 if (!await ConversationExistsAsync(target, token).ConfigureAwait(false))
@@ -77,7 +113,8 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
 
                 await DeleteDurableExecutionsAsync(target.ProjectId, target.ConversationId, target.OwnerUserId, token)
                     .ConfigureAwait(false);
-                await DeleteConversationDependentsAsync([target.ConversationId], token).ConfigureAwait(false);
+                await DeleteConversationDependentsAsync([target.ConversationId], target.OwnerUserId, token)
+                    .ConfigureAwait(false);
                 await _dbContext
                     .AgentflowNodeExecutionTraces.Where(trace =>
                         trace.ProjectId == target.ProjectId && trace.ContextId == target.ContextId
@@ -103,6 +140,7 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
     ) =>
         ExecuteProjectAsync(
             target.ProjectId,
+            target.OwnerUserId,
             async token =>
             {
                 if (!await ProjectExistsAsync(target, token).ConfigureAwait(false))
@@ -121,6 +159,7 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
     public Task<bool> DeleteProjectAsync(ProjectDeletionTarget target, CancellationToken cancellationToken = default) =>
         ExecuteProjectAsync(
             target.ProjectId,
+            target.OwnerUserId,
             async token =>
             {
                 if (
@@ -205,7 +244,8 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
             .Select(conversation => conversation.Id)
             .ToArrayAsync(cancellationToken)
             .ConfigureAwait(false);
-        await DeleteConversationDependentsAsync(conversationIds, cancellationToken).ConfigureAwait(false);
+        await DeleteConversationDependentsAsync(conversationIds, target.OwnerUserId, cancellationToken)
+            .ConfigureAwait(false);
         await _dbContext
             .AgentflowNodeExecutionTraces.Where(trace => trace.ProjectId == target.ProjectId)
             .ExecuteDeleteAsync(cancellationToken)
@@ -224,6 +264,7 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
 
     private async Task DeleteConversationDependentsAsync(
         IReadOnlyCollection<Guid> conversationIds,
+        string ownerUserId,
         CancellationToken cancellationToken
     )
     {
@@ -241,7 +282,15 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
         await _dbContext
-            .AgentSessionStates.Where(session => conversationIds.Contains(session.ProjectConversationId))
+            .AgentSessionStates.IgnoreUserScope()
+            .Where(session =>
+                conversationIds.Contains(session.ProjectConversationId)
+                && _dbContext.ProjectConversations.Any(conversation =>
+                    conversation.Id == session.ProjectConversationId
+                    && conversation.CreateBy == ownerUserId
+                    && conversation.Project!.CreateBy == ownerUserId
+                )
+            )
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
         await _dbContext
@@ -291,6 +340,7 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
 
     private async Task<bool> ExecuteProjectAsync(
         Guid projectId,
+        string ownerUserId,
         Func<CancellationToken, Task<bool>> operation,
         CancellationToken cancellationToken
     )
@@ -298,6 +348,11 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
         await using var lifecycleLease = await _applicationLock
             .AcquireAsync(ProjectLifecycleLock.GetResourceName(projectId), cancellationToken)
             .ConfigureAwait(false);
+        using var mutation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            lifecycleLease.HandleLostToken
+        );
+        cancellationToken = mutation.Token;
         var backfill = await _scopeMaintenance.BackfillAsync(cancellationToken).ConfigureAwait(false);
         if (backfill.HasPending)
         {
@@ -306,7 +361,16 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
                 "Execution scope recovery is still pending. Retry after recovery completes."
             );
         }
-        return await ExecuteAsync(operation, cancellationToken).ConfigureAwait(false);
+        return await ExecuteAsync(
+                async token =>
+                {
+                    if (!await _dbContext.LockOwnedProjectAsync(projectId, ownerUserId, token))
+                        return false;
+                    return await operation(token);
+                },
+                cancellationToken
+            )
+            .ConfigureAwait(false);
     }
 
     private async Task<bool> ExecuteAsync(

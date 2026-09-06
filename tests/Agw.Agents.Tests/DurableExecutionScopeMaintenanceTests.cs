@@ -254,6 +254,18 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
         await using var database = await Database.CreateAsync();
         var row = CreateExecution(Guid.CreateVersion7(), Guid.CreateVersion7());
         row.ScopeBackfilled = true;
+        database.Context.Projects.Add(
+            new Agw.Shared.Data.Entities.Projects.Project { Id = row.ProjectId!.Value, CreateBy = row.UserId }
+        );
+        database.Context.ProjectConversations.Add(
+            new Agw.Shared.Data.Entities.Projects.ProjectConversation
+            {
+                Id = row.ProjectConversationId!.Value,
+                ProjectId = row.ProjectId.Value,
+                ContextId = "context-1",
+                CreateBy = row.UserId,
+            }
+        );
         database.Context.Add(row);
         await database.Context.SaveChangesAsync(token);
         var store = new DurableExecutionStore(
@@ -273,7 +285,9 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
         Assert.Equal(DurableExecutionStatus.Running, snapshot.Status);
         Assert.Single(
             database.Commands,
-            sql => sql.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)
+            sql =>
+                sql.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase)
+                && sql.Contains("\"durable_execution\"", StringComparison.Ordinal)
         );
     }
 
@@ -744,9 +758,9 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
             _onAcquire = onAcquire;
         }
 
-        public async Task<IAsyncDisposable> AcquireAsync(string resourceName, CancellationToken cancellationToken)
+        public async Task<IApplicationLockLease> AcquireAsync(string resourceName, CancellationToken cancellationToken)
         {
-            var completion = new TaskCompletionSource<IAsyncDisposable>(
+            var completion = new TaskCompletionSource<IApplicationLockLease>(
                 TaskCreationOptions.RunContinuationsAsynchronously
             );
             using var registration = cancellationToken.Register(() => completion.TrySetCanceled(cancellationToken));
@@ -757,8 +771,8 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
 
     private sealed class UnexpectedCancellationLock : IApplicationLock
     {
-        public Task<IAsyncDisposable> AcquireAsync(string resourceName, CancellationToken cancellationToken) =>
-            Task.FromException<IAsyncDisposable>(
+        public Task<IApplicationLockLease> AcquireAsync(string resourceName, CancellationToken cancellationToken) =>
+            Task.FromException<IApplicationLockLease>(
                 new OperationCanceledException("Provider cancelled for an unrelated reason.")
             );
     }

@@ -484,6 +484,18 @@ public static class ErrorCodes
         "A user memory with this name already exists.",
         HttpStatusCode.Conflict
     );
+    public static readonly ErrorCode ConversationSessionConflict = new(
+        409_0019,
+        "Conversation state changed or execution is active. Retry after the execution completes.",
+        HttpStatusCode.Conflict
+    );
+
+    public static readonly ErrorCode AgentInUse = new(
+        409_0018,
+        "Agent is referenced by an Agentflow or Job.",
+        HttpStatusCode.Conflict
+    );
+
     public static readonly ErrorCode JobActiveAttemptConflict = new(
         409_0017,
         "A Job with an active attempt cannot be updated or deleted.",

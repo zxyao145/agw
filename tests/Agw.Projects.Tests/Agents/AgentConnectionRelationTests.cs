@@ -313,7 +313,11 @@ public class AgentConnectionRelationTests : IDisposable
                 new ConnectionReferenceFacade(dbContext, userInfo),
                 new ModelProviderReferenceFacade(dbContext, userInfo),
                 new SkillReferenceFacade(dbContext, userInfo),
-                userInfo
+                userInfo,
+                new Agw.Infrastructure.Agents.AgentDeletionCoordinator(
+                    dbContext,
+                    Agw.Shared.Coordination.InMemoryApplicationLock.Shared
+                )
             );
     }
 }

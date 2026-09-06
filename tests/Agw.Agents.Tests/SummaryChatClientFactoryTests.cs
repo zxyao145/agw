@@ -71,7 +71,8 @@ public class SummaryChatClientFactoryTests
                 userInfo
             ),
             null!,
-            userInfo
+            userInfo,
+            null!
         );
         var factory = new SummaryChatClientFactory(appService, NullLogger<SummaryChatClientFactory>.Instance);
 

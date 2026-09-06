@@ -19,7 +19,9 @@ public interface IAgentflowCheckpointPersistence
             CancellationToken,
             Task<AgentflowCheckpointPersistenceResult<TResult>>
         > operation,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        Guid? conversationId = null,
+        int expectedGeneration = 0
     );
 
     Task<AgentflowCheckpointRecord?> FindCheckpointAsync(

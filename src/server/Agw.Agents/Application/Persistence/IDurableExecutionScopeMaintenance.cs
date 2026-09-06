@@ -8,6 +8,14 @@ public sealed record DurableExecutionScopeBackfillResult(DurableExecutionScopeCu
 
 public interface IDurableExecutionScopeMaintenance
 {
+    Task<bool> IsSessionCurrentAsync(
+        Guid projectId,
+        Guid conversationId,
+        string ownerUserId,
+        int expectedGeneration,
+        CancellationToken cancellationToken = default
+    );
+
     // Uses the ambient owner filter. Seeding and scheduler scans may run in the restricted system scope.
     // One bounded pass. Background callers retain NextCursor across scopes/ticks; busy rows are retried next sweep.
     Task<DurableExecutionScopeBackfillResult> BackfillAsync(

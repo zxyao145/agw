@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Projects.Tests;
 
-public class TaskAppServiceTests
+public partial class TaskAppServiceTests
 {
     [Fact]
     public void ITaskAppService_ExposesOnlyReducedCreateTaskForExecutionSignature()
@@ -555,6 +555,12 @@ public class TaskAppServiceTests
 
     private sealed class DelegatingProjectsDbContext : IProjectsDbContext
     {
+        public Task<int> SaveConversationChangesAsync(
+            Guid conversationId,
+            int expectedGeneration,
+            CancellationToken cancellationToken = default
+        ) => _unitOfWork.SaveChangesAsync(cancellationToken);
+
         private readonly AgwDbContext _dbContext;
         private readonly IUnitOfWork _unitOfWork;
 

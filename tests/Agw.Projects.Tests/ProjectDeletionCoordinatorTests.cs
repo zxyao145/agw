@@ -17,7 +17,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Agw.Projects.Tests;
 
-public sealed class ProjectDeletionCoordinatorTests
+public sealed partial class ProjectDeletionCoordinatorTests
 {
     [Fact]
     public async Task DeleteProjectAsync_WithoutPhysicalForeignKeys_RemovesDependentsAndPreservesUsage()
