@@ -24,7 +24,7 @@ public interface IProjectsDbContext : IModuleDbContext
 
     DbSet<ProjectConversationChatHistory> ProjectConversationChatHistories { get; }
 
-    DbSet<TaskSessionBinding> TaskSessionBindings { get; }
+    DbSet<ProjectConversationBinding> ProjectConversationBindings { get; }
 
     DbSet<AgentUsage> AgentUsages { get; }
 }

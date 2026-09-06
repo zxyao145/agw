@@ -62,7 +62,7 @@ public sealed class AgentDeletionCoordinator : IAgentDeletionCoordinator
             .Where(state => state.AgentId == agentId && ownedAgents.Contains(state.AgentId))
             .ExecuteDeleteAsync(cancellationToken);
         await _dbContext
-            .TaskSessionBindings.IgnoreUserScope()
+            .ProjectConversationBindings.IgnoreUserScope()
             .Where(binding => binding.AgentId == agentId && binding.CreateBy == ownerUserId)
             .ExecuteDeleteAsync(cancellationToken);
         await _dbContext

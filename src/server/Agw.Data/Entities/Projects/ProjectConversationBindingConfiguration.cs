@@ -3,9 +3,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Agw.Shared.Data.Entities.Projects;
 
-public class TaskSessionBindingConfiguration : IEntityTypeConfiguration<TaskSessionBinding>
+public class ProjectConversationBindingConfiguration : IEntityTypeConfiguration<ProjectConversationBinding>
 {
-    public void Configure(EntityTypeBuilder<TaskSessionBinding> builder)
+    public void Configure(EntityTypeBuilder<ProjectConversationBinding> builder)
     {
         builder.HasKey(e => e.Id);
         builder.Property(e => e.ExternalAgentName).IsRequired().HasMaxLength(200);

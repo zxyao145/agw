@@ -1715,7 +1715,7 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.ToTable("project_skill_relation", (string)null);
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.TaskSessionBinding", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectConversationBinding", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -1759,16 +1759,16 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnName("update_time");
 
                     b.HasKey("Id")
-                        .HasName("pk_task_session_binding");
+                        .HasName("pk_project_conversation_binding");
 
                     b.HasIndex("ExternalAgentName", "ProviderSessionId")
-                        .HasDatabaseName("ix_task_session_binding_external_agent_name_provider_session_id");
+                        .HasDatabaseName("ix_project_conversation_binding_external_agent_name_provider_s");
 
                     b.HasIndex("ProjectConversationId", "AgentId", "ExternalAgentName")
                         .IsUnique()
-                        .HasDatabaseName("ix_task_session_binding_project_conversation_id_agent_id_exter");
+                        .HasDatabaseName("ix_project_conversation_binding_project_conversation_id_agent_");
 
-                    b.ToTable("task_session_binding", (string)null);
+                    b.ToTable("project_conversation_binding", (string)null);
                 });
 
             modelBuilder.Entity("Agw.Shared.Data.Entities.Providers.AgwAiModel", b =>
@@ -2412,14 +2412,14 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.Navigation("Skill");
                 });
 
-            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.TaskSessionBinding", b =>
+            modelBuilder.Entity("Agw.Shared.Data.Entities.Projects.ProjectConversationBinding", b =>
                 {
                     b.HasOne("Agw.Shared.Data.Entities.Projects.ProjectConversation", "ProjectConversation")
                         .WithMany()
                         .HasForeignKey("ProjectConversationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_task_session_binding_project_conversation_project_conversat");
+                        .HasConstraintName("fk_project_conversation_binding_project_conversation_project_c");
 
                     b.Navigation("ProjectConversation");
                 });

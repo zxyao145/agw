@@ -77,7 +77,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
             history => history.ConversationId == conversationId
         );
         Assert.DoesNotContain(
-            await assertContext.TaskSessionBindings.ToListAsync(cancellationToken),
+            await assertContext.ProjectConversationBindings.ToListAsync(cancellationToken),
             binding => binding.ProjectConversationId == conversationId
         );
         Assert.DoesNotContain(
@@ -607,8 +607,8 @@ public sealed partial class ProjectDeletionCoordinatorTests
                 CreateTime = now,
             }
         );
-        context.TaskSessionBindings.Add(
-            new TaskSessionBinding
+        context.ProjectConversationBindings.Add(
+            new ProjectConversationBinding
             {
                 Id = Guid.CreateVersion7(),
                 ProjectConversationId = conversationId,

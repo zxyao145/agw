@@ -894,7 +894,7 @@ public class ProjectConversationAppServiceTests
         {
             seedContext.Projects.Add(CreateProject(projectId, "Project"));
             seedContext.ProjectConversations.Add(CreateContext(contextId, projectId, "context-1", "Trip"));
-            seedContext.TaskSessionBindings.Add(CreateBinding(contextId));
+            seedContext.ProjectConversationBindings.Add(CreateBinding(contextId));
             await seedContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -904,7 +904,7 @@ public class ProjectConversationAppServiceTests
         var deleted = await service.DeleteAsync(projectId, contextId);
 
         Assert.True(deleted);
-        Assert.Empty(await dbContext.TaskSessionBindings.ToListAsync(cancellationToken));
+        Assert.Empty(await dbContext.ProjectConversationBindings.ToListAsync(cancellationToken));
     }
 
     [Fact]
@@ -927,7 +927,10 @@ public class ProjectConversationAppServiceTests
                 CreateContext(firstContextId, projectId, "context-1", "Trip"),
                 CreateContext(secondContextId, projectId, "context-2", "Plan")
             );
-            seedContext.TaskSessionBindings.AddRange(CreateBinding(firstContextId), CreateBinding(secondContextId));
+            seedContext.ProjectConversationBindings.AddRange(
+                CreateBinding(firstContextId),
+                CreateBinding(secondContextId)
+            );
             seedContext.AgentUsages.Add(CreateUsage(projectId, "context-1", "planner", 10, 20, 30, 4, 5));
             await seedContext.SaveChangesAsync(cancellationToken);
         }
@@ -938,7 +941,7 @@ public class ProjectConversationAppServiceTests
         var result = await service.DeleteAllAsync(projectId);
 
         Assert.Equal(ApplicationResultType.Success, result.Type);
-        Assert.Empty(await dbContext.TaskSessionBindings.ToListAsync(cancellationToken));
+        Assert.Empty(await dbContext.ProjectConversationBindings.ToListAsync(cancellationToken));
         Assert.Single(await dbContext.AgentUsages.ToListAsync(cancellationToken));
     }
 
@@ -980,8 +983,8 @@ public class ProjectConversationAppServiceTests
                     CreateTime = TimeProvider.System.GetUtcNow(),
                 }
             );
-            seedContext.TaskSessionBindings.Add(
-                new TaskSessionBinding
+            seedContext.ProjectConversationBindings.Add(
+                new ProjectConversationBinding
                 {
                     Id = Guid.CreateVersion7(),
                     ProjectConversationId = contextId,
@@ -1003,7 +1006,7 @@ public class ProjectConversationAppServiceTests
         Assert.Equal(ApplicationResultType.Success, result.Type);
         Assert.Empty(await dbContext.ProjectConversationChatHistories.ToListAsync(cancellationToken));
         Assert.Empty(await dbContext.AgentflowCheckpoints.ToListAsync(cancellationToken));
-        Assert.Empty(await dbContext.TaskSessionBindings.ToListAsync(cancellationToken));
+        Assert.Empty(await dbContext.ProjectConversationBindings.ToListAsync(cancellationToken));
         Assert.Single(await dbContext.ProjectConversations.ToListAsync(cancellationToken));
         Assert.Single(await dbContext.AgentUsages.ToListAsync(cancellationToken));
     }
@@ -1156,7 +1159,7 @@ public class ProjectConversationAppServiceTests
             UpdateTime = createTime,
         };
 
-    private static TaskSessionBinding CreateBinding(Guid conversationId) =>
+    private static ProjectConversationBinding CreateBinding(Guid conversationId) =>
         new()
         {
             Id = Guid.CreateVersion7(),

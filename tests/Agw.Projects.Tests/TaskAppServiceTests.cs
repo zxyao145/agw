@@ -577,7 +577,7 @@ public partial class TaskAppServiceTests
         public DbSet<ProjectConversation> ProjectConversations => _dbContext.ProjectConversations;
         public DbSet<ProjectConversationChatHistory> ProjectConversationChatHistories =>
             _dbContext.ProjectConversationChatHistories;
-        public DbSet<TaskSessionBinding> TaskSessionBindings => _dbContext.TaskSessionBindings;
+        public DbSet<ProjectConversationBinding> ProjectConversationBindings => _dbContext.ProjectConversationBindings;
         public DbSet<AgentUsage> AgentUsages => _dbContext.AgentUsages;
 
         public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>

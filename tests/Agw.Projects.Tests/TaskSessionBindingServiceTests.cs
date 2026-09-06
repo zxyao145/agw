@@ -84,7 +84,7 @@ public class TaskSessionBindingServiceTests
         );
 
         var bindings = await dbContext
-            .Set<TaskSessionBinding>()
+            .Set<ProjectConversationBinding>()
             .Where(binding => binding.ProjectConversationId == projectConversationId)
             .ToListAsync(cancellationToken);
         var binding = Assert.Single(bindings);
@@ -250,7 +250,7 @@ public class TaskSessionBindingServiceTests
 
             await using var verifyContext = new AgwDbContext(options);
             var bindings = await verifyContext
-                .TaskSessionBindings.Where(binding =>
+                .ProjectConversationBindings.Where(binding =>
                     binding.ProjectConversationId == projectConversationId
                     && binding.AgentId == agentId
                     && binding.ExternalAgentName == "codex"

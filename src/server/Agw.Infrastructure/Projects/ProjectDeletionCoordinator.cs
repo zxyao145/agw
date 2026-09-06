@@ -278,7 +278,7 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
         await _dbContext
-            .TaskSessionBindings.Where(binding => conversationIds.Contains(binding.ProjectConversationId))
+            .ProjectConversationBindings.Where(binding => conversationIds.Contains(binding.ProjectConversationId))
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
         await _dbContext

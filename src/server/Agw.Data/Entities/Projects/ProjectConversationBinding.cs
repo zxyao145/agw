@@ -3,9 +3,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Shared.Data.Entities.Projects;
 
-[Table("task_session_binding")]
-[EntityTypeConfiguration(typeof(TaskSessionBindingConfiguration))]
-public class TaskSessionBinding : BaseEntity
+[Table("project_conversation_binding")]
+[EntityTypeConfiguration(typeof(ProjectConversationBindingConfiguration))]
+public class ProjectConversationBinding : BaseEntity
 {
     public Guid Id { get; set; }
 

@@ -33,7 +33,7 @@ public sealed partial class InitialMigrationTests
         Assert.False(dbContext.Database.HasPendingModelChanges());
 
         var migrations = dbContext.Database.GetMigrations().ToArray();
-        Assert.Equal(12, migrations.Length);
+        Assert.Equal(13, migrations.Length);
         Assert.EndsWith("_Init", migrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", migrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", migrations[2], StringComparison.Ordinal);
@@ -46,6 +46,7 @@ public sealed partial class InitialMigrationTests
         Assert.EndsWith("_AddAgentAndAgentflowEnable", migrations[9], StringComparison.Ordinal);
         Assert.EndsWith("_AddDurableExecutionScope", migrations[10], StringComparison.Ordinal);
         Assert.EndsWith("_ConversationSessionGeneration", migrations[11], StringComparison.Ordinal);
+        Assert.EndsWith(BindingRenameMigrationSuffix, migrations[12], StringComparison.Ordinal);
 
         var script = dbContext
             .GetService<IMigrator>()
@@ -57,6 +58,7 @@ public sealed partial class InitialMigrationTests
         Assert.Contains("project_memory", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("project_conversation", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("project_conversation_chat_history", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("project_conversation_binding", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("durable_execution", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("scope_backfilled", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("generation", script, StringComparison.OrdinalIgnoreCase);
@@ -140,7 +142,7 @@ public sealed partial class InitialMigrationTests
         await dbContext.Database.MigrateAsync(cancellationToken);
 
         var appliedMigrations = (await dbContext.Database.GetAppliedMigrationsAsync(cancellationToken)).ToArray();
-        Assert.Equal(12, appliedMigrations.Length);
+        Assert.Equal(13, appliedMigrations.Length);
         Assert.EndsWith("_Init", appliedMigrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", appliedMigrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", appliedMigrations[2], StringComparison.Ordinal);
@@ -153,6 +155,7 @@ public sealed partial class InitialMigrationTests
         Assert.EndsWith("_AddAgentAndAgentflowEnable", appliedMigrations[9], StringComparison.Ordinal);
         Assert.EndsWith("_AddDurableExecutionScope", appliedMigrations[10], StringComparison.Ordinal);
         Assert.EndsWith("_ConversationSessionGeneration", appliedMigrations[11], StringComparison.Ordinal);
+        Assert.EndsWith(BindingRenameMigrationSuffix, appliedMigrations[12], StringComparison.Ordinal);
         Assert.True(await ColumnExistsAsync(connection, "durable_execution", "project_id", cancellationToken));
         Assert.True(
             await ColumnExistsAsync(connection, "durable_execution", "project_conversation_id", cancellationToken)
@@ -167,6 +170,8 @@ public sealed partial class InitialMigrationTests
             await ColumnExistsAsync(connection, "project_conversation", "session_generation", cancellationToken)
         );
         Assert.True(await TableExistsAsync(connection, "project_conversation_chat_history", cancellationToken));
+        Assert.True(await TableExistsAsync(connection, "project_conversation_binding", cancellationToken));
+        Assert.False(await TableExistsAsync(connection, "task_session_binding", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "durable_execution", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "execution_stream_entry", cancellationToken));
         Assert.True(await TableExistsAsync(connection, "agentflow_checkpoint", cancellationToken));

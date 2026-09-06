@@ -592,7 +592,7 @@ public sealed partial class BackendArchitectureTests
         ["ProjectConversationChatHistory"] = "Agw.Projects",
         ["ProjectMcpServerRelation"] = "Agw.Projects",
         ["ProjectSkillRelation"] = "Agw.Projects",
-        ["TaskSessionBinding"] = "Agw.Projects",
+        ["ProjectConversationBinding"] = "Agw.Projects",
         ["AgentUsage"] = "Agw.Projects",
         ["Job"] = "Agw.Jobs",
         ["JobLog"] = "Agw.Jobs",
