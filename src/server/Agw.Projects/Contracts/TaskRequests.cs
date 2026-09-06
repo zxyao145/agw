@@ -9,6 +9,19 @@ public record TaskCreateRequest(Guid? JobId, string Input, string? Title = null,
 
 public record ProjectConversationTitleUpdateRequest(string Title);
 
+public sealed record ProjectConversationListQuery
+{
+    [FromQuery(Name = "pageIndex")]
+    [Range(1, int.MaxValue)]
+    public int PageIndex { get; init; } = 1;
+
+    [FromQuery(Name = "pageSize")]
+    public int PageSize { get; init; } = 20;
+
+    [FromQuery(Name = "contextId")]
+    public string? ContextId { get; init; }
+}
+
 [JsonConverter(typeof(JsonStringEnumConverter<ProjectConversationMessageDirection>))]
 public enum ProjectConversationMessageDirection
 {

@@ -24,6 +24,11 @@ test("Mobile clears records while preserving the active conversation id", () => 
   expect(clearHandler).toMatch(/selectedConversationIdRef\.current !== conversationToClear/);
   expect(clearHandler).toMatch(/selectedContextIdRef\.current = contextToClear/);
   expect(clearHandler).toMatch(/setSelectedContextId\(contextToClear\)/);
+  expect(clearHandler).toMatch(/queryClient\.cancelQueries/);
+  expect(clearHandler).toMatch(/queryClient\.removeQueries/);
+  expect(clearHandler.indexOf("const cleared = await")).toBeLessThan(
+    clearHandler.indexOf("setMessages([])"),
+  );
   expect(clearHandler).not.toMatch(/selectedContextIdRef\.current = null/);
   expect(clearHandler).not.toMatch(/setSelectedContextId\(null\)/);
 });
@@ -42,7 +47,7 @@ test("Mobile sends the next message through the preserved execution context id",
   expect(sendHandler).toMatch(/const contextId = ensureContextId\(\)/);
   expect(sendHandler).toMatch(/ensureConfiguredSession\(contextId, permissionMode\)/);
   expect(sendHandler).toMatch(/conversationId,/);
-  expect(sendHandler).toMatch(/conversation\.conversationId === conversationId/);
+  expect(sendHandler).not.toMatch(/conversations\.find/);
   expect(sendHandler).not.toMatch(/conversation\.contextId === contextId/);
 });
 

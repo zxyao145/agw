@@ -3,12 +3,21 @@
 import * as React from "react";
 import { Pencil, Plus, RotateCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+} from "@agw/components/query";
+import { ApiError } from "@agw/api";
 
 import {
   deleteAllProjectConversations,
   deleteProjectConversation,
+  getProjectConversationDetails,
   getProjectConversations,
   updateProjectConversationTitle,
+  type ConversationPage,
   type ConversationSummary,
 } from "../../../services/task-client";
 import { Button } from "@agw/components";
@@ -36,6 +45,10 @@ interface ConversationListProps {
   headerActions?: React.ReactNode;
 }
 
+const CONVERSATION_PAGE_SIZE = 20;
+const CONVERSATION_STALE_TIME_MS = 30_000;
+const CONVERSATION_GC_TIME_MS = 30 * 60_000;
+
 export function ConversationList({
   projectId,
   currentConversationId,
@@ -46,106 +59,180 @@ export function ConversationList({
   onAllConversationsDeleted,
   headerActions,
 }: ConversationListProps) {
-  const [conversations, setConversations] = React.useState<ConversationSummary[]>([]);
+  const queryClient = useQueryClient();
   const [clearAllDialogOpen, setClearAllDialogOpen] = React.useState(false);
   const [conversationToDelete, setConversationToDelete] =
     React.useState<ConversationSummary | null>(null);
   const [conversationToRename, setConversationToRename] =
     React.useState<ConversationSummary | null>(null);
   const [renameTitle, setRenameTitle] = React.useState("");
-  const [isRefreshing, setIsRefreshing] = React.useState(false);
-  const didObserveRefreshSignalRef = React.useRef(false);
-  const refreshRequestIdRef = React.useRef(0);
+  const observedRefreshSignalRef = React.useRef(refreshSignal);
+  const refreshStateRef = React.useRef<{
+    projectId: string;
+    promise: Promise<void>;
+    refreshAgain: boolean;
+  } | null>(null);
   const resolvedConversationIdRef = React.useRef<string | null>(null);
+  const listScrollRef = React.useRef<HTMLDivElement | null>(null);
+  const loadMoreRef = React.useRef<HTMLDivElement | null>(null);
+  const queryKey = React.useMemo(() => ["project-conversations", projectId] as const, [projectId]);
+
+  const conversationsQuery = useInfiniteQuery({
+    queryKey,
+    enabled: Boolean(projectId),
+    initialPageParam: 1,
+    queryFn: ({ pageParam, signal }) =>
+      getProjectConversations(projectId, {
+        pageIndex: pageParam,
+        pageSize: CONVERSATION_PAGE_SIZE,
+        signal,
+      }),
+    getNextPageParam: (lastPage) =>
+      lastPage.pageIndex * lastPage.pageSize < lastPage.total ? lastPage.pageIndex + 1 : undefined,
+    staleTime: CONVERSATION_STALE_TIME_MS,
+    gcTime: CONVERSATION_GC_TIME_MS,
+  });
+
+  const conversations = React.useMemo(() => {
+    const conversationsById = new Map<string, ConversationSummary>();
+    for (const page of conversationsQuery.data?.pages ?? []) {
+      for (const conversation of page.items) {
+        if (!conversationsById.has(conversation.conversationId)) {
+          conversationsById.set(conversation.conversationId, conversation);
+        }
+      }
+    }
+    return [...conversationsById.values()];
+  }, [conversationsQuery.data]);
 
   const matchesCurrentSession = React.useCallback(
     (conversation: ConversationSummary) => conversation.conversationId === currentConversationId,
     [currentConversationId],
   );
 
-  const refreshConversations = React.useCallback(async (): Promise<ConversationSummary[]> => {
-    const requestId = ++refreshRequestIdRef.current;
-    setIsRefreshing(true);
-    try {
-      if (!projectId) {
-        if (requestId === refreshRequestIdRef.current) {
-          setConversations([]);
+  const refreshConversations = React.useCallback((): Promise<void> => {
+    if (!projectId) return Promise.resolve();
+    const activeRefresh = refreshStateRef.current;
+    if (activeRefresh?.projectId === projectId) {
+      activeRefresh.refreshAgain = true;
+      return activeRefresh.promise;
+    }
+
+    const refreshState = {
+      projectId,
+      promise: Promise.resolve(),
+      refreshAgain: false,
+    };
+    const refresh = async () => {
+      do {
+        refreshState.refreshAgain = false;
+        const summaryQueryKey = ["project-conversation-summary", projectId] as const;
+        await Promise.all([
+          queryClient.cancelQueries({ queryKey, exact: true }),
+          queryClient.cancelQueries({ queryKey: summaryQueryKey }),
+        ]);
+        if (!queryClient.getQueryCache().find({ queryKey, exact: true })?.isActive()) {
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" }),
+            queryClient.invalidateQueries({ queryKey: summaryQueryKey, refetchType: "none" }),
+          ]);
+          return;
         }
-        return [];
-      }
-
-      const latestConversations = await getProjectConversations(projectId);
-      if (requestId !== refreshRequestIdRef.current) {
-        return latestConversations;
-      }
-
-      setConversations(latestConversations);
-      return latestConversations;
-    } catch (error) {
-      console.error("Failed to load conversations:", error);
-      return [];
-    } finally {
-      if (requestId === refreshRequestIdRef.current) {
-        setIsRefreshing(false);
-      }
-    }
-  }, [projectId]);
-
-  React.useEffect(() => {
-    void refreshConversations();
-  }, [refreshConversations]);
-
-  React.useEffect(() => {
-    if (refreshSignal === undefined) {
-      return;
-    }
-
-    if (!didObserveRefreshSignalRef.current) {
-      didObserveRefreshSignalRef.current = true;
-      return;
-    }
-
-    void refreshConversations();
-  }, [refreshSignal, refreshConversations]);
-
-  React.useEffect(() => {
-    if (!projectId || !currentConversationId) {
-      return;
-    }
-
-    let cancelled = false;
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    let attempts = 0;
-
-    const refreshUntilCurrentConversationAppears = async () => {
-      attempts += 1;
-      const latestConversations = await refreshConversations();
-      if (cancelled || attempts >= 5 || latestConversations.some(matchesCurrentSession)) {
-        return;
-      }
-
-      timeoutId = setTimeout(() => {
-        void refreshUntilCurrentConversationAppears();
-      }, 500);
+        queryClient.setQueryData<InfiniteData<ConversationPage>>(queryKey, (current) =>
+          current
+            ? {
+                pages: current.pages.slice(0, 1),
+                pageParams: current.pageParams.slice(0, 1),
+              }
+            : current,
+        );
+        await Promise.all([
+          queryClient.refetchQueries({ queryKey, exact: true, type: "active" }),
+          queryClient.invalidateQueries({ queryKey: summaryQueryKey, refetchType: "active" }),
+        ]);
+        if (!queryClient.getQueryCache().find({ queryKey, exact: true })?.isActive()) {
+          await queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
+          return;
+        }
+      } while (refreshState.refreshAgain);
     };
+    refreshState.promise = refresh().finally(() => {
+      if (refreshStateRef.current === refreshState) refreshStateRef.current = null;
+    });
+    refreshStateRef.current = refreshState;
+    return refreshState.promise;
+  }, [projectId, queryClient, queryKey]);
 
-    void refreshUntilCurrentConversationAppears();
+  React.useEffect(() => {
+    if (observedRefreshSignalRef.current === refreshSignal) return;
+    observedRefreshSignalRef.current = refreshSignal;
+    void refreshConversations();
+  }, [refreshConversations, refreshSignal]);
 
-    return () => {
-      cancelled = true;
-      if (timeoutId) {
-        clearTimeout(timeoutId);
+  const shouldResolveCurrentConversation = Boolean(
+    projectId &&
+    currentConversationId &&
+    conversationsQuery.isSuccess &&
+    !conversations.some(matchesCurrentSession),
+  );
+  const currentConversationQuery = useQuery({
+    queryKey: ["project-conversation-summary", projectId, currentConversationId],
+    enabled: shouldResolveCurrentConversation,
+    queryFn: async ({ signal }) => {
+      try {
+        return await getProjectConversationDetails(
+          projectId,
+          currentConversationId!,
+          undefined,
+          signal,
+        );
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) return null;
+        throw error;
       }
-    };
-  }, [currentConversationId, matchesCurrentSession, projectId, refreshConversations]);
+    },
+    retry: false,
+    staleTime: CONVERSATION_STALE_TIME_MS,
+    gcTime: CONVERSATION_GC_TIME_MS,
+  });
+  const displayedConversations = React.useMemo(() => {
+    const current = currentConversationQuery.data;
+    return current && !conversations.some((item) => item.conversationId === current.conversationId)
+      ? [current, ...conversations]
+      : conversations;
+  }, [conversations, currentConversationQuery.data]);
 
   const activeConversation = React.useMemo(() => {
     if (!currentConversationId) {
       return null;
     }
 
-    return conversations.find(matchesCurrentSession) ?? null;
-  }, [conversations, currentConversationId, matchesCurrentSession]);
+    return displayedConversations.find(matchesCurrentSession) ?? null;
+  }, [currentConversationId, displayedConversations, matchesCurrentSession]);
+
+  React.useEffect(() => {
+    const root = listScrollRef.current;
+    const target = loadMoreRef.current;
+    if (!root || !target || !conversationsQuery.hasNextPage) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (
+          entries.some((entry) => entry.isIntersecting) &&
+          !conversationsQuery.isFetchingNextPage
+        ) {
+          void conversationsQuery.fetchNextPage();
+        }
+      },
+      { root, rootMargin: "160px" },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [
+    conversationsQuery.fetchNextPage,
+    conversationsQuery.hasNextPage,
+    conversationsQuery.isFetchingNextPage,
+  ]);
 
   React.useEffect(() => {
     if (
@@ -159,6 +246,8 @@ export function ConversationList({
     resolvedConversationIdRef.current = activeConversation.conversationId;
     onActiveConversationResolved(activeConversation);
   }, [activeConversation, onActiveConversationResolved]);
+
+  const isRefreshing = conversationsQuery.isFetching && !conversationsQuery.isFetchingNextPage;
 
   const handleClearAll = async () => {
     try {
@@ -242,12 +331,11 @@ export function ConversationList({
             variant="ghost"
             onClick={async () => {
               await Promise.resolve(onNewConversation());
-              await refreshConversations();
             }}
           >
             <Plus className="h-4 w-4" />
           </Button>
-          {conversations.length > 0 && (
+          {displayedConversations.length > 0 && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -267,11 +355,24 @@ export function ConversationList({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto agw-scrollbar p-2 space-y-1">
-        {conversations.length === 0 ? (
+      <div ref={listScrollRef} className="flex-1 overflow-y-auto agw-scrollbar p-2 space-y-1">
+        {conversationsQuery.isPending ? (
+          <div className="space-y-2 p-1" aria-label="Loading conversations">
+            {Array.from({ length: 5 }, (_, index) => (
+              <div key={index} className="h-14 animate-pulse rounded-md bg-muted" />
+            ))}
+          </div>
+        ) : conversationsQuery.isError && displayedConversations.length === 0 ? (
+          <div className="space-y-3 py-8 text-center text-sm text-muted-foreground">
+            <div>Failed to load conversations</div>
+            <Button size="sm" variant="outline" onClick={() => void refreshConversations()}>
+              Retry
+            </Button>
+          </div>
+        ) : displayedConversations.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground text-sm">No chat history yet</div>
         ) : (
-          conversations.map((conversation) => {
+          displayedConversations.map((conversation) => {
             const isActive = conversation.conversationId === activeConversation?.conversationId;
 
             return (
@@ -338,6 +439,32 @@ export function ConversationList({
             );
           })
         )}
+        <div ref={loadMoreRef} className="h-1" aria-hidden="true" />
+        {conversationsQuery.isFetchingNextPage ? (
+          <div className="py-3 text-center text-xs text-muted-foreground">
+            Loading more conversations...
+          </div>
+        ) : conversationsQuery.isFetchNextPageError ? (
+          <div className="py-3 text-center">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => void conversationsQuery.fetchNextPage()}
+            >
+              Retry loading more
+            </Button>
+          </div>
+        ) : null}
+        {conversationsQuery.isError &&
+        displayedConversations.length > 0 &&
+        !conversationsQuery.isFetchNextPageError ? (
+          <div className="space-y-2 py-3 text-center text-xs text-destructive">
+            <div>Failed to refresh conversations</div>
+            <Button size="sm" variant="ghost" onClick={() => void refreshConversations()}>
+              Retry refresh
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       <Dialog

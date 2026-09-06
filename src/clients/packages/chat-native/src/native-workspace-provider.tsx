@@ -42,11 +42,18 @@ import {
 import {
   createProjectConversationService,
   createProjectFilesService,
+  type ConversationHistory,
+  type ConversationPage,
   type ConversationSummary,
   type ProjectConversationService,
   type ProjectFilesService,
 } from "@agw/projects-core";
-import { useQuery } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import React from "react";
 
 import { getDefaultChatTargetValue } from "./chat-targets";
@@ -56,6 +63,10 @@ export type Project = components["schemas"]["ProjectResponse"];
 export type Agent = components["schemas"]["AgentResponse"];
 export type Agentflow = components["schemas"]["Agentflow"];
 export type AgentSuggestion = components["schemas"]["AgentSuggestionResponse"];
+
+const EMPTY_PROJECTS: Project[] = [];
+const EMPTY_AGENTS: Agent[] = [];
+const EMPTY_AGENTFLOWS: Agentflow[] = [];
 
 export type NativeWorkspaceContextValue = {
   projects: Project[];
@@ -77,6 +88,11 @@ export type NativeWorkspaceContextValue = {
   suggestionsError: string | null;
   isDependenciesLoading: boolean;
   isHistoryLoading: boolean;
+  isHistoryLoadingMore: boolean;
+  isHistoryLoadMoreError: boolean;
+  isHistoryRefreshError: boolean;
+  historyError: string | null;
+  hasMoreConversations: boolean;
   isChatLoading: boolean;
   isExecuting: boolean;
   reconnectState: ExecutionReconnectState | null;
@@ -104,6 +120,7 @@ export type NativeWorkspaceContextValue = {
   renameConversation(conversationId: string, title: string): Promise<void>;
   deleteConversation(conversationId: string): Promise<void>;
   refreshConversations(): Promise<void>;
+  loadMoreConversations(): Promise<void>;
   refreshDependencies(): Promise<void>;
 };
 
@@ -124,6 +141,7 @@ export function NativeWorkspaceProvider({
   onTurnFinished?: (status: TurnFinishedStatus) => void;
   children: React.ReactNode;
 }): React.JSX.Element {
+  const queryClient = useQueryClient();
   const profileId = verifiedServer?.profile.id ?? null;
   const client = verifiedServer?.client ?? null;
   const conversationService = React.useMemo(
@@ -149,6 +167,11 @@ export function NativeWorkspaceProvider({
     AgentflowCheckpointAvailability[]
   >([]);
   const [operationError, setOperationError] = React.useState<string | null>(null);
+  const conversationRefreshStateRef = React.useRef<{
+    projectId: string;
+    promise: Promise<void>;
+    refreshAgain: boolean;
+  } | null>(null);
   const executionSessionRef = React.useRef<MobileExecutionSession | null>(null);
   const executionSessionKeyRef = React.useRef<string | null>(null);
   const configuredSessionKeyRef = React.useRef<string | null>(null);
@@ -198,31 +221,123 @@ export function NativeWorkspaceProvider({
     enabled: Boolean(client),
     queryFn: async () => (await client!.apiGet("/api/agentflows")) as unknown as Agentflow[],
   });
-  const conversationsQuery = useQuery({
-    queryKey: ["mobile", profileId, "conversations", selectedProjectId],
-    enabled: Boolean(conversationService && selectedProjectId),
-    queryFn: () => conversationService!.getProjectConversations(selectedProjectId!),
-  });
-  const conversationExists = Boolean(
-    selectedConversationId &&
-    conversationsQuery.data?.some((item) => item.conversationId === selectedConversationId),
+  const conversationsQueryKey = React.useMemo(
+    () => ["mobile", profileId, "conversations", selectedProjectId] as const,
+    [profileId, selectedProjectId],
   );
+  const isConversationListEnabled = Boolean(conversationService && selectedProjectId);
+  const conversationsQuery = useInfiniteQuery({
+    queryKey: conversationsQueryKey,
+    enabled: isConversationListEnabled,
+    initialPageParam: 1,
+    queryFn: ({ pageParam, signal }) =>
+      conversationService!.getProjectConversations(selectedProjectId!, {
+        pageIndex: pageParam,
+        pageSize: 20,
+        signal,
+      }),
+    getNextPageParam: (lastPage) =>
+      lastPage.pageIndex * lastPage.pageSize < lastPage.total ? lastPage.pageIndex + 1 : undefined,
+    staleTime: 30_000,
+    gcTime: 30 * 60_000,
+  });
   const conversationDetailsQuery = useQuery({
     queryKey: ["mobile", profileId, "conversation", selectedProjectId, selectedConversationId],
     enabled: Boolean(
-      conversationService && selectedProjectId && selectedConversationId && conversationExists,
+      conversationService && selectedProjectId && selectedConversationId && !isExecuting,
     ),
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       conversationService!.getProjectConversationHistory(
         selectedProjectId!,
         selectedConversationId!,
+        signal,
       ),
   });
 
-  const projects = projectsQuery.data ?? [];
-  const agents = agentsQuery.data ?? [];
-  const agentflows = agentflowsQuery.data ?? [];
-  const conversations = conversationsQuery.data ?? [];
+  const projects = projectsQuery.data ?? EMPTY_PROJECTS;
+  const agents = agentsQuery.data ?? EMPTY_AGENTS;
+  const agentflows = agentflowsQuery.data ?? EMPTY_AGENTFLOWS;
+  const conversations = React.useMemo(() => {
+    const conversationsById = new Map<string, ConversationSummary>();
+    for (const page of conversationsQuery.data?.pages ?? []) {
+      for (const conversation of page.items) {
+        if (!conversationsById.has(conversation.conversationId)) {
+          conversationsById.set(conversation.conversationId, conversation);
+        }
+      }
+    }
+    const loaded = [...conversationsById.values()];
+    const selectedConversation = conversationDetailsQuery.data;
+    return selectedConversation && !conversationsById.has(selectedConversation.conversationId)
+      ? [selectedConversation, ...loaded]
+      : loaded;
+  }, [conversationDetailsQuery.data, conversationsQuery.data]);
+  const refreshConversations = React.useCallback((): Promise<void> => {
+    if (!selectedProjectId) return Promise.resolve();
+    const activeRefresh = conversationRefreshStateRef.current;
+    if (activeRefresh?.projectId === selectedProjectId) {
+      activeRefresh.refreshAgain = true;
+      return activeRefresh.promise;
+    }
+
+    const refreshState = {
+      projectId: selectedProjectId,
+      promise: Promise.resolve(),
+      refreshAgain: false,
+    };
+    const refresh = async () => {
+      do {
+        refreshState.refreshAgain = false;
+        await queryClient.cancelQueries({ queryKey: conversationsQueryKey, exact: true });
+        if (
+          !queryClient
+            .getQueryCache()
+            .find({ queryKey: conversationsQueryKey, exact: true })
+            ?.isActive()
+        ) {
+          await queryClient.invalidateQueries({
+            queryKey: conversationsQueryKey,
+            exact: true,
+            refetchType: "none",
+          });
+          return;
+        }
+        queryClient.setQueryData<InfiniteData<ConversationPage>>(conversationsQueryKey, (current) =>
+          current
+            ? {
+                pages: current.pages.slice(0, 1),
+                pageParams: current.pageParams.slice(0, 1),
+              }
+            : current,
+        );
+        await queryClient.refetchQueries({
+          queryKey: conversationsQueryKey,
+          exact: true,
+          type: "active",
+        });
+        if (
+          !queryClient
+            .getQueryCache()
+            .find({ queryKey: conversationsQueryKey, exact: true })
+            ?.isActive()
+        ) {
+          await queryClient.invalidateQueries({
+            queryKey: conversationsQueryKey,
+            exact: true,
+            refetchType: "none",
+          });
+          return;
+        }
+      } while (refreshState.refreshAgain);
+    };
+    refreshState.promise = refresh().finally(() => {
+      if (conversationRefreshStateRef.current === refreshState) {
+        conversationRefreshStateRef.current = null;
+      }
+    });
+    conversationRefreshStateRef.current = refreshState;
+    return refreshState.promise;
+  }, [conversationsQueryKey, queryClient, selectedProjectId]);
   const targets = React.useMemo(
     () => buildChatTargetOptions({ projectId: selectedProjectId, agents, agentflows }),
     [agentflows, agents, selectedProjectId],
@@ -341,7 +456,10 @@ export function NativeWorkspaceProvider({
         activeStreamingScopeRef.current = null;
         setPendingHumanGate(null);
         setIsExecuting(false);
-        if (hadActiveTurn) onTurnFinishedRef.current?.(finishedStatus);
+        if (hadActiveTurn) {
+          void refreshConversations();
+          onTurnFinishedRef.current?.(finishedStatus);
+        }
         return;
       }
       if (isUserTurnMessage(incoming)) return;
@@ -356,7 +474,7 @@ export function NativeWorkspaceProvider({
         generation,
       );
     },
-    [selectedTarget],
+    [refreshConversations, selectedTarget],
   );
 
   const disposeExecutionSession = React.useCallback((resetReconnectState = true) => {
@@ -467,7 +585,7 @@ export function NativeWorkspaceProvider({
 
   React.useEffect(() => {
     if (projects.length === 0) {
-      setSelectedProjectId(null);
+      if (selectedProjectId !== null) setSelectedProjectId(null);
       return;
     }
     if (!projects.some((project) => project.id === selectedProjectId)) {
@@ -477,7 +595,7 @@ export function NativeWorkspaceProvider({
 
   React.useEffect(() => {
     if (targets.length === 0) {
-      setSelectedTargetValue(null);
+      if (selectedTargetValue !== null) setSelectedTargetValue(null);
       return;
     }
     if (!targets.some((target) => getTargetValue(target) === selectedTargetValue)) {
@@ -527,7 +645,7 @@ export function NativeWorkspaceProvider({
       selectedTarget?.type !== "agentflow" ||
       !messages.some((message) => getAgentflowCheckpointMessage(message))
     ) {
-      setCheckpointAvailability([]);
+      setCheckpointAvailability((current) => (current.length === 0 ? current : []));
       return;
     }
 
@@ -730,6 +848,7 @@ export function NativeWorkspaceProvider({
       const userMessage = createUserMessage(text, attachments);
       const scopedUserMessage = scopeStreamingMessage(userMessage, userMessage.messageId);
       const generation = executionGenerationRef.current + 1;
+      let accepted = false;
       executionGenerationRef.current = generation;
       hydratedConversationRef.current = null;
       activeStreamingScopeRef.current = userMessage.messageId;
@@ -748,6 +867,8 @@ export function NativeWorkspaceProvider({
           input: toExecutionUserInput(userMessage),
         });
         if (generation !== executionGenerationRef.current) return;
+        accepted = true;
+        hydratedConversationRef.current = `${selectedProjectId}:${conversationId}`;
         batcherRef.current?.flush(generation);
       } catch (caught) {
         if (generation !== executionGenerationRef.current) return;
@@ -755,21 +876,7 @@ export function NativeWorkspaceProvider({
         setOperationError(getErrorMessage(caught));
       } finally {
         if (generation === executionGenerationRef.current) {
-          try {
-            const refreshedConversations = await conversationsQuery.refetch();
-            const persistedConversation = refreshedConversations.data?.find(
-              (conversation) => conversation.conversationId === conversationId,
-            );
-            if (
-              persistedConversation &&
-              selectedConversationIdRef.current === conversationId &&
-              selectedContextIdRef.current === contextId
-            ) {
-              hydratedConversationRef.current = `${selectedProjectId}:${persistedConversation.conversationId}`;
-            }
-          } catch {
-            // Conversation refresh must not replace the execution outcome.
-          }
+          if (accepted) void refreshConversations();
           if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
           stopTimerRef.current = null;
           activeStreamingScopeRef.current = null;
@@ -779,12 +886,12 @@ export function NativeWorkspaceProvider({
       }
     },
     [
-      conversationsQuery,
       ensureConfiguredSession,
       ensureConversationId,
       ensureContextId,
       isExecuting,
       permissionMode,
+      refreshConversations,
       selectedProjectId,
       selectedTarget,
       verifiedServer,
@@ -915,15 +1022,25 @@ export function NativeWorkspaceProvider({
     const contextToClear = selectedContextId;
     // Clearing records keeps the conversation identity; only New Chat replaces it.
     selectedContextIdRef.current = contextToClear;
-    await conversationService.clearProjectConversationRecords(
+    const cleared = await conversationService.clearProjectConversationRecords(
       selectedProjectId,
       conversationToClear,
     );
+    if (!cleared) throw new Error("Conversation not found.");
+    const detailsQueryKey = [
+      "mobile",
+      profileId,
+      "conversation",
+      selectedProjectId,
+      conversationToClear,
+    ] as const;
+    await queryClient.cancelQueries({ queryKey: detailsQueryKey, exact: true });
+    queryClient.removeQueries({ queryKey: detailsQueryKey, exact: true });
     if (
       selectedConversationIdRef.current !== conversationToClear ||
       selectedContextIdRef.current !== contextToClear
     ) {
-      await conversationsQuery.refetch();
+      await refreshConversations();
       return;
     }
     executionGenerationRef.current += 1;
@@ -939,12 +1056,14 @@ export function NativeWorkspaceProvider({
     setAgentModeState(DEFAULT_AGENT_MODE);
     setPendingHumanGate(null);
     setCheckpointAvailability([]);
-    await conversationsQuery.refetch();
+    await refreshConversations();
   }, [
     conversationService,
-    conversationsQuery,
     disposeExecutionSession,
     ensureIdle,
+    profileId,
+    queryClient,
+    refreshConversations,
     selectedConversationId,
     selectedContextId,
     selectedProjectId,
@@ -954,28 +1073,46 @@ export function NativeWorkspaceProvider({
     async (conversationId: string, title: string) => {
       if (!conversationService || !selectedProjectId) return;
       ensureIdle();
-      await conversationService.updateProjectConversationTitle(
+      const normalizedTitle = title.trim();
+      const updated = await conversationService.updateProjectConversationTitle(
         selectedProjectId,
         conversationId,
-        title,
+        normalizedTitle,
       );
-      await conversationsQuery.refetch();
+      if (!updated)
+        throw new Error(normalizedTitle ? "Conversation not found." : "Title is required.");
+      queryClient.setQueryData<ConversationHistory>(
+        ["mobile", profileId, "conversation", selectedProjectId, conversationId],
+        (current) => (current ? { ...current, title: normalizedTitle } : current),
+      );
+      await refreshConversations();
     },
-    [conversationService, conversationsQuery, ensureIdle, selectedProjectId],
+    [
+      conversationService,
+      ensureIdle,
+      profileId,
+      queryClient,
+      refreshConversations,
+      selectedProjectId,
+    ],
   );
   const deleteConversation = React.useCallback(
     async (conversationId: string) => {
       if (!conversationService || !selectedProjectId) return;
       ensureIdle();
-      await conversationService.deleteProjectConversation(selectedProjectId, conversationId);
+      const deleted = await conversationService.deleteProjectConversation(
+        selectedProjectId,
+        conversationId,
+      );
+      if (!deleted) throw new Error("Conversation not found.");
       if (selectedConversationId === conversationId) newChat();
-      await conversationsQuery.refetch();
+      await refreshConversations();
     },
     [
       conversationService,
-      conversationsQuery,
       ensureIdle,
       newChat,
+      refreshConversations,
       selectedConversationId,
       selectedProjectId,
     ],
@@ -1003,13 +1140,30 @@ export function NativeWorkspaceProvider({
       suggestionsError: suggestionsQuery.error ? getErrorMessage(suggestionsQuery.error) : null,
       isDependenciesLoading:
         projectsQuery.isLoading || agentsQuery.isLoading || agentflowsQuery.isLoading,
-      isHistoryLoading: conversationsQuery.isLoading,
+      isHistoryLoading:
+        isConversationListEnabled &&
+        (conversationsQuery.isPending ||
+          (conversationsQuery.isFetching && !conversationsQuery.isFetchingNextPage)),
+      isHistoryLoadingMore: conversationsQuery.isFetchingNextPage,
+      isHistoryLoadMoreError: conversationsQuery.isFetchNextPageError,
+      isHistoryRefreshError:
+        conversationsQuery.isError &&
+        Boolean(conversationsQuery.data) &&
+        !conversationsQuery.isFetchNextPageError,
+      historyError: conversationsQuery.error ? getErrorMessage(conversationsQuery.error) : null,
+      hasMoreConversations: Boolean(conversationsQuery.hasNextPage),
       isChatLoading: conversationDetailsQuery.isLoading,
       isExecuting,
       reconnectState,
       pendingHumanGate,
       checkpointAvailability,
-      error: operationError ?? (dependencyError ? getErrorMessage(dependencyError) : null),
+      error:
+        operationError ??
+        (conversationDetailsQuery.error
+          ? getErrorMessage(conversationDetailsQuery.error)
+          : dependencyError
+            ? getErrorMessage(dependencyError)
+            : null),
       conversationService,
       filesService,
       selectProject,
@@ -1025,8 +1179,9 @@ export function NativeWorkspaceProvider({
       clearCurrentConversation,
       renameConversation,
       deleteConversation,
-      refreshConversations: async () => {
-        await conversationsQuery.refetch();
+      refreshConversations,
+      loadMoreConversations: async () => {
+        if (conversationsQuery.hasNextPage) await conversationsQuery.fetchNextPage();
       },
       refreshDependencies: async () => {
         await Promise.all([
@@ -1059,6 +1214,8 @@ export function NativeWorkspaceProvider({
       agentflowsQuery,
       conversationsQuery,
       conversationDetailsQuery.isLoading,
+      conversationDetailsQuery.error,
+      isConversationListEnabled,
       isExecuting,
       reconnectState,
       pendingHumanGate,
@@ -1079,6 +1236,7 @@ export function NativeWorkspaceProvider({
       clearCurrentConversation,
       renameConversation,
       deleteConversation,
+      refreshConversations,
     ],
   );
 

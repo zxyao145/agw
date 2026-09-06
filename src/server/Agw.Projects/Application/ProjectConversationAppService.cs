@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Services;
+using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
@@ -30,39 +31,93 @@ public class ProjectConversationAppService
         _timeProvider = timeProvider;
     }
 
-    public async Task<IReadOnlyList<ProjectConversationSummaryResponse>> ListResponsesAsync(Guid projectId)
+    public async Task<PagedResult<ProjectConversationSummaryResponse>> ListResponsesAsync(
+        Guid projectId,
+        ProjectConversationListQuery query,
+        CancellationToken cancellationToken = default
+    )
     {
-        var project = await _projectResolver.ResolveRequiredAsync(projectId);
+        ValidateConversationListQuery(query);
+        var project = await _projectResolver.ResolveRequiredAsync(projectId, cancellationToken);
         if (project == null)
         {
-            return [];
+            return CreateConversationPage([], 0, query);
         }
 
-        var conversations = await _dbContext
+        var conversationsQuery = _dbContext
             .ProjectConversations.AsNoTracking()
-            .Where(conversation => conversation.ProjectId == project.Id && conversation.CreateBy == project.CreateBy)
-            .ToListAsync();
+            .Where(conversation => conversation.ProjectId == project.Id && conversation.CreateBy == project.CreateBy);
+        if (query.ContextId != null)
+        {
+            conversationsQuery = conversationsQuery.Where(conversation => conversation.ContextId == query.ContextId);
+        }
+
+        var histories = _dbContext.ProjectConversationChatHistories.AsNoTracking();
+        conversationsQuery = conversationsQuery.Where(conversation =>
+            conversation.JobId == null
+            || histories.Any(record =>
+                record.ConversationId == conversation.Id
+                && record.ConversationPayload != null
+                && record.ConversationSequence != null
+            )
+            || !histories.Any(record => record.ConversationId == conversation.Id)
+        );
+
+        var total = await conversationsQuery.LongCountAsync(cancellationToken);
+        if (total == 0)
+        {
+            return CreateConversationPage([], 0, query);
+        }
+
+        var conversations = await GetConversationPageAsync(conversationsQuery, query, cancellationToken);
         if (conversations.Count == 0)
         {
-            return [];
+            return CreateConversationPage([], total, query);
         }
 
-        var conversationIds = conversations.Select(conversation => conversation.Id).ToHashSet();
-        var records = await _dbContext
-            .ProjectConversationChatHistories.AsNoTracking()
+        var conversationIds = conversations.Select(conversation => conversation.Id).ToList();
+        var aggregates = await histories
             .Where(record => conversationIds.Contains(record.ConversationId))
-            .ToListAsync();
-        var recordsByConversationId = records
             .GroupBy(record => record.ConversationId)
-            .ToDictionary(group => group.Key, group => group.ToList());
+            .Select(group => new ConversationListAggregate
+            {
+                ConversationId = group.Key,
+                ExecutionCount = group.Select(record => record.TaskId).Distinct().Count(),
+                MessageCount = group.Count(record =>
+                    record.ConversationPayload != null && record.ConversationSequence != null
+                ),
+            })
+            .ToDictionaryAsync(item => item.ConversationId, cancellationToken);
+        var statusRecords = await histories
+            .Where(record => conversationIds.Contains(record.ConversationId))
+            .Select(record => new ProjectConversationChatHistory
+            {
+                Id = record.Id,
+                ConversationId = record.ConversationId,
+                TaskId = record.TaskId,
+                JobId = record.JobId,
+                Status = record.Status,
+                FinishedTime = record.FinishedTime,
+                TaskErrorMessage = record.TaskErrorMessage,
+                Error = record.Error,
+                CreateTime = record.CreateTime,
+                UpdateTime = record.UpdateTime,
+            })
+            .ToListAsync(cancellationToken);
+        var recordsByConversationId = statusRecords
+            .GroupBy(record => record.ConversationId)
+            .ToDictionary(group => group.Key, group => (IReadOnlyList<ProjectConversationChatHistory>)group.ToList());
 
-        return conversations
+        var items = conversations
             .Select(conversation =>
-                ToSummaryResponse(conversation, recordsByConversationId.GetValueOrDefault(conversation.Id) ?? [])
+                ToSummaryResponse(
+                    conversation,
+                    aggregates.GetValueOrDefault(conversation.Id),
+                    recordsByConversationId.GetValueOrDefault(conversation.Id) ?? []
+                )
             )
-            .Where(ShouldIncludeConversation)
-            .OrderByDescending(conversation => conversation.UpdateTime ?? conversation.CreateTime)
             .ToList();
+        return CreateConversationPage(items, total, query);
     }
 
     public async Task<ProjectConversationResponse?> GetResponseAsync(
@@ -282,16 +337,27 @@ public class ProjectConversationAppService
         ?? new ProjectConversationUsage();
 
     private static ProjectConversationSummaryResponse ToSummaryResponse(
-        ProjectConversation conversation,
+        ConversationListRow conversation,
+        ConversationListAggregate? aggregate,
         IReadOnlyList<ProjectConversationChatHistory> records
     )
     {
+        var mappingContext = new ProjectConversation
+        {
+            Id = conversation.Id,
+            Generation = conversation.Generation,
+            ProjectId = conversation.ProjectId,
+            ContextId = conversation.ContextId,
+            JobId = conversation.JobId,
+            Title = conversation.Title,
+            CreateTime = conversation.CreateTime,
+            UpdateTime = conversation.UpdateTime,
+        };
         var tasks = records
             .GroupBy(record => record.TaskId)
-            .Select(group => TaskExecutionMapper.ToTask(conversation, group.ToList()))
+            .Select(group => TaskExecutionMapper.ToTask(mappingContext, group.ToList()))
             .ToList();
         var latestTask = GetLatestTask(tasks);
-        var messageCount = records.Count(record => record.ToChatMessage() != null);
 
         return new ProjectConversationSummaryResponse(
             conversation.ProjectId.Normalize(),
@@ -300,8 +366,8 @@ public class ProjectConversationAppService
             conversation.JobId,
             conversation.Title,
             latestTask?.Status,
-            tasks.Count,
-            messageCount,
+            aggregate?.ExecutionCount ?? 0,
+            aggregate?.MessageCount ?? 0,
             conversation.CreateTime,
             conversation.UpdateTime,
             latestTask?.ErrorMessage
@@ -521,6 +587,100 @@ public class ProjectConversationAppService
             .ThenByDescending(task => task.TaskId)
             .FirstOrDefault();
 
-    private static bool ShouldIncludeConversation(ProjectConversationSummaryResponse conversation) =>
-        conversation.JobId == null || conversation.MessageCount > 0 || conversation.ExecutionCount == 0;
+    private static void ValidateConversationListQuery(ProjectConversationListQuery query)
+    {
+        if (query.PageIndex < 1)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "pageIndex must be at least 1.");
+        }
+
+        if (query.PageSize is not (10 or 20 or 50))
+        {
+            throw new AgwException(ErrorCodes.InvalidPageSize, "pageSize must be one of 10, 20, or 50.");
+        }
+    }
+
+    private static async Task<IReadOnlyList<ConversationListRow>> GetConversationPageAsync(
+        IQueryable<ProjectConversation> query,
+        ProjectConversationListQuery page,
+        CancellationToken cancellationToken
+    )
+    {
+        var skip = (long)(page.PageIndex - 1) * page.PageSize;
+        if (skip > int.MaxValue)
+        {
+            return [];
+        }
+
+        try
+        {
+            return await SelectConversationListRows(
+                    query
+                        .OrderByDescending(conversation => conversation.UpdateTime ?? conversation.CreateTime)
+                        .ThenByDescending(conversation => conversation.Id)
+                        .Skip((int)skip)
+                        .Take(page.PageSize)
+                )
+                .ToListAsync(cancellationToken);
+        }
+        catch (NotSupportedException exception)
+            when (exception.Message.Contains(
+                    "SQLite does not support expressions of type 'DateTimeOffset'",
+                    StringComparison.Ordinal
+                )
+            )
+        {
+            var rows = await SelectConversationListRows(query).ToListAsync(cancellationToken);
+            return rows.OrderByDescending(conversation => conversation.UpdateTime ?? conversation.CreateTime)
+                .ThenByDescending(conversation => conversation.Id)
+                .Skip((int)skip)
+                .Take(page.PageSize)
+                .ToList();
+        }
+    }
+
+    private static IQueryable<ConversationListRow> SelectConversationListRows(IQueryable<ProjectConversation> query) =>
+        query.Select(conversation => new ConversationListRow
+        {
+            Id = conversation.Id,
+            Generation = conversation.Generation,
+            ProjectId = conversation.ProjectId,
+            JobId = conversation.JobId,
+            ContextId = conversation.ContextId,
+            Title = conversation.Title,
+            CreateTime = conversation.CreateTime,
+            UpdateTime = conversation.UpdateTime,
+        });
+
+    private static PagedResult<ProjectConversationSummaryResponse> CreateConversationPage(
+        IReadOnlyList<ProjectConversationSummaryResponse> items,
+        long total,
+        ProjectConversationListQuery query
+    ) =>
+        new()
+        {
+            Items = items,
+            Total = total,
+            PageIndex = query.PageIndex,
+            PageSize = query.PageSize,
+        };
+
+    private sealed class ConversationListRow
+    {
+        public Guid Id { get; init; }
+        public int Generation { get; init; }
+        public Guid ProjectId { get; init; }
+        public Guid? JobId { get; init; }
+        public string ContextId { get; init; } = string.Empty;
+        public string Title { get; init; } = string.Empty;
+        public DateTimeOffset CreateTime { get; init; }
+        public DateTimeOffset? UpdateTime { get; init; }
+    }
+
+    private sealed class ConversationListAggregate
+    {
+        public Guid ConversationId { get; init; }
+        public int ExecutionCount { get; init; }
+        public int MessageCount { get; init; }
+    }
 }

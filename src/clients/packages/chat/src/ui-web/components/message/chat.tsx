@@ -75,18 +75,23 @@ export interface ChatSessionSeed {
   agentMode: AgentMode | null;
 }
 
+export type ConversationChangeOptions = {
+  cancelConversationLoad?: boolean;
+};
+
 export interface ChatProps {
   target: Pick<ChatTargetOption, "id" | "type"> | null;
   projectId: string | null;
   conversationId: string | null;
   sessionSeed: ChatSessionSeed;
+  isLoadingConversation?: boolean;
   environmentVariables?: Record<string, string>;
   placeholder?: string;
   className?: string;
   onConversationIdChange?: (conversationId: string | null) => void;
   onConversationAccepted?: (conversationId: string) => void;
   onContextIdChange?: (contextId: string | null) => void;
-  onConversationChange?: () => void | Promise<void>;
+  onConversationChange?: (options?: ConversationChangeOptions) => void | Promise<void>;
   onExecutionError?: (error: unknown) => void;
   pendingFileComments?: readonly LineComment[];
   onPendingFileCommentsRemove?: (commentIds: readonly string[]) => void;
@@ -155,6 +160,7 @@ export function Chat({
   projectId,
   conversationId,
   sessionSeed,
+  isLoadingConversation = false,
   environmentVariables,
   placeholder = "Type your message...",
   className,
@@ -560,11 +566,12 @@ export function Chat({
 
       const terminalStatus = getTurnFinishedStatus(message);
       if (terminalStatus) {
+        const hadActiveTurn = activeStreamingScopeRef.current !== null;
         streamingMessageBatcherRef.current?.flush(generation);
         activeStreamingScopeRef.current = null;
         setIsExecuting(false);
         setPendingHumanGate(null);
-        void onConversationChange?.();
+        if (hadActiveTurn) void onConversationChange?.();
         const client = executionClientRef.current;
         if (client) {
           void refreshAgentflowCheckpoints(client, generation).catch(() => undefined);
@@ -1257,32 +1264,57 @@ export function Chat({
     [notifyExecutionError, pendingHumanGate],
   );
 
+  const clearInFlightRef = React.useRef(false);
   const handleClear = React.useCallback(() => {
+    if (clearInFlightRef.current) return;
     const conversationToClear = conversationId;
-    olderMessagesAbortRef.current?.abort();
-    olderMessagesAbortRef.current = null;
-    void interruptAndDispose("Conversation cleared.");
-    setPendingHumanGate(null);
-    setCheckpointAvailability([]);
-    messagesRef.current = [];
-    setMessages([]);
-    setClaudeCommands([]);
-    setConversationUsage(EMPTY_TOKEN_USAGE);
-    setHasOlderMessages(false);
-    setIsLoadingOlderMessages(false);
-    setIsJumpingToTop(false);
-    olderMessagesCursorRef.current = null;
-    hasOlderMessagesRef.current = false;
-    isLoadingOlderMessagesRef.current = false;
-    userInputRef.current?.setInput("");
+    const generation = executionGenerationRef.current;
+    const clearLocalState = async () => {
+      olderMessagesAbortRef.current?.abort();
+      olderMessagesAbortRef.current = null;
+      await interruptAndDispose("Conversation cleared.");
+      setPendingHumanGate(null);
+      setCheckpointAvailability([]);
+      messagesRef.current = [];
+      setMessages([]);
+      setClaudeCommands([]);
+      setHasOlderMessages(false);
+      setIsLoadingOlderMessages(false);
+      setIsJumpingToTop(false);
+      olderMessagesCursorRef.current = null;
+      hasOlderMessagesRef.current = false;
+      isLoadingOlderMessagesRef.current = false;
+      userInputRef.current?.setInput("");
+    };
 
-    if (projectId && conversationToClear) {
-      void clearProjectConversationRecords(projectId, conversationToClear)
-        .then(() => onConversationChange?.())
-        .catch(notifyExecutionError);
-    } else {
-      void onConversationChange?.();
-    }
+    clearInFlightRef.current = true;
+    void (async () => {
+      try {
+        if (projectId && conversationToClear) {
+          const cleared = await clearProjectConversationRecords(projectId, conversationToClear);
+          if (!cleared) throw new Error("Conversation not found.");
+          const isStillCurrent =
+            conversationIdRef.current === conversationToClear &&
+            executionGenerationRef.current === generation;
+          await onConversationChange?.(
+            isStillCurrent ? { cancelConversationLoad: true } : undefined,
+          );
+          if (
+            conversationIdRef.current === conversationToClear &&
+            executionGenerationRef.current === generation
+          ) {
+            await clearLocalState();
+          }
+        } else {
+          await clearLocalState();
+          await onConversationChange?.();
+        }
+      } catch (error) {
+        notifyExecutionError(error);
+      } finally {
+        clearInFlightRef.current = false;
+      }
+    })();
   }, [conversationId, interruptAndDispose, notifyExecutionError, onConversationChange, projectId]);
 
   const handleClearPendingFileComments = React.useCallback(() => {
@@ -1545,6 +1577,7 @@ export function Chat({
               onUserInputNavigate={handleUserInputNavigate}
               hasOlderMessages={hasOlderMessages}
               isLoadingOlderMessages={isLoadingOlderMessages}
+              isInitialLoading={isLoadingConversation}
               onLoadOlderMessages={() => void loadOlderMessages()}
               permissionMode={permissionMode}
               onHumanResponse={({ approved, responseText, approvalScope = "once", responseData }) =>
@@ -1569,7 +1602,7 @@ export function Chat({
           {/* 输入框 */}
           <ChatInput
             isExecuting={isExecuting}
-            isTransitioning={isTransitioning || isHydratingSession}
+            isTransitioning={isTransitioning || isHydratingSession || isLoadingConversation}
             isLoadingHistory={isLoadingOlderMessages || isJumpingToTop}
             hasMessages={renderItems.length > 0}
             onExecute={(value, imageAttachments) => {

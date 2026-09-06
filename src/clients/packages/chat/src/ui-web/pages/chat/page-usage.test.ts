@@ -35,7 +35,7 @@ test("shared chat initializes seeded usage and accumulates streamed usage before
   assert.notEqual(humanGateIndex, -1);
   assert.ok(usageReadIndex < humanGateIndex);
   assert.match(chatSource, /setConversationUsage\(sessionSeed\.usage\)/);
-  assert.match(chatSource, /setConversationUsage\(EMPTY_TOKEN_USAGE\)/);
+  assert.doesNotMatch(chatSource, /setConversationUsage\(EMPTY_TOKEN_USAGE\)/);
 });
 
 test("shared chat hides usage messages and renders compact token usage metrics", async () => {

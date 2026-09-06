@@ -1,10 +1,11 @@
 import * as React from "react";
 import { ChevronDown, Pencil, RefreshCw, Settings, Trash2, X } from "lucide-react-native";
 import {
+  ActivityIndicator,
   Alert,
+  FlatList,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -84,61 +85,95 @@ export function NativeConversationList({
           onPress={() => void chat.refreshConversations()}
         />
       </View>
-      <ScrollView contentContainerStyle={styles.list}>
-        {chat.conversations.length === 0 ? (
+      <FlatList
+        style={styles.listView}
+        data={chat.conversations}
+        keyExtractor={(conversation) => conversation.conversationId}
+        contentContainerStyle={styles.list}
+        refreshing={chat.isHistoryLoading && chat.conversations.length > 0}
+        onRefresh={() => void chat.refreshConversations()}
+        onEndReachedThreshold={0.4}
+        onEndReached={() => {
+          if (chat.hasMoreConversations && !chat.isHistoryLoadingMore) {
+            void chat.loadMoreConversations();
+          }
+        }}
+        ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>No conversations yet</Text>
-            <Text style={styles.emptyText}>Start a new chat to create one.</Text>
+            {chat.isHistoryLoading ? (
+              <ActivityIndicator color={theme.primary} />
+            ) : chat.historyError ? (
+              <>
+                <Text style={styles.emptyTitle}>Unable to load conversations</Text>
+                <Text style={styles.emptyText}>{chat.historyError}</Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.emptyTitle}>No conversations yet</Text>
+                <Text style={styles.emptyText}>Start a new chat to create one.</Text>
+              </>
+            )}
           </View>
-        ) : (
-          chat.conversations.map((conversation) => {
-            const active = conversation.conversationId === chat.selectedConversationId;
-            return (
-              <Pressable
-                key={conversation.conversationId}
-                onPress={() => selectConversation(conversation.conversationId)}
-                style={({ pressed }) => [
-                  styles.row,
-                  active && styles.rowActive,
-                  pressed && styles.pressed,
-                ]}
-              >
-                <View style={styles.rowCopy}>
-                  <Text numberOfLines={1} style={styles.rowTitle}>
-                    {conversation.title}
-                  </Text>
-                  <Text numberOfLines={1} style={styles.rowMeta}>
-                    {formatConversationMeta(conversation)}
-                  </Text>
-                </View>
-                <View style={styles.rowActions}>
-                  <IconButton
-                    icon={Pencil}
-                    label={`Rename ${conversation.title}`}
-                    size={17}
-                    disabled={chat.isExecuting}
-                    onPress={(event) => {
-                      event.stopPropagation();
-                      setEditing(conversation);
-                    }}
-                  />
-                  <IconButton
-                    icon={Trash2}
-                    label={`Delete ${conversation.title}`}
-                    size={17}
-                    color={theme.danger}
-                    disabled={chat.isExecuting}
-                    onPress={(event) => {
-                      event.stopPropagation();
-                      remove(conversation);
-                    }}
-                  />
-                </View>
-              </Pressable>
-            );
-          })
-        )}
-      </ScrollView>
+        }
+        ListFooterComponent={
+          chat.isHistoryLoadingMore ? (
+            <ActivityIndicator style={styles.listFooter} color={theme.primary} />
+          ) : chat.isHistoryLoadMoreError ? (
+            <Pressable style={styles.listFooter} onPress={() => void chat.loadMoreConversations()}>
+              <Text style={styles.loadMoreError}>Unable to load more. Tap to retry.</Text>
+            </Pressable>
+          ) : chat.isHistoryRefreshError ? (
+            <Pressable style={styles.listFooter} onPress={() => void chat.refreshConversations()}>
+              <Text style={styles.loadMoreError}>Unable to refresh. Tap to retry.</Text>
+            </Pressable>
+          ) : null
+        }
+        renderItem={({ item: conversation }) => {
+          const active = conversation.conversationId === chat.selectedConversationId;
+          return (
+            <Pressable
+              onPress={() => selectConversation(conversation.conversationId)}
+              style={({ pressed }) => [
+                styles.row,
+                active && styles.rowActive,
+                pressed && styles.pressed,
+              ]}
+            >
+              <View style={styles.rowCopy}>
+                <Text numberOfLines={1} style={styles.rowTitle}>
+                  {conversation.title}
+                </Text>
+                <Text numberOfLines={1} style={styles.rowMeta}>
+                  {formatConversationMeta(conversation)}
+                </Text>
+              </View>
+              <View style={styles.rowActions}>
+                <IconButton
+                  icon={Pencil}
+                  label={`Rename ${conversation.title}`}
+                  size={17}
+                  disabled={chat.isExecuting}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    setEditing(conversation);
+                  }}
+                />
+                <IconButton
+                  icon={Trash2}
+                  label={`Delete ${conversation.title}`}
+                  size={17}
+                  color={theme.danger}
+                  disabled={chat.isExecuting}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    remove(conversation);
+                  }}
+                />
+              </View>
+            </Pressable>
+          );
+        }}
+      />
       <Pressable
         onPress={onOpenSettings}
         style={[styles.settingsRow, { paddingBottom: Math.max(14, safeBottom) }]}
@@ -292,7 +327,15 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   sectionTitle: { color: theme.ink, fontFamily: theme.fontSemibold, fontSize: 18 },
+  listView: { flex: 1 },
   list: { paddingHorizontal: 12, paddingBottom: 16 },
+  listFooter: { paddingVertical: 16 },
+  loadMoreError: {
+    color: theme.danger,
+    fontFamily: theme.fontMedium,
+    fontSize: 12,
+    textAlign: "center",
+  },
   row: {
     minHeight: 68,
     paddingLeft: 14,

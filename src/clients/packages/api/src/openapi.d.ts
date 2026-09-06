@@ -2706,7 +2706,11 @@ export interface paths {
     };
     get: {
       parameters: {
-        query?: never;
+        query?: {
+          pageIndex?: number;
+          pageSize?: number;
+          contextId?: null | string;
+        };
         header?: never;
         path: {
           projectId: string;
@@ -2721,9 +2725,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ApiResultOfProjectConversationSummaryResponse[]"];
-            "application/json": components["schemas"]["ApiResultOfProjectConversationSummaryResponse[]"];
-            "text/json": components["schemas"]["ApiResultOfProjectConversationSummaryResponse[]"];
+            "text/plain": components["schemas"]["ApiResultOfPagedResultOfProjectConversationSummaryResponse"];
+            "application/json": components["schemas"]["ApiResultOfPagedResultOfProjectConversationSummaryResponse"];
+            "text/json": components["schemas"]["ApiResultOfPagedResultOfProjectConversationSummaryResponse"];
           };
         };
       };
@@ -4771,8 +4775,8 @@ export interface components {
       title: string;
       detail: null | string;
     };
-    "ApiResultOfProjectConversationSummaryResponse[]": {
-      data?: null | components["schemas"]["ProjectConversationSummaryResponse"][];
+    ApiResultOfPagedResultOfProjectConversationSummaryResponse: {
+      data?: null | components["schemas"]["PagedResultOfProjectConversationSummaryResponse"];
       /** Format: int32 */
       code: number;
       title: string;
@@ -5350,6 +5354,15 @@ export interface components {
     };
     PagedResultOfAgentResponse: {
       items: components["schemas"]["AgentResponse"][];
+      /** Format: int64 */
+      total: number | string;
+      /** Format: int32 */
+      pageIndex: number;
+      /** Format: int32 */
+      pageSize: number;
+    };
+    PagedResultOfProjectConversationSummaryResponse: {
+      items: components["schemas"]["ProjectConversationSummaryResponse"][];
       /** Format: int64 */
       total: number | string;
       /** Format: int32 */

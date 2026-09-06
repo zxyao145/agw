@@ -152,7 +152,7 @@ test("deleteAllProjectContexts returns false and skips fetch when project id is 
   assert.equal(fetchCalled, false);
 });
 
-test("getProjectConversations gets the complete conversation list for a project", async (t) => {
+test("getProjectConversations gets one conversation page for a project", async (t) => {
   const originalFetch = globalThis.fetch;
   const requests: Array<{ url: string; init?: RequestInit }> = [];
 
@@ -161,47 +161,52 @@ test("getProjectConversations gets the complete conversation list for a project"
     return Response.json({
       code: 200,
       title: "OK",
-      data: [
-        {
-          projectId: "project-1",
-          conversationId: "11111111-1111-1111-1111-000000000001",
-          contextId: "context-empty",
-          jobId: null,
-          title: "New Chat",
-          latestStatus: 1,
-          executionCount: 1,
-          messageCount: 0,
-          createTime: "2026-01-01T00:00:00Z",
-          updateTime: "2026-01-02T00:00:00Z",
-          errorMessage: null,
-        },
-        {
-          projectId: "project-1",
-          conversationId: "11111111-1111-1111-1111-000000000002",
-          contextId: "context-1",
-          jobId: "job-1",
-          title: "Tokyo trip",
-          latestStatus: 2,
-          executionCount: 2,
-          messageCount: 4,
-          createTime: "2026-01-01T00:00:00Z",
-          updateTime: "2026-01-02T00:00:00Z",
-          errorMessage: null,
-        },
-        {
-          projectId: "project-1",
-          conversationId: "11111111-1111-1111-1111-000000000003",
-          contextId: "context-cleared",
-          jobId: null,
-          title: "Cleared chat",
-          latestStatus: null,
-          executionCount: 0,
-          messageCount: 0,
-          createTime: "2026-01-01T00:00:00Z",
-          updateTime: "2026-01-03T00:00:00Z",
-          errorMessage: null,
-        },
-      ],
+      data: {
+        total: 3,
+        pageIndex: 1,
+        pageSize: 20,
+        items: [
+          {
+            projectId: "project-1",
+            conversationId: "11111111-1111-1111-1111-000000000001",
+            contextId: "context-empty",
+            jobId: null,
+            title: "New Chat",
+            latestStatus: 1,
+            executionCount: 1,
+            messageCount: 0,
+            createTime: "2026-01-01T00:00:00Z",
+            updateTime: "2026-01-02T00:00:00Z",
+            errorMessage: null,
+          },
+          {
+            projectId: "project-1",
+            conversationId: "11111111-1111-1111-1111-000000000002",
+            contextId: "context-1",
+            jobId: "job-1",
+            title: "Tokyo trip",
+            latestStatus: 2,
+            executionCount: 2,
+            messageCount: 4,
+            createTime: "2026-01-01T00:00:00Z",
+            updateTime: "2026-01-02T00:00:00Z",
+            errorMessage: null,
+          },
+          {
+            projectId: "project-1",
+            conversationId: "11111111-1111-1111-1111-000000000003",
+            contextId: "context-cleared",
+            jobId: null,
+            title: "Cleared chat",
+            latestStatus: null,
+            executionCount: 0,
+            messageCount: 0,
+            createTime: "2026-01-01T00:00:00Z",
+            updateTime: "2026-01-03T00:00:00Z",
+            errorMessage: null,
+          },
+        ],
+      },
     });
   }) as typeof fetch;
 
@@ -211,22 +216,24 @@ test("getProjectConversations gets the complete conversation list for a project"
 
   const result = await getProjectConversations("project-1");
 
-  assert.equal(result.length, 3);
-  assert.equal(result[0].conversationId, "11111111-1111-1111-1111-000000000001");
-  assert.equal(result[0].contextId, "context-empty");
-  assert.equal(result[0].executionCount, 1);
-  assert.equal(result[0].messageCount, 0);
-  assert.equal(result[1].conversationId, "11111111-1111-1111-1111-000000000002");
-  assert.equal(result[1].contextId, "context-1");
-  assert.equal(result[1].jobId, "job-1");
-  assert.equal(result[1].executionCount, 2);
-  assert.equal(result[2].conversationId, "11111111-1111-1111-1111-000000000003");
-  assert.equal(result[2].contextId, "context-cleared");
-  assert.equal(result[2].executionCount, 0);
-  assert.equal(result[2].messageCount, 0);
+  assert.equal(result.total, 3);
+  assert.equal(result.pageIndex, 1);
+  assert.equal(result.pageSize, 20);
+  assert.equal(result.items[0].conversationId, "11111111-1111-1111-1111-000000000001");
+  assert.equal(result.items[0].contextId, "context-empty");
+  assert.equal(result.items[0].executionCount, 1);
+  assert.equal(result.items[0].messageCount, 0);
+  assert.equal(result.items[1].conversationId, "11111111-1111-1111-1111-000000000002");
+  assert.equal(result.items[1].contextId, "context-1");
+  assert.equal(result.items[1].jobId, "job-1");
+  assert.equal(result.items[1].executionCount, 2);
+  assert.equal(result.items[2].conversationId, "11111111-1111-1111-1111-000000000003");
+  assert.equal(result.items[2].contextId, "context-cleared");
+  assert.equal(result.items[2].executionCount, 0);
+  assert.equal(result.items[2].messageCount, 0);
   assert.deepEqual(requests, [
     {
-      url: "/api/projects/project-1/conversations",
+      url: "/api/projects/project-1/conversations?pageIndex=1&pageSize=20",
       init: {
         method: "GET",
         headers: {},

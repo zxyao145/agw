@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Text.Json;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Application.Persistence;
@@ -9,12 +10,276 @@ using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Projects.Tests;
 
 public class ProjectConversationAppServiceTests
 {
+    [Fact]
+    public async Task ListResponsesAsync_PaginatesWithStableOrderingAndContextFilter()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.CreateVersion7();
+        var conversationIds = Enumerable
+            .Range(1, 12)
+            .Select(index => Guid.Parse($"00000000-0000-0000-0000-{index:D12}"))
+            .ToList();
+        var updateTime = TimeProvider.System.GetUtcNow();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            seedContext.ProjectConversations.AddRange(
+                conversationIds.Select(
+                    (id, index) =>
+                    {
+                        var conversation = CreateContext(id, projectId, $"context-{index + 1}", $"Chat {index + 1}");
+                        conversation.UpdateTime = updateTime;
+                        return conversation;
+                    }
+                )
+            );
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+
+        var firstPage = await service.ListResponsesAsync(
+            projectId,
+            new ProjectConversationListQuery { PageSize = 10 },
+            cancellationToken
+        );
+        var secondPage = await service.ListResponsesAsync(
+            projectId,
+            new ProjectConversationListQuery { PageIndex = 2, PageSize = 10 },
+            cancellationToken
+        );
+        var filtered = await service.ListResponsesAsync(
+            projectId,
+            new ProjectConversationListQuery { ContextId = "context-4" },
+            cancellationToken
+        );
+
+        var expectedIds = conversationIds.OrderByDescending(id => id).ToList();
+        Assert.Equal(12, firstPage.Total);
+        Assert.Equal(10, firstPage.Items.Count);
+        Assert.Equal(expectedIds.Take(10), firstPage.Items.Select(item => item.ConversationId));
+        Assert.Equal(expectedIds.Skip(10), secondPage.Items.Select(item => item.ConversationId));
+        Assert.Equal(2, secondPage.PageIndex);
+        Assert.Equal(10, secondPage.PageSize);
+        var filteredConversation = Assert.Single(filtered.Items);
+        Assert.Equal("context-4", filteredConversation.ContextId);
+        Assert.Equal(1, filtered.Total);
+    }
+
+    [Fact]
+    public async Task ListResponsesAsync_DoesNotDeserializeConversationPayload()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            seedContext.ProjectConversations.Add(CreateContext(conversationId, projectId, "context", "Chat"));
+            seedContext.ProjectConversationChatHistories.Add(
+                new ProjectConversationChatHistory
+                {
+                    Id = Guid.CreateVersion7(),
+                    ConversationId = conversationId,
+                    TaskId = Guid.CreateVersion7(),
+                    Status = TaskExecutionStatus.Succeeded,
+                    ConversationSequence = 0,
+                    ConversationPayload = "not-json",
+                    CreateTime = TimeProvider.System.GetUtcNow(),
+                }
+            );
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+
+        var page = await service.ListResponsesAsync(projectId, new ProjectConversationListQuery(), cancellationToken);
+
+        var conversation = Assert.Single(page.Items);
+        Assert.Equal(1, conversation.MessageCount);
+        Assert.Equal(TaskExecutionStatus.Succeeded, conversation.LatestStatus);
+    }
+
+    [Theory]
+    [InlineData(0, 20)]
+    [InlineData(1, 1)]
+    public async Task ListResponsesAsync_WithInvalidPaging_ThrowsAgwException(int pageIndex, int pageSize)
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, TestContext.Current.CancellationToken);
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+
+        await Assert.ThrowsAsync<AgwException>(() =>
+            service.ListResponsesAsync(
+                Guid.CreateVersion7(),
+                new ProjectConversationListQuery { PageIndex = pageIndex, PageSize = pageSize },
+                TestContext.Current.CancellationToken
+            )
+        );
+    }
+
+    [Fact]
+    public async Task ListResponsesAsync_WithCancelledRequest_StopsDatabaseQuery()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, TestContext.Current.CancellationToken);
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.ListResponsesAsync(Guid.CreateVersion7(), new ProjectConversationListQuery(), cancellation.Token)
+        );
+    }
+
+    [Fact]
+    public async Task ListResponsesAsync_DoesNotExposeAnotherUsersProject()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+        var projectId = Guid.CreateVersion7();
+
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            var project = CreateProject(projectId, "Foreign project");
+            project.CreateBy = "another-user";
+            seedContext.Projects.Add(project);
+            var conversation = CreateContext(Guid.CreateVersion7(), projectId, "foreign-context", "Private");
+            conversation.CreateBy = "another-user";
+            seedContext.ProjectConversations.Add(conversation);
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+
+        var page = await service.ListResponsesAsync(projectId, new ProjectConversationListQuery(), cancellationToken);
+
+        Assert.Empty(page.Items);
+        Assert.Equal(0, page.Total);
+    }
+
+    [Fact]
+    public async Task ListResponsesAsync_WhenTaskTimesMatch_UsesTaskIdAsStableStatusTieBreaker()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = CreateOptions(connection);
+        await EnsureCreatedAsync(options, cancellationToken);
+        var projectId = Guid.CreateVersion7();
+        var conversationId = Guid.CreateVersion7();
+        var lowerTaskId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        var higherTaskId = Guid.Parse("00000000-0000-0000-0000-000000000002");
+        var timestamp = TimeProvider.System.GetUtcNow();
+
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            seedContext.ProjectConversations.Add(CreateContext(conversationId, projectId, "context", "Chat"));
+            seedContext.ProjectConversationChatHistories.AddRange(
+                CreateRecord(conversationId, lowerTaskId, 0, "First", TaskExecutionStatus.Succeeded, timestamp),
+                CreateRecord(conversationId, higherTaskId, 1, "Second", TaskExecutionStatus.Running, timestamp)
+            );
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+
+        var page = await service.ListResponsesAsync(projectId, new ProjectConversationListQuery(), cancellationToken);
+
+        Assert.Equal(TaskExecutionStatus.Running, Assert.Single(page.Items).LatestStatus);
+    }
+
+    [Fact]
+    public async Task ListResponsesAsync_QueryCountDoesNotGrowWithPageSize()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var commandCounter = new CommandCounterInterceptor();
+        var options = CreateOptions(connection, commandCounter);
+        await EnsureCreatedAsync(options, cancellationToken);
+        var projectId = Guid.CreateVersion7();
+
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            foreach (var index in Enumerable.Range(1, 20))
+            {
+                var conversationId = Guid.CreateVersion7();
+                seedContext.ProjectConversations.Add(
+                    CreateContext(conversationId, projectId, $"context-{index}", $"Chat {index}")
+                );
+                seedContext.ProjectConversationChatHistories.Add(
+                    CreateRecord(
+                        conversationId,
+                        Guid.CreateVersion7(),
+                        0,
+                        $"Message {index}",
+                        TaskExecutionStatus.Succeeded
+                    )
+                );
+            }
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = CreateService(dbContext);
+        commandCounter.Reset();
+        await service.ListResponsesAsync(
+            projectId,
+            new ProjectConversationListQuery { PageSize = 10 },
+            cancellationToken
+        );
+        var tenItemPageQueryCount = commandCounter.ReaderCommandCount;
+
+        commandCounter.Reset();
+        await service.ListResponsesAsync(
+            projectId,
+            new ProjectConversationListQuery { PageSize = 20 },
+            cancellationToken
+        );
+
+        Assert.Equal(tenItemPageQueryCount, commandCounter.ReaderCommandCount);
+        Assert.InRange(commandCounter.ReaderCommandCount, 1, 6);
+        Assert.DoesNotContain(
+            commandCounter.Commands,
+            command => command.Contains("metadata", StringComparison.OrdinalIgnoreCase)
+        );
+    }
+
     [Fact]
     public async Task ListResponsesAsync_GroupsTasksFromRecordsByContext()
     {
@@ -44,9 +309,13 @@ public class ProjectConversationAppServiceTests
         await using var dbContext = new AgwDbContext(options);
         var service = CreateService(dbContext);
 
-        var contexts = await service.ListResponsesAsync(projectId);
+        var contexts = await service.ListResponsesAsync(
+            projectId,
+            new ProjectConversationListQuery(),
+            cancellationToken
+        );
 
-        var context = Assert.Single(contexts);
+        var context = Assert.Single(contexts.Items);
         Assert.Equal(projectId.Normalize(), context.ProjectId);
         Assert.Equal(contextId, context.ConversationId);
         Assert.Equal("context-1", context.ContextId);
@@ -71,6 +340,7 @@ public class ProjectConversationAppServiceTests
         var interactiveContextId = Guid.CreateVersion7();
         var emptyJobContextId = Guid.CreateVersion7();
         var persistedJobContextId = Guid.CreateVersion7();
+        var neverStartedJobContextId = Guid.CreateVersion7();
         var jobId = Guid.CreateVersion7();
         await using (var seedContext = new AgwDbContext(options))
         {
@@ -78,7 +348,8 @@ public class ProjectConversationAppServiceTests
             seedContext.ProjectConversations.AddRange(
                 CreateContext(interactiveContextId, projectId, "interactive-context", "New Chat"),
                 CreateContext(emptyJobContextId, projectId, "empty-job-context", "Queued run", jobId),
-                CreateContext(persistedJobContextId, projectId, "persisted-job-context", "Persisted", jobId)
+                CreateContext(persistedJobContextId, projectId, "persisted-job-context", "Persisted", jobId),
+                CreateContext(neverStartedJobContextId, projectId, "never-started-job", "Never started", jobId)
             );
             seedContext.ProjectConversationChatHistories.AddRange(
                 new ProjectConversationChatHistory
@@ -107,15 +378,20 @@ public class ProjectConversationAppServiceTests
         await using var dbContext = new AgwDbContext(options);
         var service = CreateService(dbContext);
 
-        var contexts = await service.ListResponsesAsync(projectId);
+        var contexts = await service.ListResponsesAsync(
+            projectId,
+            new ProjectConversationListQuery(),
+            cancellationToken
+        );
 
-        Assert.Equal(2, contexts.Count);
-        var contextsById = contexts.ToDictionary(context => context.ConversationId);
+        Assert.Equal(3, contexts.Items.Count);
+        var contextsById = contexts.Items.ToDictionary(context => context.ConversationId);
         var interactiveContext = contextsById[interactiveContextId];
         Assert.Equal("interactive-context", interactiveContext.ContextId);
         Assert.Equal(1, interactiveContext.ExecutionCount);
         Assert.Equal(0, interactiveContext.MessageCount);
         Assert.Contains(persistedJobContextId, contextsById.Keys);
+        Assert.Contains(neverStartedJobContextId, contextsById.Keys);
         Assert.DoesNotContain(emptyJobContextId, contextsById.Keys);
     }
 
@@ -758,18 +1034,29 @@ public class ProjectConversationAppServiceTests
         var service = CreateService(dbContext);
 
         var clearResult = await service.ClearRecordsAsync(projectId, contextId);
-        var contexts = await service.ListResponsesAsync(projectId);
+        var contexts = await service.ListResponsesAsync(
+            projectId,
+            new ProjectConversationListQuery(),
+            cancellationToken
+        );
 
         Assert.Equal(ApplicationResultType.Success, clearResult.Type);
-        var context = Assert.Single(contexts);
+        var context = Assert.Single(contexts.Items);
         Assert.Equal(contextId, context.ConversationId);
         Assert.Equal("context-1", context.ContextId);
         Assert.Equal(0, context.ExecutionCount);
         Assert.Equal(0, context.MessageCount);
     }
 
-    private static DbContextOptions<AgwDbContext> CreateOptions(SqliteConnection connection) =>
-        new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).UseSnakeCaseNamingConvention().Options;
+    private static DbContextOptions<AgwDbContext> CreateOptions(
+        SqliteConnection connection,
+        params IInterceptor[] interceptors
+    ) =>
+        new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .AddInterceptors(interceptors)
+            .Options;
 
     private static async Task EnsureCreatedAsync(
         DbContextOptions<AgwDbContext> options,
@@ -915,5 +1202,29 @@ public class ProjectConversationAppServiceTests
             deletionCoordinator ?? TestProjectPersistence.CreateDeletionCoordinator(dbContext),
             TimeProvider.System
         );
+    }
+
+    private sealed class CommandCounterInterceptor : DbCommandInterceptor
+    {
+        public int ReaderCommandCount { get; private set; }
+        public List<string> Commands { get; } = [];
+
+        public void Reset()
+        {
+            ReaderCommandCount = 0;
+            Commands.Clear();
+        }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default
+        )
+        {
+            ReaderCommandCount++;
+            Commands.Add(command.CommandText);
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
     }
 }
