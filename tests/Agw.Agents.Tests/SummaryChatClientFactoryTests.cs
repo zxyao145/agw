@@ -64,17 +64,12 @@ public class SummaryChatClientFactoryTests
         var appService = new AgentAppService(
             null!,
             null!,
-            null!,
             new TestModelProviderReferenceFacade(
                 new EfRepository<ModelProviderRelation>(dbContext),
                 new EfRepository<AgwAiModel>(dbContext),
                 new EfRepository<Provider>(dbContext),
                 userInfo
             ),
-            null!,
-            null!,
-            null!,
-            null!,
             null!,
             userInfo
         );

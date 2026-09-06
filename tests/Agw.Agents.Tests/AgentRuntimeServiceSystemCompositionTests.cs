@@ -478,8 +478,7 @@ public class AgentRuntimeServiceSystemCompositionTests
         var skillRepository = new EfRepository<Skill>(dbContext);
         var userInfo = new TestUserInfoService();
         return new AgentAppService(
-            new EfRepository<Agent>(dbContext),
-            new EfRepository<AgentConnectionRelation>(dbContext),
+            dbContext,
             new TestConnectionReferenceFacade(connectionRepository, userInfo),
             new TestModelProviderReferenceFacade(
                 modelProviderRepository,
@@ -487,11 +486,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 providerRepository,
                 userInfo
             ),
-            new EfRepository<McpServer>(dbContext),
-            new EfRepository<AgentMcpServerRelation>(dbContext),
             new TestSkillReferenceFacade(skillRepository, userInfo),
-            new EfRepository<AgentSkillRelation>(dbContext),
-            dbContext,
             userInfo
         );
     }

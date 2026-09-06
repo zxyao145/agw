@@ -342,9 +342,6 @@ public class ProjectConversationsControllerTests
         var projectResolver = new ProjectResolver(projectRepository, userInfo);
 
         return new ProjectConversationAppService(
-            new EfRepository<ProjectConversation>(dbContext),
-            new EfRepository<ProjectConversationChatHistory>(dbContext),
-            new EfRepository<AgentUsage>(dbContext),
             dbContext,
             projectResolver,
             TestProjectPersistence.CreateDeletionCoordinator(dbContext),

@@ -578,15 +578,11 @@ public class ProjectAppServiceTests : IDisposable
         userInfo ??= new TestUserInfoService();
 
         return new ProjectAppService(
-            projectRepository,
-            new EfRepository<ProjectMcpServerRelation>(dbContext),
+            dbContext,
             new TestAgentCatalogFacade(new EfRepository<McpServer>(dbContext)),
-            new EfRepository<ProjectSkillRelation>(dbContext),
             new SkillReferenceFacade(dbContext, userInfo),
-            new EfRepository<ProjectConnectionRelation>(dbContext),
             new ConnectionReferenceFacade(dbContext, userInfo),
             deletionCoordinator ?? TestProjectPersistence.CreateDeletionCoordinator(dbContext),
-            dbContext,
             new ProjectResolver(projectRepository, userInfo),
             userInfo,
             fileSystemCache

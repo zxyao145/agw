@@ -1,3 +1,4 @@
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Domain.Behaviors;
 using Agw.Auth.Contracts;
 using Agw.Integrations.Contracts.References;
@@ -5,7 +6,6 @@ using Agw.Providers.Contracts.References;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Pagination;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Skills.Contracts.References;
 using Microsoft.EntityFrameworkCore;
@@ -30,39 +30,24 @@ public class AgentAppService
         (AgentUpdateField.SummaryModelProviderId, "summaryModelProviderId"),
     ];
 
-    private readonly IRepository<Agent> _agentRepository;
-    private readonly IRepository<AgentConnectionRelation> _agentConnectionRelationRepository;
+    private readonly IAgentsDbContext _dbContext;
     private readonly IConnectionReferenceFacade _connectionReferences;
     private readonly IModelProviderReferenceFacade _modelProviderReferences;
-    private readonly IRepository<McpServer> _mcpToolServerRepository;
-    private readonly IRepository<AgentMcpServerRelation> _agentMcpToolServerRepository;
     private readonly ISkillReferenceFacade _skillReferences;
-    private readonly IRepository<AgentSkillRelation> _agentSkillRelationRepository;
-    private readonly IUnitOfWork _unitOfWork;
     private readonly IUserInfoService _userInfoService;
 
     public AgentAppService(
-        IRepository<Agent> agentRepository,
-        IRepository<AgentConnectionRelation> agentConnectionRelationRepository,
+        IAgentsDbContext dbContext,
         IConnectionReferenceFacade connectionReferences,
         IModelProviderReferenceFacade modelProviderReferences,
-        IRepository<McpServer> mcpToolServerRepository,
-        IRepository<AgentMcpServerRelation> agentMcpToolServerRepository,
         ISkillReferenceFacade skillReferences,
-        IRepository<AgentSkillRelation> agentSkillRelationRepository,
-        IUnitOfWork unitOfWork,
         IUserInfoService userInfoService
     )
     {
-        _agentRepository = agentRepository;
-        _agentConnectionRelationRepository = agentConnectionRelationRepository;
+        _dbContext = dbContext;
         _connectionReferences = connectionReferences;
         _modelProviderReferences = modelProviderReferences;
-        _mcpToolServerRepository = mcpToolServerRepository;
-        _agentMcpToolServerRepository = agentMcpToolServerRepository;
         _skillReferences = skillReferences;
-        _agentSkillRelationRepository = agentSkillRelationRepository;
-        _unitOfWork = unitOfWork;
         _userInfoService = userInfoService;
     }
 
@@ -147,13 +132,13 @@ public class AgentAppService
     public async Task<IReadOnlyList<McpServer>> ListEnabledMcpToolServersByAgentAsync(Guid agentId)
     {
         var user = _userInfoService.RequiredUserId;
-        var agentExists = await _agentRepository.ListAsync(x => x.Id == agentId && x.CreateBy == user);
-        if (agentExists.Count == 0)
+        var agentExists = await _dbContext.Agents.AnyAsync(x => x.Id == agentId && x.CreateBy == user);
+        if (!agentExists)
         {
             return [];
         }
 
-        var links = await _agentMcpToolServerRepository.ListAsync(x => x.AgentId == agentId);
+        var links = await _dbContext.AgentMcpToolServers.AsNoTracking().Where(x => x.AgentId == agentId).ToListAsync();
         return await ListEnabledMcpToolServersAsync(links.Select(x => x.McpToolServerId));
     }
 
@@ -166,21 +151,25 @@ public class AgentAppService
         }
 
         var user = _userInfoService.RequiredUserId;
-        return await _mcpToolServerRepository.ListAsync(x =>
-            x.Enabled && serverIds.Contains(x.Id) && x.CreateBy == user
-        );
+        return await _dbContext
+            .McpToolServers.AsNoTracking()
+            .Where(x => x.Enabled && serverIds.Contains(x.Id) && x.CreateBy == user)
+            .ToListAsync();
     }
 
     public async Task<IReadOnlyList<SkillReferenceSnapshot>> ListSkillsByAgentAsync(Guid agentId)
     {
         var user = _userInfoService.RequiredUserId;
-        var agentExists = await _agentRepository.ListAsync(x => x.Id == agentId && x.CreateBy == user);
-        if (agentExists.Count == 0)
+        var agentExists = await _dbContext.Agents.AnyAsync(x => x.Id == agentId && x.CreateBy == user);
+        if (!agentExists)
         {
             return [];
         }
 
-        var relations = await _agentSkillRelationRepository.ListAsync(x => x.AgentId == agentId);
+        var relations = await _dbContext
+            .AgentSkillRelations.AsNoTracking()
+            .Where(x => x.AgentId == agentId)
+            .ToListAsync();
         return await ListSkillsAsync(relations.Select(x => x.SkillId));
     }
 
@@ -212,11 +201,11 @@ public class AgentAppService
         }
 
         new AgentBehavior(agent).PrepareForCreate();
-        await _agentRepository.AddAsync(agent);
+        await _dbContext.Agents.AddAsync(agent);
         await SyncAgentMcpToolServerRelationsAsync(agent.Id, mcpToolServerIds, user);
         await SyncAgentSkillRelationsAsync(agent.Id, skillIds);
         await SyncAgentConnectionRelationsAsync(agent.Id, connectionIds);
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync();
         return agent;
     }
 
@@ -225,7 +214,7 @@ public class AgentAppService
         ArgumentNullException.ThrowIfNull(command);
         var user = _userInfoService.RequiredUserId;
 
-        var existing = await _agentRepository.SingleOrDefaultAsync(agent => agent.Id == id && agent.CreateBy == user);
+        var existing = await _dbContext.Agents.SingleOrDefaultAsync(agent => agent.Id == id && agent.CreateBy == user);
         if (existing == null)
         {
             return null;
@@ -250,7 +239,8 @@ public class AgentAppService
             return null;
         }
 
-        _agentRepository.Update(existing);
+        // Preserve audit stamping even when only bindings change or the update is a no-op.
+        _dbContext.Agents.Entry(existing).Property(agent => agent.DisplayName).IsModified = true;
         if (existing.Type == AgentType.System)
         {
             await SyncAgentMcpToolServerRelationsAsync(existing.Id, command.McpToolServerIds, user);
@@ -261,7 +251,7 @@ public class AgentAppService
             }
         }
 
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync();
         return existing;
     }
 
@@ -272,7 +262,7 @@ public class AgentAppService
     )
     {
         var ownerUserId = _userInfoService.RequiredUserId;
-        var existing = await _agentRepository.Queryable.FirstOrDefaultAsync(
+        var existing = await _dbContext.Agents.FirstOrDefaultAsync(
             agent => agent.Id == id && agent.CreateBy == ownerUserId,
             cancellationToken
         );
@@ -282,41 +272,41 @@ public class AgentAppService
         }
 
         existing.Enable = enable;
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return existing;
     }
 
     public async Task<bool> DeleteAgentAsync(Guid id)
     {
         var ownerUserId = _userInfoService.RequiredUserId;
-        var existing = (
-            await _agentRepository.ListAsync(agent => agent.Id == id && agent.CreateBy == ownerUserId)
-        ).FirstOrDefault();
+        var existing = await _dbContext.Agents.FirstOrDefaultAsync(agent =>
+            agent.Id == id && agent.CreateBy == ownerUserId
+        );
         if (existing == null)
         {
             return false;
         }
 
-        var skillRelations = await _agentSkillRelationRepository.ListAsync(x => x.AgentId == id);
+        var skillRelations = await _dbContext.AgentSkillRelations.Where(x => x.AgentId == id).ToListAsync();
         foreach (var relation in skillRelations)
         {
-            _agentSkillRelationRepository.Remove(relation);
+            _dbContext.AgentSkillRelations.Remove(relation);
         }
 
-        var connectionRelations = await _agentConnectionRelationRepository.ListAsync(x => x.AgentId == id);
+        var connectionRelations = await _dbContext.AgentConnectionRelations.Where(x => x.AgentId == id).ToListAsync();
         foreach (var relation in connectionRelations)
         {
-            _agentConnectionRelationRepository.Remove(relation);
+            _dbContext.AgentConnectionRelations.Remove(relation);
         }
 
-        var mcpRelations = await _agentMcpToolServerRepository.ListAsync(x => x.AgentId == id);
+        var mcpRelations = await _dbContext.AgentMcpToolServers.Where(x => x.AgentId == id).ToListAsync();
         foreach (var relation in mcpRelations)
         {
-            _agentMcpToolServerRepository.Remove(relation);
+            _dbContext.AgentMcpToolServers.Remove(relation);
         }
 
-        _agentRepository.Remove(existing);
-        await _unitOfWork.SaveChangesAsync();
+        _dbContext.Agents.Remove(existing);
+        await _dbContext.SaveChangesAsync();
         return true;
     }
 
@@ -442,28 +432,27 @@ public class AgentAppService
         string user
     )
     {
-        var existingLinks = await _agentMcpToolServerRepository.ListAsync(x => x.AgentId == agentId);
-        foreach (var link in existingLinks)
-        {
-            _agentMcpToolServerRepository.Remove(link);
-        }
-
+        var existingLinks = await _dbContext.AgentMcpToolServers.Where(link => link.AgentId == agentId).ToListAsync();
         var requestedIds = (mcpToolServerIds ?? []).Where(id => id != Guid.Empty).Distinct().ToList();
-        if (requestedIds.Count == 0)
-        {
-            return;
-        }
-
-        var existingServers = await _mcpToolServerRepository.ListAsync(x =>
-            requestedIds.Contains(x.Id) && x.CreateBy == user
-        );
-        if (existingServers.Count != requestedIds.Count)
+        var validIds =
+            requestedIds.Count == 0
+                ? []
+                : await _dbContext
+                    .McpToolServers.Where(server => requestedIds.Contains(server.Id) && server.CreateBy == user)
+                    .Select(server => server.Id)
+                    .ToListAsync();
+        if (validIds.Count != requestedIds.Count)
         {
             throw new AgwException(ErrorCodes.InvalidParam);
         }
-        foreach (var serverId in existingServers.Select(x => x.Id))
+
+        foreach (var link in existingLinks.Where(link => !validIds.Contains(link.McpToolServerId)))
         {
-            await _agentMcpToolServerRepository.AddAsync(
+            _dbContext.AgentMcpToolServers.Remove(link);
+        }
+        foreach (var serverId in validIds.Except(existingLinks.Select(link => link.McpToolServerId)))
+        {
+            await _dbContext.AgentMcpToolServers.AddAsync(
                 new AgentMcpServerRelation { AgentId = agentId, McpToolServerId = serverId }
             );
         }
@@ -471,26 +460,24 @@ public class AgentAppService
 
     private async Task SyncAgentSkillRelationsAsync(Guid agentId, IEnumerable<Guid>? skillIds)
     {
-        var existingLinks = await _agentSkillRelationRepository.ListAsync(x => x.AgentId == agentId);
-        foreach (var link in existingLinks)
-        {
-            _agentSkillRelationRepository.Remove(link);
-        }
-
+        var existingLinks = await _dbContext.AgentSkillRelations.Where(link => link.AgentId == agentId).ToListAsync();
         var requestedIds = (skillIds ?? []).Where(static id => id != Guid.Empty).Distinct().ToList();
-        if (requestedIds.Count == 0)
-        {
-            return;
-        }
-
-        var visibleSkillIds = await _skillReferences.FilterVisibleSkillIdsAsync(requestedIds).ConfigureAwait(false);
+        var visibleSkillIds =
+            requestedIds.Count == 0
+                ? new HashSet<Guid>()
+                : await _skillReferences.FilterVisibleSkillIdsAsync(requestedIds).ConfigureAwait(false);
         if (visibleSkillIds.Count != requestedIds.Count)
         {
             throw new AgwException(ErrorCodes.InvalidParam);
         }
-        foreach (var skillId in visibleSkillIds)
+
+        foreach (var link in existingLinks.Where(link => !visibleSkillIds.Contains(link.SkillId)))
         {
-            await _agentSkillRelationRepository.AddAsync(
+            _dbContext.AgentSkillRelations.Remove(link);
+        }
+        foreach (var skillId in visibleSkillIds.Except(existingLinks.Select(link => link.SkillId)))
+        {
+            await _dbContext.AgentSkillRelations.AddAsync(
                 new AgentSkillRelation { AgentId = agentId, SkillId = skillId }
             );
         }
@@ -498,8 +485,8 @@ public class AgentAppService
 
     private IQueryable<Agent> CreateAgentQuery(string ownerUserId)
     {
-        IQueryable<Agent> query = _agentRepository
-            .Queryable.Include(agent =>
+        IQueryable<Agent> query = _dbContext
+            .Agents.Include(agent =>
                 agent.AgentMcpToolServers.Where(relation => relation.McpToolServer.CreateBy == ownerUserId)
             )
             .Include(agent => agent.AgentSkillRelations)
@@ -562,31 +549,33 @@ public class AgentAppService
 
     private async Task SyncAgentConnectionRelationsAsync(Guid agentId, IEnumerable<Guid>? connectionIds)
     {
-        var existingLinks = await _agentConnectionRelationRepository.ListAsync(link => link.AgentId == agentId);
+        var existingLinks = await _dbContext
+            .AgentConnectionRelations.Where(link => link.AgentId == agentId)
+            .ToListAsync();
         var ownedExistingIds = await _connectionReferences
             .FilterOwnedConnectionIdsAsync(existingLinks.Select(link => link.ConnectionId).ToArray())
             .ConfigureAwait(false);
-        foreach (var link in existingLinks.Where(link => ownedExistingIds.Contains(link.ConnectionId)))
-        {
-            _agentConnectionRelationRepository.Remove(link);
-        }
-
         var requestedIds = (connectionIds ?? []).Where(static id => id != Guid.Empty).Distinct().ToList();
-        if (requestedIds.Count == 0)
-        {
-            return;
-        }
-
-        var ownedConnectionIds = await _connectionReferences
-            .FilterOwnedConnectionIdsAsync(requestedIds)
-            .ConfigureAwait(false);
+        var ownedConnectionIds =
+            requestedIds.Count == 0
+                ? new HashSet<Guid>()
+                : await _connectionReferences.FilterOwnedConnectionIdsAsync(requestedIds).ConfigureAwait(false);
         if (ownedConnectionIds.Count != requestedIds.Count)
         {
             throw new AgwException(ErrorCodes.InvalidParam);
         }
-        foreach (var connectionId in ownedConnectionIds)
+
+        foreach (
+            var link in existingLinks.Where(link =>
+                ownedExistingIds.Contains(link.ConnectionId) && !ownedConnectionIds.Contains(link.ConnectionId)
+            )
+        )
         {
-            await _agentConnectionRelationRepository.AddAsync(
+            _dbContext.AgentConnectionRelations.Remove(link);
+        }
+        foreach (var connectionId in ownedConnectionIds.Except(existingLinks.Select(link => link.ConnectionId)))
+        {
+            await _dbContext.AgentConnectionRelations.AddAsync(
                 new AgentConnectionRelation { AgentId = agentId, ConnectionId = connectionId }
             );
         }

@@ -178,9 +178,6 @@ public class ProjectTraceCleanupTests
         var projectRepository = new EfRepository<Project>(dbContext);
         var userInfo = new TestUserInfoService();
         return new ProjectConversationAppService(
-            new EfRepository<ProjectConversation>(dbContext),
-            new EfRepository<ProjectConversationChatHistory>(dbContext),
-            new EfRepository<AgentUsage>(dbContext),
             dbContext,
             new ProjectResolver(projectRepository, userInfo),
             new ProjectDeletionCoordinator(
@@ -207,8 +204,7 @@ public class ProjectTraceCleanupTests
         var projectRepository = new EfRepository<Project>(dbContext);
         var userInfo = new TestUserInfoService();
         return new ProjectAppService(
-            projectRepository,
-            new EfRepository<ProjectMcpServerRelation>(dbContext),
+            dbContext,
             new AgentCatalogFacade(
                 new EfRepository<Agent>(dbContext),
                 new EfRepository<Agentflow>(dbContext),
@@ -217,9 +213,7 @@ public class ProjectTraceCleanupTests
                 dbContext,
                 userInfo
             ),
-            new EfRepository<ProjectSkillRelation>(dbContext),
             new SkillReferenceFacade(dbContext, userInfo),
-            new EfRepository<ProjectConnectionRelation>(dbContext),
             new ConnectionReferenceFacade(dbContext, userInfo),
             new ProjectDeletionCoordinator(
                 dbContext,
@@ -236,7 +230,6 @@ public class ProjectTraceCleanupTests
                         .Instance
                 )
             ),
-            dbContext,
             new ProjectResolver(projectRepository, userInfo),
             userInfo
         );

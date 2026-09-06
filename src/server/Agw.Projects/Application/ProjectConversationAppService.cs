@@ -4,7 +4,6 @@ using System.Text.Json;
 using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Microsoft.EntityFrameworkCore;
@@ -13,28 +12,19 @@ namespace Agw.Projects.Application;
 
 public class ProjectConversationAppService
 {
-    private readonly IRepository<ProjectConversation> _conversationRepository;
-    private readonly IRepository<ProjectConversationChatHistory> _recordRepository;
-    private readonly IRepository<AgentUsage> _usageRepository;
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IProjectsDbContext _dbContext;
     private readonly ProjectResolver _projectResolver;
     private readonly IProjectDeletionCoordinator _deletionCoordinator;
     private readonly TimeProvider _timeProvider;
 
     public ProjectConversationAppService(
-        IRepository<ProjectConversation> conversationRepository,
-        IRepository<ProjectConversationChatHistory> recordRepository,
-        IRepository<AgentUsage> usageRepository,
-        IUnitOfWork unitOfWork,
+        IProjectsDbContext dbContext,
         ProjectResolver projectResolver,
         IProjectDeletionCoordinator deletionCoordinator,
         TimeProvider timeProvider
     )
     {
-        _conversationRepository = conversationRepository;
-        _recordRepository = recordRepository;
-        _usageRepository = usageRepository;
-        _unitOfWork = unitOfWork;
+        _dbContext = dbContext;
         _projectResolver = projectResolver;
         _deletionCoordinator = deletionCoordinator;
         _timeProvider = timeProvider;
@@ -48,16 +38,20 @@ public class ProjectConversationAppService
             return [];
         }
 
-        var conversations = await _conversationRepository.ListAsync(conversation =>
-            conversation.ProjectId == project.Id && conversation.CreateBy == project.CreateBy
-        );
+        var conversations = await _dbContext
+            .ProjectConversations.AsNoTracking()
+            .Where(conversation => conversation.ProjectId == project.Id && conversation.CreateBy == project.CreateBy)
+            .ToListAsync();
         if (conversations.Count == 0)
         {
             return [];
         }
 
         var conversationIds = conversations.Select(conversation => conversation.Id).ToHashSet();
-        var records = await _recordRepository.ListAsync(record => conversationIds.Contains(record.ConversationId));
+        var records = await _dbContext
+            .ProjectConversationChatHistories.AsNoTracking()
+            .Where(record => conversationIds.Contains(record.ConversationId))
+            .ToListAsync();
         var recordsByConversationId = records
             .GroupBy(record => record.ConversationId)
             .ToDictionary(group => group.Key, group => group.ToList());
@@ -88,7 +82,7 @@ public class ProjectConversationAppService
             return null;
         }
 
-        var conversation = await _conversationRepository.SingleOrDefaultAsync(item =>
+        var conversation = await _dbContext.ProjectConversations.SingleOrDefaultAsync(item =>
             item.ProjectId == project.Id && item.Id == conversationId && item.CreateBy == project.CreateBy
         );
 
@@ -111,8 +105,8 @@ public class ProjectConversationAppService
             return null;
         }
 
-        var recordsQuery = _recordRepository
-            .Queryable.AsNoTracking()
+        var recordsQuery = _dbContext
+            .ProjectConversationChatHistories.AsNoTracking()
             .Where(record =>
                 record.ConversationId == conversation.Id
                 && record.ConversationPayload != null
@@ -197,8 +191,8 @@ public class ProjectConversationAppService
         conversation.Title = title.Trim();
         conversation.UpdateBy = user;
         conversation.UpdateTime = _timeProvider.GetUtcNow();
-        _conversationRepository.Update(conversation);
-        await _unitOfWork.SaveChangesAsync();
+        _dbContext.ProjectConversations.Entry(conversation).Property(item => item.Title).IsModified = true;
+        await _dbContext.SaveChangesAsync();
         return ApplicationResult.Success();
     }
 
@@ -235,8 +229,8 @@ public class ProjectConversationAppService
         CancellationToken cancellationToken
     )
     {
-        var recordsQuery = _recordRepository
-            .Queryable.AsNoTracking()
+        var recordsQuery = _dbContext
+            .ProjectConversationChatHistories.AsNoTracking()
             .Where(record => record.ConversationId == conversation.Id);
         var executionCount = await recordsQuery
             .Select(record => record.TaskId)
@@ -271,8 +265,8 @@ public class ProjectConversationAppService
         ProjectConversation conversation,
         CancellationToken cancellationToken
     ) =>
-        await _usageRepository
-            .Queryable.Where(usage =>
+        await _dbContext
+            .AgentUsages.Where(usage =>
                 usage.ProjectId == conversation.ProjectId && usage.ContextId == conversation.ContextId
             )
             .GroupBy(_ => 1)
@@ -513,7 +507,7 @@ public class ProjectConversationAppService
             return null;
         }
 
-        return await _conversationRepository.SingleOrDefaultAsync(conversation =>
+        return await _dbContext.ProjectConversations.SingleOrDefaultAsync(conversation =>
             conversation.ProjectId == project.Id
             && conversation.Id == conversationId
             && conversation.CreateBy == project.CreateBy

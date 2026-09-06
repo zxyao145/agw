@@ -9,11 +9,16 @@ using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Tooling;
+using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Agents.Tests;
 
-public class AgentAppServiceUpdateTests
+public class AgentAppServiceUpdateTests : IDisposable
 {
+    private readonly TestAgentDatabase _database = new();
+
+    public void Dispose() => _database.Dispose();
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     [Fact]
@@ -24,30 +29,24 @@ public class AgentAppServiceUpdateTests
         var agent = CreateExternalAgent();
         agent.EnableSummary = true;
         agent.SummaryModelProviderId = summaryModelProviderId;
-        var mcpRelations = new TestRepository<AgentMcpServerRelation>([
+        AgentMcpServerRelation[] mcpRelations =
+        [
             new AgentMcpServerRelation { AgentId = agent.Id, McpToolServerId = Guid.CreateVersion7() },
-        ])
-        {
-            ThrowOnList = true,
-        };
-        var skillRelations = new TestRepository<AgentSkillRelation>([
+        ];
+        AgentSkillRelation[] skillRelations =
+        [
             new AgentSkillRelation { AgentId = agent.Id, SkillId = Guid.CreateVersion7() },
-        ])
-        {
-            ThrowOnList = true,
-        };
-        var connectionRelations = new TestRepository<AgentConnectionRelation>([
+        ];
+        AgentConnectionRelation[] connectionRelations =
+        [
             new AgentConnectionRelation { AgentId = agent.Id, ConnectionId = Guid.CreateVersion7() },
-        ])
-        {
-            ThrowOnList = true,
-        };
+        ];
         var service = CreateService(
             agent,
             modelProviderIds: [newModelProviderId, summaryModelProviderId],
-            mcpRelationRepository: mcpRelations,
-            skillRelationRepository: skillRelations,
-            connectionRelationRepository: connectionRelations
+            mcpRelations: mcpRelations,
+            skillRelations: skillRelations,
+            connectionRelations: connectionRelations
         );
         var request = Deserialize(
             $$"""
@@ -73,9 +72,9 @@ public class AgentAppServiceUpdateTests
         Assert.IsType<WebFetchToolDefinition>(Assert.IsType<ToolValue>(Assert.Single(agent.Tools)).Definition);
         Assert.True(agent.EnableSummary);
         Assert.Equal(summaryModelProviderId, agent.SummaryModelProviderId);
-        Assert.Equal(0, mcpRelations.ListCallCount);
-        Assert.Equal(0, skillRelations.ListCallCount);
-        Assert.Equal(0, connectionRelations.ListCallCount);
+        Assert.Equal(mcpRelations, _database.Context.AgentMcpToolServers.ToArray());
+        Assert.Equal(skillRelations, _database.Context.AgentSkillRelations.ToArray());
+        Assert.Equal(connectionRelations, _database.Context.AgentConnectionRelations.ToArray());
     }
 
     [Theory]
@@ -184,8 +183,7 @@ public class AgentAppServiceUpdateTests
     public async Task UpdateAgentAsync_ExternalForbiddenField_ThrowsBeforeMutation(string json, string fieldName)
     {
         var agent = CreateExternalAgent();
-        var unitOfWork = new TestUnitOfWork();
-        var service = CreateService(agent, unitOfWork: unitOfWork);
+        var service = CreateService(agent);
         var request = Deserialize(json);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
@@ -195,7 +193,7 @@ public class AgentAppServiceUpdateTests
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
         Assert.Contains(fieldName, exception.Message, StringComparison.Ordinal);
         Assert.Null(agent.UpdateBy);
-        Assert.Equal(0, unitOfWork.SaveCount);
+        Assert.Equal("External Agent", _database.Context.Agents.AsNoTracking().Single().DisplayName);
     }
 
     [Fact]
@@ -320,13 +318,12 @@ public class AgentAppServiceUpdateTests
         JsonSerializer.Deserialize<AgentUpdateRequest>(json, JsonOptions)
         ?? throw new Xunit.Sdk.XunitException("Agent update request did not deserialize.");
 
-    private static AgentAppService CreateService(
+    private AgentAppService CreateService(
         Agent agent,
         IEnumerable<Guid>? modelProviderIds = null,
-        TestRepository<AgentMcpServerRelation>? mcpRelationRepository = null,
-        TestRepository<AgentSkillRelation>? skillRelationRepository = null,
-        TestRepository<AgentConnectionRelation>? connectionRelationRepository = null,
-        TestUnitOfWork? unitOfWork = null
+        IEnumerable<AgentMcpServerRelation>? mcpRelations = null,
+        IEnumerable<AgentSkillRelation>? skillRelations = null,
+        IEnumerable<AgentConnectionRelation>? connectionRelations = null
     )
     {
         agent.CreateBy ??= "tester";
@@ -339,9 +336,32 @@ public class AgentAppServiceUpdateTests
         var providerRepository = new TestRepository<Provider>();
         var skillRepository = new TestRepository<Skill>();
         var userInfo = new TestUserInfoService();
+        _database.Context.McpToolServers.AddRange(
+            (mcpRelations ?? []).Select(relation => new McpServer
+            {
+                Id = relation.McpToolServerId,
+                CreateBy = "tester",
+            })
+        );
+        _database.Context.Skills.AddRange(
+            (skillRelations ?? []).Select(relation => new Skill { Id = relation.SkillId, CreateBy = "tester" })
+        );
+        _database.Context.Connections.AddRange(
+            (connectionRelations ?? []).Select(relation => new Connection
+            {
+                Id = relation.ConnectionId,
+                Alias = relation.ConnectionId.ToString(),
+                CreateBy = "tester",
+            })
+        );
+        _database.Context.Agents.Add(agent);
+        _database.Context.AgentMcpToolServers.AddRange(mcpRelations ?? []);
+        _database.Context.AgentSkillRelations.AddRange(skillRelations ?? []);
+        _database.Context.AgentConnectionRelations.AddRange(connectionRelations ?? []);
+        _database.Context.SaveChanges();
+
         return new AgentAppService(
-            new TestRepository<Agent>([agent], item => item.Id),
-            connectionRelationRepository ?? new TestRepository<AgentConnectionRelation>(),
+            _database.Context,
             new TestConnectionReferenceFacade(connectionRepository, userInfo),
             new TestModelProviderReferenceFacade(
                 modelProviderRepository,
@@ -349,11 +369,7 @@ public class AgentAppServiceUpdateTests
                 providerRepository,
                 userInfo
             ),
-            new TestRepository<McpServer>(),
-            mcpRelationRepository ?? new TestRepository<AgentMcpServerRelation>(),
             new TestSkillReferenceFacade(skillRepository, userInfo),
-            skillRelationRepository ?? new TestRepository<AgentSkillRelation>(),
-            unitOfWork ?? new TestUnitOfWork(),
             userInfo
         );
     }
@@ -371,8 +387,6 @@ public class AgentAppServiceUpdateTests
         }
 
         public IQueryable<TEntity> Queryable => _items.AsQueryable();
-        public bool ThrowOnList { get; init; }
-        public int ListCallCount { get; private set; }
 
         public Task<TEntity?> GetByIdAsync(object id) =>
             Task.FromResult(_idSelector == null ? null : _items.SingleOrDefault(item => Equals(_idSelector(item), id)));
@@ -387,12 +401,6 @@ public class AgentAppServiceUpdateTests
             Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
         )
         {
-            ListCallCount++;
-            if (ThrowOnList)
-            {
-                throw new Xunit.Sdk.XunitException($"Unexpected {typeof(TEntity).Name} relation sync.");
-            }
-
             IQueryable<TEntity> query = _items.AsQueryable();
             if (predicate != null)
             {
@@ -424,20 +432,5 @@ public class AgentAppServiceUpdateTests
         public void Remove(TEntity entity) => _items.Remove(entity);
 
         public Task SaveChangesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-    }
-
-    private sealed class TestUnitOfWork : IUnitOfWork
-    {
-        public int SaveCount { get; private set; }
-
-        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-        {
-            SaveCount++;
-            return Task.FromResult(0);
-        }
-
-        public Task<bool> SaveEntitiesAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
-
-        public void Dispose() { }
     }
 }

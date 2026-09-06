@@ -7,7 +7,6 @@ using Agw.Integrations.Contracts.References;
 using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Behaviors;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Skills.Contracts.References;
 using Microsoft.EntityFrameworkCore;
@@ -16,43 +15,31 @@ namespace Agw.Projects.Application;
 
 public class ProjectAppService : IProjectAppService
 {
-    private readonly IRepository<Project> _projectRepository;
-    private readonly IRepository<ProjectMcpServerRelation> _projectMcpToolServerRepository;
+    private readonly IProjectsDbContext _dbContext;
     private readonly IAgentCatalogFacade _agentCatalog;
-    private readonly IRepository<ProjectSkillRelation> _projectSkillRelationRepository;
     private readonly ISkillReferenceFacade _skillReferences;
-    private readonly IRepository<ProjectConnectionRelation> _projectConnectionRelationRepository;
     private readonly IConnectionReferenceFacade _connectionReferences;
     private readonly IProjectDeletionCoordinator _deletionCoordinator;
-    private readonly IUnitOfWork _unitOfWork;
     private readonly ProjectResolver _projectResolver;
     private readonly IUserInfoService _userInfoService;
     private readonly IProjectFileSystemCacheInvalidator? _fileSystemCache;
 
     public ProjectAppService(
-        IRepository<Project> projectRepository,
-        IRepository<ProjectMcpServerRelation> projectMcpToolServerRepository,
+        IProjectsDbContext dbContext,
         IAgentCatalogFacade agentCatalog,
-        IRepository<ProjectSkillRelation> projectSkillRelationRepository,
         ISkillReferenceFacade skillReferences,
-        IRepository<ProjectConnectionRelation> projectConnectionRelationRepository,
         IConnectionReferenceFacade connectionReferences,
         IProjectDeletionCoordinator deletionCoordinator,
-        IUnitOfWork unitOfWork,
         ProjectResolver projectResolver,
         IUserInfoService userInfoService,
         IProjectFileSystemCacheInvalidator? fileSystemCache = null
     )
     {
-        _projectRepository = projectRepository;
-        _projectMcpToolServerRepository = projectMcpToolServerRepository;
+        _dbContext = dbContext;
         _agentCatalog = agentCatalog;
-        _projectSkillRelationRepository = projectSkillRelationRepository;
         _skillReferences = skillReferences;
-        _projectConnectionRelationRepository = projectConnectionRelationRepository;
         _connectionReferences = connectionReferences;
         _deletionCoordinator = deletionCoordinator;
-        _unitOfWork = unitOfWork;
         _projectResolver = projectResolver;
         _userInfoService = userInfoService;
         _fileSystemCache = fileSystemCache;
@@ -117,11 +104,11 @@ public class ProjectAppService : IProjectAppService
         }
 
         EnsureWorkspaceDirectory(project.Workspace);
-        await _projectRepository.AddAsync(project);
+        await _dbContext.Projects.AddAsync(project);
         await SyncProjectMcpToolServerRelationsAsync(project.Id, mcpToolServerIds);
         await SyncProjectSkillRelationsAsync(project.Id, skillIds);
         await SyncProjectConnectionRelationsAsync(project.Id, connectionIds);
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync();
         return await GetForCurrentUserAsync(project.Id);
     }
 
@@ -137,7 +124,7 @@ public class ProjectAppService : IProjectAppService
     )
     {
         var user = _userInfoService.RequiredUserId;
-        var existing = await _projectRepository.Queryable.FirstOrDefaultAsync(
+        var existing = await _dbContext.Projects.FirstOrDefaultAsync(
             project => project.Id == id && project.CreateBy == user,
             CancellationToken.None
         );
@@ -164,7 +151,8 @@ public class ProjectAppService : IProjectAppService
         }
 
         EnsureWorkspaceDirectory(existing.Workspace);
-        _projectRepository.Update(existing);
+        // Preserve audit stamping even when only bindings change or the update is a no-op.
+        _dbContext.Projects.Entry(existing).Property(project => project.Name).IsModified = true;
         if (mcpToolServerIds != null)
         {
             await SyncProjectMcpToolServerRelationsAsync(existing.Id, mcpToolServerIds);
@@ -177,14 +165,14 @@ public class ProjectAppService : IProjectAppService
         {
             await SyncProjectConnectionRelationsAsync(existing.Id, connectionIds);
         }
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync();
         _fileSystemCache?.Invalidate(existing.Id);
         return await GetForCurrentUserAsync(existing.Id);
     }
 
     public async Task<bool> DeleteAsync(Guid id)
     {
-        var existing = await _projectRepository.Queryable.FirstOrDefaultAsync(
+        var existing = await _dbContext.Projects.FirstOrDefaultAsync(
             project => project.Id == id && project.CreateBy == _userInfoService.RequiredUserId,
             CancellationToken.None
         );
@@ -234,8 +222,8 @@ public class ProjectAppService : IProjectAppService
 
     private async Task SyncProjectMcpToolServerRelationsAsync(Guid projectId, IEnumerable<Guid>? mcpToolServerIds)
     {
-        var currentIds = await _projectMcpToolServerRepository
-            .Queryable.Where(relation => relation.ProjectId == projectId)
+        var currentIds = await _dbContext
+            .ProjectMcpToolServers.Where(relation => relation.ProjectId == projectId)
             .Select(relation => relation.McpToolServerId)
             .ToListAsync();
 
@@ -251,20 +239,20 @@ public class ProjectAppService : IProjectAppService
         var removedIds = currentIds.Except(validIds).ToList();
         if (removedIds.Count > 0)
         {
-            var removedRelations = await _projectMcpToolServerRepository
-                .Queryable.Where(relation =>
+            var removedRelations = await _dbContext
+                .ProjectMcpToolServers.Where(relation =>
                     relation.ProjectId == projectId && removedIds.Contains(relation.McpToolServerId)
                 )
                 .ToListAsync();
             foreach (var relation in removedRelations)
             {
-                _projectMcpToolServerRepository.Remove(relation);
+                _dbContext.ProjectMcpToolServers.Remove(relation);
             }
         }
 
         foreach (var resourceId in validIds.Except(currentIds))
         {
-            await _projectMcpToolServerRepository.AddAsync(
+            await _dbContext.ProjectMcpToolServers.AddAsync(
                 new ProjectMcpServerRelation { ProjectId = projectId, McpToolServerId = resourceId }
             );
         }
@@ -272,8 +260,8 @@ public class ProjectAppService : IProjectAppService
 
     private async Task SyncProjectSkillRelationsAsync(Guid projectId, IEnumerable<Guid>? skillIds)
     {
-        var currentIds = await _projectSkillRelationRepository
-            .Queryable.Where(relation => relation.ProjectId == projectId)
+        var currentIds = await _dbContext
+            .ProjectSkillRelations.Where(relation => relation.ProjectId == projectId)
             .Select(relation => relation.SkillId)
             .ToListAsync();
 
@@ -289,18 +277,20 @@ public class ProjectAppService : IProjectAppService
         var removedIds = currentIds.Except(validIds).ToList();
         if (removedIds.Count > 0)
         {
-            var removedRelations = await _projectSkillRelationRepository
-                .Queryable.Where(relation => relation.ProjectId == projectId && removedIds.Contains(relation.SkillId))
+            var removedRelations = await _dbContext
+                .ProjectSkillRelations.Where(relation =>
+                    relation.ProjectId == projectId && removedIds.Contains(relation.SkillId)
+                )
                 .ToListAsync();
             foreach (var relation in removedRelations)
             {
-                _projectSkillRelationRepository.Remove(relation);
+                _dbContext.ProjectSkillRelations.Remove(relation);
             }
         }
 
         foreach (var resourceId in validIds.Except(currentIds))
         {
-            await _projectSkillRelationRepository.AddAsync(
+            await _dbContext.ProjectSkillRelations.AddAsync(
                 new ProjectSkillRelation { ProjectId = projectId, SkillId = resourceId }
             );
         }
@@ -308,8 +298,8 @@ public class ProjectAppService : IProjectAppService
 
     private IQueryable<Project> CreateProjectQuery(string ownerUserId)
     {
-        IQueryable<Project> query = _projectRepository
-            .Queryable.Include(project => project.ProjectMcpToolServers)
+        IQueryable<Project> query = _dbContext
+            .Projects.Include(project => project.ProjectMcpToolServers)
             .Include(project => project.ProjectSkillRelations)
             .Include(project => project.ProjectConnectionRelations)
             .Where(project => project.CreateBy == ownerUserId);
@@ -318,8 +308,8 @@ public class ProjectAppService : IProjectAppService
 
     private async Task SyncProjectConnectionRelationsAsync(Guid projectId, IEnumerable<Guid>? connectionIds)
     {
-        var relationIds = await _projectConnectionRelationRepository
-            .Queryable.Where(relation => relation.ProjectId == projectId)
+        var relationIds = await _dbContext
+            .ProjectConnectionRelations.Where(relation => relation.ProjectId == projectId)
             .Select(relation => relation.ConnectionId)
             .ToListAsync();
         var currentIds = await _connectionReferences.FilterOwnedConnectionIdsAsync(relationIds).ConfigureAwait(false);
@@ -336,20 +326,20 @@ public class ProjectAppService : IProjectAppService
         var removedIds = currentIds.Except(validIds).ToList();
         if (removedIds.Count > 0)
         {
-            var removedRelations = await _projectConnectionRelationRepository
-                .Queryable.Where(relation =>
+            var removedRelations = await _dbContext
+                .ProjectConnectionRelations.Where(relation =>
                     relation.ProjectId == projectId && removedIds.Contains(relation.ConnectionId)
                 )
                 .ToListAsync();
             foreach (var relation in removedRelations)
             {
-                _projectConnectionRelationRepository.Remove(relation);
+                _dbContext.ProjectConnectionRelations.Remove(relation);
             }
         }
 
         foreach (var resourceId in validIds.Except(currentIds))
         {
-            await _projectConnectionRelationRepository.AddAsync(
+            await _dbContext.ProjectConnectionRelations.AddAsync(
                 new ProjectConnectionRelation { ProjectId = projectId, ConnectionId = resourceId }
             );
         }

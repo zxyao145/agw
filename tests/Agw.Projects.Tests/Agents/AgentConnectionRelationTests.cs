@@ -2,7 +2,6 @@ using System.Security.Claims;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Application.Facades;
 using Agw.Projects.Tests;
 using Agw.Providers.Application.Facades;
@@ -309,16 +308,11 @@ public class AgentConnectionRelationTests : IDisposable
         }
 
         private static AgentAppService CreateService(AgwDbContext dbContext, TestUserInfoService userInfo) =>
-            new(
-                new EfRepository<Agent>(dbContext),
-                new EfRepository<AgentConnectionRelation>(dbContext),
+            new AgentAppService(
+                dbContext,
                 new ConnectionReferenceFacade(dbContext, userInfo),
                 new ModelProviderReferenceFacade(dbContext, userInfo),
-                new EfRepository<McpServer>(dbContext),
-                new EfRepository<AgentMcpServerRelation>(dbContext),
                 new SkillReferenceFacade(dbContext, userInfo),
-                new EfRepository<AgentSkillRelation>(dbContext),
-                dbContext,
                 userInfo
             );
     }
