@@ -524,15 +524,17 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     private async Task ResolveExecutionContextAsync(ExecCommand command, CancellationToken cancellationToken)
     {
-        var generation =
-            await _projectTasks.GetGenerationAsync(command.ConversationId!.Value, cancellationToken)
-            ?? throw new AgwException(ErrorCodes.ResourceNotFound);
+        var generation = await _projectTasks.GetGenerationAsync(command.ConversationId!.Value, cancellationToken);
         if (_resolvedTask != null && _resolvedTask.Generation != generation)
         {
             await ReleaseRuntimeAsync();
             _resolvedTask = null;
             _workspace = null;
             _lastResumeExecutionId = null;
+            if (!generation.HasValue)
+            {
+                throw new AgwException(ErrorCodes.ResourceNotFound);
+            }
         }
 
         if (_resolvedTask == null)

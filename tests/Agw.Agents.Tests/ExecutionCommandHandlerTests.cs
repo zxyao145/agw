@@ -496,7 +496,7 @@ public partial class ExecutionCommandHandlerTests
         public Task<int?> GetGenerationAsync(Guid conversationId, CancellationToken cancellationToken = default) =>
             Task.FromResult<int?>(Generation);
 
-        public int Generation { get; set; }
+        public int? Generation { get; set; } = 0;
 
         private readonly ProjectTaskSnapshot _task;
 
@@ -520,7 +520,7 @@ public partial class ExecutionCommandHandlerTests
                 _task with
                 {
                     ProjectConversationId = request.ConversationId,
-                    Generation = Generation,
+                    Generation = Generation ?? 0,
                 }
             );
         }
