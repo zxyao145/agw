@@ -42,7 +42,7 @@ public class TaskProjectionModelTests
     }
 
     [Fact]
-    public void TaskSessionBinding_HasUniqueProjectConversationAgentIndex()
+    public void ProjectConversationBinding_HasUniqueProjectConversationAgentIndex()
     {
         var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite("DataSource=:memory:")
@@ -50,14 +50,15 @@ public class TaskProjectionModelTests
             .Options;
 
         using var dbContext = new AgwDbContext(options);
-        var entityType = dbContext.Model.FindEntityType(typeof(TaskSessionBinding));
+        var entityType = dbContext.Model.FindEntityType(typeof(ProjectConversationBinding));
         Assert.NotNull(entityType);
+        Assert.Equal("project_conversation_binding", entityType.GetTableName());
 
         Assert.Null(entityType.FindProperty("TaskId"));
 
-        var contextIdProperty = entityType.FindProperty(nameof(TaskSessionBinding.ProjectConversationId));
-        var agentIdProperty = entityType.FindProperty(nameof(TaskSessionBinding.AgentId));
-        var externalAgentNameProperty = entityType.FindProperty(nameof(TaskSessionBinding.ExternalAgentName));
+        var contextIdProperty = entityType.FindProperty(nameof(ProjectConversationBinding.ProjectConversationId));
+        var agentIdProperty = entityType.FindProperty(nameof(ProjectConversationBinding.AgentId));
+        var externalAgentNameProperty = entityType.FindProperty(nameof(ProjectConversationBinding.ExternalAgentName));
         Assert.NotNull(contextIdProperty);
         Assert.NotNull(agentIdProperty);
         Assert.NotNull(externalAgentNameProperty);

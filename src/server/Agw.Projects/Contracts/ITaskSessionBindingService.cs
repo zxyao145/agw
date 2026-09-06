@@ -4,7 +4,7 @@ namespace Agw.Projects.Application;
 
 public interface ITaskSessionBindingService
 {
-    Task<TaskSessionBinding?> GetAsync(
+    Task<ProjectConversationBinding?> GetAsync(
         Guid projectId,
         string contextId,
         Guid agentId,
@@ -13,7 +13,7 @@ public interface ITaskSessionBindingService
         int expectedGeneration = 0
     );
 
-    Task<TaskSessionBinding> UpsertAsync(
+    Task<ProjectConversationBinding> UpsertAsync(
         Guid projectId,
         string contextId,
         Guid agentId,

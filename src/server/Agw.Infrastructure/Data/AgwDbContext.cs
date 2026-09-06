@@ -111,7 +111,7 @@ public partial class AgwDbContext
     public DbSet<ProjectConnectionRelation> ProjectConnectionRelations => Set<ProjectConnectionRelation>();
     public DbSet<ProjectConversation> ProjectConversations => Set<ProjectConversation>();
     public DbSet<AgentUsage> AgentUsages => Set<AgentUsage>();
-    public DbSet<TaskSessionBinding> TaskSessionBindings => Set<TaskSessionBinding>();
+    public DbSet<ProjectConversationBinding> ProjectConversationBindings => Set<ProjectConversationBinding>();
     public DbSet<ProjectConversationChatHistory> ProjectConversationChatHistories =>
         Set<ProjectConversationChatHistory>();
     public DbSet<Job> Jobs => Set<Job>();

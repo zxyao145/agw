@@ -99,7 +99,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         Assert.Equal("context-1", conversation.Title);
         Assert.Equal(1, await context.AgentUsages.CountAsync(token));
         Assert.Empty(await context.ProjectConversationChatHistories.ToListAsync(token));
-        Assert.Empty(await context.TaskSessionBindings.ToListAsync(token));
+        Assert.Empty(await context.ProjectConversationBindings.ToListAsync(token));
         Assert.Empty(await context.AgentflowCheckpoints.ToListAsync(token));
         using (UserInfoUtil.PushSystemScope())
         {
@@ -164,7 +164,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         await Assert.ThrowsAsync<AgwException>(() =>
             bindings.UpsertAsync(projectId, "context-1", agent.Id, "codex", "late-session", "tester", token)
         );
-        Assert.Empty(await lateContext.TaskSessionBindings.ToListAsync(token));
+        Assert.Empty(await lateContext.ProjectConversationBindings.ToListAsync(token));
     }
 
     [Fact]

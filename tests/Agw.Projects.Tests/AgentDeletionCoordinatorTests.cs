@@ -71,7 +71,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         Assert.Equal(ErrorCodes.AgentInUse.Code, error.Code);
         Assert.True(await context.Agents.AnyAsync(item => item.Id == agent.Id, token));
         Assert.Equal(1, await context.AgentSessionStates.CountAsync(token));
-        Assert.Equal(1, await context.TaskSessionBindings.CountAsync(token));
+        Assert.Equal(1, await context.ProjectConversationBindings.CountAsync(token));
     }
 
     [Fact]
@@ -93,7 +93,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
         using (UserInfoUtil.PushSystemScope())
         {
             Assert.Empty(await context.AgentSessionStates.ToListAsync(token));
-            Assert.Empty(await context.TaskSessionBindings.ToListAsync(token));
+            Assert.Empty(await context.ProjectConversationBindings.ToListAsync(token));
         }
         context.ChangeTracker.Clear();
         Assert.False(
@@ -145,7 +145,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
 
         Assert.True(await context.Agents.AnyAsync(item => item.Id == agent.Id, token));
         Assert.Equal(1, await context.AgentSessionStates.CountAsync(token));
-        Assert.Equal(1, await context.TaskSessionBindings.CountAsync(token));
+        Assert.Equal(1, await context.ProjectConversationBindings.CountAsync(token));
     }
 
     private static async Task<(Agent Agent, Project Project, ProjectConversation Conversation)> SeedAgentStateAsync(
@@ -175,8 +175,8 @@ public sealed partial class ProjectDeletionCoordinatorTests
                 SerializedSession = "{}",
             }
         );
-        context.TaskSessionBindings.Add(
-            new TaskSessionBinding
+        context.ProjectConversationBindings.Add(
+            new ProjectConversationBinding
             {
                 Id = Guid.NewGuid(),
                 AgentId = agent.Id,

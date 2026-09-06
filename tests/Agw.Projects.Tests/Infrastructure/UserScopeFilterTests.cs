@@ -58,7 +58,7 @@ public sealed class UserScopeFilterTests
             typeof(ProjectMcpServerRelation),
             typeof(ProjectMemoryEntry),
             typeof(ProjectSkillRelation),
-            typeof(TaskSessionBinding),
+            typeof(ProjectConversationBinding),
         };
         var expectedIndirectProjectScopedTypes = new[]
         {
@@ -493,9 +493,9 @@ public sealed class UserScopeFilterTests
                 CreateHistory(conversationA.Id, "user-a", now),
                 CreateHistory(conversationB.Id, "user-b", now)
             );
-            seed.TaskSessionBindings.AddRange(
-                CreateTaskSessionBinding(conversationA.Id, agentA.Id, "user-a", now),
-                CreateTaskSessionBinding(conversationB.Id, agentB.Id, "user-b", now)
+            seed.ProjectConversationBindings.AddRange(
+                CreateProjectConversationBinding(conversationA.Id, agentA.Id, "user-a", now),
+                CreateProjectConversationBinding(conversationB.Id, agentB.Id, "user-b", now)
             );
             seed.JobLogs.AddRange(CreateJobLog(jobA.Id, "user-a", now), CreateJobLog(jobB.Id, "user-b", now));
             seed.PluginInstallationCredentials.AddRange(
@@ -626,7 +626,7 @@ public sealed class UserScopeFilterTests
         Assert.Equal(1, await context.AgentflowNodeExecutionTraces.CountAsync(cancellationToken));
         Assert.Equal(1, await context.ProjectMemories.CountAsync(cancellationToken));
         Assert.Equal(1, await context.ProjectConversationChatHistories.CountAsync(cancellationToken));
-        Assert.Equal(1, await context.TaskSessionBindings.CountAsync(cancellationToken));
+        Assert.Equal(1, await context.ProjectConversationBindings.CountAsync(cancellationToken));
         Assert.Equal(1, await context.JobLogs.CountAsync(cancellationToken));
         Assert.Equal(1, await context.PluginInstallationCredentials.CountAsync(cancellationToken));
         Assert.Equal(1, await context.ConnectionCredentials.CountAsync(cancellationToken));
@@ -809,7 +809,7 @@ public sealed class UserScopeFilterTests
             CreateTime = now,
         };
 
-    private static TaskSessionBinding CreateTaskSessionBinding(
+    private static ProjectConversationBinding CreateProjectConversationBinding(
         Guid conversationId,
         Guid agentId,
         string owner,

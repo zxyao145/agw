@@ -240,7 +240,7 @@ internal static class UserScopeModelBuilderExtensions
                             )
             );
         modelBuilder
-            .Entity<TaskSessionBinding>()
+            .Entity<ProjectConversationBinding>()
             .HasQueryFilter(
                 UserScopeQueryFilterNames.UserScope,
                 binding =>

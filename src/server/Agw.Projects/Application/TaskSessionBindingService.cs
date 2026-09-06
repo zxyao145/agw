@@ -32,7 +32,7 @@ public class TaskSessionBindingService : ITaskSessionBindingService
         _applicationLock = applicationLock ?? InMemoryApplicationLock.Shared;
     }
 
-    public async Task<TaskSessionBinding?> GetAsync(
+    public async Task<ProjectConversationBinding?> GetAsync(
         Guid projectId,
         string contextId,
         Guid agentId,
@@ -69,7 +69,7 @@ public class TaskSessionBindingService : ITaskSessionBindingService
         }
 
         return await _dbContext
-            .TaskSessionBindings.AsNoTracking()
+            .ProjectConversationBindings.AsNoTracking()
             .SingleOrDefaultAsync(
                 binding =>
                     binding.ProjectConversationId == projectConversation.Id
@@ -79,7 +79,7 @@ public class TaskSessionBindingService : ITaskSessionBindingService
             );
     }
 
-    public async Task<TaskSessionBinding> UpsertAsync(
+    public async Task<ProjectConversationBinding> UpsertAsync(
         Guid projectId,
         string contextId,
         Guid agentId,
@@ -146,7 +146,7 @@ public class TaskSessionBindingService : ITaskSessionBindingService
             throw new AgwException(ErrorCodes.ResourceNotFound, "Project context not found.");
         }
 
-        var binding = await _dbContext.TaskSessionBindings.SingleOrDefaultAsync(
+        var binding = await _dbContext.ProjectConversationBindings.SingleOrDefaultAsync(
             existing =>
                 existing.ProjectConversationId == projectConversation.Id
                 && existing.AgentId == agentId
@@ -156,7 +156,7 @@ public class TaskSessionBindingService : ITaskSessionBindingService
 
         if (binding == null)
         {
-            binding = new TaskSessionBinding
+            binding = new ProjectConversationBinding
             {
                 Id = Guid.CreateVersion7(),
                 ProjectConversationId = projectConversation.Id,
@@ -166,7 +166,7 @@ public class TaskSessionBindingService : ITaskSessionBindingService
                 CreateBy = projectConversation.CreateBy ?? normalizedUser,
                 CreateTime = now,
             };
-            await _dbContext.TaskSessionBindings.AddAsync(binding, cancellationToken);
+            await _dbContext.ProjectConversationBindings.AddAsync(binding, cancellationToken);
             try
             {
                 await _dbContext.SaveConversationChangesAsync(
@@ -178,8 +178,8 @@ public class TaskSessionBindingService : ITaskSessionBindingService
             }
             catch (DbUpdateException)
             {
-                _dbContext.TaskSessionBindings.Remove(binding);
-                binding = await _dbContext.TaskSessionBindings.SingleOrDefaultAsync(
+                _dbContext.ProjectConversationBindings.Remove(binding);
+                binding = await _dbContext.ProjectConversationBindings.SingleOrDefaultAsync(
                     existing =>
                         existing.ProjectConversationId == projectConversation.Id
                         && existing.AgentId == agentId
