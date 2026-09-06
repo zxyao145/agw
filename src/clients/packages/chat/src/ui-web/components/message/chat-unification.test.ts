@@ -15,7 +15,7 @@ const RUNTIME_HOOK_URL = new URL(
 
 test("Web and Desktop pages keep Chat implementation inside workspace packages", async () => {
   const source = await readFile(CHAT_WORKSPACE_URL, "utf8");
-  assert.match(source, /import \{ Chat, type ChatSessionSeed \}/);
+  assert.match(source, /Chat,[\s\S]*?type ChatSessionSeed/);
   assert.match(source, /<Chat/);
 });
 

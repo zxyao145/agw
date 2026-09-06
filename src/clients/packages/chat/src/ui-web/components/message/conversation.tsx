@@ -52,6 +52,7 @@ export interface ChatSessionProps {
   scrollElementRef: React.RefObject<HTMLDivElement | null>;
   hasOlderMessages?: boolean;
   isLoadingOlderMessages?: boolean;
+  isInitialLoading?: boolean;
   onLoadOlderMessages?: () => void;
   userInputNavigationHost?: HTMLDivElement | null;
   onUserInputNavigate?: () => void;
@@ -67,6 +68,7 @@ export function Conversation({
   scrollElementRef,
   hasOlderMessages = false,
   isLoadingOlderMessages = false,
+  isInitialLoading = false,
   onLoadOlderMessages,
   userInputNavigationHost = null,
   onUserInputNavigate,
@@ -127,6 +129,17 @@ export function Conversation({
     [onUserInputNavigate, virtualizer],
   );
 
+  if (items.length === 0 && isInitialLoading) {
+    return (
+      <Empty>
+        <EmptyHeader>
+          <LoaderCircle className="h-5 w-5 animate-spin text-muted-foreground" />
+          <EmptyTitle>Loading conversation...</EmptyTitle>
+        </EmptyHeader>
+      </Empty>
+    );
+  }
+
   if (items.length === 0 && !hasHistoryLoader) {
     return (
       <Empty>
@@ -155,7 +168,7 @@ export function Conversation({
           )
         : null}
       <div
-        className="relative mx-auto w-full max-w-225 pb-36"
+        className="relative mx-auto w-full max-w-225 pb-40"
         style={{ height: totalSize }}
         role="list"
         aria-label="Conversation messages"

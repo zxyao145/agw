@@ -15,8 +15,8 @@ import {
   ExecutionPlatformProvider,
 } from "@agw/chat";
 import { createQueryClient } from "@agw/components";
-import { QueryClientProvider, type QueryClient } from "@agw/components/query";
-import { getProjectConversations } from "@agw/projects";
+import { QueryClientProvider, type InfiniteData, type QueryClient } from "@agw/components/query";
+import { getProjectConversations, type ConversationPage } from "@agw/projects";
 import { toast } from "sonner";
 import {
   classifyDesktopConnection,
@@ -168,6 +168,7 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
         key.projectId,
         key.contextId,
         activeProfileIdRef.current,
+        queryClientRef.current,
       ).then((title) => {
         void bridge.showTurnNotification({ status, title });
       });
@@ -370,20 +371,31 @@ async function resolveTurnNotificationTitle(
   projectId: string,
   contextId: string,
   activeServerId: string | null,
+  queryClient: QueryClient | null,
 ): Promise<string | undefined> {
   if (!activeServerId || serverId !== activeServerId) return undefined;
+  const cachedPages = queryClient?.getQueriesData<InfiniteData<ConversationPage>>({
+    queryKey: ["project-conversations", projectId],
+  });
+  for (const [, data] of cachedPages ?? []) {
+    const cached = data?.pages
+      .flatMap((page) => page.items)
+      .find((summary) => summary.contextId === contextId);
+    if (cached?.title.trim()) return cached.title.trim();
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TURN_NOTIFICATION_TITLE_TIMEOUT_MS);
   try {
-    const summaries = await Promise.race([
-      getProjectConversations(projectId),
-      new Promise<never>((_, reject) =>
-        setTimeout(
-          () => reject(new Error("Resolving conversation title timed out.")),
-          TURN_NOTIFICATION_TITLE_TIMEOUT_MS,
-        ),
-      ),
-    ]);
-    return summaries.find((summary) => summary.contextId === contextId)?.title?.trim() || undefined;
+    const page = await getProjectConversations(projectId, {
+      contextId,
+      pageSize: 20,
+      signal: controller.signal,
+    });
+    return page.items[0]?.title?.trim() || undefined;
   } catch {
     return undefined;
+  } finally {
+    clearTimeout(timeout);
   }
 }

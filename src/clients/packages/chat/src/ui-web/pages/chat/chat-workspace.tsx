@@ -17,7 +17,11 @@ import {
 import { AgentSelector, type AgentSelection } from "../../components/agent-selector";
 import { Explorer, FileContent } from "@agw/projects";
 import type { LineComment } from "@agw/projects";
-import { Chat, type ChatSessionSeed } from "../../components/message/chat";
+import {
+  Chat,
+  type ChatSessionSeed,
+  type ConversationChangeOptions,
+} from "../../components/message/chat";
 import { ExecutionReconnectingDialog } from "../../components/message/execution-reconnecting-dialog";
 import { ConversationList } from "@agw/projects";
 import { Button } from "@agw/components";
@@ -329,6 +333,7 @@ export function ChatWorkspace({
     hasOlderMessages: false,
     agentMode: null,
   });
+  const [isLoadingConversation, setIsLoadingConversation] = React.useState(false);
   const [conversationListRefreshSignal, setConversationListRefreshSignal] = React.useState(0);
   const [drawerContent, setDrawerContent] = React.useState<"chat" | "files" | null>(null);
   const [selectedFile, setSelectedFile] = React.useState<string | null>(null);
@@ -414,7 +419,12 @@ export function ChatWorkspace({
     [routeBasePath, router],
   );
 
-  const refreshConversationList = React.useCallback(() => {
+  const refreshConversationList = React.useCallback((options?: ConversationChangeOptions) => {
+    if (options?.cancelConversationLoad) {
+      conversationLoadAbortRef.current?.abort();
+      conversationLoadAbortRef.current = null;
+      setIsLoadingConversation(false);
+    }
     setConversationListRefreshSignal((signal) => signal + 1);
   }, []);
 
@@ -573,6 +583,7 @@ export function ChatWorkspace({
     conversationLoadAbortRef.current?.abort();
     conversationLoadAbortRef.current = null;
     hydratedConversationKeyRef.current = null;
+    setIsLoadingConversation(false);
     setConversationId(null);
     setContextId(null);
     replaceChatSession({
@@ -600,6 +611,7 @@ export function ChatWorkspace({
       conversationLoadAbortRef.current?.abort();
       const abortController = new AbortController();
       conversationLoadAbortRef.current = abortController;
+      setIsLoadingConversation(true);
       const abortFromCaller = () => abortController.abort();
       signal?.addEventListener("abort", abortFromCaller, { once: true });
 
@@ -648,6 +660,7 @@ export function ChatWorkspace({
         signal?.removeEventListener("abort", abortFromCaller);
         if (conversationLoadAbortRef.current === abortController) {
           conversationLoadAbortRef.current = null;
+          setIsLoadingConversation(false);
         }
       }
     },
@@ -1184,6 +1197,7 @@ export function ChatWorkspace({
                     projectId={selectedProjectId}
                     conversationId={conversationId}
                     sessionSeed={chatSessionSeed}
+                    isLoadingConversation={isLoadingConversation}
                     showUserInputNavigation={showUserInputNavigation}
                     restoreDurableExecution={
                       Number(chatSessionSeed.revision) > 0 &&

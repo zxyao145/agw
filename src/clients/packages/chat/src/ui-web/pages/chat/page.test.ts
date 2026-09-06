@@ -58,7 +58,8 @@ test("chat page refreshes the conversation list after an execution completes", a
   ]);
 
   assert.match(conversationListSource, /refreshSignal\?: number;/);
-  assert.match(conversationListSource, /\[refreshSignal, refreshConversations\]/);
+  assert.match(conversationListSource, /observedRefreshSignalRef\.current === refreshSignal/);
+  assert.doesNotMatch(conversationListSource, /refreshUntilCurrentConversationAppears/);
   assert.match(
     pageSource,
     /const \[conversationListRefreshSignal, setConversationListRefreshSignal\] = React\.useState\(0\)/,
@@ -152,11 +153,48 @@ test("shared chat preserves streamed messages after an execution completes", asy
   assert.doesNotMatch(terminalBranch, /getProjectConversationDetails|setMessages/);
 });
 
-test("conversation list ignores stale refresh responses", async () => {
+test("conversation list cancels stale refreshes and uses paged queries", async () => {
   const conversationListSource = await readFile(CONVERSATION_LIST_URL, "utf8");
 
-  assert.match(conversationListSource, /refreshRequestIdRef/);
-  assert.match(conversationListSource, /requestId !== refreshRequestIdRef\.current/);
+  assert.match(conversationListSource, /useInfiniteQuery\(/);
+  assert.match(conversationListSource, /getProjectConversations\(projectId, \{/);
+  assert.match(conversationListSource, /pageSize: CONVERSATION_PAGE_SIZE/);
+  assert.match(conversationListSource, /queryClient\.cancelQueries/);
+  assert.match(conversationListSource, /activeRefresh\?\.projectId === projectId/);
+  assert.match(conversationListSource, /getProjectConversationDetails[\s\S]*?signal/);
+  assert.doesNotMatch(conversationListSource, /setTimeout[\s\S]*?currentConversationId/);
+});
+
+test("clearing a conversation waits for server success before dropping local state", async () => {
+  const chatSource = await readFile(CHAT_COMPONENT_URL, "utf8");
+  const clearStart = chatSource.indexOf("const handleClear = React.useCallback");
+  const clearEnd = chatSource.indexOf("const handleClearPendingFileComments", clearStart);
+  const clearHandler = chatSource.slice(clearStart, clearEnd);
+
+  assert.notEqual(clearStart, -1);
+  assert.notEqual(clearEnd, -1);
+  assert.match(clearHandler, /const cleared = await clearProjectConversationRecords/);
+  assert.match(clearHandler, /if \(!cleared\) throw new Error\("Conversation not found\."\)/);
+  assert.match(clearHandler, /executionGenerationRef\.current === generation/);
+  assert.match(clearHandler, /cancelConversationLoad: true/);
+  assert.match(clearHandler, /await clearLocalState\(\)/);
+  assert.doesNotMatch(clearHandler, /setConversationUsage\(EMPTY_TOKEN_USAGE\)/);
+  assert.ok(
+    clearHandler.indexOf("const cleared = await clearProjectConversationRecords") <
+      clearHandler.lastIndexOf("await clearLocalState()"),
+  );
+});
+
+test("conversation detail loading does not render an empty-chat state", async () => {
+  const [workspaceSource, chatSource] = await Promise.all([
+    readFile(CHAT_WORKSPACE_URL, "utf8"),
+    readFile(CHAT_COMPONENT_URL, "utf8"),
+  ]);
+
+  assert.match(workspaceSource, /setIsLoadingConversation\(true\)/);
+  assert.match(workspaceSource, /conversationLoadAbortRef\.current\?\.abort\(\)/);
+  assert.match(workspaceSource, /isLoadingConversation=\{isLoadingConversation\}/);
+  assert.match(chatSource, /isInitialLoading=\{isLoadingConversation\}/);
 });
 
 test("chat conversations use the shared friendly local date-time formatter", async () => {
@@ -173,7 +211,7 @@ test("chat conversations use the shared friendly local date-time formatter", asy
 test("chat conversation list trusts the project conversation API visibility contract", async () => {
   const taskClientSource = await readFile(TASK_CLIENT_URL, "utf8");
 
-  assert.match(taskClientSource, /return result\.map\(toConversationSummary\);/);
+  assert.match(taskClientSource, /items: result\.items\.map\(toConversationSummary\)/);
   assert.doesNotMatch(taskClientSource, /shouldIncludeConversation/);
 });
 

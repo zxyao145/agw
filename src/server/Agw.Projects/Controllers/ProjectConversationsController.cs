@@ -1,3 +1,4 @@
+using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Agw.Shared.Results;
@@ -18,9 +19,12 @@ public class ProjectConversationsController : ControllerBase
     }
 
     [HttpGet]
-    [ProducesApiResult(typeof(ProjectConversationSummaryResponse[]))]
-    public async Task<IActionResult> ListAsync(Guid projectId) =>
-        ApiResult.Ok(await _projectConversationAppService.ListResponsesAsync(projectId));
+    [ProducesApiResult(typeof(PagedResult<ProjectConversationSummaryResponse>))]
+    public async Task<IActionResult> ListAsync(
+        Guid projectId,
+        [FromQuery] ProjectConversationListQuery query,
+        CancellationToken cancellationToken
+    ) => ApiResult.Ok(await _projectConversationAppService.ListResponsesAsync(projectId, query, cancellationToken));
 
     [HttpGet("{conversationId}")]
     [ProducesApiResult(typeof(ProjectConversationResponse))]

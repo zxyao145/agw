@@ -25,6 +25,12 @@ export type NativeChatBindings = {
   supportsAgentMode: boolean;
   isSuggestionsLoading: boolean;
   suggestionsError: string | null;
+  isHistoryLoading: boolean;
+  isHistoryLoadingMore: boolean;
+  isHistoryLoadMoreError: boolean;
+  isHistoryRefreshError: boolean;
+  historyError: string | null;
+  hasMoreConversations: boolean;
   isExecuting: boolean;
   filesService: ProjectFilesService | null;
   selectTarget(value: string): void;
@@ -37,6 +43,7 @@ export type NativeChatBindings = {
   renameConversation(conversationId: string, title: string): Promise<void>;
   deleteConversation(conversationId: string): Promise<void>;
   refreshConversations(): Promise<void>;
+  loadMoreConversations(): Promise<void>;
 };
 
 export type NativeComposerState = {

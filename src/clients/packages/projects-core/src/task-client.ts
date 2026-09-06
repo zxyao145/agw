@@ -22,6 +22,20 @@ export interface ConversationSummary {
   errorMessage?: string | null;
 }
 
+export type ConversationPage = {
+  items: ConversationSummary[];
+  total: number;
+  pageIndex: number;
+  pageSize: number;
+};
+
+export type ConversationPageOptions = {
+  pageIndex?: number;
+  pageSize?: 10 | 20 | 50;
+  contextId?: string;
+  signal?: AbortSignal;
+};
+
 export type ConversationResumeState = {
   targetType?: string | null;
   targetId?: string | null;
@@ -55,6 +69,13 @@ export type ProjectConversationSummaryResponse = {
   createTime: string;
   updateTime?: string | null;
   errorMessage?: string | null;
+};
+
+export type ProjectConversationPageResponse = {
+  items: ProjectConversationSummaryResponse[];
+  total: number;
+  pageIndex: number;
+  pageSize: number;
 };
 
 export type ProjectConversationResponse = ProjectConversationSummaryResponse & {
@@ -107,13 +128,27 @@ function isNotFoundError(error: unknown): boolean {
 
 export async function getProjectConversations(
   projectId: string,
+  options: ConversationPageOptions = {},
   client: ProjectConversationApiClient = browserClient,
-): Promise<ConversationSummary[]> {
+): Promise<ConversationPage> {
   const result = (await client.apiGet("/api/projects/{projectId}/conversations", {
-    params: { path: { projectId } },
-  })) as ProjectConversationSummaryResponse[];
+    params: {
+      path: { projectId },
+      query: {
+        pageIndex: options.pageIndex ?? 1,
+        pageSize: options.pageSize ?? 20,
+        contextId: options.contextId,
+      },
+    },
+    signal: options.signal,
+  })) as ProjectConversationPageResponse;
 
-  return result.map(toConversationSummary);
+  return {
+    items: result.items.map(toConversationSummary),
+    total: result.total,
+    pageIndex: result.pageIndex,
+    pageSize: result.pageSize,
+  };
 }
 
 export async function getProjectConversationDetails(
@@ -290,7 +325,10 @@ export async function deleteAllProjectConversations(
 }
 
 export type ProjectConversationService = {
-  getProjectConversations(projectId: string): Promise<ConversationSummary[]>;
+  getProjectConversations(
+    projectId: string,
+    options?: ConversationPageOptions,
+  ): Promise<ConversationPage>;
   getProjectConversationDetails(
     projectId: string,
     conversationId: string,
@@ -303,6 +341,7 @@ export type ProjectConversationService = {
   getProjectConversationHistory(
     projectId: string,
     conversationId: string,
+    signal?: AbortSignal,
   ): Promise<ConversationHistory>;
   updateProjectConversationTitle(
     projectId: string,
@@ -318,13 +357,14 @@ export function createProjectConversationService(
   client: ProjectConversationApiClient,
 ): ProjectConversationService {
   return {
-    getProjectConversations: (projectId) => getProjectConversations(projectId, client),
+    getProjectConversations: (projectId, options) =>
+      getProjectConversations(projectId, options, client),
     getProjectConversationDetails: (projectId, conversationId) =>
       getProjectConversationDetails(projectId, conversationId, client),
     getProjectConversationMessages: (projectId, conversationId, options) =>
       getProjectConversationMessages(projectId, conversationId, options, client),
-    getProjectConversationHistory: (projectId, conversationId) =>
-      getProjectConversationHistory(projectId, conversationId, client),
+    getProjectConversationHistory: (projectId, conversationId, signal) =>
+      getProjectConversationHistory(projectId, conversationId, client, signal),
     updateProjectConversationTitle: (projectId, conversationId, title) =>
       updateProjectConversationTitle(projectId, conversationId, title, client),
     deleteProjectConversation: (projectId, conversationId) =>

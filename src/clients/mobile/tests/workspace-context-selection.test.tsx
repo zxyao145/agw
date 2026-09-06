@@ -35,7 +35,7 @@ test("selecting the active conversation again preserves its loaded history", asy
       case "/api/agents/suggestions":
         return { mode: "unsupported", suggestions: [] };
       case "/api/projects/{projectId}/conversations":
-        return [context];
+        return { items: [context], total: 1, pageIndex: 1, pageSize: 20 };
       case "/api/projects/{projectId}/conversations/{conversationId}":
         return { ...context, usage: null, resumeState: null };
       case "/api/projects/{projectId}/conversations/{conversationId}/messages":

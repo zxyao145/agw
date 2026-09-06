@@ -128,7 +128,7 @@ public class ProjectConversationsControllerTests
         await using var dbContext = new AgwDbContext(options);
         var controller = new ProjectConversationsController(CreateService(dbContext));
 
-        var result = await controller.ListAsync(projectId);
+        var result = await controller.ListAsync(projectId, new ProjectConversationListQuery(), cancellationToken);
 
         Assert.StartsWith("Bens.Results.ApiResult", result.GetType().FullName);
     }

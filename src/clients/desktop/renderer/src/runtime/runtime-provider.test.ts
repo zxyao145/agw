@@ -114,3 +114,13 @@ test("Desktop ignores stale runtime state before mutating shared clients", async
     /if \(generation !== connectGenerationRef\.current\) return;\s+configureClients\(profile, token\);\s+activateQueryClient/,
   );
 });
+
+test("Desktop resolves notification titles from cache or an exact cancellable context query", async () => {
+  const source = await readFile(RUNTIME_URL, "utf8");
+
+  assert.match(source, /getQueriesData<InfiniteData<ConversationPage>>/);
+  assert.match(source, /summary\.contextId === contextId/);
+  assert.match(source, /contextId,[\s\S]*?signal: controller\.signal/);
+  assert.match(source, /setTimeout\(\(\) => controller\.abort\(\)/);
+  assert.doesNotMatch(source, /Promise\.race/);
+});

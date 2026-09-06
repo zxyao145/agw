@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@agw/components/query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@agw/components/query";
 import { toast } from "sonner";
 
 import {
@@ -153,9 +153,15 @@ export default function ProjectDetailsPage() {
     queryFn: async () => (await apiGet("/api/agentflows")) as unknown as AgentflowDto[],
   });
 
-  const conversationsQuery = useQuery({
+  const conversationsQuery = useInfiniteQuery({
     queryKey: ["projects", projectId, "conversations"],
-    queryFn: async () => getProjectConversations(projectId),
+    initialPageParam: 1,
+    queryFn: ({ pageParam, signal }) =>
+      getProjectConversations(projectId, { pageIndex: pageParam, pageSize: 20, signal }),
+    getNextPageParam: (lastPage) =>
+      lastPage.pageIndex * lastPage.pageSize < lastPage.total ? lastPage.pageIndex + 1 : undefined,
+    staleTime: 30_000,
+    gcTime: 30 * 60_000,
   });
 
   const project = projectQuery.data;
@@ -188,11 +194,17 @@ export default function ProjectDetailsPage() {
     },
   });
 
-  const conversations = [...(conversationsQuery.data ?? [])].sort((left, right) => {
-    const leftTime = Date.parse(left.updateTime ?? left.createTime ?? "") || 0;
-    const rightTime = Date.parse(right.updateTime ?? right.createTime ?? "") || 0;
-    return rightTime - leftTime;
-  });
+  const conversations = React.useMemo(() => {
+    const conversationsById = new Map<string, ConversationSummary>();
+    for (const page of conversationsQuery.data?.pages ?? []) {
+      for (const conversation of page.items) {
+        if (!conversationsById.has(conversation.conversationId)) {
+          conversationsById.set(conversation.conversationId, conversation);
+        }
+      }
+    }
+    return [...conversationsById.values()];
+  }, [conversationsQuery.data]);
 
   return (
     <div className="space-y-6 w-full">
@@ -236,7 +248,7 @@ export default function ProjectDetailsPage() {
         <div>
           {conversationsQuery.isLoading ? (
             <div className="text-sm text-muted-foreground">Loading conversations...</div>
-          ) : conversationsQuery.isError ? (
+          ) : conversationsQuery.isError && conversations.length === 0 ? (
             <div className="text-sm text-destructive">
               Failed to load conversations: {getApiErrorMessage(conversationsQuery.error)}
             </div>
@@ -296,6 +308,31 @@ export default function ProjectDetailsPage() {
                   </div>
                 </div>
               ))}
+              {conversationsQuery.isFetchNextPageError ? (
+                <Button
+                  variant="ghost"
+                  className="w-full text-destructive"
+                  onClick={() => void conversationsQuery.fetchNextPage()}
+                >
+                  Failed to load more conversations. Retry
+                </Button>
+              ) : conversationsQuery.hasNextPage ? (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  disabled={conversationsQuery.isFetchingNextPage}
+                  onClick={() => void conversationsQuery.fetchNextPage()}
+                >
+                  {conversationsQuery.isFetchingNextPage
+                    ? "Loading more conversations..."
+                    : "Load more conversations"}
+                </Button>
+              ) : null}
+              {conversationsQuery.isError && !conversationsQuery.isFetchNextPageError ? (
+                <div className="text-sm text-destructive">
+                  Failed to refresh conversations: {getApiErrorMessage(conversationsQuery.error)}
+                </div>
+              ) : null}
             </div>
           )}
         </div>
