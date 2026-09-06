@@ -1,9 +1,9 @@
 using Agw.Auth.Contracts;
+using Agw.Integrations.Application.Persistence;
 using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.Management;
 using Agw.Integrations.Domain.Plugins;
 using Agw.Shared.Data.Entities.Integrations;
-using Agw.Shared.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Integrations.Application.Management;
@@ -13,27 +13,21 @@ public sealed class PluginInstallationAppService
     private const string NeedsConfigurationCode = "integration.needs_configuration";
     private const string PendingAuthorizationCode = "integration.pending_authorization";
 
-    private readonly IRepository<PluginInstallation> _installationRepository;
-    private readonly IRepository<Connection> _connectionRepository;
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IIntegrationsDbContext _dbContext;
     private readonly IPluginCatalog _pluginCatalog;
     private readonly CredentialMutationService _credentialMutations;
     private readonly TimeProvider _timeProvider;
     private readonly IUserInfoService _userInfoService;
 
     public PluginInstallationAppService(
-        IRepository<PluginInstallation> installationRepository,
-        IRepository<Connection> connectionRepository,
-        IUnitOfWork unitOfWork,
+        IIntegrationsDbContext dbContext,
         IPluginCatalog pluginCatalog,
         CredentialMutationService credentialMutations,
         TimeProvider timeProvider,
         IUserInfoService userInfoService
     )
     {
-        _installationRepository = installationRepository;
-        _connectionRepository = connectionRepository;
-        _unitOfWork = unitOfWork;
+        _dbContext = dbContext;
         _pluginCatalog = pluginCatalog;
         _credentialMutations = credentialMutations;
         _timeProvider = timeProvider;
@@ -56,8 +50,8 @@ public sealed class PluginInstallationAppService
         var pluginId = definition.Plugin.Id;
         var connectorId = definition.Connector.Id;
         var authSchemeId = definition.AuthScheme.Id;
-        var installation = await _installationRepository
-            .Queryable.Include(item => item.Credentials)
+        var installation = await _dbContext
+            .PluginInstallations.Include(item => item.Credentials)
             .FirstOrDefaultAsync(item => item.PluginId == pluginId && item.CreateBy == user, cancellationToken);
         if (installation == null)
         {
@@ -70,7 +64,7 @@ public sealed class PluginInstallationAppService
                 CreateBy = user,
                 CreateTime = _timeProvider.GetUtcNow(),
             };
-            await _installationRepository.AddAsync(installation);
+            await _dbContext.PluginInstallations.AddAsync(installation, cancellationToken);
         }
         else
         {
@@ -112,7 +106,7 @@ public sealed class PluginInstallationAppService
 
         await _credentialMutations.ApplyInstallationAsync(installation, input.SecretUpdates, connectorId, authSchemeId);
         await InvalidateConnectionsAsync(installation, definition, cancellationToken);
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
         return Map(installation, definition, input.Configuration);
     }
@@ -124,8 +118,8 @@ public sealed class PluginInstallationAppService
     )
     {
         var user = _userInfoService.RequiredUserId;
-        var query = _connectionRepository
-            .Queryable.Include(connection => connection.Credentials)
+        var query = _dbContext
+            .Connections.Include(connection => connection.Credentials)
             .Where(connection => connection.PluginId == installation.PluginId && connection.CreateBy == user);
         if (installation.Enabled)
         {

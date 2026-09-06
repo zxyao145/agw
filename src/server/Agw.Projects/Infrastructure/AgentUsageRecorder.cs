@@ -1,4 +1,5 @@
 using Agw.Auth.Contracts;
+using Agw.Projects.Application.Persistence;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,7 +26,7 @@ public sealed class AgentUsageRecorder : IAgentUsageRecorder
     )
     {
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IProjectsDbContext>();
         if (!UserInfoUtil.IsContextActive)
         {
             return;
@@ -33,8 +34,7 @@ public sealed class AgentUsageRecorder : IAgentUsageRecorder
 
         var currentUserId = UserInfoUtil.RequiredUserId;
         var project = await dbContext
-            .Set<Project>()
-            .AsNoTracking()
+            .Projects.AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == projectId && item.CreateBy == currentUserId, cancellationToken)
             .ConfigureAwait(false);
         if (project == null || string.IsNullOrWhiteSpace(project.CreateBy))
@@ -43,25 +43,23 @@ public sealed class AgentUsageRecorder : IAgentUsageRecorder
         }
         var ownerUserId = project.CreateBy.Trim();
 
-        await dbContext
-            .Set<AgentUsage>()
-            .AddAsync(
-                new AgentUsage
-                {
-                    Id = Guid.CreateVersion7(),
-                    ProjectId = projectId,
-                    UserId = ownerUserId,
-                    ContextId = ContextIdUtil.NormalizeContextId(contextId),
-                    AgentName = agentName,
-                    RecordedAt = _timeProvider.GetUtcNow(),
-                    InputTokenCount = usage.InputTokenCount,
-                    OutputTokenCount = usage.OutputTokenCount,
-                    TotalTokenCount = usage.TotalTokenCount,
-                    CachedInputTokenCount = usage.CachedInputTokenCount,
-                    ReasoningTokenCount = usage.ReasoningTokenCount,
-                },
-                cancellationToken
-            );
+        await dbContext.AgentUsages.AddAsync(
+            new AgentUsage
+            {
+                Id = Guid.CreateVersion7(),
+                ProjectId = projectId,
+                UserId = ownerUserId,
+                ContextId = ContextIdUtil.NormalizeContextId(contextId),
+                AgentName = agentName,
+                RecordedAt = _timeProvider.GetUtcNow(),
+                InputTokenCount = usage.InputTokenCount,
+                OutputTokenCount = usage.OutputTokenCount,
+                TotalTokenCount = usage.TotalTokenCount,
+                CachedInputTokenCount = usage.CachedInputTokenCount,
+                ReasoningTokenCount = usage.ReasoningTokenCount,
+            },
+            cancellationToken
+        );
         await dbContext.SaveChangesAsync(cancellationToken);
     }
 }

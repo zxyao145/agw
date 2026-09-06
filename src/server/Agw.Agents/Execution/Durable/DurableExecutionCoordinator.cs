@@ -360,7 +360,7 @@ internal sealed class DurableExecutionCoordinator
             : manifest.Input.MessageId;
 
     /// <summary>
-    /// 在独立 DI scope 中加载 execution 快照，避免后台订阅持有 request scope DbContext。
+    /// 在独立 DI scope 中加载 execution 快照，避免后台订阅持有请求级持久化上下文。
     /// </summary>
     private async Task<DurableExecutionSnapshot> GetSnapshotAsync(
         Guid executionId,

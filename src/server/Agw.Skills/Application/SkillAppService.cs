@@ -5,14 +5,15 @@ using Agw.Shared.Contracts;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Pagination;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
+using Agw.Skills.Application.Persistence;
 using Agw.Skills.Application.Remote;
 using Agw.Skills.Contracts.Registration;
 using Agw.Skills.Contracts.Remote;
 using Agw.Skills.Domain.Rules;
 using Microsoft.AspNetCore.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Agw.Skills.Application;
@@ -21,10 +22,8 @@ public sealed record SkillDetails(Skill Skill, IReadOnlyList<Guid> AgentIds, boo
 
 public class SkillAppService
 {
-    private readonly IRepository<Skill> _skillRepository;
+    private readonly ISkillsDbContext _dbContext;
     private readonly IAgentReferenceFacade _agentReferences;
-    private readonly IRepository<RemoteSkillCache> _remoteSkillCacheRepository;
-    private readonly IUnitOfWork _unitOfWork;
     private readonly AgwDataPaths _dataPaths;
     private readonly ILogger<SkillAppService> _logger;
     private readonly IReadOnlySet<Guid> _builtInSkillIds;
@@ -34,10 +33,8 @@ public class SkillAppService
     private readonly ICurrentUser _currentUser;
 
     public SkillAppService(
-        IRepository<Skill> skillRepository,
+        ISkillsDbContext dbContext,
         IAgentReferenceFacade agentReferences,
-        IRepository<RemoteSkillCache> remoteSkillCacheRepository,
-        IUnitOfWork unitOfWork,
         AgwDataPaths dataPaths,
         ILogger<SkillAppService> logger,
         IRemoteSkillClient remoteSkillClient,
@@ -47,10 +44,8 @@ public class SkillAppService
         IEnumerable<IAgentSkillRegistration>? skillRegistrations = null
     )
     {
-        _skillRepository = skillRepository;
+        _dbContext = dbContext;
         _agentReferences = agentReferences;
-        _remoteSkillCacheRepository = remoteSkillCacheRepository;
-        _unitOfWork = unitOfWork;
         _dataPaths = dataPaths;
         _logger = logger;
         _remoteSkillClient = remoteSkillClient;
@@ -63,9 +58,10 @@ public class SkillAppService
     public async Task<IReadOnlyList<SkillDetails>> ListAsync()
     {
         var ownerUserId = ResolveOwnerUserId();
-        var skills = await _skillRepository.ListAsync(skill =>
-            skill.Kind == SkillKind.BuiltIn || skill.CreateBy == ownerUserId
-        );
+        var skills = await _dbContext
+            .Skills.AsNoTracking()
+            .Where(skill => skill.Kind == SkillKind.BuiltIn || skill.CreateBy == ownerUserId)
+            .ToListAsync();
         return await AttachAgentIdsAsync(skills);
     }
 
@@ -76,9 +72,9 @@ public class SkillAppService
     )
     {
         var page = await UpdatedTimePagination.ToPagedResultAsync(
-            _skillRepository.Queryable.Where(skill =>
-                skill.Kind == SkillKind.BuiltIn || skill.CreateBy == ResolveOwnerUserId()
-            ),
+            _dbContext
+                .Skills.AsNoTracking()
+                .Where(skill => skill.Kind == SkillKind.BuiltIn || skill.CreateBy == ResolveOwnerUserId()),
             skill => skill.Id,
             pageIndex,
             pageSize,
@@ -98,11 +94,11 @@ public class SkillAppService
     public async Task<SkillDetails?> GetAsync(Guid id)
     {
         var ownerUserId = ResolveOwnerUserId();
-        var skill = (
-            await _skillRepository.ListAsync(skill =>
+        var skill = await _dbContext
+            .Skills.AsNoTracking()
+            .FirstOrDefaultAsync(skill =>
                 skill.Id == id && (skill.Kind == SkillKind.BuiltIn || skill.CreateBy == ownerUserId)
-            )
-        ).FirstOrDefault();
+            );
         if (skill == null)
         {
             return null;
@@ -142,7 +138,7 @@ public class SkillAppService
     )
     {
         var ownerUserId = ResolveOwnerUserId();
-        var existing = await _skillRepository.SingleOrDefaultAsync(skill =>
+        var existing = await _dbContext.Skills.SingleOrDefaultAsync(skill =>
             skill.Id == id && (skill.Kind == SkillKind.BuiltIn || skill.CreateBy == ownerUserId)
         );
         if (existing == null)
@@ -169,11 +165,11 @@ public class SkillAppService
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var ownerUserId = ResolveOwnerUserId();
-        var existing = (
-            await _skillRepository.ListAsync(skill =>
+        var existing = await _dbContext
+            .Skills.AsNoTracking()
+            .FirstOrDefaultAsync(skill =>
                 skill.Id == id && (skill.Kind == SkillKind.BuiltIn || skill.CreateBy == ownerUserId)
-            )
-        ).FirstOrDefault();
+            );
         if (existing == null)
         {
             return false;
@@ -212,8 +208,8 @@ public class SkillAppService
         skill.ContentPath = SkillRules.GetContentPath(skill.Kind, skill.Id);
         await using var preparedDirectory = await PrepareArchiveDirectoryAsync(skill.Name, skill.Description, archive);
 
-        await _skillRepository.AddAsync(skill);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await _dbContext.Skills.AddAsync(skill, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
         var targetDirectory = GetSkillAbsolutePath(skill);
         ReplaceDirectory(targetDirectory, preparedDirectory.DirectoryPath);
@@ -243,9 +239,9 @@ public class SkillAppService
         SkillRules.Validate(skill.Name, skill.Description);
         skill.Id = skill.Id == Guid.Empty ? Guid.CreateVersion7() : skill.Id;
         skill.ContentPath = SkillRules.GetContentPath(skill.Kind, skill.Id);
-        await _skillRepository.AddAsync(skill);
-        await _remoteSkillCacheRepository.AddAsync(CreateCache(skill, definition));
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await _dbContext.Skills.AddAsync(skill, cancellationToken);
+        await _dbContext.RemoteSkillCaches.AddAsync(CreateCache(skill, definition), cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
             "Created remote skill {SkillName} from {RemoteLocation}",
@@ -293,8 +289,8 @@ public class SkillAppService
             preparedDirectory = await PrepareArchiveDirectoryAsync(existing.Name, existing.Description, archive);
         }
 
-        _skillRepository.Update(existing);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        _dbContext.Skills.Entry(existing).Property(skill => skill.Name).IsModified = true;
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
         if (preparedDirectory != null)
         {
@@ -340,19 +336,21 @@ public class SkillAppService
         existing.Name = definition.Name.Trim();
         existing.Description = definition.Description.Trim();
         existing.ContentPath = SkillRules.GetContentPath(existing.Kind, existing.Id);
-        _skillRepository.Update(existing);
-        var cache = await _remoteSkillCacheRepository.GetByIdAsync(existing.Id);
+        var cache = await _dbContext.RemoteSkillCaches.SingleOrDefaultAsync(
+            item => item.SkillId == existing.Id,
+            cancellationToken
+        );
         if (cache == null)
         {
-            await _remoteSkillCacheRepository.AddAsync(CreateCache(existing, definition));
+            await _dbContext.RemoteSkillCaches.AddAsync(CreateCache(existing, definition), cancellationToken);
         }
         else
         {
             ApplyCache(cache, existing, definition);
-            _remoteSkillCacheRepository.Update(cache);
         }
 
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        _dbContext.Skills.Entry(existing).Property(skill => skill.Name).IsModified = true;
+        await _dbContext.SaveChangesAsync(cancellationToken);
         _logger.LogInformation(
             "Updated remote skill {SkillId} ({SkillName}) from {RemoteLocation}",
             existing.Id,
@@ -376,16 +374,19 @@ public class SkillAppService
 
     private async Task<bool> DeleteCoreAsync(Skill existing, CancellationToken cancellationToken)
     {
-        var cache = await _remoteSkillCacheRepository.GetByIdAsync(existing.Id);
+        var cache = await _dbContext.RemoteSkillCaches.SingleOrDefaultAsync(
+            item => item.SkillId == existing.Id,
+            cancellationToken
+        );
         if (cache != null)
         {
-            _remoteSkillCacheRepository.Remove(cache);
+            _dbContext.RemoteSkillCaches.Remove(cache);
         }
 
         await _agentReferences.RemoveSkillBindingsAsync(existing.Id, cancellationToken).ConfigureAwait(false);
 
-        _skillRepository.Remove(existing);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        _dbContext.Skills.Remove(existing);
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
         if (existing.Kind == SkillKind.Local)
         {
@@ -430,7 +431,7 @@ public class SkillAppService
     private async Task EnsureNameAvailableAsync(string name, Guid? excludedSkillId, CancellationToken cancellationToken)
     {
         var ownerUserId = ResolveOwnerUserId();
-        var existing = await _skillRepository.SingleOrDefaultAsync(
+        var existing = await _dbContext.Skills.SingleOrDefaultAsync(
             skill =>
                 skill.Name == name
                 && (skill.Kind == SkillKind.BuiltIn || skill.CreateBy == ownerUserId)

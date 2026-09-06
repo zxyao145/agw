@@ -1,9 +1,9 @@
 using System.Security.Claims;
 using Agw.Auth.Contracts;
+using Agw.Jobs.Application.Persistence;
 using Agw.Jobs.Execution;
 using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Jobs;
-using Agw.Shared.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Jobs.Scheduling.Attempts;
@@ -26,25 +26,19 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
 {
     private const string SchedulerUser = "scheduler";
 
-    private readonly IRepository<Job> _jobRepository;
-    private readonly IRepository<JobLog> _jobLogRepository;
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IJobsDbContext _dbContext;
     private readonly IProjectTaskFacade _projectTasks;
     private readonly JobScheduleCalculator _scheduleCalculator;
     private readonly TimeProvider _timeProvider;
 
     public JobAttemptOutcomeRecorder(
-        IRepository<Job> jobRepository,
-        IRepository<JobLog> jobLogRepository,
-        IUnitOfWork unitOfWork,
+        IJobsDbContext dbContext,
         IProjectTaskFacade projectTasks,
         JobScheduleCalculator scheduleCalculator,
         TimeProvider timeProvider
     )
     {
-        _jobRepository = jobRepository;
-        _jobLogRepository = jobLogRepository;
-        _unitOfWork = unitOfWork;
+        _dbContext = dbContext;
         _projectTasks = projectTasks;
         _scheduleCalculator = scheduleCalculator;
         _timeProvider = timeProvider;
@@ -61,8 +55,8 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
         Job? job;
         using (UserInfoUtil.PushSystemScope())
         {
-            job = await _jobRepository
-                .Queryable.SingleOrDefaultAsync(item => item.Id == jobId, cancellationToken)
+            job = await _dbContext
+                .Jobs.SingleOrDefaultAsync(item => item.Id == jobId, cancellationToken)
                 .ConfigureAwait(false);
         }
         if (
@@ -148,9 +142,7 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
         job.ActiveAttemptStartedAt = null;
         job.UpdateBy = SchedulerUser;
         job.UpdateTime = now;
-        _jobRepository.Update(job);
-
-        await _jobLogRepository.AddAsync(
+        await _dbContext.JobLogs.AddAsync(
             new JobLog
             {
                 Id = Guid.CreateVersion7(),
@@ -165,9 +157,10 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
                 CreateTime = now,
                 UpdateBy = SchedulerUser,
                 UpdateTime = now,
-            }
+            },
+            cancellationToken
         );
-        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         return result is JobAttemptResult.Reschedule
             ? new JobAttemptResult.Reschedule(ScheduledJob.FromJob(job))
@@ -194,9 +187,7 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
         job.ActiveAttemptStartedAt = null;
         job.UpdateBy = SchedulerUser;
         job.UpdateTime = now;
-        _jobRepository.Update(job);
-
-        await _jobLogRepository.AddAsync(
+        await _dbContext.JobLogs.AddAsync(
             new JobLog
             {
                 Id = Guid.CreateVersion7(),
@@ -211,9 +202,10 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
                 CreateTime = now,
                 UpdateBy = SchedulerUser,
                 UpdateTime = now,
-            }
+            },
+            cancellationToken
         );
-        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return new JobAttemptResult.Drop();
     }
 }

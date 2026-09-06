@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using System.Text.Json;
 using Agw.Infrastructure.Data;
+using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Services;
 using Agw.Shared;
 using Agw.Shared.Coordination;
@@ -31,7 +32,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
     public void TryGetProjectContext_InitializedSession_ReturnsProjectAndContext()
     {
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => null!);
+        services.AddScoped<IProjectsDbContext>(_ => null!);
         using var serviceProvider = services.BuildServiceProvider();
         var provider = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
@@ -54,7 +55,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
     public void TryGetProjectContext_UninitializedSession_ReturnsFalse()
     {
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => null!);
+        services.AddScoped<IProjectsDbContext>(_ => null!);
         using var serviceProvider = services.BuildServiceProvider();
         var provider = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
@@ -108,7 +109,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
 
         var provider = new EfCoreChatHistoryProvider(
@@ -177,7 +178,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         var provider = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
@@ -233,7 +234,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         var provider = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
@@ -292,7 +293,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         var provider = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
@@ -384,7 +385,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         var provider = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
@@ -490,7 +491,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         var provider = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
@@ -568,7 +569,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         var provider = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
@@ -629,7 +630,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         var provider = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
@@ -670,7 +671,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
 
         var projectId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         var provider = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
@@ -773,7 +774,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         var provider = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
@@ -873,7 +874,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         IConversationHistoryWriter writer = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
@@ -950,7 +951,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         IConversationHistoryWriter writer = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
@@ -999,7 +1000,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         IConversationHistoryWriter writer = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
@@ -1049,7 +1050,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         IConversationHistoryWriter writer = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
@@ -1106,7 +1107,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
 
         var provider = new EfCoreChatHistoryProvider(
@@ -1178,7 +1179,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         var provider = new EfCoreChatHistoryProvider(
@@ -1265,7 +1266,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
 
         var provider = new EfCoreChatHistoryProvider(
@@ -1316,7 +1317,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         var provider = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
@@ -1383,7 +1384,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
 
         var provider = new EfCoreChatHistoryProvider(
@@ -1444,7 +1445,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         var provider = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
@@ -1493,7 +1494,7 @@ public class EfCoreChatHistoryProviderTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         await using var serviceProvider = services.BuildServiceProvider();
         var projectId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         IConversationHistoryWriter writer = new EfCoreChatHistoryProvider(

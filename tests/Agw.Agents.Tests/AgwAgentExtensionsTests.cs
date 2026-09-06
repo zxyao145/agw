@@ -7,6 +7,7 @@ using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Tools;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Infrastructure.Data;
+using Agw.Projects.Application.Persistence;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
@@ -405,7 +406,9 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped(_ => new AgwDbContext(options));
+        services.AddScoped<DbContext>(provider => provider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<IProjectsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
         await using var serviceProvider = services.BuildServiceProvider();
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         var historyProvider = new EfCoreChatHistoryProvider(
@@ -850,7 +853,9 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped(_ => new AgwDbContext(options));
+        services.AddScoped<DbContext>(provider => provider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<IProjectsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
         await using var serviceProvider = services.BuildServiceProvider();
         var historyProvider = new EfCoreChatHistoryProvider(
             serviceProvider.GetRequiredService<IServiceScopeFactory>(),
@@ -1059,7 +1064,9 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         }
 
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped(_ => new AgwDbContext(options));
+        services.AddScoped<DbContext>(provider => provider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<IProjectsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
         await using var serviceProvider = services.BuildServiceProvider();
         var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
         var historyProvider = new EfCoreChatHistoryProvider(

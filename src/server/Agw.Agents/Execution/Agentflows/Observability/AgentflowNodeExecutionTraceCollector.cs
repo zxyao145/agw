@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Threading.Channels;
+using Agw.Agents.Application.Persistence;
 using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Shared.Data.Repositories;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -25,10 +25,9 @@ internal sealed class AgentflowNodeExecutionTraceStore : IAgentflowNodeExecution
     public async Task SaveAsync(AgentflowTrace trace, CancellationToken cancellationToken)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var repository = scope.ServiceProvider.GetRequiredService<IRepository<AgentflowTrace>>();
-        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-        await repository.AddAsync(trace);
-        await unitOfWork.SaveChangesAsync();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IAgentsDbContext>();
+        await dbContext.AgentflowNodeExecutionTraces.AddAsync(trace, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 }
 

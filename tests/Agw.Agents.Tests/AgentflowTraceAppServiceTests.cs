@@ -2,7 +2,6 @@ using System.Security.Claims;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Repositories;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
@@ -39,7 +38,7 @@ public class AgentflowTraceAppServiceTests : IDisposable
             cancellationToken
         );
 
-        var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
+        var service = new AgentflowTraceAppService(dbContext);
         var result = await service.ListAsync(
             new AgentflowTraceQuery
             {
@@ -77,7 +76,7 @@ public class AgentflowTraceAppServiceTests : IDisposable
             cancellationToken
         );
 
-        var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
+        var service = new AgentflowTraceAppService(dbContext);
         var result = await service.ListAsync(
             new AgentflowTraceQuery
             {
@@ -116,7 +115,7 @@ public class AgentflowTraceAppServiceTests : IDisposable
             cancellationToken
         );
 
-        var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
+        var service = new AgentflowTraceAppService(dbContext);
         var result = await service.ListAsync(
             new AgentflowTraceQuery
             {
@@ -167,7 +166,7 @@ public class AgentflowTraceAppServiceTests : IDisposable
             cancellationToken
         );
 
-        var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
+        var service = new AgentflowTraceAppService(dbContext);
         var result = await service.ListAsync(
             new AgentflowTraceQuery
             {
@@ -208,7 +207,7 @@ public class AgentflowTraceAppServiceTests : IDisposable
             cancellationToken
         );
 
-        var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
+        var service = new AgentflowTraceAppService(dbContext);
         var result = await service.ListAsync(
             new AgentflowTraceQuery { PageIndex = 1, PageSize = 50 },
             cancellationToken
@@ -229,7 +228,7 @@ public class AgentflowTraceAppServiceTests : IDisposable
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
         await SeedTracesAsync(dbContext, traces, cancellationToken);
 
-        var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
+        var service = new AgentflowTraceAppService(dbContext);
         var result = await service.ListAsync(
             new AgentflowTraceQuery { PageIndex = 2, PageSize = 10 },
             cancellationToken
@@ -267,7 +266,7 @@ public class AgentflowTraceAppServiceTests : IDisposable
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
         await SeedTracesAsync(dbContext, [trace], cancellationToken);
 
-        var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
+        var service = new AgentflowTraceAppService(dbContext);
         var result = await service.ListAsync(
             new AgentflowTraceQuery { PageIndex = 1, PageSize = 10 },
             cancellationToken
@@ -301,7 +300,7 @@ public class AgentflowTraceAppServiceTests : IDisposable
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
-        var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
+        var service = new AgentflowTraceAppService(dbContext);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
             service.ListAsync(new AgentflowTraceQuery { PageIndex = pageIndex, PageSize = pageSize }, cancellationToken)
@@ -314,7 +313,7 @@ public class AgentflowTraceAppServiceTests : IDisposable
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var dbContext = await BuildDbContextAsync(cancellationToken);
-        var service = new AgentflowTraceAppService(new EfRepository<AgentflowTrace>(dbContext));
+        var service = new AgentflowTraceAppService(dbContext);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
             service.ListAsync(

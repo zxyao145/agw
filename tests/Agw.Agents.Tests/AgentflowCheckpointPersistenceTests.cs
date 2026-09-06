@@ -27,6 +27,7 @@ public sealed class AgentflowCheckpointPersistenceTests
             new DbContextOptionsBuilder<AgwDbContext>().UseSqlite("Data Source=:memory:").Options
         ));
         services.AddScoped<DbContext>(provider => provider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<IAgentsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
         services.AddSingleton<IApplicationLock>(InMemoryApplicationLock.Shared);
         services.AddSingleton(TimeProvider.System);
         services.AddScoped(serviceType);

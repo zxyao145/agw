@@ -1,11 +1,9 @@
 using Agw.Agents.Definitions.Facades;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Projects;
-using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Application.Facades;
 using Agw.Projects.Application;
 using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Skills.Application.Facades;
 using Microsoft.Data.Sqlite;
@@ -175,11 +173,10 @@ public class ProjectTraceCleanupTests
 
     private static ProjectConversationAppService CreateProjectConversationService(AgwDbContext dbContext)
     {
-        var projectRepository = new EfRepository<Project>(dbContext);
         var userInfo = new TestUserInfoService();
         return new ProjectConversationAppService(
             dbContext,
-            new ProjectResolver(projectRepository, userInfo),
+            new ProjectResolver(dbContext, userInfo),
             new ProjectDeletionCoordinator(
                 dbContext,
                 Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
@@ -201,18 +198,10 @@ public class ProjectTraceCleanupTests
 
     private static ProjectAppService CreateProjectService(AgwDbContext dbContext)
     {
-        var projectRepository = new EfRepository<Project>(dbContext);
         var userInfo = new TestUserInfoService();
         return new ProjectAppService(
             dbContext,
-            new AgentCatalogFacade(
-                new EfRepository<Agent>(dbContext),
-                new EfRepository<Agentflow>(dbContext),
-                new EfRepository<McpServer>(dbContext),
-                new EfRepository<AgentSkillRelation>(dbContext),
-                dbContext,
-                userInfo
-            ),
+            new AgentCatalogFacade(dbContext, userInfo),
             new SkillReferenceFacade(dbContext, userInfo),
             new ConnectionReferenceFacade(dbContext, userInfo),
             new ProjectDeletionCoordinator(
@@ -230,7 +219,7 @@ public class ProjectTraceCleanupTests
                         .Instance
                 )
             ),
-            new ProjectResolver(projectRepository, userInfo),
+            new ProjectResolver(dbContext, userInfo),
             userInfo
         );
     }

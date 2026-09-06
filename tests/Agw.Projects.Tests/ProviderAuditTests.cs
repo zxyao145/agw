@@ -38,23 +38,9 @@ public class ProviderAuditTests
         var guard = new ModelProviderUsageGuard(
             new TestAgentReferenceFacade(new EfRepository<Agent>(context), new EfRepository<Agentflow>(context))
         );
-        var providers = new ProviderAppService(
-            new EfRepository<Provider>(context),
-            new EfRepository<AgwAiModel>(context),
-            new EfRepository<ModelProviderRelation>(context),
-            context,
-            guard,
-            user
-        );
-        var models = new ModelAppService(new EfRepository<AgwAiModel>(context), context, user);
-        var relations = new ModelProviderAppService(
-            new EfRepository<ModelProviderRelation>(context),
-            context,
-            guard,
-            user,
-            new EfRepository<Provider>(context),
-            new EfRepository<AgwAiModel>(context)
-        );
+        var providers = new ProviderAppService(context, guard, user);
+        var models = new ModelAppService(context, user);
+        var relations = new ModelProviderAppService(context, guard, user);
 
         // Act
         var provider = await providers.CreateAsync(

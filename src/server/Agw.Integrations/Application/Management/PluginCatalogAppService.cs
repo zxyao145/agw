@@ -1,10 +1,10 @@
 using Agw.Auth.Contracts;
 using Agw.Integrations.Application.Capabilities;
+using Agw.Integrations.Application.Persistence;
 using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.Management;
 using Agw.Integrations.Domain.Plugins;
 using Agw.Shared.Data.Entities.Integrations;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,19 +13,19 @@ namespace Agw.Integrations.Application.Management;
 public sealed class PluginCatalogAppService
 {
     private readonly IPluginCatalog _pluginCatalog;
-    private readonly IRepository<PluginInstallation> _installationRepository;
+    private readonly IIntegrationsDbContext _dbContext;
     private readonly PluginSkillMetadataReader _pluginSkillMetadataReader;
     private readonly IUserInfoService _userInfoService;
 
     public PluginCatalogAppService(
         IPluginCatalog pluginCatalog,
-        IRepository<PluginInstallation> installationRepository,
+        IIntegrationsDbContext dbContext,
         PluginSkillMetadataReader pluginSkillMetadataReader,
         IUserInfoService userInfoService
     )
     {
         _pluginCatalog = pluginCatalog;
-        _installationRepository = installationRepository;
+        _dbContext = dbContext;
         _pluginSkillMetadataReader = pluginSkillMetadataReader;
         _userInfoService = userInfoService;
     }
@@ -38,8 +38,9 @@ public sealed class PluginCatalogAppService
     public async Task<IReadOnlyList<PluginResponse>> ListAsync(CancellationToken cancellationToken)
     {
         var ownerUserId = ResolveOwnerUserId();
-        var installations = await _installationRepository
-            .Queryable.Include(installation => installation.Credentials)
+        var installations = await _dbContext
+            .PluginInstallations.AsNoTracking()
+            .Include(installation => installation.Credentials)
             .Where(installation => installation.CreateBy == ownerUserId)
             .ToListAsync(cancellationToken);
         return _pluginCatalog

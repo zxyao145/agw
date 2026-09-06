@@ -7,12 +7,11 @@ using System.Text.Json;
 using Agw.Auth.Contracts;
 using Agw.Integrations.Application.Credentials;
 using Agw.Integrations.Application.Management;
+using Agw.Integrations.Application.Persistence;
 using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.OAuth;
 using Agw.Integrations.Domain.Plugins;
-using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Integrations;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
@@ -51,10 +50,7 @@ public sealed class OAuthAuthorizationAppService
         "code_challenge_method",
     ];
 
-    private readonly IRepository<IntegrationConnection> _connectionRepository;
-    private readonly IRepository<PluginInstallation> _installationRepository;
-    private readonly IRepository<ConnectionCredential> _connectionCredentialRepository;
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IIntegrationsDbContext _dbContext;
     private readonly IPluginCatalog _pluginCatalog;
     private readonly IConnectionCredentialReader _credentialReader;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -64,10 +60,7 @@ public sealed class OAuthAuthorizationAppService
     private readonly IUserInfoService _userInfoService;
 
     public OAuthAuthorizationAppService(
-        IRepository<IntegrationConnection> connectionRepository,
-        IRepository<PluginInstallation> installationRepository,
-        IRepository<ConnectionCredential> connectionCredentialRepository,
-        IUnitOfWork unitOfWork,
+        IIntegrationsDbContext dbContext,
         IPluginCatalog pluginCatalog,
         IConnectionCredentialReader credentialReader,
         IHttpClientFactory httpClientFactory,
@@ -77,10 +70,7 @@ public sealed class OAuthAuthorizationAppService
         IUserInfoService userInfoService
     )
     {
-        _connectionRepository = connectionRepository;
-        _installationRepository = installationRepository;
-        _connectionCredentialRepository = connectionCredentialRepository;
-        _unitOfWork = unitOfWork;
+        _dbContext = dbContext;
         _pluginCatalog = pluginCatalog;
         _credentialReader = credentialReader;
         _httpClientFactory = httpClientFactory;
@@ -135,7 +125,7 @@ public sealed class OAuthAuthorizationAppService
         context.Connection.LastValidatedAtUtc = null;
         context.Connection.UpdateBy = user;
         context.Connection.UpdateTime = _timeProvider.GetUtcNow();
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
         return new OAuthAuthorizeStartResponse
         {
@@ -216,7 +206,7 @@ public sealed class OAuthAuthorizationAppService
         MarkReady(context.Connection, state.UserId);
         try
         {
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            await _dbContext.SaveChangesAsync(cancellationToken);
             return SucceededRedirect(state.ReturnPath, state.CompletionTarget);
         }
         catch (Exception exception) when (IsPersistenceFailure(exception, cancellationToken))
@@ -270,7 +260,7 @@ public sealed class OAuthAuthorizationAppService
                 context.Connection.Subject = subject;
             }
             MarkReady(context.Connection, user);
-            await _unitOfWork.SaveChangesAsync();
+            await _dbContext.SaveChangesAsync(cancellationToken);
             return new OAuthRefreshResponse { ConnectionId = connectionId, ExpiresAtUtc = token.ExpiresAtUtc };
         }
         catch (Exception exception) when (IsProviderFailure(exception, cancellationToken))
@@ -294,8 +284,8 @@ public sealed class OAuthAuthorizationAppService
     )
     {
         var connection =
-            await _connectionRepository
-                .Queryable.Include(item => item.Credentials)
+            await _dbContext
+                .Connections.Include(item => item.Credentials)
                 .FirstOrDefaultAsync(item => item.Id == connectionId && item.CreateBy == user, cancellationToken)
             ?? throw new AgwException(ErrorCodes.ConnectionNotFound);
         if (!connection.Enabled)
@@ -318,8 +308,8 @@ public sealed class OAuthAuthorizationAppService
         }
 
         var installation =
-            await _installationRepository
-                .Queryable.Include(item => item.Credentials)
+            await _dbContext
+                .PluginInstallations.Include(item => item.Credentials)
                 .FirstOrDefaultAsync(
                     item => item.PluginId == connection.PluginId && item.CreateBy == user && item.Enabled,
                     cancellationToken
@@ -577,7 +567,7 @@ public sealed class OAuthAuthorizationAppService
                 CreateTime = _timeProvider.GetUtcNow(),
             };
             connection.Credentials.Add(credential);
-            await _connectionCredentialRepository.AddAsync(credential);
+            await _dbContext.ConnectionCredentials.AddAsync(credential);
         }
         else
         {
@@ -601,7 +591,7 @@ public sealed class OAuthAuthorizationAppService
             return;
         }
 
-        _connectionCredentialRepository.Remove(credential);
+        _dbContext.ConnectionCredentials.Remove(credential);
         connection.Credentials.Remove(credential);
     }
 
@@ -628,7 +618,7 @@ public sealed class OAuthAuthorizationAppService
         connection.LastValidationErrorCode = errorCode;
         connection.UpdateBy = user;
         connection.UpdateTime = _timeProvider.GetUtcNow();
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task TrySetFailureAsync(
@@ -642,29 +632,22 @@ public sealed class OAuthAuthorizationAppService
     {
         try
         {
-            if (_unitOfWork is EFContext dbContext)
+            // A failed save can leave pending credential inserts and the Ready mutation tracked.
+            // Discard those changes before recording the terminal callback state in a clean unit.
+            ClearTrackedIntegrationEntities();
+            var refreshedConnection = await _dbContext
+                .Connections.FirstOrDefaultAsync(
+                    item => item.Id == connection.Id && item.CreateBy == user,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            if (refreshedConnection == null)
             {
-                // A failed SaveChanges can leave pending credential inserts and
-                // the Ready mutation tracked. Discard those changes before
-                // recording the terminal callback state in a clean unit.
-                dbContext.ChangeTracker.Clear();
-                var refreshedConnection = await _connectionRepository
-                    .Queryable.FirstOrDefaultAsync(
-                        item => item.Id == connection.Id && item.CreateBy == user,
-                        cancellationToken
-                    )
-                    .ConfigureAwait(false);
-                if (refreshedConnection == null)
-                {
-                    return;
-                }
-
-                await SetFailureAsync(refreshedConnection, status, errorCode, user, cancellationToken)
-                    .ConfigureAwait(false);
                 return;
             }
 
-            await SetFailureAsync(connection, status, errorCode, user, cancellationToken).ConfigureAwait(false);
+            await SetFailureAsync(refreshedConnection, status, errorCode, user, cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (Exception exception) when (!cancellationToken.IsCancellationRequested)
         {
@@ -673,6 +656,26 @@ public sealed class OAuthAuthorizationAppService
                 context.Connection.Id,
                 exception.GetType().Name
             );
+        }
+    }
+
+    private void ClearTrackedIntegrationEntities()
+    {
+        foreach (var credential in _dbContext.ConnectionCredentials.Local.ToArray())
+        {
+            _dbContext.ConnectionCredentials.Entry(credential).State = EntityState.Detached;
+        }
+        foreach (var credential in _dbContext.PluginInstallationCredentials.Local.ToArray())
+        {
+            _dbContext.PluginInstallationCredentials.Entry(credential).State = EntityState.Detached;
+        }
+        foreach (var connection in _dbContext.Connections.Local.ToArray())
+        {
+            _dbContext.Connections.Entry(connection).State = EntityState.Detached;
+        }
+        foreach (var installation in _dbContext.PluginInstallations.Local.ToArray())
+        {
+            _dbContext.PluginInstallations.Entry(installation).State = EntityState.Detached;
         }
     }
 

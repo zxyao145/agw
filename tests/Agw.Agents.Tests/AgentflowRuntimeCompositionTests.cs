@@ -1,4 +1,5 @@
 using System.Reflection;
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Messaging;
@@ -35,6 +36,11 @@ public partial class AgentflowRuntimeServiceTests
         services.AddScoped<IRepository<Agentflow>>(_ => new TestRepository<Agentflow>([], flow => flow.Id));
         services.AddScoped<IRepository<AgentflowNode>>(_ => new TestRepository<AgentflowNode>([], node => node.NodeId));
         services.AddScoped<IRepository<AgentflowEdge>>(_ => new TestRepository<AgentflowEdge>([], edge => edge.EdgeId));
+        services.AddScoped<IAgentflowDefinitionReader>(provider => new TestAgentflowDefinitionReader(
+            provider.GetRequiredService<IRepository<Agentflow>>(),
+            provider.GetRequiredService<IRepository<AgentflowNode>>(),
+            provider.GetRequiredService<IRepository<AgentflowEdge>>()
+        ));
         services.AddScoped<IAgentRuntimeService>(_ => new StubAgentRuntimeService(Guid.CreateVersion7()));
         services.AddScoped<IProviderSessionState>(_ => new StubProviderSessionState());
         services.AddScoped<IAgentTurnSummaryService>(_ => new RecordingSummaryService());

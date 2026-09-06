@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Domain.Topology;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents;
@@ -6,7 +7,6 @@ using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
 using Agw.Auth.Contracts;
 using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
@@ -20,9 +20,7 @@ namespace Agw.Agents.Execution.Agentflows;
 public sealed class AgentflowWorkflowFactory
 {
     private readonly ILogger<AgentflowRuntimeService> _logger;
-    private readonly IRepository<Agentflow> _agentflowRepository;
-    private readonly IRepository<AgentflowNode> _agentflowNodeRepository;
-    private readonly IRepository<AgentflowEdge> _agentflowEdgeRepository;
+    private readonly IAgentflowDefinitionReader _definitions;
     private readonly IAgentRuntimeService _agentRuntimeService;
     private readonly IAgentTurnSummaryService _summaryService;
     private readonly IRuntimeTurnContextAccessor _turnContextAccessor;
@@ -30,18 +28,14 @@ public sealed class AgentflowWorkflowFactory
 
     public AgentflowWorkflowFactory(
         ILogger<AgentflowRuntimeService> logger,
-        IRepository<Agentflow> agentflowRepository,
-        IRepository<AgentflowNode> agentflowNodeRepository,
-        IRepository<AgentflowEdge> agentflowEdgeRepository,
+        IAgentflowDefinitionReader definitions,
         IAgentRuntimeService agentRuntimeService,
         IAgentTurnSummaryService summaryService,
         IRuntimeTurnContextAccessor turnContextAccessor
     )
     {
         _logger = logger;
-        _agentflowRepository = agentflowRepository;
-        _agentflowNodeRepository = agentflowNodeRepository;
-        _agentflowEdgeRepository = agentflowEdgeRepository;
+        _definitions = definitions;
         _agentRuntimeService = agentRuntimeService;
         _summaryService = summaryService;
         _turnContextAccessor = turnContextAccessor;
@@ -117,8 +111,8 @@ public sealed class AgentflowWorkflowFactory
         bool deferHumanInteractions = false
     )
     {
-        var agentflowNodes = await _agentflowNodeRepository.ListAsync(x => x.AgentflowId == agentflow.Id);
-        var agentflowEdges = await _agentflowEdgeRepository.ListAsync(x => x.AgentflowId == agentflow.Id);
+        var agentflowNodes = await _definitions.ListNodesAsync(agentflow.Id, cancellationToken);
+        var agentflowEdges = await _definitions.ListEdgesAsync(agentflow.Id, cancellationToken);
         if (agentflowNodes.Count == 0)
         {
             return null;
@@ -258,10 +252,7 @@ public sealed class AgentflowWorkflowFactory
     internal async Task<Agentflow?> GetVisibleAgentflowAsync(Guid agentflowId)
     {
         var ownerUserId = ResolveExecutionUserId();
-        var flows = await _agentflowRepository
-            .ListAsync(agentflow => agentflow.Id == agentflowId && agentflow.CreateBy == ownerUserId)
-            .ConfigureAwait(false);
-        return flows.FirstOrDefault();
+        return await _definitions.FindVisibleAsync(agentflowId, ownerUserId).ConfigureAwait(false);
     }
 
     internal string ResolveExecutionUserId()

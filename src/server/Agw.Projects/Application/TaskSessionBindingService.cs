@@ -1,6 +1,6 @@
 using Agw.Auth.Contracts;
+using Agw.Projects.Application.Persistence;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,23 +8,17 @@ namespace Agw.Projects.Application;
 
 public class TaskSessionBindingService : ITaskSessionBindingService
 {
-    private readonly IRepository<TaskSessionBinding> _bindingRepository;
-    private readonly IRepository<ProjectConversation> _contextRepository;
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IProjectsDbContext _dbContext;
     private readonly TimeProvider _timeProvider;
     private readonly IUserInfoService _userInfoService;
 
     public TaskSessionBindingService(
-        IRepository<TaskSessionBinding> bindingRepository,
-        IRepository<ProjectConversation> contextRepository,
-        IUnitOfWork unitOfWork,
+        IProjectsDbContext dbContext,
         TimeProvider timeProvider,
         IUserInfoService userInfoService
     )
     {
-        _bindingRepository = bindingRepository;
-        _contextRepository = contextRepository;
-        _unitOfWork = unitOfWork;
+        _dbContext = dbContext;
         _timeProvider = timeProvider;
         _userInfoService = userInfoService;
     }
@@ -45,8 +39,8 @@ public class TaskSessionBindingService : ITaskSessionBindingService
             return null;
         }
 
-        var projectConversation = await _contextRepository
-            .Queryable.AsNoTracking()
+        var projectConversation = await _dbContext
+            .ProjectConversations.AsNoTracking()
             .SingleOrDefaultAsync(
                 context =>
                     context.ProjectId == projectId
@@ -60,8 +54,8 @@ public class TaskSessionBindingService : ITaskSessionBindingService
             return null;
         }
 
-        return await _bindingRepository
-            .Queryable.AsNoTracking()
+        return await _dbContext
+            .TaskSessionBindings.AsNoTracking()
             .SingleOrDefaultAsync(
                 binding =>
                     binding.ProjectConversationId == projectConversation.Id
@@ -102,7 +96,7 @@ public class TaskSessionBindingService : ITaskSessionBindingService
             throw new AgwException(ErrorCodes.InvalidParam, "Context id is required.");
         }
 
-        var projectConversation = await _contextRepository.Queryable.SingleOrDefaultAsync(
+        var projectConversation = await _dbContext.ProjectConversations.SingleOrDefaultAsync(
             context =>
                 context.ProjectId == projectId
                 && context.ContextId == normalizedContextId
@@ -115,7 +109,7 @@ public class TaskSessionBindingService : ITaskSessionBindingService
             throw new AgwException(ErrorCodes.ResourceNotFound, "Project context not found.");
         }
 
-        var binding = await _bindingRepository.Queryable.SingleOrDefaultAsync(
+        var binding = await _dbContext.TaskSessionBindings.SingleOrDefaultAsync(
             existing =>
                 existing.ProjectConversationId == projectConversation.Id
                 && existing.AgentId == agentId
@@ -135,16 +129,16 @@ public class TaskSessionBindingService : ITaskSessionBindingService
                 CreateBy = projectConversation.CreateBy ?? normalizedUser,
                 CreateTime = now,
             };
-            await _bindingRepository.AddAsync(binding);
+            await _dbContext.TaskSessionBindings.AddAsync(binding, cancellationToken);
             try
             {
-                await _unitOfWork.SaveChangesAsync();
+                await _dbContext.SaveChangesAsync(cancellationToken);
                 return binding;
             }
             catch (DbUpdateException)
             {
-                _bindingRepository.Remove(binding);
-                binding = await _bindingRepository.Queryable.SingleOrDefaultAsync(
+                _dbContext.TaskSessionBindings.Remove(binding);
+                binding = await _dbContext.TaskSessionBindings.SingleOrDefaultAsync(
                     existing =>
                         existing.ProjectConversationId == projectConversation.Id
                         && existing.AgentId == agentId
@@ -163,10 +157,9 @@ public class TaskSessionBindingService : ITaskSessionBindingService
             binding.ProviderSessionId = normalizedProviderSessionId;
             binding.UpdateBy = normalizedUser;
             binding.UpdateTime = now;
-            _bindingRepository.Update(binding);
         }
 
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return binding;
     }
 

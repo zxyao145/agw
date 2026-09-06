@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Agw.Auth.Contracts;
+using Agw.Infrastructure.Auth;
 using Agw.Infrastructure.Data;
 using Agw.Setup.Services;
 using Agw.Shared;
@@ -39,7 +40,11 @@ public sealed class LegacyApiTokenMigratorTests : IDisposable
             await using var context = new AgwDbContext(options);
             await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
             var stateStore = new JsonInitializationStateStore(paths);
-            var migrator = new LegacyApiTokenMigrator(stateStore, context, NullLogger<LegacyApiTokenMigrator>.Instance);
+            var migrator = new LegacyApiTokenMigrator(
+                stateStore,
+                new EfApiTokenStore(context),
+                NullLogger<LegacyApiTokenMigrator>.Instance
+            );
 
             var migratedCount = await migrator.MigrateAsync(TestContext.Current.CancellationToken);
             context.ChangeTracker.Clear();
@@ -93,7 +98,11 @@ public sealed class LegacyApiTokenMigratorTests : IDisposable
             );
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
             var stateStore = new JsonInitializationStateStore(paths);
-            var migrator = new LegacyApiTokenMigrator(stateStore, context, NullLogger<LegacyApiTokenMigrator>.Instance);
+            var migrator = new LegacyApiTokenMigrator(
+                stateStore,
+                new EfApiTokenStore(context),
+                NullLogger<LegacyApiTokenMigrator>.Instance
+            );
 
             var migratedCount = await migrator.MigrateAsync(TestContext.Current.CancellationToken);
 
@@ -137,7 +146,11 @@ public sealed class LegacyApiTokenMigratorTests : IDisposable
             );
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
             var stateStore = new JsonInitializationStateStore(paths);
-            var migrator = new LegacyApiTokenMigrator(stateStore, context, NullLogger<LegacyApiTokenMigrator>.Instance);
+            var migrator = new LegacyApiTokenMigrator(
+                stateStore,
+                new EfApiTokenStore(context),
+                NullLogger<LegacyApiTokenMigrator>.Instance
+            );
 
             var exception = await Assert.ThrowsAsync<AgwException>(() =>
                 migrator.MigrateAsync(TestContext.Current.CancellationToken)

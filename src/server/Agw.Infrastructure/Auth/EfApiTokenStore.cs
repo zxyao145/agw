@@ -2,13 +2,14 @@ using System.Security.Cryptography;
 using System.Text;
 using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
+using Agw.Shared;
 using Agw.Shared.Data.Entities.Auth;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Infrastructure.Auth;
 
-public sealed class EfApiTokenStore : IApiTokenStore
+public sealed class EfApiTokenStore : IApiTokenStore, ILegacyApiTokenImporter
 {
     private const int PrefixLength = 12;
 
@@ -134,6 +135,84 @@ public sealed class EfApiTokenStore : IApiTokenStore
         }
 
         return null;
+    }
+
+    public async Task ImportAsync(
+        IReadOnlyList<LegacyApiTokenImport> tokens,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var existingTokens = await LoadExistingTokensAsync(tokens, cancellationToken).ConfigureAwait(false);
+        foreach (var token in tokens)
+        {
+            if (existingTokens.TryGetValue(token.Id, out var existingToken))
+            {
+                EnsureSameLegacyToken(existingToken, token);
+                continue;
+            }
+
+            _context.ApiTokens.Add(
+                new ApiToken
+                {
+                    Id = token.Id,
+                    Name = token.Name,
+                    NormalizedName = ApiToken.NormalizeName(token.Name),
+                    Prefix = token.Prefix,
+                    SecretHash = token.SecretHash,
+                    CreateBy = Constants.AdminUserId,
+                    CreateTime = token.CreatedAt,
+                }
+            );
+        }
+
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException)
+        {
+            _context.ChangeTracker.Clear();
+            existingTokens = await LoadExistingTokensAsync(tokens, cancellationToken).ConfigureAwait(false);
+            if (
+                !tokens.All(token =>
+                    existingTokens.TryGetValue(token.Id, out var existing) && IsSameLegacyToken(existing, token)
+                )
+            )
+            {
+                throw;
+            }
+        }
+    }
+
+    private async Task<Dictionary<Guid, ApiToken>> LoadExistingTokensAsync(
+        IReadOnlyList<LegacyApiTokenImport> tokens,
+        CancellationToken cancellationToken
+    )
+    {
+        var ids = tokens.Select(token => token.Id).ToArray();
+        return await _context
+            .ApiTokens.AsNoTracking()
+            .Where(token => ids.Contains(token.Id))
+            .ToDictionaryAsync(token => token.Id, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static void EnsureSameLegacyToken(ApiToken existingToken, LegacyApiTokenImport token)
+    {
+        if (!IsSameLegacyToken(existingToken, token))
+        {
+            throw new AgwException(
+                ErrorCodes.LegacyApiTokenConflict,
+                $"API Token '{token.Id}' conflicts with its legacy server-state record."
+            );
+        }
+    }
+
+    private static bool IsSameLegacyToken(ApiToken existingToken, LegacyApiTokenImport token)
+    {
+        return string.Equals(existingToken.NormalizedName, ApiToken.NormalizeName(token.Name), StringComparison.Ordinal)
+            && string.Equals(existingToken.Prefix, token.Prefix, StringComparison.Ordinal)
+            && string.Equals(existingToken.SecretHash, token.SecretHash, StringComparison.Ordinal);
     }
 
     private static string CreateSecret()

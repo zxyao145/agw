@@ -1,6 +1,6 @@
 using Agw.Shared.Data.Entities.Skills;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
+using Agw.Skills.Application.Persistence;
 using Agw.Skills.Contracts.Remote;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -93,10 +93,9 @@ public sealed class RemoteSkillContentResolver : IRemoteSkillContentResolver
     private async Task<RemoteSkillState> ReadStateAsync(Guid skillId, CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
-        var skillRepository = scope.ServiceProvider.GetRequiredService<IRepository<Skill>>();
-        var cacheRepository = scope.ServiceProvider.GetRequiredService<IRepository<RemoteSkillCache>>();
-        var skill = await skillRepository
-            .Queryable.AsNoTracking()
+        var dbContext = scope.ServiceProvider.GetRequiredService<ISkillsDbContext>();
+        var skill = await dbContext
+            .Skills.AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == skillId, cancellationToken);
         if (skill == null)
         {
@@ -104,8 +103,8 @@ public sealed class RemoteSkillContentResolver : IRemoteSkillContentResolver
         }
 
         EnsureRemoteSkill(skill);
-        var cache = await cacheRepository
-            .Queryable.AsNoTracking()
+        var cache = await dbContext
+            .RemoteSkillCaches.AsNoTracking()
             .SingleOrDefaultAsync(item => item.SkillId == skillId, cancellationToken);
         return new RemoteSkillState(skill, cache);
     }
@@ -117,11 +116,9 @@ public sealed class RemoteSkillContentResolver : IRemoteSkillContentResolver
     )
     {
         using var scope = _scopeFactory.CreateScope();
-        var skillRepository = scope.ServiceProvider.GetRequiredService<IRepository<Skill>>();
-        var cacheRepository = scope.ServiceProvider.GetRequiredService<IRepository<RemoteSkillCache>>();
-        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-        var skill = await skillRepository
-            .Queryable.AsNoTracking()
+        var dbContext = scope.ServiceProvider.GetRequiredService<ISkillsDbContext>();
+        var skill = await dbContext
+            .Skills.AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == expectedSkill.Id, cancellationToken);
         if (skill == null)
         {
@@ -137,24 +134,26 @@ public sealed class RemoteSkillContentResolver : IRemoteSkillContentResolver
             throw new AgwException(ErrorCodes.RemoteSkillConfigurationInvalid);
         }
 
-        var cache = await cacheRepository.GetByIdAsync(skill.Id);
+        var cache = await dbContext.RemoteSkillCaches.SingleOrDefaultAsync(
+            item => item.SkillId == skill.Id,
+            cancellationToken
+        );
         if (cache == null)
         {
             cache = new RemoteSkillCache { SkillId = skill.Id };
             cache.SourceUrl = skill.RemoteUrl!;
             cache.ContentJson = RemoteSkillDefinitionSerializer.Serialize(definition);
             cache.FetchedAt = _timeProvider.GetUtcNow();
-            await cacheRepository.AddAsync(cache);
+            await dbContext.RemoteSkillCaches.AddAsync(cache, cancellationToken);
         }
         else
         {
             cache.SourceUrl = skill.RemoteUrl!;
             cache.ContentJson = RemoteSkillDefinitionSerializer.Serialize(definition);
             cache.FetchedAt = _timeProvider.GetUtcNow();
-            cacheRepository.Update(cache);
         }
 
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private static void EnsureRemoteSkill(Skill skill)

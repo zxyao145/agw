@@ -574,7 +574,6 @@ public class ProjectAppServiceTests : IDisposable
         IProjectDeletionCoordinator? deletionCoordinator = null
     )
     {
-        var projectRepository = new EfRepository<Project>(dbContext);
         userInfo ??= new TestUserInfoService();
 
         return new ProjectAppService(
@@ -583,7 +582,7 @@ public class ProjectAppServiceTests : IDisposable
             new SkillReferenceFacade(dbContext, userInfo),
             new ConnectionReferenceFacade(dbContext, userInfo),
             deletionCoordinator ?? TestProjectPersistence.CreateDeletionCoordinator(dbContext),
-            new ProjectResolver(projectRepository, userInfo),
+            new ProjectResolver(dbContext, userInfo),
             userInfo,
             fileSystemCache
         );

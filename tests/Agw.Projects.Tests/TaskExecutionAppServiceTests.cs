@@ -1,5 +1,4 @@
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Repositories;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
 using Microsoft.Data.Sqlite;
@@ -337,17 +336,9 @@ public class TaskExecutionAppServiceTests
 
     private static TaskExecutionAppService CreateService(AgwDbContext dbContext)
     {
-        var projectRepository = new EfRepository<Project>(dbContext);
         var userInfo = new TestUserInfoService();
-        var projectResolver = new ProjectResolver(projectRepository, userInfo);
+        var projectResolver = new ProjectResolver(dbContext, userInfo);
 
-        return new TaskExecutionAppService(
-            new EfRepository<ProjectConversation>(dbContext),
-            new EfRepository<ProjectConversationChatHistory>(dbContext),
-            dbContext,
-            projectResolver,
-            TimeProvider.System,
-            userInfo
-        );
+        return new TaskExecutionAppService(dbContext, projectResolver, TimeProvider.System, userInfo);
     }
 }

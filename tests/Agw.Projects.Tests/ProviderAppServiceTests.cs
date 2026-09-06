@@ -451,9 +451,6 @@ public class ProviderAppServiceTests
     private static ProviderAppService CreateService(AgwDbContext dbContext)
     {
         return new ProviderAppService(
-            new EfRepository<Provider>(dbContext),
-            new EfRepository<AgwAiModel>(dbContext),
-            new EfRepository<ModelProviderRelation>(dbContext),
             dbContext,
             new ModelProviderUsageGuard(
                 new TestAgentReferenceFacade(new EfRepository<Agent>(dbContext), new EfRepository<Agentflow>(dbContext))

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents;
@@ -1068,9 +1069,7 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
     {
         var workflowFactory = new AgentflowWorkflowFactory(
             logger,
-            agentflowRepository,
-            nodeRepository,
-            edgeRepository,
+            new TestAgentflowDefinitionReader(agentflowRepository, nodeRepository, edgeRepository),
             agentRuntimeService,
             summaryService,
             turnContextAccessor ?? new RuntimeTurnContextAccessor()
@@ -1096,6 +1095,44 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
             projectDefaults ?? new TestProjectDefaultResolver(),
             projectRuntimeFacade ?? new TestProjectRuntimeFacade()
         );
+    }
+
+    private sealed class TestAgentflowDefinitionReader : IAgentflowDefinitionReader
+    {
+        private readonly IRepository<Agentflow> _agentflows;
+        private readonly IRepository<AgentflowNode> _nodes;
+        private readonly IRepository<AgentflowEdge> _edges;
+
+        public TestAgentflowDefinitionReader(
+            IRepository<Agentflow> agentflows,
+            IRepository<AgentflowNode> nodes,
+            IRepository<AgentflowEdge> edges
+        )
+        {
+            _agentflows = agentflows;
+            _nodes = nodes;
+            _edges = edges;
+        }
+
+        public Task<Agentflow?> FindVisibleAsync(
+            Guid agentflowId,
+            string ownerUserId,
+            CancellationToken cancellationToken = default
+        ) =>
+            _agentflows.SingleOrDefaultAsync(
+                agentflow => agentflow.Id == agentflowId && agentflow.CreateBy == ownerUserId,
+                cancellationToken
+            );
+
+        public Task<IReadOnlyList<AgentflowNode>> ListNodesAsync(
+            Guid agentflowId,
+            CancellationToken cancellationToken = default
+        ) => _nodes.ListAsync(node => node.AgentflowId == agentflowId);
+
+        public Task<IReadOnlyList<AgentflowEdge>> ListEdgesAsync(
+            Guid agentflowId,
+            CancellationToken cancellationToken = default
+        ) => _edges.ListAsync(edge => edge.AgentflowId == agentflowId);
     }
 
     private sealed class TestProjectDefaultResolver : IProjectDefaultResolver

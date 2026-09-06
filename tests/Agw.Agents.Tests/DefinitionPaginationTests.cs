@@ -5,7 +5,6 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Repositories;
 using Agw.Shared.Data.Abstractions;
-using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;
@@ -233,17 +232,8 @@ public class DefinitionPaginationTests
         await database.Context.SaveChangesAsync(cancellationToken);
 
         var service = new SkillAppService(
-            new EfRepository<Skill>(database.Context),
-            new AgentCatalogFacade(
-                new EfRepository<Agent>(database.Context),
-                new EfRepository<Agentflow>(database.Context),
-                new EfRepository<McpServer>(database.Context),
-                new EfRepository<AgentSkillRelation>(database.Context),
-                database.Context,
-                new TestUserInfoService()
-            ),
-            new EfRepository<RemoteSkillCache>(database.Context),
             database.Context,
+            new AgentCatalogFacade(database.Context, new TestUserInfoService()),
             AgwDataPaths.Resolve(Path.Combine(Path.GetTempPath(), "agw-pagination-tests"), Path.GetTempPath()),
             NullLogger<SkillAppService>.Instance,
             new TestRemoteSkillClient(),

@@ -38,14 +38,7 @@ public class ModelProviderAppServiceTests
         var guard = new ModelProviderUsageGuard(
             new TestAgentReferenceFacade(new EfRepository<Agent>(context), new EfRepository<Agentflow>(context))
         );
-        var service = new ModelProviderAppService(
-            new EfRepository<ModelProviderRelation>(context),
-            context,
-            guard,
-            user,
-            new EfRepository<Provider>(context),
-            new EfRepository<AgwAiModel>(context)
-        );
+        var service = new ModelProviderAppService(context, guard, user);
 
         // Act
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
@@ -128,14 +121,7 @@ public class ModelProviderAppServiceTests
                     new EfRepository<Agentflow>(deleteContext)
                 )
             );
-            var service = new ModelProviderAppService(
-                new EfRepository<ModelProviderRelation>(deleteContext),
-                deleteContext,
-                usageGuard,
-                new TestUserInfoService("seed"),
-                new EfRepository<Provider>(deleteContext),
-                new EfRepository<AgwAiModel>(deleteContext)
-            );
+            var service = new ModelProviderAppService(deleteContext, usageGuard, new TestUserInfoService("seed"));
 
             var exception = await Assert.ThrowsAsync<AgwException>(() => service.DeleteAsync(relationId));
 

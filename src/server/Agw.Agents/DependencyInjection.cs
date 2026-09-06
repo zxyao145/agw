@@ -1,6 +1,8 @@
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Contracts.Catalog;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Facades;
+using Agw.Agents.Definitions.Persistence;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents;
@@ -61,6 +63,7 @@ public static class DependencyInjection
         services.AddScoped<AgentflowAppService>();
         services.AddScoped<AgentflowTraceAppService>();
         services.AddScoped<AgentflowWorkflowFactory>();
+        services.AddScoped<IAgentflowDefinitionReader, AgentflowDefinitionReader>();
         services.AddScoped<AgentflowExecutionContextFactory>();
         services.AddScoped<AgentflowCheckpointSupport>();
         services.AddScoped<DurableAgentflowSegmentRunner>();

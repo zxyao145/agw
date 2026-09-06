@@ -1,8 +1,8 @@
 using System.Text.Json;
 using Agw.Auth.Contracts;
+using Agw.Projects.Application.Persistence;
 using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Projects.Application.Facades;
@@ -12,24 +12,12 @@ public sealed class ExternalTaskSnapshotStore : IExternalTaskSnapshotStore
     private const string SnapshotRecordType = "a2a-task-snapshot";
     private const string RecordTypeMetadataKey = "recordType";
     private const string SnapshotMetadataKey = "agentTask";
-    private readonly IRepository<ProjectConversation> _conversationRepository;
-    private readonly IRepository<ProjectConversationChatHistory> _historyRepository;
-    private readonly IRepository<Project> _projectRepository;
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IProjectsDbContext _dbContext;
     private readonly IUserInfoService _userInfoService;
 
-    public ExternalTaskSnapshotStore(
-        IRepository<ProjectConversation> conversationRepository,
-        IRepository<ProjectConversationChatHistory> historyRepository,
-        IUnitOfWork unitOfWork,
-        IUserInfoService userInfoService,
-        IRepository<Project> projectRepository
-    )
+    public ExternalTaskSnapshotStore(IProjectsDbContext dbContext, IUserInfoService userInfoService)
     {
-        _conversationRepository = conversationRepository;
-        _historyRepository = historyRepository;
-        _projectRepository = projectRepository;
-        _unitOfWork = unitOfWork;
+        _dbContext = dbContext;
         _userInfoService = userInfoService;
     }
 
@@ -44,16 +32,23 @@ public sealed class ExternalTaskSnapshotStore : IExternalTaskSnapshotStore
             return null;
         }
 
-        var records = await _historyRepository.ListAsync(record => record.TaskId == taskId).ConfigureAwait(false);
+        var records = await _dbContext
+            .ProjectConversationChatHistories.AsNoTracking()
+            .Where(record => record.TaskId == taskId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
         if (records.Count == 0)
         {
             return null;
         }
 
         var ownerUserId = ResolveOwnerUserId();
-        var conversation = await _conversationRepository
-            .Queryable.SingleOrDefaultAsync(item =>
-                item.Id == records[0].ConversationId && item.ProjectId == projectId && item.CreateBy == ownerUserId
+        var conversation = await _dbContext
+            .ProjectConversations.AsNoTracking()
+            .SingleOrDefaultAsync(
+                item =>
+                    item.Id == records[0].ConversationId && item.ProjectId == projectId && item.CreateBy == ownerUserId,
+                cancellationToken
             )
             .ConfigureAwait(false);
         return conversation == null || conversation.ProjectId != projectId
@@ -75,12 +70,14 @@ public sealed class ExternalTaskSnapshotStore : IExternalTaskSnapshotStore
 
         var normalizedContextId = string.IsNullOrWhiteSpace(contextId) ? null : contextId.Trim();
         var ownerUserId = ResolveOwnerUserId();
-        var conversations = await _conversationRepository
-            .ListAsync(conversation =>
+        var conversations = await _dbContext
+            .ProjectConversations.AsNoTracking()
+            .Where(conversation =>
                 conversation.ProjectId == projectId
                 && (normalizedContextId == null || conversation.ContextId == normalizedContextId)
                 && conversation.CreateBy == ownerUserId
             )
+            .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         if (conversations.Count == 0)
         {
@@ -89,8 +86,10 @@ public sealed class ExternalTaskSnapshotStore : IExternalTaskSnapshotStore
 
         var conversationById = conversations.ToDictionary(conversation => conversation.Id);
         var conversationIds = conversationById.Keys.ToHashSet();
-        var histories = await _historyRepository
-            .ListAsync(record => conversationIds.Contains(record.ConversationId))
+        var histories = await _dbContext
+            .ProjectConversationChatHistories.AsNoTracking()
+            .Where(record => conversationIds.Contains(record.ConversationId))
+            .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
         return histories
@@ -112,16 +111,19 @@ public sealed class ExternalTaskSnapshotStore : IExternalTaskSnapshotStore
             return ExternalTaskSaveResult.TaskIdConflict;
         }
 
-        var records = await _historyRepository
-            .ListAsync(record => record.TaskId == request.TaskId)
+        var records = await _dbContext
+            .ProjectConversationChatHistories.AsNoTracking()
+            .Where(record => record.TaskId == request.TaskId)
+            .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         ProjectConversation? conversation = null;
         if (records.Count > 0)
         {
             var ownerUserId = ResolveOwnerUserId();
-            conversation = await _conversationRepository
-                .Queryable.SingleOrDefaultAsync(item =>
-                    item.Id == records[0].ConversationId && item.CreateBy == ownerUserId
+            conversation = await _dbContext
+                .ProjectConversations.SingleOrDefaultAsync(
+                    item => item.Id == records[0].ConversationId && item.CreateBy == ownerUserId,
+                    cancellationToken
                 )
                 .ConfigureAwait(false);
             if (conversation == null)
@@ -135,8 +137,8 @@ public sealed class ExternalTaskSnapshotStore : IExternalTaskSnapshotStore
         }
 
         var currentOwnerUserId = ResolveOwnerUserId();
-        conversation ??= await _conversationRepository
-            .SingleOrDefaultAsync(
+        conversation ??= await _dbContext
+            .ProjectConversations.SingleOrDefaultAsync(
                 item =>
                     item.ProjectId == request.ProjectId
                     && item.ContextId == request.ContextId
@@ -157,7 +159,7 @@ public sealed class ExternalTaskSnapshotStore : IExternalTaskSnapshotStore
                 UpdateBy = currentOwnerUserId,
                 UpdateTime = request.StatusTimestamp,
             };
-            await _conversationRepository.AddAsync(conversation).ConfigureAwait(false);
+            await _dbContext.ProjectConversations.AddAsync(conversation, cancellationToken).ConfigureAwait(false);
         }
         else
         {
@@ -165,16 +167,15 @@ public sealed class ExternalTaskSnapshotStore : IExternalTaskSnapshotStore
             conversation.Title = request.Title;
             conversation.UpdateBy = currentOwnerUserId;
             conversation.UpdateTime = request.StatusTimestamp;
-            _conversationRepository.Update(conversation);
         }
 
         foreach (var record in records.Where(record => record.ConversationId == conversation.Id))
         {
-            _historyRepository.Remove(record);
+            _dbContext.ProjectConversationChatHistories.Remove(record);
         }
 
-        await _historyRepository
-            .AddAsync(
+        await _dbContext
+            .ProjectConversationChatHistories.AddAsync(
                 new ProjectConversationChatHistory
                 {
                     Id = Guid.CreateVersion7(),
@@ -193,10 +194,11 @@ public sealed class ExternalTaskSnapshotStore : IExternalTaskSnapshotStore
                     Error = request.ErrorMessage,
                     CreateTime = request.StatusTimestamp,
                     UpdateTime = request.StatusTimestamp,
-                }
+                },
+                cancellationToken
             )
             .ConfigureAwait(false);
-        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return ExternalTaskSaveResult.Saved;
     }
 
@@ -207,16 +209,23 @@ public sealed class ExternalTaskSnapshotStore : IExternalTaskSnapshotStore
             return;
         }
 
-        var records = await _historyRepository.ListAsync(record => record.TaskId == taskId).ConfigureAwait(false);
+        var records = await _dbContext
+            .ProjectConversationChatHistories.AsNoTracking()
+            .Where(record => record.TaskId == taskId)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
         if (records.Count == 0)
         {
             return;
         }
 
         var ownerUserId = ResolveOwnerUserId();
-        var conversation = await _conversationRepository
-            .Queryable.SingleOrDefaultAsync(item =>
-                item.Id == records[0].ConversationId && item.ProjectId == projectId && item.CreateBy == ownerUserId
+        var conversation = await _dbContext
+            .ProjectConversations.AsNoTracking()
+            .SingleOrDefaultAsync(
+                item =>
+                    item.Id == records[0].ConversationId && item.ProjectId == projectId && item.CreateBy == ownerUserId,
+                cancellationToken
             )
             .ConfigureAwait(false);
         if (conversation == null || conversation.ProjectId != projectId)
@@ -226,9 +235,9 @@ public sealed class ExternalTaskSnapshotStore : IExternalTaskSnapshotStore
 
         foreach (var record in records.Where(record => record.ConversationId == conversation.Id))
         {
-            _historyRepository.Remove(record);
+            _dbContext.ProjectConversationChatHistories.Remove(record);
         }
-        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static ExternalTaskSnapshot BuildSnapshot(
@@ -262,11 +271,9 @@ public sealed class ExternalTaskSnapshotStore : IExternalTaskSnapshotStore
     private async Task<bool> IsProjectVisibleAsync(Guid projectId, CancellationToken cancellationToken)
     {
         var ownerUserId = ResolveOwnerUserId();
-        return await _projectRepository
-            .Queryable.AnyAsync(
-                project => project.Id == projectId && project.CreateBy == ownerUserId,
-                cancellationToken
-            )
+        return await _dbContext
+            .Projects.AsNoTracking()
+            .AnyAsync(project => project.Id == projectId && project.CreateBy == ownerUserId, cancellationToken)
             .ConfigureAwait(false);
     }
 }

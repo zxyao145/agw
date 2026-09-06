@@ -1,9 +1,9 @@
 using System.Linq.Expressions;
 using Agw.Auth.Contracts;
+using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Rules;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,25 +11,19 @@ namespace Agw.Projects.Application;
 
 public class TaskExecutionAppService
 {
-    private readonly IRepository<ProjectConversation> _contextRepository;
-    private readonly IRepository<ProjectConversationChatHistory> _recordRepository;
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IProjectsDbContext _dbContext;
     private readonly ProjectResolver _projectResolver;
     private readonly TimeProvider _timeProvider;
     private readonly IUserInfoService _userInfoService;
 
     public TaskExecutionAppService(
-        IRepository<ProjectConversation> contextRepository,
-        IRepository<ProjectConversationChatHistory> recordRepository,
-        IUnitOfWork unitOfWork,
+        IProjectsDbContext dbContext,
         ProjectResolver projectResolver,
         TimeProvider timeProvider,
         IUserInfoService userInfoService
     )
     {
-        _contextRepository = contextRepository;
-        _recordRepository = recordRepository;
-        _unitOfWork = unitOfWork;
+        _dbContext = dbContext;
         _projectResolver = projectResolver;
         _timeProvider = timeProvider;
         _userInfoService = userInfoService;
@@ -52,16 +46,20 @@ public class TaskExecutionAppService
             return [];
         }
 
-        var contexts = await _contextRepository.ListAsync(context =>
-            context.ProjectId == project.Id && context.CreateBy == project.CreateBy
-        );
+        var contexts = await _dbContext
+            .ProjectConversations.AsNoTracking()
+            .Where(context => context.ProjectId == project.Id && context.CreateBy == project.CreateBy)
+            .ToListAsync();
         if (contexts.Count == 0)
         {
             return [];
         }
 
         var contextIds = contexts.Select(context => context.Id).ToHashSet();
-        var records = await _recordRepository.ListAsync(record => contextIds.Contains(record.ConversationId));
+        var records = await _dbContext
+            .ProjectConversationChatHistories.AsNoTracking()
+            .Where(record => contextIds.Contains(record.ConversationId))
+            .ToListAsync();
         var contextById = contexts.ToDictionary(context => context.Id);
 
         return records
@@ -86,9 +84,13 @@ public class TaskExecutionAppService
             return null;
         }
 
-        var context = await _contextRepository.Queryable.SingleOrDefaultAsync(item =>
-            item.Id == records[0].ConversationId && item.ProjectId == project.Id && item.CreateBy == project.CreateBy
-        );
+        var context = await _dbContext
+            .ProjectConversations.AsNoTracking()
+            .SingleOrDefaultAsync(item =>
+                item.Id == records[0].ConversationId
+                && item.ProjectId == project.Id
+                && item.CreateBy == project.CreateBy
+            );
         if (context == null)
         {
             return null;
@@ -198,20 +200,20 @@ public class TaskExecutionAppService
             UpdateTime = now,
         };
 
-        await _recordRepository.AddAsync(record);
+        await _dbContext.ProjectConversationChatHistories.AddAsync(record);
         try
         {
-            await _unitOfWork.SaveChangesAsync();
+            await _dbContext.SaveChangesAsync();
         }
         catch (DbUpdateException exception) when (conversationCreated && conversationId.HasValue)
         {
             // SaveChanges is atomic. Detach the failed graph before an owner-scoped requery so an exact concurrent
             // insert can be reused without treating a foreign or mismatched identity as available.
-            _recordRepository.Remove(record);
-            _contextRepository.Remove(conversation);
+            _dbContext.ProjectConversationChatHistories.Remove(record);
+            _dbContext.ProjectConversations.Remove(conversation);
             record.ProjectConversation = null;
 
-            var concurrentConversation = await _contextRepository.SingleOrDefaultAsync(item =>
+            var concurrentConversation = await _dbContext.ProjectConversations.SingleOrDefaultAsync(item =>
                 item.Id == conversationId.Value
                 && item.ProjectId == project.Id
                 && item.ContextId == contextId
@@ -228,9 +230,8 @@ public class TaskExecutionAppService
 
             conversation = concurrentConversation;
             UpdateExistingConversation(conversation, request.JobId, title, user, now);
-            _contextRepository.Update(conversation);
-            await _recordRepository.AddAsync(record);
-            await _unitOfWork.SaveChangesAsync();
+            await _dbContext.ProjectConversationChatHistories.AddAsync(record);
+            await _dbContext.SaveChangesAsync();
         }
 
         var task = TaskExecutionMapper.ToTask(conversation, [record]);
@@ -253,8 +254,7 @@ public class TaskExecutionAppService
         context.Title = title.Trim();
         context.UpdateBy = user;
         context.UpdateTime = _timeProvider.GetUtcNow();
-        _contextRepository.Update(context);
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync();
         return ApplicationResult.Success();
     }
 
@@ -275,12 +275,14 @@ public class TaskExecutionAppService
             .ToArray();
         if (conversationIds.Length > 0)
         {
-            await _recordRepository
-                .Queryable.Where(x => x.TaskId == taskId && conversationIds.Contains(x.ConversationId))
+            await _dbContext
+                .ProjectConversationChatHistories.Where(x =>
+                    x.TaskId == taskId && conversationIds.Contains(x.ConversationId)
+                )
                 .ExecuteDeleteAsync();
         }
 
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync();
 
         return ApplicationResult.Success();
     }
@@ -302,12 +304,14 @@ public class TaskExecutionAppService
             .ToArray();
         if (conversationIds.Length > 0)
         {
-            await _recordRepository
-                .Queryable.Where(x => x.TaskId == taskId && conversationIds.Contains(x.ConversationId))
+            await _dbContext
+                .ProjectConversationChatHistories.Where(x =>
+                    x.TaskId == taskId && conversationIds.Contains(x.ConversationId)
+                )
                 .ExecuteDeleteAsync();
         }
 
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync();
         return ApplicationResult.Success();
     }
 
@@ -331,8 +335,8 @@ public class TaskExecutionAppService
     )
     {
         var records = ProjectConversationChatHistoryRules.Order(
-            await _recordRepository
-                .Queryable.Where(record =>
+            await _dbContext
+                .ProjectConversationChatHistories.Where(record =>
                     record.TaskId == id
                     && record.ProjectConversation!.CreateBy == user
                     && record.ProjectConversation.Project!.CreateBy == user
@@ -345,7 +349,7 @@ public class TaskExecutionAppService
             return null;
         }
 
-        var context = await _contextRepository.Queryable.SingleOrDefaultAsync(item =>
+        var context = await _dbContext.ProjectConversations.SingleOrDefaultAsync(item =>
             item.Id == records[0].ConversationId && item.CreateBy == user
         );
         if (context == null)
@@ -370,8 +374,7 @@ public class TaskExecutionAppService
 
         context.UpdateBy = user;
         context.UpdateTime = now;
-        _contextRepository.Update(context);
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync();
 
         return TaskExecutionMapper.ToTask(context, records);
     }
@@ -397,7 +400,7 @@ public class TaskExecutionAppService
         ProjectConversation? conversation = null;
         if (conversationId.HasValue)
         {
-            conversation = await _contextRepository.SingleOrDefaultAsync(item =>
+            conversation = await _dbContext.ProjectConversations.SingleOrDefaultAsync(item =>
                 item.Id == conversationId.Value && item.CreateBy == user
             );
             if (conversation != null)
@@ -418,14 +421,16 @@ public class TaskExecutionAppService
             }
         }
 
-        conversation ??= await _contextRepository.SingleOrDefaultAsync(item =>
+        conversation ??= await _dbContext.ProjectConversations.SingleOrDefaultAsync(item =>
             item.ProjectId == projectId && item.ContextId == contextId && item.CreateBy == user
         );
         if (conversation == null && Guid.TryParse(contextId, out _))
         {
-            var legacyContexts = await _contextRepository.ListAsync(item =>
-                item.ProjectId == projectId && item.ContextId.ToLower() == contextId && item.CreateBy == user
-            );
+            var legacyContexts = await _dbContext
+                .ProjectConversations.Where(item =>
+                    item.ProjectId == projectId && item.ContextId.ToLower() == contextId && item.CreateBy == user
+                )
+                .ToListAsync();
             conversation = legacyContexts.OrderBy(item => item.CreateTime).FirstOrDefault();
             if (conversation != null)
             {
@@ -444,7 +449,6 @@ public class TaskExecutionAppService
         if (conversation != null)
         {
             UpdateExistingConversation(conversation, jobId, title, user, now);
-            _contextRepository.Update(conversation);
             return (conversation, false);
         }
 
@@ -460,7 +464,7 @@ public class TaskExecutionAppService
             UpdateBy = user,
             UpdateTime = now,
         };
-        await _contextRepository.AddAsync(conversation);
+        await _dbContext.ProjectConversations.AddAsync(conversation);
         return (conversation, true);
     }
 
@@ -497,7 +501,7 @@ public class TaskExecutionAppService
             return null;
         }
 
-        var context = await _contextRepository.Queryable.SingleOrDefaultAsync(item =>
+        var context = await _dbContext.ProjectConversations.SingleOrDefaultAsync(item =>
             item.Id == records[0].ConversationId && item.ProjectId == projectId && item.CreateBy == ownerUserId
         );
         return context;
@@ -512,24 +516,25 @@ public class TaskExecutionAppService
             return null;
         }
 
-        var context = await _contextRepository.Queryable.SingleOrDefaultAsync(item =>
-            item.Id == records[0].ConversationId && item.CreateBy == ownerUserId
-        );
+        var context = await _dbContext
+            .ProjectConversations.AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == records[0].ConversationId && item.CreateBy == ownerUserId);
         return context == null ? null : TaskExecutionMapper.ToTask(context, records);
     }
 
     private async Task<IReadOnlyList<TaskProjection>> ListProjectedTasksAsync(string? ownerUserId)
     {
-        var records = await _recordRepository.ListAsync();
+        var records = await _dbContext.ProjectConversationChatHistories.AsNoTracking().ToListAsync();
         if (records.Count == 0)
         {
             return [];
         }
 
         var contextIds = records.Select(record => record.ConversationId).ToHashSet();
-        var contexts = await _contextRepository.ListAsync(context =>
-            contextIds.Contains(context.Id) && context.CreateBy == ownerUserId
-        );
+        var contexts = await _dbContext
+            .ProjectConversations.AsNoTracking()
+            .Where(context => contextIds.Contains(context.Id) && context.CreateBy == ownerUserId)
+            .ToListAsync();
         var contextById = contexts.ToDictionary(context => context.Id);
 
         return records
@@ -553,17 +558,19 @@ public class TaskExecutionAppService
         string? ownerUserId
     )
     {
-        var records = await _recordRepository.ListAsync(record => record.TaskId == taskId);
+        var records = await _dbContext
+            .ProjectConversationChatHistories.AsNoTracking()
+            .Where(record => record.TaskId == taskId)
+            .ToListAsync();
         if (records.Count == 0)
         {
             return records;
         }
 
         var conversationIds = records.Select(record => record.ConversationId).Distinct().ToArray();
-        var ownedConversationIds = await _contextRepository
-            .Queryable.Where(conversation =>
-                conversationIds.Contains(conversation.Id) && conversation.CreateBy == ownerUserId
-            )
+        var ownedConversationIds = await _dbContext
+            .ProjectConversations.AsNoTracking()
+            .Where(conversation => conversationIds.Contains(conversation.Id) && conversation.CreateBy == ownerUserId)
             .Select(conversation => conversation.Id)
             .ToHashSetAsync()
             .ConfigureAwait(false);

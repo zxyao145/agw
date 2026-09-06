@@ -92,7 +92,7 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
             throw new AgwException(ErrorCodes.InvalidParam, "executionId is required.");
         }
 
-        // 先完成 PostgreSQL 鉴权，再启动由协调器自行创建 DbContext scope 的后台 pump。
+        // 先完成 PostgreSQL 鉴权，再启动由协调器自行创建持久化 scope 的后台 pump。
         var status = await _coordinator.GetStatusAsync(executionId, _userId, cancellationToken).ConfigureAwait(false);
         await StopSubscriptionAsync().ConfigureAwait(false);
         await SendTurnStateAsync(status, cancellationToken).ConfigureAwait(false);

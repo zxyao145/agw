@@ -1,7 +1,7 @@
 using Agw.Auth.Contracts;
+using Agw.Projects.Application.Persistence;
 using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,21 +11,18 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
 {
     private readonly TaskExecutionAppService _taskService;
     private readonly ITaskAppService _taskResolver;
-    private readonly IRepository<ProjectConversation> _conversationRepository;
-    private readonly IRepository<ProjectConversationChatHistory> _historyRepository;
+    private readonly IProjectsDbContext _dbContext;
     private readonly IUserInfoService _userInfoService;
 
     public ProjectTaskFacade(
         TaskExecutionAppService taskService,
-        IRepository<ProjectConversation> conversationRepository,
-        IRepository<ProjectConversationChatHistory> historyRepository,
+        IProjectsDbContext dbContext,
         ITaskAppService taskResolver,
         IUserInfoService userInfoService
     )
     {
         _taskService = taskService;
-        _conversationRepository = conversationRepository;
-        _historyRepository = historyRepository;
+        _dbContext = dbContext;
         _taskResolver = taskResolver;
         _userInfoService = userInfoService;
     }
@@ -137,14 +134,14 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
 
         var ids = taskIds.ToHashSet();
         var ownerUserId = ResolveOwnerUserId();
-        var histories = await _historyRepository
-            .Queryable.AsNoTracking()
+        var histories = await _dbContext
+            .ProjectConversationChatHistories.AsNoTracking()
             .Where(record => ids.Contains(record.TaskId))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         var conversationIds = histories.Select(record => record.ConversationId).ToHashSet();
-        var conversations = await _conversationRepository
-            .Queryable.AsNoTracking()
+        var conversations = await _dbContext
+            .ProjectConversations.AsNoTracking()
             .Where(conversation => conversationIds.Contains(conversation.Id) && conversation.CreateBy == ownerUserId)
             .ToDictionaryAsync(conversation => conversation.Id, cancellationToken)
             .ConfigureAwait(false);

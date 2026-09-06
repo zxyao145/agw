@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
@@ -813,7 +814,7 @@ public sealed class DurableExecutionStoreTests : IDisposable
         public ServiceProvider CreateServiceProvider()
         {
             var services = new ServiceCollection();
-            services.AddScoped<DbContext>(_ => new AgwDbContext(_options));
+            services.AddScoped<IAgentsDbContext>(_ => new AgwDbContext(_options));
             return services.BuildServiceProvider();
         }
 

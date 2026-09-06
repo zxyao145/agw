@@ -1,6 +1,5 @@
 using System.Reflection;
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Repositories;
 using Agw.Projects.Controllers;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.AspNetCore.Mvc;
@@ -337,9 +336,8 @@ public class ProjectConversationsControllerTests
 
     private static ProjectConversationAppService CreateService(AgwDbContext dbContext)
     {
-        var projectRepository = new EfRepository<Project>(dbContext);
         var userInfo = new TestUserInfoService();
-        var projectResolver = new ProjectResolver(projectRepository, userInfo);
+        var projectResolver = new ProjectResolver(dbContext, userInfo);
 
         return new ProjectConversationAppService(
             dbContext,

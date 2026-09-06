@@ -20,6 +20,7 @@ using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Application.Persistence;
 using Agw.Providers.Application.Persistence;
 using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Contracts.Persistence;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Repositories;
@@ -104,7 +105,12 @@ public static class DependencyInjection
 
         // Register database seeder
         services.AddScoped<DbSeeder>();
-        services.AddScoped<IApiTokenStore, EfApiTokenStore>();
+        services.AddScoped<IDatabaseBootstrapper, DatabaseBootstrapper>();
+        services.AddScoped<EfApiTokenStore>();
+        services.AddScoped<IApiTokenStore>(serviceProvider => serviceProvider.GetRequiredService<EfApiTokenStore>());
+        services.AddScoped<ILegacyApiTokenImporter>(serviceProvider =>
+            serviceProvider.GetRequiredService<EfApiTokenStore>()
+        );
 
         services.AddScoped<DbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IAgentsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());

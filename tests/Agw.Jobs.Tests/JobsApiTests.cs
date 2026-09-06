@@ -8,6 +8,7 @@ using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Jobs.Api;
+using Agw.Jobs.Application.Persistence;
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
@@ -139,6 +140,9 @@ public class JobsApiTests : IDisposable
                 options.UseSqlite(connection).UseSnakeCaseNamingConvention()
             );
             builder.Services.AddScoped<DbContext>(serviceProvider =>
+                serviceProvider.GetRequiredService<AgwDbContext>()
+            );
+            builder.Services.AddScoped<IJobsDbContext>(serviceProvider =>
                 serviceProvider.GetRequiredService<AgwDbContext>()
             );
             builder.Services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));

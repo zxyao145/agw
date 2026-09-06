@@ -1,7 +1,6 @@
 using Agw.Auth.Contracts;
+using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Services;
-using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Bens.Results;
 using Microsoft.EntityFrameworkCore;
@@ -10,22 +9,19 @@ namespace Agw.Projects.Application;
 
 public class TaskAppService : ITaskAppService
 {
-    private readonly IRepository<ProjectConversation> _contextRepository;
-    private readonly IRepository<ProjectConversationChatHistory> _recordRepository;
+    private readonly IProjectsDbContext _dbContext;
     private readonly ProjectResolver _projectResolver;
     private readonly TaskExecutionAppService _taskExecutionAppService;
     private readonly IUserInfoService _userInfoService;
 
     public TaskAppService(
-        IRepository<ProjectConversation> contextRepository,
-        IRepository<ProjectConversationChatHistory> recordRepository,
+        IProjectsDbContext dbContext,
         ProjectResolver projectResolver,
         TaskExecutionAppService taskExecutionAppService,
         IUserInfoService userInfoService
     )
     {
-        _contextRepository = contextRepository;
-        _recordRepository = recordRepository;
+        _dbContext = dbContext;
         _projectResolver = projectResolver;
         _taskExecutionAppService = taskExecutionAppService;
         _userInfoService = userInfoService;
@@ -100,7 +96,7 @@ public class TaskAppService : ITaskAppService
             {
                 return false;
             }
-            var existInProject = await _recordRepository.Queryable.AnyAsync(
+            var existInProject = await _dbContext.ProjectConversationChatHistories.AnyAsync(
                 r =>
                     r.TaskId == taskId
                     && r.ProjectConversation != null
@@ -256,9 +252,12 @@ public class TaskAppService : ITaskAppService
     )
     {
         var normalizedContextId = ContextIdUtil.NormalizeContextId(contextId);
-        var conversation = await _contextRepository.SingleOrDefaultAsync(item =>
-            item.Id == conversationId && item.ProjectId == projectId && item.CreateBy == ownerUserId
-        );
+        var conversation = await _dbContext
+            .ProjectConversations.AsNoTracking()
+            .SingleOrDefaultAsync(
+                item => item.Id == conversationId && item.ProjectId == projectId && item.CreateBy == ownerUserId,
+                cancellationToken
+            );
         if (
             conversation == null
             || !string.Equals(
@@ -271,7 +270,10 @@ public class TaskAppService : ITaskAppService
             return null;
         }
 
-        var records = await _recordRepository.ListAsync(record => record.ConversationId == conversation.Id);
+        var records = await _dbContext
+            .ProjectConversationChatHistories.AsNoTracking()
+            .Where(record => record.ConversationId == conversation.Id)
+            .ToListAsync(cancellationToken);
         if (records.Count == 0)
         {
             return null;

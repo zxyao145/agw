@@ -52,10 +52,8 @@ public class SkillAppServicePersistenceTests
             await context.Database.EnsureCreatedAsync(cancellationToken);
             var remote = new RemoteClient();
             var service = new SkillAppService(
-                new EfRepository<Skill>(context),
-                new TestAgentReferenceFacade(new EfRepository<AgentSkillRelation>(context), context),
-                new EfRepository<RemoteSkillCache>(context),
                 context,
+                new TestAgentReferenceFacade(new EfRepository<AgentSkillRelation>(context), context),
                 paths,
                 NullLogger<SkillAppService>.Instance,
                 remote,
@@ -151,8 +149,6 @@ public class SkillAppServicePersistenceTests
     public async Task CreateAsync_BuiltInSkill_RejectsBeforePersistence()
     {
         var service = new SkillAppService(
-            null!,
-            null!,
             null!,
             null!,
             null!,

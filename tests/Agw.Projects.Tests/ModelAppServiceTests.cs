@@ -1,6 +1,5 @@
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
-using Agw.Infrastructure.Repositories;
 using Agw.Providers.Application;
 using Agw.Providers.Contracts.Manager;
 using Agw.Shared.Data.Entities.Providers;
@@ -81,6 +80,5 @@ public sealed class ModelAppServiceTests
         Assert.Equal(64_000, persisted.MaxOutputTokens);
     }
 
-    private static ModelAppService CreateService(AgwDbContext dbContext) =>
-        new(new EfRepository<AgwAiModel>(dbContext), dbContext, new TestUserInfoService());
+    private static ModelAppService CreateService(AgwDbContext dbContext) => new(dbContext, new TestUserInfoService());
 }

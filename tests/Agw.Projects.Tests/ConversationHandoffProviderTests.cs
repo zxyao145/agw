@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Repositories;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.Data.Sqlite;
@@ -393,8 +392,7 @@ public class ConversationHandoffProviderTests
         );
     }
 
-    private static ConversationHandoffProvider CreateProvider(AgwDbContext dbContext) =>
-        new(new EfRepository<ProjectConversationChatHistory>(dbContext));
+    private static ConversationHandoffProvider CreateProvider(AgwDbContext dbContext) => new(dbContext);
 
     private static IDisposable PushTestUser() =>
         UserInfoUtil.Push(

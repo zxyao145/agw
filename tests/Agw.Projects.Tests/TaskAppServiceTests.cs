@@ -1,5 +1,5 @@
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Repositories;
+using Agw.Projects.Application.Persistence;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
@@ -437,25 +437,18 @@ public class TaskAppServiceTests
 
     private static TaskAppService CreateService(AgwDbContext dbContext, IUnitOfWork? unitOfWork = null)
     {
-        var projectRepository = new EfRepository<Project>(dbContext);
+        IProjectsDbContext persistence =
+            unitOfWork == null ? dbContext : new DelegatingProjectsDbContext(dbContext, unitOfWork);
         var userInfo = new TestUserInfoService();
-        var projectResolver = new ProjectResolver(projectRepository, userInfo);
+        var projectResolver = new ProjectResolver(persistence, userInfo);
         var taskExecutionAppService = new TaskExecutionAppService(
-            new EfRepository<ProjectConversation>(dbContext),
-            new EfRepository<ProjectConversationChatHistory>(dbContext),
-            unitOfWork ?? dbContext,
+            persistence,
             projectResolver,
             TimeProvider.System,
             userInfo
         );
 
-        return new TaskAppService(
-            new EfRepository<ProjectConversation>(dbContext),
-            new EfRepository<ProjectConversationChatHistory>(dbContext),
-            projectResolver,
-            taskExecutionAppService,
-            userInfo
-        );
+        return new TaskAppService(persistence, projectResolver, taskExecutionAppService, userInfo);
     }
 
     private static Project CreateProject(Guid projectId, string owner = "tester") =>
@@ -558,5 +551,30 @@ public class TaskAppServiceTests
             await SaveChangesAsync(cancellationToken) > 0;
 
         public void Dispose() { }
+    }
+
+    private sealed class DelegatingProjectsDbContext : IProjectsDbContext
+    {
+        private readonly AgwDbContext _dbContext;
+        private readonly IUnitOfWork _unitOfWork;
+
+        public DelegatingProjectsDbContext(AgwDbContext dbContext, IUnitOfWork unitOfWork)
+        {
+            _dbContext = dbContext;
+            _unitOfWork = unitOfWork;
+        }
+
+        public DbSet<Project> Projects => _dbContext.Projects;
+        public DbSet<ProjectSkillRelation> ProjectSkillRelations => _dbContext.ProjectSkillRelations;
+        public DbSet<ProjectMcpServerRelation> ProjectMcpToolServers => _dbContext.ProjectMcpToolServers;
+        public DbSet<ProjectConnectionRelation> ProjectConnectionRelations => _dbContext.ProjectConnectionRelations;
+        public DbSet<ProjectConversation> ProjectConversations => _dbContext.ProjectConversations;
+        public DbSet<ProjectConversationChatHistory> ProjectConversationChatHistories =>
+            _dbContext.ProjectConversationChatHistories;
+        public DbSet<TaskSessionBinding> TaskSessionBindings => _dbContext.TaskSessionBindings;
+        public DbSet<AgentUsage> AgentUsages => _dbContext.AgentUsages;
+
+        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) =>
+            _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 }

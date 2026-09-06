@@ -343,47 +343,7 @@ public sealed partial class BackendArchitectureTests
     // Preserve the original lexical counting rules, including comments, so a scanner change cannot claim debt repayment.
     // Values are (concrete context, generic repository); repaid files disappear instead of retaining reusable capacity.
     private static readonly IReadOnlyDictionary<string, (int DbContext, int Repository)> RawPersistenceAccessInventory =
-        new Dictionary<string, (int DbContext, int Repository)>(StringComparer.Ordinal)
-        {
-            ["Agw.Agents/Definitions/Agents/AgentflowTraceAppService.cs"] = (0, 2),
-            ["Agw.Agents/Definitions/Agents/McpToolServerAppService.cs"] = (0, 6),
-            ["Agw.Agents/Definitions/Facades/AgentCatalogFacade.cs"] = (0, 8),
-            ["Agw.Agents/Execution/Agentflows/AgentflowWorkflowFactory.cs"] = (0, 6),
-            ["Agw.Agents/Execution/Agentflows/Observability/AgentflowNodeExecutionTraceCollector.cs"] = (0, 1),
-            ["Agw.Agents/Execution/Durable/DurableExecutionCoordinator.cs"] = (1, 0),
-            ["Agw.Agents/Execution/Durable/DurableExecutionSession.cs"] = (1, 0),
-            ["Agw.Agents/Execution/Durable/DurableExecutionStore.cs"] = (3, 0),
-            ["Agw.Agents/Execution/Durable/PostgresExecutionEventStream.cs"] = (4, 0),
-            ["Agw.Integrations/Application/Capabilities/ConnectionCapabilityResolver.cs"] = (0, 4),
-            ["Agw.Integrations/Application/Credentials/ConnectionCredentialReader.cs"] = (0, 4),
-            ["Agw.Integrations/Application/Management/ConnectionAppService.cs"] = (0, 4),
-            ["Agw.Integrations/Application/Management/CredentialMutationService.cs"] = (0, 4),
-            ["Agw.Integrations/Application/Management/PluginCatalogAppService.cs"] = (0, 2),
-            ["Agw.Integrations/Application/Management/PluginInstallationAppService.cs"] = (0, 4),
-            ["Agw.Integrations/Application/OAuth/OAuthAuthorizationAppService.cs"] = (0, 6),
-            ["Agw.Jobs/Application/Facades/JobMetricsFacade.cs"] = (0, 2),
-            ["Agw.Jobs/Application/Services/JobAppService.cs"] = (0, 4),
-            ["Agw.Jobs/Scheduling/Attempts/JobAttemptOutcomeRecorder.cs"] = (0, 4),
-            ["Agw.Jobs/Scheduling/Coordination/DurableJobRecoveryHostedService.cs"] = (0, 2),
-            ["Agw.Projects/Application/Facades/ExternalTaskSnapshotStore.cs"] = (0, 6),
-            ["Agw.Projects/Application/Facades/ProjectMetricsFacade.cs"] = (0, 8),
-            ["Agw.Projects/Application/Facades/ProjectTaskFacade.cs"] = (0, 4),
-            ["Agw.Projects/Application/ProjectResolver.cs"] = (0, 2),
-            ["Agw.Projects/Application/TaskAppService.cs"] = (0, 4),
-            ["Agw.Projects/Application/TaskExecutionAppService.cs"] = (0, 4),
-            ["Agw.Projects/Application/TaskSessionBindingService.cs"] = (0, 4),
-            ["Agw.Projects/Infrastructure/AgentUsageRecorder.cs"] = (1, 0),
-            ["Agw.Projects/Infrastructure/ConversationHandoffProvider.cs"] = (0, 2),
-            ["Agw.Projects/Infrastructure/EfCoreChatHistoryProvider.cs"] = (3, 0),
-            ["Agw.Providers/Application/ModelAppService.cs"] = (0, 2),
-            ["Agw.Providers/Application/ModelProviderAppService.cs"] = (0, 6),
-            ["Agw.Providers/Application/ProviderAppService.cs"] = (0, 6),
-            ["Agw.Setup/Services/LegacyApiTokenMigrator.cs"] = (2, 0),
-            ["Agw.Setup/Services/SetupInitializationService.cs"] = (2, 0),
-            ["Agw.Skills/Application/Remote/RemoteSkillContentResolver.cs"] = (0, 4),
-            ["Agw.Skills/Application/SkillAppService.cs"] = (0, 4),
-            ["Agw.Tools/Application/UserMemoryAppService.cs"] = (0, 2),
-        };
+        new Dictionary<string, (int DbContext, int Repository)>(StringComparer.Ordinal);
 
     [GeneratedRegex(@"\[Table\([^\]]+\)\][\s\S]*?\bclass\s+(?<entity>[A-Za-z_][A-Za-z0-9_]*)\b")]
     private static partial Regex TableEntityClassRegex();
