@@ -8,13 +8,16 @@ public sealed class AgentflowWorkflowLease : IAsyncDisposable
 {
     private readonly AgentResourceLease _resources;
 
-    internal AgentflowWorkflowLease(Workflow workflow, AgentResourceLease resources)
+    internal AgentflowWorkflowLease(Workflow workflow, AgentResourceLease resources, AgentflowWorkflowMetadata metadata)
     {
         Workflow = workflow;
         _resources = resources;
+        Metadata = metadata;
     }
 
     public Workflow Workflow { get; }
+
+    internal AgentflowWorkflowMetadata Metadata { get; }
 
     public ValueTask DisposeAsync()
     {

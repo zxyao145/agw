@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Globalization;
+using Agw.Agents.Application.Persistence;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
@@ -20,7 +21,7 @@ internal sealed class PostgresExecutionEventStream : IExecutionEventStream
     private readonly int _readBatchSize;
 
     /// <summary>
-    /// 创建按操作获取独立 DbContext scope 的 PostgreSQL 消息回放实现。
+    /// 创建按操作获取独立持久化 scope 的 PostgreSQL 消息回放实现。
     /// </summary>
     public PostgresExecutionEventStream(IServiceScopeFactory scopeFactory, IOptions<ExecutionRuntimeOptions> options)
     {
@@ -53,19 +54,17 @@ internal sealed class PostgresExecutionEventStream : IExecutionEventStream
         try
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
-            dbContext
-                .Set<DurableExecutionEventRecord>()
-                .Add(
-                    new DurableExecutionEventRecord
-                    {
-                        Id = Guid.CreateVersion7(),
-                        ExecutionId = executionId,
-                        SegmentIndex = segmentIndex,
-                        Sequence = sequence,
-                        PayloadJson = payload,
-                    }
-                );
+            var dbContext = scope.ServiceProvider.GetRequiredService<IAgentsDbContext>();
+            dbContext.DurableExecutionEvents.Add(
+                new DurableExecutionEventRecord
+                {
+                    Id = Guid.CreateVersion7(),
+                    ExecutionId = executionId,
+                    SegmentIndex = segmentIndex,
+                    Sequence = sequence,
+                    PayloadJson = payload,
+                }
+            );
             await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (DbUpdateException exception)
@@ -100,11 +99,8 @@ internal sealed class PostgresExecutionEventStream : IExecutionEventStream
         try
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
-            var query = dbContext
-                .Set<DurableExecutionEventRecord>()
-                .AsNoTracking()
-                .Where(item => item.ExecutionId == executionId);
+            var dbContext = scope.ServiceProvider.GetRequiredService<IAgentsDbContext>();
+            var query = dbContext.DurableExecutionEvents.AsNoTracking().Where(item => item.ExecutionId == executionId);
             if (cursor.SegmentIndex >= 0)
             {
                 query = cursor.Sequence.HasValue
@@ -164,10 +160,9 @@ internal sealed class PostgresExecutionEventStream : IExecutionEventStream
         try
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
+            var dbContext = scope.ServiceProvider.GetRequiredService<IAgentsDbContext>();
             return await dbContext
-                .Set<DurableExecutionEventRecord>()
-                .AsNoTracking()
+                .DurableExecutionEvents.AsNoTracking()
                 .AnyAsync(
                     item =>
                         item.ExecutionId == executionId

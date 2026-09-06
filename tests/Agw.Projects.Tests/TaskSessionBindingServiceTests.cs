@@ -58,11 +58,10 @@ public class TaskSessionBindingServiceTests
 
         await using var dbContext = new AgwDbContext(options);
         var service = new TaskSessionBindingService(
-            new EfRepository<TaskSessionBinding>(dbContext),
-            new EfRepository<ProjectConversation>(dbContext),
             dbContext,
             TimeProvider.System,
-            new TestUserInfoService()
+            new TestUserInfoService(),
+            new TestAgentCatalogFacade(new EfRepository<Agw.Shared.Data.Entities.Agents.McpServer>(dbContext))
         );
 
         await service.UpsertAsync(
@@ -147,11 +146,10 @@ public class TaskSessionBindingServiceTests
 
         await using var dbContext = new AgwDbContext(options);
         var service = new TaskSessionBindingService(
-            new EfRepository<TaskSessionBinding>(dbContext),
-            new EfRepository<ProjectConversation>(dbContext),
             dbContext,
             TimeProvider.System,
-            new TestUserInfoService()
+            new TestUserInfoService(),
+            new TestAgentCatalogFacade(new EfRepository<Agw.Shared.Data.Entities.Agents.McpServer>(dbContext))
         );
 
         await service.UpsertAsync(
@@ -227,11 +225,12 @@ public class TaskSessionBindingServiceTests
                     await startGate.Task.WaitAsync(cancellationToken);
                     await using var dbContext = new AgwDbContext(options);
                     var service = new TaskSessionBindingService(
-                        new EfRepository<TaskSessionBinding>(dbContext),
-                        new EfRepository<ProjectConversation>(dbContext),
                         dbContext,
                         TimeProvider.System,
-                        new TestUserInfoService()
+                        new TestUserInfoService(),
+                        new TestAgentCatalogFacade(
+                            new EfRepository<Agw.Shared.Data.Entities.Agents.McpServer>(dbContext)
+                        )
                     );
 
                     return await service.UpsertAsync(

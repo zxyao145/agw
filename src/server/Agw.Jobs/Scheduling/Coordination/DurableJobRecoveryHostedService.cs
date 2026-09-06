@@ -1,9 +1,10 @@
 using Agw.Auth.Contracts;
+using Agw.Jobs.Application.Persistence;
 using Agw.Jobs.Execution;
 using Agw.Jobs.Scheduling.Attempts;
 using Agw.Shared.Data.Entities.Jobs;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -59,11 +60,14 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
     private async Task RecoverAsync(CancellationToken cancellationToken)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var jobRepository = scope.ServiceProvider.GetRequiredService<IRepository<Job>>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IJobsDbContext>();
         IReadOnlyList<Job> runningJobs;
         using (UserInfoUtil.PushSystemScope())
         {
-            runningJobs = await jobRepository.ListAsync(job => job.Status == JobStatus.Running);
+            runningJobs = await dbContext
+                .Jobs.AsNoTracking()
+                .Where(job => job.Status == JobStatus.Running)
+                .ToListAsync();
         }
         await Task.WhenAll(runningJobs.Select(job => RecoverJobAsync(job, cancellationToken)));
     }
@@ -72,11 +76,11 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
     {
         await using var projectLock = await _projectExecutionLock.AcquireAsync(job.ProjectId, cancellationToken);
         await using var scope = _scopeFactory.CreateAsyncScope();
-        var jobRepository = scope.ServiceProvider.GetRequiredService<IRepository<Job>>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IJobsDbContext>();
         Job? currentJob;
         using (UserInfoUtil.PushSystemScope())
         {
-            currentJob = await jobRepository.GetByIdAsync(job.Id);
+            currentJob = await dbContext.Jobs.SingleOrDefaultAsync(item => item.Id == job.Id, cancellationToken);
         }
         if (currentJob?.Status != JobStatus.Running)
         {

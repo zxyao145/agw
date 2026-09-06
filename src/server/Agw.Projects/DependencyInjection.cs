@@ -3,7 +3,6 @@ using Agw.Projects.Application.Facades;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Metrics;
 using Agw.Projects.Contracts.Runtime;
-using Agw.Projects.Domain.Services;
 using Agw.Projects.Infrastructure;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Configuration;
@@ -15,7 +14,6 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddProjects(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddScoped<ProjectDomainService>();
         services.AddScoped<ITaskAppService, TaskAppService>();
         services.AddScoped<IProjectAppService, ProjectAppService>();
         services.AddScoped<IProjectFileSystemConfigurationProvider, ProjectFileSystemConfigurationProvider>();
@@ -30,7 +28,6 @@ public static class DependencyInjection
         services.AddScoped<IProjectMetricsFacade, ProjectMetricsFacade>();
         services.AddScoped<ProjectConversationAppService>();
         services.AddScoped<ProjectResolver>();
-        services.AddScoped<ProjectConversationChatHistoryDomainService>();
         services.AddScoped<IConversationHandoffProvider, ConversationHandoffProvider>();
 
         services.AddSingleton<EfCoreChatHistoryProvider>();

@@ -1,7 +1,9 @@
 using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using System.Text.Json;
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agents.Store;
+using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
@@ -233,7 +235,7 @@ public class AgentSessionStateStoreTests
         await connection.OpenAsync(TestContext.Current.CancellationToken);
         var services = new ServiceCollection();
         services.AddDbContext<AgwDbContext>(options => options.UseSqlite(connection));
-        services.AddScoped<DbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<IAgentSessionStatePersistence, AgentSessionStatePersistence>();
         await using var serviceProvider = services.BuildServiceProvider();
 
         var projectId = Guid.CreateVersion7();
@@ -332,6 +334,69 @@ public class AgentSessionStateStoreTests
             [string.Empty, "flow-a:concurrent", "flow-a:node-a"],
             entries.Select(entry => entry.AgentflowNodeId)
         );
+    }
+
+    [Fact]
+    public async Task SaveAsync_ForeignConversation_DoesNotPersistSessionState()
+    {
+        // Arrange
+        using var userScope = PushTestUser();
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        var services = new ServiceCollection();
+        services.AddDbContext<AgwDbContext>(options => options.UseSqlite(connection));
+        services.AddScoped<IAgentSessionStatePersistence, AgentSessionStatePersistence>();
+        await using var serviceProvider = services.BuildServiceProvider();
+        var projectId = Guid.CreateVersion7();
+        var projectConversationId = Guid.CreateVersion7();
+        var agentId = Guid.CreateVersion7();
+        await using (var serviceScope = serviceProvider.CreateAsyncScope())
+        {
+            var dbContext = serviceScope.ServiceProvider.GetRequiredService<AgwDbContext>();
+            await dbContext.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+            dbContext.Projects.Add(
+                new Project
+                {
+                    Id = projectId,
+                    Name = "foreign-project",
+                    CreateBy = "other-user",
+                }
+            );
+            dbContext.ProjectConversations.Add(
+                new ProjectConversation
+                {
+                    Id = projectConversationId,
+                    ProjectId = projectId,
+                    ContextId = "context-1",
+                    Title = "Foreign context",
+                    CreateBy = "other-user",
+                }
+            );
+            await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        var store = new AgentSessionStateStore(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            TimeProvider.System,
+            NullLogger<AgentSessionStateStore>.Instance
+        );
+        var aiAgent = new TestAIAgent();
+        var session = await aiAgent.CreateSessionAsync(TestContext.Current.CancellationToken);
+
+        // Act
+        await store.SaveAsync(
+            AgentType.System,
+            new AgentSessionStateScope(projectConversationId, projectId, "context-1", agentId),
+            aiAgent,
+            session,
+            TestContext.Current.CancellationToken
+        );
+
+        // Assert
+        using var systemScope = UserInfoUtil.PushSystemScope();
+        await using var verificationScope = serviceProvider.CreateAsyncScope();
+        var verificationContext = verificationScope.ServiceProvider.GetRequiredService<AgwDbContext>();
+        Assert.Empty(await verificationContext.AgentSessionStates.ToListAsync(TestContext.Current.CancellationToken));
     }
 
     private static AgentSessionStateScope CreateScope() =>

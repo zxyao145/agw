@@ -32,7 +32,7 @@ public sealed class ApplicationLockRouter : IApplicationLock
         _providerFactory = providerFactory;
     }
 
-    public async Task<IAsyncDisposable> AcquireAsync(string resourceName, CancellationToken cancellationToken)
+    public async Task<IApplicationLockLease> AcquireAsync(string resourceName, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(resourceName);
 
@@ -46,9 +46,39 @@ public sealed class ApplicationLockRouter : IApplicationLock
             return await _inMemoryLock.AcquireAsync(resourceName, cancellationToken).ConfigureAwait(false);
         }
 
-        return await GetDistributedLockProvider(effectiveSettings.Provider!.Value, effectiveSettings.ConnectionString!)
+        var handle = await GetDistributedLockProvider(
+                effectiveSettings.Provider!.Value,
+                effectiveSettings.ConnectionString!
+            )
             .AcquireLockAsync($"agw:application:{resourceName}", cancellationToken: cancellationToken)
             .ConfigureAwait(false);
+        return new DistributedLease(handle);
+    }
+
+    private sealed class DistributedLease : IApplicationLockLease
+    {
+        private readonly IDistributedSynchronizationHandle _handle;
+
+        public DistributedLease(IDistributedSynchronizationHandle handle)
+        {
+            _handle = handle;
+        }
+
+        public CancellationToken HandleLostToken => _handle.HandleLostToken;
+
+        public async ValueTask DisposeAsync()
+        {
+            var lost = _handle.HandleLostToken.IsCancellationRequested;
+            try
+            {
+                await _handle.DisposeAsync().ConfigureAwait(false);
+            }
+            catch (Exception exception)
+                when (lost && exception is System.Data.Common.DbException or InvalidOperationException)
+            {
+                // The owning database connection is gone; its locks have already been released.
+            }
+        }
     }
 
     private IDistributedLockProvider GetDistributedLockProvider(

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Agw.Infrastructure.Data;
+using Agw.Projects.Application.Persistence;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -161,7 +162,7 @@ public class AgentUsageRecorderTests : IDisposable
     private static ServiceProvider CreateServiceProvider(DbContextOptions<AgwDbContext> options)
     {
         var services = new ServiceCollection();
-        services.AddScoped<DbContext>(_ => new AgwDbContext(options));
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
         return services.BuildServiceProvider();
     }
 

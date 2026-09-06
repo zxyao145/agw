@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
-using Agw.Domain.Services.Skills;
+using Agw.Auth.Contracts;
+using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
@@ -9,6 +10,8 @@ using Agw.Skills.Application;
 using Agw.Skills.Application.Remote;
 using Agw.Testing;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace Agw.Skills.Tests;
@@ -42,9 +45,7 @@ public class SkillAppServiceRemoteTests
         Assert.Equal(SkillKind.Remote, result.Skill.Kind);
         Assert.Equal(string.Empty, result.Skill.ContentPath);
         Assert.Equal("https://example.com/skills/expense-report", result.Skill.RemoteUrl);
-        Assert.Equal("remote-admin", result.Skill.CreateBy);
-        Assert.Equal(UtcNow, result.Skill.CreateTime);
-        var cache = Assert.Single(fixture.CacheRepository.Items);
+        var cache = Assert.Single(fixture.Context.RemoteSkillCaches.AsNoTracking());
         Assert.Equal(result.Skill.Id, cache.SkillId);
         Assert.Equal(result.Skill.RemoteUrl, cache.SourceUrl);
         Assert.Equal(UtcNow, cache.FetchedAt);
@@ -94,8 +95,8 @@ public class SkillAppServiceRemoteTests
         );
 
         Assert.Equal(ErrorCodes.RemoteSkillArchiveNotAllowed.Code, exception.Code);
-        Assert.Empty(fixture.SkillRepository.Items);
-        Assert.Empty(fixture.CacheRepository.Items);
+        Assert.Empty(fixture.Context.Skills.AsNoTracking());
+        Assert.Empty(fixture.Context.RemoteSkillCaches.AsNoTracking());
     }
 
     [Fact]
@@ -159,13 +160,14 @@ public class SkillAppServiceRemoteTests
         Assert.Equal("Updated description", result.Skill.Description);
         Assert.Equal("https://new.example.com/skill", result.Skill.RemoteUrl);
         Assert.Equal(SkillKind.Remote, result.Skill.Kind);
-        Assert.Equal("remote-admin", result.Skill.UpdateBy);
-        Assert.Equal(UtcNow, result.Skill.UpdateTime);
         Assert.Equal(1, fixture.RefreshLock.AcquireCount);
-        Assert.Equal(result.Skill.RemoteUrl, cache.SourceUrl);
+        var persistedCache = await fixture
+            .Context.RemoteSkillCaches.AsNoTracking()
+            .SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(result.Skill.RemoteUrl, persistedCache.SourceUrl);
         Assert.Equal(
             "updated instructions",
-            RemoteSkillDefinitionSerializer.Deserialize(cache.ContentJson)?.Instructions
+            RemoteSkillDefinitionSerializer.Deserialize(persistedCache.ContentJson)?.Instructions
         );
     }
 
@@ -222,8 +224,8 @@ public class SkillAppServiceRemoteTests
         var deleted = await fixture.Service.DeleteAsync(skill.Id, TestContext.Current.CancellationToken);
 
         Assert.True(deleted);
-        Assert.Empty(fixture.SkillRepository.Items);
-        Assert.Empty(fixture.CacheRepository.Items);
+        Assert.Empty(fixture.Context.Skills.AsNoTracking());
+        Assert.Empty(fixture.Context.RemoteSkillCaches.AsNoTracking());
         Assert.Equal(1, fixture.RefreshLock.AcquireCount);
     }
 
@@ -235,6 +237,8 @@ public class SkillAppServiceRemoteTests
     private sealed class TestFixture : IAsyncDisposable
     {
         private readonly string _root;
+        private readonly SqliteConnection _connection;
+        private readonly IDisposable _systemScope;
 
         public TestFixture(
             RemoteSkillDefinition definition,
@@ -242,6 +246,7 @@ public class SkillAppServiceRemoteTests
             IEnumerable<RemoteSkillCache>? caches = null
         )
         {
+            _systemScope = UserInfoUtil.PushSystemScope();
             _root = Path.Combine(Path.GetTempPath(), $"agw-remote-skill-service-{Guid.CreateVersion7():N}");
             var dataPaths = AgwDataPaths.Resolve(_root, "/unused");
             dataPaths.EnsureCreated();
@@ -250,17 +255,24 @@ public class SkillAppServiceRemoteTests
             {
                 skill.CreateBy ??= "remote-admin";
             }
-            SkillRepository = new TestRepository<Skill>(ownedSkills, entity => entity.Id);
-            CacheRepository = new TestRepository<RemoteSkillCache>(caches ?? [], entity => entity.SkillId);
+            _connection = new SqliteConnection("Data Source=:memory:");
+            _connection.Open();
+            var options = new DbContextOptionsBuilder<AgwDbContext>()
+                .UseSqlite(_connection)
+                .UseSnakeCaseNamingConvention()
+                .Options;
+            Context = new AgwDbContext(options);
+            Context.Database.EnsureCreated();
+            Context.Skills.AddRange(ownedSkills);
+            Context.RemoteSkillCaches.AddRange(caches ?? []);
+            Context.SaveChanges();
+            Context.ChangeTracker.Clear();
             RefreshLock = new TestRemoteSkillRefreshLock();
             Logger = new TestLogger<SkillAppService>();
             var unitOfWork = new TestUnitOfWork();
             Service = new SkillAppService(
-                SkillRepository,
+                Context,
                 new TestAgentReferenceFacade(new TestRepository<AgentSkillRelation>([], _ => Guid.Empty), unitOfWork),
-                CacheRepository,
-                unitOfWork,
-                new SkillDomainService(new TestTimeProvider(UtcNow)),
                 dataPaths,
                 Logger,
                 new TestRemoteSkillClient(definition),
@@ -272,18 +284,18 @@ public class SkillAppServiceRemoteTests
 
         public SkillAppService Service { get; }
 
-        public TestRepository<Skill> SkillRepository { get; }
-
-        public TestRepository<RemoteSkillCache> CacheRepository { get; }
+        public AgwDbContext Context { get; }
 
         public TestRemoteSkillRefreshLock RefreshLock { get; }
 
         public TestLogger<SkillAppService> Logger { get; }
 
-        public ValueTask DisposeAsync()
+        public async ValueTask DisposeAsync()
         {
+            await Context.DisposeAsync();
+            await _connection.DisposeAsync();
+            _systemScope.Dispose();
             Directory.Delete(_root, recursive: true);
-            return ValueTask.CompletedTask;
         }
     }
 

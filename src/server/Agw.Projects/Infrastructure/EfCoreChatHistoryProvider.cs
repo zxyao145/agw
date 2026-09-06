@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Agw.Auth.Contracts;
+using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Services;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
@@ -136,11 +137,10 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
         var state = _state.GetOrInitializeState(context.Session);
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IProjectsDbContext>();
 
         var projectConversation = await dbContext
-            .Set<ProjectConversation>()
-            .AsNoTracking()
+            .ProjectConversations.AsNoTracking()
             .SingleOrDefaultAsync(
                 context => context.ProjectId == state.ProjectId && context.ContextId == state.ContextId,
                 cancellationToken
@@ -152,8 +152,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         }
 
         var records = await dbContext
-            .Set<ProjectConversationChatHistory>()
-            .AsNoTracking()
+            .ProjectConversationChatHistories.AsNoTracking()
             .Where(record => record.ConversationId == projectConversation.Id && record.ConversationPayload != null)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -227,7 +226,15 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             return;
         }
 
-        await AppendAsync(state.ProjectId, state.ContextId, newMessages, state.HistoryScope, cancellationToken)
+        await AppendAsync(
+                state.ProjectId,
+                state.ContextId,
+                newMessages,
+                state.HistoryScope,
+                cancellationToken,
+                state.Generation,
+                state.IsExecutionBound
+            )
             .ConfigureAwait(false);
     }
 
@@ -241,7 +248,16 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         CancellationToken cancellationToken = default
     )
     {
-        await AppendAsync(projectId, contextId, messages, historyScope: null, cancellationToken).ConfigureAwait(false);
+        await AppendAsync(
+                projectId,
+                contextId,
+                messages,
+                historyScope: null,
+                cancellationToken,
+                ConversationSessionContext.GetGeneration(projectId, contextId),
+                ConversationSessionContext.IsBound(projectId, contextId)
+            )
+            .ConfigureAwait(false);
     }
 
     private async Task AppendAsync(
@@ -249,7 +265,9 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         string contextId,
         IReadOnlyList<ChatMessage> messages,
         string? historyScope,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        int expectedGeneration,
+        bool isExecutionBound
     )
     {
         ArgumentNullException.ThrowIfNull(messages);
@@ -266,12 +284,15 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
         contextId = ContextIdUtil.NormalizeContextId(contextId);
 
+        await using var lifecycleLease = await _applicationLock
+            .AcquireAsync(ProjectLifecycleLock.GetResourceName(projectId), cancellationToken)
+            .ConfigureAwait(false);
         await using var mutationLease = await _applicationLock
             .AcquireAsync($"conversation-history:{projectId:D}:{contextId}", cancellationToken)
             .ConfigureAwait(false);
 
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IProjectsDbContext>();
 
         if (!UserInfoUtil.IsContextActive)
         {
@@ -281,8 +302,10 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         var ownerUserId = UserInfoUtil.RequiredUserId;
         if (
             !await dbContext
-                .Set<Project>()
-                .AnyAsync(project => project.Id == projectId && project.CreateBy == ownerUserId, cancellationToken)
+                .Projects.AnyAsync(
+                    project => project.Id == projectId && project.CreateBy == ownerUserId,
+                    cancellationToken
+                )
                 .ConfigureAwait(false)
         )
         {
@@ -294,14 +317,15 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             persistableMessages.FirstOrDefault(message => message.Role == ChatRole.User)
         );
         var projectConversation = await dbContext
-            .Set<ProjectConversation>()
-            .SingleOrDefaultAsync(x => x.ProjectId == projectId && x.ContextId == contextId, cancellationToken)
+            .ProjectConversations.SingleOrDefaultAsync(
+                x => x.ProjectId == projectId && x.ContextId == contextId,
+                cancellationToken
+            )
             .ConfigureAwait(false);
         if (projectConversation == null && Guid.TryParse(contextId, out _))
         {
             projectConversation = await dbContext
-                .Set<ProjectConversation>()
-                .Where(x => x.ProjectId == projectId && x.ContextId.ToLower() == contextId)
+                .ProjectConversations.Where(x => x.ProjectId == projectId && x.ContextId.ToLower() == contextId)
                 .FirstOrDefaultAsync(cancellationToken)
                 .ConfigureAwait(false);
             if (projectConversation != null)
@@ -312,6 +336,8 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
         if (projectConversation == null)
         {
+            if (isExecutionBound)
+                throw new AgwException(ErrorCodes.ResourceNotFound);
             projectConversation = new ProjectConversation
             {
                 Id = Guid.CreateVersion7(),
@@ -323,7 +349,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                 UpdateBy = ResolveCurrentUserId(),
                 UpdateTime = now,
             };
-            dbContext.Set<ProjectConversation>().Add(projectConversation);
+            dbContext.ProjectConversations.Add(projectConversation);
         }
         else
         {
@@ -344,8 +370,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
         var nextSequence =
             await dbContext
-                .Set<ProjectConversationChatHistory>()
-                .Where(x => x.ConversationId == projectConversation.Id)
+                .ProjectConversationChatHistories.Where(x => x.ConversationId == projectConversation.Id)
                 .Select(x => x.ConversationSequence)
                 .MaxAsync(cancellationToken)
                 .ConfigureAwait(false)
@@ -356,26 +381,26 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             // user input
             nextSequence++;
 
-            dbContext
-                .Set<ProjectConversationChatHistory>()
-                .Add(
-                    new ProjectConversationChatHistory
-                    {
-                        Id = Guid.CreateVersion7(),
-                        ConversationId = projectConversation.Id,
-                        TaskId = taskId,
-                        Status = TaskExecutionStatus.Succeeded,
-                        AgentName = message.AuthorName,
-                        ConversationSequence = nextSequence,
-                        ConversationPayload = JsonSerializer.Serialize(message, _jsonSerializerOptions),
-                        Metadata = CreateMetadata(message, historyScope),
-                        CreateTime = now,
-                        UpdateTime = now,
-                    }
-                );
+            dbContext.ProjectConversationChatHistories.Add(
+                new ProjectConversationChatHistory
+                {
+                    Id = Guid.CreateVersion7(),
+                    ConversationId = projectConversation.Id,
+                    TaskId = taskId,
+                    Status = TaskExecutionStatus.Succeeded,
+                    AgentName = message.AuthorName,
+                    ConversationSequence = nextSequence,
+                    ConversationPayload = JsonSerializer.Serialize(message, _jsonSerializerOptions),
+                    Metadata = CreateMetadata(message, historyScope),
+                    CreateTime = now,
+                    UpdateTime = now,
+                }
+            );
         }
 
-        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await dbContext
+            .SaveConversationChangesAsync(projectConversation.Id, expectedGeneration, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static bool IsResult(ChatMessage message) =>
@@ -592,7 +617,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
     }
 
     private static Task<Project?> ResolveProjectAsync(
-        DbContext dbContext,
+        IProjectsDbContext dbContext,
         string projectId,
         CancellationToken cancellationToken
     )
@@ -600,17 +625,13 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         var normalizedProjectId = projectId.Trim();
         if (Guid.TryParse(normalizedProjectId, out var projectGuid))
         {
-            return dbContext
-                .Set<Project>()
-                .SingleOrDefaultAsync(project => project.Id == projectGuid, cancellationToken);
+            return dbContext.Projects.SingleOrDefaultAsync(project => project.Id == projectGuid, cancellationToken);
         }
 
-        return dbContext
-            .Set<Project>()
-            .SingleOrDefaultAsync(
-                project => project.Name.ToLower() == normalizedProjectId.ToLower(),
-                cancellationToken
-            );
+        return dbContext.Projects.SingleOrDefaultAsync(
+            project => project.Name.ToLower() == normalizedProjectId.ToLower(),
+            cancellationToken
+        );
     }
 
     private static string? ExtractFirstText(ChatMessage? message)
@@ -672,6 +693,10 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
 
     public sealed record State
     {
+        public int Generation { get; init; }
+
+        public bool IsExecutionBound { get; init; }
+
         public string ContextId { get; init; }
 
         public Guid ProjectId { get; init; }
@@ -683,6 +708,8 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         public State(string contextId, Guid projectId, string? historyScope = null, string? nodeName = null)
         {
             ContextId = contextId;
+            Generation = ConversationSessionContext.GetGeneration(projectId, contextId);
+            IsExecutionBound = ConversationSessionContext.IsBound(projectId, contextId);
             ProjectId = projectId;
             HistoryScope = historyScope;
             NodeName = string.IsNullOrWhiteSpace(nodeName) ? null : nodeName.Trim();

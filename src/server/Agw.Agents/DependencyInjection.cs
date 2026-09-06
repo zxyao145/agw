@@ -1,6 +1,8 @@
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Contracts.Catalog;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Facades;
+using Agw.Agents.Definitions.Persistence;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agents;
@@ -60,12 +62,18 @@ public static class DependencyInjection
         services.AddSingleton<IAgentInstructionsSource, ProjectInstructionsSource>();
         services.AddScoped<AgentflowAppService>();
         services.AddScoped<AgentflowTraceAppService>();
+        services.AddScoped<AgentflowWorkflowFactory>();
+        services.AddScoped<IAgentflowDefinitionReader, AgentflowDefinitionReader>();
+        services.AddScoped<AgentflowExecutionContextFactory>();
+        services.AddScoped<AgentflowCheckpointSupport>();
+        services.AddScoped<DurableAgentflowSegmentRunner>();
+        services.AddScoped<InProcessAgentflowRunner>();
         services.AddScoped<AgentflowRuntimeService>();
-        services.AddScoped<IAgentflowRuntimeService, AgentflowRuntimeService>();
+        services.AddScoped<IAgentflowRuntimeService>(provider =>
+            provider.GetRequiredService<AgentflowRuntimeService>()
+        );
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton<AgentflowCheckpointStore>();
-        services.AddScoped<McpToolServerDomainService>();
-        services.AddScoped<AgentDomainService>();
         services.AddScoped<AgentAppService>();
         services.AddScoped<AgentCatalogFacade>();
         services.AddScoped<IAgentCatalogFacade>(provider => provider.GetRequiredService<AgentCatalogFacade>());
@@ -119,6 +127,9 @@ public static class DependencyInjection
             services.AddScoped<DurableExecutionStore>();
             services.AddScoped<DurableAgentSegmentRunner>();
             services.AddScoped<DurableExecutionSegmentExecutor>();
+            services.AddScoped<IDurableExecutionSegmentExecutor>(sp =>
+                sp.GetRequiredService<DurableExecutionSegmentExecutor>()
+            );
             AddExecutionEventStream(services, executionOptions);
             services.AddSingleton<DurableExecutionCoordinator>();
             services.AddSingleton<IDurableExecutionClient, DurableExecutionClient>();

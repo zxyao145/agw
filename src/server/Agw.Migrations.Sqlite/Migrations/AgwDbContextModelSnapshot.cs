@@ -798,9 +798,21 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("pending_interactions_json");
 
+                    b.Property<Guid?>("ProjectConversationId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_conversation_id");
+
+                    b.Property<Guid?>("ProjectId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("project_id");
+
                     b.Property<string>("ResponsesJson")
                         .HasColumnType("TEXT")
                         .HasColumnName("responses_json");
+
+                    b.Property<bool>("ScopeBackfilled")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("scope_backfilled");
 
                     b.Property<int>("SegmentIndex")
                         .HasColumnType("INTEGER")
@@ -838,6 +850,12 @@ namespace Agw.Migrations.Sqlite.Migrations
 
                     b.HasIndex("Status", "StateChangedAt")
                         .HasDatabaseName("ix_durable_execution_status_state_changed_at");
+
+                    b.HasIndex("ScopeBackfilled", "UserId", "Id")
+                        .HasDatabaseName("ix_durable_execution_scope_backfilled_user_id_id");
+
+                    b.HasIndex("UserId", "ProjectId", "ProjectConversationId", "Status")
+                        .HasDatabaseName("ix_durable_execution_user_id_project_id_project_conversation_id_status");
 
                     b.ToTable("durable_execution", (string)null);
                 });
@@ -1485,6 +1503,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                     b.Property<DateTimeOffset>("CreateTime")
                         .HasColumnType("TEXT")
                         .HasColumnName("create_time");
+
+                    b.Property<int>("Generation")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0)
+                        .HasColumnName("generation");
 
                     b.Property<Guid?>("JobId")
                         .HasColumnType("TEXT")

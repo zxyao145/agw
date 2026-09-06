@@ -1,13 +1,10 @@
 using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Repositories;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Attempts;
 using Agw.Projects.Application;
 using Agw.Projects.Application.Facades;
-using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Jobs;
-using Agw.Shared.Data.Entities.Projects;
 using Agw.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -56,33 +53,18 @@ public sealed class JobAttemptOutcomeRecorderTests
         dbContext.Jobs.Add(job);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        var jobRepository = new JobRepo(dbContext, new TestTimeProvider(FinishedAt));
-        var jobLogRepository = new EfRepository<JobLog>(dbContext);
-        var contextRepository = new EfRepository<ProjectConversation>(dbContext);
-        var historyRepository = new EfRepository<ProjectConversationChatHistory>(dbContext);
         var userInfo = new TestUserInfoService("owner");
-        var projectResolver = new ProjectResolver(new EfRepository<Project>(dbContext), userInfo);
+        var projectResolver = new ProjectResolver(dbContext, userInfo);
         var taskExecution = new TaskExecutionAppService(
-            contextRepository,
-            historyRepository,
             dbContext,
-            new ProjectConversationChatHistoryDomainService(),
             projectResolver,
             new TestTimeProvider(FinishedAt),
             userInfo
         );
-        var taskResolver = new TaskAppService(
-            contextRepository,
-            historyRepository,
-            projectResolver,
-            taskExecution,
-            userInfo
-        );
+        var taskResolver = new TaskAppService(dbContext, projectResolver, taskExecution, userInfo);
         var recorder = new JobAttemptOutcomeRecorder(
-            jobRepository,
-            jobLogRepository,
             dbContext,
-            new ProjectTaskFacade(taskExecution, contextRepository, historyRepository, taskResolver, userInfo),
+            new ProjectTaskFacade(taskExecution, dbContext, taskResolver, userInfo),
             new JobScheduleCalculator(),
             new TestTimeProvider(FinishedAt)
         );
@@ -155,10 +137,8 @@ public sealed class JobAttemptOutcomeRecorderTests
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var recorder = new JobAttemptOutcomeRecorder(
-            new JobRepo(dbContext, new TestTimeProvider(FinishedAt)),
-            new EfRepository<JobLog>(dbContext),
             dbContext,
-            projectTasks: null!,
+            null!,
             new JobScheduleCalculator(),
             new TestTimeProvider(FinishedAt)
         );

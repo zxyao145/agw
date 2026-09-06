@@ -1,27 +1,24 @@
 using Agw.Auth.Contracts;
+using Agw.Integrations.Application.Persistence;
 using Agw.Integrations.Contracts.Management;
 using Agw.Shared.Data.Entities.Integrations;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Integrations.Application.Management;
 
 public sealed class CredentialMutationService
 {
-    private readonly IRepository<PluginInstallationCredential> _installationCredentialRepository;
-    private readonly IRepository<ConnectionCredential> _connectionCredentialRepository;
+    private readonly IIntegrationsDbContext _dbContext;
     private readonly TimeProvider _timeProvider;
     private readonly IUserInfoService _userInfoService;
 
     public CredentialMutationService(
-        IRepository<PluginInstallationCredential> installationCredentialRepository,
-        IRepository<ConnectionCredential> connectionCredentialRepository,
+        IIntegrationsDbContext dbContext,
         TimeProvider timeProvider,
         IUserInfoService userInfoService
     )
     {
-        _installationCredentialRepository = installationCredentialRepository;
-        _connectionCredentialRepository = connectionCredentialRepository;
+        _dbContext = dbContext;
         _timeProvider = timeProvider;
         _userInfoService = userInfoService;
     }
@@ -47,7 +44,7 @@ public sealed class CredentialMutationService
                 case SecretUpdateAction.Clear:
                     if (existing != null)
                     {
-                        _installationCredentialRepository.Remove(existing);
+                        _dbContext.PluginInstallationCredentials.Remove(existing);
                         installation.Credentials.Remove(existing);
                     }
                     break;
@@ -63,7 +60,7 @@ public sealed class CredentialMutationService
                             CreateBy = user,
                             CreateTime = _timeProvider.GetUtcNow(),
                         };
-                        await _installationCredentialRepository.AddAsync(existing);
+                        await _dbContext.PluginInstallationCredentials.AddAsync(existing);
                     }
                     else
                     {
@@ -97,7 +94,7 @@ public sealed class CredentialMutationService
                 case SecretUpdateAction.Clear:
                     if (existing != null)
                     {
-                        _connectionCredentialRepository.Remove(existing);
+                        _dbContext.ConnectionCredentials.Remove(existing);
                         connection.Credentials.Remove(existing);
                     }
                     break;
@@ -113,7 +110,7 @@ public sealed class CredentialMutationService
                             CreateBy = user,
                             CreateTime = _timeProvider.GetUtcNow(),
                         };
-                        await _connectionCredentialRepository.AddAsync(existing);
+                        await _dbContext.ConnectionCredentials.AddAsync(existing);
                     }
                     else
                     {

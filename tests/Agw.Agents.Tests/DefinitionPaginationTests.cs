@@ -1,12 +1,10 @@
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Controllers;
 using Agw.Agents.Definitions.Facades;
-using Agw.Domain.Services.Skills;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Repositories;
 using Agw.Shared.Data.Abstractions;
-using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;
@@ -234,18 +232,8 @@ public class DefinitionPaginationTests
         await database.Context.SaveChangesAsync(cancellationToken);
 
         var service = new SkillAppService(
-            new EfRepository<Skill>(database.Context),
-            new AgentCatalogFacade(
-                new EfRepository<Agent>(database.Context),
-                new EfRepository<Agentflow>(database.Context),
-                new EfRepository<McpServer>(database.Context),
-                new EfRepository<AgentSkillRelation>(database.Context),
-                database.Context,
-                new TestUserInfoService()
-            ),
-            new EfRepository<RemoteSkillCache>(database.Context),
             database.Context,
-            new SkillDomainService(TimeProvider.System),
+            new AgentCatalogFacade(database.Context, new TestUserInfoService()),
             AgwDataPaths.Resolve(Path.Combine(Path.GetTempPath(), "agw-pagination-tests"), Path.GetTempPath()),
             NullLogger<SkillAppService>.Instance,
             new TestRemoteSkillClient(),
@@ -260,22 +248,226 @@ public class DefinitionPaginationTests
         Assert.Equal(new[] { agent.Id }, listed.AgentIds);
     }
 
+    [Fact]
+    public async Task CreateAndUpdateAgentAsync_ExternalAgent_PersistsOwnerAndRefreshesAudit()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var createdAt = new DateTimeOffset(2026, 9, 5, 1, 0, 0, TimeSpan.Zero);
+        var clock = new TestTimeProvider(createdAt);
+        var auditUser = new TestAuditUserIdProvider("tester");
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .AddInterceptors(
+                new EntityCreatorInterceptor(auditUser, clock),
+                new EntityModifierInterceptor(auditUser, clock)
+            )
+            .Options;
+        await using var context = new AgwDbContext(options);
+        await context.Database.EnsureCreatedAsync(cancellationToken);
+        var service = CreateAgentAppService(context);
+
+        // Act
+        var agent = await service.CreateAgentAsync(
+            new Agent
+            {
+                Type = AgentType.External,
+                Name = "",
+                DisplayName = "before",
+            },
+            [],
+            [],
+            []
+        );
+
+        // Assert
+        Assert.NotNull(agent);
+        Assert.NotEqual(Guid.Empty, agent.Id);
+        Assert.Equal(agent.Id.ToString(), agent.Name);
+        Assert.Equal("tester", agent.CreateBy);
+        Assert.Equal(createdAt, agent.CreateTime);
+
+        for (var update = 1; update <= 3; update++)
+        {
+            context.ChangeTracker.Clear();
+            var updatedAt = createdAt.AddMinutes(update);
+            clock.SetUtcNow(updatedAt);
+            // The third save changes no domain fields and must still refresh the root audit.
+            var valueVersion = Math.Min(update, 2);
+            var command = new AgentUpdateCommand(
+                $"name-{valueVersion}",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                "  {\"enabled\":true}  ",
+                new Dictionary<string, string> { [" KEY "] = $"{valueVersion}" },
+                null,
+                null,
+                [AgentUpdateField.DisplayName, AgentUpdateField.Extra, AgentUpdateField.EnvironmentVariables]
+            );
+
+            var updated = await service.UpdateAgentAsync(agent.Id, command);
+            Assert.NotNull(updated);
+            context.ChangeTracker.Clear();
+            var persisted = await context.Agents.SingleAsync(cancellationToken);
+
+            Assert.Equal($"name-{valueVersion}", persisted.DisplayName);
+            Assert.Equal(agent.Name, persisted.Name);
+            Assert.Equal("{\"enabled\":true}", persisted.Extra);
+            Assert.Equal($"{valueVersion}", persisted.EnvironmentVariables["KEY"]);
+            Assert.Equal("tester", persisted.CreateBy);
+            Assert.Equal(createdAt, persisted.CreateTime);
+            Assert.Equal("tester", persisted.UpdateBy);
+            Assert.Equal(updatedAt, persisted.UpdateTime);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateAgentAsync_TrackedBindings_ReconcilesKeysAndRefreshesAudit()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var createdAt = new DateTimeOffset(2026, 9, 6, 1, 0, 0, TimeSpan.Zero);
+        var clock = new TestTimeProvider(createdAt);
+        var auditUser = new TestAuditUserIdProvider("tester");
+        await using var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=True");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .AddInterceptors(
+                new EntityCreatorInterceptor(auditUser, clock),
+                new EntityModifierInterceptor(auditUser, clock)
+            )
+            .Options;
+        await using var context = new AgwDbContext(options);
+        await context.Database.EnsureCreatedAsync(cancellationToken);
+        var service = CreateAgentAppService(context);
+        var servers = new[]
+        {
+            new McpServer { Name = "first" },
+            new McpServer { Name = "second" },
+        };
+        var skills = new[]
+        {
+            new Skill { Name = "first" },
+            new Skill { Name = "second" },
+        };
+        var connections = new[]
+        {
+            new Connection { Alias = "first" },
+            new Connection { Alias = "second" },
+        };
+        var model = new AgwAiModel { Id = Guid.CreateVersion7(), Name = "model" };
+        var provider = new Provider { Id = Guid.CreateVersion7(), Name = "provider" };
+        var modelProvider = new ModelProviderRelation
+        {
+            Id = Guid.CreateVersion7(),
+            ModelId = model.Id,
+            ProviderId = provider.Id,
+        };
+        context.AddRange(model, provider, modelProvider);
+        context.McpToolServers.AddRange(servers);
+        context.Skills.AddRange(skills);
+        context.Connections.AddRange(connections);
+        await context.SaveChangesAsync(cancellationToken);
+        var agent = await service.CreateAgentAsync(
+            new Agent
+            {
+                Name = "system",
+                DisplayName = "System",
+                Type = AgentType.System,
+                ModelProviderId = modelProvider.Id,
+            },
+            [servers[0].Id],
+            [skills[0].Id],
+            [connections[0].Id]
+        );
+        Assert.NotNull(agent);
+        var originalMcp = await context.AgentMcpToolServers.SingleAsync(cancellationToken);
+        var originalSkill = await context.AgentSkillRelations.SingleAsync(cancellationToken);
+        var originalConnection = await context.AgentConnectionRelations.SingleAsync(cancellationToken);
+
+        for (var update = 1; update <= 3; update++)
+        {
+            // Act: retain + add, remove the old keys, then repeat without any field changes.
+            clock.SetUtcNow(createdAt.AddMinutes(update));
+            var keepBoth = update == 1;
+            var command = new AgentUpdateCommand(
+                "System",
+                "",
+                "",
+                modelProvider.Id,
+                null,
+                keepBoth ? [servers[0].Id, servers[1].Id] : [servers[1].Id],
+                keepBoth ? [skills[0].Id, skills[1].Id] : [skills[1].Id],
+                keepBoth ? [connections[0].Id, connections[1].Id] : [connections[1].Id],
+                null,
+                null,
+                false,
+                null,
+                [
+                    AgentUpdateField.DisplayName,
+                    AgentUpdateField.Description,
+                    AgentUpdateField.SystemPrompt,
+                    AgentUpdateField.ModelProviderId,
+                    AgentUpdateField.ConnectionIds,
+                ]
+            );
+            Assert.NotNull(await service.UpdateAgentAsync(agent.Id, command));
+
+            // Assert
+            var mcps = await context.AgentMcpToolServers.ToListAsync(cancellationToken);
+            var skillLinks = await context.AgentSkillRelations.ToListAsync(cancellationToken);
+            var connectionLinks = await context.AgentConnectionRelations.ToListAsync(cancellationToken);
+            Assert.Equal(keepBoth ? 2 : 1, mcps.Count);
+            Assert.Equal(keepBoth ? 2 : 1, skillLinks.Count);
+            Assert.Equal(keepBoth ? 2 : 1, connectionLinks.Count);
+            Assert.Contains(mcps, link => link.McpToolServerId == servers[1].Id);
+            Assert.Contains(skillLinks, link => link.SkillId == skills[1].Id);
+            Assert.Contains(connectionLinks, link => link.ConnectionId == connections[1].Id);
+            if (keepBoth)
+            {
+                Assert.Same(originalMcp, mcps.Single(link => link.McpToolServerId == servers[0].Id));
+                Assert.Same(originalSkill, skillLinks.Single(link => link.SkillId == skills[0].Id));
+                Assert.Same(originalConnection, connectionLinks.Single(link => link.ConnectionId == connections[0].Id));
+            }
+            var persisted = await context.Agents.AsNoTracking().SingleAsync(cancellationToken);
+            Assert.Equal("tester", persisted.CreateBy);
+            Assert.Equal(createdAt, persisted.CreateTime);
+            Assert.Equal("tester", persisted.UpdateBy);
+            Assert.Equal(clock.GetUtcNow(), persisted.UpdateTime);
+        }
+    }
+
     private static AgentAppService CreateAgentAppService(AgwDbContext dbContext)
     {
+        var connectionRepository = new EfRepository<Connection>(dbContext);
+        var modelProviderRepository = new EfRepository<ModelProviderRelation>(dbContext);
+        var modelRepository = new EfRepository<AgwAiModel>(dbContext);
+        var providerRepository = new EfRepository<Provider>(dbContext);
+        var skillRepository = new EfRepository<Skill>(dbContext);
+        var userInfo = new TestUserInfoService();
         return new AgentAppService(
-            new EfRepository<Agent>(dbContext),
-            new EfRepository<AgentConnectionRelation>(dbContext),
-            new EfRepository<Connection>(dbContext),
-            new EfRepository<ModelProviderRelation>(dbContext),
-            new EfRepository<AgwAiModel>(dbContext),
-            new EfRepository<Provider>(dbContext),
-            new EfRepository<McpServer>(dbContext),
-            new EfRepository<AgentMcpServerRelation>(dbContext),
-            new EfRepository<Skill>(dbContext),
-            new EfRepository<AgentSkillRelation>(dbContext),
             dbContext,
-            new AgentDomainService(TimeProvider.System),
-            new TestUserInfoService()
+            new TestConnectionReferenceFacade(connectionRepository, userInfo),
+            new TestModelProviderReferenceFacade(
+                modelProviderRepository,
+                modelRepository,
+                providerRepository,
+                userInfo
+            ),
+            new TestSkillReferenceFacade(skillRepository, userInfo),
+            userInfo,
+            new Agw.Infrastructure.Agents.AgentDeletionCoordinator(
+                dbContext,
+                Agw.Shared.Coordination.InMemoryApplicationLock.Shared
+            )
         );
     }
 

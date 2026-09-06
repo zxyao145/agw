@@ -5,6 +5,7 @@ using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
+using static Agw.Agents.Application.Persistence.DurableExecutionQueries;
 
 namespace Agw.Agents.Execution.Durable;
 
@@ -91,7 +92,7 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
             throw new AgwException(ErrorCodes.InvalidParam, "executionId is required.");
         }
 
-        // 先完成 PostgreSQL 鉴权，再启动由协调器自行创建 DbContext scope 的后台 pump。
+        // 先完成 PostgreSQL 鉴权，再启动由协调器自行创建持久化 scope 的后台 pump。
         var status = await _coordinator.GetStatusAsync(executionId, _userId, cancellationToken).ConfigureAwait(false);
         await StopSubscriptionAsync().ConfigureAwait(false);
         await SendTurnStateAsync(status, cancellationToken).ConfigureAwait(false);
@@ -331,13 +332,4 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
     /// </summary>
     private static AgwMessage CreateMessage(AgwContent content) =>
         new(Guid.CreateVersion7().ToString("D"), Constants.DefaultAgentAuthor, AiRole.System, [content]);
-
-    /// <summary>
-    /// 判断状态是否已结束，不应再启动消息订阅。
-    /// </summary>
-    private static bool IsTerminal(DurableExecutionStatus status) =>
-        status
-            is DurableExecutionStatus.Completed
-                or DurableExecutionStatus.Failed
-                or DurableExecutionStatus.Interrupted;
 }

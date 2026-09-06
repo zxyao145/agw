@@ -1,6 +1,9 @@
 using System.Security.Claims;
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Connections;
 using Agw.Auth.Contracts;
+using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -26,6 +29,8 @@ internal sealed record DurableExecutionSnapshot
     /// 获取下一次需要执行的分段序号。
     /// </summary>
     public required int SegmentIndex { get; init; }
+
+    public Guid StateVersion { get; init; }
 
     /// <summary>
     /// 获取恢复 Agentflow 所需的最新 checkpoint。
@@ -87,16 +92,25 @@ internal sealed record DurableExecutionSnapshot
 /// </summary>
 internal sealed class DurableExecutionStore
 {
-    private readonly DbContext _dbContext;
+    private readonly IAgentsDbContext _dbContext;
     private readonly TimeProvider _timeProvider;
+    private readonly IApplicationLock _applicationLock;
+    private readonly IDurableExecutionScopeMaintenance _scopeMaintenance;
 
     /// <summary>
-    /// 创建使用当前 scope DbContext 和统一时钟的 execution 状态仓储。
+    /// 创建使用当前 scope 持久化上下文和统一时钟的 execution 状态仓储。
     /// </summary>
-    public DurableExecutionStore(DbContext dbContext, TimeProvider timeProvider)
+    public DurableExecutionStore(
+        IAgentsDbContext dbContext,
+        TimeProvider timeProvider,
+        IApplicationLock applicationLock,
+        IDurableExecutionScopeMaintenance scopeMaintenance
+    )
     {
         _dbContext = dbContext;
         _timeProvider = timeProvider;
+        _applicationLock = applicationLock;
+        _scopeMaintenance = scopeMaintenance;
     }
 
     /// <summary>
@@ -146,6 +160,9 @@ internal sealed class DurableExecutionStore
             Settings = DurableExecutionSettings.FromSettings(settings),
         };
         var manifestJson = DurableExecutionJson.Serialize(manifest);
+        await using var lifecycleLease = await _applicationLock
+            .AcquireAsync(ProjectLifecycleLock.GetResourceName(task.ProjectId), cancellationToken)
+            .ConfigureAwait(false);
         DurableExecutionRecord? existing;
         using (UserInfoUtil.PushSystemScope())
         {
@@ -154,6 +171,11 @@ internal sealed class DurableExecutionStore
         }
         if (existing != null)
         {
+            await _dbContext.SaveConversationChangesAsync(
+                task.ProjectConversationId,
+                task.Generation,
+                cancellationToken
+            );
             return EnsureIdempotentRegistration(existing, userId, manifestJson);
         }
 
@@ -163,6 +185,9 @@ internal sealed class DurableExecutionStore
             Id = executionId,
             UserId = userId,
             CreateBy = userId,
+            ProjectId = task.ProjectId,
+            ProjectConversationId = task.ProjectConversationId,
+            ScopeBackfilled = true,
             UpdateBy = userId,
             ManifestJson = manifestJson,
             Status = DurableExecutionStatus.Queued,
@@ -170,15 +195,17 @@ internal sealed class DurableExecutionStore
             StateChangedAt = now,
             StateVersion = Guid.CreateVersion7(),
         };
-        _dbContext.Add(record);
+        _dbContext.DurableExecutions.Add(record);
         try
         {
-            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await _dbContext
+                .SaveConversationChangesAsync(task.ProjectConversationId, task.Generation, cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (DbUpdateException)
         {
             // 多个 Server 可能同时登记同一 executionId；主键选出胜者后再校验真正幂等。
-            _dbContext.ChangeTracker.Clear();
+            ClearTrackedDurableExecutions();
             using (UserInfoUtil.PushSystemScope())
             {
                 existing = await FindAsync(executionId, userId: null, tracking: false, cancellationToken)
@@ -218,7 +245,9 @@ internal sealed class DurableExecutionStore
         var record =
             await FindAsync(executionId, userId, tracking: false, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
-        return ToSnapshot(record);
+        var snapshot = ToSnapshot(record);
+        await EnsureSessionCurrentAsync(snapshot, cancellationToken);
+        return snapshot;
     }
 
     /// <summary>
@@ -232,8 +261,7 @@ internal sealed class DurableExecutionStore
     )
     {
         var state = await _dbContext
-            .Set<DurableExecutionRecord>()
-            .AsNoTracking()
+            .DurableExecutions.AsNoTracking()
             .Where(item => item.Id == executionId && item.UserId == userId)
             .Select(item => new { item.Id, item.Status })
             .SingleOrDefaultAsync(cancellationToken)
@@ -268,22 +296,28 @@ internal sealed class DurableExecutionStore
         }
 
         var candidates = _dbContext
-            .Set<DurableExecutionRecord>()
-            .AsNoTracking()
+            .DurableExecutions.AsNoTracking()
+            .Where(item => item.ScopeBackfilled && item.ProjectId != null && item.ProjectConversationId != null)
             .Where(item =>
                 item.Status == DurableExecutionStatus.Queued
                 || item.Status == DurableExecutionStatus.Resuming
                 || item.Status == DurableExecutionStatus.Running
             );
-        if (
-            string.Equals(
-                _dbContext.Database.ProviderName,
-                "Microsoft.EntityFrameworkCore.Sqlite",
-                StringComparison.Ordinal
-            )
-        )
+        try
         {
-            // SQLite 不能翻译 DateTimeOffset 的比较和排序；它只用于本地/测试，先缩小到可运行状态再在内存筛选。
+            return await candidates
+                .Where(item =>
+                    item.Status != DurableExecutionStatus.Running || item.StateChangedAt <= staleRunningBefore
+                )
+                .OrderBy(item => item.Status == DurableExecutionStatus.Running ? 1 : 0)
+                .ThenBy(item => item.StateChangedAt)
+                .Select(item => item.Id)
+                .Take(limit)
+                .ToArrayAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception exception) when (IsDateTimeOffsetQueryTranslationException(exception))
+        {
             var localCandidates = await candidates
                 .Select(item => new
                 {
@@ -303,15 +337,6 @@ internal sealed class DurableExecutionStore
                 .Take(limit)
                 .ToArray();
         }
-
-        return await candidates
-            .Where(item => item.Status != DurableExecutionStatus.Running || item.StateChangedAt <= staleRunningBefore)
-            .OrderBy(item => item.Status == DurableExecutionStatus.Running ? 1 : 0)
-            .ThenBy(item => item.StateChangedAt)
-            .Select(item => item.Id)
-            .Take(limit)
-            .ToArrayAsync(cancellationToken)
-            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -324,10 +349,14 @@ internal sealed class DurableExecutionStore
         CancellationToken cancellationToken
     )
     {
-        _dbContext.ChangeTracker.Clear();
-        var record =
-            await FindAsync(executionId, userId: null, tracking: true, cancellationToken).ConfigureAwait(false)
-            ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
+        ClearTrackedDurableExecutions();
+        var record = await _scopeMaintenance
+            .LoadValidatedExecutionAsync(executionId, cancellationToken)
+            .ConfigureAwait(false);
+        if (record == null)
+        {
+            return null;
+        }
         var runnable =
             record.Status is DurableExecutionStatus.Queued or DurableExecutionStatus.Resuming
             || record.Status == DurableExecutionStatus.Running && record.StateChangedAt <= staleRunningBefore;
@@ -336,6 +365,7 @@ internal sealed class DurableExecutionStore
             return null;
         }
 
+        _dbContext.DurableExecutions.Attach(record);
         record.Status = DurableExecutionStatus.Running;
         record.ErrorMessage = null;
         try
@@ -346,7 +376,7 @@ internal sealed class DurableExecutionStore
         catch (DbUpdateConcurrencyException)
         {
             // 中断请求可能在获取锁前后更新并发版本；让下一轮按最新状态重新判断。
-            _dbContext.ChangeTracker.Clear();
+            ClearTrackedDurableExecutions();
             return null;
         }
     }
@@ -356,15 +386,20 @@ internal sealed class DurableExecutionStore
     /// </summary>
     internal async Task<DurableExecutionSnapshot> SaveSegmentResultAsync(
         DurableExecutionSegmentResult result,
+        Guid expectedStateVersion,
         CancellationToken cancellationToken
     )
     {
         ArgumentNullException.ThrowIfNull(result);
-        _dbContext.ChangeTracker.Clear();
+        ClearTrackedDurableExecutions();
         var record =
             await FindAsync(result.ExecutionId, userId: null, tracking: true, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
-        if (record.Status != DurableExecutionStatus.Running || record.SegmentIndex != result.SegmentIndex)
+        if (
+            record.Status != DurableExecutionStatus.Running
+            || record.SegmentIndex != result.SegmentIndex
+            || record.StateVersion != expectedStateVersion
+        )
         {
             if (record.Status == DurableExecutionStatus.Interrupted)
             {
@@ -402,11 +437,12 @@ internal sealed class DurableExecutionStore
     {
         ArgumentNullException.ThrowIfNull(request);
         var requestId = request.RequestId.Trim();
-        _dbContext.ChangeTracker.Clear();
+        ClearTrackedDurableExecutions();
         var record =
             await FindAsync(request.ExecutionId, userId, tracking: true, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
         var snapshot = ToSnapshot(record);
+        await EnsureSessionCurrentAsync(snapshot, cancellationToken);
         var response = new DurableHumanResponseEnvelope
         {
             ExecutionId = request.ExecutionId,
@@ -458,7 +494,7 @@ internal sealed class DurableExecutionStore
         }
         catch (DbUpdateConcurrencyException)
         {
-            _dbContext.ChangeTracker.Clear();
+            ClearTrackedDurableExecutions();
             var current = await GetAuthorizedAsync(request.ExecutionId, userId, cancellationToken)
                 .ConfigureAwait(false);
             if (current.Status == DurableExecutionStatus.Interrupted)
@@ -481,14 +517,8 @@ internal sealed class DurableExecutionStore
     {
         var now = _timeProvider.GetUtcNow();
         var updatedCount = await _dbContext
-            .Set<DurableExecutionRecord>()
-            .Where(item =>
-                item.Id == executionId
-                && item.UserId == userId
-                && item.Status != DurableExecutionStatus.Completed
-                && item.Status != DurableExecutionStatus.Failed
-                && item.Status != DurableExecutionStatus.Interrupted
-            )
+            .DurableExecutions.Where(item => item.Id == executionId && item.UserId == userId)
+            .Where(DurableExecutionQueries.Active)
             .ExecuteUpdateAsync(
                 setters =>
                     setters
@@ -521,7 +551,7 @@ internal sealed class DurableExecutionStore
         CancellationToken cancellationToken
     )
     {
-        IQueryable<DurableExecutionRecord> query = _dbContext.Set<DurableExecutionRecord>();
+        IQueryable<DurableExecutionRecord> query = _dbContext.DurableExecutions;
         if (!tracking)
         {
             query = query.AsNoTracking();
@@ -617,7 +647,7 @@ internal sealed class DurableExecutionStore
         CancellationToken cancellationToken
     )
     {
-        _dbContext.ChangeTracker.Clear();
+        ClearTrackedDurableExecutions();
         var record =
             await FindAsync(executionId, userId: null, tracking: true, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
@@ -667,6 +697,7 @@ internal sealed class DurableExecutionStore
             Manifest = manifest,
             Status = record.Status,
             SegmentIndex = record.SegmentIndex,
+            StateVersion = record.StateVersion,
             Checkpoint = string.IsNullOrWhiteSpace(record.CheckpointJson)
                 ? null
                 : DurableExecutionJson.DeserializeRequired<DurableAgentflowCheckpoint>(
@@ -701,6 +732,26 @@ internal sealed class DurableExecutionStore
         record.ErrorMessage = errorMessage;
     }
 
+    private void ClearTrackedDurableExecutions()
+    {
+        foreach (var record in _dbContext.DurableExecutions.Local.ToArray())
+        {
+            _dbContext.DurableExecutions.Entry(record).State = EntityState.Detached;
+        }
+    }
+
+    private static bool IsDateTimeOffsetQueryTranslationException(Exception exception)
+    {
+        return exception is NotSupportedException
+                && exception.Message.Contains(
+                    "SQLite does not support expressions of type 'DateTimeOffset'",
+                    StringComparison.Ordinal
+                )
+            || exception is InvalidOperationException
+                && exception.Message.Contains("StateChangedAt", StringComparison.Ordinal)
+                && exception.Message.Contains("could not be translated", StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// 更新时间与乐观并发版本后保存状态变更。
     /// </summary>
@@ -715,7 +766,27 @@ internal sealed class DurableExecutionStore
         }
 
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal(record.UserId));
-        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        var task = ToSnapshot(record).Manifest.Task;
+        await _dbContext
+            .SaveConversationChangesAsync(task.ProjectConversationId, task.Generation, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task EnsureSessionCurrentAsync(DurableExecutionSnapshot snapshot, CancellationToken cancellationToken)
+    {
+        var task = snapshot.Manifest.Task;
+        if (
+            !await _scopeMaintenance.IsSessionCurrentAsync(
+                task.ProjectId,
+                task.ProjectConversationId,
+                snapshot.Manifest.ResolveUserId(),
+                task.Generation,
+                cancellationToken
+            )
+        )
+        {
+            throw new AgwException(ErrorCodes.ConversationSessionConflict);
+        }
     }
 
     private static ClaimsPrincipal CreateUserPrincipal(string userId) =>

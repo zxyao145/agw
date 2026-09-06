@@ -1,11 +1,9 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Services;
-using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Microsoft.EntityFrameworkCore;
@@ -14,36 +12,21 @@ namespace Agw.Projects.Application;
 
 public class ProjectConversationAppService
 {
-    private readonly IRepository<ProjectConversation> _conversationRepository;
-    private readonly IRepository<ProjectConversationChatHistory> _recordRepository;
-    private readonly IRepository<AgentflowCheckpointRecord> _checkpointRepository;
-    private readonly IRepository<AgentflowTrace> _traceRepository;
-    private readonly IRepository<AgentUsage> _usageRepository;
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IProjectsDbContext _dbContext;
     private readonly ProjectResolver _projectResolver;
-    private readonly ITaskSessionBindingService _taskSessionBindingService;
+    private readonly IProjectDeletionCoordinator _deletionCoordinator;
     private readonly TimeProvider _timeProvider;
 
     public ProjectConversationAppService(
-        IRepository<ProjectConversation> conversationRepository,
-        IRepository<ProjectConversationChatHistory> recordRepository,
-        IRepository<AgentflowCheckpointRecord> checkpointRepository,
-        IRepository<AgentflowTrace> traceRepository,
-        IRepository<AgentUsage> usageRepository,
-        IUnitOfWork unitOfWork,
+        IProjectsDbContext dbContext,
         ProjectResolver projectResolver,
-        ITaskSessionBindingService taskSessionBindingService,
+        IProjectDeletionCoordinator deletionCoordinator,
         TimeProvider timeProvider
     )
     {
-        _conversationRepository = conversationRepository;
-        _recordRepository = recordRepository;
-        _checkpointRepository = checkpointRepository;
-        _traceRepository = traceRepository;
-        _usageRepository = usageRepository;
-        _unitOfWork = unitOfWork;
+        _dbContext = dbContext;
         _projectResolver = projectResolver;
-        _taskSessionBindingService = taskSessionBindingService;
+        _deletionCoordinator = deletionCoordinator;
         _timeProvider = timeProvider;
     }
 
@@ -55,16 +38,20 @@ public class ProjectConversationAppService
             return [];
         }
 
-        var conversations = await _conversationRepository.ListAsync(conversation =>
-            conversation.ProjectId == project.Id && conversation.CreateBy == project.CreateBy
-        );
+        var conversations = await _dbContext
+            .ProjectConversations.AsNoTracking()
+            .Where(conversation => conversation.ProjectId == project.Id && conversation.CreateBy == project.CreateBy)
+            .ToListAsync();
         if (conversations.Count == 0)
         {
             return [];
         }
 
         var conversationIds = conversations.Select(conversation => conversation.Id).ToHashSet();
-        var records = await _recordRepository.ListAsync(record => conversationIds.Contains(record.ConversationId));
+        var records = await _dbContext
+            .ProjectConversationChatHistories.AsNoTracking()
+            .Where(record => conversationIds.Contains(record.ConversationId))
+            .ToListAsync();
         var recordsByConversationId = records
             .GroupBy(record => record.ConversationId)
             .ToDictionary(group => group.Key, group => group.ToList());
@@ -95,7 +82,7 @@ public class ProjectConversationAppService
             return null;
         }
 
-        var conversation = await _conversationRepository.SingleOrDefaultAsync(item =>
+        var conversation = await _dbContext.ProjectConversations.SingleOrDefaultAsync(item =>
             item.ProjectId == project.Id && item.Id == conversationId && item.CreateBy == project.CreateBy
         );
 
@@ -118,8 +105,8 @@ public class ProjectConversationAppService
             return null;
         }
 
-        var recordsQuery = _recordRepository
-            .Queryable.AsNoTracking()
+        var recordsQuery = _dbContext
+            .ProjectConversationChatHistories.AsNoTracking()
             .Where(record =>
                 record.ConversationId == conversation.Id
                 && record.ConversationPayload != null
@@ -179,22 +166,8 @@ public class ProjectConversationAppService
             return ApplicationResult.NotFound();
         }
 
-        await _recordRepository
-            .Queryable.Where(record => record.ConversationId == conversation.Id)
-            .ExecuteDeleteAsync();
-        await _checkpointRepository
-            .Queryable.Where(checkpoint => checkpoint.ProjectConversationId == conversation.Id)
-            .ExecuteDeleteAsync();
-        await _traceRepository
-            .Queryable.Where(trace =>
-                trace.ProjectId == conversation.ProjectId && trace.ContextId == conversation.ContextId
-            )
-            .ExecuteDeleteAsync();
-
-        await _taskSessionBindingService.DeleteByConversationAsync(conversation.Id);
-
-        await _unitOfWork.SaveChangesAsync();
-        return ApplicationResult.Success();
+        var cleared = await _deletionCoordinator.ClearConversationRecordsAsync(ToDeletionTarget(conversation));
+        return cleared ? ApplicationResult.Success() : ApplicationResult.NotFound();
     }
 
     public async Task<ApplicationResult> UpdateTitleAsync(
@@ -218,8 +191,8 @@ public class ProjectConversationAppService
         conversation.Title = title.Trim();
         conversation.UpdateBy = user;
         conversation.UpdateTime = _timeProvider.GetUtcNow();
-        _conversationRepository.Update(conversation);
-        await _unitOfWork.SaveChangesAsync();
+        _dbContext.ProjectConversations.Entry(conversation).Property(item => item.Title).IsModified = true;
+        await _dbContext.SaveChangesAsync();
         return ApplicationResult.Success();
     }
 
@@ -231,35 +204,10 @@ public class ProjectConversationAppService
             return ApplicationResult.NotFound();
         }
 
-        var conversations = await _conversationRepository.ListAsync(conversation =>
-            conversation.ProjectId == project.Id && conversation.CreateBy == project.CreateBy
+        var deleted = await _deletionCoordinator.DeleteAllConversationsAsync(
+            new ProjectDeletionTarget(project.Id, project.CreateBy!)
         );
-        foreach (var conversation in conversations)
-        {
-            await _taskSessionBindingService.DeleteByConversationAsync(conversation.Id);
-        }
-
-        var conversationIds = conversations.Select(conversation => conversation.Id).ToArray();
-        if (conversationIds.Length > 0)
-        {
-            await _recordRepository
-                .Queryable.Where(record => conversationIds.Contains(record.ConversationId))
-                .ExecuteDeleteAsync();
-        }
-
-        await _traceRepository.Queryable.Where(trace => trace.ProjectId == project.Id).ExecuteDeleteAsync();
-        await _checkpointRepository
-            .Queryable.Where(checkpoint => checkpoint.ProjectId == project.Id)
-            .ExecuteDeleteAsync();
-
-        await _conversationRepository
-            .Queryable.Where(conversation =>
-                conversation.ProjectId == project.Id && conversation.CreateBy == project.CreateBy
-            )
-            .ExecuteDeleteAsync();
-
-        await _unitOfWork.SaveChangesAsync();
-        return ApplicationResult.Success();
+        return deleted ? ApplicationResult.Success() : ApplicationResult.NotFound();
     }
 
     public async Task<bool> DeleteAsync(Guid projectId, Guid conversationId)
@@ -270,32 +218,19 @@ public class ProjectConversationAppService
             return false;
         }
 
-        await _recordRepository
-            .Queryable.Where(record => record.ConversationId == conversation.Id)
-            .ExecuteDeleteAsync();
-        await _checkpointRepository
-            .Queryable.Where(checkpoint => checkpoint.ProjectConversationId == conversation.Id)
-            .ExecuteDeleteAsync();
-        await _traceRepository
-            .Queryable.Where(trace =>
-                trace.ProjectId == conversation.ProjectId && trace.ContextId == conversation.ContextId
-            )
-            .ExecuteDeleteAsync();
-
-        await _taskSessionBindingService.DeleteByConversationAsync(conversation.Id);
-
-        _conversationRepository.Remove(conversation);
-        await _unitOfWork.SaveChangesAsync();
-        return true;
+        return await _deletionCoordinator.DeleteConversationAsync(ToDeletionTarget(conversation));
     }
+
+    private static ProjectConversationDeletionTarget ToDeletionTarget(ProjectConversation conversation) =>
+        new(conversation.ProjectId, conversation.Id, conversation.ContextId, conversation.CreateBy!);
 
     private async Task<ProjectConversationResponse> ToResponseAsync(
         ProjectConversation conversation,
         CancellationToken cancellationToken
     )
     {
-        var recordsQuery = _recordRepository
-            .Queryable.AsNoTracking()
+        var recordsQuery = _dbContext
+            .ProjectConversationChatHistories.AsNoTracking()
             .Where(record => record.ConversationId == conversation.Id);
         var executionCount = await recordsQuery
             .Select(record => record.TaskId)
@@ -330,8 +265,8 @@ public class ProjectConversationAppService
         ProjectConversation conversation,
         CancellationToken cancellationToken
     ) =>
-        await _usageRepository
-            .Queryable.Where(usage =>
+        await _dbContext
+            .AgentUsages.Where(usage =>
                 usage.ProjectId == conversation.ProjectId && usage.ContextId == conversation.ContextId
             )
             .GroupBy(_ => 1)
@@ -572,7 +507,7 @@ public class ProjectConversationAppService
             return null;
         }
 
-        return await _conversationRepository.SingleOrDefaultAsync(conversation =>
+        return await _dbContext.ProjectConversations.SingleOrDefaultAsync(conversation =>
             conversation.ProjectId == project.Id
             && conversation.Id == conversationId
             && conversation.CreateBy == project.CreateBy

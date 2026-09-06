@@ -3,15 +3,14 @@ using System.Security.Claims;
 using System.Text;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
-using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Application.Credentials;
 using Agw.Integrations.Application.Management;
 using Agw.Integrations.Application.OAuth;
+using Agw.Integrations.Application.Persistence;
 using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.OAuth;
 using Agw.Integrations.Domain.Plugins;
 using Agw.Shared.Data.Entities.Integrations;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Testing;
 using Microsoft.AspNetCore.DataProtection;
@@ -527,30 +526,14 @@ public sealed class OAuthAppServiceTests
             var httpClientFactory = new TestHttpClientFactory(handler);
             var logger = new ListLogger<OAuthAuthorizationAppService>();
 
-            IRepository<PluginInstallation> installationRepository = new EfRepository<PluginInstallation>(dbContext);
-            IRepository<PluginInstallationCredential> installationCredentialRepository =
-                new EfRepository<PluginInstallationCredential>(dbContext);
-            IRepository<IntegrationConnection> connectionRepository = new EfRepository<IntegrationConnection>(
-                dbContext
-            );
-            IRepository<ConnectionCredential> connectionCredentialRepository = new EfRepository<ConnectionCredential>(
-                dbContext
-            );
-            IUnitOfWork unitOfWork = failCallbackPersistence
+            IIntegrationsDbContext persistence = failCallbackPersistence
                 ? new FailCallbackPersistenceUnitOfWork(dbContext)
                 : dbContext;
             var userInfo = new TestUserInfoService();
-            var reader = new ConnectionCredentialReader(
-                installationCredentialRepository,
-                connectionCredentialRepository,
-                userInfo
-            );
+            var reader = new ConnectionCredentialReader(persistence, userInfo);
             var stateProtector = new OAuthStateProtector(new EphemeralDataProtectionProvider(), timeProvider);
             var authorization = new OAuthAuthorizationAppService(
-                connectionRepository,
-                installationRepository,
-                connectionCredentialRepository,
-                unitOfWork,
+                persistence,
                 catalog,
                 reader,
                 httpClientFactory,
@@ -783,12 +766,12 @@ public sealed class OAuthAppServiceTests
     private static ClaimsPrincipal CreatePrincipal(string userId) =>
         new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], "test"));
 
-    private sealed class FailCallbackPersistenceUnitOfWork : IUnitOfWork
+    private sealed class FailCallbackPersistenceUnitOfWork : IIntegrationsDbContext
     {
-        private readonly IUnitOfWork _inner;
+        private readonly AgwDbContext _inner;
         private int _saveCount;
 
-        public FailCallbackPersistenceUnitOfWork(IUnitOfWork inner)
+        public FailCallbackPersistenceUnitOfWork(AgwDbContext inner)
         {
             _inner = inner;
         }
@@ -803,10 +786,11 @@ public sealed class OAuthAppServiceTests
             return _inner.SaveChangesAsync(cancellationToken);
         }
 
-        public Task<bool> SaveEntitiesAsync(CancellationToken cancellationToken = default) =>
-            _inner.SaveEntitiesAsync(cancellationToken);
-
-        public void Dispose() { }
+        public DbSet<PluginInstallation> PluginInstallations => _inner.PluginInstallations;
+        public DbSet<PluginInstallationCredential> PluginInstallationCredentials =>
+            _inner.PluginInstallationCredentials;
+        public DbSet<IntegrationConnection> Connections => _inner.Connections;
+        public DbSet<ConnectionCredential> ConnectionCredentials => _inner.ConnectionCredentials;
     }
 
     private sealed class OAuthTestCatalog : IPluginCatalog

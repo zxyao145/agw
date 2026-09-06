@@ -28,6 +28,7 @@ public static class TaskExecutionMapper
         {
             TaskId = firstRecord.TaskId,
             ProjectConversationId = context.Id,
+            Generation = context.Generation,
             ProjectId = context.ProjectId,
             ContextId = context.ContextId,
             JobId = latestRecord.JobId,

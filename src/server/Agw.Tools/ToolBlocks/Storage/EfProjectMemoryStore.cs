@@ -3,10 +3,9 @@ using System.Text.RegularExpressions;
 using Agw.Auth.Contracts;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
-using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
+using Agw.Tools.Application.Persistence;
 using Microsoft.Agents.AI;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Tools.ToolBlocks.Storage;
@@ -37,47 +36,22 @@ public sealed class EfProjectMemoryStore : AgentFileStore
     public override async Task WriteAsync(string path, string content, CancellationToken cancellationToken = default)
     {
         var normalizedPath = NormalizePath(path);
+        await using var lifecycleLease = await _applicationLock
+            .AcquireAsync(ProjectLifecycleLock.GetResourceName(_projectId), cancellationToken)
+            .ConfigureAwait(false);
         await using var mutationLease = await AcquireMutationLockAsync(cancellationToken).ConfigureAwait(false);
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
-        await EnsureProjectOwnedAsync(dbContext, cancellationToken).ConfigureAwait(false);
-        var existingPaths = await Query(dbContext)
-            .AsNoTracking()
-            .Select(item => item.Path)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
-        var conflictingPath = existingPaths.FirstOrDefault(existingPath =>
-            !string.Equals(existingPath, normalizedPath, StringComparison.Ordinal)
-            && (
-                existingPath.StartsWith(normalizedPath + "/", StringComparison.Ordinal)
-                || normalizedPath.StartsWith(existingPath + "/", StringComparison.Ordinal)
+        var persistence = scope.ServiceProvider.GetRequiredService<IProjectMemoryPersistence>();
+        await persistence
+            .WriteAsync(
+                _projectId,
+                ResolveOwnerUserId(),
+                normalizedPath,
+                content,
+                _timeProvider.GetUtcNow(),
+                cancellationToken
             )
-        );
-        if (conflictingPath != null)
-        {
-            throw new AgwException(
-                ErrorCodes.InvalidParam,
-                $"Project memory path '{normalizedPath}' conflicts with existing path '{conflictingPath}'."
-            );
-        }
-
-        var entry = await Query(dbContext)
-            .SingleOrDefaultAsync(item => item.Path == normalizedPath, cancellationToken)
             .ConfigureAwait(false);
-        if (entry == null)
-        {
-            entry = new ProjectMemoryEntry
-            {
-                Id = Guid.CreateVersion7(),
-                ProjectId = _projectId,
-                Path = normalizedPath,
-            };
-            dbContext.Add(entry);
-        }
-
-        entry.Content = content;
-        entry.UpdatedAt = _timeProvider.GetUtcNow();
-        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public override async Task<string?> ReadAsync(string path, CancellationToken cancellationToken = default)
@@ -85,32 +59,24 @@ public sealed class EfProjectMemoryStore : AgentFileStore
         var normalizedPath = NormalizePath(path);
         await using var mutationLease = await AcquireMutationLockAsync(cancellationToken).ConfigureAwait(false);
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
-        return await Query(dbContext)
-            .AsNoTracking()
-            .Where(item => item.Path == normalizedPath)
-            .Select(item => item.Content)
-            .SingleOrDefaultAsync(cancellationToken)
+        var persistence = scope.ServiceProvider.GetRequiredService<IProjectMemoryPersistence>();
+        return await persistence
+            .ReadAsync(_projectId, ResolveOwnerUserId(), normalizedPath, cancellationToken)
             .ConfigureAwait(false);
     }
 
     public override async Task<bool> DeleteAsync(string path, CancellationToken cancellationToken = default)
     {
         var normalizedPath = NormalizePath(path);
+        await using var lifecycleLease = await _applicationLock
+            .AcquireAsync(ProjectLifecycleLock.GetResourceName(_projectId), cancellationToken)
+            .ConfigureAwait(false);
         await using var mutationLease = await AcquireMutationLockAsync(cancellationToken).ConfigureAwait(false);
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
-        var entry = await Query(dbContext)
-            .SingleOrDefaultAsync(item => item.Path == normalizedPath, cancellationToken)
+        var persistence = scope.ServiceProvider.GetRequiredService<IProjectMemoryPersistence>();
+        return await persistence
+            .DeleteAsync(_projectId, ResolveOwnerUserId(), normalizedPath, cancellationToken)
             .ConfigureAwait(false);
-        if (entry == null)
-        {
-            return false;
-        }
-
-        dbContext.Remove(entry);
-        await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        return true;
     }
 
     public override async Task<IReadOnlyList<FileStoreEntry>> ListChildrenAsync(
@@ -120,12 +86,9 @@ public sealed class EfProjectMemoryStore : AgentFileStore
     {
         var prefix = DirectoryPrefix(directory);
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
-        var paths = await Query(dbContext)
-            .AsNoTracking()
-            .Where(item => item.Path.StartsWith(prefix))
-            .Select(item => item.Path)
-            .ToListAsync(cancellationToken)
+        var persistence = scope.ServiceProvider.GetRequiredService<IProjectMemoryPersistence>();
+        var paths = await persistence
+            .ListPathsAsync(_projectId, ResolveOwnerUserId(), prefix, cancellationToken)
             .ConfigureAwait(false);
 
         return paths
@@ -149,10 +112,9 @@ public sealed class EfProjectMemoryStore : AgentFileStore
     {
         var normalizedPath = NormalizePath(path);
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
-        return await Query(dbContext)
-            .AsNoTracking()
-            .AnyAsync(item => item.Path == normalizedPath, cancellationToken)
+        var persistence = scope.ServiceProvider.GetRequiredService<IProjectMemoryPersistence>();
+        return await persistence
+            .FileExistsAsync(_projectId, ResolveOwnerUserId(), normalizedPath, cancellationToken)
             .ConfigureAwait(false);
     }
 
@@ -171,12 +133,8 @@ public sealed class EfProjectMemoryStore : AgentFileStore
             TimeSpan.FromSeconds(2)
         );
         await using var scope = _serviceScopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<DbContext>();
-        var entries = Query(dbContext)
-            .AsNoTracking()
-            .Where(item => item.Path.StartsWith(prefix))
-            .Select(item => new { item.Path, item.Content })
-            .AsAsyncEnumerable();
+        var persistence = scope.ServiceProvider.GetRequiredService<IProjectMemoryPersistence>();
+        var entries = persistence.ListEntriesAsync(_projectId, ResolveOwnerUserId(), prefix, cancellationToken);
 
         var results = new List<FileSearchResult>();
         await foreach (var entry in entries.WithCancellation(cancellationToken).ConfigureAwait(false))
@@ -225,42 +183,17 @@ public sealed class EfProjectMemoryStore : AgentFileStore
         return Task.CompletedTask;
     }
 
-    private IQueryable<ProjectMemoryEntry> Query(DbContext dbContext)
-    {
-        var query = dbContext.Set<ProjectMemoryEntry>().Where(item => item.ProjectId == _projectId);
-        if (!UserInfoUtil.IsContextActive)
-        {
-            return query;
-        }
-
-        var ownerUserId = UserInfoUtil.RequiredUserId;
-        return query.Where(item =>
-            dbContext.Set<Project>().Any(project => project.Id == item.ProjectId && project.CreateBy == ownerUserId)
-        );
-    }
-
-    private async Task EnsureProjectOwnedAsync(DbContext dbContext, CancellationToken cancellationToken)
+    private static string ResolveOwnerUserId()
     {
         if (!UserInfoUtil.IsContextActive)
         {
             throw new AgwException(ErrorCodes.AuthenticationRequired);
         }
 
-        if (
-            !await dbContext
-                .Set<Project>()
-                .AnyAsync(
-                    project => project.Id == _projectId && project.CreateBy == UserInfoUtil.RequiredUserId,
-                    cancellationToken
-                )
-                .ConfigureAwait(false)
-        )
-        {
-            throw new AgwException(ErrorCodes.ResourceNotFound, "Project was not found.");
-        }
+        return UserInfoUtil.RequiredUserId;
     }
 
-    private Task<IAsyncDisposable> AcquireMutationLockAsync(CancellationToken cancellationToken) =>
+    private Task<IApplicationLockLease> AcquireMutationLockAsync(CancellationToken cancellationToken) =>
         _applicationLock.AcquireAsync($"project-memory-store:{_projectId:D}", cancellationToken);
 
     private static string DirectoryPrefix(string directory)

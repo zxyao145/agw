@@ -8,6 +8,7 @@ public class ProjectConversationConfiguration : IEntityTypeConfiguration<Project
     public void Configure(EntityTypeBuilder<ProjectConversation> builder)
     {
         builder.HasKey(e => e.Id);
+        builder.Property(e => e.Generation).HasDefaultValue(0).IsConcurrencyToken();
         builder.Property(e => e.JobId);
         builder.Property(e => e.ContextId).IsRequired().HasMaxLength(64);
         builder.Property(e => e.Title).IsRequired().HasMaxLength(200).HasDefaultValue("Untitled");

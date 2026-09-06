@@ -1,35 +1,19 @@
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Contracts.Catalog;
 using Agw.Auth.Contracts;
-using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Agents.Definitions.Facades;
 
 public sealed class AgentCatalogFacade : IAgentCatalogFacade, IAgentReferenceFacade
 {
-    private readonly IRepository<Agent> _agentRepository;
-    private readonly IRepository<Agentflow> _agentflowRepository;
-    private readonly IRepository<McpServer> _mcpServerRepository;
-    private readonly IRepository<AgentSkillRelation> _agentSkillRepository;
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IAgentsDbContext _dbContext;
     private readonly IUserInfoService _userInfoService;
 
-    public AgentCatalogFacade(
-        IRepository<Agent> agentRepository,
-        IRepository<Agentflow> agentflowRepository,
-        IRepository<McpServer> mcpServerRepository,
-        IRepository<AgentSkillRelation> agentSkillRepository,
-        IUnitOfWork unitOfWork,
-        IUserInfoService userInfoService
-    )
+    public AgentCatalogFacade(IAgentsDbContext dbContext, IUserInfoService userInfoService)
     {
-        _agentRepository = agentRepository;
-        _agentflowRepository = agentflowRepository;
-        _mcpServerRepository = mcpServerRepository;
-        _agentSkillRepository = agentSkillRepository;
-        _unitOfWork = unitOfWork;
+        _dbContext = dbContext;
         _userInfoService = userInfoService;
     }
 
@@ -38,8 +22,8 @@ public sealed class AgentCatalogFacade : IAgentCatalogFacade, IAgentReferenceFac
     )
     {
         var ownerUserId = ResolveOwnerUserId();
-        var agents = await _agentRepository
-            .Queryable.AsNoTracking()
+        var agents = await _dbContext
+            .Agents.AsNoTracking()
             .Where(agent => agent.CreateBy == ownerUserId)
             .OrderBy(agent => agent.Name)
             .ToArrayAsync(cancellationToken)
@@ -54,8 +38,8 @@ public sealed class AgentCatalogFacade : IAgentCatalogFacade, IAgentReferenceFac
     {
         var normalizedName = name.Trim();
         var ownerUserId = ResolveOwnerUserId();
-        var agent = await _agentRepository
-            .Queryable.AsNoTracking()
+        var agent = await _dbContext
+            .Agents.AsNoTracking()
             .SingleOrDefaultAsync(
                 item => item.Name == normalizedName && item.CreateBy == ownerUserId,
                 cancellationToken
@@ -76,8 +60,8 @@ public sealed class AgentCatalogFacade : IAgentCatalogFacade, IAgentReferenceFac
 
         var ids = serverIds.Where(id => id != Guid.Empty).Distinct().ToArray();
         var ownerUserId = ResolveOwnerUserId();
-        return await _mcpServerRepository
-            .Queryable.AsNoTracking()
+        return await _dbContext
+            .McpToolServers.AsNoTracking()
             .Where(server => ids.Contains(server.Id) && server.CreateBy == ownerUserId)
             .Select(server => server.Id)
             .ToHashSetAsync(cancellationToken)
@@ -106,16 +90,12 @@ public sealed class AgentCatalogFacade : IAgentCatalogFacade, IAgentReferenceFac
 
         return type switch
         {
-            AgentRuntimeType.Agent => (
-                await _agentRepository
-                    .ListAsync(agent => agent.Id == id && agent.CreateBy == ownerUserId)
-                    .ConfigureAwait(false)
-            ).Count > 0,
-            AgentRuntimeType.Agentflow => (
-                await _agentflowRepository
-                    .ListAsync(agentflow => agentflow.Id == id && agentflow.CreateBy == ownerUserId)
-                    .ConfigureAwait(false)
-            ).Count > 0,
+            AgentRuntimeType.Agent => await _dbContext
+                .Agents.AsNoTracking()
+                .AnyAsync(agent => agent.Id == id && agent.CreateBy == ownerUserId, cancellationToken),
+            AgentRuntimeType.Agentflow => await _dbContext
+                .Agentflows.AsNoTracking()
+                .AnyAsync(agentflow => agentflow.Id == id && agentflow.CreateBy == ownerUserId, cancellationToken),
             _ => false,
         };
     }
@@ -123,11 +103,11 @@ public sealed class AgentCatalogFacade : IAgentCatalogFacade, IAgentReferenceFac
     public async Task<AgentCatalogMetrics> GetMetricsAsync(CancellationToken cancellationToken = default)
     {
         var ownerUserId = ResolveOwnerUserId();
-        var agentCount = await _agentRepository
-            .Queryable.CountAsync(agent => agent.CreateBy == ownerUserId, cancellationToken)
+        var agentCount = await _dbContext
+            .Agents.CountAsync(agent => agent.CreateBy == ownerUserId, cancellationToken)
             .ConfigureAwait(false);
-        var agentflowCount = await _agentflowRepository
-            .Queryable.CountAsync(agentflow => agentflow.CreateBy == ownerUserId, cancellationToken)
+        var agentflowCount = await _dbContext
+            .Agentflows.CountAsync(agentflow => agentflow.CreateBy == ownerUserId, cancellationToken)
             .ConfigureAwait(false);
         return new AgentCatalogMetrics(agentCount, agentflowCount);
     }
@@ -144,7 +124,7 @@ public sealed class AgentCatalogFacade : IAgentCatalogFacade, IAgentReferenceFac
         }
 
         var ownerUserId = ResolveOwnerUserId();
-        var usedByAgent = await _agentRepository.Queryable.AnyAsync(
+        var usedByAgent = await _dbContext.Agents.AnyAsync(
             agent =>
                 agent.CreateBy == ownerUserId
                 && (
@@ -154,7 +134,7 @@ public sealed class AgentCatalogFacade : IAgentCatalogFacade, IAgentReferenceFac
             cancellationToken
         );
         return usedByAgent
-            || await _agentflowRepository.Queryable.AnyAsync(
+            || await _dbContext.Agentflows.AnyAsync(
                 agentflow =>
                     agentflow.CreateBy == ownerUserId
                     && agentflow.SummaryModelProviderId.HasValue
@@ -175,8 +155,8 @@ public sealed class AgentCatalogFacade : IAgentCatalogFacade, IAgentReferenceFac
 
         var ids = skillIds.ToHashSet();
         var ownerUserId = ResolveOwnerUserId();
-        var relations = await _agentSkillRepository
-            .Queryable.AsNoTracking()
+        var relations = await _dbContext
+            .AgentSkillRelations.AsNoTracking()
             .Where(relation => ids.Contains(relation.SkillId) && relation.Agent!.CreateBy == ownerUserId)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -191,15 +171,17 @@ public sealed class AgentCatalogFacade : IAgentCatalogFacade, IAgentReferenceFac
     public async Task RemoveSkillBindingsAsync(Guid skillId, CancellationToken cancellationToken = default)
     {
         var ownerUserId = ResolveOwnerUserId();
-        var relations = await _agentSkillRepository
-            .Queryable.Where(relation => relation.SkillId == skillId && relation.Agent!.CreateBy == ownerUserId)
+        var relations = await _dbContext
+            .AgentSkillRelations.Where(relation =>
+                relation.SkillId == skillId && relation.Agent!.CreateBy == ownerUserId
+            )
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         foreach (var relation in relations)
         {
-            _agentSkillRepository.Remove(relation);
+            _dbContext.AgentSkillRelations.Remove(relation);
         }
-        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private string ResolveOwnerUserId() => _userInfoService.RequiredUserId;

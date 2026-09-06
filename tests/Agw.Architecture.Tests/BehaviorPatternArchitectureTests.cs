@@ -238,17 +238,7 @@ public sealed partial class BackendArchitectureTests
         "Agw.Data/Entities/Projects/Project.cs:GetMustWorkspace"
     );
 
-    private static readonly IReadOnlySet<string> AllowedLegacyEntityDomainServices = Set(
-        "Agw.Agents/Definitions/Domain/AgentDomainService.cs:AgentDomainService",
-        "Agw.Agents/Definitions/Domain/AgentflowDomainService.cs:AgentflowDomainService",
-        "Agw.Agents/Definitions/Domain/McpToolServerDomainService.cs:McpToolServerDomainService",
-        "Agw.Projects/Domain/Services/ProjectConversationChatHistoryDomainService.cs:ProjectConversationChatHistoryDomainService",
-        "Agw.Projects/Domain/Services/ProjectDomainService.cs:ProjectDomainService",
-        "Agw.Providers/Domain/Services/ModelDomainService.cs:ModelDomainService",
-        "Agw.Providers/Domain/Services/ModelProviderDomainService.cs:ModelProviderDomainService",
-        "Agw.Providers/Domain/Services/ProviderDomainService.cs:ProviderDomainService",
-        "Agw.Skills/Domain/Services/SkillDomainService.cs:SkillDomainService"
-    );
+    private static readonly IReadOnlySet<string> AllowedLegacyEntityDomainServices = Set();
 
     private static readonly IReadOnlySet<string> EntityBehaviorTypeNames = EntityOwners.Keys.ToHashSet(
         StringComparer.Ordinal

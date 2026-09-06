@@ -22,7 +22,8 @@ public sealed class ProjectProviderSessionFacade : IProjectProviderSessionFacade
                 reference.ContextId,
                 reference.AgentId,
                 reference.ExternalAgentName,
-                cancellationToken
+                cancellationToken,
+                reference.Generation
             )
             .ConfigureAwait(false);
         return binding?.ProviderSessionId;
@@ -43,7 +44,8 @@ public sealed class ProjectProviderSessionFacade : IProjectProviderSessionFacade
                 reference.ExternalAgentName,
                 providerSessionId,
                 ownerUserId,
-                cancellationToken
+                cancellationToken,
+                reference.Generation
             )
             .ConfigureAwait(false);
     }

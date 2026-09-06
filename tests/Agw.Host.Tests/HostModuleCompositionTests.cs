@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using Agw.A2A.Extensions;
 using Agw.Agents;
 using Agw.Agents.Contracts.Catalog;
@@ -8,13 +7,12 @@ using Agw.ControlPlane.Host;
 using Agw.DataPlane.Host;
 using Agw.Host.Hosting;
 using Agw.Jobs;
+using Agw.Jobs.Application.Persistence;
 using Agw.Jobs.Execution;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
-using Agw.Shared.Data.Entities.Jobs;
-using Agw.Shared.Data.Repositories;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 using Microsoft.AspNetCore.Routing;
@@ -213,9 +211,7 @@ public sealed class HostModuleCompositionTests
         services.AddScoped<IUserInfoService, TestUserInfoService>();
         services.AddScoped<IProjectRuntimeFacade, EmptyProjectRuntimeFacade>();
         services.AddScoped<IAgentCatalogFacade, EmptyAgentCatalogFacade>();
-        services.AddScoped<IRepository<Job>, EmptyRepository<Job>>();
-        services.AddScoped<IRepository<JobLog>, EmptyRepository<JobLog>>();
-        services.AddScoped<IUnitOfWork, NoopUnitOfWork>();
+        services.AddScoped<IJobsDbContext>(_ => null!);
         services.AddScoped<IProjectTaskFacade, EmptyProjectTaskFacade>();
     }
 
@@ -235,49 +231,11 @@ public sealed class HostModuleCompositionTests
             Task.FromResult<string?>(null);
     }
 
-    private sealed class EmptyRepository<TEntity> : IRepository<TEntity>
-        where TEntity : class
-    {
-        public IQueryable<TEntity> Queryable => Array.Empty<TEntity>().AsQueryable();
-
-        public Task<TEntity?> GetByIdAsync(object id) => Task.FromResult<TEntity?>(null);
-
-        public Task<TEntity?> SingleOrDefaultAsync(
-            Expression<Func<TEntity, bool>> predicate,
-            CancellationToken cancellationToken = default
-        ) => Task.FromResult<TEntity?>(null);
-
-        public Task<IReadOnlyList<TEntity>> ListAsync(
-            Expression<Func<TEntity, bool>>? predicate = null,
-            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null
-        ) => Task.FromResult<IReadOnlyList<TEntity>>([]);
-
-        public Task<IReadOnlyList<TEntity>> ListAsync(
-            Expression<Func<TEntity, bool>>? predicate = null,
-            Func<IQueryable<TEntity>, IOrderedQueryable<TEntity>>? orderBy = null,
-            params Expression<Func<TEntity, object>>[] includes
-        ) => Task.FromResult<IReadOnlyList<TEntity>>([]);
-
-        public Task AddAsync(TEntity entity) => Task.CompletedTask;
-
-        public void Update(TEntity entity) { }
-
-        public void Remove(TEntity entity) { }
-
-        public Task SaveChangesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-    }
-
-    private sealed class NoopUnitOfWork : IUnitOfWork
-    {
-        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(0);
-
-        public Task<bool> SaveEntitiesAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
-
-        public void Dispose() { }
-    }
-
     private sealed class EmptyProjectTaskFacade : IProjectTaskFacade
     {
+        public Task<int?> GetGenerationAsync(Guid conversationId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<int?>(0);
+
         public Task<ProjectTaskSnapshot> ResolveAsync(
             ResolveProjectTaskRequest request,
             CancellationToken cancellationToken = default

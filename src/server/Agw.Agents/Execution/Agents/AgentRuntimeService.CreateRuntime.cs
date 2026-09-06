@@ -43,6 +43,7 @@ public partial class AgentRuntimeService
         CancellationToken cancellationToken
     )
     {
+        using var sessionContext = ConversationSessionContext.Push(task.ProjectId, task.ContextId, task.Generation);
         var agent = await _agentAppService.GetAgentForCurrentUserAsync(agentId);
         if (agent == null)
         {
@@ -146,7 +147,13 @@ public partial class AgentRuntimeService
         }
 
         var providerSessionId = await _providerSessions.GetProviderSessionIdAsync(
-            new ProjectProviderSessionReference(projectId, contextId, agent.Id, agent.Name),
+            new ProjectProviderSessionReference(
+                projectId,
+                contextId,
+                agent.Id,
+                agent.Name,
+                ConversationSessionContext.GetGeneration(projectId, contextId)
+            ),
             cancellationToken
         );
         if (providerSessionId == null)
@@ -207,7 +214,13 @@ public partial class AgentRuntimeService
             try
             {
                 await _providerSessions.SaveProviderSessionIdAsync(
-                    new ProjectProviderSessionReference(task.ProjectId, contextId, agent.Id, agent.Name),
+                    new ProjectProviderSessionReference(
+                        task.ProjectId,
+                        contextId,
+                        agent.Id,
+                        agent.Name,
+                        task.Generation
+                    ),
                     providerSessionId,
                     executionUserId,
                     callbackCancellationToken

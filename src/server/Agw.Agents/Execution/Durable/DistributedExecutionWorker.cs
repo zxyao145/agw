@@ -3,12 +3,14 @@ using System.Security.Claims;
 using Agw.Agents.Execution.Turns;
 using Agw.Auth.Contracts;
 using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Runtime;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using static Agw.Agents.Application.Persistence.DurableExecutionQueries;
 
 namespace Agw.Agents.Execution.Durable;
 
@@ -148,7 +150,7 @@ internal sealed class DistributedExecutionWorker : BackgroundService
     /// </summary>
     private async Task RunExecutionAsync(Guid executionId, CancellationToken cancellationToken)
     {
-        IAsyncDisposable executionLock;
+        IApplicationLockLease executionLock;
         using (
             var timeoutCancellation = new CancellationTokenSource(
                 TimeSpan.FromMilliseconds(_options.LockAcquireTimeoutMilliseconds),
@@ -168,7 +170,8 @@ internal sealed class DistributedExecutionWorker : BackgroundService
                     .AcquireAsync(DurableExecutionLock.GetResourceName(executionId), lockCancellation.Token)
                     .ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException)
+                when (timeoutCancellation.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
             {
                 // 其他 Server 正持有该 execution 的 PostgreSQL advisory lock，本轮直接跳过。
                 return;
@@ -177,15 +180,20 @@ internal sealed class DistributedExecutionWorker : BackgroundService
 
         await using (executionLock.ConfigureAwait(false))
         {
+            using var ownershipCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken,
+                executionLock.HandleLostToken
+            );
+            var ownershipToken = ownershipCancellation.Token;
             await using var scope = _scopeFactory.CreateAsyncScope();
             var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-            var executor = scope.ServiceProvider.GetRequiredService<DurableExecutionSegmentExecutor>();
+            var executor = scope.ServiceProvider.GetRequiredService<IDurableExecutionSegmentExecutor>();
             var staleBefore = _timeProvider.GetUtcNow() - TimeSpan.FromSeconds(_options.RecoveryProbeSeconds);
             DurableExecutionSnapshot? snapshot;
             using (UserInfoUtil.PushSystemScope())
             {
                 snapshot = await store
-                    .TryBeginSegmentAsync(executionId, staleBefore, cancellationToken)
+                    .TryBeginSegmentAsync(executionId, staleBefore, ownershipToken)
                     .ConfigureAwait(false);
             }
             if (snapshot == null)
@@ -193,9 +201,14 @@ internal sealed class DistributedExecutionWorker : BackgroundService
                 return;
             }
 
-            using var segmentCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            using var monitorCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var interruptMonitor = MonitorInterruptAsync(executionId, segmentCancellation, monitorCancellation.Token);
+            using var segmentCancellation = CancellationTokenSource.CreateLinkedTokenSource(ownershipToken);
+            using var monitorCancellation = CancellationTokenSource.CreateLinkedTokenSource(ownershipToken);
+            var interruptMonitor = MonitorInterruptAsync(
+                executionId,
+                snapshot.StateVersion,
+                segmentCancellation,
+                monitorCancellation.Token
+            );
             DurableExecutionSegmentResult result;
             try
             {
@@ -251,7 +264,9 @@ internal sealed class DistributedExecutionWorker : BackgroundService
             using var ownerScope = UserInfoUtil.Push(CreateUserPrincipal(snapshot.Manifest.ResolveUserId()));
             using (UserInfoUtil.PushSystemScope())
             {
-                persisted = await store.SaveSegmentResultAsync(result, cancellationToken).ConfigureAwait(false);
+                persisted = await store
+                    .SaveSegmentResultAsync(result, snapshot.StateVersion, segmentCancellation.Token)
+                    .ConfigureAwait(false);
             }
             if (IsTerminal(persisted.Status))
             {
@@ -268,6 +283,7 @@ internal sealed class DistributedExecutionWorker : BackgroundService
 
     private async Task MonitorInterruptAsync(
         Guid executionId,
+        Guid expectedStateVersion,
         CancellationTokenSource segmentCancellation,
         CancellationToken cancellationToken
     )
@@ -282,7 +298,7 @@ internal sealed class DistributedExecutionWorker : BackgroundService
             {
                 snapshot = await store.GetAsync(executionId, cancellationToken).ConfigureAwait(false);
             }
-            if (snapshot.Status != DurableExecutionStatus.Interrupted)
+            if (snapshot.Status == DurableExecutionStatus.Running && snapshot.StateVersion == expectedStateVersion)
             {
                 continue;
             }
@@ -368,15 +384,6 @@ internal sealed class DistributedExecutionWorker : BackgroundService
         }
         catch (OperationCanceledException) { }
     }
-
-    /// <summary>
-    /// 判断执行状态是否已经终止。
-    /// </summary>
-    private static bool IsTerminal(DurableExecutionStatus status) =>
-        status
-            is DurableExecutionStatus.Completed
-                or DurableExecutionStatus.Failed
-                or DurableExecutionStatus.Interrupted;
 
     private static ClaimsPrincipal CreateUserPrincipal(string userId) =>
         new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, userId)], "DistributedExecution"));

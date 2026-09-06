@@ -147,6 +147,7 @@ function UserInputRoot({
           <div className="absolute left-2 right-2 bottom-2 h-7 flex justify-between">
             <div className="flex min-w-0 items-center">{bottomLeft}</div>
             <Button
+              // variant={canStop ? "destructive" : "default"}
               size="icon-sm"
               className="rounded-full size-7"
               onClick={handleClick}

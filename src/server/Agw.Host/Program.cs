@@ -410,6 +410,10 @@ public static class AgwHostApplication
                         await seeder.SeedAsync();
                     }
 
+                    // Also runs after configured first-run setup, which intentionally skips a second seed pass.
+                    // A bounded pass must not block startup on a busy execution; the mode-independent recovery service continues.
+                    await DbSeeder.RecoverDurableExecutionScopesAsync(scope.ServiceProvider, CancellationToken.None);
+
                     var legacyApiTokenMigrator = scope.ServiceProvider.GetRequiredService<LegacyApiTokenMigrator>();
                     await legacyApiTokenMigrator.MigrateAsync();
                 }

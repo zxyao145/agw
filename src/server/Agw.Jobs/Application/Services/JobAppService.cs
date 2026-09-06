@@ -2,12 +2,14 @@ using System.Globalization;
 using Agw.Agents.Contracts.Catalog;
 using Agw.Auth.Contracts;
 using Agw.Jobs.Application.Contracts;
+using Agw.Jobs.Application.Persistence;
 using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
+using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,10 +17,9 @@ namespace Agw.Jobs.Application.Services;
 
 public class JobAppService
 {
-    private readonly IRepository<Job> _jobTaskRepository;
-    private readonly IRepository<JobLog> _jobExecutionLogRepository;
+    private readonly IJobsDbContext _dbContext;
+    private readonly IApplicationLock _applicationLock;
     private readonly IProjectTaskFacade _projectTasks;
-    private readonly IUnitOfWork _unitOfWork;
     private readonly JobScheduleCalculator _jobScheduleCalculator;
     private readonly JobSchedulerWakeSignal _schedulerWakeSignal;
     private readonly TimeProvider _timeProvider;
@@ -27,35 +28,34 @@ public class JobAppService
     private readonly IAgentCatalogFacade _agentCatalog;
 
     public JobAppService(
-        IRepository<Job> jobTaskRepository,
-        IRepository<JobLog> jobExecutionLogRepository,
+        IJobsDbContext dbContext,
         IProjectTaskFacade projectTasks,
-        IUnitOfWork unitOfWork,
         JobScheduleCalculator jobScheduleCalculator,
         JobSchedulerWakeSignal schedulerWakeSignal,
         TimeProvider timeProvider,
         IUserInfoService userInfoService,
         IProjectRuntimeFacade projects,
-        IAgentCatalogFacade agentCatalog
+        IAgentCatalogFacade agentCatalog,
+        IApplicationLock? applicationLock = null
     )
     {
-        _jobTaskRepository = jobTaskRepository;
-        _jobExecutionLogRepository = jobExecutionLogRepository;
+        _dbContext = dbContext;
         _projectTasks = projectTasks;
-        _unitOfWork = unitOfWork;
         _jobScheduleCalculator = jobScheduleCalculator;
         _schedulerWakeSignal = schedulerWakeSignal;
         _timeProvider = timeProvider;
         _userInfoService = userInfoService;
         _projects = projects;
         _agentCatalog = agentCatalog;
+        _applicationLock = applicationLock ?? InMemoryApplicationLock.Shared;
     }
 
     public async Task<IReadOnlyList<Job>> ListAsync(CancellationToken cancellationToken = default)
     {
         var ownerUserId = ResolveOwnerUserId();
-        var jobs = await _jobTaskRepository
-            .Queryable.Where(job => job.CreateBy == ownerUserId)
+        var jobs = await _dbContext
+            .Jobs.AsNoTracking()
+            .Where(job => job.CreateBy == ownerUserId)
             .ToListAsync(cancellationToken);
 
         return jobs.OrderBy(t => t.NextRunTime).ToList();
@@ -67,8 +67,9 @@ public class JobAppService
     )
     {
         var ownerUserId = ResolveOwnerUserId();
-        var jobs = await _jobTaskRepository
-            .Queryable.Where(job => job.ProjectId == projectId && job.CreateBy == ownerUserId)
+        var jobs = await _dbContext
+            .Jobs.AsNoTracking()
+            .Where(job => job.ProjectId == projectId && job.CreateBy == ownerUserId)
             .ToListAsync(cancellationToken);
 
         return jobs.OrderBy(job => job.NextRunTime).ToList();
@@ -77,13 +78,13 @@ public class JobAppService
     public Task<Job?> GetAsync(Guid id)
     {
         var ownerUserId = ResolveOwnerUserId();
-        return _jobTaskRepository.Queryable.FirstOrDefaultAsync(job => job.Id == id && job.CreateBy == ownerUserId);
+        return _dbContext.Jobs.AsNoTracking().FirstOrDefaultAsync(job => job.Id == id && job.CreateBy == ownerUserId);
     }
 
     public Task<Job?> GetByProjectAsync(Guid id, Guid projectId, CancellationToken cancellationToken = default)
     {
         var ownerUserId = ResolveOwnerUserId();
-        return _jobTaskRepository.Queryable.SingleOrDefaultAsync(
+        return _dbContext.Jobs.SingleOrDefaultAsync(
             job => job.Id == id && job.ProjectId == projectId && job.CreateBy == ownerUserId,
             cancellationToken
         );
@@ -95,7 +96,7 @@ public class JobAppService
     )
     {
         var ownerUserId = ResolveOwnerUserId();
-        var jobExists = await _jobTaskRepository.Queryable.AnyAsync(
+        var jobExists = await _dbContext.Jobs.AnyAsync(
             job => job.Id == jobId && job.CreateBy == ownerUserId,
             cancellationToken
         );
@@ -104,8 +105,9 @@ public class JobAppService
             throw new AgwException(ErrorCodes.ResourceNotFound);
         }
 
-        var logs = await _jobExecutionLogRepository
-            .Queryable.Where(log => log.JobId == jobId)
+        var logs = await _dbContext
+            .JobLogs.AsNoTracking()
+            .Where(log => log.JobId == jobId)
             .ToListAsync(cancellationToken);
 
         if (logs.Count == 0)
@@ -132,8 +134,19 @@ public class JobAppService
             .ToList();
     }
 
-    public async Task<Job> CreateAsync(JobCreateRequest request, string user)
+    public async Task<Job> CreateAsync(
+        JobCreateRequest request,
+        string user,
+        CancellationToken cancellationToken = default
+    )
     {
+        await using var lease = await _applicationLock.AcquireAsync(
+            AgentDefinitionLock.GetResourceName(ResolveOwnerUserId()),
+            cancellationToken
+        );
+        using var mutation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lease.HandleLostToken);
+        cancellationToken = mutation.Token;
+
         await EnsureProjectVisibleAsync(request.ProjectId, user).ConfigureAwait(false);
         await EnsureAgentTargetVisibleAsync(request.AgentType, request.AgentId, user).ConfigureAwait(false);
         var now = _timeProvider.GetUtcNow();
@@ -158,17 +171,27 @@ public class JobAppService
         };
         entity.NextRunTime = ResolveNextRunTime(entity, now);
 
-        await _jobTaskRepository.AddAsync(entity);
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.Jobs.AddAsync(entity, cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
         _schedulerWakeSignal.NotifyCreated(entity);
         return entity;
     }
 
-    public async Task<Job?> UpdateAsync(Guid id, JobUpdateRequest request, string user)
+    public async Task<Job?> UpdateAsync(
+        Guid id,
+        JobUpdateRequest request,
+        string user,
+        CancellationToken cancellationToken = default
+    )
     {
-        var entity = await _jobTaskRepository.Queryable.FirstOrDefaultAsync(job =>
-            job.Id == id && job.CreateBy == user
+        await using var lease = await _applicationLock.AcquireAsync(
+            AgentDefinitionLock.GetResourceName(ResolveOwnerUserId()),
+            cancellationToken
         );
+        using var mutation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lease.HandleLostToken);
+        cancellationToken = mutation.Token;
+
+        var entity = await _dbContext.Jobs.FirstOrDefaultAsync(job => job.Id == id && job.CreateBy == user);
         if (entity == null)
         {
             return null;
@@ -176,7 +199,7 @@ public class JobAppService
 
         await EnsureProjectVisibleAsync(request.ProjectId, user).ConfigureAwait(false);
         await EnsureAgentTargetVisibleAsync(request.AgentType, request.AgentId, user).ConfigureAwait(false);
-        return await UpdateEntityAsync(entity, request, user, recalculateSchedule: true);
+        return await UpdateEntityAsync(entity, request, user, recalculateSchedule: true, cancellationToken);
     }
 
     public async Task<Job?> UpdateByProjectAsync(
@@ -188,6 +211,13 @@ public class JobAppService
         CancellationToken cancellationToken = default
     )
     {
+        await using var lease = await _applicationLock.AcquireAsync(
+            AgentDefinitionLock.GetResourceName(ResolveOwnerUserId()),
+            cancellationToken
+        );
+        using var mutation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lease.HandleLostToken);
+        cancellationToken = mutation.Token;
+
         var entity = await GetByProjectAsync(id, projectId, cancellationToken);
         if (entity == null)
         {
@@ -233,16 +263,13 @@ public class JobAppService
         entity.UpdateTime = now;
         entity.NextRunTime = recalculateSchedule ? ResolveNextRunTime(entity, now) : nextRunTime;
 
-        _jobTaskRepository.Update(entity);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return entity;
     }
 
     public async Task<Job?> UpdateEnabledAsync(JobEnabledUpdateRequest request, string user)
     {
-        var entity = await _jobTaskRepository.Queryable.FirstOrDefaultAsync(job =>
-            job.Id == request.JobId && job.CreateBy == user
-        );
+        var entity = await _dbContext.Jobs.FirstOrDefaultAsync(job => job.Id == request.JobId && job.CreateBy == user);
         if (entity == null)
         {
             return null;
@@ -252,8 +279,7 @@ public class JobAppService
         entity.UpdateBy = user;
         entity.UpdateTime = _timeProvider.GetUtcNow();
 
-        _jobTaskRepository.Update(entity);
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync();
 
         if (entity.IsEnabled)
         {
@@ -266,9 +292,7 @@ public class JobAppService
     public async Task<bool> DeleteAsync(Guid id)
     {
         var user = ResolveOwnerUserId();
-        var entity = await _jobTaskRepository.Queryable.FirstOrDefaultAsync(job =>
-            job.Id == id && job.CreateBy == user
-        );
+        var entity = await _dbContext.Jobs.FirstOrDefaultAsync(job => job.Id == id && job.CreateBy == user);
         if (entity == null)
         {
             return false;
@@ -276,12 +300,9 @@ public class JobAppService
 
         EnsureMutable(entity);
 
-        await _jobExecutionLogRepository
-            .Queryable.Where(log => log.JobId == entity.Id)
-            .ExecuteDeleteAsync()
-            .ConfigureAwait(false);
-        _jobTaskRepository.Remove(entity);
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.JobLogs.Where(log => log.JobId == entity.Id).ExecuteDeleteAsync().ConfigureAwait(false);
+        _dbContext.Jobs.Remove(entity);
+        await _dbContext.SaveChangesAsync();
         return true;
     }
 
@@ -295,12 +316,12 @@ public class JobAppService
 
         EnsureMutable(entity);
 
-        await _jobExecutionLogRepository
-            .Queryable.Where(log => log.JobId == entity.Id)
+        await _dbContext
+            .JobLogs.Where(log => log.JobId == entity.Id)
             .ExecuteDeleteAsync(cancellationToken)
             .ConfigureAwait(false);
-        _jobTaskRepository.Remove(entity);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        _dbContext.Jobs.Remove(entity);
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return entity;
     }
 
@@ -311,7 +332,7 @@ public class JobAppService
             return requestedName.Trim();
         }
 
-        var count = await _jobTaskRepository.Queryable.CountAsync(job => job.CreateBy == user);
+        var count = await _dbContext.Jobs.CountAsync(job => job.CreateBy == user);
         return $"job-{count + 1}-{now.ToString("yyyyMMdd", CultureInfo.InvariantCulture)}";
     }
 

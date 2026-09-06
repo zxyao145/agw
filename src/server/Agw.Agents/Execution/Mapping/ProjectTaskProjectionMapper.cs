@@ -10,6 +10,7 @@ internal static class ProjectTaskProjectionMapper
         new()
         {
             TaskId = task.TaskId,
+            Generation = task.Generation,
             ProjectConversationId = task.ProjectConversationId,
             ProjectId = task.ProjectId,
             ContextId = task.ContextId,

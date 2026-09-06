@@ -1,65 +1,59 @@
+using Agw.Providers.Application.Persistence;
 using Agw.Providers.Contracts.Manager;
-using Agw.Providers.Domain.Services;
+using Agw.Providers.Domain.Rules;
 using Agw.Shared.Contracts;
 using Agw.Shared.Data.Entities.Providers;
-using Agw.Shared.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Providers.Application;
 
 public class ModelAppService : IModelAppService
 {
-    private readonly IRepository<AgwAiModel> _modelRepository;
-    private readonly IUnitOfWork _unitOfWork;
-    private readonly ModelDomainService _modelDomainService;
+    private readonly IProvidersDbContext _dbContext;
     private readonly ICurrentUser _currentUser;
 
-    public ModelAppService(
-        IRepository<AgwAiModel> modelRepository,
-        IUnitOfWork unitOfWork,
-        ModelDomainService modelDomainService,
-        ICurrentUser currentUser
-    )
+    public ModelAppService(IProvidersDbContext dbContext, ICurrentUser currentUser)
     {
-        _modelRepository = modelRepository;
-        _unitOfWork = unitOfWork;
-        _modelDomainService = modelDomainService;
+        _dbContext = dbContext;
         _currentUser = currentUser;
     }
 
-    public Task<IReadOnlyList<AgwAiModel>> ListAsync()
+    public async Task<IReadOnlyList<AgwAiModel>> ListAsync()
     {
         var ownerUserId = ResolveOwnerUserId();
-        return _modelRepository.ListAsync(model => model.CreateBy == ownerUserId);
+        return await _dbContext.Models.AsNoTracking().Where(model => model.CreateBy == ownerUserId).ToListAsync();
     }
 
     public Task<AgwAiModel?> GetAsync(Guid id)
     {
         var ownerUserId = ResolveOwnerUserId();
-        return _modelRepository.Queryable.FirstOrDefaultAsync(model => model.Id == id && model.CreateBy == ownerUserId);
+        return _dbContext
+            .Models.AsNoTracking()
+            .FirstOrDefaultAsync(model => model.Id == id && model.CreateBy == ownerUserId);
     }
 
     public async Task<AgwAiModel> CreateAsync(ModelCreateRequest request, string user)
     {
-        _modelDomainService.ValidateTokenLimits(request.MaxContextWindowTokens, request.MaxOutputTokens);
+        _ = ResolveOwnerUserId();
+        ModelRules.ValidateTokenLimits(request.MaxContextWindowTokens, request.MaxOutputTokens);
         var model = new AgwAiModel
         {
+            Id = Guid.CreateVersion7(),
             Name = request.Name,
             Description = request.Description,
             MaxContextWindowTokens = request.MaxContextWindowTokens,
             MaxOutputTokens = request.MaxOutputTokens,
         };
 
-        _modelDomainService.PrepareForCreate(model, user);
-        await _modelRepository.AddAsync(model);
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.Models.AddAsync(model);
+        await _dbContext.SaveChangesAsync();
         return model;
     }
 
     public async Task<AgwAiModel?> UpdateAsync(Guid id, ModelUpdateRequest request, string user)
     {
         var ownerUserId = ResolveOwnerUserId();
-        var existing = await _modelRepository.Queryable.FirstOrDefaultAsync(model =>
+        var existing = await _dbContext.Models.FirstOrDefaultAsync(model =>
             model.Id == id && model.CreateBy == ownerUserId
         );
         if (existing == null)
@@ -67,28 +61,21 @@ public class ModelAppService : IModelAppService
             return null;
         }
 
-        _modelDomainService.ValidateTokenLimits(request.MaxContextWindowTokens, request.MaxOutputTokens);
-        _modelDomainService.ApplyUpdate(
-            existing,
-            model =>
-            {
-                model.Name = request.Name;
-                model.Description = request.Description;
-                model.MaxContextWindowTokens = request.MaxContextWindowTokens;
-                model.MaxOutputTokens = request.MaxOutputTokens;
-            },
-            user
-        );
+        ModelRules.ValidateTokenLimits(request.MaxContextWindowTokens, request.MaxOutputTokens);
+        existing.Name = request.Name;
+        existing.Description = request.Description;
+        existing.MaxContextWindowTokens = request.MaxContextWindowTokens;
+        existing.MaxOutputTokens = request.MaxOutputTokens;
 
-        _modelRepository.Update(existing);
-        await _unitOfWork.SaveChangesAsync();
+        _dbContext.Models.Entry(existing).Property(model => model.Name).IsModified = true;
+        await _dbContext.SaveChangesAsync();
         return existing;
     }
 
     public async Task<bool> DeleteAsync(Guid id)
     {
         var ownerUserId = ResolveOwnerUserId();
-        var existing = await _modelRepository.Queryable.FirstOrDefaultAsync(model =>
+        var existing = await _dbContext.Models.FirstOrDefaultAsync(model =>
             model.Id == id && model.CreateBy == ownerUserId
         );
         if (existing == null)
@@ -96,8 +83,8 @@ public class ModelAppService : IModelAppService
             return false;
         }
 
-        _modelRepository.Remove(existing);
-        await _unitOfWork.SaveChangesAsync();
+        _dbContext.Models.Remove(existing);
+        await _dbContext.SaveChangesAsync();
         return true;
     }
 

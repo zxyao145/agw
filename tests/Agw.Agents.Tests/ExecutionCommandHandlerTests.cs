@@ -20,7 +20,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
-public class ExecutionCommandHandlerTests
+public partial class ExecutionCommandHandlerTests
 {
     [Fact]
     public async Task SettingCommand_ChangedSettings_ReleasesRuntimeAndClearsResolvedState()
@@ -493,6 +493,11 @@ public class ExecutionCommandHandlerTests
 
     private sealed class FakeProjectTaskFacade : IProjectTaskFacade
     {
+        public Task<int?> GetGenerationAsync(Guid conversationId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<int?>(Generation);
+
+        public int Generation { get; set; }
+
         private readonly ProjectTaskSnapshot _task;
 
         public FakeProjectTaskFacade(AgentExecutionTask task)
@@ -511,7 +516,13 @@ public class ExecutionCommandHandlerTests
         {
             ResolveCount++;
             LastRequest = request;
-            return Task.FromResult(_task with { ProjectConversationId = request.ConversationId });
+            return Task.FromResult(
+                _task with
+                {
+                    ProjectConversationId = request.ConversationId,
+                    Generation = Generation,
+                }
+            );
         }
 
         public Task<ProjectTaskSnapshot?> GetAsync(Guid taskId, CancellationToken cancellationToken = default) =>

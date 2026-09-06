@@ -1,7 +1,7 @@
 using Agw.Auth.Contracts;
+using Agw.Projects.Application.Persistence;
 using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,24 +11,32 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
 {
     private readonly TaskExecutionAppService _taskService;
     private readonly ITaskAppService _taskResolver;
-    private readonly IRepository<ProjectConversation> _conversationRepository;
-    private readonly IRepository<ProjectConversationChatHistory> _historyRepository;
+    private readonly IProjectsDbContext _dbContext;
     private readonly IUserInfoService _userInfoService;
 
     public ProjectTaskFacade(
         TaskExecutionAppService taskService,
-        IRepository<ProjectConversation> conversationRepository,
-        IRepository<ProjectConversationChatHistory> historyRepository,
+        IProjectsDbContext dbContext,
         ITaskAppService taskResolver,
         IUserInfoService userInfoService
     )
     {
         _taskService = taskService;
-        _conversationRepository = conversationRepository;
-        _historyRepository = historyRepository;
+        _dbContext = dbContext;
         _taskResolver = taskResolver;
         _userInfoService = userInfoService;
     }
+
+    public Task<int?> GetGenerationAsync(Guid conversationId, CancellationToken cancellationToken = default) =>
+        _dbContext
+            .ProjectConversations.AsNoTracking()
+            .Where(conversation =>
+                conversation.Id == conversationId
+                && conversation.CreateBy == _userInfoService.RequiredUserId
+                && conversation.Project!.CreateBy == _userInfoService.RequiredUserId
+            )
+            .Select(conversation => (int?)conversation.Generation)
+            .SingleOrDefaultAsync(cancellationToken);
 
     public async Task<ProjectTaskSnapshot> ResolveAsync(
         ResolveProjectTaskRequest request,
@@ -137,14 +145,14 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
 
         var ids = taskIds.ToHashSet();
         var ownerUserId = ResolveOwnerUserId();
-        var histories = await _historyRepository
-            .Queryable.AsNoTracking()
+        var histories = await _dbContext
+            .ProjectConversationChatHistories.AsNoTracking()
             .Where(record => ids.Contains(record.TaskId))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
         var conversationIds = histories.Select(record => record.ConversationId).ToHashSet();
-        var conversations = await _conversationRepository
-            .Queryable.AsNoTracking()
+        var conversations = await _dbContext
+            .ProjectConversations.AsNoTracking()
             .Where(conversation => conversationIds.Contains(conversation.Id) && conversation.CreateBy == ownerUserId)
             .ToDictionaryAsync(conversation => conversation.Id, cancellationToken)
             .ConfigureAwait(false);
@@ -170,7 +178,8 @@ public sealed class ProjectTaskFacade : IProjectTaskFacade
             task.ErrorMessage,
             task.CreateTime,
             task.UpdateTime,
-            task.FinishedTime
+            task.FinishedTime,
+            task.Generation
         );
 
     internal static ProjectTaskStatus Map(TaskExecutionStatus status) =>

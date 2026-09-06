@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
-using Agw.Domain.Services.Skills;
+using Agw.Auth.Contracts;
+using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
@@ -9,6 +10,8 @@ using Agw.Skills.Application;
 using Agw.Skills.Application.Remote;
 using Agw.Skills.Contracts.Registration;
 using Microsoft.Agents.AI;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Skills.Tests;
@@ -20,6 +23,7 @@ public class SkillAppServiceBuiltInTests
     [Fact]
     public async Task BuiltInSkill_IsReportedAndCannotBeUpdatedOrDeleted()
     {
+        using var systemScope = UserInfoUtil.PushSystemScope();
         var root = Path.Combine(Path.GetTempPath(), $"agw-built-in-skill-{Guid.CreateVersion7():N}");
         var dataPaths = AgwDataPaths.Resolve(root, "/unused");
         dataPaths.EnsureCreated();
@@ -33,13 +37,20 @@ public class SkillAppServiceBuiltInTests
                 Kind = SkillKind.BuiltIn,
                 ContentPath = string.Empty,
             };
+            await using var connection = new SqliteConnection("Data Source=:memory:");
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+            var options = new DbContextOptionsBuilder<AgwDbContext>()
+                .UseSqlite(connection)
+                .UseSnakeCaseNamingConvention()
+                .Options;
+            await using var context = new AgwDbContext(options);
+            await context.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+            context.Skills.Add(skill);
+            await context.SaveChangesAsync(TestContext.Current.CancellationToken);
             var unitOfWork = new TestUnitOfWork();
             var service = new SkillAppService(
-                new TestRepository<Skill>([skill], entity => entity.Id),
+                context,
                 new TestAgentReferenceFacade(new TestRepository<AgentSkillRelation>([], _ => Guid.Empty), unitOfWork),
-                new TestRepository<RemoteSkillCache>([], entity => entity.SkillId),
-                unitOfWork,
-                new SkillDomainService(TimeProvider.System),
                 dataPaths,
                 NullLogger<SkillAppService>.Instance,
                 new TestRemoteSkillClient(),

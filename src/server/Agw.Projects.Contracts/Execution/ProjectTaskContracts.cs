@@ -20,7 +20,8 @@ public sealed record ProjectTaskSnapshot(
     string? ErrorMessage,
     DateTimeOffset CreatedAt,
     DateTimeOffset? UpdatedAt,
-    DateTimeOffset? FinishedAt
+    DateTimeOffset? FinishedAt,
+    int Generation = 0
 );
 
 public sealed record ResolveProjectTaskRequest(
@@ -53,6 +54,8 @@ public sealed record FinishProjectTaskRequest(
 
 public interface IProjectTaskFacade
 {
+    Task<int?> GetGenerationAsync(Guid conversationId, CancellationToken cancellationToken = default);
+
     Task<ProjectTaskSnapshot> ResolveAsync(
         ResolveProjectTaskRequest request,
         CancellationToken cancellationToken = default

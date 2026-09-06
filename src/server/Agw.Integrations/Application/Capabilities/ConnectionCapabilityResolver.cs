@@ -1,12 +1,12 @@
 using Agw.Auth.Contracts;
 using Agw.Integrations.Application.Credentials;
 using Agw.Integrations.Application.Management;
+using Agw.Integrations.Application.Persistence;
 using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.Capabilities;
 using Agw.Integrations.Domain.Plugins;
 using Agw.Integrations.Mcp;
 using Agw.Shared.Data.Entities.Integrations;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -16,8 +16,7 @@ namespace Agw.Integrations.Application.Capabilities;
 
 public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver, IConnectionMcpInvocationSession
 {
-    private readonly IRepository<IntegrationConnection> _connectionRepository;
-    private readonly IRepository<PluginInstallation> _installationRepository;
+    private readonly IIntegrationsDbContext _dbContext;
     private readonly IPluginCatalog _pluginCatalog;
     private readonly IConnectionCredentialReader _credentialReader;
     private readonly IReadOnlyDictionary<string, IConnectionNativeCapabilityProvider> _nativeProviders;
@@ -28,8 +27,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
     private readonly IUserInfoService _userInfoService;
 
     public ConnectionCapabilityResolver(
-        IRepository<IntegrationConnection> connectionRepository,
-        IRepository<PluginInstallation> installationRepository,
+        IIntegrationsDbContext dbContext,
         IPluginCatalog pluginCatalog,
         IConnectionCredentialReader credentialReader,
         IEnumerable<IConnectionNativeCapabilityProvider> nativeProviders,
@@ -40,8 +38,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         IUserInfoService userInfoService
     )
     {
-        _connectionRepository = connectionRepository;
-        _installationRepository = installationRepository;
+        _dbContext = dbContext;
         _pluginCatalog = pluginCatalog;
         _credentialReader = credentialReader;
         _nativeProviders = nativeProviders.ToDictionary(item => item.Provider, StringComparer.OrdinalIgnoreCase);
@@ -62,14 +59,14 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         var userId = _userInfoService.RequiredUserId;
 
         var orderedIds = connectionIds.Distinct().ToArray();
-        var storedConnections = await _connectionRepository
-            .Queryable.AsNoTracking()
+        var storedConnections = await _dbContext
+            .Connections.AsNoTracking()
             .Where(item => orderedIds.Contains(item.Id) && item.CreateBy == userId)
             .ToListAsync(cancellationToken);
         var connections = storedConnections.ToDictionary(item => item.Id);
         var pluginIds = storedConnections.Select(item => item.PluginId).Distinct().ToArray();
-        var installations = await _installationRepository
-            .Queryable.AsNoTracking()
+        var installations = await _dbContext
+            .PluginInstallations.AsNoTracking()
             .Where(item => pluginIds.Contains(item.PluginId) && item.CreateBy == userId)
             .ToDictionaryAsync(item => item.PluginId, StringComparer.OrdinalIgnoreCase, cancellationToken);
 
@@ -519,16 +516,16 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
         try
         {
             var userId = _userInfoService.RequiredUserId;
-            var connection = await _connectionRepository
-                .Queryable.AsNoTracking()
+            var connection = await _dbContext
+                .Connections.AsNoTracking()
                 .SingleOrDefaultAsync(item => item.Id == connectionId && item.CreateBy == userId, cancellationToken);
             if (connection == null)
             {
                 throw new AgwException(ErrorCodes.IntegrationDataInvalid);
             }
 
-            var installation = await _installationRepository
-                .Queryable.AsNoTracking()
+            var installation = await _dbContext
+                .PluginInstallations.AsNoTracking()
                 .SingleOrDefaultAsync(
                     item => item.PluginId == connection.PluginId && item.CreateBy == userId,
                     cancellationToken

@@ -1,10 +1,10 @@
 using Agw.Auth.Contracts;
 using Agw.Integrations.Application.Credentials;
+using Agw.Integrations.Application.Persistence;
 using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.Management;
 using Agw.Integrations.Domain.Plugins;
 using Agw.Shared.Data.Entities.Integrations;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,9 +18,7 @@ public sealed class ConnectionAppService
     private const string CredentialExpiredCode = "integration.credential_expired";
     private const string DefinitionUnavailableCode = "integration.definition_unavailable";
 
-    private readonly IRepository<Connection> _connectionRepository;
-    private readonly IRepository<PluginInstallation> _installationRepository;
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IIntegrationsDbContext _dbContext;
     private readonly IPluginCatalog _pluginCatalog;
     private readonly CredentialMutationService _credentialMutations;
     private readonly IConnectionCredentialReader _credentialReader;
@@ -28,9 +26,7 @@ public sealed class ConnectionAppService
     private readonly IUserInfoService _userInfoService;
 
     public ConnectionAppService(
-        IRepository<Connection> connectionRepository,
-        IRepository<PluginInstallation> installationRepository,
-        IUnitOfWork unitOfWork,
+        IIntegrationsDbContext dbContext,
         IPluginCatalog pluginCatalog,
         CredentialMutationService credentialMutations,
         IConnectionCredentialReader credentialReader,
@@ -38,9 +34,7 @@ public sealed class ConnectionAppService
         IUserInfoService userInfoService
     )
     {
-        _connectionRepository = connectionRepository;
-        _installationRepository = installationRepository;
-        _unitOfWork = unitOfWork;
+        _dbContext = dbContext;
         _pluginCatalog = pluginCatalog;
         _credentialMutations = credentialMutations;
         _credentialReader = credentialReader;
@@ -51,8 +45,9 @@ public sealed class ConnectionAppService
     public async Task<IReadOnlyList<ConnectionResponse>> ListAsync(Guid? id, CancellationToken cancellationToken)
     {
         var user = _userInfoService.RequiredUserId;
-        IQueryable<Connection> query = _connectionRepository
-            .Queryable.Include(connection => connection.Credentials)
+        IQueryable<Connection> query = _dbContext
+            .Connections.AsNoTracking()
+            .Include(connection => connection.Credentials)
             .Where(connection => connection.CreateBy == user);
         if (id.HasValue)
         {
@@ -77,7 +72,7 @@ public sealed class ConnectionAppService
         );
         var alias = IntegrationInputValidator.NormalizeAlias(request.Alias);
         if (
-            await _connectionRepository.Queryable.AnyAsync(
+            await _dbContext.Connections.AnyAsync(
                 connection => connection.CreateBy == user && connection.Alias == alias,
                 cancellationToken
             )
@@ -112,10 +107,10 @@ public sealed class ConnectionAppService
             CreateBy = user,
             CreateTime = _timeProvider.GetUtcNow(),
         };
-        await _connectionRepository.AddAsync(connection);
+        await _dbContext.Connections.AddAsync(connection, cancellationToken);
         await _credentialMutations.ApplyConnectionAsync(connection, input.SecretUpdates);
         await SetInitialStatusAsync(connection, definition, cancellationToken);
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return Map(connection);
     }
 
@@ -167,7 +162,7 @@ public sealed class ConnectionAppService
         connection.UpdateTime = _timeProvider.GetUtcNow();
         await _credentialMutations.ApplyConnectionAsync(connection, input.SecretUpdates);
         await SetInitialStatusAsync(connection, definition, cancellationToken);
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return Map(connection);
     }
 
@@ -225,14 +220,14 @@ public sealed class ConnectionAppService
             }
         }
 
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return Map(connection);
     }
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
         var user = _userInfoService.RequiredUserId;
-        var connection = await _connectionRepository.Queryable.FirstOrDefaultAsync(
+        var connection = await _dbContext.Connections.FirstOrDefaultAsync(
             item => item.Id == id && item.CreateBy == user,
             cancellationToken
         );
@@ -241,8 +236,8 @@ public sealed class ConnectionAppService
             return false;
         }
 
-        _connectionRepository.Remove(connection);
-        await _unitOfWork.SaveChangesAsync();
+        _dbContext.Connections.Remove(connection);
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return true;
     }
 
@@ -343,8 +338,8 @@ public sealed class ConnectionAppService
     private async Task<Connection> GetTrackedAsync(Guid id, CancellationToken cancellationToken)
     {
         var user = _userInfoService.RequiredUserId;
-        var connection = await _connectionRepository
-            .Queryable.Include(item => item.Credentials)
+        var connection = await _dbContext
+            .Connections.Include(item => item.Credentials)
             .FirstOrDefaultAsync(item => item.Id == id && item.CreateBy == user, cancellationToken);
         return connection ?? throw new AgwException(ErrorCodes.ConnectionNotFound);
     }
@@ -435,8 +430,8 @@ public sealed class ConnectionAppService
             return null;
         }
 
-        var installation = await _installationRepository
-            .Queryable.Include(item => item.Credentials)
+        var installation = await _dbContext
+            .PluginInstallations.Include(item => item.Credentials)
             .FirstOrDefaultAsync(
                 item => item.PluginId == connection.PluginId && item.CreateBy == _userInfoService.RequiredUserId,
                 cancellationToken

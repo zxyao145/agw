@@ -23,8 +23,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
-public class AgentSuggestionAppServiceTests
+public class AgentSuggestionAppServiceTests : IDisposable
 {
+    private readonly TestAgentDatabase _database = new();
+
+    public void Dispose() => _database.Dispose();
+
     [Fact]
     public async Task GetSuggestionsAsync_SystemAgent_MergesDirectProjectAndAgentCapabilities()
     {
@@ -228,15 +232,24 @@ public class AgentSuggestionAppServiceTests
         Assert.Empty(response.Suggestions);
     }
 
-    [Fact]
-    public async Task GetSuggestionsAsync_MissingAgent_ThrowsAgentNotFound()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GetSuggestionsAsync_MissingOrForeignAgent_ThrowsAgentNotFound(bool foreignAgentExists)
     {
-        var service = CreateService(projects: [new Project { Id = Guid.CreateVersion7() }]);
-
-        var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            service.GetSuggestionsAsync(Guid.CreateVersion7(), Guid.CreateVersion7())
+        // Arrange
+        var agentId = Guid.CreateVersion7();
+        var service = CreateService(
+            agents: foreignAgentExists ? [new Agent { Id = agentId, CreateBy = "other-user" }] : [],
+            projects: [new Project { Id = Guid.CreateVersion7() }]
         );
 
+        // Act
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            service.GetSuggestionsAsync(Guid.CreateVersion7(), agentId)
+        );
+
+        // Assert
         Assert.Equal(ErrorCodes.AgentNotFound.Code, exception.Code);
     }
 
@@ -291,7 +304,7 @@ public class AgentSuggestionAppServiceTests
         );
     }
 
-    private static AgentSuggestionAppService CreateService(
+    private AgentSuggestionAppService CreateService(
         IEnumerable<Agent>? agents = null,
         IEnumerable<Project>? projects = null,
         IEnumerable<Skill>? skills = null
@@ -314,12 +327,18 @@ public class AgentSuggestionAppServiceTests
             [new WebSearchContextualTool(), new ShellContextualTool(new ConfigurationBuilder().Build())],
             new ToolBlockRegistry([new TodoToolBlock(), new ModeToolBlock()])
         );
+        var skillRepository = new TestRepository<Skill>(ownedSkills);
+        var userInfo = new TestUserInfoService();
+        _database.Context.Agents.AddRange(ownedAgents);
+        _database.Context.Skills.AddRange(ownedSkills);
+        _database.Context.SaveChanges();
+
         return new AgentSuggestionAppService(
-            new TestRepository<Agent>(ownedAgents),
+            _database.Context,
             new TestProjectRuntimeFacade(projects),
-            new TestRepository<Skill>(ownedSkills),
+            new TestSkillReferenceFacade(skillRepository, userInfo),
             registry,
-            new TestUserInfoService()
+            userInfo
         );
     }
 

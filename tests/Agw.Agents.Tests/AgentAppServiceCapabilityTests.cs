@@ -9,8 +9,12 @@ using Agw.Shared.Data.Repositories;
 
 namespace Agw.Agents.Tests;
 
-public class AgentAppServiceCapabilityTests
+public class AgentAppServiceCapabilityTests : IDisposable
 {
+    private readonly TestAgentDatabase _database = new();
+
+    public void Dispose() => _database.Dispose();
+
     [Fact]
     public void CreateAiAgentRequest_DefaultMode_IsExecute()
     {
@@ -115,7 +119,7 @@ public class AgentAppServiceCapabilityTests
         Assert.Equal(skill.Id, Assert.Single(skills).Id);
     }
 
-    private static AgentAppService CreateService(
+    private AgentAppService CreateService(
         IEnumerable<McpServer>? mcpServers = null,
         IEnumerable<Skill>? skills = null,
         IEnumerable<AgentMcpServerRelation>? agentMcpRelations = null,
@@ -140,21 +144,35 @@ public class AgentAppServiceCapabilityTests
             .Distinct()
             .Select(id => new Agent { Id = id, CreateBy = "tester" })
             .ToArray();
+        var connectionRepository = new TestRepository<Connection>();
+        var modelProviderRepository = new TestRepository<ModelProviderRelation>();
+        var modelRepository = new TestRepository<AgwAiModel>();
+        var providerRepository = new TestRepository<Provider>();
+        var skillRepository = new TestRepository<Skill>(skillItems);
+        var userInfo = new TestUserInfoService();
+
+        _database.Context.Agents.AddRange(agents);
+        _database.Context.McpToolServers.AddRange(serverItems);
+        _database.Context.Skills.AddRange(skillItems);
+        _database.Context.AgentMcpToolServers.AddRange(mcpRelations);
+        _database.Context.AgentSkillRelations.AddRange(skillRelations);
+        _database.Context.SaveChanges();
 
         return new AgentAppService(
-            new TestRepository<Agent>(agents),
-            new TestRepository<AgentConnectionRelation>(),
-            new TestRepository<Connection>(),
-            new TestRepository<ModelProviderRelation>(),
-            new TestRepository<AgwAiModel>(),
-            new TestRepository<Provider>(),
-            new TestRepository<McpServer>(serverItems),
-            new TestRepository<AgentMcpServerRelation>(mcpRelations),
-            new TestRepository<Skill>(skillItems),
-            new TestRepository<AgentSkillRelation>(skillRelations),
-            new TestUnitOfWork(),
-            new AgentDomainService(TimeProvider.System),
-            new TestUserInfoService()
+            _database.Context,
+            new TestConnectionReferenceFacade(connectionRepository, userInfo),
+            new TestModelProviderReferenceFacade(
+                modelProviderRepository,
+                modelRepository,
+                providerRepository,
+                userInfo
+            ),
+            new TestSkillReferenceFacade(skillRepository, userInfo),
+            userInfo,
+            new Agw.Infrastructure.Agents.AgentDeletionCoordinator(
+                _database.Context,
+                Agw.Shared.Coordination.InMemoryApplicationLock.Shared
+            )
         );
     }
 
@@ -213,14 +231,5 @@ public class AgentAppServiceCapabilityTests
         public void Remove(TEntity entity) => _items.Remove(entity);
 
         public Task SaveChangesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
-    }
-
-    private sealed class TestUnitOfWork : IUnitOfWork
-    {
-        public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default) => Task.FromResult(0);
-
-        public Task<bool> SaveEntitiesAsync(CancellationToken cancellationToken = default) => Task.FromResult(true);
-
-        public void Dispose() { }
     }
 }

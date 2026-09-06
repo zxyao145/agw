@@ -2,10 +2,9 @@ using System.Collections.Concurrent;
 using System.Security.Claims;
 using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Repositories;
 using Agw.Shared.Data.Entities.Skills;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
+using Agw.Skills.Application.Persistence;
 using Agw.Skills.Application.Remote;
 using Agw.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -314,9 +313,7 @@ public class RemoteSkillContentResolverTests : IDisposable
         {
             var services = new ServiceCollection();
             services.AddDbContext<AgwDbContext>(options => options.UseSqlite(ConnectionString));
-            services.AddScoped<DbContext>(provider => provider.GetRequiredService<AgwDbContext>());
-            services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
-            services.AddScoped<IUnitOfWork>(provider => provider.GetRequiredService<AgwDbContext>());
+            services.AddScoped<ISkillsDbContext>(provider => provider.GetRequiredService<AgwDbContext>());
             return services.BuildServiceProvider();
         }
 

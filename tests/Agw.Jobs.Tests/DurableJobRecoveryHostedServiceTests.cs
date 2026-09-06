@@ -1,10 +1,12 @@
-using System.Linq.Expressions;
 using System.Reflection;
+using Agw.Infrastructure.Data;
+using Agw.Jobs.Application.Persistence;
 using Agw.Jobs.Scheduling.Attempts;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -26,9 +28,17 @@ public sealed class DurableJobRecoveryHostedServiceTests
             ActiveAttemptStartedAt = TimeProvider.System.GetUtcNow(),
             CreateBy = "owner",
         };
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await using var dbContext = new AgwDbContext(
+            new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options
+        );
+        await dbContext.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+        dbContext.Jobs.Add(job);
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
         var recorder = new RecordingOutcomeRecorder();
         var services = new ServiceCollection()
-            .AddSingleton<IRepository<Job>>(new InMemoryJobRepository(job))
+            .AddSingleton<IJobsDbContext>(dbContext)
             .AddSingleton<IDurableAgentExecutionFacade>(new MissingDurableExecutionFacade())
             .AddSingleton<IJobAttemptOutcomeRecorder>(recorder)
             .BuildServiceProvider();
@@ -68,10 +78,18 @@ public sealed class DurableJobRecoveryHostedServiceTests
             ActiveAttemptStartedAt = TimeProvider.System.GetUtcNow(),
             CreateBy = string.Empty,
         };
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await using var dbContext = new AgwDbContext(
+            new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options
+        );
+        await dbContext.Database.EnsureCreatedAsync(TestContext.Current.CancellationToken);
+        dbContext.Jobs.Add(job);
+        await dbContext.SaveChangesAsync(TestContext.Current.CancellationToken);
         var recorder = new RecordingOutcomeRecorder();
         var executionFacade = new MissingDurableExecutionFacade();
         var services = new ServiceCollection()
-            .AddSingleton<IRepository<Job>>(new InMemoryJobRepository(job))
+            .AddSingleton<IJobsDbContext>(dbContext)
             .AddSingleton<IDurableAgentExecutionFacade>(executionFacade)
             .AddSingleton<IJobAttemptOutcomeRecorder>(recorder)
             .BuildServiceProvider();
@@ -152,37 +170,6 @@ public sealed class DurableJobRecoveryHostedServiceTests
             ErrorMessage = errorMessage;
             return Task.FromResult<JobAttemptResult>(new JobAttemptResult.Drop());
         }
-    }
-
-    private sealed class InMemoryJobRepository(Job job) : IRepository<Job>
-    {
-        public IQueryable<Job> Queryable => new[] { job }.AsQueryable();
-
-        public Task<Job?> GetByIdAsync(object id) => Task.FromResult<Job?>(Equals(job.Id, id) ? job : null);
-
-        public Task<Job?> SingleOrDefaultAsync(
-            Expression<Func<Job, bool>> predicate,
-            CancellationToken cancellationToken = default
-        ) => Task.FromResult(new[] { job }.AsQueryable().SingleOrDefault(predicate));
-
-        public Task<IReadOnlyList<Job>> ListAsync(
-            Expression<Func<Job, bool>>? predicate = null,
-            Func<IQueryable<Job>, IOrderedQueryable<Job>>? orderBy = null
-        ) => throw new NotSupportedException();
-
-        public Task<IReadOnlyList<Job>> ListAsync(
-            Expression<Func<Job, bool>>? predicate = null,
-            Func<IQueryable<Job>, IOrderedQueryable<Job>>? orderBy = null,
-            params Expression<Func<Job, object>>[] includes
-        ) => throw new NotSupportedException();
-
-        public Task AddAsync(Job entity) => throw new NotSupportedException();
-
-        public void Update(Job entity) => throw new NotSupportedException();
-
-        public void Remove(Job entity) => throw new NotSupportedException();
-
-        public Task SaveChangesAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class ImmediateProjectExecutionLock : IProjectExecutionLock

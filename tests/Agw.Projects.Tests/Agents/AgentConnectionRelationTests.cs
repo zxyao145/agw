@@ -1,15 +1,15 @@
 using System.Security.Claims;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
-using Agw.Agents.Definitions.Domain;
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Repositories;
+using Agw.Integrations.Application.Facades;
 using Agw.Projects.Tests;
+using Agw.Providers.Application.Facades;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;
-using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
+using Agw.Skills.Application.Facades;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -308,20 +308,16 @@ public class AgentConnectionRelationTests : IDisposable
         }
 
         private static AgentAppService CreateService(AgwDbContext dbContext, TestUserInfoService userInfo) =>
-            new(
-                new EfRepository<Agent>(dbContext),
-                new EfRepository<AgentConnectionRelation>(dbContext),
-                new EfRepository<Connection>(dbContext),
-                new EfRepository<ModelProviderRelation>(dbContext),
-                new EfRepository<AgwAiModel>(dbContext),
-                new EfRepository<Provider>(dbContext),
-                new EfRepository<McpServer>(dbContext),
-                new EfRepository<AgentMcpServerRelation>(dbContext),
-                new EfRepository<Skill>(dbContext),
-                new EfRepository<AgentSkillRelation>(dbContext),
+            new AgentAppService(
                 dbContext,
-                new AgentDomainService(TimeProvider.System),
-                userInfo
+                new ConnectionReferenceFacade(dbContext, userInfo),
+                new ModelProviderReferenceFacade(dbContext, userInfo),
+                new SkillReferenceFacade(dbContext, userInfo),
+                userInfo,
+                new Agw.Infrastructure.Agents.AgentDeletionCoordinator(
+                    dbContext,
+                    Agw.Shared.Coordination.InMemoryApplicationLock.Shared
+                )
             );
     }
 }

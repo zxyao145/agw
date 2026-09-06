@@ -4,7 +4,8 @@ public sealed record ProjectProviderSessionReference(
     Guid ProjectId,
     string ContextId,
     Guid AgentId,
-    string ExternalAgentName
+    string ExternalAgentName,
+    int Generation = 0
 );
 
 public interface IProjectProviderSessionFacade

@@ -1,10 +1,8 @@
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Repositories;
+using Agw.Infrastructure.Data.Interceptors;
 using Agw.Providers.Application;
 using Agw.Providers.Contracts.Manager;
-using Agw.Providers.Domain.Services;
 using Agw.Shared.Data.Entities.Providers;
-using Agw.Shared.Exceptions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,6 +18,10 @@ public sealed class ModelAppServiceTests
         await connection.OpenAsync(cancellationToken);
         var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite(connection)
+            .AddInterceptors(
+                new EntityCreatorInterceptor(new TestAuditUserIdProvider(), TimeProvider.System),
+                new EntityModifierInterceptor(new TestAuditUserIdProvider(), TimeProvider.System)
+            )
             .UseSnakeCaseNamingConvention()
             .Options;
         await using var dbContext = new AgwDbContext(options);
@@ -43,6 +45,10 @@ public sealed class ModelAppServiceTests
         await connection.OpenAsync(cancellationToken);
         var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite(connection)
+            .AddInterceptors(
+                new EntityCreatorInterceptor(new TestAuditUserIdProvider(), TimeProvider.System),
+                new EntityModifierInterceptor(new TestAuditUserIdProvider(), TimeProvider.System)
+            )
             .UseSnakeCaseNamingConvention()
             .Options;
         await using var dbContext = new AgwDbContext(options);
@@ -74,29 +80,5 @@ public sealed class ModelAppServiceTests
         Assert.Equal(64_000, persisted.MaxOutputTokens);
     }
 
-    [Theory]
-    [InlineData(0, 1)]
-    [InlineData(-1, 1)]
-    [InlineData(128_000, 0)]
-    [InlineData(128_000, -1)]
-    [InlineData(128_000, 128_000)]
-    [InlineData(128_000, 256_000)]
-    public void ValidateTokenLimits_InvalidValues_ThrowsInvalidParam(int maxContextWindowTokens, int maxOutputTokens)
-    {
-        var service = new ModelDomainService(TimeProvider.System);
-
-        var exception = Assert.Throws<AgwException>(() =>
-            service.ValidateTokenLimits(maxContextWindowTokens, maxOutputTokens)
-        );
-
-        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
-    }
-
-    private static ModelAppService CreateService(AgwDbContext dbContext) =>
-        new(
-            new EfRepository<AgwAiModel>(dbContext),
-            dbContext,
-            new ModelDomainService(TimeProvider.System),
-            new TestUserInfoService()
-        );
+    private static ModelAppService CreateService(AgwDbContext dbContext) => new(dbContext, new TestUserInfoService());
 }

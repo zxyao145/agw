@@ -7,7 +7,9 @@
     <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
     <ProjectReference Include="..\Agw.Data\Agw.Data.csproj" />
     <ProjectReference Include="..\Agw.Files\Agw.Files.csproj" />
+    <ProjectReference Include="..\Agw.Integrations\Agw.Integrations.csproj" />
     <ProjectReference Include="..\Agw.Projects.Contracts\Agw.Projects.Contracts.csproj" />
+    <ProjectReference Include="..\Agw.Skills\Agw.Skills.csproj" />
     <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
   </ItemGroup>
 </Project>

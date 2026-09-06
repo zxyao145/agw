@@ -1,8 +1,8 @@
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Repositories;
 using Agw.Providers.Application;
 using Agw.Providers.Contracts.Manager;
-using Agw.Providers.Domain.Services;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Providers;
@@ -290,6 +290,10 @@ public class ProviderAppServiceTests
 
         var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite(connection)
+            .AddInterceptors(
+                new EntityCreatorInterceptor(new TestAuditUserIdProvider(), TimeProvider.System),
+                new EntityModifierInterceptor(new TestAuditUserIdProvider(), TimeProvider.System)
+            )
             .UseSnakeCaseNamingConvention()
             .Options;
 
@@ -361,6 +365,10 @@ public class ProviderAppServiceTests
 
         var options = new DbContextOptionsBuilder<AgwDbContext>()
             .UseSqlite(connection)
+            .AddInterceptors(
+                new EntityCreatorInterceptor(new TestAuditUserIdProvider(), TimeProvider.System),
+                new EntityModifierInterceptor(new TestAuditUserIdProvider(), TimeProvider.System)
+            )
             .UseSnakeCaseNamingConvention()
             .Options;
 
@@ -443,13 +451,7 @@ public class ProviderAppServiceTests
     private static ProviderAppService CreateService(AgwDbContext dbContext)
     {
         return new ProviderAppService(
-            new EfRepository<Provider>(dbContext),
-            new EfRepository<AgwAiModel>(dbContext),
-            new EfRepository<ModelProviderRelation>(dbContext),
             dbContext,
-            new ProviderDomainService(TimeProvider.System),
-            new ModelDomainService(TimeProvider.System),
-            new ModelProviderDomainService(TimeProvider.System),
             new ModelProviderUsageGuard(
                 new TestAgentReferenceFacade(new EfRepository<Agent>(dbContext), new EfRepository<Agentflow>(dbContext))
             ),
@@ -458,7 +460,14 @@ public class ProviderAppServiceTests
     }
 
     private static DbContextOptions<AgwDbContext> CreateOptions(SqliteConnection connection) =>
-        new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).UseSnakeCaseNamingConvention().Options;
+        new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .AddInterceptors(
+                new EntityCreatorInterceptor(new TestAuditUserIdProvider(), TimeProvider.System),
+                new EntityModifierInterceptor(new TestAuditUserIdProvider(), TimeProvider.System)
+            )
+            .UseSnakeCaseNamingConvention()
+            .Options;
 
     private static Provider CreateProvider(Guid providerId) =>
         new()

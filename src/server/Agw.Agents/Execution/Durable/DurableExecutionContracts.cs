@@ -1,20 +1,10 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
 using Agw.Shared.Data.Entities.Executions;
 
 namespace Agw.Agents.Execution.Durable;
-
-/// <summary>
-/// 定义所有 Server 共享的 execution 分布式锁资源命名规则。
-/// </summary>
-internal static class DurableExecutionLock
-{
-    /// <summary>
-    /// 为 execution 生成稳定的 PostgreSQL advisory lock 资源名。
-    /// </summary>
-    public static string GetResourceName(Guid executionId) => $"distributed-execution:{executionId:N}";
-}
 
 /// <summary>
 /// 单次可恢复分段的结果类型。
@@ -94,6 +84,9 @@ internal sealed record DurableExecutionManifest
 /// </summary>
 internal sealed record DurableProjectTaskSnapshot
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int Generation { get; init; }
+
     /// <summary>
     /// 获取任务标识。
     /// </summary>
@@ -121,6 +114,7 @@ internal sealed record DurableProjectTaskSnapshot
         new()
         {
             TaskId = task.TaskId,
+            Generation = task.Generation,
             ProjectConversationId = task.ProjectConversationId,
             ProjectId = task.ProjectId,
             ContextId = task.ContextId,
@@ -133,6 +127,7 @@ internal sealed record DurableProjectTaskSnapshot
         new()
         {
             TaskId = TaskId,
+            Generation = Generation,
             ProjectConversationId = ProjectConversationId,
             ProjectId = ProjectId,
             ContextId = ContextId,

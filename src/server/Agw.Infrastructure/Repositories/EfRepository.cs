@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -106,7 +107,25 @@ public class EfRepository<TEntity> : IRepository<TEntity>
 
     public void Update(TEntity entity)
     {
+        var entry = _dbContext.Entry(entity);
+        if (entry.State == EntityState.Detached)
+        {
+            _dbSet.Update(entity);
+            return;
+        }
+
+        // Marking the entire row modified must not turn unchanged audit values into explicit overrides.
+        var auditProperties = entry
+            .Properties.Where(property =>
+                property.Metadata.Name is nameof(IEntityModifier.UpdateBy) or nameof(IEntityModifyTime.UpdateTime)
+            )
+            .Select(property => (Property: property, property.IsModified))
+            .ToArray();
         _dbSet.Update(entity);
+        foreach (var (property, isModified) in auditProperties)
+        {
+            property.IsModified = isModified;
+        }
     }
 
     public void Remove(TEntity entity)

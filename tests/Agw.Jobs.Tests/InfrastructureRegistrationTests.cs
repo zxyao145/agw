@@ -88,6 +88,51 @@ public class InfrastructureRegistrationTests
     }
 
     [Fact]
+    public void AddInfrastructure_RegistersCrossModulePersistenceAdaptersAsScoped()
+    {
+        // Arrange
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Database:Provider"] = "sqlite" })
+            .Build();
+        var services = new ServiceCollection();
+
+        // Act
+        services.AddInfrastructure(configuration);
+
+        // Assert
+        Assert.Contains(
+            services,
+            descriptor =>
+                descriptor.ServiceType == typeof(IAgentflowCheckpointPersistence)
+                && descriptor.Lifetime == ServiceLifetime.Scoped
+        );
+        Assert.Contains(
+            services,
+            descriptor =>
+                descriptor.ServiceType == typeof(IDurableExecutionScopeMaintenance)
+                && descriptor.Lifetime == ServiceLifetime.Scoped
+        );
+        Assert.Contains(
+            services,
+            descriptor =>
+                descriptor.ServiceType == typeof(IAgentSessionStatePersistence)
+                && descriptor.Lifetime == ServiceLifetime.Scoped
+        );
+        Assert.Contains(
+            services,
+            descriptor =>
+                descriptor.ServiceType == typeof(IProjectDeletionCoordinator)
+                && descriptor.Lifetime == ServiceLifetime.Scoped
+        );
+        Assert.Contains(
+            services,
+            descriptor =>
+                descriptor.ServiceType == typeof(IProjectMemoryPersistence)
+                && descriptor.Lifetime == ServiceLifetime.Scoped
+        );
+    }
+
+    [Fact]
     public void AddInfrastructure_ResolvesModuleDbContextsToTheSameScopedInstance()
     {
         var configuration = new ConfigurationBuilder()

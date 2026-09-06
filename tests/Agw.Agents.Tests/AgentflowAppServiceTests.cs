@@ -9,9 +9,71 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Agents.Tests;
 
-public sealed class AgentflowAppServiceTests
+public sealed partial class AgentflowAppServiceTests
 {
     private static readonly DateTimeOffset UtcNow = new(2026, 8, 25, 10, 0, 0, TimeSpan.Zero);
+
+    [Fact]
+    public async Task UpdateAsync_IndirectNestedCycle_RejectsAndPreservesDefinition()
+    {
+        // Arrange
+        var token = TestContext.Current.CancellationToken;
+        await using var connection = await OpenConnectionAsync(token);
+        await using var dbContext = await CreateDbContextAsync(connection, token);
+        var a = Guid.CreateVersion7();
+        var b = Guid.CreateVersion7();
+        dbContext.Agentflows.AddRange(
+            new Agentflow
+            {
+                Id = a,
+                Name = "a",
+                CreateBy = "tester",
+            },
+            new Agentflow
+            {
+                Id = b,
+                Name = "b",
+                CreateBy = "tester",
+            }
+        );
+        dbContext.AgentflowNodes.Add(
+            new AgentflowNode
+            {
+                AgentflowId = b,
+                NodeId = "nested-a",
+                Kind = AgentflowNodeKind.WorkflowAsAgent,
+                RelateId = a,
+            }
+        );
+        await dbContext.SaveChangesAsync(token);
+        dbContext.ChangeTracker.Clear();
+        var service = CreateService(dbContext);
+
+        // Act
+        var result = await service.UpdateAsync(
+            a,
+            _ => { },
+            [
+                Node(a, "input", AgentflowNodeKind.Input),
+                new AgentflowNode
+                {
+                    AgentflowId = a,
+                    NodeId = "nested-b",
+                    Kind = AgentflowNodeKind.WorkflowAsAgent,
+                    RelateId = b,
+                },
+                Node(a, "output", AgentflowNodeKind.Output),
+            ],
+            [Edge(a, "input-b", "input", "nested-b"), Edge(a, "b-output", "nested-b", "output")],
+            "tester",
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+
+        // Assert
+        Assert.Null(result);
+        dbContext.ChangeTracker.Clear();
+        Assert.False(await dbContext.AgentflowNodes.AnyAsync(node => node.AgentflowId == a, token));
+    }
 
     [Fact]
     public async Task CreateAsync_BlankName_ReturnsNullWithoutMutatingMetadata()
@@ -24,7 +86,13 @@ public sealed class AgentflowAppServiceTests
         var agentflow = new Agentflow { Name = "  " };
 
         // Act
-        var result = await service.CreateAsync(agentflow, [], [], "tester");
+        var result = await service.CreateAsync(
+            agentflow,
+            [],
+            [],
+            "tester",
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
         // Assert
         Assert.Null(result);
@@ -52,7 +120,8 @@ public sealed class AgentflowAppServiceTests
                 new AgentflowNode { NodeId = "output", Kind = AgentflowNodeKind.Output },
             ],
             [Edge(Guid.Empty, "input-output", "input", "output")],
-            "tester"
+            "tester",
+            cancellationToken: TestContext.Current.CancellationToken
         );
 
         // Assert
@@ -111,7 +180,8 @@ public sealed class AgentflowAppServiceTests
                 Edge(agentflowId, "input-worker", "input", "worker", label: "updated label"),
                 Edge(agentflowId, "worker-added", "worker", "added"),
             ],
-            "updater"
+            "updater",
+            cancellationToken: TestContext.Current.CancellationToken
         );
 
         // Assert
@@ -167,7 +237,8 @@ public sealed class AgentflowAppServiceTests
             },
             [Node(agentflowId, "input", AgentflowNodeKind.Input)],
             [],
-            "updater"
+            "updater",
+            cancellationToken: TestContext.Current.CancellationToken
         );
 
         // Assert
@@ -245,13 +316,21 @@ public sealed class AgentflowAppServiceTests
         Assert.True((await dbContext.Agentflows.AsNoTracking().SingleAsync(cancellationToken)).Enable);
     }
 
-    private static AgentflowAppService CreateService(AgwDbContext dbContext) =>
-        new(
+    private static AgentflowAppService CreateService(AgwDbContext dbContext)
+    {
+        var userInfo = new TestUserInfoService();
+        return new AgentflowAppService(
             dbContext,
-            new EfRepository<ModelProviderRelation>(dbContext),
+            new TestModelProviderReferenceFacade(
+                new EfRepository<ModelProviderRelation>(dbContext),
+                new EfRepository<AgwAiModel>(dbContext),
+                new EfRepository<Provider>(dbContext),
+                userInfo
+            ),
             new TestTimeProvider(UtcNow),
-            new TestUserInfoService()
+            userInfo
         );
+    }
 
     private static async Task<SqliteConnection> OpenConnectionAsync(CancellationToken cancellationToken)
     {

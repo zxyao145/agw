@@ -8,6 +8,7 @@ using Agw.Auth.Application;
 using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
+using Agw.Jobs.Application.Persistence;
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Application.Skills;
 using Agw.Jobs.Scheduling;
@@ -389,6 +390,7 @@ public class JobManagementSkillTests : IDisposable
             services.AddScoped<Agw.Agents.Contracts.Catalog.IAgentCatalogFacade, TestAgentCatalogFacade>();
             services.AddScoped(_ => new AgwDbContext(options));
             services.AddScoped<DbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
+            services.AddScoped<IJobsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
             services.AddScoped<IUnitOfWork>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
             services.AddScoped<IRepository<Job>>(serviceProvider => new JobRepo(
                 serviceProvider.GetRequiredService<DbContext>(),
@@ -516,6 +518,9 @@ public class JobManagementSkillTests : IDisposable
 
         private sealed class NoopProjectTaskFacade : IProjectTaskFacade
         {
+            public Task<int?> GetGenerationAsync(Guid conversationId, CancellationToken cancellationToken = default) =>
+                Task.FromResult<int?>(0);
+
             public Task<ProjectTaskSnapshot> ResolveAsync(
                 ResolveProjectTaskRequest request,
                 CancellationToken cancellationToken = default

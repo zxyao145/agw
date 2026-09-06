@@ -10,6 +10,9 @@ public class ProjectConversation : BaseEntity
 {
     public Guid Id { get; set; }
 
+    [JsonIgnore]
+    public int Generation { get; set; }
+
     public Guid ProjectId { get; set; }
 
     public Guid? JobId { get; set; }

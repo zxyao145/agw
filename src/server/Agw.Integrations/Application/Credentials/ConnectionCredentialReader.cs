@@ -1,6 +1,5 @@
 using Agw.Auth.Contracts;
-using Agw.Shared.Data.Entities.Integrations;
-using Agw.Shared.Data.Repositories;
+using Agw.Integrations.Application.Persistence;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,18 +7,12 @@ namespace Agw.Integrations.Application.Credentials;
 
 public sealed class ConnectionCredentialReader : IConnectionCredentialReader
 {
-    private readonly IRepository<PluginInstallationCredential> _installationCredentialRepository;
-    private readonly IRepository<ConnectionCredential> _connectionCredentialRepository;
+    private readonly IIntegrationsDbContext _dbContext;
     private readonly IUserInfoService _userInfoService;
 
-    public ConnectionCredentialReader(
-        IRepository<PluginInstallationCredential> installationCredentialRepository,
-        IRepository<ConnectionCredential> connectionCredentialRepository,
-        IUserInfoService userInfoService
-    )
+    public ConnectionCredentialReader(IIntegrationsDbContext dbContext, IUserInfoService userInfoService)
     {
-        _installationCredentialRepository = installationCredentialRepository;
-        _connectionCredentialRepository = connectionCredentialRepository;
+        _dbContext = dbContext;
         _userInfoService = userInfoService;
     }
 
@@ -30,10 +23,12 @@ public sealed class ConnectionCredentialReader : IConnectionCredentialReader
     )
     {
         var userId = _userInfoService.RequiredUserId;
-        var credential = await _connectionCredentialRepository.Queryable.FirstOrDefaultAsync(
-            item => item.ConnectionId == connectionId && item.Connection.CreateBy == userId && item.Slot == slot,
-            cancellationToken
-        );
+        var credential = await _dbContext
+            .ConnectionCredentials.AsNoTracking()
+            .FirstOrDefaultAsync(
+                item => item.ConnectionId == connectionId && item.Connection.CreateBy == userId && item.Slot == slot,
+                cancellationToken
+            );
         return credential == null ? null : Resolve(credential.Value, credential.ExpiresAtUtc);
     }
 
@@ -43,13 +38,15 @@ public sealed class ConnectionCredentialReader : IConnectionCredentialReader
         CancellationToken cancellationToken
     )
     {
-        var credential = await _installationCredentialRepository.Queryable.FirstOrDefaultAsync(
-            item =>
-                item.PluginInstallationId == pluginInstallationId
-                && item.PluginInstallation!.CreateBy == _userInfoService.RequiredUserId
-                && item.Slot == slot,
-            cancellationToken
-        );
+        var credential = await _dbContext
+            .PluginInstallationCredentials.AsNoTracking()
+            .FirstOrDefaultAsync(
+                item =>
+                    item.PluginInstallationId == pluginInstallationId
+                    && item.PluginInstallation!.CreateBy == _userInfoService.RequiredUserId
+                    && item.Slot == slot,
+                cancellationToken
+            );
         return credential == null ? null : Resolve(credential.Value, null);
     }
 

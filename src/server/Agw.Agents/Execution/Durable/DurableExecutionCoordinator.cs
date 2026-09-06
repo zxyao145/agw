@@ -4,11 +4,13 @@ using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using static Agw.Agents.Application.Persistence.DurableExecutionQueries;
 
 namespace Agw.Agents.Execution.Durable;
 
@@ -358,7 +360,7 @@ internal sealed class DurableExecutionCoordinator
             : manifest.Input.MessageId;
 
     /// <summary>
-    /// 在独立 DI scope 中加载 execution 快照，避免后台订阅持有 request scope DbContext。
+    /// 在独立 DI scope 中加载 execution 快照，避免后台订阅持有请求级持久化上下文。
     /// </summary>
     private async Task<DurableExecutionSnapshot> GetSnapshotAsync(
         Guid executionId,
@@ -370,15 +372,6 @@ internal sealed class DurableExecutionCoordinator
         var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
         return await store.GetAuthorizedAsync(executionId, userId, cancellationToken).ConfigureAwait(false);
     }
-
-    /// <summary>
-    /// 判断执行状态是否已经终止。
-    /// </summary>
-    private static bool IsTerminal(DurableExecutionStatus status) =>
-        status
-            is DurableExecutionStatus.Completed
-                or DurableExecutionStatus.Failed
-                or DurableExecutionStatus.Interrupted;
 
     private static bool IsActionable(DurableExecutionStatus status) =>
         status == DurableExecutionStatus.WaitingForHuman || IsTerminal(status);

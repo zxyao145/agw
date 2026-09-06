@@ -1,8 +1,8 @@
 using Agw.Auth.Contracts;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Contracts.Pagination;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
+using Agw.Tools.Application.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Tools.Application;
@@ -34,20 +34,17 @@ public sealed class UserMemoryAppService
 
     private static readonly int[] SupportedPageSizes = [10, 20, 50];
 
-    private readonly IRepository<UserMemory> _repository;
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IToolsDbContext _dbContext;
     private readonly IApplicationLock _applicationLock;
     private readonly IUserInfoService _userInfoService;
 
     public UserMemoryAppService(
-        IRepository<UserMemory> repository,
-        IUnitOfWork unitOfWork,
+        IToolsDbContext dbContext,
         IApplicationLock applicationLock,
         IUserInfoService userInfoService
     )
     {
-        _repository = repository;
-        _unitOfWork = unitOfWork;
+        _dbContext = dbContext;
         _applicationLock = applicationLock;
         _userInfoService = userInfoService;
     }
@@ -61,7 +58,7 @@ public sealed class UserMemoryAppService
         var normalizedUserId = GetCurrentUserId();
         ValidatePaging(pageIndex, pageSize);
 
-        var query = _repository.Queryable.AsNoTracking().Where(memory => memory.UserId == normalizedUserId);
+        var query = _dbContext.UserMemories.AsNoTracking().Where(memory => memory.UserId == normalizedUserId);
         var total = await query.CountAsync(cancellationToken).ConfigureAwait(false);
         IReadOnlyList<UserMemorySummary> items;
         try
@@ -121,8 +118,8 @@ public sealed class UserMemoryAppService
             throw new AgwException(ErrorCodes.InvalidParam, "limit must be positive.");
         }
 
-        var query = _repository
-            .Queryable.AsNoTracking()
+        var query = _dbContext
+            .UserMemories.AsNoTracking()
             .Where(memory => memory.UserId == normalizedUserId)
             .OrderBy(memory => memory.Name)
             .Select(memory => new UserMemorySummary(
@@ -151,8 +148,8 @@ public sealed class UserMemoryAppService
         }
 
         var userId = GetCurrentUserId();
-        var memories = await _repository
-            .Queryable.AsNoTracking()
+        var memories = await _dbContext
+            .UserMemories.AsNoTracking()
             .Where(memory => memory.UserId == userId)
             .OrderBy(memory => memory.Name)
             .Take(limit)
@@ -164,8 +161,8 @@ public sealed class UserMemoryAppService
     public async Task<UserMemoryDetails?> GetAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var normalizedUserId = GetCurrentUserId();
-        var memory = await _repository
-            .Queryable.AsNoTracking()
+        var memory = await _dbContext
+            .UserMemories.AsNoTracking()
             .SingleOrDefaultAsync(item => item.Id == id && item.UserId == normalizedUserId, cancellationToken)
             .ConfigureAwait(false);
         return memory == null ? null : MapDetails(memory);
@@ -175,8 +172,8 @@ public sealed class UserMemoryAppService
     {
         var normalizedUserId = GetCurrentUserId();
         var normalizedName = NormalizeName(name).Normalized;
-        var memory = await _repository
-            .Queryable.AsNoTracking()
+        var memory = await _dbContext
+            .UserMemories.AsNoTracking()
             .SingleOrDefaultAsync(
                 item => item.UserId == normalizedUserId && item.NormalizedName == normalizedName,
                 cancellationToken
@@ -210,8 +207,8 @@ public sealed class UserMemoryAppService
             Description = normalizedDescription,
             Content = content,
         };
-        await _repository.AddAsync(memory).ConfigureAwait(false);
-        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await _dbContext.UserMemories.AddAsync(memory, cancellationToken).ConfigureAwait(false);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return MapDetails(memory);
     }
 
@@ -230,8 +227,11 @@ public sealed class UserMemoryAppService
 
         await using var lease = await AcquireMutationLockAsync(normalizedUserId, cancellationToken)
             .ConfigureAwait(false);
-        var memory = await _repository
-            .Queryable.SingleOrDefaultAsync(item => item.Id == id && item.UserId == normalizedUserId, cancellationToken)
+        var memory = await _dbContext
+            .UserMemories.SingleOrDefaultAsync(
+                item => item.Id == id && item.UserId == normalizedUserId,
+                cancellationToken
+            )
             .ConfigureAwait(false);
         if (memory == null)
         {
@@ -244,8 +244,8 @@ public sealed class UserMemoryAppService
         memory.NormalizedName = normalizedName.Normalized;
         memory.Description = normalizedDescription;
         memory.Content = content;
-        _repository.Update(memory);
-        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        _dbContext.UserMemories.Entry(memory).Property(item => item.Name).IsModified = true;
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return MapDetails(memory);
     }
 
@@ -262,8 +262,8 @@ public sealed class UserMemoryAppService
 
         await using var lease = await AcquireMutationLockAsync(normalizedUserId, cancellationToken)
             .ConfigureAwait(false);
-        var memory = await _repository
-            .Queryable.SingleOrDefaultAsync(
+        var memory = await _dbContext
+            .UserMemories.SingleOrDefaultAsync(
                 item => item.UserId == normalizedUserId && item.NormalizedName == normalizedName.Normalized,
                 cancellationToken
             )
@@ -279,7 +279,7 @@ public sealed class UserMemoryAppService
                 Description = NormalizeDescription(description),
                 Content = content,
             };
-            await _repository.AddAsync(memory).ConfigureAwait(false);
+            await _dbContext.UserMemories.AddAsync(memory, cancellationToken).ConfigureAwait(false);
         }
         else
         {
@@ -289,10 +289,10 @@ public sealed class UserMemoryAppService
             {
                 memory.Description = NormalizeDescription(description);
             }
-            _repository.Update(memory);
+            _dbContext.UserMemories.Entry(memory).Property(item => item.Name).IsModified = true;
         }
 
-        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return MapDetails(memory);
     }
 
@@ -301,8 +301,11 @@ public sealed class UserMemoryAppService
         var normalizedUserId = GetCurrentUserId();
         await using var lease = await AcquireMutationLockAsync(normalizedUserId, cancellationToken)
             .ConfigureAwait(false);
-        var memory = await _repository
-            .Queryable.SingleOrDefaultAsync(item => item.Id == id && item.UserId == normalizedUserId, cancellationToken)
+        var memory = await _dbContext
+            .UserMemories.SingleOrDefaultAsync(
+                item => item.Id == id && item.UserId == normalizedUserId,
+                cancellationToken
+            )
             .ConfigureAwait(false);
         return memory != null && await DeleteCoreAsync(memory, cancellationToken).ConfigureAwait(false);
     }
@@ -313,8 +316,8 @@ public sealed class UserMemoryAppService
         var normalizedName = NormalizeName(name).Normalized;
         await using var lease = await AcquireMutationLockAsync(normalizedUserId, cancellationToken)
             .ConfigureAwait(false);
-        var memory = await _repository
-            .Queryable.SingleOrDefaultAsync(
+        var memory = await _dbContext
+            .UserMemories.SingleOrDefaultAsync(
                 item => item.UserId == normalizedUserId && item.NormalizedName == normalizedName,
                 cancellationToken
             )
@@ -324,8 +327,8 @@ public sealed class UserMemoryAppService
 
     private async Task<bool> DeleteCoreAsync(UserMemory memory, CancellationToken cancellationToken)
     {
-        _repository.Remove(memory);
-        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        _dbContext.UserMemories.Remove(memory);
+        await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return true;
     }
 
@@ -336,8 +339,8 @@ public sealed class UserMemoryAppService
         CancellationToken cancellationToken
     )
     {
-        var exists = await _repository
-            .Queryable.AsNoTracking()
+        var exists = await _dbContext
+            .UserMemories.AsNoTracking()
             .AnyAsync(
                 memory =>
                     memory.UserId == userId
@@ -352,7 +355,7 @@ public sealed class UserMemoryAppService
         }
     }
 
-    private Task<IAsyncDisposable> AcquireMutationLockAsync(string userId, CancellationToken cancellationToken) =>
+    private Task<IApplicationLockLease> AcquireMutationLockAsync(string userId, CancellationToken cancellationToken) =>
         _applicationLock.AcquireAsync($"user-memory:{userId}", cancellationToken);
 
     private string GetCurrentUserId()

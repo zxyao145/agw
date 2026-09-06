@@ -146,6 +146,9 @@ public class ExecutionConnectionTests
 
     private sealed class FakeProjectTaskFacade : IProjectTaskFacade
     {
+        public Task<int?> GetGenerationAsync(Guid conversationId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<int?>(0);
+
         private readonly ProjectTaskSnapshot _task;
 
         public FakeProjectTaskFacade(AgentExecutionTask task)

@@ -290,7 +290,7 @@ export function ChatInput({
       </UserInput.TopRight>
       {isExecuting && !isTransitioning ? (
         <UserInput.Sender>
-          <Square size={20} />
+          <Square fill="currentColor" size={14} />
         </UserInput.Sender>
       ) : null}
     </UserInput>

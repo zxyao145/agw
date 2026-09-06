@@ -1,6 +1,6 @@
 using Agw.Auth.Contracts;
+using Agw.Projects.Application.Persistence;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,12 +8,12 @@ namespace Agw.Projects.Application;
 
 public class ProjectResolver
 {
-    private readonly IRepository<Project> _projectRepository;
+    private readonly IProjectsDbContext _dbContext;
     private readonly IUserInfoService _userInfoService;
 
-    public ProjectResolver(IRepository<Project> projectRepository, IUserInfoService userInfoService)
+    public ProjectResolver(IProjectsDbContext dbContext, IUserInfoService userInfoService)
     {
-        _projectRepository = projectRepository;
+        _dbContext = dbContext;
         _userInfoService = userInfoService;
     }
 
@@ -120,19 +120,23 @@ public class ProjectResolver
 
         if (projectId.HasValue)
         {
-            return await _projectRepository.Queryable.FirstOrDefaultAsync(
-                project => project.Id == projectId.Value && project.CreateBy == ownerUserId,
-                cancellationToken
-            );
+            return await _dbContext
+                .Projects.AsNoTracking()
+                .FirstOrDefaultAsync(
+                    project => project.Id == projectId.Value && project.CreateBy == ownerUserId,
+                    cancellationToken
+                );
         }
 
-        return await _projectRepository.Queryable.FirstOrDefaultAsync(
-            project =>
-                project.Type == ProjectType.DefaultBuiltIn
-                && project.Name == defaultProjectName
-                && project.CreateBy == ownerUserId,
-            cancellationToken
-        );
+        return await _dbContext
+            .Projects.AsNoTracking()
+            .FirstOrDefaultAsync(
+                project =>
+                    project.Type == ProjectType.DefaultBuiltIn
+                    && project.Name == defaultProjectName
+                    && project.CreateBy == ownerUserId,
+                cancellationToken
+            );
     }
 
     private string ResolveOwnerUserId() => _userInfoService.RequiredUserId;

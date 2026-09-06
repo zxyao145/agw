@@ -1,9 +1,6 @@
 using System.Reflection;
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Repositories;
 using Agw.Projects.Controllers;
-using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
@@ -339,25 +336,13 @@ public class ProjectConversationsControllerTests
 
     private static ProjectConversationAppService CreateService(AgwDbContext dbContext)
     {
-        var projectRepository = new EfRepository<Project>(dbContext);
         var userInfo = new TestUserInfoService();
-        var projectResolver = new ProjectResolver(projectRepository, userInfo);
+        var projectResolver = new ProjectResolver(dbContext, userInfo);
 
         return new ProjectConversationAppService(
-            new EfRepository<ProjectConversation>(dbContext),
-            new EfRepository<ProjectConversationChatHistory>(dbContext),
-            new EfRepository<AgentflowCheckpointRecord>(dbContext),
-            new EfRepository<AgentflowTrace>(dbContext),
-            new EfRepository<AgentUsage>(dbContext),
             dbContext,
             projectResolver,
-            new TaskSessionBindingService(
-                new EfRepository<TaskSessionBinding>(dbContext),
-                new EfRepository<ProjectConversation>(dbContext),
-                dbContext,
-                TimeProvider.System,
-                userInfo
-            ),
+            TestProjectPersistence.CreateDeletionCoordinator(dbContext),
             TimeProvider.System
         );
     }

@@ -17,6 +17,42 @@ Connection 生命周期、Command Handler 扩展方式与状态所有权的决�
 
 `Microsoft.Agents.AI.AgentSession` 只存在于 `AgentRuntime` 内部，不承担 SignalR connection 或 turn 的职责。
 
+## Agentflow Runtime 协作边界
+
+`IAgentflowRuntimeService` 保持稳定入口。`AgentflowRuntimeService` 解析执行目标与 Project，通过 Execution Context Factory 准备会话，委托 Workflow Factory 构建 Workflow，再调用对应 Runner，并在执行结束或枚举器释放时释放 Workflow Lease。
+
+| 组件 | 职责 | 生命周期 |
+| --- | --- | --- |
+| `AgentflowRuntimeService` | 目标解析、Runner 分派、顶层资源编排 | Scoped；接口与具体类型解析为同一实例 |
+| `AgentflowWorkflowFactory` | 当前用户可见的图与嵌套 Workflow、Agent 资源及不可变节点元数据；Mermaid 使用同一构建路径 | Scoped；每次构建返回独立 Lease |
+| `AgentflowExecutionContextFactory` | Conversation 解析、Provider / Agent Session Scope、Handoff 加载和初始消息准备 | Scoped；不保留单次执行状态 |
+| `InProcessAgentflowRunner` | 流式/非流式事件消费、交互审批、Checkpoint Continue | Scoped；执行状态是方法局部变量 |
+| `DurableAgentflowSegmentRunner` | 首段与恢复、持久化回答匹配、pending/consumed、Checkpoint 捕获、Segment Result | Scoped；每个分段独立持有可变状态 |
+| `AgentflowCheckpointSupport` | Checkpoint 启动/恢复、Marker 映射、记录、Continue 与日志 | Scoped；不保存执行状态 |
+| `AgentflowMessageMapper` | Framework 内容事件、HumanGate 和失败结果的协议映射；新控制消息 ID 由调用方提供 | 无服务依赖的确定性静态映射 |
+
+构建图、HumanGate 元数据和 Checkpoint 节点名共用一次节点查询。Lease 携带这些元数据的不可变快照，Runner 使用该次构建的快照；下一次执行重新构建，不建立跨执行缓存。Checkpoint 指纹验证仍使用既有持久化读取。
+
+Runtime 拥有 Workflow Lease，Runner 拥有当前 `StreamingRun`；Durable Runner 还拥有该段的人工交互作用域。释放顺序为 Run、人工交互作用域、Workflow Lease。Factory 构建失败时清理已经创建的 Agent 和嵌套 Lease，清理异常不能覆盖构建异常。
+
+流式执行保持既有 Error/Finished 顺序；非流式执行保持原有输出集合与非交互审批错误。Durable Runner 逐条等待 sink 写入，返回分段状态；pending 与 terminal 控制消息仍由持久化提交后的协调层发布。Checkpoint 恢复会还原未完成 turn 的消息和待处理请求；只有首次执行发送启动 `TurnToken`，恢复时不能再次发送。Worker 故障后的整个 segment 重试仍为至少一次执行，不增加跨故障的恰好一次保证。
+
+InProcess 的每次显式恢复都携带当前 occurrence 的 Marker；Durable 只在新恢复分支的首段（`SegmentIndex == 1` 且 Manifest 含恢复 occurrence）自动继续这些 Marker，后续 HITL 分段保留自己的等待边界。两者的恢复条件对应不同的输入协议。
+
+JSON 配置解析及 HumanGate 默认 mode / prompt 是确定性转换。随机 ID 分配和可能生成输入 ID 的会话准备位于执行边界，Mapper 不分配 ID。非流式字符串入口继续使用原有 ChatMessage 语义。
+
+Checkpoint 和 Agent Session 的持久化仍经过既有 Application Port / Infrastructure Adapter。Factory 中的 Repository 查询仅访问 Agents 所有的数据；这次拆分没有改变持久化边界、格式或项目引用。
+
+## 领取权与会话重置
+
+`TryBeginSegmentAsync` 返回持久化后的领取 `StateVersion`。worker 用该版本调用 `SaveSegmentResultAsync`，同时依靠 EF 并发条件拒绝迟到结果；读取最新记录不能替换原领取凭据。`IApplicationLockLease.HandleLostToken` 与 host、状态监测取消信号传到分段执行器，失去领取权后不发布该 attempt 的 terminal marker。外部工具已经发生的副作用仍可能在故障恢复中重复。
+
+`ProjectConversation.Generation` 初始为 0，清空时在事务内递增，同时删除历史、trace、checkpoint、TaskSessionBinding 和 AgentSessionState，保留 ID、ContextId、标题和用量。InProcess 执行与清空共享 conversation execution lease；Durable 的 Queued、Running、WaitingForHuman 状态阻止清空。下一轮重新读取代次，释放旧 runtime 和解析任务缓存；Resume 指向已清空会话时创建新代次的任务。
+
+任务快照和 durable manifest 携带代次。`ConversationSessionContext` 通过执行的异步上下文传递不可变代次，SDK history provider 把它保存在 session state，外部 SDK 回调显式捕获 `ProjectProviderSessionReference.Generation`。这些写入使用原代次；不能在迟到回调中读取当前值作为凭据。`SaveConversationChangesAsync` 在同一事务中按 Project → Conversation 锁顺序验证存活根、owner 和代次，再提交子记录。旧 manifest 缺少代次时按 0 读取；序列化省略默认 0，保留既有幂等比较。
+
+部署与隔离 PostgreSQL 验证见 [运行时一致性维护说明](../../../../docs/operations/backend-runtime-consistency.md)。
+
 ## 两套执行提供者
 
 实时执行保留两套实现，并通过 `Execution:Provider` 在进程启动时二选一。它不是按请求动态切换；同一套部署中的所有 Host 必须使用相同配置。拆分部署中，Data Plane 映射 SignalR/A2A 并运行 worker，Control Plane 只为 Jobs 注册 durable client，Standalone 同时组合两者。
@@ -44,6 +80,12 @@ Connection 生命周期、Command Handler 扩展方式与状态所有权的决�
 Execution/
 ├── Agentflows/
 │   ├── AgentflowRuntimeService.cs
+│   ├── AgentflowWorkflowFactory.cs
+│   ├── AgentflowExecutionContextFactory.cs
+│   ├── InProcessAgentflowRunner.cs
+│   ├── DurableAgentflowSegmentRunner.cs
+│   ├── AgentflowMessageMapper.cs
+│   ├── AgentflowCheckpointSupport.cs
 │   ├── AgentflowWorkflowCompiler.cs
 │   ├── AgentflowCheckpointStore.cs
 │   ├── AgentflowNodeScopedAgent.cs
@@ -426,9 +468,16 @@ Execution.Provider
 状态机只使用一张 `durable_execution` 表，没有为 checkpoint、pending 或 response 分表。除 `BaseEntity` 审计列外，核心字段为：
 
 - `Id`、稳定 owner `UserId`、加密的 `ManifestJson`；
+- 明文 `ProjectId` / `ProjectConversationId` 与 `ScopeBackfilled`，用于项目/会话范围索引和旧记录一次性回填；
 - `Status`、`SegmentIndex`、`StateChangedAt`；
 - 加密的 `CheckpointJson`、`PendingInteractionsJson`、`ResponsesJson`、`ErrorMessage`；
 - 乐观并发字段 `StateVersion`，用于保护终态不被迟到结果覆盖。
+
+`DurableExecutionScopeMaintenance` 在 Host 启动、独立后台回填和删除/恢复预检中处理旧记录。每批最多 128 行，每次最多 4 批，并在行间检查 1 秒预算；在途数据库操作仍遵循自身超时。`DurableExecutionScopeRecoveryService` 在 InProcess 和 Distributed 模式均注册，等待 Setup 完成后每轮新建 scope，携带 `(UserId, Id)` 游标，间隔 1 秒继续处理积压，清空后退出。忙碌或竞争失败的行留待下一轮扫描；非预期异常记录错误并重试，不占用 execution worker 的调度轮次。新执行必须同时写入两列归属及 `ScopeBackfilled=true`，调度只领取归属完整且已回填的记录。删除/非幂等 durable 恢复若仍有当前用户的待回填记录，则返回 409，不能把未知归属视为不存在；无需通过反复调用接口来推进剩余回填。幂等恢复先完成原有匹配校验，不触发无关回填，普通 InProcess checkpoint 恢复不走该回填预检。
+
+损坏记录在 execution 锁和 StateVersion 条件更新保护下隔离，非终态转为 Failed；并发 Interrupt 胜出时不覆盖、不记录伪失败。已确认与 Manifest 冲突的索引归属会清空，防止错误项目误删；Manifest 无法解析/解密但既有索引未被明确否定时保留归属以支持正常清理。回填派生索引不修改业务审计字段、状态时间或版本，隔离才记录维护审计；原始加密数据保留，日志仅包含 execution ID。段启动复用一次加载/解密的健康记录，物化失败时才额外读取标量元数据用于隔离。事务外修复与事务内冲突复检保持分离，共享纯查询规则。
+
+启动和后台回填通过 Infrastructure 入口建立系统扫描作用域，在配置驱动的首次 Setup 后也执行；`DbSeeder.SeedAsync` 仅负责种子数据，独立恢复方法负责系统作用域并返回进度。交互式 Setup 初始化持久化后，后台服务自动继续回填，不要求重启，也不创建进程内锁替身。相关持久化适配器必须显式注入维护服务和锁。锁等待仅在自身截止时间触发、且调用方未取消时视为忙碌；调用方取消继续传播，非预期取消由上层记录并处理。部署仍需先应用 SQLite/PostgreSQL 对应的 `AddDurableExecutionScope` migration，并停止旧副本后再回填；本轮复审修复不新增迁移。
 
 PostgreSQL event stream 另使用一张 `execution_stream_entry` append-only 表，保存 `ExecutionId + SegmentIndex + Sequence + 加密 PayloadJson`。这张表不能与状态行合并：流式 token 数量无界且写入频繁，把它们放入 `durable_execution` 会持续放大单行、制造状态更新冲突。它也不能复用对话历史表，因为对话历史不具备 execution cursor 和逐条传输消息语义。
 

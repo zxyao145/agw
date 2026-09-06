@@ -1,8 +1,8 @@
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,15 +12,12 @@ public class AgentflowTraceAppService
 {
     private const int MaxPageSize = 100;
 
-    private readonly IRepository<AgentflowTrace> _traceRepository;
+    private readonly IAgentsDbContext _dbContext;
     private readonly IProjectOwnershipFacade? _projectOwnership;
 
-    public AgentflowTraceAppService(
-        IRepository<AgentflowTrace> traceRepository,
-        IProjectOwnershipFacade? projectOwnership = null
-    )
+    public AgentflowTraceAppService(IAgentsDbContext dbContext, IProjectOwnershipFacade? projectOwnership = null)
     {
-        _traceRepository = traceRepository;
+        _dbContext = dbContext;
         _projectOwnership = projectOwnership;
     }
 
@@ -31,7 +28,7 @@ public class AgentflowTraceAppService
     {
         ValidateQuery(query);
 
-        var queryable = _traceRepository.Queryable.AsNoTracking();
+        var queryable = _dbContext.AgentflowNodeExecutionTraces.AsNoTracking();
         var ownedProjectIds =
             _projectOwnership == null
                 ? null

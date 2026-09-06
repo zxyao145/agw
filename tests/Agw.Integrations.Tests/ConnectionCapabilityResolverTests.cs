@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json;
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Application.Capabilities;
 using Agw.Integrations.Application.Credentials;
 using Agw.Integrations.Application.Plugins;
@@ -9,7 +8,6 @@ using Agw.Integrations.Domain.Plugins;
 using Agw.Integrations.Mcp;
 using Agw.Integrations.Tools.GitHub;
 using Agw.Shared.Data.Entities.Integrations;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -473,14 +471,9 @@ public class ConnectionCapabilityResolverTests : IDisposable
             );
 
             var credentials = new MutableCredentialReader();
-            IRepository<IntegrationConnection> connectionRepository = new EfRepository<IntegrationConnection>(
-                dbContext
-            );
-            IRepository<PluginInstallation> installationRepository = new EfRepository<PluginInstallation>(dbContext);
             var mcpToolInvoker = new ForwardingMcpToolInvoker();
             var resolver = new ConnectionCapabilityResolver(
-                connectionRepository,
-                installationRepository,
+                dbContext,
                 catalog ?? new TestCatalog(),
                 credentials,
                 [nativeProvider],

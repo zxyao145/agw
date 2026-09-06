@@ -8,7 +8,15 @@ namespace Agw.Agents.Execution.Durable;
 /// <summary>
 /// 执行一个可恢复分段：加载 PostgreSQL 清单、调用 Agent 或 Agentflow，并把普通输出写入消息流。
 /// </summary>
-internal sealed class DurableExecutionSegmentExecutor
+internal interface IDurableExecutionSegmentExecutor
+{
+    Task<DurableExecutionSegmentResult> RunAsync(
+        DurableExecutionSegmentInput input,
+        CancellationToken cancellationToken
+    );
+}
+
+internal sealed class DurableExecutionSegmentExecutor : IDurableExecutionSegmentExecutor
 {
     private readonly DurableExecutionStore _store;
     private readonly DurableAgentSegmentRunner _agentRunner;
@@ -50,6 +58,11 @@ internal sealed class DurableExecutionSegmentExecutor
             manifest = (await _store.GetAsync(input.ExecutionId, cancellationToken).ConfigureAwait(false)).Manifest;
         }
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal(manifest.ResolveUserId()));
+        using var sessionContext = ConversationSessionContext.Push(
+            manifest.Task.ProjectId,
+            manifest.Task.ContextId,
+            manifest.Task.Generation
+        );
         return manifest.AgentType switch
         {
             AgentRuntimeType.Agent => await _agentRunner

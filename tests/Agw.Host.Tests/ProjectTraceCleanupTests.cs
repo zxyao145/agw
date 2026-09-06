@@ -1,14 +1,11 @@
 using Agw.Agents.Definitions.Facades;
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Repositories;
+using Agw.Infrastructure.Projects;
+using Agw.Integrations.Application.Facades;
 using Agw.Projects.Application;
-using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Executions;
-using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Entities.Skills;
+using Agw.Skills.Application.Facades;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -176,22 +173,24 @@ public class ProjectTraceCleanupTests
 
     private static ProjectConversationAppService CreateProjectConversationService(AgwDbContext dbContext)
     {
-        var projectRepository = new EfRepository<Project>(dbContext);
         var userInfo = new TestUserInfoService();
         return new ProjectConversationAppService(
-            new EfRepository<ProjectConversation>(dbContext),
-            new EfRepository<ProjectConversationChatHistory>(dbContext),
-            new EfRepository<AgentflowCheckpointRecord>(dbContext),
-            new EfRepository<AgentflowTrace>(dbContext),
-            new EfRepository<AgentUsage>(dbContext),
             dbContext,
-            new ProjectResolver(projectRepository, userInfo),
-            new TaskSessionBindingService(
-                new EfRepository<TaskSessionBinding>(dbContext),
-                new EfRepository<ProjectConversation>(dbContext),
+            new ProjectResolver(dbContext, userInfo),
+            new ProjectDeletionCoordinator(
                 dbContext,
-                TimeProvider.System,
-                userInfo
+                Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+                new Agw.Infrastructure.Agents.DurableExecutionScopeMaintenance(
+                    dbContext,
+                    Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+                    TimeProvider.System,
+                    Microsoft
+                        .Extensions
+                        .Logging
+                        .Abstractions
+                        .NullLogger<Agw.Infrastructure.Agents.DurableExecutionScopeMaintenance>
+                        .Instance
+                )
             ),
             TimeProvider.System
         );
@@ -199,27 +198,28 @@ public class ProjectTraceCleanupTests
 
     private static ProjectAppService CreateProjectService(AgwDbContext dbContext)
     {
-        var projectRepository = new EfRepository<Project>(dbContext);
         var userInfo = new TestUserInfoService();
         return new ProjectAppService(
-            projectRepository,
-            new EfRepository<ProjectMcpServerRelation>(dbContext),
-            new AgentCatalogFacade(
-                new EfRepository<Agent>(dbContext),
-                new EfRepository<Agentflow>(dbContext),
-                new EfRepository<McpServer>(dbContext),
-                new EfRepository<AgentSkillRelation>(dbContext),
-                dbContext,
-                userInfo
-            ),
-            new EfRepository<ProjectSkillRelation>(dbContext),
-            new EfRepository<Skill>(dbContext),
-            new EfRepository<ProjectConnectionRelation>(dbContext),
-            new EfRepository<Connection>(dbContext),
-            new EfRepository<AgentflowTrace>(dbContext),
             dbContext,
-            new ProjectDomainService(TimeProvider.System),
-            new ProjectResolver(projectRepository, userInfo),
+            new AgentCatalogFacade(dbContext, userInfo),
+            new SkillReferenceFacade(dbContext, userInfo),
+            new ConnectionReferenceFacade(dbContext, userInfo),
+            new ProjectDeletionCoordinator(
+                dbContext,
+                Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+                new Agw.Infrastructure.Agents.DurableExecutionScopeMaintenance(
+                    dbContext,
+                    Agw.Shared.Coordination.InMemoryApplicationLock.Shared,
+                    TimeProvider.System,
+                    Microsoft
+                        .Extensions
+                        .Logging
+                        .Abstractions
+                        .NullLogger<Agw.Infrastructure.Agents.DurableExecutionScopeMaintenance>
+                        .Instance
+                )
+            ),
+            new ProjectResolver(dbContext, userInfo),
             userInfo
         );
     }

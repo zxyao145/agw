@@ -4,14 +4,10 @@ using Agw.Agents.Definitions.Facades;
 using Agw.Auth.Contracts;
 using Agw.Host.Controllers;
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Repositories;
 using Agw.Jobs.Application.Facades;
 using Agw.Jobs.Contracts.Metrics;
 using Agw.Projects.Application.Facades;
 using Agw.Projects.Contracts.Metrics;
-using Agw.Shared.Data.Entities.Agentflows;
-using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.Sqlite;
@@ -148,22 +144,9 @@ public class DashboardControllerTests : IDisposable
     {
         var userInfo = new TestUserInfoService();
         return new DashboardController(
-            new JobMetricsFacade(new EfRepository<Job>(dbContext), userInfo),
-            new ProjectMetricsFacade(
-                new EfRepository<Project>(dbContext),
-                new EfRepository<ProjectConversation>(dbContext),
-                new EfRepository<ProjectConversationChatHistory>(dbContext),
-                new EfRepository<AgentUsage>(dbContext),
-                userInfo
-            ),
-            new AgentCatalogFacade(
-                new EfRepository<Agent>(dbContext),
-                new EfRepository<Agentflow>(dbContext),
-                new EfRepository<McpServer>(dbContext),
-                new EfRepository<AgentSkillRelation>(dbContext),
-                dbContext,
-                userInfo
-            )
+            new JobMetricsFacade(dbContext, userInfo),
+            new ProjectMetricsFacade(dbContext, userInfo),
+            new AgentCatalogFacade(dbContext, userInfo)
         );
     }
 

@@ -1,3 +1,5 @@
+using Agw.Agents.Execution.Agentflows;
+using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Durable;
 using Agw.Agents.ExternalAgents.Pi;
 using Agw.Shared.Exceptions;
@@ -9,6 +11,30 @@ namespace Agw.Agents.Tests;
 
 public sealed class ExecutionRuntimeConfigurationTests
 {
+    [Fact]
+    public void AddAgents_RegistersCheckpointAndSessionStoresWithExpectedLifetimes()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        services.AddAgents(new ConfigurationBuilder().Build());
+
+        // Assert
+        Assert.Contains(
+            services,
+            descriptor =>
+                descriptor.ServiceType == typeof(AgentflowCheckpointStore)
+                && descriptor.Lifetime == ServiceLifetime.Singleton
+        );
+        Assert.Contains(
+            services,
+            descriptor =>
+                descriptor.ServiceType == typeof(AgentSessionStateStore)
+                && descriptor.Lifetime == ServiceLifetime.Scoped
+        );
+    }
+
     [Fact]
     public void AddAgents_DefaultConfiguration_UsesInProcessProvider()
     {

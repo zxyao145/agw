@@ -803,9 +803,21 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("text")
                         .HasColumnName("pending_interactions_json");
 
+                    b.Property<Guid?>("ProjectConversationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_conversation_id");
+
+                    b.Property<Guid?>("ProjectId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("project_id");
+
                     b.Property<string>("ResponsesJson")
                         .HasColumnType("text")
                         .HasColumnName("responses_json");
+
+                    b.Property<bool>("ScopeBackfilled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("scope_backfilled");
 
                     b.Property<int>("SegmentIndex")
                         .HasColumnType("integer")
@@ -843,6 +855,12 @@ namespace Agw.Migrations.Postgres.Migrations
 
                     b.HasIndex("Status", "StateChangedAt")
                         .HasDatabaseName("ix_durable_execution_status_state_changed_at");
+
+                    b.HasIndex("ScopeBackfilled", "UserId", "Id")
+                        .HasDatabaseName("ix_durable_execution_scope_backfilled_user_id_id");
+
+                    b.HasIndex("UserId", "ProjectId", "ProjectConversationId", "Status")
+                        .HasDatabaseName("ix_durable_execution_user_id_project_id_project_conversation_i");
 
                     b.ToTable("durable_execution", (string)null);
                 });
@@ -1490,6 +1508,13 @@ namespace Agw.Migrations.Postgres.Migrations
                     b.Property<DateTimeOffset>("CreateTime")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("create_time");
+
+                    b.Property<int>("Generation")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("generation");
 
                     b.Property<Guid?>("JobId")
                         .HasColumnType("uuid")

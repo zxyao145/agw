@@ -8,6 +8,7 @@ using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Mapping;
 using Agw.Auth.Contracts;
+using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.DependencyInjection;
@@ -71,6 +72,18 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
             }
             yield break;
         }
+
+        await using var executionLease = await AcquireInProcessLeaseAsync(request, cancellationToken);
+        using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            executionLease?.HandleLostToken ?? CancellationToken.None
+        );
+        cancellationToken = executionCancellation.Token;
+        using var sessionContext = ConversationSessionContext.Push(
+            request.Task.ProjectId,
+            request.Task.ContextId,
+            request.Task.Generation
+        );
 
         if (target.Kind == AgentTargetKind.Agent)
         {
@@ -175,6 +188,18 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
         CancellationToken cancellationToken
     )
     {
+        await using var executionLease = await AcquireInProcessLeaseAsync(request, cancellationToken);
+        using var executionCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken,
+            executionLease?.HandleLostToken ?? CancellationToken.None
+        );
+        cancellationToken = executionCancellation.Token;
+        using var sessionContext = ConversationSessionContext.Push(
+            request.Task.ProjectId,
+            request.Task.ContextId,
+            request.Task.Generation
+        );
+
         IReadOnlyList<AgwMessage> messages;
         if (target.Kind == AgentTargetKind.Agent)
         {
@@ -294,6 +319,17 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
         {
             throw new AgwException(ErrorCodes.AgentExecutionFailed, outcome.ErrorMessage ?? "Agent execution failed.");
         }
+    }
+
+    private async Task<Agw.Shared.Contracts.Coordination.IApplicationLockLease?> AcquireInProcessLeaseAsync(
+        AgentExecutionRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        var gate = _services.GetService<IConversationExecutionGate>();
+        return gate == null
+            ? null
+            : await gate.AcquireAsync(request.Task.ProjectConversationId, request.Task.Generation, cancellationToken);
     }
 
     private Task StartDurableAsync(

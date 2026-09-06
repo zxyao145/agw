@@ -62,6 +62,9 @@ public sealed class JobAgentExecutorTests
 
     private sealed class RecordingProjectTaskFacade : IProjectTaskFacade
     {
+        public Task<int?> GetGenerationAsync(Guid conversationId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<int?>(0);
+
         public StartProjectTaskRequest? Request { get; private set; }
 
         public Task<ProjectTaskSnapshot> ResolveAsync(

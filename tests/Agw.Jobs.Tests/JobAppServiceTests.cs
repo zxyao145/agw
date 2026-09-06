@@ -2,7 +2,6 @@ using System.Security.Claims;
 using Agw.Agents.Contracts.Catalog;
 using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
-using Agw.Infrastructure.Repositories;
 using Agw.Jobs.Application.Contracts;
 using Agw.Jobs.Application.Services;
 using Agw.Jobs.Scheduling;
@@ -10,9 +9,7 @@ using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Application;
 using Agw.Projects.Application.Facades;
 using Agw.Projects.Contracts.Runtime;
-using Agw.Projects.Domain.Services;
 using Agw.Shared.Data.Entities.Jobs;
-using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Testing;
 using Microsoft.Data.Sqlite;
@@ -37,7 +34,11 @@ public class JobAppServiceTests : IDisposable
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var fixture = await JobAppServiceFixture.CreateAsync(2, cancellationToken);
 
-        var job = await fixture.Service.CreateAsync(CreateRequest("   "), "test-user");
+        var job = await fixture.Service.CreateAsync(
+            CreateRequest("   "),
+            "test-user",
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
         Assert.Equal("job-3-20260715", job.Name);
     }
@@ -48,7 +49,11 @@ public class JobAppServiceTests : IDisposable
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var fixture = await JobAppServiceFixture.CreateAsync(0, cancellationToken);
 
-        var job = await fixture.Service.CreateAsync(CreateRequest("  Nightly Job  "), "test-user");
+        var job = await fixture.Service.CreateAsync(
+            CreateRequest("  Nightly Job  "),
+            "test-user",
+            cancellationToken: TestContext.Current.CancellationToken
+        );
 
         Assert.Equal("Nightly Job", job.Name);
     }
@@ -71,7 +76,8 @@ public class JobAppServiceTests : IDisposable
                 IsEnabled = true,
                 Status = JobStatus.Pending,
             },
-            "test-user"
+            "test-user",
+            cancellationToken: TestContext.Current.CancellationToken
         );
 
         Assert.NotNull(job);
@@ -143,7 +149,12 @@ public class JobAppServiceTests : IDisposable
         await fixture.SetActiveAttemptAsync(fixture.FirstJobId, cancellationToken);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            fixture.Service.UpdateAsync(fixture.FirstJobId, CreateUpdateRequest(), "test-user")
+            fixture.Service.UpdateAsync(
+                fixture.FirstJobId,
+                CreateUpdateRequest(),
+                "test-user",
+                cancellationToken: TestContext.Current.CancellationToken
+            )
         );
 
         Assert.Equal(ErrorCodes.JobActiveAttemptConflict.Code, exception.Code);
@@ -268,32 +279,13 @@ public class JobAppServiceTests : IDisposable
 
             var timeProvider = new TestTimeProvider(UtcNow);
             var schedulerWakeSignal = new JobSchedulerWakeSignal(timeProvider);
-            var projectRepository = new EfRepository<Project>(dbContext);
-            var conversationRepository = new EfRepository<ProjectConversation>(dbContext);
-            var historyRepository = new EfRepository<ProjectConversationChatHistory>(dbContext);
             var userInfo = new TestUserInfoService();
-            var projectResolver = new ProjectResolver(projectRepository, userInfo);
-            var taskService = new TaskExecutionAppService(
-                conversationRepository,
-                historyRepository,
-                dbContext,
-                new ProjectConversationChatHistoryDomainService(),
-                projectResolver,
-                timeProvider,
-                userInfo
-            );
-            var taskResolver = new TaskAppService(
-                conversationRepository,
-                historyRepository,
-                projectResolver,
-                taskService,
-                userInfo
-            );
+            var projectResolver = new ProjectResolver(dbContext, userInfo);
+            var taskService = new TaskExecutionAppService(dbContext, projectResolver, timeProvider, userInfo);
+            var taskResolver = new TaskAppService(dbContext, projectResolver, taskService, userInfo);
             var service = new JobAppService(
-                new JobRepo(dbContext, timeProvider),
-                new EfRepository<JobLog>(dbContext),
-                new ProjectTaskFacade(taskService, conversationRepository, historyRepository, taskResolver, userInfo),
                 dbContext,
+                new ProjectTaskFacade(taskService, dbContext, taskResolver, userInfo),
                 new JobScheduleCalculator(),
                 schedulerWakeSignal,
                 timeProvider,

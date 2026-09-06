@@ -1,34 +1,35 @@
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.ExternalAgents;
 using Agw.Auth.Contracts;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Skills;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
+using Agw.Skills.Contracts.References;
 using Agw.Tools;
+using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Agents.Definitions.Agents;
 
 public class AgentSuggestionAppService
 {
-    private readonly IRepository<Agent> _agentRepository;
+    private readonly IAgentsDbContext _dbContext;
     private readonly IProjectRuntimeFacade _projects;
-    private readonly IRepository<Skill> _skillRepository;
+    private readonly ISkillReferenceFacade _skillReferences;
     private readonly ToolRegistryService _toolRegistryService;
     private readonly IUserInfoService _userInfoService;
 
     public AgentSuggestionAppService(
-        IRepository<Agent> agentRepository,
+        IAgentsDbContext dbContext,
         IProjectRuntimeFacade projects,
-        IRepository<Skill> skillRepository,
+        ISkillReferenceFacade skillReferences,
         ToolRegistryService toolRegistryService,
         IUserInfoService userInfoService
     )
     {
-        _agentRepository = agentRepository;
+        _dbContext = dbContext;
         _projects = projects;
-        _skillRepository = skillRepository;
+        _skillReferences = skillReferences;
         _toolRegistryService = toolRegistryService;
         _userInfoService = userInfoService;
     }
@@ -36,12 +37,12 @@ public class AgentSuggestionAppService
     public async Task<AgentSuggestionsResponse> GetSuggestionsAsync(Guid? projectId, Guid agentId)
     {
         var ownerUserId = ResolveOwnerUserId();
-        var agents = await _agentRepository.ListAsync(
-            agent => agent.Id == agentId && agent.CreateBy == ownerUserId,
-            null,
-            agent => agent.AgentSkillRelations
-        );
-        var agent = agents.FirstOrDefault() ?? throw new AgwException(ErrorCodes.AgentNotFound);
+        var agent =
+            await _dbContext
+                .Agents.AsNoTracking()
+                .Include(agent => agent.AgentSkillRelations)
+                .FirstOrDefaultAsync(agent => agent.Id == agentId && agent.CreateBy == ownerUserId)
+            ?? throw new AgwException(ErrorCodes.AgentNotFound);
 
         ProjectRuntimeSnapshot? project = null;
         if (projectId.HasValue)
@@ -71,9 +72,7 @@ public class AgentSuggestionAppService
         var skillIds = relatedSkillIds.Where(id => id != Guid.Empty).Distinct().ToArray();
         if (skillIds.Length > 0)
         {
-            var skills = await _skillRepository.ListAsync(skill =>
-                skillIds.Contains(skill.Id) && (skill.Kind == SkillKind.BuiltIn || skill.CreateBy == ownerUserId)
-            );
+            var skills = await _skillReferences.DescribeVisibleSkillsAsync(skillIds).ConfigureAwait(false);
             suggestions.AddRange(
                 skills
                     .Where(skill => !string.IsNullOrWhiteSpace(skill.Name))

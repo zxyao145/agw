@@ -1,6 +1,5 @@
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
-using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Application.Capabilities;
 using Agw.Integrations.Application.Credentials;
 using Agw.Integrations.Application.Management;
@@ -11,7 +10,6 @@ using Agw.Integrations.Infrastructure.Plugins;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Agw.Testing;
 using Microsoft.AspNetCore.DataProtection;
@@ -916,33 +914,12 @@ public class IntegrationManagementAppServiceTests
             catalog ??= new TestPluginCatalog();
             var timeProvider = new TestTimeProvider(now ?? TimeProvider.System.GetUtcNow());
 
-            IRepository<PluginInstallation> installationRepository = new EfRepository<PluginInstallation>(dbContext);
-            IRepository<PluginInstallationCredential> installationCredentialRepository =
-                new EfRepository<PluginInstallationCredential>(dbContext);
-            IRepository<IntegrationConnection> connectionRepository = new EfRepository<IntegrationConnection>(
-                dbContext
-            );
-            IRepository<ConnectionCredential> connectionCredentialRepository = new EfRepository<ConnectionCredential>(
-                dbContext
-            );
-            IUnitOfWork unitOfWork = dbContext;
             var userInfo = new TestUserInfoService("tester");
 
-            var reader = new ConnectionCredentialReader(
-                installationCredentialRepository,
-                connectionCredentialRepository,
-                userInfo
-            );
-            var credentialMutations = new CredentialMutationService(
-                installationCredentialRepository,
-                connectionCredentialRepository,
-                timeProvider,
-                userInfo
-            );
+            var reader = new ConnectionCredentialReader(dbContext, userInfo);
+            var credentialMutations = new CredentialMutationService(dbContext, timeProvider, userInfo);
             var installations = new PluginInstallationAppService(
-                installationRepository,
-                connectionRepository,
-                unitOfWork,
+                dbContext,
                 catalog,
                 credentialMutations,
                 timeProvider,
@@ -950,14 +927,12 @@ public class IntegrationManagementAppServiceTests
             );
             var plugins = new PluginCatalogAppService(
                 catalog,
-                installationRepository,
+                dbContext,
                 new PluginSkillMetadataReader(new AppContextPluginContentRootProvider()),
                 userInfo
             );
             var connections = new ConnectionAppService(
-                connectionRepository,
-                installationRepository,
-                unitOfWork,
+                dbContext,
                 catalog,
                 credentialMutations,
                 reader,

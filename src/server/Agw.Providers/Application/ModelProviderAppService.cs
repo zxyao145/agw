@@ -1,8 +1,7 @@
+using Agw.Providers.Application.Persistence;
 using Agw.Providers.Contracts.Manager;
-using Agw.Providers.Domain.Services;
 using Agw.Shared.Contracts;
 using Agw.Shared.Data.Entities.Providers;
-using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,31 +9,19 @@ namespace Agw.Providers.Application;
 
 public class ModelProviderAppService : IModelProviderAppService
 {
-    private readonly IRepository<ModelProviderRelation> _repository;
-    private readonly IUnitOfWork _unitOfWork;
-    private readonly ModelProviderDomainService _domainService;
+    private readonly IProvidersDbContext _dbContext;
     private readonly ModelProviderUsageGuard _usageGuard;
     private readonly ICurrentUser _currentUser;
-    private readonly IRepository<Provider> _providerRepository;
-    private readonly IRepository<AgwAiModel> _modelRepository;
 
     public ModelProviderAppService(
-        IRepository<ModelProviderRelation> repository,
-        IUnitOfWork unitOfWork,
-        ModelProviderDomainService domainService,
+        IProvidersDbContext dbContext,
         ModelProviderUsageGuard usageGuard,
-        ICurrentUser currentUser,
-        IRepository<Provider> providerRepository,
-        IRepository<AgwAiModel> modelRepository
+        ICurrentUser currentUser
     )
     {
-        _repository = repository;
-        _unitOfWork = unitOfWork;
-        _domainService = domainService;
+        _dbContext = dbContext;
         _usageGuard = usageGuard;
         _currentUser = currentUser;
-        _providerRepository = providerRepository;
-        _modelRepository = modelRepository;
     }
 
     public async Task<IReadOnlyList<ModelProviderRelation>> ListAsync(Guid? modelId = null, Guid? providerId = null)
@@ -43,23 +30,25 @@ public class ModelProviderAppService : IModelProviderAppService
         IReadOnlyList<ModelProviderRelation> modelProviders;
         if (!modelId.HasValue && !providerId.HasValue)
         {
-            modelProviders = await _repository.ListAsync(
-                relation => relation.CreateBy == ownerUserId,
-                null,
-                includes: [modelProvider => modelProvider.Model!, modelProvider => modelProvider.Provider!]
-            );
+            modelProviders = await _dbContext
+                .ModelProviders.AsNoTracking()
+                .Include(modelProvider => modelProvider.Model)
+                .Include(modelProvider => modelProvider.Provider)
+                .Where(relation => relation.CreateBy == ownerUserId)
+                .ToListAsync();
         }
         else
         {
-            modelProviders = await _repository.ListAsync(
-                modelProvider =>
+            modelProviders = await _dbContext
+                .ModelProviders.AsNoTracking()
+                .Include(modelProvider => modelProvider.Model)
+                .Include(modelProvider => modelProvider.Provider)
+                .Where(modelProvider =>
                     (!modelId.HasValue || modelProvider.ModelId == modelId.Value)
                     && (!providerId.HasValue || modelProvider.ProviderId == providerId.Value)
-                    && modelProvider.CreateBy == ownerUserId,
-                null,
-                modelProvider => modelProvider.Model!,
-                modelProvider => modelProvider.Provider!
-            );
+                    && modelProvider.CreateBy == ownerUserId
+                )
+                .ToListAsync();
         }
 
         return modelProviders.OrderByDescending(modelProvider => modelProvider.CreateTime).ToList();
@@ -68,22 +57,21 @@ public class ModelProviderAppService : IModelProviderAppService
     public async Task<ModelProviderRelation?> GetAsync(Guid id)
     {
         var ownerUserId = ResolveOwnerUserId();
-        var results = await _repository.ListAsync(
-            modelProvider => modelProvider.Id == id && modelProvider.CreateBy == ownerUserId,
-            null,
-            modelProvider => modelProvider.Model!,
-            modelProvider => modelProvider.Provider!
-        );
-        return results.Count > 0 ? results[0] : null;
+        return await _dbContext
+            .ModelProviders.AsNoTracking()
+            .Include(modelProvider => modelProvider.Model)
+            .Include(modelProvider => modelProvider.Provider)
+            .FirstOrDefaultAsync(modelProvider => modelProvider.Id == id && modelProvider.CreateBy == ownerUserId);
     }
 
     public async Task<ModelProviderRelation> CreateAsync(ModelProviderCreateRequest request, string user)
     {
-        var providerExists = await _providerRepository.Queryable.AnyAsync(provider =>
-            provider.Id == request.ProviderId && provider.CreateBy == user
+        var ownerUserId = ResolveOwnerUserId();
+        var providerExists = await _dbContext.Providers.AnyAsync(provider =>
+            provider.Id == request.ProviderId && provider.CreateBy == ownerUserId
         );
-        var modelExists = await _modelRepository.Queryable.AnyAsync(model =>
-            model.Id == request.ModelId && model.CreateBy == user
+        var modelExists = await _dbContext.Models.AnyAsync(model =>
+            model.Id == request.ModelId && model.CreateBy == ownerUserId
         );
         if (!providerExists || !modelExists)
         {
@@ -92,6 +80,7 @@ public class ModelProviderAppService : IModelProviderAppService
 
         var entity = new ModelProviderRelation
         {
+            Id = Guid.CreateVersion7(),
             ModelId = request.ModelId,
             ProviderId = request.ProviderId,
             InputPrice = request.InputPrice,
@@ -101,35 +90,31 @@ public class ModelProviderAppService : IModelProviderAppService
             RpsLimit = request.RpsLimit,
         };
 
-        _domainService.PrepareForCreate(entity, user);
-        await _repository.AddAsync(entity);
-        await _unitOfWork.SaveChangesAsync();
+        await _dbContext.ModelProviders.AddAsync(entity);
+        await _dbContext.SaveChangesAsync();
         return entity;
     }
 
     public async Task<ModelProviderRelation?> UpdateAsync(Guid id, ModelProviderUpdateRequest request, string user)
     {
-        var existing = await GetAsync(id);
+        var ownerUserId = ResolveOwnerUserId();
+        var existing = await _dbContext
+            .ModelProviders.Include(entity => entity.Model)
+            .Include(entity => entity.Provider)
+            .FirstOrDefaultAsync(entity => entity.Id == id && entity.CreateBy == ownerUserId);
         if (existing == null)
         {
             return null;
         }
 
-        _domainService.ApplyUpdate(
-            existing,
-            entity =>
-            {
-                entity.InputPrice = request.InputPrice;
-                entity.OutputPrice = request.OutputPrice;
-                entity.CacheRead = request.CacheRead;
-                entity.CacheWrite = request.CacheWrite;
-                entity.RpsLimit = request.RpsLimit;
-            },
-            user
-        );
+        existing.InputPrice = request.InputPrice;
+        existing.OutputPrice = request.OutputPrice;
+        existing.CacheRead = request.CacheRead;
+        existing.CacheWrite = request.CacheWrite;
+        existing.RpsLimit = request.RpsLimit;
 
-        _repository.Update(existing);
-        await _unitOfWork.SaveChangesAsync();
+        _dbContext.ModelProviders.Entry(existing).Property(relation => relation.InputPrice).IsModified = true;
+        await _dbContext.SaveChangesAsync();
         return existing;
     }
 
@@ -142,8 +127,8 @@ public class ModelProviderAppService : IModelProviderAppService
         }
 
         await _usageGuard.EnsureNotInUseAsync([existing.Id]);
-        _repository.Remove(existing);
-        await _unitOfWork.SaveChangesAsync();
+        _dbContext.ModelProviders.Remove(existing);
+        await _dbContext.SaveChangesAsync();
         return true;
     }
 

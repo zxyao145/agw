@@ -171,6 +171,10 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
         Settings ??= ExecutionSettings.CreateDefault();
         await ResolveExecutionContextAsync(command, cancellationToken);
+        if (command.ResumeCheckpoint != null && command.ResumeGeneration != _resolvedTask!.Generation)
+        {
+            throw new AgwException(ErrorCodes.ConversationSessionConflict);
+        }
 
         var target = new ExecutionTarget(agentId, command.AgentType);
         if (_durableSession != null)
@@ -368,6 +372,17 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 "checkpointOccurrenceId, resumeExecutionId and agentflowId are required."
             );
         }
+        if (
+            _resolvedTask != null
+            && await _projectTasks.GetGenerationAsync(_resolvedTask.ProjectConversationId, cancellationToken)
+                != _resolvedTask.Generation
+        )
+        {
+            await ReleaseRuntimeAsync();
+            _resolvedTask = null;
+            _lastResumeExecutionId = null;
+            throw new AgwException(ErrorCodes.ConversationSessionConflict);
+        }
         if (_lastResumeExecutionId == command.ResumeExecutionId)
         {
             return;
@@ -447,6 +462,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                     ExecutionId = command.ResumeExecutionId,
                     Stream = true,
                     ResumeCheckpoint = snapshot,
+                    ResumeGeneration = resolvedTask.Generation,
                 },
                 cancellationToken
             )
@@ -508,6 +524,17 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     private async Task ResolveExecutionContextAsync(ExecCommand command, CancellationToken cancellationToken)
     {
+        var generation =
+            await _projectTasks.GetGenerationAsync(command.ConversationId!.Value, cancellationToken)
+            ?? throw new AgwException(ErrorCodes.ResourceNotFound);
+        if (_resolvedTask != null && _resolvedTask.Generation != generation)
+        {
+            await ReleaseRuntimeAsync();
+            _resolvedTask = null;
+            _workspace = null;
+            _lastResumeExecutionId = null;
+        }
+
         if (_resolvedTask == null)
         {
             var task = await _projectTasks.ResolveAsync(

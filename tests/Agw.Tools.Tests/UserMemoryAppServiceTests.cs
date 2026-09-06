@@ -1,7 +1,6 @@
 using System.Security.Claims;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
-using Agw.Infrastructure.Repositories;
 using Agw.Shared.Coordination;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
@@ -149,9 +148,8 @@ public sealed class UserMemoryAppServiceTests
             var protector = new DataProtectionEncryptedDataProtector(new EphemeralDataProtectionProvider());
             var context = new AgwDbContext(options, protector);
             await context.Database.EnsureCreatedAsync(cancellationToken);
-            var repository = new EfRepository<UserMemory>(context);
             var userInfoService = new TestUserInfoService("user-a");
-            var service = new UserMemoryAppService(repository, context, new InMemoryApplicationLock(), userInfoService);
+            var service = new UserMemoryAppService(context, new InMemoryApplicationLock(), userInfoService);
             return new Fixture(connection, context, service, userInfoService);
         }
 

@@ -1,9 +1,9 @@
 using System.Text.Json;
 using Agw.Auth.Contracts;
+using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Services;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Data.Repositories;
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -17,11 +17,11 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
     private const string TargetTypeMetadataKey = "targetType";
     private const string TargetIdMetadataKey = "targetId";
 
-    private readonly IRepository<ProjectConversationChatHistory> _recordRepository;
+    private readonly IProjectsDbContext _dbContext;
 
-    public ConversationHandoffProvider(IRepository<ProjectConversationChatHistory> recordRepository)
+    public ConversationHandoffProvider(IProjectsDbContext dbContext)
     {
-        _recordRepository = recordRepository;
+        _dbContext = dbContext;
     }
 
     public async Task<ConversationHandoff> CreateAsync(
@@ -42,8 +42,8 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
         }
 
         var ownerUserId = UserInfoUtil.RequiredUserId;
-        var records = await _recordRepository
-            .Queryable.AsNoTracking()
+        var records = await _dbContext
+            .ProjectConversationChatHistories.AsNoTracking()
             .Where(record =>
                 record.ConversationId == conversationId
                 && record.ProjectConversation!.CreateBy == ownerUserId

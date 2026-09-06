@@ -1,6 +1,7 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Auth.Application.Persistence;
 using Agw.Auth.Contracts;
+using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Auth;
 using Agw.Infrastructure.Configuration;
 using Agw.Infrastructure.Coordination;
@@ -8,8 +9,10 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Jobs;
+using Agw.Infrastructure.Projects;
 using Agw.Infrastructure.Repositories;
 using Agw.Infrastructure.Skills;
+using Agw.Infrastructure.Tools;
 using Agw.Integrations.Application.Persistence;
 using Agw.Jobs.Application.Persistence;
 using Agw.Jobs.Scheduling;
@@ -17,6 +20,7 @@ using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Application.Persistence;
 using Agw.Providers.Application.Persistence;
 using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Contracts.Persistence;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Repositories;
@@ -101,7 +105,12 @@ public static class DependencyInjection
 
         // Register database seeder
         services.AddScoped<DbSeeder>();
-        services.AddScoped<IApiTokenStore, EfApiTokenStore>();
+        services.AddScoped<IDatabaseBootstrapper, DatabaseBootstrapper>();
+        services.AddScoped<EfApiTokenStore>();
+        services.AddScoped<IApiTokenStore>(serviceProvider => serviceProvider.GetRequiredService<EfApiTokenStore>());
+        services.AddScoped<ILegacyApiTokenImporter>(serviceProvider =>
+            serviceProvider.GetRequiredService<EfApiTokenStore>()
+        );
 
         services.AddScoped<DbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IAgentsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
@@ -114,6 +123,14 @@ public static class DependencyInjection
         services.AddScoped<IProvidersDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<ISkillsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IToolsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
+        services.AddScoped<IAgentflowCheckpointPersistence, AgentflowCheckpointPersistence>();
+        services.AddScoped<IDurableExecutionScopeMaintenance, DurableExecutionScopeMaintenance>();
+        services.AddHostedService<DurableExecutionScopeRecoveryService>();
+        services.AddScoped<IAgentSessionStatePersistence, AgentSessionStatePersistence>();
+        services.AddScoped<IAgentDeletionCoordinator, AgentDeletionCoordinator>();
+        services.AddScoped<IProjectDeletionCoordinator, ProjectDeletionCoordinator>();
+        services.AddScoped<Agw.Projects.Contracts.Execution.IConversationExecutionGate, ConversationExecutionGate>();
+        services.AddScoped<IProjectMemoryPersistence, ProjectMemoryPersistence>();
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
         services.AddScoped<JobRepo>();
         services.AddScoped<IRepository<Job>, JobRepo>(sp => sp.GetRequiredService<JobRepo>());

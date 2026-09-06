@@ -20,6 +20,78 @@ namespace Agw.Infrastructure.Tests;
 public sealed class UserScopeFilterTests
 {
     [Fact]
+    public void UserScopeFilter_AllTableEntities_HaveNamedFilter()
+    {
+        // Arrange
+        var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite("Data Source=:memory:").Options;
+        using var context = new AgwDbContext(options);
+
+        // Act
+        var unfilteredEntities = context
+            .Model.GetEntityTypes()
+            .Where(entityType => entityType.GetTableName() != null)
+            .Where(entityType => entityType.FindDeclaredQueryFilter(UserScopeQueryFilterNames.UserScope) == null)
+            .Select(entityType => entityType.ClrType.FullName ?? entityType.Name)
+            .OrderBy(static entityName => entityName, StringComparer.Ordinal)
+            .ToArray();
+
+        // Assert
+        Assert.Empty(unfilteredEntities);
+    }
+
+    [Fact]
+    public void ProjectDeletionInventory_AllDirectProjectScopedTables_HaveExplicitLifecycleCoverage()
+    {
+        // Arrange
+        var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite("Data Source=:memory:").Options;
+        using var context = new AgwDbContext(options);
+        var expectedDirectProjectScopedTypes = new[]
+        {
+            typeof(AgentSessionStateEntry),
+            typeof(AgentUsage), // Intentional retention: usage is user-scoped analytics.
+            typeof(AgentflowCheckpointRecord),
+            typeof(AgentflowTrace),
+            typeof(DurableExecutionRecord),
+            typeof(Job),
+            typeof(ProjectConnectionRelation),
+            typeof(ProjectConversation),
+            typeof(ProjectMcpServerRelation),
+            typeof(ProjectMemoryEntry),
+            typeof(ProjectSkillRelation),
+            typeof(TaskSessionBinding),
+        };
+        var expectedIndirectProjectScopedTypes = new[]
+        {
+            typeof(DurableExecutionEventRecord), // Deleted through matching durable execution IDs.
+            typeof(JobLog), // Deleted through project Job IDs.
+            typeof(ProjectConversationChatHistory), // Deleted through project Conversation IDs.
+        };
+
+        // Act
+        var actualDirectProjectScopedTypes = context
+            .Model.GetEntityTypes()
+            .Where(entityType => entityType.GetTableName() != null)
+            .Where(entityType =>
+                entityType.GetProperties().Any(property => property.Name is "ProjectId" or "ProjectConversationId")
+            )
+            .Select(entityType => entityType.ClrType)
+            .OrderBy(type => type.FullName, StringComparer.Ordinal)
+            .ToArray();
+        var actualTableTypes = context
+            .Model.GetEntityTypes()
+            .Where(entityType => entityType.GetTableName() != null)
+            .Select(entityType => entityType.ClrType)
+            .ToHashSet();
+
+        // Assert
+        Assert.Equal(
+            expectedDirectProjectScopedTypes.OrderBy(type => type.FullName, StringComparer.Ordinal),
+            actualDirectProjectScopedTypes
+        );
+        Assert.All(expectedIndirectProjectScopedTypes, type => Assert.Contains(type, actualTableTypes));
+    }
+
+    [Fact]
     public async Task UserScopeFilter_AuthenticatedUser_SeesOnlyOwnedRoots()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

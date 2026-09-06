@@ -308,7 +308,7 @@ public sealed class ProjectMemoryProvider : AIContextProvider
         await _fileStore.WriteAsync(MemoryIndexFileName, index.ToString(), cancellationToken).ConfigureAwait(false);
     }
 
-    private Task<IAsyncDisposable> AcquireMutationLockAsync(CancellationToken cancellationToken) =>
+    private Task<IApplicationLockLease> AcquireMutationLockAsync(CancellationToken cancellationToken) =>
         _applicationLock.AcquireAsync(_mutationResourceName, cancellationToken);
 
     private static string NormalizeMemoryFileName(string fileName)
