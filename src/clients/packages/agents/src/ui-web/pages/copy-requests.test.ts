@@ -29,6 +29,7 @@ const sourceAgent = {
     },
   ],
   type: 0,
+  externalAgentKind: 0,
   extra: "not copied",
   environmentVariables: {
     SEARCH_TOKEN: "secret",
@@ -54,11 +55,11 @@ const sourceAgent = {
 } satisfies AgentDto;
 
 test("createAgentCopyRequest copies all System Agent configuration with a new identity", () => {
-  const request = createAgentCopyRequest(sourceAgent, "12345678-abcd-efab-cdef-1234567890ab");
+  const request = createAgentCopyRequest(sourceAgent);
 
   assert.deepEqual(request, {
     displayName: "Research Agent Copy",
-    name: "research-agent-copy-12345678",
+    name: "research-agent-copy",
     description: "Researches a topic",
     systemPrompt: "Find reliable sources.",
     modelProviderId: "model-provider-1",
@@ -71,40 +72,60 @@ test("createAgentCopyRequest copies all System Agent configuration with a new id
     environmentVariables: {
       SEARCH_TOKEN: "secret",
     },
+    type: 0,
+    externalAgentKind: 0,
+    extra: null,
   });
   assert.notStrictEqual(request.tools, sourceAgent.tools);
   assert.notStrictEqual(request.environmentVariables, sourceAgent.environmentVariables);
   assert.equal("id" in request, false);
-  assert.equal("type" in request, false);
-  assert.equal("extra" in request, false);
+  assert.equal(request.type, 0);
+  assert.equal(request.externalAgentKind, 0);
+  assert.equal(request.extra, null);
+});
+
+test("createAgentCopyRequest preserves External Agent kind and Extra Settings", () => {
+  const request = createAgentCopyRequest({
+    ...sourceAgent,
+    name: "claude-reviewer",
+    type: 1,
+    externalAgentKind: 1,
+    extra: '{"model":"claude-sonnet"}',
+  });
+
+  assert.equal(request.name, "claude-reviewer-copy");
+  assert.equal(request.type, 1);
+  assert.equal(request.externalAgentKind, 1);
+  assert.equal(request.extra, '{"model":"claude-sonnet"}');
+  assert.equal(request.systemPrompt, "");
+  assert.equal(request.enableSummary, false);
+  assert.equal(request.summaryModelProviderId, null);
+  assert.deepEqual(request.tools, []);
+  assert.equal(request.mcpToolServerIds, null);
+  assert.equal(request.skillIds, null);
+  assert.equal(request.connectionIds, null);
 });
 
 test("createAgentCopyRequest keeps generated names within the database length limit", () => {
-  const request = createAgentCopyRequest(
-    {
-      ...sourceAgent,
-      displayName: "D".repeat(200),
-      name: "n".repeat(200),
-    },
-    "abcd-ef12-3456-7890",
-  );
+  const request = createAgentCopyRequest({
+    ...sourceAgent,
+    displayName: "D".repeat(200),
+    name: "n".repeat(200),
+  });
 
   assert.equal(request.displayName.length, 200);
   assert.equal(request.displayName.endsWith(" Copy"), true);
   assert.equal(request.name.length, 200);
-  assert.equal(request.name.endsWith("-copy-abcdef12"), true);
+  assert.equal(request.name.endsWith("-copy"), true);
 });
 
 test("createAgentCopyRequest represents empty relations as null", () => {
-  const request = createAgentCopyRequest(
-    {
-      ...sourceAgent,
-      agentMcpToolServers: [],
-      agentSkillRelations: null,
-      agentConnectionRelations: undefined,
-    },
-    "12345678",
-  );
+  const request = createAgentCopyRequest({
+    ...sourceAgent,
+    agentMcpToolServers: [],
+    agentSkillRelations: null,
+    agentConnectionRelations: undefined,
+  });
 
   assert.equal(request.mcpToolServerIds, null);
   assert.equal(request.skillIds, null);

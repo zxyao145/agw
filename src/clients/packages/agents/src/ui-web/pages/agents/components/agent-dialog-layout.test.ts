@@ -127,13 +127,21 @@ test("Edit Agent sends only allowed fields for External Agent updates", async ()
 });
 
 test("Create and Edit Agent dialogs send normalized environment variables", async () => {
-  for (const fileUrl of [CREATE_DIALOG_URL, EDIT_DIALOG_URL]) {
-    const source = await readFile(fileUrl, "utf8");
+  const [createSource, editSource] = await Promise.all([
+    readFile(CREATE_DIALOG_URL, "utf8"),
+    readFile(EDIT_DIALOG_URL, "utf8"),
+  ]);
 
-    assert.match(
-      source,
-      /environmentVariables: normalizeAgentEnvironmentVariables\(environmentVariables\)/,
-    );
+  assert.match(
+    createSource,
+    /const environment = normalizeAgentEnvironmentVariables\(environmentVariables\)/,
+  );
+  assert.match(createSource, /environmentVariables: environment/);
+  assert.match(
+    editSource,
+    /environmentVariables: normalizeAgentEnvironmentVariables\(environmentVariables\)/,
+  );
+  for (const source of [createSource, editSource]) {
     assert.match(source, /getAgentEnvironmentVariablesError\(environmentVariables\)/);
   }
 });
@@ -181,13 +189,16 @@ test("External Agent display name is optional while System validation remains re
   assert.match(formSource, /Description[\s\S]*\(Optional\)/);
 });
 
-test("Agent forms use SearchableSelect for both model provider fields", async () => {
+test("Agent forms use SearchableSelect for type, external kind, and model provider fields", async () => {
   const source = await readFile(FORM_FIELDS_URL, "utf8");
 
   assert.match(source, /SearchableSelect,[\s\S]*type SearchableSelectOption/);
   assert.match(source, /const modelProviderOptions = React\.useMemo<SearchableSelectOption\[]>/);
-  assert.equal(source.match(/<SearchableSelect\s/g)?.length, 2);
+  assert.equal(source.match(/<SearchableSelect\s/g)?.length, 4);
   assert.equal(source.match(/options=\{modelProviderOptions\}/g)?.length, 2);
+  assert.match(source, /ariaLabel="Agent Type"/);
+  assert.match(source, /ariaLabel="External Agent"/);
+  assert.match(source, /options=\{externalAgentKindOptions\}/);
   assert.doesNotMatch(source, /<Select(?:\s|>)/);
 });
 

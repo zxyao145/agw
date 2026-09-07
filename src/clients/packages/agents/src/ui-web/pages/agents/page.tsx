@@ -9,14 +9,19 @@ import { PaginatedTable } from "@agw/components";
 import { Button } from "@agw/components";
 import { DEFAULT_PAGE_SIZE, getClampedPageIndex, type PagedResult } from "@agw/components";
 
-import type {
-  AgentDto,
-  AgentCreateRequest,
-  AgentUpdateRequest,
-  ToolInfo,
-  ModelProviderDto,
-  McpToolServerDto,
-  SkillDto,
+import {
+  AgentType,
+  ExternalAgentKind,
+  type AgentType as AgentTypeValue,
+  type ExternalAgentKind as ExternalAgentKindValue,
+  type AgentDto,
+  type AgentCreateRequest,
+  type AgentUpdateRequest,
+  type ExternalAgentOptionDto,
+  type ToolInfo,
+  type ModelProviderDto,
+  type McpToolServerDto,
+  type SkillDto,
 } from "./components/types";
 import { getApiErrorMessage } from "@agw/api";
 import type { ConnectionOption } from "./components/connection-selector";
@@ -25,12 +30,12 @@ import {
   type AgentEnvironmentVariableEntry,
 } from "./components/agent-environment-variables";
 import { CreateAgentDialog } from "./components/create-agent-dialog";
+import { CopyAgentDialog } from "./components/copy-agent-dialog";
 import { EditAgentDialog } from "./components/edit-agent-dialog";
 import { DeleteAgentDialog } from "./components/delete-agent-dialog";
 import { ExecuteAgentDrawer } from "./components/execute-agent-drawer";
 import { AgentsTable } from "./components/agents-table";
 import { parseToolValues, type ToolValueObject } from "@agw/tools";
-import { createAgentCopyRequest } from "../copy-requests";
 
 type AgentEnabledUpdateRequest = {
   agentId: string;
@@ -72,6 +77,13 @@ export default function AgentsPage() {
     },
   });
 
+  const externalAgentOptionsQuery = useQuery({
+    queryKey: ["agents", "external-options"],
+    queryFn: async () => {
+      return (await apiGet("/api/agents/external-options")) as unknown as ExternalAgentOptionDto[];
+    },
+  });
+
   const toolsQuery = useQuery({
     queryKey: ["tools"],
     queryFn: async () => {
@@ -109,6 +121,11 @@ export default function AgentsPage() {
   const [modelProviderId, setModelProviderId] = React.useState("");
   const [summaryModelProviderId, setSummaryModelProviderId] = React.useState("");
   const [enableSummary, setEnableSummary] = React.useState(false);
+  const [agentType, setAgentType] = React.useState<AgentTypeValue>(AgentType.System);
+  const [externalAgentKind, setExternalAgentKind] = React.useState<ExternalAgentKindValue>(
+    ExternalAgentKind.None,
+  );
+  const [extra, setExtra] = React.useState("");
   const [selectedSkillIds, setSelectedSkillIds] = React.useState<string[]>([]);
   const [selectedConnectionIds, setSelectedConnectionIds] = React.useState<string[]>([]);
   const [tools, setTools] = React.useState<ToolValueObject[]>([]);
@@ -141,6 +158,7 @@ export default function AgentsPage() {
   // Delete dialog state
   const [deleteOpen, setDeleteOpen] = React.useState(false);
   const [deletingAgent, setDeletingAgent] = React.useState<AgentDto | null>(null);
+  const [copyingAgent, setCopyingAgent] = React.useState<AgentDto | null>(null);
 
   // Execute sheet state
   const [executeOpen, setExecuteOpen] = React.useState(false);
@@ -161,6 +179,9 @@ export default function AgentsPage() {
       setModelProviderId("");
       setSummaryModelProviderId("");
       setEnableSummary(false);
+      setAgentType(AgentType.System);
+      setExternalAgentKind(ExternalAgentKind.None);
+      setExtra("");
       setSelectedSkillIds([]);
       setSelectedConnectionIds([]);
       setTools([]);
@@ -174,17 +195,14 @@ export default function AgentsPage() {
   });
 
   const copyAgentMutation = useMutation({
-    mutationFn: async (agent: AgentDto) => {
-      const body = createAgentCopyRequest(agent, crypto.randomUUID());
+    mutationFn: async (body: AgentCreateRequest) => {
       return await apiPost("/api/agents", { body });
     },
-    onSuccess: async (_data, agent) => {
-      toast.success(`Agent "${agent.displayName}" copied`);
+    onSuccess: async (_data, body) => {
+      toast.success(`Agent "${body.displayName || body.name}" copied`);
+      setCopyingAgent(null);
       setPageIndex(1);
       await queryClient.invalidateQueries({ queryKey: ["agents"] });
-    },
-    onError: (error) => {
-      toast.error(`Copy failed: ${getApiErrorMessage(error)}`);
     },
   });
 
@@ -274,11 +292,39 @@ export default function AgentsPage() {
   };
 
   const handleCopy = (agent: AgentDto) => {
-    if (agent.type !== 0 || copyAgentMutation.isPending) {
+    if (copyAgentMutation.isPending) {
       return;
     }
 
-    copyAgentMutation.mutate(agent);
+    copyAgentMutation.reset();
+    setCopyingAgent(agent);
+  };
+
+  const handleCreateAgentTypeChange = (nextAgentType: AgentTypeValue) => {
+    setAgentType(nextAgentType);
+    if (nextAgentType === AgentType.System) {
+      setExternalAgentKind(ExternalAgentKind.None);
+      setExtra("");
+    }
+  };
+
+  const handleCreateExternalAgentKindChange = (nextKind: ExternalAgentKindValue) => {
+    if (nextKind === externalAgentKind) return;
+
+    const currentDefault = externalAgentOptionsQuery.data?.find(
+      (option) => option.kind === externalAgentKind,
+    )?.defaultExtra;
+    const hasCustomExtra = Boolean(extra.trim()) && extra !== currentDefault;
+    if (
+      hasCustomExtra &&
+      !window.confirm("Changing the external agent kind will replace the current Extra Settings.")
+    ) {
+      return;
+    }
+
+    const nextOption = externalAgentOptionsQuery.data?.find((option) => option.kind === nextKind);
+    setExternalAgentKind(nextKind);
+    setExtra(nextOption?.defaultExtra ?? "");
   };
 
   const handleDelete = (agent: AgentDto) => {
@@ -351,7 +397,7 @@ export default function AgentsPage() {
         <div className="min-w-0">
           <h1 className="truncate text-xl font-semibold">Agents</h1>
           <p className="text-sm text-muted-foreground">
-            Manage agents. Creating an agent requires a Model Provider.
+            Manage System and External Agents. System Agents require a Model Provider.
           </p>
         </div>
 
@@ -381,6 +427,13 @@ export default function AgentsPage() {
             setSummaryModelProviderId={setSummaryModelProviderId}
             enableSummary={enableSummary}
             setEnableSummary={setEnableSummary}
+            agentType={agentType}
+            setAgentType={handleCreateAgentTypeChange}
+            externalAgentKind={externalAgentKind}
+            setExternalAgentKind={handleCreateExternalAgentKindChange}
+            externalAgentOptionsQuery={externalAgentOptionsQuery}
+            extra={extra}
+            setExtra={setExtra}
             environmentVariables={environmentVariables}
             setEnvironmentVariables={setEnvironmentVariables}
             selectedSkillIds={selectedSkillIds}
@@ -426,6 +479,15 @@ export default function AgentsPage() {
         />
       </PaginatedTable>
 
+      {copyingAgent ? (
+        <CopyAgentDialog
+          key={copyingAgent.id}
+          agent={copyingAgent}
+          onClose={() => setCopyingAgent(null)}
+          copyAgentMutation={copyAgentMutation}
+        />
+      ) : null}
+
       <EditAgentDialog
         open={editOpen}
         setOpen={setEditOpen}
@@ -444,6 +506,7 @@ export default function AgentsPage() {
         setSummaryModelProviderId={setEditSummaryModelProviderId}
         enableSummary={editEnableSummary}
         setEnableSummary={setEditEnableSummary}
+        externalAgentOptionsQuery={externalAgentOptionsQuery}
         extra={editExtra}
         setExtra={setEditExtra}
         environmentVariables={editEnvironmentVariables}

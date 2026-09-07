@@ -96,6 +96,7 @@ public class AgentRuntimeServiceCompositionTests
     {
         var codexAgent = Assert.Single(AgentNames.ExternalAgentNames, agent => agent.Name == AgentNames.Codex);
 
+        Assert.Equal(ExternalAgentKind.Codex, codexAgent.ExternalAgentKind);
         Assert.False(string.IsNullOrWhiteSpace(codexAgent.Extra));
         var options = JsonUtil.Deserialize<CodexAIAgentOptions>(codexAgent.Extra!);
 
@@ -172,6 +173,7 @@ public class AgentRuntimeServiceCompositionTests
         var piAgent = Assert.Single(AgentNames.ExternalAgentNames, agent => agent.Name == AgentNames.Pi);
 
         Assert.Equal(AgentNames.PiId, piAgent.Id);
+        Assert.Equal(ExternalAgentKind.Pi, piAgent.ExternalAgentKind);
         var options = JsonUtil.Deserialize<PiAgentAIAgentOptions>(piAgent.Extra!);
         Assert.NotNull(options);
         Assert.Equal(PiProjectTrust.Deny, options.SessionOptions.ProjectTrust);
@@ -180,27 +182,35 @@ public class AgentRuntimeServiceCompositionTests
     }
 
     [Theory]
-    [InlineData("claudecode", "ClaudeCode")]
-    [InlineData("CODEX", "Codex")]
-    [InlineData("pi", "Pi")]
-    public void ExternalAgentKindResolver_KnownExternalName_ClassifiesIgnoringCase(string name, string expected)
+    [InlineData(ExternalAgentKind.ClaudeCode, "custom-claude")]
+    [InlineData(ExternalAgentKind.Codex, "custom-codex")]
+    [InlineData(ExternalAgentKind.Pi, "custom-pi")]
+    public void ExternalAgentKindResolver_ExternalAgent_UsesPersistedKindRegardlessOfName(
+        ExternalAgentKind externalAgentKind,
+        string name
+    )
     {
         // Arrange
-        var agent = new Agent { Type = AgentType.External, Name = name };
+        var agent = new Agent
+        {
+            Type = AgentType.External,
+            ExternalAgentKind = externalAgentKind,
+            Name = name,
+        };
 
         // Act
         var kind = ExternalAgentKindResolver.Resolve(agent);
 
         // Assert
-        Assert.Equal(expected, kind.ToString());
+        Assert.Equal(externalAgentKind, kind);
     }
 
     [Fact]
-    public void ExternalAgentKindResolver_NonExternalOrUnknownName_ReturnsNone()
+    public void ExternalAgentKindResolver_NonExternalOrUnsupportedKind_ReturnsNone()
     {
         // Arrange
-        var systemAgent = new Agent { Type = AgentType.System, Name = AgentNames.Pi };
-        var unknownExternalAgent = new Agent { Type = AgentType.External, Name = "Unknown" };
+        var systemAgent = new Agent { Type = AgentType.System, ExternalAgentKind = ExternalAgentKind.Pi };
+        var unknownExternalAgent = new Agent { Type = AgentType.External, ExternalAgentKind = (ExternalAgentKind)99 };
 
         // Act
         var systemKind = ExternalAgentKindResolver.Resolve(systemAgent);
@@ -576,7 +586,12 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void ResolveExternalProviderSession_ClaudeCode_CreatesThenResumesSameSession()
     {
-        var agent = new Agent { Type = AgentType.External, Name = AgentNames.ClaudeCode };
+        var agent = new Agent
+        {
+            Type = AgentType.External,
+            ExternalAgentKind = ExternalAgentKind.ClaudeCode,
+            Name = "custom-claude",
+        };
 
         var created = AgentRuntimeService.ResolveExternalProviderSession(
             agent,
@@ -598,7 +613,12 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void ResolveExternalProviderSession_Codex_PreservesExistingBehavior()
     {
-        var agent = new Agent { Type = AgentType.External, Name = AgentNames.Codex };
+        var agent = new Agent
+        {
+            Type = AgentType.External,
+            ExternalAgentKind = ExternalAgentKind.Codex,
+            Name = "custom-codex",
+        };
         var providerSessionId = Guid.Parse("22222222-3333-4444-5555-666666666666");
 
         var created = AgentRuntimeService.ResolveExternalProviderSession(
@@ -621,7 +641,12 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void ResolveExternalProviderSession_Pi_ResumesOnlyPersistedSession()
     {
-        var agent = new Agent { Type = AgentType.External, Name = AgentNames.Pi.ToLowerInvariant() };
+        var agent = new Agent
+        {
+            Type = AgentType.External,
+            ExternalAgentKind = ExternalAgentKind.Pi,
+            Name = "custom-pi",
+        };
         var providerSessionId = Guid.Parse("33333333-4444-5555-6666-777777777777");
 
         var created = AgentRuntimeService.ResolveExternalProviderSession(
@@ -646,27 +671,42 @@ public class AgentRuntimeServiceCompositionTests
     {
         Assert.True(
             AgentRuntimeService.UsesProviderSessionBinding(
-                new Agent { Type = AgentType.External, Name = AgentNames.ClaudeCode }
+                new Agent
+                {
+                    Type = AgentType.External,
+                    ExternalAgentKind = ExternalAgentKind.ClaudeCode,
+                    Name = "first-claude",
+                }
             )
         );
         Assert.True(
             AgentRuntimeService.UsesProviderSessionBinding(
-                new Agent { Type = AgentType.External, Name = AgentNames.Codex }
+                new Agent
+                {
+                    Type = AgentType.External,
+                    ExternalAgentKind = ExternalAgentKind.Codex,
+                    Name = "first-codex",
+                }
             )
         );
         Assert.True(
             AgentRuntimeService.UsesProviderSessionBinding(
-                new Agent { Type = AgentType.External, Name = AgentNames.Pi }
+                new Agent
+                {
+                    Type = AgentType.External,
+                    ExternalAgentKind = ExternalAgentKind.Pi,
+                    Name = "first-pi",
+                }
             )
         );
         Assert.False(
             AgentRuntimeService.UsesProviderSessionBinding(
-                new Agent { Type = AgentType.External, Name = AgentNames.GithubCopilot }
+                new Agent { Type = AgentType.External, ExternalAgentKind = ExternalAgentKind.None }
             )
         );
         Assert.False(
             AgentRuntimeService.UsesProviderSessionBinding(
-                new Agent { Type = AgentType.System, Name = AgentNames.ClaudeCode }
+                new Agent { Type = AgentType.System, ExternalAgentKind = ExternalAgentKind.ClaudeCode }
             )
         );
     }

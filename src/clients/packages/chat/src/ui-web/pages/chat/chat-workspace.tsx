@@ -782,9 +782,6 @@ export function ChatWorkspace({
     }
 
     const hydrationKey = getRouteHydrationKey(routeAction);
-    if (hydrationKey) {
-      hydratedConversationKeyRef.current = hydrationKey;
-    }
 
     let cancelled = false;
     const abortController = new AbortController();
@@ -931,23 +928,6 @@ export function ChatWorkspace({
     [loadConversationHistory, selectedProjectId],
   );
 
-  const handleActiveConversationResolved = React.useCallback(
-    (conversation: ConversationSummary) => {
-      if (!selectedProjectId) {
-        return;
-      }
-
-      hydratedConversationKeyRef.current = getConversationHydrationKey(
-        selectedProjectId,
-        conversation.conversationId,
-      );
-      setConversationId(conversation.conversationId);
-      setContextId(conversation.contextId);
-      syncRoute(selectedProjectId, conversation.conversationId);
-    },
-    [selectedProjectId, syncRoute],
-  );
-
   const handleNewConversation = React.useCallback(() => {
     startNewConversation();
     setIsDrawerOpen(false);
@@ -1021,7 +1001,6 @@ export function ChatWorkspace({
         onConversationSelect={(nextConversation) => {
           void handleConversationSelect(nextConversation);
         }}
-        onActiveConversationResolved={handleActiveConversationResolved}
         onNewConversation={handleNewConversation}
         onAllConversationsDeleted={handleAllConversationsDeleted}
         headerActions={
@@ -1037,7 +1016,6 @@ export function ChatWorkspace({
       getActiveSettingsDraft,
       conversationId,
       conversationListRefreshSignal,
-      handleActiveConversationResolved,
       handleAllConversationsDeleted,
       handleConversationSelect,
       handleNewConversation,
@@ -1197,7 +1175,14 @@ export function ChatWorkspace({
                     projectId={selectedProjectId}
                     conversationId={conversationId}
                     sessionSeed={chatSessionSeed}
-                    isLoadingConversation={isLoadingConversation}
+                    isLoadingConversation={
+                      isLoadingConversation ||
+                      Boolean(
+                        queryConversationId &&
+                        (queryProjectId !== selectedProjectId ||
+                          queryConversationId !== conversationId),
+                      )
+                    }
                     showUserInputNavigation={showUserInputNavigation}
                     restoreDurableExecution={
                       Number(chatSessionSeed.revision) > 0 &&

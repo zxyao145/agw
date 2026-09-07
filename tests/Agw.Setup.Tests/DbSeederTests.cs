@@ -74,6 +74,7 @@ public class DbSeederTests : IDisposable
             );
             Assert.Equal("Pi", piAgent.Name);
             Assert.Equal(AgentType.External, piAgent.Type);
+            Assert.Equal(ExternalAgentKind.Pi, piAgent.ExternalAgentKind);
             Assert.Equal(Constants.AdminUserId, piAgent.CreateBy);
 
             var model = await context

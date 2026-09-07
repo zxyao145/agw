@@ -97,12 +97,68 @@ public class AgentBehaviorTests
     }
 
     [Fact]
+    public void PrepareForCreate_SystemAgentWithExternalKind_ThrowsAgwException()
+    {
+        var agent = new Agent
+        {
+            Type = AgentType.System,
+            ExternalAgentKind = ExternalAgentKind.Codex,
+            ModelProviderId = Guid.CreateVersion7(),
+        };
+
+        var exception = Assert.Throws<AgwException>(() => new AgentBehavior(agent).PrepareForCreate());
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+    }
+
+    [Fact]
+    public void PrepareForCreate_ExternalAgentWithoutSupportedKind_ThrowsAgwException()
+    {
+        var agent = new Agent { Type = AgentType.External };
+
+        var exception = Assert.Throws<AgwException>(() => new AgentBehavior(agent).PrepareForCreate());
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+    }
+
+    [Fact]
+    public void PrepareForCreate_ExternalAgentWithValidExtra_NormalizesExtra()
+    {
+        var agent = new Agent
+        {
+            Type = AgentType.External,
+            ExternalAgentKind = ExternalAgentKind.Pi,
+            Extra = "  {\"model\":\"test\"}  ",
+        };
+
+        new AgentBehavior(agent).PrepareForCreate();
+
+        Assert.Equal("{\"model\":\"test\"}", agent.Extra);
+    }
+
+    [Fact]
+    public void PrepareForCreate_ExternalAgentWithInvalidExtra_ThrowsAgwException()
+    {
+        var agent = new Agent
+        {
+            Type = AgentType.External,
+            ExternalAgentKind = ExternalAgentKind.Pi,
+            Extra = "[]",
+        };
+
+        var exception = Assert.Throws<AgwException>(() => new AgentBehavior(agent).PrepareForCreate());
+
+        Assert.Equal(ErrorCodes.InvalidAgentExtraSettings.Code, exception.Code);
+    }
+
+    [Fact]
     public void PrepareForCreate_ExternalAgentWithSummaryEnabledAndSummaryModelProvider_PreservesSummary()
     {
         var summaryModelProviderId = Guid.CreateVersion7();
         var agent = new Agent
         {
             Type = AgentType.External,
+            ExternalAgentKind = ExternalAgentKind.ClaudeCode,
             EnableSummary = true,
             ModelProviderId = null,
             SummaryModelProviderId = summaryModelProviderId,
@@ -120,6 +176,7 @@ public class AgentBehaviorTests
         var agent = new Agent
         {
             Type = AgentType.External,
+            ExternalAgentKind = ExternalAgentKind.ClaudeCode,
             EnableSummary = true,
             ModelProviderId = null,
             SummaryModelProviderId = null,
@@ -178,6 +235,7 @@ public class AgentBehaviorTests
             Tools = [new ToolValue { Definition = new WebSearchToolDefinition() }],
             EnableSummary = false,
             Type = AgentType.External,
+            ExternalAgentKind = ExternalAgentKind.ClaudeCode,
             DisplayName = "Before",
             CreateBy = "creator",
             CreateTime = originalCreateTime,
@@ -194,6 +252,7 @@ public class AgentBehaviorTests
             current.Tools = [new ToolValue { Definition = new WebFetchToolDefinition() }];
             current.EnableSummary = true;
             current.Type = AgentType.System;
+            current.ExternalAgentKind = ExternalAgentKind.Codex;
             current.DisplayName = "After";
             current.ModelProviderId = updatedModelProviderId;
             current.SummaryModelProviderId = updatedSummaryModelProviderId;
@@ -205,6 +264,7 @@ public class AgentBehaviorTests
         Assert.Same(originalTools, agent.Tools);
         Assert.True(agent.EnableSummary);
         Assert.Equal(AgentType.External, agent.Type);
+        Assert.Equal(ExternalAgentKind.ClaudeCode, agent.ExternalAgentKind);
         Assert.Equal("After", agent.DisplayName);
         Assert.Equal(updatedModelProviderId, agent.ModelProviderId);
         Assert.Equal(updatedSummaryModelProviderId, agent.SummaryModelProviderId);
@@ -222,6 +282,7 @@ public class AgentBehaviorTests
             Id = Guid.CreateVersion7(),
             Name = "external-agent",
             Type = AgentType.External,
+            ExternalAgentKind = ExternalAgentKind.ClaudeCode,
             Extra = "{\"before\":true}",
         };
 
@@ -238,6 +299,7 @@ public class AgentBehaviorTests
             Id = Guid.CreateVersion7(),
             Name = "external-agent",
             Type = AgentType.External,
+            ExternalAgentKind = ExternalAgentKind.ClaudeCode,
             Extra = "{\"before\":true}",
         };
 
@@ -260,6 +322,7 @@ public class AgentBehaviorTests
             Id = Guid.CreateVersion7(),
             Name = "external-agent",
             Type = AgentType.External,
+            ExternalAgentKind = ExternalAgentKind.ClaudeCode,
         };
 
         var exception = Assert.Throws<AgwException>(() =>

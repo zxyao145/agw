@@ -32,6 +32,8 @@ public class Agent : BaseEntity, IAggregateRoot
 
     public AgentType Type { get; set; } = AgentType.System;
 
+    public ExternalAgentKind ExternalAgentKind { get; set; } = ExternalAgentKind.None;
+
     /// <summary>
     /// JSON object for additional external agent settings.
     /// </summary>

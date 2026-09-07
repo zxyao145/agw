@@ -1,6 +1,28 @@
 export type { AgentDto } from "../../../../types/agentflow";
 import type { ToolValueObject } from "@agw/tools";
 
+export const AgentType = {
+  System: 0,
+  External: 1,
+} as const;
+
+export type AgentType = (typeof AgentType)[keyof typeof AgentType];
+
+export const ExternalAgentKind = {
+  None: 0,
+  ClaudeCode: 1,
+  Codex: 2,
+  Pi: 3,
+} as const;
+
+export type ExternalAgentKind = (typeof ExternalAgentKind)[keyof typeof ExternalAgentKind];
+
+export interface ExternalAgentOptionDto {
+  kind: ExternalAgentKind;
+  displayName: string;
+  defaultExtra: string;
+}
+
 export interface AgentCreateRequest {
   displayName: string;
   name: string;
@@ -14,6 +36,9 @@ export interface AgentCreateRequest {
   skillIds?: string[] | null;
   connectionIds?: string[] | null;
   environmentVariables: Record<string, string>;
+  type: AgentType;
+  externalAgentKind: ExternalAgentKind;
+  extra: string | null;
 }
 
 export interface SystemAgentUpdateRequest {

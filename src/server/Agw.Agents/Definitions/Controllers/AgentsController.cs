@@ -1,5 +1,6 @@
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
+using Agw.Agents.ExternalAgents;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
@@ -69,6 +70,21 @@ public class AgentsController : ControllerBase
         return ApiResult.Ok(suggestions);
     }
 
+    [HttpGet("external-options")]
+    [ProducesApiResult(typeof(ExternalAgentOptionResponse[]))]
+    public IActionResult GetExternalOptions()
+    {
+        return ApiResult.Ok(
+            ExternalAgentDefaults
+                .SupportedKinds.Select(kind => new ExternalAgentOptionResponse(
+                    kind,
+                    ExternalAgentDefaults.GetDisplayName(kind),
+                    ExternalAgentDefaults.GetDefaultExtra(kind)
+                ))
+                .ToArray()
+        );
+    }
+
     [HttpPost]
     [ProducesApiResult(typeof(AgentResponse))]
     public async Task<IActionResult> CreateAsync([FromBody] AgentCreateRequest request)
@@ -90,6 +106,9 @@ public class AgentsController : ControllerBase
             EnableSummary = request.EnableSummary,
             Tools = request.Tools ?? [],
             EnvironmentVariables = request.EnvironmentVariables ?? new Dictionary<string, string>(),
+            Type = request.Type ?? AgentType.System,
+            ExternalAgentKind = request.ExternalAgentKind ?? ExternalAgentKind.None,
+            Extra = request.Extra,
         };
 
         var created = await _agentAppService.CreateAgentAsync(

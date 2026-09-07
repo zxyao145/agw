@@ -232,7 +232,7 @@ Definition Agent 的 Skill provider 明确把 Skill 内容与 Project Workspace 
 
 `RuntimeFactory` 负责把已解析好的 execution/turn 输入对应到具体 runtime，并将 runtime 输出接入统一的 `TurnPipeline`。task 与 workspace 的解析由 `ExecutionConnectionContext` 统一完成。Agent runtime 只有在 project 和 context 仍兼容时才会复用；settings 或 target 变化会先释放旧 runtime。
 
-Claude Code、Codex 和 Pi 的 SDK 配置统一从 `Agent.Extra` 解析；`Project.ExtraSetting` 不参与外部 Agent 配置，也不作为回退来源。`Agent.Extra` 为空或空 JSON 对象时使用各自默认配置。工作目录继续由 `Project.Workspace` 提供，环境变量按 Agent、Project、本次执行的顺序合并。Pi 的显式扩展和历史持久化超时分别配置在 `Agent.Extra` 的 `sessionOptions.extensions` 和 `historyPersistenceTimeout` 中。
+External Agent 通过持久化的 `Agent.ExternalAgentKind` 选择 Claude Code、Codex 或 Pi，`Agent.Name` 只是用户定义的稳定标识，不参与运行时分派。同一种外部实现可以有多个独立定义。三种 SDK 配置统一从 `Agent.Extra` 解析；创建时为空或空 JSON 对象会保存该实现的默认配置，运行时仍保留同样的兜底行为。`Project.ExtraSetting` 不参与外部 Agent 配置，也不作为回退来源。工作目录继续由 `Project.Workspace` 提供，环境变量按 Agent、Project、本次执行的顺序合并。Pi 的显式扩展和历史持久化超时分别配置在 `Agent.Extra` 的 `sessionOptions.extensions` 和 `historyPersistenceTimeout` 中。
 
 ### `Turns`
 

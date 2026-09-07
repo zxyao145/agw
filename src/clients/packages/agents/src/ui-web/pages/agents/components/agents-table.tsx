@@ -4,7 +4,7 @@ import { ButtonGroup } from "@agw/components";
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "@agw/components";
 import { Copy, Pencil, Trash2, Play } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@agw/components";
-import type { AgentDto } from "./types";
+import { ExternalAgentKind, type AgentDto } from "./types";
 import { getApiErrorMessage } from "@agw/api";
 import { StaticTable } from "@agw/components";
 import { Empty } from "@agw/components";
@@ -72,8 +72,15 @@ export function AgentsTable({
       <TableBody>
         {agents.map((agent) => {
           const toolNames = agent.tools.map((value) => value.definition.name);
-          const isExternalAgent = agent.type === 1;
-          const isCopyDisabled = isCopying || isExternalAgent;
+          const isCopyDisabled = isCopying;
+          const externalAgentName =
+            agent.externalAgentKind === ExternalAgentKind.ClaudeCode
+              ? "Claude Code"
+              : agent.externalAgentKind === ExternalAgentKind.Codex
+                ? "Codex"
+                : agent.externalAgentKind === ExternalAgentKind.Pi
+                  ? "Pi"
+                  : "Unknown";
 
           return (
             <TableRow key={agent.id}>
@@ -90,7 +97,7 @@ export function AgentsTable({
                       : "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
                   }`}
                 >
-                  {agent.type === 0 ? "System" : "External"}
+                  {agent.type === 0 ? "System" : `External · ${externalAgentName}`}
                 </span>
               </TableCell>
               <TableCell className="max-w-xs truncate">{agent.description || "-"}</TableCell>
@@ -158,7 +165,6 @@ export function AgentsTable({
                       <TooltipTrigger asChild>
                         <span
                           className={`inline-flex [&>button]:rounded-none ${isCopyDisabled ? "cursor-not-allowed" : ""}`}
-                          tabIndex={isExternalAgent ? 0 : undefined}
                         >
                           <Button
                             variant="ghost"
@@ -172,9 +178,7 @@ export function AgentsTable({
                           </Button>
                         </span>
                       </TooltipTrigger>
-                      <TooltipContent>
-                        {isExternalAgent ? "External agents cannot be copied." : "Copy agent"}
-                      </TooltipContent>
+                      <TooltipContent>Copy agent</TooltipContent>
                     </Tooltip>
                     <Button
                       variant="ghost"

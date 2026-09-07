@@ -63,6 +63,56 @@ public class AgentRequestsTests
     }
 
     [Fact]
+    public void ExternalAgentKind_RoundTripsThroughCreateRequestAndResponse()
+    {
+        var createRequest = new AgentCreateRequest(
+            "Reviewer",
+            "reviewer",
+            "Reviews changes",
+            "",
+            null,
+            Type: AgentType.External,
+            ExternalAgentKind: ExternalAgentKind.ClaudeCode,
+            Extra: "{\"model\":\"claude-sonnet\"}"
+        );
+        var response = AgentResponse.FromDomain(
+            new Agent
+            {
+                Type = AgentType.External,
+                ExternalAgentKind = ExternalAgentKind.ClaudeCode,
+                Extra = createRequest.Extra,
+            }
+        );
+
+        Assert.Equal(AgentType.External, createRequest.Type);
+        Assert.Equal(ExternalAgentKind.ClaudeCode, createRequest.ExternalAgentKind);
+        Assert.Equal(ExternalAgentKind.ClaudeCode, response.ExternalAgentKind);
+        Assert.Equal(createRequest.Extra, response.Extra);
+    }
+
+    [Fact]
+    public void AgentCreateRequest_DeserializationWithoutNewFields_PreservesSystemDefaults()
+    {
+        var request = JsonSerializer.Deserialize<AgentCreateRequest>(
+            """
+            {
+              "displayName": "System Agent",
+              "name": "system-agent",
+              "description": "",
+              "systemPrompt": "Help the user.",
+              "modelProviderId": null
+            }
+            """,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        );
+
+        Assert.NotNull(request);
+        Assert.Null(request.Type);
+        Assert.Null(request.ExternalAgentKind);
+        Assert.Null(request.Extra);
+    }
+
+    [Fact]
     public void AgentSummaryModelProviderId_RoundTripsThroughRequestsAndResponse()
     {
         var summaryModelProviderId = Guid.CreateVersion7();

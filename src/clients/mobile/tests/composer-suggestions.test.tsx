@@ -102,6 +102,25 @@ test("exposes conversation bottom and top scroll actions", async () => {
   expect(onScrollToTop).toHaveBeenCalledTimes(1);
 });
 
+test("keeps the draft and disables sending until the selected conversation is restored", async () => {
+  initialText = "Keep this draft";
+  workspaceState = createWorkspace({
+    selectedConversationId: "conversation-1",
+    selectedContextId: null,
+  });
+  const view = await render(<Composer safeBottom={0} />);
+
+  expect(view.getByLabelText("Send message")).toBeDisabled();
+  await fireEvent.press(view.getByLabelText("Send message"));
+  expect(view.getByLabelText("Message").props.value).toBe("Keep this draft");
+
+  workspaceState = { ...workspaceState, selectedContextId: "context-1" };
+  await view.rerender(<Composer safeBottom={0} />);
+  expect(view.getByLabelText("Send message")).toBeEnabled();
+  await fireEvent.press(view.getByLabelText("Send message"));
+  expect(view.getByLabelText("Message").props.value).toBe("");
+});
+
 test("shows slash suggestions and replaces the trigger at the active caret", async () => {
   initialText = "Please /dep later";
   const view = await render(<Composer safeBottom={0} />);

@@ -13,6 +13,7 @@ import {
 } from "@agw/components";
 
 import { AgentFormFields } from "./agent-form-fields";
+import { getAgentExtraSettingsError, normalizeAgentExtraSettings } from "./agent-extra-settings";
 import {
   getAgentEnvironmentVariablesError,
   normalizeAgentEnvironmentVariables,
@@ -20,6 +21,9 @@ import {
 } from "./agent-environment-variables";
 import type { ConnectionOption } from "./connection-selector";
 import type {
+  AgentType,
+  ExternalAgentKind,
+  ExternalAgentOptionDto,
   AgentCreateRequest,
   McpToolServerDto,
   ModelProviderDto,
@@ -45,6 +49,13 @@ interface CreateAgentDialogProps {
   setSummaryModelProviderId: (value: string) => void;
   enableSummary: boolean;
   setEnableSummary: (value: boolean) => void;
+  agentType: AgentType;
+  setAgentType: (value: AgentType) => void;
+  externalAgentKind: ExternalAgentKind;
+  setExternalAgentKind: (value: ExternalAgentKind) => void;
+  externalAgentOptionsQuery: UseQueryResult<ExternalAgentOptionDto[], Error>;
+  extra: string;
+  setExtra: (value: string) => void;
   environmentVariables: AgentEnvironmentVariableEntry[];
   setEnvironmentVariables: (entries: AgentEnvironmentVariableEntry[]) => void;
   selectedSkillIds: string[];
@@ -81,6 +92,13 @@ export function CreateAgentDialog({
   setSummaryModelProviderId,
   enableSummary,
   setEnableSummary,
+  agentType,
+  setAgentType,
+  externalAgentKind,
+  setExternalAgentKind,
+  externalAgentOptionsQuery,
+  extra,
+  setExtra,
   environmentVariables,
   setEnvironmentVariables,
   selectedSkillIds,
@@ -99,23 +117,48 @@ export function CreateAgentDialog({
   toggleConnection,
   toggleMcpToolServer,
 }: CreateAgentDialogProps) {
+  const isExternalAgent = agentType === 1;
+  const extraError = isExternalAgent ? getAgentExtraSettingsError(extra) : null;
   const environmentVariablesError = getAgentEnvironmentVariablesError(environmentVariables);
 
   const handleCreate = () => {
-    createAgentMutation.mutate({
-      displayName,
-      name: name.trim(),
-      description,
-      systemPrompt,
-      modelProviderId,
-      summaryModelProviderId: summaryModelProviderId || null,
-      enableSummary,
-      tools,
-      skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : null,
-      mcpToolServerIds: selectedMcpToolServerIds.length > 0 ? selectedMcpToolServerIds : null,
-      connectionIds: selectedConnectionIds.length > 0 ? selectedConnectionIds : null,
-      environmentVariables: normalizeAgentEnvironmentVariables(environmentVariables),
-    });
+    const environment = normalizeAgentEnvironmentVariables(environmentVariables);
+    const body: AgentCreateRequest = isExternalAgent
+      ? {
+          displayName,
+          name: name.trim(),
+          description,
+          systemPrompt: "",
+          modelProviderId: modelProviderId || null,
+          summaryModelProviderId: null,
+          enableSummary: false,
+          tools: [],
+          skillIds: null,
+          mcpToolServerIds: null,
+          connectionIds: null,
+          environmentVariables: environment,
+          type: agentType,
+          externalAgentKind,
+          extra: normalizeAgentExtraSettings(extra),
+        }
+      : {
+          displayName,
+          name: name.trim(),
+          description,
+          systemPrompt,
+          modelProviderId: modelProviderId || null,
+          summaryModelProviderId: summaryModelProviderId || null,
+          enableSummary,
+          tools,
+          skillIds: selectedSkillIds.length > 0 ? selectedSkillIds : null,
+          mcpToolServerIds: selectedMcpToolServerIds.length > 0 ? selectedMcpToolServerIds : null,
+          connectionIds: selectedConnectionIds.length > 0 ? selectedConnectionIds : null,
+          environmentVariables: environment,
+          type: agentType,
+          externalAgentKind,
+          extra: null,
+        };
+    createAgentMutation.mutate(body);
   };
 
   return (
@@ -165,8 +208,9 @@ export function CreateAgentDialog({
                   size="sm"
                   onClick={handleCreate}
                   disabled={
-                    !displayName.trim() ||
-                    !modelProviderId.trim() ||
+                    (!isExternalAgent && (!displayName.trim() || !modelProviderId.trim())) ||
+                    (isExternalAgent && externalAgentKind === 0) ||
+                    Boolean(extraError) ||
                     Boolean(environmentVariablesError) ||
                     createAgentMutation.isPending
                   }
@@ -193,8 +237,13 @@ export function CreateAgentDialog({
             setSummaryModelProviderId={setSummaryModelProviderId}
             enableSummary={enableSummary}
             setEnableSummary={setEnableSummary}
-            agentType="0"
-            extra=""
+            agentType={agentType}
+            setAgentType={setAgentType}
+            externalAgentKind={externalAgentKind}
+            setExternalAgentKind={setExternalAgentKind}
+            externalAgentOptionsQuery={externalAgentOptionsQuery}
+            extra={extra}
+            setExtra={setExtra}
             environmentVariables={environmentVariables}
             setEnvironmentVariables={setEnvironmentVariables}
             selectedSkillIds={selectedSkillIds}

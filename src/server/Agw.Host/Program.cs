@@ -285,6 +285,11 @@ public static class AgwHostApplication
                                 }
                             }
 
+                            if (type == typeof(AgentCreateRequest))
+                            {
+                                schema.Required?.Remove("extra");
+                            }
+
                             return Task.CompletedTask;
                         }
                     );

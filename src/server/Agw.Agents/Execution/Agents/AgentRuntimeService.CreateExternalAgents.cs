@@ -11,7 +11,6 @@ using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
 using Agw.Tools.ToolBlocks.Blocks.UserMemory;
 using ClaudeCodeSdk.MAF;
-using ClaudeCodeSdk.Types;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -325,9 +324,7 @@ public partial class AgentRuntimeService
         var extra = agent.Extra;
         if (string.IsNullOrWhiteSpace(extra) || IsEmptyJsonObject(extra))
         {
-            extra = JsonUtil.Serialize(
-                new ClaudeCodeAIAgentOptions { PermissionMode = PermissionMode.bypassPermissions }
-            );
+            extra = ExternalAgentDefaults.GetDefaultExtra(ExternalAgentKind.ClaudeCode);
         }
 
         var options = JsonUtil.Deserialize<ClaudeCodeAIAgentOptions>(extra);
@@ -450,7 +447,7 @@ public partial class AgentRuntimeService
         var extra = agent.Extra;
         if (string.IsNullOrWhiteSpace(extra) || IsEmptyJsonObject(extra))
         {
-            extra = JsonUtil.Serialize(new PiAgentAIAgentOptions());
+            extra = ExternalAgentDefaults.GetDefaultExtra(ExternalAgentKind.Pi);
         }
 
         var options = JsonUtil.Deserialize<PiAgentAIAgentOptions>(extra);
@@ -532,7 +529,7 @@ public partial class AgentRuntimeService
         var extra = agent.Extra;
         if (string.IsNullOrWhiteSpace(extra) || IsEmptyJsonObject(extra))
         {
-            extra = JsonUtil.Serialize(new CodexAIAgentOptions());
+            extra = ExternalAgentDefaults.GetDefaultExtra(ExternalAgentKind.Codex);
         }
 
         var options = JsonUtil.Deserialize<CodexAIAgentOptions>(extra);

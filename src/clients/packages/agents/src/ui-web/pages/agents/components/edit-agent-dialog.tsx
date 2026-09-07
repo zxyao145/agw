@@ -22,6 +22,7 @@ import type { ConnectionOption } from "./connection-selector";
 import type {
   AgentDto,
   AgentUpdateRequest,
+  ExternalAgentOptionDto,
   McpToolServerDto,
   ModelProviderDto,
   SkillDto,
@@ -58,6 +59,7 @@ interface EditAgentDialogProps {
   setTools: (value: ToolValueObject[]) => void;
   agentOptions: Array<{ id: string; name: string; displayName?: string }>;
   modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
+  externalAgentOptionsQuery: UseQueryResult<ExternalAgentOptionDto[], Error>;
   skillsQuery: UseQueryResult<SkillDto[], Error>;
   toolsQuery: UseQueryResult<ToolInfo[], Error>;
   mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
@@ -102,6 +104,7 @@ export function EditAgentDialog({
   setTools,
   agentOptions,
   modelProvidersQuery,
+  externalAgentOptionsQuery,
   skillsQuery,
   toolsQuery,
   mcpToolServersQuery,
@@ -227,7 +230,9 @@ export function EditAgentDialog({
             setSummaryModelProviderId={setSummaryModelProviderId}
             enableSummary={enableSummary}
             setEnableSummary={setEnableSummary}
-            agentType={editingAgent?.type.toString() ?? "0"}
+            agentType={editingAgent?.type ?? 0}
+            externalAgentKind={editingAgent?.externalAgentKind ?? 0}
+            externalAgentOptionsQuery={externalAgentOptionsQuery}
             extra={extra}
             setExtra={setExtra}
             environmentVariables={environmentVariables}

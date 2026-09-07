@@ -1029,6 +1029,35 @@
         }
       }
     },
+    "/api/agents/external-options": {
+      "get": {
+        "tags": [
+          "Agents"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExternalAgentOptionResponse[]"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExternalAgentOptionResponse[]"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExternalAgentOptionResponse[]"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agents/enabled": {
       "put": {
         "tags": [
@@ -5014,6 +5043,7 @@
           "systemPrompt",
           "enableSummary",
           "type",
+          "externalAgentKind",
           "extra",
           "createTime",
           "createBy",
@@ -5061,6 +5091,9 @@
           },
           "type": {
             "$ref": "#/components/schemas/AgentType"
+          },
+          "externalAgentKind": {
+            "$ref": "#/components/schemas/ExternalAgentKind"
           },
           "extra": {
             "type": [
@@ -5256,6 +5289,32 @@
               "string"
             ],
             "format": "uuid"
+          },
+          "type": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentType"
+              }
+            ]
+          },
+          "externalAgentKind": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ExternalAgentKind"
+              }
+            ]
+          },
+          "extra": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -5865,6 +5924,7 @@
           "enableSummary",
           "tools",
           "type",
+          "externalAgentKind",
           "extra",
           "environmentVariables",
           "agentMcpToolServers",
@@ -5921,6 +5981,9 @@
           },
           "type": {
             "$ref": "#/components/schemas/AgentType"
+          },
+          "externalAgentKind": {
+            "$ref": "#/components/schemas/ExternalAgentKind"
           },
           "extra": {
             "type": [
@@ -7043,6 +7106,39 @@
               "items": {
                 "$ref": "#/components/schemas/ToolInfo"
               }
+            }
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfExternalAgentOptionResponse[]": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ExternalAgentOptionResponse"
             }
           },
           "code": {
@@ -8748,6 +8844,28 @@
       },
       "EmptyToolOptions": {
         "type": "object"
+      },
+      "ExternalAgentKind": {
+        "type": "integer"
+      },
+      "ExternalAgentOptionResponse": {
+        "required": [
+          "kind",
+          "displayName",
+          "defaultExtra"
+        ],
+        "type": "object",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ExternalAgentKind"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "defaultExtra": {
+            "type": "string"
+          }
+        }
       },
       "FileItem": {
         "required": [
