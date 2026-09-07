@@ -1,6 +1,8 @@
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Data.Interceptors;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
+using Agw.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -117,6 +119,69 @@ public class TaskExecutionAppServiceTests
         var record = await dbContext.ProjectConversationChatHistories.SingleAsync(cancellationToken);
         Assert.Equal(TaskExecutionStatus.Succeeded, record.Status);
         Assert.NotNull(record.FinishedTime);
+    }
+
+    [Theory]
+    [InlineData(TaskExecutionStatus.Succeeded, false)]
+    [InlineData(TaskExecutionStatus.Succeeded, true)]
+    [InlineData(TaskExecutionStatus.Failed, false)]
+    [InlineData(TaskExecutionStatus.Failed, true)]
+    public async Task MarkTaskAsync_RunningTask_PreservesConversationAudit(
+        TaskExecutionStatus status,
+        bool hasUpdateTime
+    )
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var now = new DateTimeOffset(2026, 9, 7, 1, 0, 0, TimeSpan.Zero);
+        var clock = new TestTimeProvider(now);
+        var userInfo = new TestUserInfoService();
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>(CreateOptions(connection))
+            .AddInterceptors(new EntityModifierInterceptor(new TestAuditUserIdProvider(), clock))
+            .Options;
+        var projectId = Guid.CreateVersion7();
+        var conversation = CreateContext(Guid.CreateVersion7(), projectId, "context-1", "Task");
+        conversation.CreateTime = now.AddHours(-2);
+        conversation.UpdateTime = hasUpdateTime ? now.AddHours(-1) : null;
+        conversation.UpdateBy = "previous-writer";
+        var record = CreateRecord(conversation.Id, Guid.CreateVersion7());
+        record.CreateTime = now.AddHours(-1);
+        record.UpdateTime = record.CreateTime;
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            await seedContext.Database.EnsureCreatedAsync(cancellationToken);
+            seedContext.Projects.Add(CreateProject(projectId, "Project"));
+            seedContext.ProjectConversations.Add(conversation);
+            seedContext.ProjectConversationChatHistories.Add(record);
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await using var dbContext = new AgwDbContext(options);
+        var service = new TaskExecutionAppService(dbContext, new ProjectResolver(dbContext, userInfo), clock, userInfo);
+
+        // Act
+        var result =
+            status == TaskExecutionStatus.Succeeded
+                ? await service.MarkSucceededAsync(record.TaskId, "tester")
+                : await service.MarkFailedAsync(record.TaskId, "Execution failed", "tester");
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal(status, result.Status);
+        await using var verifyContext = new AgwDbContext(options);
+        var persistedConversation = await verifyContext.ProjectConversations.SingleAsync(cancellationToken);
+        Assert.Equal(conversation.UpdateTime, persistedConversation.UpdateTime);
+        Assert.Equal(conversation.UpdateBy, persistedConversation.UpdateBy);
+        var persistedRecord = await verifyContext.ProjectConversationChatHistories.SingleAsync(cancellationToken);
+        Assert.Equal(status, persistedRecord.Status);
+        Assert.Equal(now, persistedRecord.UpdateTime);
+        Assert.Equal(now, persistedRecord.FinishedTime);
+        Assert.Equal(
+            status == TaskExecutionStatus.Failed ? "Execution failed" : null,
+            persistedRecord.TaskErrorMessage
+        );
     }
 
     [Fact]

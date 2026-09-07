@@ -372,8 +372,6 @@ public class TaskExecutionAppService
             record.UpdateTime = now;
         }
 
-        context.UpdateBy = user;
-        context.UpdateTime = now;
         await _dbContext.SaveChangesAsync();
 
         return TaskExecutionMapper.ToTask(context, records);
