@@ -3,7 +3,6 @@ using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
-using Agw.Agents.ExternalAgents.Pi;
 using Agw.Files.Abstracts;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
@@ -14,7 +13,6 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 
 namespace Agw.Agents.Execution.Agents;
 
@@ -41,7 +39,6 @@ public partial class AgentRuntimeService : IAgentRuntimeService
     private readonly IRuntimeTurnContextAccessor? _turnContextAccessor;
     private readonly IProjectDefaultResolver? _projectDefaults;
     private readonly TimeProvider _timeProvider;
-    private readonly PiExternalAgentOptions _piExternalAgentOptions;
 
     private readonly ILoggerFactory _loggerFactory;
     private readonly IServiceProvider _services;
@@ -69,8 +66,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         IConversationHandoffProvider? conversationHandoffProvider = null,
         IRuntimeTurnContextAccessor? turnContextAccessor = null,
         TimeProvider? timeProvider = null,
-        IProjectDefaultResolver? projectDefaults = null,
-        IOptions<PiExternalAgentOptions>? piExternalAgentOptions = null
+        IProjectDefaultResolver? projectDefaults = null
     )
     {
         _agentAppService = agentAppService;
@@ -96,7 +92,6 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         _conversationHandoffProvider = conversationHandoffProvider;
         _turnContextAccessor = turnContextAccessor;
         _projectDefaults = projectDefaults;
-        _piExternalAgentOptions = piExternalAgentOptions?.Value ?? new PiExternalAgentOptions();
         _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
         _services = services ?? new ServiceCollection().BuildServiceProvider();
     }

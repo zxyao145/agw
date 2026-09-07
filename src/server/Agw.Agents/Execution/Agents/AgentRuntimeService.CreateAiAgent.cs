@@ -183,7 +183,6 @@ public partial class AgentRuntimeService
             Id = project.Id,
             Name = project.Name,
             Workspace = project.Workspace,
-            ExtraSetting = project.ExtraSetting,
             Tools = project.Tools.ToList(),
             EnvironmentVariables = project.EnvironmentVariables.ToDictionary(),
         };

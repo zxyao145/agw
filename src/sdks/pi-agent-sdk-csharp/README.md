@@ -145,20 +145,6 @@ Agw reuses the host Pi configuration directory at `~/.pi/agent`, including `auth
 
 Because the host configuration directory is process-level, every Agw user running under the same server OS account shares the same provider identity and quota from `auth.json` and `models.json`. Within Pi's filesystem integration, per-user isolation applies only to the Session directory.
 
-Administrators may still load an explicit extension allowlist and bound history persistence:
-
-```json
-{
-  "ExternalAgents": {
-    "Pi": {
-      "Extensions": ["/trusted/extensions/approval.ts"],
-      "HistoryPersistenceTimeout": "00:00:30"
-    }
-  }
-}
-```
-
-Agent `ExtraSetting` cannot add or replace these extension paths or override the persistence timeout.
 
 Explicit Agent, Project, or turn environment variables are passed to Pi after the sanitized host environment and therefore override ordinary `models.json` key expressions. Pi itself resolves credentials in this order: `--api-key`, `auth.json`, environment variables, then `models.json`. Consequently, an existing `auth.json` entry for the same provider still has priority over an environment variable; Agw does not place plaintext API keys in process arguments to bypass that rule.
 
@@ -174,7 +160,7 @@ PI_TELEMETRY=0
 
 ## Extension UI
 
-The SDK supports select, confirm, input, and editor dialogs through a typed callback. Notification/status/widget/title/editor-text events remain fire-and-forget events. Agw bridges foreground dialogs from explicitly allowlisted extensions to its human-interaction channel and cancels background dialogs. With the default empty allowlist, no extension code is loaded and therefore no Extension UI request is expected.
+The SDK supports select, confirm, input, and editor dialogs through a typed callback. Notification/status/widget/title/editor-text events remain fire-and-forget events. Agw bridges foreground dialogs from explicitly configured extensions to its human-interaction channel and cancels background dialogs. With no configured extensions, no extension code is loaded and therefore no Extension UI request is expected.
 
 ## MAF Tool Boundary
 
