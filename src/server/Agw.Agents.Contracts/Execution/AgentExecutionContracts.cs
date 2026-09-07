@@ -25,6 +25,13 @@ public enum HumanInteractionPolicy
     Reject = 1,
 }
 
+public enum AgentExecutionPermissionMode
+{
+    FullAccess = 0,
+    AlwaysAsk = 1,
+    AllowSameArguments = 2,
+}
+
 public sealed record AgentTarget(AgentTargetKind Kind, Guid? Id = null, string? Name = null);
 
 public sealed record AgentExecutionRequest(
@@ -34,7 +41,8 @@ public sealed record AgentExecutionRequest(
     ProjectTaskSnapshot Task,
     AgwUserInput Input,
     bool Resume = false,
-    HumanInteractionPolicy HumanInteractionPolicy = HumanInteractionPolicy.Allow
+    HumanInteractionPolicy HumanInteractionPolicy = HumanInteractionPolicy.Allow,
+    AgentExecutionPermissionMode? PermissionMode = null
 );
 
 public sealed record AgentExecutionResult(

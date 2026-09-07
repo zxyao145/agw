@@ -1,3 +1,4 @@
+using Agw.Agents.Execution.Commands.Setting;
 using Agw.Shared.Data.Entities.Agents;
 using Microsoft.Extensions.AI;
 
@@ -31,6 +32,8 @@ public sealed class AgentExecuteByIdRequest
         ContextId = contextId;
     }
 
+    public PermissionMode? PermissionMode { get; init; }
+
     public List<ChatMessage> Input { get; private set; }
 
     public Guid AgentId { get; private set; }
@@ -44,6 +47,8 @@ public sealed class AgentExecuteByIdRequest
 
 public sealed class AgentExecuteRequest
 {
+    public PermissionMode? PermissionMode { get; init; }
+
     public required Agent Agent { get; init; }
 
     public Guid? TaskId { get; init; }

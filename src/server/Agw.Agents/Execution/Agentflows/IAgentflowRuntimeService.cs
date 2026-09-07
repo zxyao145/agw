@@ -24,7 +24,8 @@ public interface IAgentflowRuntimeService
         string input,
         CancellationToken cancellationToken = default,
         Guid? projectId = null,
-        string? contextId = null
+        string? contextId = null,
+        PermissionMode? permissionMode = null
     );
 
     Task<AgentflowExecutionResult?> ExecuteAsync(
@@ -33,7 +34,8 @@ public interface IAgentflowRuntimeService
         List<ChatMessage> messages,
         CancellationToken cancellationToken = default,
         Guid? projectId = null,
-        string? contextId = null
+        string? contextId = null,
+        PermissionMode? permissionMode = null
     );
 
     Task<AgentflowWorkflowLease?> CreateAiWorkflow(Guid agentflowId, CancellationToken cancellationToken = default);

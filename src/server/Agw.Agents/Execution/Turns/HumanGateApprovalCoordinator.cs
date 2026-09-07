@@ -78,7 +78,9 @@ public sealed class HumanGateApprovalCoordinator : IHumanGateApprovalHandler
         var approvedCount = 0;
         foreach (var (requestId, pending) in _pending.ToArray())
         {
-            if (pending.Request.ToolApprovalRequest == null || !_pending.TryRemove(requestId, out _))
+            if (
+                !PermissionAwareApprovalHandler.IsToolApproval(pending.Request) || !_pending.TryRemove(requestId, out _)
+            )
             {
                 continue;
             }

@@ -345,7 +345,8 @@ public sealed class InProcessAgentflowRunner
         string contextId,
         AgentflowWorkflowLease workflowLease,
         List<ChatMessage> messages,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        IHumanGateApprovalHandler? approvalHandler = null
     )
     {
         var workflow = workflowLease.Workflow;
@@ -375,7 +376,6 @@ public sealed class InProcessAgentflowRunner
                     continue;
                 }
 
-                await run.CancelRunAsync();
                 if (
                     !requestInfo.Request.TryGetDataAs(
                         out Microsoft.Extensions.AI.ToolApprovalRequestContent? toolApprovalRequest
@@ -388,9 +388,18 @@ public sealed class InProcessAgentflowRunner
                     );
                 }
 
-                throw new AgwException(
-                    ErrorCodes.AgentExecutionFailed,
-                    $"Tool approval '{toolApprovalRequest.RequestId}' cannot be requested during unattended Agentflow execution."
+                var request = ToolApprovalSupport.CreateRequest(
+                    toolApprovalRequest,
+                    requestInfo.Request.PortInfo.PortId
+                );
+                var decision = await (approvalHandler ?? UnattendedApprovalHandler.Create(null)).WaitForApprovalAsync(
+                    request,
+                    cancellationToken
+                );
+                await run.SendResponseAsync(
+                    requestInfo.Request.CreateResponse(
+                        ToolApprovalSupport.CreateWorkflowResponse(toolApprovalRequest, decision)
+                    )
                 );
             }
             else if (evt is AgentResponseUpdateEvent updateEvt)

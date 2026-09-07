@@ -112,6 +112,35 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task RegisterAsync_FullAccessJob_ReloadPreservesPermissions()
+    {
+        await using var database = await TestDatabase.CreateAsync();
+        var task = CreateTask(database);
+        var executionId = Guid.CreateVersion7();
+        var token = TestContext.Current.CancellationToken;
+        var settings = CreateSettings(task.ProjectId, task.ContextId)
+            .WithPermissionMode(PermissionMode.FullAccess)
+            .WithHumanInteractionPolicy(HumanInteractionPolicy.Reject);
+        await database
+            .CreateStore()
+            .RegisterAsync(
+                executionId,
+                "user-id",
+                Guid.CreateVersion7(),
+                AgentRuntimeType.Agent,
+                CreateInput("run"),
+                task,
+                settings,
+                token
+            );
+
+        var restored = await database.CreateStore().GetAsync(executionId, token);
+
+        Assert.Equal(PermissionMode.FullAccess, restored.Manifest.Settings.PermissionMode);
+        Assert.Equal(HumanInteractionPolicy.Reject, restored.Manifest.Settings.HumanInteractionPolicy);
+    }
+
+    [Fact]
     public async Task RegisterAsync_UserIdPersistsAndLegacyManifestFallsBackToAdmin()
     {
         await using var database = await TestDatabase.CreateAsync();

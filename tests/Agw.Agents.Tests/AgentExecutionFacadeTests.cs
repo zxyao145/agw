@@ -59,19 +59,24 @@ public sealed class AgentExecutionFacadeTests
                 Author = "user",
                 Contents = [new AgwTextContent { Content = "run" }],
             },
-            HumanInteractionPolicy: HumanInteractionPolicy.Reject
+            HumanInteractionPolicy: HumanInteractionPolicy.Reject,
+            PermissionMode: AgentExecutionPermissionMode.FullAccess
         );
 
         var result = await facade.ExecuteAsync(request, cancellationToken);
 
         Assert.Equal(AgentExecutionState.Completed, result.State);
         Assert.Equal(1, client.StartCount);
+        Assert.Equal(PermissionMode.FullAccess, client.Request!.Settings.PermissionMode);
+        Assert.Equal(HumanInteractionPolicy.Reject, client.Request.Settings.HumanInteractionPolicy);
         Assert.Equal(1, client.WaitCount);
         Assert.Equal(0, client.ReadCount);
     }
 
-    [Fact]
-    public async Task ExecuteAsync_InProcess_RestoresUserContext()
+    [Theory]
+    [InlineData(null)]
+    [InlineData(AgentExecutionPermissionMode.FullAccess)]
+    public async Task ExecuteAsync_InProcess_RestoresUserContext(AgentExecutionPermissionMode? permissionMode)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var runtime = new RecordingAgentRuntimeService();
@@ -100,12 +105,14 @@ public sealed class AgentExecutionFacadeTests
                     MessageId = executionId.ToString("D"),
                     Author = "user",
                     Contents = [new AgwTextContent { Content = "run" }],
-                }
+                },
+                PermissionMode: permissionMode
             );
 
             await facade.ExecuteAsync(request, cancellationToken);
 
             Assert.Equal("owner", runtime.CapturedUserId);
+            Assert.Equal(permissionMode == null ? null : PermissionMode.FullAccess, runtime.CapturedPermissionMode);
             Assert.Same(previousUser, UserInfoUtil.Current);
         }
         finally
@@ -139,7 +146,8 @@ public sealed class AgentExecutionFacadeTests
                 Author = "user",
                 Contents = [new AgwTextContent { Content = "run" }],
             },
-            HumanInteractionPolicy: HumanInteractionPolicy.Reject
+            HumanInteractionPolicy: HumanInteractionPolicy.Reject,
+            PermissionMode: AgentExecutionPermissionMode.FullAccess
         );
 
         var exception = await Assert.ThrowsAsync<AgwException>(async () =>
@@ -168,6 +176,7 @@ public sealed class AgentExecutionFacadeTests
     private sealed class RecordingAgentRuntimeService : IAgentRuntimeService
     {
         public string? CapturedUserId { get; private set; }
+        public PermissionMode? CapturedPermissionMode { get; private set; }
 
         public Task<AIAgent?> CreateAiAgentAsync(Guid agentId, CancellationToken cancellationToken = default) =>
             Task.FromResult<AIAgent?>(null);
@@ -216,6 +225,7 @@ public sealed class AgentExecutionFacadeTests
         )
         {
             CapturedUserId = UserInfoUtil.UserId;
+            CapturedPermissionMode = request.PermissionMode;
             var taskId = request.TaskId?.ToString("D") ?? string.Empty;
             return Task.FromResult<AgentsDtos.AgentExecutionResult?>(new AgentsDtos.AgentExecutionResult(taskId, []));
         }
@@ -279,7 +289,8 @@ public sealed class AgentExecutionFacadeTests
             string input,
             CancellationToken cancellationToken = default,
             Guid? projectId = null,
-            string? contextId = null
+            string? contextId = null,
+            PermissionMode? permissionMode = null
         ) => Task.FromResult<AgentflowExecutionResult?>(null);
 
         public Task<AgentflowExecutionResult?> ExecuteAsync(
@@ -288,7 +299,8 @@ public sealed class AgentExecutionFacadeTests
             List<ChatMessage> messages,
             CancellationToken cancellationToken = default,
             Guid? projectId = null,
-            string? contextId = null
+            string? contextId = null,
+            PermissionMode? permissionMode = null
         ) => Task.FromResult<AgentflowExecutionResult?>(null);
 
         public Task<AgentflowWorkflowLease?> CreateAiWorkflow(
@@ -302,12 +314,14 @@ public sealed class AgentExecutionFacadeTests
 
     private sealed class RecordingDurableExecutionClient : IDurableExecutionClient
     {
+        public DurableExecutionRequest? Request { get; private set; }
         public int StartCount { get; private set; }
         public int WaitCount { get; private set; }
         public int ReadCount { get; private set; }
 
         public Task StartAsync(DurableExecutionRequest request, CancellationToken cancellationToken)
         {
+            Request = request;
             StartCount++;
             return Task.CompletedTask;
         }

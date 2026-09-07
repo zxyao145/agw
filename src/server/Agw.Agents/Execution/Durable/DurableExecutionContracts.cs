@@ -149,6 +149,9 @@ internal sealed record DurableExecutionSettings
     /// </summary>
     public PermissionMode? PermissionMode { get; init; }
 
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public HumanInteractionPolicy HumanInteractionPolicy { get; init; } = HumanInteractionPolicy.Allow;
+
     /// <summary>
     /// 获取是否恢复已有 Agent 会话。
     /// </summary>
@@ -164,6 +167,7 @@ internal sealed record DurableExecutionSettings
                 .EnvironmentVariables.OrderBy(pair => pair.Key, StringComparer.Ordinal)
                 .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
             PermissionMode = settings.PermissionMode,
+            HumanInteractionPolicy = settings.HumanInteractionPolicy,
             Resume = settings.Resume,
         };
 

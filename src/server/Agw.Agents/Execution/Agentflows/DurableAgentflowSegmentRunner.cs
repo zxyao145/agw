@@ -1,6 +1,7 @@
 using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Turns;
+using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
@@ -153,6 +154,38 @@ public sealed class DurableAgentflowSegmentRunner
                                 )
                                 .ConfigureAwait(false);
                             consumed.Add(approvalRequest.RequestId);
+                            break;
+                        }
+
+                        var handler =
+                            manifest.Settings.HumanInteractionPolicy == HumanInteractionPolicy.Reject
+                                ? UnattendedApprovalHandler.Create(manifest.Settings.PermissionMode)
+                                : new PermissionAwareApprovalHandler(
+                                    new UnattendedApprovalHandler(),
+                                    manifest.Settings.PermissionMode
+                                );
+                        if (
+                            !handler.RequiresHumanResponse(approvalRequest)
+                            || manifest.Settings.HumanInteractionPolicy == HumanInteractionPolicy.Reject
+                        )
+                        {
+                            HumanGateApprovalDecision decision;
+                            try
+                            {
+                                decision = await handler.WaitForApprovalAsync(approvalRequest, cancellationToken);
+                            }
+                            catch (AgwException exception)
+                            {
+                                return CreateDurableFailure(input, exception.Message);
+                            }
+                            await run.SendResponseAsync(
+                                externalRequest.CreateResponse(
+                                    ToolApprovalSupport.CreateWorkflowResponse(
+                                        approvalRequest.ToolApprovalRequest!,
+                                        decision
+                                    )
+                                )
+                            );
                             break;
                         }
 

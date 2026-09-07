@@ -51,7 +51,8 @@ public interface IAgentRuntimeService
         Guid conversationId,
         IReadOnlyDictionary<string, string>? environmentVariables,
         bool deferHumanInteractions,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        PermissionMode? permissionMode = null
     ) => CreateAgentflowNodeAgentAsync(agentId, projectId, conversationId, environmentVariables, cancellationToken);
 
     Task<AgentRuntime?> CreateRuntimeAsync(

@@ -1,11 +1,43 @@
 using System.Text.Json;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
+using Agw.Agents.Execution.Durable;
 
 namespace Agw.Agents.Tests;
 
 public class ExecutionSettingsTests
 {
+    [Fact]
+    public void DurableSettings_RoundTrip_PreservesUnattendedPermissions()
+    {
+        var settings = ExecutionSettings
+            .CreateDefault()
+            .WithPermissionMode(PermissionMode.FullAccess)
+            .WithHumanInteractionPolicy(HumanInteractionPolicy.Reject);
+        var snapshot = DurableExecutionSettings.FromSettings(settings);
+
+        var restored = JsonSerializer.Deserialize<DurableExecutionSettings>(JsonSerializer.Serialize(snapshot))!;
+
+        Assert.Equal(PermissionMode.FullAccess, restored.ToCommand(Guid.CreateVersion7(), "context").PermissionMode);
+        Assert.Equal(HumanInteractionPolicy.Reject, restored.HumanInteractionPolicy);
+        Assert.Equal(
+            HumanInteractionPolicy.Reject,
+            settings.WithPermissionMode(PermissionMode.AlwaysAsk).HumanInteractionPolicy
+        );
+        Assert.NotEqual(settings, settings.WithHumanInteractionPolicy(HumanInteractionPolicy.Allow));
+    }
+
+    [Fact]
+    public void DurableSettings_LegacyPayload_PreservesDefaults()
+    {
+        var restored = JsonSerializer.Deserialize<DurableExecutionSettings>(
+            """{"EnvironmentVariables":{},"Resume":false}"""
+        )!;
+
+        Assert.Null(restored.PermissionMode);
+        Assert.Equal(HumanInteractionPolicy.Allow, restored.HumanInteractionPolicy);
+    }
+
     [Fact]
     public void FromCommand_CopiesMutableEnvironmentVariables()
     {

@@ -7,6 +7,7 @@ using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Mapping;
+using Agw.Agents.Execution.Turns;
 using Agw.Auth.Contracts;
 using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Executions;
@@ -88,7 +89,14 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
         if (target.Kind == AgentTargetKind.Agent)
         {
             var task = ProjectTaskProjectionMapper.Map(request.Task);
-            var settings = new SettingCommand(task.ProjectId, contextId: task.ContextId) { Resume = request.Resume };
+            var settings = new SettingCommand(
+                task.ProjectId,
+                contextId: task.ContextId,
+                permissionMode: MapPermissionMode(request.PermissionMode)
+            )
+            {
+                Resume = request.Resume,
+            };
             await using var runtime = await _agentRuntimeService
                 .CreateRuntimeAsync(target.Id, task, settings, cancellationToken)
                 .ConfigureAwait(false);
@@ -99,7 +107,12 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
 
             await foreach (
                 var message in _agentRuntimeService
-                    .ExecuteStreamingAsync(runtime, request.Input, cancellationToken)
+                    .ExecuteStreamingAsync(
+                        runtime,
+                        request.Input,
+                        UnattendedApprovalHandler.Create(MapPermissionMode(request.PermissionMode)),
+                        cancellationToken
+                    )
                     .ConfigureAwait(false)
             )
             {
@@ -117,7 +130,11 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
                     cancellationToken,
                     request.Task.ProjectId,
                     request.Task.ContextId,
-                    request.ExecutionId
+                    request.ExecutionId,
+                    humanGateApprovalHandler: UnattendedApprovalHandler.Create(
+                        MapPermissionMode(request.PermissionMode)
+                    ),
+                    permissionMode: MapPermissionMode(request.PermissionMode)
                 )
                 .ConfigureAwait(false)
         )
@@ -211,7 +228,10 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
                         request.ExecutionId,
                         request.Task.ProjectId,
                         request.Task.ContextId
-                    ),
+                    )
+                    {
+                        PermissionMode = MapPermissionMode(request.PermissionMode),
+                    },
                     cancellationToken
                 )
                 .ConfigureAwait(false);
@@ -230,7 +250,8 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
                     [AgwMessageUtil.CreateUserChatMessage(request.Input)],
                     cancellationToken,
                     request.Task.ProjectId,
-                    request.Task.ContextId
+                    request.Task.ContextId,
+                    MapPermissionMode(request.PermissionMode)
                 )
                 .ConfigureAwait(false);
             if (result == null)
@@ -339,8 +360,16 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
     )
     {
         var settings = ExecutionSettings.FromCommand(
-            new SettingCommand(request.Task.ProjectId, contextId: request.Task.ContextId) { Resume = request.Resume }
+            new SettingCommand(
+                request.Task.ProjectId,
+                contextId: request.Task.ContextId,
+                permissionMode: MapPermissionMode(request.PermissionMode)
+            )
+            {
+                Resume = request.Resume,
+            }
         );
+        settings = settings.WithHumanInteractionPolicy(request.HumanInteractionPolicy);
         return DurableClient.StartAsync(
             new DurableExecutionRequest(
                 request.ExecutionId,
@@ -354,6 +383,16 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
             cancellationToken
         );
     }
+
+    private static PermissionMode? MapPermissionMode(AgentExecutionPermissionMode? mode) =>
+        mode switch
+        {
+            null => null,
+            AgentExecutionPermissionMode.FullAccess => PermissionMode.FullAccess,
+            AgentExecutionPermissionMode.AlwaysAsk => PermissionMode.AlwaysAsk,
+            AgentExecutionPermissionMode.AllowSameArguments => PermissionMode.AllowSameArguments,
+            _ => throw new AgwException(ErrorCodes.InvalidParam, "Unsupported execution permission mode."),
+        };
 
     private async Task<ResolvedTarget> ResolveTargetAsync(AgentTarget target, CancellationToken cancellationToken)
     {

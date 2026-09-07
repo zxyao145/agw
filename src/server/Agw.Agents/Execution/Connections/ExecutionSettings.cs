@@ -12,7 +12,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         string? contextId,
         IReadOnlyDictionary<string, string> environmentVariables,
         PermissionMode? permissionMode,
-        bool resume
+        bool resume,
+        HumanInteractionPolicy humanInteractionPolicy = HumanInteractionPolicy.Allow
     )
     {
         ProjectId = projectId;
@@ -20,6 +21,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         _environmentVariables = environmentVariables;
         PermissionMode = permissionMode;
         Resume = resume;
+        HumanInteractionPolicy = humanInteractionPolicy;
     }
 
     public Guid ProjectId { get; }
@@ -31,6 +33,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
     public PermissionMode? PermissionMode { get; }
 
     public bool Resume { get; }
+
+    public HumanInteractionPolicy HumanInteractionPolicy { get; }
 
     public static ExecutionSettings FromCommand(SettingCommand command)
     {
@@ -48,7 +52,10 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         FromCommand(new SettingCommand(ProjectDefaults.DefaultBuiltInId));
 
     public ExecutionSettings WithPermissionMode(PermissionMode permissionMode) =>
-        new(ProjectId, ContextId, _environmentVariables, permissionMode, Resume);
+        new(ProjectId, ContextId, _environmentVariables, permissionMode, Resume, HumanInteractionPolicy);
+
+    public ExecutionSettings WithHumanInteractionPolicy(HumanInteractionPolicy policy) =>
+        new(ProjectId, ContextId, _environmentVariables, PermissionMode, Resume, policy);
 
     public bool Equals(ExecutionSettings? other)
     {
@@ -62,6 +69,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
             && string.Equals(ContextId, other.ContextId, StringComparison.Ordinal)
             && PermissionMode == other.PermissionMode
             && Resume == other.Resume
+            && HumanInteractionPolicy == other.HumanInteractionPolicy
             && EnvironmentVariablesEqual(_environmentVariables, other._environmentVariables);
     }
 
@@ -74,6 +82,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         hash.Add(ContextId, StringComparer.Ordinal);
         hash.Add(PermissionMode);
         hash.Add(Resume);
+        hash.Add(HumanInteractionPolicy);
         foreach (var (key, value) in _environmentVariables.OrderBy(pair => pair.Key, StringComparer.Ordinal))
         {
             hash.Add(key, StringComparer.Ordinal);

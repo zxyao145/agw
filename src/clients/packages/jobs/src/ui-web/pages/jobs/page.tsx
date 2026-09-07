@@ -340,6 +340,16 @@ export default function JobsPage() {
     queryFn: async () => (await apiGet("/api/projects")) as unknown as ProjectDto[],
   });
 
+  const agentsQuery = useQuery({
+    queryKey: ["agents"],
+    queryFn: async () => await apiGet("/api/agents"),
+  });
+
+  const agentflowsQuery = useQuery({
+    queryKey: ["agentflows"],
+    queryFn: async () => await apiGet("/api/agentflows"),
+  });
+
   const viewingJobId = viewingJob?.id ?? null;
 
   const jobDetailQuery = useQuery({
@@ -569,10 +579,18 @@ export default function JobsPage() {
                   <div className="font-mono text-xs break-all text-muted-foreground">{job.id}</div>
                 </TableCell>
                 <TableCell className="min-w-56">
-                  <div className="text-sm break-all">{job.projectId}</div>
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-sm break-all" title={job.projectId}>
+                    {projectsQuery.data?.find((project) => project.id === job.projectId)?.name ??
+                      job.projectId}
+                  </div>
+                  <div
+                    className="text-xs break-all text-muted-foreground"
+                    title={job.agentId ?? undefined}
+                  >
                     {getAgentTypeLabel(job.agentType)}
-                    {job.agentId ? ` · ${job.agentId}` : ""}
+                    {job.agentId
+                      ? ` · ${(job.agentType === 1 ? agentflowsQuery.data : agentsQuery.data)?.find((agent) => agent.id === job.agentId)?.name ?? job.agentId}`
+                      : ""}
                   </div>
                 </TableCell>
                 <TableCell className="min-w-52">

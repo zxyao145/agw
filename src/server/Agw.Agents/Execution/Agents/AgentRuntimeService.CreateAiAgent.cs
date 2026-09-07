@@ -1,5 +1,6 @@
 using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Utils;
+using Agw.Agents.Execution.Commands.Setting;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
@@ -109,7 +110,8 @@ public partial class AgentRuntimeService
         Guid conversationId,
         IReadOnlyDictionary<string, string>? environmentVariables,
         bool deferHumanInteractions,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        PermissionMode? permissionMode = null
     )
     {
         var agent = await _agentAppService.GetAgentForCurrentUserAsync(agentId);
@@ -128,6 +130,7 @@ public partial class AgentRuntimeService
                 IsResume = false,
                 DefaultMode = "execute",
                 DeferHumanInteractions = deferHumanInteractions,
+                PermissionMode = permissionMode,
             },
             cancellationToken
         );

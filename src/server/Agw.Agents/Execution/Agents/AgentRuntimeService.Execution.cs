@@ -202,6 +202,7 @@ public partial class AgentRuntimeService
         var req = new AgentExecuteRequest
         {
             Agent = agent,
+            PermissionMode = request.PermissionMode,
             Input = request.Input,
             TaskId = request.TaskId,
             ProjectId = request.ProjectId,
@@ -237,8 +238,10 @@ public partial class AgentRuntimeService
             new CreateAiAgentRequest
             {
                 Agent = agent,
+                PermissionMode = request.PermissionMode,
                 ProjectId = projectId,
                 ConversationId = conversationId ?? Guid.Empty,
+                DeferHumanInteractions = true,
             },
             cancellationToken
         );
@@ -271,6 +274,7 @@ public partial class AgentRuntimeService
                 ProjectDefaults.GetDefaultProjectIdentifier(projectId)
             );
 
+            ToolApprovalPermissionState.Apply(session, request.PermissionMode);
             turnPersistence = new ToolTurnPersistence(
                 aiAgent,
                 session,
@@ -281,7 +285,8 @@ public partial class AgentRuntimeService
                     chatMsg,
                     session,
                     turnPersistence,
-                    cancellationToken
+                    cancellationToken,
+                    UnattendedApprovalHandler.Create(request.PermissionMode)
                 )
                 .ConfigureAwait(false);
             messages = await AppendDefinitionSummaryAsync(
@@ -453,27 +458,47 @@ public partial class AgentRuntimeService
         IReadOnlyList<ChatMessage> chatMessages,
         AgentSession session,
         ToolTurnPersistence turnPersistence,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        IHumanGateApprovalHandler? approvalHandler = null
     )
     {
-        var stream = aiAgent.RunStreamingAsync(chatMessages, session, cancellationToken: cancellationToken);
         var messages = new List<AgwMessage>();
-        await foreach (var update in stream)
+        IEnumerable<ChatMessage> currentMessages = chatMessages;
+        approvalHandler ??= UnattendedApprovalHandler.Create(null);
+        for (var round = 0; ; round++)
         {
-            turnPersistence.Record(ToolStateSnapshots.ToMessage(update));
-            if (update.Contents.OfType<Microsoft.Extensions.AI.ToolApprovalRequestContent>().Any())
+            cancellationToken.ThrowIfCancellationRequested();
+            if (round == 32)
             {
-                throw new AgwException(
-                    ErrorCodes.AgentExecutionFailed,
-                    "Tool approval cannot be requested during unattended Agent execution."
-                );
+                throw new AgwException(ErrorCodes.AgentExecutionFailed, "Tool approval round limit exceeded.");
             }
 
-            var msg = update.ToAiMessage();
-            if (msg != null)
+            var approvals = new List<Microsoft.Extensions.AI.ToolApprovalRequestContent>();
+            await foreach (
+                var update in aiAgent.RunStreamingAsync(currentMessages, session, cancellationToken: cancellationToken)
+            )
             {
-                messages.Add(msg);
+                turnPersistence.Record(ToolStateSnapshots.ToMessage(update));
+                approvals.AddRange(update.Contents.OfType<Microsoft.Extensions.AI.ToolApprovalRequestContent>());
+                if (update.ToAiMessage() is { } message)
+                {
+                    messages.Add(message);
+                }
             }
+
+            if (approvals.Count == 0)
+            {
+                break;
+            }
+
+            var responses = new List<Microsoft.Extensions.AI.AIContent>(approvals.Count);
+            foreach (var approval in approvals)
+            {
+                var request = ToolApprovalSupport.CreateRequest(approval, "standalone", aiAgent.Name);
+                var decision = await approvalHandler.WaitForApprovalAsync(request, cancellationToken);
+                responses.Add(ToolApprovalSupport.CreateResponse(approval, decision));
+            }
+            currentMessages = [new ChatMessage(Microsoft.Extensions.AI.ChatRole.User, responses)];
         }
 
         var stateSnapshots = await turnPersistence.CompleteAsync(CancellationToken.None).ConfigureAwait(false);

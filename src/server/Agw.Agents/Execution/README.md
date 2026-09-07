@@ -70,7 +70,7 @@ Checkpoint 和 Agent Session 的持久化仍经过既有 Application Port / Infr
 
 默认值仍为 `InProcess`，因此没有配置集群依赖的现有部署行为不变。选择 `Distributed` 时会在启动阶段校验 PostgreSQL 与 PostgreSQL DistributedLock，不会静默降级到进程内实现。消息回放默认也使用 PostgreSQL；只有显式选择 Redis provider 时才要求 Redis connection string。
 
-当前 `Distributed` provider 只接受 `ExecCommand.stream=true`。非流式缓冲若要跨多个 HITL segment 保持与进程内模式完全一致，需要另行定义持久缓冲语义；本实现选择明确拒绝，而不是静默丢失或提前发送缓冲消息。Distributed Jobs 与 A2A 通过 transport-neutral durable request Interface 登记同一状态机；Jobs 和 A2A 不支持 HITL，遇到等待状态会失败或中断。
+当前 `Distributed` provider 只接受 `ExecCommand.stream=true`。非流式缓冲若要跨多个 HITL segment 保持与进程内模式完全一致，需要另行定义持久缓冲语义；本实现选择明确拒绝，而不是静默丢失或提前发送缓冲消息。Distributed Jobs 与 A2A 通过 transport-neutral durable request Interface 登记同一状态机；Jobs 固定使用 Full access 自动批准普通工具调用，但拒绝需要用户回答或人工关卡的 HITL；A2A 沿用调用方权限设置，未处理的等待状态会失败或中断。
 
 ## 关键目录与入口
 
@@ -819,7 +819,9 @@ dotnet test tests/Agw.Jobs.Tests/Agw.Jobs.Tests.csproj
 A2A 和 Jobs 不经过 `ExecutionHub`、connection registry 或 command dispatcher。它们只调用 `Agw.Agents.Contracts` 中的 `IAgentExecutionFacade`：
 
 - A2A 使用 streaming 方法并把统一执行事件映射为 A2A 协议事件；
-- Jobs 使用非 streaming 方法等待执行结果；
+- Jobs 使用非 streaming 方法等待执行结果，显式传入 `PermissionMode = FullAccess` 和 `HumanInteractionPolicy = Reject`；
+- 权限通过执行契约传入 InProcess Agent/Agentflow，并随 durable manifest 保存，worker 恢复时继续使用。普通工具审批返回 `always-tool` 响应后继续执行；`ask_user_question` 和 HumanGate 不会被自动批准，无人值守时明确失败；
+- Full access 对 Codex 映射为 `ApprovalPolicy = Never`，对 Claude Code 映射为 `bypassPermissions`；保留工作区、Codex 沙箱及用户资源归属限制。未指定权限的调用方保持原配置；
 - InProcess / Distributed 的选择以及 Agent / Agentflow runtime 的差异都留在 Agents 模块内部；恢复和中断仅通过独立的 `IDurableAgentExecutionFacade` 暴露。
 
 因此，修改 Agent/Agentflow 构造或 session 持久化时，调用方不需要了解 runtime 实现；修改公开 Contracts 时才需要同时检查 A2A 和 Jobs。只修改 connection command 时，影响范围通常局限在实时执行链路。

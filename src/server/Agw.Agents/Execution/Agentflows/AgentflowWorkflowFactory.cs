@@ -142,7 +142,8 @@ public sealed class AgentflowWorkflowFactory
                         sessionScope?.ConversationId ?? Guid.Empty,
                         environmentVariables,
                         deferHumanInteractions,
-                        cancellationToken: cancellationToken
+                        cancellationToken: cancellationToken,
+                        permissionMode: sessionScope?.PermissionState.Current
                     );
                     if (aiAgent != null)
                     {

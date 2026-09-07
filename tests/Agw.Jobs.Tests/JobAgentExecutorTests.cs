@@ -30,6 +30,8 @@ public sealed class JobAgentExecutorTests
         await executor.ExecuteAsync(job, executionId, cancellationToken);
 
         Assert.NotNull(agentExecutions.Request);
+        Assert.Equal(AgentExecutionPermissionMode.FullAccess, agentExecutions.Request.PermissionMode);
+        Assert.Equal(HumanInteractionPolicy.Reject, agentExecutions.Request.HumanInteractionPolicy);
         Assert.Equal("job-owner", agentExecutions.Request.OwnerUserId);
         Assert.Equal(executionId, agentExecutions.Request.ExecutionId);
         Assert.Equal(agentId, agentExecutions.Request.Target.Id);
