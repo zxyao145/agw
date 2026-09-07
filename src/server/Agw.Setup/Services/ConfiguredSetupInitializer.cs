@@ -27,11 +27,7 @@ public sealed class ConfiguredSetupInitializer
         if (_stateStore.IsInitialized || !_bootstrap.IsConfigured)
             return false;
 
-        _logger.LogInformation(
-            "Initializing Agw from the Setup configuration using {DeploymentMode} deployment and {DatabaseProvider}",
-            _bootstrap.Request.DeploymentMode,
-            _bootstrap.Request.Provider
-        );
+        _logger.LogInformation("Initializing Agw administrator from the Setup configuration");
         await _setupInitializationService.InitializeAsync(_bootstrap.Request, cancellationToken);
         _logger.LogInformation("Agw initialization from configuration completed");
         return true;

@@ -101,7 +101,7 @@ dotnet restore Agw.slnx
 dotnet run --project src/server/Agw.Standalone.Host
 ```
 
-The development backend listens on `http://localhost:30816` by default. On the first run, open `http://localhost:30816/setup` to choose Standalone or Cluster deployment, enter structured SQLite or PostgreSQL settings, and create the administrator password. Unattended deployments may provide the same fields under the `Setup` configuration section when no `server-state.json` exists; inject passwords through environment variables or Secrets. Cluster deployment requires PostgreSQL and a Server restart after setup. All runtime data is stored in an `agw` directory under the current user's home directory. Setup through a domain name also requires the one-time setup code printed in the server startup logs.
+The development backend listens on `http://localhost:30816` by default. Configure Database, Execution, and DistributedLock in appsettings or environment variables before startup, then open `/setup` to create the administrator password. SQLite and InProcess are the defaults; split Control/Data deployments require PostgreSQL and Distributed execution. Unattended deployments inject `Setup__AdminPassword`. Successful setup writes authentication/initialization state to `server-state.json` and needs no extra restart. Old state-file deployment values remain a low-priority fallback. All runtime data is stored under the current user's `agw` directory. Setup through a domain also requires the one-time code printed in startup logs. See the [Deployment Guide](docs/4.Deployment.md).
 
 Start the frontend in another terminal:
 
@@ -180,7 +180,7 @@ After changing a backend API contract, run `pnpm gen:api` from `src/clients` to 
 
 ## Debugging
 
-- **Backend:** Start `src/server/Agw.Standalone.Host` with its launch profile in a .NET debugger. It sets `ASPNETCORE_ENVIRONMENT=Development`; the Development-only OpenAPI and Scalar endpoints are then available. Server logs are written to the console and to the role-specific files below `$AGW_DATA_DIR/logs/`, or `~/agw/logs/` when `AGW_DATA_DIR` is not set.
+- **Backend:** Start `src/server/Agw.Standalone.Host` with its launch profile in a .NET debugger. It sets `ASPNETCORE_ENVIRONMENT=Development`; the Development-only OpenAPI and Scalar endpoints are then available. Server logs are written to the console and to role-specific files in `AgwLogDir`, which defaults to `./logs` relative to the process working directory and is independent of `AgwDataDir`.
 - **Web:** Run `pnpm dev:web`, use the browser developer tools for client code and network requests, and inspect the Next.js terminal for server-side output. To target another backend, start Web with `BACKEND_API_BASE_URL=http://host:port pnpm dev:web`.
 - **Desktop:** Run `pnpm dev:desktop`. Main-process logs and build output appear in the terminal; preload and renderer code can be inspected with Electron DevTools. The development renderer uses `http://localhost:3000`.
 - **Focused tests:** Use `dotnet test tests/<Project> --filter "FullyQualifiedName~MethodName"` for a backend test, or `pnpm exec turbo run test --filter=@agw/web` (replace the package filter as needed) from `src/clients`.

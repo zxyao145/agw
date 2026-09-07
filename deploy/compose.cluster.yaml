@@ -1,3 +1,10 @@
+x-deployment-environment: &deployment-environment
+  Database__Provider: postgres
+  Database__ConnectionString: "${AGW_DATABASE_CONNECTION_STRING:?Set the complete PostgreSQL connection string}"
+  Execution__Provider: Distributed
+  DistributedLock__Provider: postgres
+  DistributedLock__ConnectionString: ""
+
 services:
   postgres:
     image: postgres:18-alpine
@@ -17,13 +24,7 @@ services:
     ports:
       - "127.0.0.1:30816:8080"
     environment:
-      Setup__DeploymentMode: Cluster
-      Setup__Provider: Postgres
-      Setup__PostgresHost: postgres
-      Setup__PostgresPort: 5432
-      Setup__PostgresDatabase: agw
-      Setup__PostgresUsername: agw
-      Setup__PostgresPassword: "${AGW_POSTGRES_PASSWORD}"
+      <<: *deployment-environment
       Setup__AdminPassword: "${AGW_ADMIN_PASSWORD}"
     volumes:
       - agw-data:/data
@@ -38,6 +39,8 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:30817:8080"
+    environment:
+      <<: *deployment-environment
     volumes:
       - agw-data:/data
       - "${AGW_WORKSPACES_PATH:-./workspaces}:/workspaces"

@@ -1,6 +1,5 @@
 using Agw.Infrastructure.Configuration;
 using Agw.Jobs.Scheduling.Coordination;
-using Agw.Shared.Runtime;
 using Medallion.Threading;
 using Microsoft.Extensions.Options;
 
@@ -8,7 +7,7 @@ namespace Agw.Infrastructure.Jobs;
 
 public sealed class ProjectExecutionLockRouter : IProjectExecutionLock
 {
-    private readonly IServerInitializationState _serverInitializationState;
+    private readonly IOptionsMonitor<DatabaseSettings> _databaseSettings;
     private readonly IOptionsMonitor<DistributedLockSettings> _settings;
     private readonly InMemoryProjectExecutionLock _inMemoryLock;
     private readonly Func<DistributedLockProvider, string, IDistributedLockProvider> _providerFactory;
@@ -19,13 +18,13 @@ public sealed class ProjectExecutionLockRouter : IProjectExecutionLock
     private DistributedProjectExecutionLock? _distributedLock;
 
     public ProjectExecutionLockRouter(
-        IServerInitializationState serverInitializationState,
+        IOptionsMonitor<DatabaseSettings> databaseSettings,
         IOptionsMonitor<DistributedLockSettings> settings,
         InMemoryProjectExecutionLock inMemoryLock,
         Func<DistributedLockProvider, string, IDistributedLockProvider> providerFactory
     )
     {
-        _serverInitializationState = serverInitializationState;
+        _databaseSettings = databaseSettings;
         _settings = settings;
         _inMemoryLock = inMemoryLock;
         _providerFactory = providerFactory;
@@ -33,10 +32,11 @@ public sealed class ProjectExecutionLockRouter : IProjectExecutionLock
 
     public Task<IAsyncDisposable> AcquireAsync(Guid projectId, CancellationToken cancellationToken)
     {
+        var databaseSettings = _databaseSettings.CurrentValue;
         var effectiveSettings = DistributedLockSettingsResolver.Resolve(
             _settings.CurrentValue,
-            _serverInitializationState.DatabaseProvider,
-            _serverInitializationState.DatabaseConnectionString
+            databaseSettings.Provider,
+            databaseSettings.ConnectionString
         );
 
         return effectiveSettings.Provider == DistributedLockProvider.InMemory

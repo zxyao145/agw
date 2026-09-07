@@ -1,5 +1,4 @@
 using Agw.Setup.Middleware;
-using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
 using Microsoft.AspNetCore.Http;
 using Xunit;
@@ -52,7 +51,5 @@ public class InitializationGuardMiddlewareTests
     private sealed class UninitializedStateStore : IServerInitializationState
     {
         public bool IsInitialized => false;
-        public DatabaseProvider DatabaseProvider => DatabaseProvider.Sqlite;
-        public string DatabaseConnectionString => string.Empty;
     }
 }

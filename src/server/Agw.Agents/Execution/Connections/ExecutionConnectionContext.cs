@@ -10,10 +10,10 @@ using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Turns;
 using Agw.Auth.Contracts;
-using Agw.Files.Utils;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Utils;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution.Connections;

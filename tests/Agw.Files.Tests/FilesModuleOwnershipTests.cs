@@ -12,11 +12,10 @@ public class FilesModuleOwnershipTests
     }
 
     [Fact]
-    public void AgwFilesAssembly_DoesNotReferenceAgwShared()
+    public void PathUtil_LivesInAgwSharedAssembly()
     {
-        var referencedAssemblies = typeof(FilesController).Assembly.GetReferencedAssemblies();
-
-        Assert.DoesNotContain(referencedAssemblies, assembly => assembly.Name == "Agw.Shared");
+        Assert.Equal("Agw.Shared", typeof(Agw.Shared.Utils.PathUtil).Assembly.GetName().Name);
+        Assert.Null(typeof(FilesController).Assembly.GetType("Agw.Files.Utils.PathUtil"));
     }
 
     [Fact]
@@ -45,7 +44,6 @@ public class FilesModuleOwnershipTests
     [InlineData("Agw.Files.Abstracts.IAgwFileSystemResolver")]
     [InlineData("Agw.Files.Abstracts.IProjectFileSystemConfigurationProvider")]
     [InlineData("Agw.Files.Services.IGitCommandService")]
-    [InlineData("Agw.Files.Utils.PathUtil")]
     [InlineData("Agw.Files.Exceptions.AgwFilesException")]
     public void SdkType_LivesInAgwFilesAssembly(string typeName)
     {

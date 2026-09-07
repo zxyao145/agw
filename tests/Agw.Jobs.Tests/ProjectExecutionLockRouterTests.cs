@@ -1,8 +1,11 @@
 using Agw.Infrastructure.Configuration;
+using Agw.Infrastructure.Coordination;
 using Agw.Infrastructure.Jobs;
+using Agw.Infrastructure.Skills;
 using Agw.Shared.Configuration;
-using Agw.Shared.Runtime;
+using Agw.Shared.Coordination;
 using Medallion.Threading;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace Agw.Jobs.Tests;
@@ -12,7 +15,7 @@ public class ProjectExecutionLockRouterTests
     [Fact]
     public async Task AcquireAsync_WhenConfigurationIsBlankAndDatabaseIsSqlite_UsesInMemoryLock()
     {
-        var state = new MutableServerInitializationState { DatabaseProvider = DatabaseProvider.Sqlite };
+        var state = new DatabaseSettings { Provider = DatabaseProvider.Sqlite };
         var projectLock = CreateRouter(
             state,
             new MutableOptionsMonitor<DistributedLockSettings>(new DistributedLockSettings()),
@@ -34,11 +37,7 @@ public class ProjectExecutionLockRouterTests
     [Fact]
     public async Task AcquireAsync_WhenInMemoryIsExplicit_OverridesPostgresDatabase()
     {
-        var state = new MutableServerInitializationState
-        {
-            DatabaseProvider = DatabaseProvider.Postgres,
-            DatabaseConnectionString = "Host=database",
-        };
+        var state = new DatabaseSettings { Provider = DatabaseProvider.Postgres, ConnectionString = "Host=database" };
         var settings = new DistributedLockSettings { Provider = DistributedLockProvider.InMemory };
         var projectLock = CreateRouter(
             state,
@@ -55,10 +54,10 @@ public class ProjectExecutionLockRouterTests
     [Fact]
     public async Task AcquireAsync_WhenPostgresIsExplicit_UsesConfiguredDistributedLock()
     {
-        var state = new MutableServerInitializationState
+        var state = new DatabaseSettings
         {
-            DatabaseProvider = DatabaseProvider.Sqlite,
-            DatabaseConnectionString = "Data Source=agw.db",
+            Provider = DatabaseProvider.Sqlite,
+            ConnectionString = "Data Source=agw.db",
         };
         var settings = new DistributedLockSettings
         {
@@ -93,10 +92,10 @@ public class ProjectExecutionLockRouterTests
     [Fact]
     public async Task AcquireAsync_WhenConfigurationIsBlankAndDatabaseChanges_UpdatesWithoutRestart()
     {
-        var state = new MutableServerInitializationState
+        var state = new DatabaseSettings
         {
-            DatabaseProvider = DatabaseProvider.Sqlite,
-            DatabaseConnectionString = "Data Source=agw.db",
+            Provider = DatabaseProvider.Sqlite,
+            ConnectionString = "Data Source=agw.db",
         };
         var createdConnectionStrings = new List<string>();
         var projectLock = CreateRouter(
@@ -110,8 +109,8 @@ public class ProjectExecutionLockRouterTests
         );
         await using (await projectLock.AcquireAsync(Guid.CreateVersion7(), TestContext.Current.CancellationToken)) { }
 
-        state.DatabaseProvider = DatabaseProvider.Postgres;
-        state.DatabaseConnectionString = "Host=database";
+        state.Provider = DatabaseProvider.Postgres;
+        state.ConnectionString = "Host=database";
         await using (await projectLock.AcquireAsync(Guid.CreateVersion7(), TestContext.Current.CancellationToken)) { }
 
         Assert.Equal(["Host=database"], createdConnectionStrings);
@@ -120,11 +119,7 @@ public class ProjectExecutionLockRouterTests
     [Fact]
     public async Task AcquireAsync_WhenOptionsChange_ReplacesCachedProviderOnlyForEffectiveChange()
     {
-        var state = new MutableServerInitializationState
-        {
-            DatabaseProvider = DatabaseProvider.Postgres,
-            DatabaseConnectionString = "Host=database",
-        };
+        var state = new DatabaseSettings { Provider = DatabaseProvider.Postgres, ConnectionString = "Host=database" };
         var options = new MutableOptionsMonitor<DistributedLockSettings>(new DistributedLockSettings());
         var createdConfigurations = new List<(DistributedLockProvider Provider, string ConnectionString)>();
         var projectLock = CreateRouter(
@@ -153,19 +148,62 @@ public class ProjectExecutionLockRouterTests
     }
 
     private static ProjectExecutionLockRouter CreateRouter(
-        IServerInitializationState state,
+        DatabaseSettings state,
         IOptionsMonitor<DistributedLockSettings> options,
         Func<DistributedLockProvider, string, IDistributedLockProvider> providerFactory
     )
     {
-        return new ProjectExecutionLockRouter(state, options, new InMemoryProjectExecutionLock(), providerFactory);
+        return new ProjectExecutionLockRouter(
+            new MutableOptionsMonitor<DatabaseSettings>(state),
+            options,
+            new InMemoryProjectExecutionLock(),
+            providerFactory
+        );
     }
 
-    private sealed class MutableServerInitializationState : IServerInitializationState
+    [Theory]
+    [InlineData("application")]
+    [InlineData("skill")]
+    public async Task AcquireAsync_OtherLockRouters_FollowDatabaseOptionsWithoutInitializationState(string kind)
     {
-        public bool IsInitialized => true;
-        public DatabaseProvider DatabaseProvider { get; set; } = DatabaseProvider.Sqlite;
-        public string DatabaseConnectionString { get; set; } = string.Empty;
+        var database = new MutableOptionsMonitor<DatabaseSettings>(
+            new DatabaseSettings { Provider = DatabaseProvider.Postgres, ConnectionString = "Host=first" }
+        );
+        var settings = new MutableOptionsMonitor<DistributedLockSettings>(new DistributedLockSettings());
+        var connections = new List<string>();
+        IDistributedLockProvider CreateProvider(DistributedLockProvider provider, string connectionString)
+        {
+            Assert.Equal(DistributedLockProvider.Postgres, provider);
+            connections.Add(connectionString);
+            return new RecordingDistributedLockProvider();
+        }
+
+        Func<Task<IAsyncDisposable>> acquire;
+        if (kind == "application")
+        {
+            var router = new ApplicationLockRouter(database, settings, new InMemoryApplicationLock(), CreateProvider);
+            acquire = async () => await router.AcquireAsync("test", TestContext.Current.CancellationToken);
+        }
+        else
+        {
+            var router = new RemoteSkillRefreshLockRouter(
+                database,
+                settings,
+                CreateProvider,
+                NullLogger<RemoteSkillRefreshLockRouter>.Instance
+            );
+            acquire = () => router.AcquireAsync(Guid.NewGuid(), TestContext.Current.CancellationToken);
+        }
+
+        await using (await acquire()) { }
+        database.CurrentValue = new DatabaseSettings
+        {
+            Provider = DatabaseProvider.Postgres,
+            ConnectionString = "Host=second",
+        };
+        await using (await acquire()) { }
+
+        Assert.Equal(["Host=first", "Host=second"], connections);
     }
 
     private sealed class MutableOptionsMonitor<T> : IOptionsMonitor<T>

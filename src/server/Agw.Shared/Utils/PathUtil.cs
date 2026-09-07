@@ -1,21 +1,25 @@
-namespace Agw.Files.Utils;
+namespace Agw.Shared.Utils;
 
 public static class PathUtil
 {
     public static string ExpandTilde(string? path)
+    {
+        return ExpandTilde(path, Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+    }
+
+    public static string ExpandTilde(string? path, string userHome)
     {
         if (string.IsNullOrWhiteSpace(path))
             return path ?? "";
 
         if (path == "~")
         {
-            return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            return userHome;
         }
 
         if (path.StartsWith("~/") || path.StartsWith("~\\"))
         {
-            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            return Path.Combine(home, path.Substring(2));
+            return Path.Combine(userHome, path[2..]);
         }
 
         return path;

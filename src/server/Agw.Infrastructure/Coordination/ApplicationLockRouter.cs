@@ -1,7 +1,6 @@
 using Agw.Infrastructure.Configuration;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
-using Agw.Shared.Runtime;
 using Medallion.Threading;
 using Microsoft.Extensions.Options;
 
@@ -9,7 +8,7 @@ namespace Agw.Infrastructure.Coordination;
 
 public sealed class ApplicationLockRouter : IApplicationLock
 {
-    private readonly IServerInitializationState _serverInitializationState;
+    private readonly IOptionsMonitor<DatabaseSettings> _databaseSettings;
     private readonly IOptionsMonitor<DistributedLockSettings> _settings;
     private readonly InMemoryApplicationLock _inMemoryLock;
     private readonly Func<DistributedLockProvider, string, IDistributedLockProvider> _providerFactory;
@@ -20,13 +19,13 @@ public sealed class ApplicationLockRouter : IApplicationLock
     private IDistributedLockProvider? _distributedLockProvider;
 
     public ApplicationLockRouter(
-        IServerInitializationState serverInitializationState,
+        IOptionsMonitor<DatabaseSettings> databaseSettings,
         IOptionsMonitor<DistributedLockSettings> settings,
         InMemoryApplicationLock inMemoryLock,
         Func<DistributedLockProvider, string, IDistributedLockProvider> providerFactory
     )
     {
-        _serverInitializationState = serverInitializationState;
+        _databaseSettings = databaseSettings;
         _settings = settings;
         _inMemoryLock = inMemoryLock;
         _providerFactory = providerFactory;
@@ -36,10 +35,11 @@ public sealed class ApplicationLockRouter : IApplicationLock
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(resourceName);
 
+        var databaseSettings = _databaseSettings.CurrentValue;
         var effectiveSettings = DistributedLockSettingsResolver.Resolve(
             _settings.CurrentValue,
-            _serverInitializationState.DatabaseProvider,
-            _serverInitializationState.DatabaseConnectionString
+            databaseSettings.Provider,
+            databaseSettings.ConnectionString
         );
         if (effectiveSettings.Provider == DistributedLockProvider.InMemory)
         {

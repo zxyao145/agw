@@ -35,7 +35,7 @@ public class AgwDbContextDesignTimeFactory : IDesignTimeDbContextFactory<AgwDbCo
         var options = new DbContextOptionsBuilder<AgwDbContext>();
         AgwDbContextOptionsConfigurator.Configure(options, provider, connectionString);
 
-        var dataPaths = AgwDataPaths.ResolveFromEnvironment();
+        var dataPaths = AgwDataPaths.ResolveFromConfiguration(configuration);
         dataPaths.EnsureCreated();
         var dataProtectionProvider = AgwDataProtectionConfiguration.CreatePersistedProvider(
             new DirectoryInfo(dataPaths.KeysDirectory)

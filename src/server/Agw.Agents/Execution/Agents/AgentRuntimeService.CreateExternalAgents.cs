@@ -4,7 +4,6 @@ using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.ExternalAgents;
 using Agw.Agents.ExternalAgents.ClaudeCode;
 using Agw.Agents.ExternalAgents.Pi;
-using Agw.Files.Utils;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;

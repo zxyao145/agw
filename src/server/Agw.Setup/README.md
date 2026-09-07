@@ -1,57 +1,54 @@
 # Agw.Setup
 
-`Agw.Setup` owns first-run initialization and the persisted Server bootstrap document.
+`Agw.Setup` owns first-run administrator setup, initialization guards, and the persisted authentication state document.
+
+## Deployment configuration
+
+Configure deployment before starting the Server through `Database`, `Execution`, and `DistributedLock` in `appsettings.json`, environment variables, or another standard ASP.NET Core configuration provider. The priority, from lowest to highest, is built-in defaults, legacy state-file deployment values, and the standard configuration chain. Standard configuration keeps its usual order: base JSON, environment JSON, Development User Secrets when configured, environment variables, then command-line arguments.
+
+The defaults are SQLite at `<AGW_DATA_DIR>/database/agw.db`, InProcess execution, and a lock provider inferred from the database. The base appsettings template intentionally omits the five deployment keys so its defaults cannot override an older installation. Explicit values, even values equal to the defaults, override legacy values. Overrides are per key; when changing databases, supply both Provider and ConnectionString and review Execution and DistributedLock together. See the [Deployment Guide](../../../docs/4.Deployment.md) for complete examples.
+
+Standalone Host supports SQLite or PostgreSQL and either supported execution mode. Distributed execution requires PostgreSQL. Control Plane and Data Plane require PostgreSQL, Distributed execution, and PostgreSQL locks even before initialization. Both roles must receive the same deployment configuration; new state files do not distribute these settings. Apply coordinated deployment changes by restarting the Server. Existing Options consumers retain their update behavior, but there is no coordinated database/execution hot switch.
 
 ## Initialization
 
-Before initialization, normal UI requests redirect to `/setup`; APIs return 403 except Server info and health checks. The setup form first selects a Standalone or Cluster deployment. Standalone supports SQLite and PostgreSQL; Cluster requires PostgreSQL and enables distributed execution after the Server restarts.
+Standalone and Control Plane can start without `server-state.json`. Before initialization, normal UI requests redirect to `/setup`; APIs return 403 except Server info and health checks. The form collects only an 8–256 character administrator password and, for a domain or forwarded request, the one-time Setup Code printed at startup. Direct loopback setup is trusted.
 
-The form accepts structured database settings rather than a raw connection string. SQLite uses a Server-visible database file path. PostgreSQL uses host, port, database, username, and database password fields. The database password remains separate from the 8–256 character Agw administrator password. Control Plane Host Setup fixes the deployment to Cluster + PostgreSQL; Standalone keeps the existing Standalone/Cluster choice. Data Plane never exposes Setup and requires the initialized shared state file.
+Setup uses the same effective Database settings as normal DbContext creation. It applies pending migrations and seeds that database, hashes the password, and only then atomically persists initialization. Failure does not mark setup complete. Successful browser setup redirects to the application without another restart: execution services and the Control Plane scheduler are already registered from the deployment configuration, and background work waits for initialization.
 
-Direct loopback setup is trusted. Setup through a domain or forwarded request additionally requires the one-time Setup Code printed by the Server at startup.
+Data Plane never exposes Setup and refuses startup until shared authentication state is initialized. Start one Control Plane, complete setup and wait for readiness, then start Data Plane and additional replicas. All replicas still share the data directory and Data Protection keys.
 
-For unattended deployments, the same fields can be supplied under the `Setup` configuration section. If no `server-state.json` exists, startup validates this section and runs the same migration, seeding, password hashing, and atomic state write as the form before the Server starts listening. A completed state file always wins: later `Setup` configuration changes are ignored and cannot replace the administrator password or runtime setup choices.
+For unattended initialization, supply only the initial password under `Setup`, preferably through `Setup__AdminPassword` and the deployment platform's Secrets mechanism:
 
 ```json
 {
-  "Setup": {
-    "DeploymentMode": "Standalone",
-    "Provider": "Sqlite",
-    "SqlitePath": "agw.db",
-    "AdminPassword": "replace-through-a-secret"
-  }
+  "Database": {
+    "Provider": "sqlite",
+    "ConnectionString": "Data Source=agw.db"
+  },
+  "Execution": { "Provider": "InProcess" },
+  "DistributedLock": { "Provider": null, "ConnectionString": "" }
 }
 ```
 
-Accepted enum values:
+With `Setup:AdminPassword` supplied, the same initialization completes before the Server accepts traffic. Once initialized, all Setup configuration is ignored; restarts cannot overwrite an administrator password changed through Auth. `SetupCode` is never read from configuration because it protects only the browser endpoint. Old `Setup:DeploymentMode`, `Setup:Provider`, `Setup:SqlitePath`, and `Setup:Postgres*` fields are unsupported: an uninitialized Server rejects them with instructions to use standard deployment configuration. No compatibility conversion is performed.
 
-| Field | Values | Default |
-| --- | --- | --- |
-| `DeploymentMode` | `Standalone`, `Cluster` | `Standalone` |
-| `Provider` | `Sqlite`, `Postgres` | `Sqlite` |
+## State persistence and compatibility
 
-`Cluster` can only be combined with `Postgres`. Use the enum spellings above in `appsettings*.json` and environment-variable values; the user-facing labels remain SQLite and PostgreSQL.
+New initialization writes schema version 3 below the Agw data directory. It contains only `schemaVersion`, `isInitialized`, `passwordHash`, and `sessionVersion`. Deployment configuration and plaintext passwords are not written to new state files.
 
-PostgreSQL uses `PostgresHost`, `PostgresPort`, `PostgresDatabase`, `PostgresUsername`, and `PostgresPassword`. Do not commit the administrator or PostgreSQL password to `appsettings*.json`; inject them through environment variables or the deployment platform's Secret mechanism. `SetupCode` is never read from configuration because it only protects the browser setup endpoint.
+Schema versions 1 and 2 remain readable. At startup, only their actually present Database Provider/ConnectionString, Execution Provider, and DistributedLock Provider/ConnectionString values become low-priority configuration. Passwords, session versions, and initialization flags never enter IConfiguration. Authentication writes preserve legacy deployment values and their schema version so the fallback survives password changes and legacy Token removal. Do not remove the state file after moving deployment configuration: it still contains the administrator and session state.
 
-Configuration-driven Cluster setup selects the distributed runtime before service registration, so the first Server starts in Cluster mode without the browser flow's extra restart. Start exactly one replica for the initial bootstrap, wait for readiness, and only then scale out.
+`JsonInitializationStateStore` is the sole writer. It uses a cross-process file lock and atomic replacement. A background refresher reloads authentication state once per second; request authentication reads the last valid in-memory snapshot. This refresh does not reload deployment configuration. Readers allow Windows delete sharing required by atomic replacement.
 
-The resulting `server-state.json` lives below the Agw data directory, not the application directory. New setup writes schema version 2 with the selected database and execution provider; Cluster also selects the PostgreSQL distributed lock provider. Existing schema version 1 documents keep their original appsettings/environment-driven execution behavior. `JsonInitializationStateStore` atomically persists initialization, runtime settings, the administrator password hash, and the Web-session version. A background refresher reloads the shared document once per second under the same cross-process lock used by writers; request authentication reads only the last valid in-memory snapshot, and readers allow Windows delete sharing required by atomic replacement.
+API Token hashes and metadata live in the database `api_token` table. At startup, legacy JSON Token records are imported with their original creation time and attributed to the built-in administrator; the JSON Token section is removed only after a successful database write. Existing installations still follow the [Deployment Guide](../../../docs/4.Deployment.md) for schema upgrades; normal startup does not rerun first-run migrations.
 
-API Token hashes and metadata live in the database `api_token` table instead of `server-state.json`. On startup, legacy JSON Token records are imported with their original creation time, attributed to the built-in administrator because the old format had no creator, and removed from the state file only after a successful database write. See [`Agw.Auth`](../Agw.Auth/README.md) for the runtime seam.
+## Authentication handoff and recovery
 
-Matching schema migrations are maintained for SQLite and PostgreSQL. Setup applies the selected provider's pending migrations before seeding and before any legacy Token import; it never marks initialization complete when migration or import fails. An already initialized installation does not repeat first-run setup during normal startup, so later schema upgrades must follow the procedure in the [Deployment Guide](../../../docs/4.Deployment.md).
+`Agw.Auth` owns login, Cookie and Bearer authentication, LocalTrusted, CSRF, Token management, and authorization. Password changes update the hash and invalidate existing Web sessions without altering API Token rows or deployment settings. The old `X-API-Key` configuration remains unsupported.
 
-## Authentication handoff
-
-Setup hashes and persists the initial administrator password as part of the atomic bootstrap write. Login, Cookie and Bearer authentication, `LocalTrusted`, CSRF, Token management, and authorization protection are owned by `Agw.Auth`. New Token rows record the creating user and UTC creation time through the shared database audit pipeline. The old `X-API-Key` setting is intentionally not supported or migrated.
-
-## Recovery
-
-Stop the Server and run:
+Stop the Server to reset a forgotten password:
 
 ```bash
 agw-server auth reset-password
 ```
-
-The command updates the password hash and invalidates existing Web sessions without changing API Token rows.
