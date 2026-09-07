@@ -52,13 +52,14 @@ test("Agent form uses a responsive 360px metadata column and one combined Tools 
   assert.match(source, /<TabsTrigger value="system-prompt">Instructions<\/TabsTrigger>/);
   assert.match(source, /<TabsTrigger value="skills">Skills<\/TabsTrigger>/);
   assert.match(source, /<TabsTrigger value="tools">Tools<\/TabsTrigger>/);
-  assert.equal(source.match(/<TabsTrigger value=/g)?.length, 6);
+  assert.equal(source.match(/<TabsTrigger value=/g)?.length, 7);
   assert.match(source, /<TabsTrigger value="mcp-tool-servers">MCP Tool Server<\/TabsTrigger>/);
   assert.match(source, /<TabsTrigger value="connections">Integrations<\/TabsTrigger>/);
   assert.match(
     source,
     /<TabsTrigger value="environment-variables">Environment Variables<\/TabsTrigger>/,
   );
+  assert.match(source, /<TabsTrigger value="extra-settings">Extra Settings<\/TabsTrigger>/);
   assert.match(source, /<EnvironmentVariablesPanel/);
   assert.match(source, /External agents do not support instructions configuration/);
   assert.match(source, /External agents do not support turn summary configuration/);
@@ -67,6 +68,22 @@ test("Agent form uses a responsive 360px metadata column and one combined Tools 
   assert.match(source, /External agents do not support MCP tool server configuration/);
   assert.match(source, /External agents do not support integration configuration/);
   assert.match(source, /<SkillsPanel/);
+});
+
+test("Agent Extra Settings is rendered in the right tab area", async () => {
+  const source = await readFile(FORM_FIELDS_URL, "utf8");
+  const rightColumnStart = source.indexOf(
+    '<div className="min-h-0 overflow-hidden bg-background">',
+  );
+  const extraTabContent = source.indexOf('value="extra-settings"', rightColumnStart);
+  const extraControl = source.indexOf("id={`${idPrefix}extra`}", extraTabContent);
+
+  assert.ok(rightColumnStart >= 0);
+  assert.ok(extraTabContent > rightColumnStart);
+  assert.ok(extraControl > extraTabContent);
+  assert.doesNotMatch(source.slice(0, rightColumnStart), /id=\{`\$\{idPrefix\}extra`\}/);
+  assert.match(source.slice(extraTabContent), /readOnly=\{!canEditExtra\}/);
+  assert.match(source.slice(extraTabContent), /aria-invalid=\{Boolean\(extraError\)\}/);
 });
 
 test("Agent form explains project-level capability merging below the tabs", async () => {

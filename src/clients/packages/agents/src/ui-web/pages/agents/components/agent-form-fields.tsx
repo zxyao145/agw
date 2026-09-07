@@ -256,29 +256,6 @@ export function AgentFormFields({
               />
             </div>
           ) : null}
-
-          <div className="grid gap-2">
-            <Label htmlFor={`${idPrefix}extra`}>Extra Settings (JSON)</Label>
-            <Textarea
-              id={`${idPrefix}extra`}
-              value={extra}
-              onChange={(event) => setExtra?.(event.target.value)}
-              placeholder="{}"
-              rows={7}
-              readOnly={!canEditExtra}
-              aria-invalid={Boolean(extraError)}
-              className={!canEditExtra ? "bg-muted/50 font-mono text-xs" : "font-mono text-xs"}
-            />
-            {extraError ? (
-              <p className="text-xs text-destructive">{extraError}</p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                {canEditExtra
-                  ? "Optional JSON object stored with this external agent definition."
-                  : "Extra Settings can be edited only for external agents."}
-              </p>
-            )}
-          </div>
         </div>
       </div>
 
@@ -292,6 +269,7 @@ export function AgentFormFields({
               <TabsTrigger value="mcp-tool-servers">MCP Tool Server</TabsTrigger>
               <TabsTrigger value="connections">Integrations</TabsTrigger>
               <TabsTrigger value="environment-variables">Environment Variables</TabsTrigger>
+              <TabsTrigger value="extra-settings">Extra Settings</TabsTrigger>
             </TabsList>
             <p className="mt-2 max-w-4xl text-xs text-muted-foreground">
               Agw recommends configuring Skills, Tools, MCP Tool Servers, Integrations, and
@@ -416,6 +394,35 @@ export function AgentFormFields({
               idPrefix={idPrefix}
               ownerLabel="agent"
             />
+          </TabsContent>
+
+          <TabsContent
+            value="extra-settings"
+            className="m-0 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto agw-scrollbar p-6"
+          >
+            <div>
+              <h3 className="font-medium">Extra Settings</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {canEditExtra
+                  ? "Configure the JSON options for this external agent."
+                  : "Extra Settings can be edited only for external agents."}
+              </p>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col gap-2">
+              <Label htmlFor={`${idPrefix}extra`}>JSON object</Label>
+              <Textarea
+                id={`${idPrefix}extra`}
+                value={extra}
+                onChange={(event) => setExtra?.(event.target.value)}
+                placeholder="{}"
+                readOnly={!canEditExtra}
+                aria-invalid={Boolean(extraError)}
+                className={`min-h-80 flex-1 resize-none font-mono text-xs ${
+                  canEditExtra ? "" : "bg-muted/50"
+                }`}
+              />
+              {extraError ? <p className="text-xs text-destructive">{extraError}</p> : null}
+            </div>
           </TabsContent>
         </Tabs>
       </div>

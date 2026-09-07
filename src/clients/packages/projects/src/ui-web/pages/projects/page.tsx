@@ -77,7 +77,6 @@ export default function ProjectsPage() {
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [workspace, setWorkspace] = React.useState("");
-  const [extraSetting, setExtraSetting] = React.useState("{\n  \n}");
   const [selectedSkillIds, setSelectedSkillIds] = React.useState<string[]>([]);
   const [selectedConnectionIds, setSelectedConnectionIds] = React.useState<string[]>([]);
   const [tools, setTools] = React.useState<ToolValueObject[]>([]);
@@ -110,7 +109,6 @@ export default function ProjectsPage() {
       setName("");
       setDescription("");
       setWorkspace("");
-      setExtraSetting("{\n  \n}");
       setTools([]);
       setSelectedSkillIds([]);
       setSelectedMcpToolServerIds([]);
@@ -151,7 +149,6 @@ export default function ProjectsPage() {
   const [editName, setEditName] = React.useState("");
   const [editDescription, setEditDescription] = React.useState("");
   const [editWorkspace, setEditWorkspace] = React.useState("");
-  const [editExtraSetting, setEditExtraSetting] = React.useState("");
   const [editSelectedSkillIds, setEditSelectedSkillIds] = React.useState<string[]>([]);
   const [editSelectedConnectionIds, setEditSelectedConnectionIds] = React.useState<string[]>([]);
   const [editTools, setEditTools] = React.useState<ToolValueObject[]>([]);
@@ -199,7 +196,6 @@ export default function ProjectsPage() {
       setEditName(project.name ?? "");
       setEditDescription(project.description ?? "");
       setEditWorkspace(project.workspace ?? "");
-      setEditExtraSetting(project.extraSetting ?? "");
       setEditTools(capabilityState.tools);
       setEditSelectedSkillIds(capabilityState.selectedSkillIds);
       setEditSelectedMcpToolServerIds(capabilityState.selectedMcpToolServerIds);
@@ -267,8 +263,6 @@ export default function ProjectsPage() {
             setDescription={setDescription}
             workspace={workspace}
             setWorkspace={setWorkspace}
-            extraSetting={extraSetting}
-            setExtraSetting={setExtraSetting}
             environmentVariables={environmentVariables}
             setEnvironmentVariables={setEnvironmentVariables}
             selectedSkillIds={selectedSkillIds}
@@ -431,8 +425,6 @@ export default function ProjectsPage() {
         setDescription={setEditDescription}
         workspace={editWorkspace}
         setWorkspace={setEditWorkspace}
-        extraSetting={editExtraSetting}
-        setExtraSetting={setEditExtraSetting}
         environmentVariables={editEnvironmentVariables}
         setEnvironmentVariables={setEditEnvironmentVariables}
         selectedSkillIds={editSelectedSkillIds}

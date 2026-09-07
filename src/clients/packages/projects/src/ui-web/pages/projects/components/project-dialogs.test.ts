@@ -76,7 +76,22 @@ test("Project form has the 360px metadata column and one combined Tools tab", as
   assert.match(source, /Project Type/);
   assert.match(source, /value="User Defined"/);
   assert.match(source, /readOnly/);
+  assert.doesNotMatch(source, /Extra Settings/);
+  assert.doesNotMatch(source, /extraSetting/);
   assert.doesNotMatch(source, /dialogPortalContainer/);
+});
+
+test("Project dialogs keep ExtraSetting hidden without clearing existing values", async () => {
+  const [createSource, editSource, pageSource] = await Promise.all([
+    readSource(CREATE_DIALOG_URL, "Create Project dialog"),
+    readSource(EDIT_DIALOG_URL, "Edit Project dialog"),
+    readSource(PAGE_URL, "Projects page"),
+  ]);
+
+  assert.match(createSource, /extraSetting: null/);
+  assert.match(editSource, /extraSetting: editingProject\.extraSetting \?\? null/);
+  assert.doesNotMatch(pageSource, /setExtraSetting/);
+  assert.doesNotMatch(pageSource, /setEditExtraSetting/);
 });
 
 test("Project dialogs serialize the unified Tools value and remaining capabilities", async () => {
