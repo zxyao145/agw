@@ -20,7 +20,14 @@ import { Textarea } from "@agw/components";
 import { ToolsPanel, type ToolInfo, type ToolValueObject } from "@agw/tools";
 
 import { getAgentExtraSettingsError } from "./agent-extra-settings";
-import type { ModelProviderDto } from "./types";
+import {
+  AgentType,
+  ExternalAgentKind,
+  type AgentType as AgentTypeValue,
+  type ExternalAgentKind as ExternalAgentKindValue,
+  type ExternalAgentOptionDto,
+  type ModelProviderDto,
+} from "./types";
 
 type AgentFormMode = "create" | "edit";
 
@@ -40,9 +47,13 @@ interface AgentFormFieldsProps {
   setSummaryModelProviderId: (value: string) => void;
   enableSummary: boolean;
   setEnableSummary: (value: boolean) => void;
-  agentType: string;
+  agentType: AgentTypeValue;
+  setAgentType?: (value: AgentTypeValue) => void;
+  externalAgentKind: ExternalAgentKindValue;
+  setExternalAgentKind?: (value: ExternalAgentKindValue) => void;
+  externalAgentOptionsQuery: UseQueryResult<ExternalAgentOptionDto[], Error>;
   extra: string;
-  setExtra?: (value: string) => void;
+  setExtra: (value: string) => void;
   environmentVariables: EnvironmentVariableEntry[];
   setEnvironmentVariables: (entries: EnvironmentVariableEntry[]) => void;
   selectedSkillIds: string[];
@@ -87,6 +98,10 @@ export function AgentFormFields({
   enableSummary,
   setEnableSummary,
   agentType,
+  setAgentType,
+  externalAgentKind,
+  setExternalAgentKind,
+  externalAgentOptionsQuery,
   extra,
   setExtra,
   environmentVariables,
@@ -107,11 +122,11 @@ export function AgentFormFields({
   toggleMcpToolServer,
   idPrefix = "",
 }: AgentFormFieldsProps) {
-  const isExternalAgent = agentType === "1";
+  const isExternalAgent = agentType === AgentType.External;
   const effectiveSummaryModelProviderId = isExternalAgent
     ? summaryModelProviderId
     : summaryModelProviderId || modelProviderId;
-  const canEditExtra = mode === "edit" && isExternalAgent;
+  const canEditExtra = isExternalAgent;
   const extraError = canEditExtra ? getAgentExtraSettingsError(extra) : null;
   const modelProviderOptions = React.useMemo<SearchableSelectOption[]>(
     () =>
@@ -122,6 +137,17 @@ export function AgentFormFields({
       })),
     [modelProvidersQuery.data],
   );
+  const externalAgentKindOptions = React.useMemo<SearchableSelectOption[]>(
+    () =>
+      (externalAgentOptionsQuery.data ?? []).map((option) => ({
+        value: option.kind.toString(),
+        title: option.displayName,
+      })),
+    [externalAgentOptionsQuery.data],
+  );
+  const externalAgentKindDisplayName = externalAgentOptionsQuery.data?.find(
+    (option) => option.kind === externalAgentKind,
+  )?.displayName;
 
   return (
     <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,45%)_minmax(0,1fr)] overflow-hidden lg:grid-cols-[360px_minmax(0,1fr)] lg:grid-rows-1">
@@ -176,13 +202,62 @@ export function AgentFormFields({
 
           <div className="grid gap-2">
             <Label htmlFor={`${idPrefix}agentType`}>Agent Type</Label>
-            <Input
-              id={`${idPrefix}agentType`}
-              value={isExternalAgent ? "External" : "System"}
-              readOnly
-              className="bg-muted/50"
-            />
+            {mode === "create" ? (
+              <SearchableSelect
+                id={`${idPrefix}agentType`}
+                ariaLabel="Agent Type"
+                value={agentType.toString()}
+                onValueChange={(value) => setAgentType?.(Number(value) as AgentTypeValue)}
+                options={[
+                  { value: AgentType.System.toString(), title: "System" },
+                  { value: AgentType.External.toString(), title: "External" },
+                ]}
+                placeholder="Select an agent type..."
+                searchPlaceholder="Search agent types..."
+              />
+            ) : (
+              <Input
+                id={`${idPrefix}agentType`}
+                value={isExternalAgent ? "External" : "System"}
+                readOnly
+                className="bg-muted/50"
+              />
+            )}
           </div>
+
+          {isExternalAgent ? (
+            <div className="grid gap-2">
+              <Label htmlFor={`${idPrefix}externalAgentKind`}>External Agent</Label>
+              {mode === "create" ? (
+                <SearchableSelect
+                  id={`${idPrefix}externalAgentKind`}
+                  ariaLabel="External Agent"
+                  value={
+                    externalAgentKind === ExternalAgentKind.None ? "" : externalAgentKind.toString()
+                  }
+                  onValueChange={(value) =>
+                    setExternalAgentKind?.(Number(value) as ExternalAgentKindValue)
+                  }
+                  options={externalAgentKindOptions}
+                  placeholder="Select an external agent..."
+                  searchPlaceholder="Search external agents..."
+                  isLoading={externalAgentOptionsQuery.isLoading}
+                />
+              ) : (
+                <Input
+                  id={`${idPrefix}externalAgentKind`}
+                  value={externalAgentKindDisplayName ?? "Unknown"}
+                  readOnly
+                  className="bg-muted/50"
+                />
+              )}
+              {mode === "edit" ? (
+                <p className="text-xs text-muted-foreground">
+                  The external agent kind is fixed after creation.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="grid gap-2">
             <Label htmlFor={`${idPrefix}modelProviderId`}>
@@ -256,29 +331,6 @@ export function AgentFormFields({
               />
             </div>
           ) : null}
-
-          <div className="grid gap-2">
-            <Label htmlFor={`${idPrefix}extra`}>Extra Settings (JSON)</Label>
-            <Textarea
-              id={`${idPrefix}extra`}
-              value={extra}
-              onChange={(event) => setExtra?.(event.target.value)}
-              placeholder="{}"
-              rows={7}
-              readOnly={!canEditExtra}
-              aria-invalid={Boolean(extraError)}
-              className={!canEditExtra ? "bg-muted/50 font-mono text-xs" : "font-mono text-xs"}
-            />
-            {extraError ? (
-              <p className="text-xs text-destructive">{extraError}</p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                {canEditExtra
-                  ? "Optional JSON object stored with this external agent definition."
-                  : "Extra Settings can be edited only for external agents."}
-              </p>
-            )}
-          </div>
         </div>
       </div>
 
@@ -292,6 +344,7 @@ export function AgentFormFields({
               <TabsTrigger value="mcp-tool-servers">MCP Tool Server</TabsTrigger>
               <TabsTrigger value="connections">Integrations</TabsTrigger>
               <TabsTrigger value="environment-variables">Environment Variables</TabsTrigger>
+              <TabsTrigger value="extra-settings">Extra Settings</TabsTrigger>
             </TabsList>
             <p className="mt-2 max-w-4xl text-xs text-muted-foreground">
               Agw recommends configuring Skills, Tools, MCP Tool Servers, Integrations, and
@@ -416,6 +469,35 @@ export function AgentFormFields({
               idPrefix={idPrefix}
               ownerLabel="agent"
             />
+          </TabsContent>
+
+          <TabsContent
+            value="extra-settings"
+            className="m-0 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto agw-scrollbar p-6"
+          >
+            <div>
+              <h3 className="font-medium">Extra Settings</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {canEditExtra
+                  ? "Configure the JSON options for this external agent."
+                  : "Extra Settings are available for external agents."}
+              </p>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col gap-2">
+              <Label htmlFor={`${idPrefix}extra`}>JSON object</Label>
+              <Textarea
+                id={`${idPrefix}extra`}
+                value={extra}
+                onChange={(event) => setExtra(event.target.value)}
+                placeholder="{}"
+                readOnly={!canEditExtra}
+                aria-invalid={Boolean(extraError)}
+                className={`min-h-80 flex-1 resize-none font-mono text-xs ${
+                  canEditExtra ? "" : "bg-muted/50"
+                }`}
+              />
+              {extraError ? <p className="text-xs text-destructive">{extraError}</p> : null}
+            </div>
           </TabsContent>
         </Tabs>
       </div>

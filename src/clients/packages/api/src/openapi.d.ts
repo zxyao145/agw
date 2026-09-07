@@ -980,6 +980,43 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/agents/external-options": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfExternalAgentOptionResponse[]"];
+            "application/json": components["schemas"]["ApiResultOfExternalAgentOptionResponse[]"];
+            "text/json": components["schemas"]["ApiResultOfExternalAgentOptionResponse[]"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/agents/enabled": {
     parameters: {
       query?: never;
@@ -4135,6 +4172,7 @@ export interface components {
       /** Format: uuid */
       summaryModelProviderId?: null | string;
       type: components["schemas"]["AgentType"];
+      externalAgentKind: components["schemas"]["ExternalAgentKind"];
       /** @description JSON object for additional external agent settings. */
       extra: null | string;
       tools?: components["schemas"]["ToolValueObject"][];
@@ -4182,6 +4220,9 @@ export interface components {
       enableSummary: boolean;
       /** Format: uuid */
       summaryModelProviderId?: null | string;
+      type?: null | components["schemas"]["AgentType"];
+      externalAgentKind?: null | components["schemas"]["ExternalAgentKind"];
+      extra?: null | string;
     };
     AgentEnabledUpdateRequest: {
       /** Format: uuid */
@@ -4341,6 +4382,7 @@ export interface components {
       enableSummary: boolean;
       tools: components["schemas"]["ToolValueObject"][];
       type: components["schemas"]["AgentType"];
+      externalAgentKind: components["schemas"]["ExternalAgentKind"];
       extra: null | string;
       environmentVariables: {
         [key: string]: string;
@@ -4602,6 +4644,13 @@ export interface components {
       data?: null | {
         [key: string]: components["schemas"]["ToolInfo"][];
       };
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
+    "ApiResultOfExternalAgentOptionResponse[]": {
+      data?: null | components["schemas"]["ExternalAgentOptionResponse"][];
       /** Format: int32 */
       code: number;
       title: string;
@@ -4996,6 +5045,12 @@ export interface components {
       usageTotalTokenCount: number | string;
     };
     EmptyToolOptions: Record<string, never>;
+    ExternalAgentKind: number;
+    ExternalAgentOptionResponse: {
+      kind: components["schemas"]["ExternalAgentKind"];
+      displayName: string;
+      defaultExtra: string;
+    };
     FileItem: {
       name: string;
       path: string;

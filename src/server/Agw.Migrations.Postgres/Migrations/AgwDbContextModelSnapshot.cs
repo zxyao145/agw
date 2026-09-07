@@ -334,6 +334,12 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("text")
                         .HasColumnName("environment_variables");
 
+                    b.Property<int>("ExternalAgentKind")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("external_agent_kind");
+
                     b.Property<string>("Extra")
                         .HasColumnType("text")
                         .HasColumnName("extra");

@@ -11,7 +11,6 @@ using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
 using Agw.Tools.ToolBlocks.Blocks.UserMemory;
 using ClaudeCodeSdk.MAF;
-using ClaudeCodeSdk.Types;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -103,6 +102,7 @@ public partial class AgentRuntimeService
         aiAgent = kind switch
         {
             ExternalAgentKind.ClaudeCode => CreateClaudeCodeAgent(
+                request.Agent,
                 project,
                 request.ProviderSessionId,
                 request.IsResume,
@@ -111,6 +111,7 @@ public partial class AgentRuntimeService
                 requestHistoryProvider
             ),
             ExternalAgentKind.Codex => CreateCodexAgent(
+                request.Agent,
                 project,
                 request.ProviderSessionId,
                 request.IsResume,
@@ -118,6 +119,7 @@ public partial class AgentRuntimeService
                 request.OnExternalSessionStartedAsync
             ),
             ExternalAgentKind.Pi => CreatePiAgent(
+                request.Agent,
                 project,
                 request.ProviderSessionId,
                 request.IsResume,
@@ -276,6 +278,7 @@ public partial class AgentRuntimeService
     }
 
     private AIAgent? CreateClaudeCodeAgent(
+        Agent agent,
         Project project,
         Guid? providerSessionId,
         bool isResume,
@@ -284,17 +287,9 @@ public partial class AgentRuntimeService
         AgentRequestChatHistoryProvider requestHistoryProvider
     )
     {
-        string? extra = project.ExtraSetting;
-        if (string.IsNullOrWhiteSpace(extra) || IsEmptyJsonObject(extra))
-        {
-            extra = JsonUtil.Serialize(
-                new ClaudeCodeAIAgentOptions { PermissionMode = PermissionMode.bypassPermissions }
-            );
-        }
-
         var options = BuildClaudeCodeAIAgentOptions(
-            extra,
-            PathUtil.ExpandTilde(project.Workspace),
+            agent,
+            project,
             providerSessionId,
             isResume,
             environmentVariables,
@@ -318,14 +313,20 @@ public partial class AgentRuntimeService
     }
 
     private static ClaudeCodeAIAgentOptions? BuildClaudeCodeAIAgentOptions(
-        string extra,
-        string? workspace,
+        Agent agent,
+        Project project,
         Guid? providerSessionId,
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         ChatHistoryProvider? chatHistoryProvider = null
     )
     {
+        var extra = agent.Extra;
+        if (string.IsNullOrWhiteSpace(extra) || IsEmptyJsonObject(extra))
+        {
+            extra = ExternalAgentDefaults.GetDefaultExtra(ExternalAgentKind.ClaudeCode);
+        }
+
         var options = JsonUtil.Deserialize<ClaudeCodeAIAgentOptions>(extra);
         if (options == null)
         {
@@ -334,7 +335,7 @@ public partial class AgentRuntimeService
 
         options = options with
         {
-            WorkingDirectory = workspace,
+            WorkingDirectory = PathUtil.ExpandTilde(project.Workspace),
             IncludePartialMessages = true,
             ContinueConversation = false,
             Resume = null,
@@ -359,6 +360,7 @@ public partial class AgentRuntimeService
     }
 
     private AIAgent? CreateCodexAgent(
+        Agent agent,
         Project project,
         Guid? threadId,
         bool isResume,
@@ -366,15 +368,9 @@ public partial class AgentRuntimeService
         Func<string, CancellationToken, ValueTask>? onThreadStartedAsync
     )
     {
-        string? extra = project.ExtraSetting;
-        if (string.IsNullOrWhiteSpace(extra) || IsEmptyJsonObject(extra))
-        {
-            extra = JsonUtil.Serialize(new CodexAIAgentOptions());
-        }
-
         var options = BuildCodexAIAgentOptions(
-            extra,
-            PathUtil.ExpandTilde(project.Workspace),
+            agent,
+            project,
             threadId,
             isResume,
             environmentVariables,
@@ -391,6 +387,7 @@ public partial class AgentRuntimeService
     }
 
     private AIAgent? CreatePiAgent(
+        Agent agent,
         Project project,
         Guid? providerSessionId,
         bool isResume,
@@ -401,12 +398,6 @@ public partial class AgentRuntimeService
         Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync
     )
     {
-        string? extra = project.ExtraSetting;
-        if (string.IsNullOrWhiteSpace(extra) || IsEmptyJsonObject(extra))
-        {
-            extra = JsonUtil.Serialize(new PiAgentAIAgentOptions());
-        }
-
         var paths = PiRuntimePaths.Create(_dataPaths, ResolveExecutionUserId());
         paths.EnsureCreated();
         var interactionBridge = new PiExtensionUiBridge(
@@ -414,8 +405,8 @@ public partial class AgentRuntimeService
             allowInteraction: !isBackground
         );
         var options = BuildPiAgentAIAgentOptions(
-            extra,
-            PathUtil.ExpandTilde(project.Workspace),
+            agent,
+            project,
             paths.ConfigDirectory,
             paths.SessionDirectory,
             providerSessionId,
@@ -423,9 +414,7 @@ public partial class AgentRuntimeService
             environmentVariables,
             new PiChatHistoryProvider(requestHistoryProvider),
             interactionBridge.HandleAsync,
-            onSessionStartedAsync,
-            _piExternalAgentOptions.Extensions,
-            _piExternalAgentOptions.HistoryPersistenceTimeout
+            onSessionStartedAsync
         );
         if (options == null)
         {
@@ -443,8 +432,8 @@ public partial class AgentRuntimeService
     }
 
     internal static PiAgentAIAgentOptions? BuildPiAgentAIAgentOptions(
-        string extra,
-        string? workspace,
+        Agent agent,
+        Project project,
         string configDirectory,
         string sessionDirectory,
         Guid? providerSessionId,
@@ -452,11 +441,15 @@ public partial class AgentRuntimeService
         IReadOnlyDictionary<string, string>? environmentVariables,
         ChatHistoryProvider chatHistoryProvider,
         Func<PiExtensionUiRequest, CancellationToken, ValueTask<PiExtensionUiResponse>> extensionUiHandler,
-        Func<string, CancellationToken, ValueTask>? onSessionStartedAsync,
-        IReadOnlyList<string>? trustedExtensions = null,
-        TimeSpan? historyPersistenceTimeout = null
+        Func<string, CancellationToken, ValueTask>? onSessionStartedAsync
     )
     {
+        var extra = agent.Extra;
+        if (string.IsNullOrWhiteSpace(extra) || IsEmptyJsonObject(extra))
+        {
+            extra = ExternalAgentDefaults.GetDefaultExtra(ExternalAgentKind.Pi);
+        }
+
         var options = JsonUtil.Deserialize<PiAgentAIAgentOptions>(extra);
         if (options == null)
         {
@@ -465,7 +458,6 @@ public partial class AgentRuntimeService
 
         var globalOptions = options.GlobalOptions ?? new PiAgentOptions();
         var sessionOptions = options.SessionOptions ?? new PiSessionOptions();
-        var normalizedExtensions = NormalizeTrustedPiExtensions(trustedExtensions);
         var mergedEnvironment = new Dictionary<string, string>(StringComparer.Ordinal);
         MergePiEnvironment(mergedEnvironment, globalOptions.EnvironmentVariables);
         MergePiEnvironment(mergedEnvironment, sessionOptions.EnvironmentVariables);
@@ -479,11 +471,10 @@ public partial class AgentRuntimeService
         globalOptions = globalOptions with { EnvironmentVariables = null };
         sessionOptions = sessionOptions with
         {
-            WorkingDirectory = workspace,
+            WorkingDirectory = PathUtil.ExpandTilde(project.Workspace),
             SessionDir = sessionDirectory,
             NoSession = false,
             NoExtensions = true,
-            Extensions = normalizedExtensions,
             EnvironmentVariables = mergedEnvironment,
             ExtensionUiHandler = extensionUiHandler,
         };
@@ -494,25 +485,9 @@ public partial class AgentRuntimeService
             SessionOptions = sessionOptions,
             SessionId = providerSessionId?.ToString("D"),
             IsResume = providerSessionId.HasValue && isResume,
-            HistoryPersistenceTimeout = historyPersistenceTimeout ?? options.HistoryPersistenceTimeout,
             ChatHistoryProvider = chatHistoryProvider,
             OnSessionStartedAsync = onSessionStartedAsync,
         };
-    }
-
-    private static IReadOnlyList<string> NormalizeTrustedPiExtensions(IReadOnlyList<string>? extensions)
-    {
-        if (extensions is not { Count: > 0 })
-        {
-            return [];
-        }
-
-        var pathComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        return extensions
-            .Where(extension => !string.IsNullOrWhiteSpace(extension))
-            .Select(extension => Path.GetFullPath(PathUtil.ExpandTilde(extension.Trim())))
-            .Distinct(pathComparer)
-            .ToList();
     }
 
     private static void MergePiEnvironment(
@@ -543,20 +518,27 @@ public partial class AgentRuntimeService
     #region CodexAgentOptions
 
     private static CodexAIAgentOptions? BuildCodexAIAgentOptions(
-        string extra,
-        string? workspace,
+        Agent agent,
+        Project project,
         Guid? threadId,
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         Func<string, CancellationToken, ValueTask>? onThreadStartedAsync = null
     )
     {
+        var extra = agent.Extra;
+        if (string.IsNullOrWhiteSpace(extra) || IsEmptyJsonObject(extra))
+        {
+            extra = ExternalAgentDefaults.GetDefaultExtra(ExternalAgentKind.Codex);
+        }
+
         var options = JsonUtil.Deserialize<CodexAIAgentOptions>(extra);
         if (options == null)
         {
             return null;
         }
 
+        var workspace = PathUtil.ExpandTilde(project.Workspace);
         if (!string.IsNullOrWhiteSpace(workspace))
         {
             options = options with

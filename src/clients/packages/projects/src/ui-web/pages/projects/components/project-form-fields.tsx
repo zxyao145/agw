@@ -23,9 +23,6 @@ export interface ProjectFormFieldsProps {
   setDescription: (value: string) => void;
   workspace: string;
   setWorkspace: (value: string) => void;
-  extraSetting: string;
-  setExtraSetting: (value: string) => void;
-  extraSettingError: string | null;
   environmentVariables: EnvironmentVariableEntry[];
   setEnvironmentVariables: (entries: EnvironmentVariableEntry[]) => void;
   selectedSkillIds: string[];
@@ -50,9 +47,6 @@ export function ProjectFormFields({
   setDescription,
   workspace,
   setWorkspace,
-  extraSetting,
-  setExtraSetting,
-  extraSettingError,
   environmentVariables,
   setEnvironmentVariables,
   selectedSkillIds,
@@ -112,26 +106,6 @@ export function ProjectFormFields({
               readOnly
               className="bg-muted/50"
             />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor={`${idPrefix}extraSetting`}>Extra Settings (JSON)</Label>
-            <Textarea
-              id={`${idPrefix}extraSetting`}
-              value={extraSetting}
-              onChange={(event) => setExtraSetting(event.target.value)}
-              placeholder="{}"
-              rows={9}
-              aria-invalid={Boolean(extraSettingError)}
-              className="font-mono text-xs"
-            />
-            {extraSettingError ? (
-              <p className="text-xs text-destructive">{extraSettingError}</p>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Optional JSON settings. Objects, arrays, and scalar values are supported.
-              </p>
-            )}
           </div>
         </div>
       </div>

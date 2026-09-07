@@ -209,10 +209,11 @@ public class AgentSuggestionAppServiceTests : IDisposable
     }
 
     [Theory]
-    [InlineData(AgentNames.ClaudeCode, AgentSuggestionMode.ClaudeCode)]
-    [InlineData(AgentNames.Codex, AgentSuggestionMode.Unsupported)]
-    [InlineData("OtherExternal", AgentSuggestionMode.Unsupported)]
+    [InlineData(ExternalAgentKind.ClaudeCode, "custom-claude", AgentSuggestionMode.ClaudeCode)]
+    [InlineData(ExternalAgentKind.Codex, AgentNames.ClaudeCode, AgentSuggestionMode.Unsupported)]
+    [InlineData(ExternalAgentKind.Pi, "custom-pi", AgentSuggestionMode.Unsupported)]
     public async Task GetSuggestionsAsync_ExternalAgent_ReturnsExpectedMode(
+        ExternalAgentKind externalAgentKind,
         string agentName,
         AgentSuggestionMode expectedMode
     )
@@ -222,6 +223,7 @@ public class AgentSuggestionAppServiceTests : IDisposable
             Id = Guid.CreateVersion7(),
             Name = agentName,
             Type = AgentType.External,
+            ExternalAgentKind = externalAgentKind,
         };
         var project = new Project { Id = Guid.CreateVersion7() };
         var service = CreateService(agents: [agent], projects: [project]);

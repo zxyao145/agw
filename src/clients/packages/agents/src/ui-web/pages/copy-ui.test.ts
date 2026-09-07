@@ -10,23 +10,24 @@ const AGENTFLOWS_TABLE_URL = new URL(
   import.meta.url,
 );
 
-test("Agents page wires immediate copy creation and query refresh", async () => {
+test("Agents page opens a naming dialog before copy creation and refreshes after success", async () => {
   const [pageSource, tableSource] = await Promise.all([
     readFile(AGENTS_PAGE_URL, "utf8"),
     readFile(AGENTS_TABLE_URL, "utf8"),
   ]);
 
   assert.match(pageSource, /const copyAgentMutation = useMutation\(/);
-  assert.match(pageSource, /createAgentCopyRequest\(agent, crypto\.randomUUID\(\)\)/);
+  assert.match(pageSource, /setCopyingAgent\(agent\)/);
+  assert.match(pageSource, /<CopyAgentDialog/);
+  assert.doesNotMatch(pageSource, /copyAgentMutation\.mutate\(agent\)/);
   assert.match(pageSource, /apiPost\("\/api\/agents", \{ body \}\)/);
   assert.match(pageSource, /toast\.success\(`Agent .* copied`\)/);
   assert.match(pageSource, /invalidateQueries\(\{ queryKey: \["agents"\] \}\)/);
   assert.match(pageSource, /onCopy=\{handleCopy\}/);
   assert.match(pageSource, /isCopying=\{copyAgentMutation\.isPending\}/);
 
-  assert.match(tableSource, /const isExternalAgent = agent\.type === 1/);
   assert.match(tableSource, /disabled=\{isCopyDisabled\}/);
-  assert.match(tableSource, /External agents cannot be copied\./);
+  assert.doesNotMatch(tableSource, /External agents cannot be copied\./);
   assert.match(tableSource, /aria-label="Copy agent"/);
   assert.match(tableSource, /<Pencil[\s\S]*?<Copy[\s\S]*?<Trash2/);
 });

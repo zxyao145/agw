@@ -315,7 +315,10 @@ export function Chat({
         ),
     [checkpointAvailability],
   );
-  const isHydratingSession = hydratedSessionRevision !== sessionSeed.revision;
+  const isHydratingSession =
+    isLoadingConversation ||
+    hydratedSessionRevision !== sessionSeed.revision ||
+    Boolean(conversationId && !contextId);
   const checkpointResumeDisabled =
     isExecuting || isTransitioning || isHydratingSession || reconnectState !== null;
 
@@ -402,6 +405,8 @@ export function Chat({
     setMessages(preparedHistory.messages);
     setClaudeCommands(preparedHistory.commands);
     setConversationUsage(sessionSeed.usage);
+    conversationIdRef.current = conversationId;
+    announcedConversationIdRef.current = conversationId;
     setContextId(sessionSeed.contextId);
     contextIdRef.current = sessionSeed.contextId;
     announcedContextIdRef.current = sessionSeed.contextId;

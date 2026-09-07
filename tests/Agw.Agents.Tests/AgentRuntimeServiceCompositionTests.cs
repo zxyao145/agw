@@ -6,6 +6,7 @@ using Agw.Agents.ExternalAgents;
 using Agw.Agents.ExternalAgents.ClaudeCode;
 using Agw.Agents.ExternalAgents.Pi;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
 using Agw.Shared.Runtime;
@@ -95,6 +96,7 @@ public class AgentRuntimeServiceCompositionTests
     {
         var codexAgent = Assert.Single(AgentNames.ExternalAgentNames, agent => agent.Name == AgentNames.Codex);
 
+        Assert.Equal(ExternalAgentKind.Codex, codexAgent.ExternalAgentKind);
         Assert.False(string.IsNullOrWhiteSpace(codexAgent.Extra));
         var options = JsonUtil.Deserialize<CodexAIAgentOptions>(codexAgent.Extra!);
 
@@ -103,12 +105,75 @@ public class AgentRuntimeServiceCompositionTests
         Assert.NotNull(options.ThreadOptions);
     }
 
+    [Theory]
+    [InlineData("ClaudeCode", false)]
+    [InlineData("ClaudeCode", true)]
+    [InlineData("Codex", false)]
+    [InlineData("Codex", true)]
+    [InlineData("Pi", false)]
+    [InlineData("Pi", true)]
+    public void BuildExternalAgentOptions_AgentExtraConfigured_IgnoresProjectExtra(
+        string agentName,
+        bool malformedProjectExtra
+    )
+    {
+        // Arrange
+        const string agentExtra = """
+            {
+              "model": "agent-model",
+              "threadOptions": { "model": "agent-model" },
+              "sessionOptions": { "model": "agent-model" }
+            }
+            """;
+        var projectExtra = malformedProjectExtra
+            ? "invalid project JSON"
+            : agentExtra.Replace("agent-model", "project-model");
+
+        // Act
+        var model = BuildExternalAgentModel(agentName, agentExtra, projectExtra);
+
+        // Assert
+        Assert.Equal("agent-model", model);
+    }
+
+    [Theory]
+    [InlineData("ClaudeCode", null)]
+    [InlineData("ClaudeCode", "   ")]
+    [InlineData("ClaudeCode", "{}")]
+    [InlineData("Codex", null)]
+    [InlineData("Codex", "   ")]
+    [InlineData("Codex", "{}")]
+    [InlineData("Pi", null)]
+    [InlineData("Pi", "   ")]
+    [InlineData("Pi", "{}")]
+    public void BuildExternalAgentOptions_AgentExtraMissing_UsesDefaultsWithoutProjectFallback(
+        string agentName,
+        string? agentExtra
+    )
+    {
+        // Arrange
+        const string projectExtra = """
+            {
+              "model": "project-model",
+              "threadOptions": { "model": "project-model" },
+              "sessionOptions": { "model": "project-model" }
+            }
+            """;
+
+        // Act
+        var model = BuildExternalAgentModel(agentName, agentExtra, projectExtra);
+
+        // Assert
+        Assert.Null(model);
+    }
+
     [Fact]
     public void ExternalAgentNames_Pi_HasSafeDefaultOptions()
     {
         var piAgent = Assert.Single(AgentNames.ExternalAgentNames, agent => agent.Name == AgentNames.Pi);
 
         Assert.Equal(AgentNames.PiId, piAgent.Id);
+        Assert.Equal(ExternalAgentKind.Pi, piAgent.ExternalAgentKind);
         var options = JsonUtil.Deserialize<PiAgentAIAgentOptions>(piAgent.Extra!);
         Assert.NotNull(options);
         Assert.Equal(PiProjectTrust.Deny, options.SessionOptions.ProjectTrust);
@@ -117,27 +182,35 @@ public class AgentRuntimeServiceCompositionTests
     }
 
     [Theory]
-    [InlineData("claudecode", "ClaudeCode")]
-    [InlineData("CODEX", "Codex")]
-    [InlineData("pi", "Pi")]
-    public void ExternalAgentKindResolver_KnownExternalName_ClassifiesIgnoringCase(string name, string expected)
+    [InlineData(ExternalAgentKind.ClaudeCode, "custom-claude")]
+    [InlineData(ExternalAgentKind.Codex, "custom-codex")]
+    [InlineData(ExternalAgentKind.Pi, "custom-pi")]
+    public void ExternalAgentKindResolver_ExternalAgent_UsesPersistedKindRegardlessOfName(
+        ExternalAgentKind externalAgentKind,
+        string name
+    )
     {
         // Arrange
-        var agent = new Agent { Type = AgentType.External, Name = name };
+        var agent = new Agent
+        {
+            Type = AgentType.External,
+            ExternalAgentKind = externalAgentKind,
+            Name = name,
+        };
 
         // Act
         var kind = ExternalAgentKindResolver.Resolve(agent);
 
         // Assert
-        Assert.Equal(expected, kind.ToString());
+        Assert.Equal(externalAgentKind, kind);
     }
 
     [Fact]
-    public void ExternalAgentKindResolver_NonExternalOrUnknownName_ReturnsNone()
+    public void ExternalAgentKindResolver_NonExternalOrUnsupportedKind_ReturnsNone()
     {
         // Arrange
-        var systemAgent = new Agent { Type = AgentType.System, Name = AgentNames.Pi };
-        var unknownExternalAgent = new Agent { Type = AgentType.External, Name = "Unknown" };
+        var systemAgent = new Agent { Type = AgentType.System, ExternalAgentKind = ExternalAgentKind.Pi };
+        var unknownExternalAgent = new Agent { Type = AgentType.External, ExternalAgentKind = (ExternalAgentKind)99 };
 
         // Act
         var systemKind = ExternalAgentKindResolver.Resolve(systemAgent);
@@ -307,8 +380,9 @@ public class AgentRuntimeServiceCompositionTests
     }
 
     [Fact]
-    public void BuildPiAgentAIAgentOptions_OverridesTrustedPathsReservedEnvironmentAndStaleSession()
+    public void BuildPiAgentAIAgentOptions_PreservesAgentExtraAndOverridesRuntimeState()
     {
+        // Arrange
         var history = new InMemoryChatHistoryProvider();
         ValueTask<PiExtensionUiResponse> HandleAsync(
             PiExtensionUiRequest request,
@@ -317,12 +391,12 @@ public class AgentRuntimeServiceCompositionTests
         ValueTask StartedAsync(string sessionId, CancellationToken cancellationToken) => ValueTask.CompletedTask;
         Func<PiExtensionUiRequest, CancellationToken, ValueTask<PiExtensionUiResponse>> handler = HandleAsync;
         Func<string, CancellationToken, ValueTask> started = StartedAsync;
-        var trustedExtension = Path.GetFullPath("/trusted/extension.ts");
         var extra = JsonUtil.Serialize(
             new PiAgentAIAgentOptions
             {
                 SessionId = "stale",
                 IsResume = true,
+                HistoryPersistenceTimeout = TimeSpan.FromSeconds(12),
                 GlobalOptions = new PiAgentOptions
                 {
                     EnvironmentVariables = new Dictionary<string, string>
@@ -334,7 +408,7 @@ public class AgentRuntimeServiceCompositionTests
                 SessionOptions = new PiSessionOptions
                 {
                     SessionDir = "/evil/sessions",
-                    Extensions = ["/evil/extension.ts"],
+                    Extensions = ["/project/extension.ts"],
                     EnvironmentVariables = new Dictionary<string, string>
                     {
                         ["PI_CODING_AGENT_SESSION_DIR"] = "/evil/sessions",
@@ -344,9 +418,10 @@ public class AgentRuntimeServiceCompositionTests
             }
         );
 
+        // Act
         var options = AgentRuntimeService.BuildPiAgentAIAgentOptions(
-            extra,
-            "/safe/workspace",
+            new Agent { Extra = extra },
+            new Project { Workspace = "/safe/workspace" },
             "/safe/config",
             "/safe/sessions",
             providerSessionId: null,
@@ -354,18 +429,17 @@ public class AgentRuntimeServiceCompositionTests
             new Dictionary<string, string> { ["PI_OFFLINE"] = "0", ["ANTHROPIC_API_KEY"] = "explicit" },
             history,
             handler,
-            started,
-            [trustedExtension],
-            historyPersistenceTimeout: TimeSpan.FromSeconds(12)
+            started
         );
 
+        // Assert
         Assert.NotNull(options);
         Assert.Null(options.SessionId);
         Assert.False(options.IsResume);
         Assert.Equal("/safe/workspace", options.SessionOptions.WorkingDirectory);
         Assert.Equal("/safe/sessions", options.SessionOptions.SessionDir);
         Assert.True(options.SessionOptions.NoExtensions);
-        Assert.Equal([trustedExtension], options.SessionOptions.Extensions);
+        Assert.Equal(["/project/extension.ts"], options.SessionOptions.Extensions);
         Assert.Equal(TimeSpan.FromSeconds(12), options.HistoryPersistenceTimeout);
         Assert.Null(options.GlobalOptions.EnvironmentVariables);
         Assert.Equal("/safe/config", options.SessionOptions.EnvironmentVariables!["PI_CODING_AGENT_DIR"]);
@@ -378,6 +452,35 @@ public class AgentRuntimeServiceCompositionTests
         Assert.Same(history, options.ChatHistoryProvider);
         Assert.Same(handler, options.SessionOptions.ExtensionUiHandler);
         Assert.Same(started, options.OnSessionStartedAsync);
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("""{"sessionOptions":{"extensions":[]}}""")]
+    public void BuildPiAgentAIAgentOptions_UnconfiguredAgent_UsesPiDefaults(string extra)
+    {
+        // Arrange
+        var history = new InMemoryChatHistoryProvider();
+
+        // Act
+        var options = AgentRuntimeService.BuildPiAgentAIAgentOptions(
+            new Agent { Extra = extra },
+            new Project { Workspace = "/safe/workspace" },
+            "/safe/config",
+            "/safe/sessions",
+            providerSessionId: null,
+            isResume: false,
+            environmentVariables: null,
+            history,
+            static (request, _) => ValueTask.FromResult(PiExtensionUiResponse.Cancel(request.Id)),
+            onSessionStartedAsync: null
+        );
+
+        // Assert
+        Assert.NotNull(options);
+        Assert.Empty(options.SessionOptions.Extensions ?? []);
+        Assert.True(options.SessionOptions.NoExtensions);
+        Assert.Equal(TimeSpan.FromSeconds(30), options.HistoryPersistenceTimeout);
     }
 
     [Fact]
@@ -483,7 +586,12 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void ResolveExternalProviderSession_ClaudeCode_CreatesThenResumesSameSession()
     {
-        var agent = new Agent { Type = AgentType.External, Name = AgentNames.ClaudeCode };
+        var agent = new Agent
+        {
+            Type = AgentType.External,
+            ExternalAgentKind = ExternalAgentKind.ClaudeCode,
+            Name = "custom-claude",
+        };
 
         var created = AgentRuntimeService.ResolveExternalProviderSession(
             agent,
@@ -505,7 +613,12 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void ResolveExternalProviderSession_Codex_PreservesExistingBehavior()
     {
-        var agent = new Agent { Type = AgentType.External, Name = AgentNames.Codex };
+        var agent = new Agent
+        {
+            Type = AgentType.External,
+            ExternalAgentKind = ExternalAgentKind.Codex,
+            Name = "custom-codex",
+        };
         var providerSessionId = Guid.Parse("22222222-3333-4444-5555-666666666666");
 
         var created = AgentRuntimeService.ResolveExternalProviderSession(
@@ -528,7 +641,12 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void ResolveExternalProviderSession_Pi_ResumesOnlyPersistedSession()
     {
-        var agent = new Agent { Type = AgentType.External, Name = AgentNames.Pi.ToLowerInvariant() };
+        var agent = new Agent
+        {
+            Type = AgentType.External,
+            ExternalAgentKind = ExternalAgentKind.Pi,
+            Name = "custom-pi",
+        };
         var providerSessionId = Guid.Parse("33333333-4444-5555-6666-777777777777");
 
         var created = AgentRuntimeService.ResolveExternalProviderSession(
@@ -553,27 +671,42 @@ public class AgentRuntimeServiceCompositionTests
     {
         Assert.True(
             AgentRuntimeService.UsesProviderSessionBinding(
-                new Agent { Type = AgentType.External, Name = AgentNames.ClaudeCode }
+                new Agent
+                {
+                    Type = AgentType.External,
+                    ExternalAgentKind = ExternalAgentKind.ClaudeCode,
+                    Name = "first-claude",
+                }
             )
         );
         Assert.True(
             AgentRuntimeService.UsesProviderSessionBinding(
-                new Agent { Type = AgentType.External, Name = AgentNames.Codex }
+                new Agent
+                {
+                    Type = AgentType.External,
+                    ExternalAgentKind = ExternalAgentKind.Codex,
+                    Name = "first-codex",
+                }
             )
         );
         Assert.True(
             AgentRuntimeService.UsesProviderSessionBinding(
-                new Agent { Type = AgentType.External, Name = AgentNames.Pi }
+                new Agent
+                {
+                    Type = AgentType.External,
+                    ExternalAgentKind = ExternalAgentKind.Pi,
+                    Name = "first-pi",
+                }
             )
         );
         Assert.False(
             AgentRuntimeService.UsesProviderSessionBinding(
-                new Agent { Type = AgentType.External, Name = AgentNames.GithubCopilot }
+                new Agent { Type = AgentType.External, ExternalAgentKind = ExternalAgentKind.None }
             )
         );
         Assert.False(
             AgentRuntimeService.UsesProviderSessionBinding(
-                new Agent { Type = AgentType.System, Name = AgentNames.ClaudeCode }
+                new Agent { Type = AgentType.System, ExternalAgentKind = ExternalAgentKind.ClaudeCode }
             )
         );
     }
@@ -668,13 +801,48 @@ public class AgentRuntimeServiceCompositionTests
         Assert.Equal("context-1", suppliedContextId);
     }
 
+    private static string? BuildExternalAgentModel(string agentName, string? agentExtra, string? projectExtra) =>
+        agentName switch
+        {
+            "ClaudeCode" => BuildClaudeCodeAIAgentOptions(
+                agentExtra,
+                workspace: "/project",
+                providerSessionId: null,
+                isResume: false,
+                projectExtra: projectExtra
+            )!.Model,
+            "Codex" => BuildCodexAIAgentOptions(
+                agentExtra,
+                workspace: "/project",
+                threadId: null,
+                resume: false,
+                projectExtra: projectExtra
+            )!.ThreadOptions.Model,
+            "Pi" => AgentRuntimeService
+                .BuildPiAgentAIAgentOptions(
+                    new Agent { Extra = agentExtra },
+                    new Project { Workspace = "/project", ExtraSetting = projectExtra },
+                    "/safe/config",
+                    "/safe/sessions",
+                    providerSessionId: null,
+                    isResume: false,
+                    environmentVariables: null,
+                    new InMemoryChatHistoryProvider(),
+                    static (request, _) => ValueTask.FromResult(PiExtensionUiResponse.Cancel(request.Id)),
+                    onSessionStartedAsync: null
+                )!
+                .SessionOptions.Model,
+            _ => throw new ArgumentOutOfRangeException(nameof(agentName)),
+        };
+
     private static CodexAIAgentOptions? BuildCodexAIAgentOptions(
-        string extra,
+        string? extra,
         string? workspace,
         Guid? threadId,
         bool resume,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
-        Func<string, CancellationToken, ValueTask>? onThreadStartedAsync = null
+        Func<string, CancellationToken, ValueTask>? onThreadStartedAsync = null,
+        string? projectExtra = null
     )
     {
         var method = typeof(AgentRuntimeService).GetMethod(
@@ -684,17 +852,28 @@ public class AgentRuntimeServiceCompositionTests
 
         Assert.NotNull(method);
         return Assert.IsType<CodexAIAgentOptions>(
-            method.Invoke(null, [extra, workspace, threadId, resume, environmentVariables, onThreadStartedAsync])
+            method.Invoke(
+                null,
+                [
+                    new Agent { Extra = extra },
+                    new Project { Workspace = workspace, ExtraSetting = projectExtra },
+                    threadId,
+                    resume,
+                    environmentVariables,
+                    onThreadStartedAsync,
+                ]
+            )
         );
     }
 
     private static ClaudeCodeAIAgentOptions? BuildClaudeCodeAIAgentOptions(
-        string extra,
+        string? extra,
         string? workspace,
         Guid? providerSessionId,
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
-        ChatHistoryProvider? chatHistoryProvider = null
+        ChatHistoryProvider? chatHistoryProvider = null,
+        string? projectExtra = null
     )
     {
         var method = typeof(AgentRuntimeService).GetMethod(
@@ -706,7 +885,14 @@ public class AgentRuntimeServiceCompositionTests
         return Assert.IsType<ClaudeCodeAIAgentOptions>(
             method.Invoke(
                 null,
-                [extra, workspace, providerSessionId, isResume, environmentVariables, chatHistoryProvider]
+                [
+                    new Agent { Extra = extra },
+                    new Project { Workspace = workspace, ExtraSetting = projectExtra },
+                    providerSessionId,
+                    isResume,
+                    environmentVariables,
+                    chatHistoryProvider,
+                ]
             )
         );
     }

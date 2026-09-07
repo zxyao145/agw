@@ -274,6 +274,7 @@ public class DefinitionPaginationTests
             new Agent
             {
                 Type = AgentType.External,
+                ExternalAgentKind = ExternalAgentKind.Pi,
                 Name = "",
                 DisplayName = "before",
             },
@@ -286,6 +287,8 @@ public class DefinitionPaginationTests
         Assert.NotNull(agent);
         Assert.NotEqual(Guid.Empty, agent.Id);
         Assert.Equal(agent.Id.ToString(), agent.Name);
+        Assert.Equal(ExternalAgentKind.Pi, agent.ExternalAgentKind);
+        Assert.False(string.IsNullOrWhiteSpace(agent.Extra));
         Assert.Equal("tester", agent.CreateBy);
         Assert.Equal(createdAt, agent.CreateTime);
 
@@ -326,6 +329,56 @@ public class DefinitionPaginationTests
             Assert.Equal("tester", persisted.UpdateBy);
             Assert.Equal(updatedAt, persisted.UpdateTime);
         }
+    }
+
+    [Fact]
+    public async Task CreateAgentAsync_SameExternalKindWithDifferentNames_PersistsIndependentDefinitions()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var database = await TestDatabase.CreateAsync(cancellationToken);
+        var service = CreateAgentAppService(database.Context);
+
+        var reviewer = await service.CreateAgentAsync(
+            new Agent
+            {
+                Type = AgentType.External,
+                ExternalAgentKind = ExternalAgentKind.Codex,
+                Name = "codex-reviewer",
+                DisplayName = "Codex Reviewer",
+            },
+            null,
+            null,
+            null
+        );
+        var coder = await service.CreateAgentAsync(
+            new Agent
+            {
+                Type = AgentType.External,
+                ExternalAgentKind = ExternalAgentKind.Codex,
+                Name = "codex-coder",
+                DisplayName = "Codex Coder",
+                Extra = "{}",
+            },
+            null,
+            null,
+            null
+        );
+
+        Assert.NotNull(reviewer);
+        Assert.NotNull(coder);
+        Assert.NotEqual(reviewer.Id, coder.Id);
+        Assert.Equal(ExternalAgentKind.Codex, reviewer.ExternalAgentKind);
+        Assert.Equal(ExternalAgentKind.Codex, coder.ExternalAgentKind);
+        Assert.False(string.IsNullOrWhiteSpace(reviewer.Extra));
+        Assert.Equal(reviewer.Extra, coder.Extra);
+        Assert.Equal(
+            ["codex-coder", "codex-reviewer"],
+            await database
+                .Context.Agents.IgnoreQueryFilters()
+                .OrderBy(agent => agent.Name)
+                .Select(agent => agent.Name)
+                .ToArrayAsync(cancellationToken)
+        );
     }
 
     [Fact]

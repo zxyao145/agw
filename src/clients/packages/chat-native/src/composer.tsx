@@ -102,6 +102,7 @@ export function NativeChatComposer({
   const canSend = Boolean(
     workspace.selectedProjectId &&
     workspace.selectedTarget &&
+    (!workspace.selectedConversationId || workspace.selectedContextId) &&
     (composer.text.trim() || composer.attachments.length > 0),
   );
 

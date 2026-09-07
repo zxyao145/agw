@@ -205,6 +205,7 @@ public class DbSeeder
             DisplayName = definition.DisplayName,
             Name = definition.Name,
             Type = definition.Type,
+            ExternalAgentKind = definition.ExternalAgentKind,
             Description = definition.Description,
             Extra = definition.Extra,
 

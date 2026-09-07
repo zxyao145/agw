@@ -204,6 +204,9 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
         configureClients(profile, token);
         activateQueryClient(profile, token);
 
+        // Keep local settings editable even when the Server probe or authentication fails.
+        setRuntimeState(nextState);
+
         let info = await probeServer(profile, token, abortController.signal);
         if (!info.initialized && !setupAttempted.current.has(profile.baseUrl)) {
           setupAttempted.current.add(profile.baseUrl);
@@ -218,6 +221,7 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
           profile = getEffectiveActiveServerProfile(nextState);
           token = nextState.activeToken;
           activateQueryClient(profile, token);
+          setRuntimeState(nextState);
           info = await probeServer(profile, token, abortController.signal);
         }
 

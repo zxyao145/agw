@@ -19,10 +19,15 @@ public sealed class AgentBehavior
     {
         var agent = _agent;
 
+        EnsureAgentKindIsValid(agent);
         EnsureModelProviderIsPresentWhenRequired(agent);
         NormalizeEnvironmentVariables(agent);
         agent.Id = agent.Id == Guid.Empty ? Guid.CreateVersion7() : agent.Id;
         agent.Name = string.IsNullOrWhiteSpace(agent.Name) ? agent.Id.Normalize() : agent.Name;
+        if (agent.Type == AgentType.External)
+        {
+            agent.Extra = NormalizeExtraSettings(agent.Extra);
+        }
     }
 
     public void ApplyUpdate(Action<Agent> updateAction)
@@ -39,6 +44,7 @@ public sealed class AgentBehavior
             var originalSystemPrompt = existing.SystemPrompt;
             var originalTools = existing.Tools;
             var originalType = existing.Type;
+            var originalExternalAgentKind = existing.ExternalAgentKind;
 
             updateAction(existing);
 
@@ -47,6 +53,7 @@ public sealed class AgentBehavior
             existing.SystemPrompt = originalSystemPrompt;
             existing.Tools = originalTools;
             existing.Type = originalType;
+            existing.ExternalAgentKind = originalExternalAgentKind;
             existing.Extra = NormalizeExtraSettings(existing.Extra);
         }
         else
@@ -56,8 +63,33 @@ public sealed class AgentBehavior
         }
 
         NormalizeEnvironmentVariables(existing);
+        EnsureAgentKindIsValid(existing);
         EnsureModelProviderIsPresentWhenRequired(existing);
         existing.Name = string.IsNullOrWhiteSpace(existing.Name) ? existing.Id.Normalize() : existing.Name;
+    }
+
+    private static void EnsureAgentKindIsValid(Agent agent)
+    {
+        if (agent.Type is not AgentType.System and not AgentType.External)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, $"Agent type '{agent.Type}' is not supported.");
+        }
+
+        if (agent.Type == AgentType.System && agent.ExternalAgentKind != ExternalAgentKind.None)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "System agents cannot specify an external agent kind.");
+        }
+
+        if (
+            agent.Type == AgentType.External
+            && agent.ExternalAgentKind
+                is not ExternalAgentKind.ClaudeCode
+                    and not ExternalAgentKind.Codex
+                    and not ExternalAgentKind.Pi
+        )
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "External agents require a supported external agent kind.");
+        }
     }
 
     private static void EnsureModelProviderIsPresentWhenRequired(Agent agent)

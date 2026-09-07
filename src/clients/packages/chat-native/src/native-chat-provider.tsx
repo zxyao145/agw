@@ -95,7 +95,12 @@ export function NativeChatProvider({
       removeAttachment: (id) =>
         setAttachments((current) => current.filter((attachment) => attachment.id !== id)),
       submit: async () => {
-        if ((!text.trim() && attachments.length === 0) || bindings.isExecuting) return;
+        if (
+          (!text.trim() && attachments.length === 0) ||
+          bindings.isExecuting ||
+          (bindings.selectedConversationId && !bindings.selectedContextId)
+        )
+          return;
         const submittedText = text;
         const submittedAttachments = attachments;
         setText("");

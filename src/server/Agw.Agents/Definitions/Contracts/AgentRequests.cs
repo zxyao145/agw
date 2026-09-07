@@ -16,8 +16,13 @@ public record AgentCreateRequest(
     List<Guid>? ConnectionIds = null,
     Dictionary<string, string>? EnvironmentVariables = null,
     bool EnableSummary = false,
-    Guid? SummaryModelProviderId = null
+    Guid? SummaryModelProviderId = null,
+    AgentType? Type = null,
+    ExternalAgentKind? ExternalAgentKind = null,
+    string? Extra = null
 );
+
+public sealed record ExternalAgentOptionResponse(ExternalAgentKind Kind, string DisplayName, string DefaultExtra);
 
 public sealed record AgentEnabledUpdateRequest(Guid AgentId, bool Enable);
 
@@ -210,6 +215,7 @@ public sealed record AgentResponse(
     bool EnableSummary,
     IReadOnlyList<ToolValueObject> Tools,
     AgentType Type,
+    ExternalAgentKind ExternalAgentKind,
     string? Extra,
     IReadOnlyDictionary<string, string> EnvironmentVariables,
     IReadOnlyList<AgentMcpToolServerRelationResponse> AgentMcpToolServers,
@@ -234,6 +240,7 @@ public sealed record AgentResponse(
             agent.EnableSummary,
             agent.Tools,
             agent.Type,
+            agent.ExternalAgentKind,
             agent.Extra,
             agent.EnvironmentVariables,
             [.. agent.AgentMcpToolServers.Select(AgentMcpToolServerRelationResponse.FromDomain)],

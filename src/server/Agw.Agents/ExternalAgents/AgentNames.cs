@@ -1,9 +1,4 @@
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Utils;
-using ClaudeCodeSdk.MAF;
-using ClaudeCodeSdk.Types;
-using OpenAI.CodexSdk.MAF;
-using PiAgentSdk.MAF;
 
 namespace Agw.Agents.ExternalAgents;
 
@@ -28,9 +23,8 @@ public class AgentNames
             Name = ClaudeCode,
             Description = "External agent for Claude Code integration with AI-powered coding assistance",
             Type = AgentType.External,
-            Extra = JsonUtil.Serialize(
-                new ClaudeCodeAIAgentOptions() { PermissionMode = PermissionMode.bypassPermissions }
-            ),
+            ExternalAgentKind = ExternalAgentKind.ClaudeCode,
+            Extra = ExternalAgentDefaults.GetDefaultExtra(ExternalAgentKind.ClaudeCode),
         },
         new Agent
         {
@@ -39,7 +33,8 @@ public class AgentNames
             Name = Codex,
             Description = "External agent for OpenAI Codex integration",
             Type = AgentType.External,
-            Extra = JsonUtil.Serialize(new CodexAIAgentOptions()),
+            ExternalAgentKind = ExternalAgentKind.Codex,
+            Extra = ExternalAgentDefaults.GetDefaultExtra(ExternalAgentKind.Codex),
         },
         new Agent
         {
@@ -48,7 +43,8 @@ public class AgentNames
             Name = Pi,
             Description = "External agent for the Pi agent integration",
             Type = AgentType.External,
-            Extra = JsonUtil.Serialize(new PiAgentAIAgentOptions()),
+            ExternalAgentKind = ExternalAgentKind.Pi,
+            Extra = ExternalAgentDefaults.GetDefaultExtra(ExternalAgentKind.Pi),
         },
         //new Agent
         //{

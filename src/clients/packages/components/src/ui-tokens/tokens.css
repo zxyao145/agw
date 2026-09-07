@@ -226,6 +226,26 @@ div[role="option"]:hover {
     padding-right: 146px;
   }
 
+  :root[data-agw-desktop="true"]:has(
+      [data-slot="dialog-content"][data-size="fullscreen"][data-state="open"]
+    )
+    .agw-titlebar {
+    -webkit-app-region: no-drag;
+  }
+
+  :root[data-agw-desktop="true"]
+    [data-slot="dialog-content"][data-size="fullscreen"]
+    [data-slot="dialog-header"] {
+    -webkit-app-region: no-drag;
+  }
+
+  :root[data-agw-desktop="true"]
+    [data-slot="dialog-content"][data-size="fullscreen"]
+    [data-slot="dialog-header"]
+    [data-slot="dialog-title"] {
+    -webkit-app-region: drag;
+  }
+
   :root[data-agw-desktop="true"][data-agw-platform="darwin"]
     [data-slot="dialog-content"][data-size="fullscreen"]
     [data-slot="dialog-header"] {

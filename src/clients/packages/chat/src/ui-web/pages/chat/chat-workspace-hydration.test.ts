@@ -1,0 +1,429 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import test from "node:test";
+import { runInNewContext } from "node:vm";
+import { JSDOM } from "jsdom";
+import * as React from "react";
+import { createRoot } from "react-dom/client";
+import ts from "typescript";
+
+import { buildChatHref } from "../../../lib/chat-route";
+import * as sessionRouting from "./lib/session-routing";
+import type { ChatProps } from "../../components/message/chat";
+import type { ChatWorkspaceProps } from "./chat-workspace";
+import type { ExecutionRequest, ExecutionSetting } from "@agw/chat-runtime/execution-session";
+
+async function checkConversationSession(kind: string, strictMode = false) {
+  const failHistory = kind === "restore-failure";
+  const conversation = {
+    conversationId: "conversation-1",
+    contextId: "original-context",
+    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+    resumeState: { targetType: 0, targetId: "agent-1" },
+  };
+  const messages = [{ messageId: "message-1", role: "user", contents: [] }];
+  const dom = new JSDOM("<div id='root'></div>", {
+    url: "http://localhost/desktop/chat/?projectId=project-1&conversationId=conversation-1",
+  });
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", { configurable: true, value: dom.window });
+  const actHost = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
+  const originalActEnvironment = actHost.IS_REACT_ACT_ENVIRONMENT;
+  actHost.IS_REACT_ACT_ENVIRONMENT = true;
+  dom.window.matchMedia = () =>
+    ({
+      matches: false,
+      addEventListener() {},
+      removeEventListener() {},
+    }) as unknown as MediaQueryList;
+
+  let detailsRequests = 0;
+  let messageRequests = 0;
+  const observed: {
+    chat?: ChatProps;
+    input?: {
+      onClearSession: () => void;
+      isTransitioning: boolean;
+      onExecute: (text: string, attachments: []) => void;
+    };
+    newChat?: () => void;
+    selectAgent?: (selection: { agentType: number; agentId: string }) => void;
+  } = {};
+  const executions: (ExecutionRequest & { contextId: string })[] = [];
+  const configurations: ExecutionSetting[] = [];
+  let finishHistory!: () => void;
+  const historyReady = new Promise<void>((resolve) => {
+    finishHistory = resolve;
+  });
+  const errors: unknown[] = [];
+  let searchParams = new URLSearchParams(dom.window.location.search);
+  const router = {
+    replace(href: string) {
+      dom.window.history.replaceState(null, "", href);
+    },
+  };
+  const pending = new Map<
+    string,
+    { resolve: (v: unknown) => void; reject: (e: Error) => void; promise: Promise<unknown> }
+  >();
+  for (const id of ["conversation-2", "conversation-3"]) {
+    let resolve!: (v: unknown) => void, reject!: (e: Error) => void;
+    const promise = new Promise((a, b) => {
+      resolve = a;
+      reject = b;
+    });
+    pending.set(id, { resolve, reject, promise });
+  }
+  const queryData: Record<string, unknown[]> = {
+    projects: [
+      { id: "project-1", name: "Project" },
+      { id: "project-2", name: "Second" },
+    ],
+    agents: [
+      { id: "agent-1", name: "first", displayName: "First", enable: true },
+      { id: "agent-2", name: "second", displayName: "Second", enable: true },
+    ],
+    agentflows: [],
+  };
+  function Container({ children }: { children?: React.ReactNode }) {
+    return React.createElement(React.Fragment, null, children);
+  }
+  const splitLayout = Object.assign(Container, { Left: Container, Right: Container });
+  const components = new Proxy(
+    { cn: () => "", Drawer: () => null },
+    { get: (target, key) => Reflect.get(target, key) ?? Container },
+  );
+  const modules: Record<string, unknown> = {
+    "@agw/components": components,
+    "@agw/components/query": {
+      useQuery: ({ queryKey }: { queryKey: string[] }) => ({ data: queryData[queryKey[0]] }),
+    },
+    "next/navigation": { useRouter: () => router, useSearchParams: () => searchParams },
+    sonner: { toast: { error: (error: unknown) => errors.push(error) } },
+    "@agw/projects": {
+      Explorer: () => null,
+      FileContent: () => null,
+      clearProjectConversationRecords: async () => true,
+      getProjectConversationDetails: async (_project: string, id: string) => {
+        if (id !== "conversation-1") return pending.get(id)!.promise;
+        detailsRequests += 1;
+        await historyReady;
+        if (failHistory) throw new Error("History unavailable");
+        return conversation;
+      },
+      getProjectConversationMessages: async (_project: string, id: string) => {
+        if (id !== "conversation-1") return { items: [], hasMore: false, nextCursor: null };
+        messageRequests += 1;
+        await historyReady;
+        return { items: messages, nextCursor: null, hasMore: false };
+      },
+      // A cached sidebar publishes its summary in the child's effect, before the
+      // workspace's route hydration effect. A summary is not a hydrated session.
+      ConversationList: (props: {
+        onNewConversation?: () => void;
+        onActiveConversationResolved?: (value: unknown) => void;
+      }) => {
+        observed.newChat = props.onNewConversation;
+        React.useEffect(() => {
+          props.onActiveConversationResolved?.(conversation);
+        }, [props.onActiveConversationResolved]);
+        return null;
+      },
+    },
+    "../../components/agent-selector": {
+      AgentSelector: (props: { onSelect: typeof observed.selectAgent }) => {
+        observed.selectAgent = props.onSelect;
+        return null;
+      },
+    },
+    "../../components/message/execution-reconnecting-dialog": {},
+    "../../../lib/chat-route": { buildChatHref },
+    "./settings-storage": { chatSettingsStorage: { get: () => ({}), set() {} } },
+    "./components/split-layout": { default: splitLayout, __esModule: true },
+    "./lib/chat-settings": {},
+    "./lib/session-routing": sessionRouting,
+    "../../../services/execution-session-manager": {
+      executionSessionManager: {
+        has: () => false,
+        attach: (key: { contextId: string }) => ({
+          matchesKey: (candidate: typeof key) => candidate.contextId === key.contextId,
+          detach() {},
+          interruptAndWait: async () => {},
+          dispose: async () => {},
+          getStatus: () => "idle",
+          listAgentflowCheckpoints: async () => [],
+          getReconnectState: () => null,
+          getActiveTurnSnapshot: () => null,
+          configure: async (setting: ExecutionSetting) => {
+            configurations.push(setting);
+            return { restoredDurableExecution: false };
+          },
+          execute: async (request: ExecutionRequest) => {
+            executions.push({ ...request, contextId: key.contextId });
+          },
+        }),
+      },
+    },
+    "../../execution-platform": { useExecutionPlatform: () => ({ serverId: "local" }) },
+  };
+  async function loadComponent<Props extends object>(
+    url: URL,
+    overrides: Record<string, unknown> = {},
+  ) {
+    const source = await readFile(url, "utf8");
+    const compiled = ts.transpileModule(source, {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        jsx: ts.JsxEmit.ReactJSX,
+        esModuleInterop: true,
+        target: ts.ScriptTarget.ES2022,
+      },
+    }).outputText;
+    const exports: Record<string, React.ComponentType<Props>> = {};
+    const require = createRequire(url);
+    const dependencies = { ...modules, ...overrides };
+    runInNewContext(compiled, {
+      exports,
+      console,
+      ResizeObserver: class {
+        observe() {}
+        disconnect() {}
+      },
+      require: (name: string) => (name in dependencies ? dependencies[name] : require(name)),
+      window: dom.window,
+      URLSearchParams,
+      AbortController,
+      DOMException,
+      requestAnimationFrame: (callback: () => void) => setTimeout(callback, 0),
+      cancelAnimationFrame: clearTimeout,
+    });
+    return exports;
+  }
+  const { Chat } = await loadComponent<ChatProps>(
+    new URL("../../components/message/chat.tsx", import.meta.url),
+    {
+      "./chat-input": {
+        ChatInput: (props: NonNullable<typeof observed.input>) => {
+          observed.input = props;
+          return null;
+        },
+      },
+      "./chat-aside": { ChatAside: () => null },
+      "./conversation": { Conversation: () => null },
+    },
+  );
+  modules["../../components/message/chat"] = {
+    Chat: (props: ChatProps) => {
+      observed.chat = props;
+      return React.createElement(Chat, props);
+    },
+  };
+  const { ChatWorkspace } = await loadComponent<ChatWorkspaceProps>(
+    new URL("./chat-workspace.tsx", import.meta.url),
+  );
+  const root = createRoot(dom.window.document.getElementById("root")!);
+  try {
+    const renderWorkspace = () =>
+      root.render(
+        React.createElement(
+          strictMode ? React.StrictMode : React.Fragment,
+          null,
+          React.createElement(ChatWorkspace, {
+            routeBasePath: "/desktop/chat",
+            showProjectSelect: false,
+          }),
+        ),
+      );
+    if (kind.startsWith("drawer")) {
+      const flow = kind === "drawer-agentflow";
+      const drawerPath = flow
+        ? "../../../../../agents/src/ui-web/pages/agentflows/components/execute-agentflow-drawer.tsx"
+        : "../../../../../agents/src/ui-web/pages/agents/components/execute-agent-drawer.tsx";
+      // Keep children mounted during the close animation, as Vaul/Radix Presence does.
+      const drawerModules = await loadComponent<Record<string, unknown>>(
+        new URL(drawerPath, import.meta.url),
+        {
+          "@agw/chat": modules["../../components/message/chat"],
+          react: React,
+          "lucide-react": { X: () => null },
+          "@agw/components": new Proxy(
+            { cn: () => "" },
+            { get: (target, key) => Reflect.get(target, key) ?? Container },
+          ),
+        },
+      );
+      const Drawer = drawerModules[flow ? "ExecuteAgentflowDrawer" : "ExecuteAgentDrawer"];
+      const agent = { id: "agent-1", name: "First" };
+      const draw = (open: boolean) =>
+        root.render(
+          React.createElement(
+            Drawer,
+            flow
+              ? { open, onOpenChange() {}, agentflow: agent }
+              : { open, setOpen() {}, executingAgent: agent },
+          ),
+        );
+      await React.act(async () => draw(true));
+      await React.act(async () => observed.input!.onExecute("first turn", []));
+      assert.equal(executions.length, 1);
+      await React.act(async () => draw(false));
+      await React.act(async () => draw(true));
+      assert.equal(observed.input?.isTransitioning, false);
+      await React.act(async () => observed.input!.onExecute("second turn", []));
+      assert.equal(executions.length, 2);
+      assert.notEqual(executions[1].conversationId, executions[0].conversationId);
+      assert.notEqual(
+        executions[1].contextId,
+        executions[0].contextId,
+        "a new drawer session gets a new context",
+      );
+    } else {
+      await React.act(async () => renderWorkspace());
+      assert.equal(observed.input?.isTransitioning, true);
+      await React.act(async () => observed.input!.onExecute("too early", []));
+      assert.equal(executions.length, 0);
+      await React.act(async () => finishHistory());
+      if (kind === "restore" || kind === "restore-failure") {
+        assert.equal(detailsRequests, strictMode ? 2 : 1);
+        assert.equal(messageRequests, detailsRequests);
+        await React.act(async () => observed.selectAgent!({ agentType: 0, agentId: "agent-2" }));
+        await React.act(async () => observed.input!.onExecute("1+4=?", []));
+        if (failHistory) {
+          assert.equal(errors.length, 1);
+          assert.equal(observed.input?.isTransitioning, true);
+          assert.equal(executions.length, 0);
+        } else {
+          assert.deepEqual(errors, []);
+          assert.equal(executions.length, 1);
+          assert.equal(executions[0].conversationId, conversation.conversationId);
+          assert.equal(executions[0].contextId, conversation.contextId);
+          assert.equal(executions[0].agentId, "agent-2");
+          assert.deepEqual(observed.chat?.sessionSeed.messages, messages);
+          assert.equal(configurations.at(-1)?.contextId, conversation.contextId);
+        }
+        return;
+      }
+      assert.equal(observed.chat?.conversationId, "conversation-1");
+      async function navigate(id: string) {
+        dom.window.history.pushState(
+          null,
+          "",
+          `/desktop/chat/?projectId=project-1&conversationId=${id}`,
+        );
+        searchParams = new URLSearchParams(dom.window.location.search);
+        await React.act(async () => renderWorkspace());
+      }
+      if (["new-chat", "project-switch", "clear-history"].includes(kind)) {
+        if (kind === "new-chat") {
+          assert.ok(observed.newChat);
+          await React.act(async () => observed.newChat!());
+          searchParams = new URLSearchParams(dom.window.location.search);
+          await React.act(async () => renderWorkspace());
+        } else if (kind === "project-switch") {
+          dom.window.history.pushState(null, "", "/desktop/chat/?projectId=project-2");
+          searchParams = new URLSearchParams(dom.window.location.search);
+          await React.act(async () => renderWorkspace());
+        } else {
+          await React.act(async () => observed.input!.onClearSession());
+        }
+        assert.equal(observed.input?.isTransitioning, false);
+        await React.act(async () => observed.input!.onExecute("next turn", []));
+        assert.equal(executions.length, 1);
+        if (kind === "clear-history") {
+          assert.equal(executions[0].conversationId, "conversation-1");
+          assert.equal(executions[0].contextId, "original-context");
+        } else {
+          assert.notEqual(executions[0].conversationId, "conversation-1");
+          assert.notEqual(executions[0].contextId, "original-context");
+          assert.equal(
+            observed.chat?.projectId,
+            kind === "project-switch" ? "project-2" : "project-1",
+          );
+        }
+
+        return;
+      }
+      await navigate("conversation-2");
+      assert.equal(observed.input?.isTransitioning, true);
+      if (kind === "route-failure") {
+        await React.act(async () =>
+          pending.get("conversation-2")!.reject(new Error("History unavailable")),
+        );
+        assert.equal(errors.length, 1);
+        assert.equal(observed.input?.isTransitioning, true);
+        await React.act(async () => observed.input!.onExecute("for conversation-2", []));
+        assert.equal(
+          executions.length,
+          0,
+          "failed navigation must not send to the old conversation",
+        );
+        assert.equal(
+          new URLSearchParams(dom.window.location.search).get("conversationId"),
+          "conversation-2",
+        );
+        await navigate("conversation-3");
+        await React.act(async () =>
+          pending
+            .get("conversation-3")!
+            .resolve({ ...conversation, conversationId: "conversation-3", contextId: "context-3" }),
+        );
+        assert.equal(observed.input?.isTransitioning, false);
+        await React.act(async () => observed.input!.onExecute("recovered", []));
+        assert.equal(executions.length, 1);
+        assert.equal(executions[0].conversationId, "conversation-3");
+        assert.equal(executions[0].contextId, "context-3");
+      } else {
+        await navigate("conversation-3");
+        await React.act(async () =>
+          pending
+            .get("conversation-3")!
+            .resolve({ ...conversation, conversationId: "conversation-3", contextId: "context-3" }),
+        );
+        await React.act(async () =>
+          pending
+            .get("conversation-2")!
+            .resolve({ ...conversation, conversationId: "conversation-2", contextId: "context-2" }),
+        );
+        assert.equal(observed.chat?.conversationId, "conversation-3");
+        await React.act(async () => observed.input!.onExecute("for conversation-3", []));
+        assert.equal(executions.length, 1);
+        assert.equal(executions[0].conversationId, "conversation-3");
+        assert.equal(executions[0].contextId, "context-3");
+      }
+    }
+  } finally {
+    await React.act(async () => root.unmount());
+    dom.window.close();
+    if (originalWindow) Object.defineProperty(globalThis, "window", originalWindow);
+    else Reflect.deleteProperty(globalThis, "window");
+    actHost.IS_REACT_ACT_ENVIRONMENT = originalActEnvironment;
+  }
+}
+
+test("returning to cached Chat and switching Agent preserves the conversation on send", () =>
+  checkConversationSession("restore"));
+test("StrictMode cancellation retries Chat hydration before switching Agent and sending", () =>
+  checkConversationSession("restore", true));
+test("failed history restoration cannot send an existing conversation with a new context", () =>
+  checkConversationSession("restore-failure", true));
+for (const [kind, name] of [
+  [
+    "drawer-agent",
+    "reopening an Agent drawer before unmount creates a new conversation and context",
+  ],
+  [
+    "drawer-agentflow",
+    "reopening an Agentflow drawer before unmount creates a new conversation and context",
+  ],
+  [
+    "route-failure",
+    "failed route hydration blocks the old conversation and recovers on navigation",
+  ],
+  ["route-out-of-order", "late history responses cannot replace the latest route session"],
+  ["new-chat", "New Chat replaces both conversation and context identities"],
+  ["project-switch", "switching projects starts a fresh conversation and context"],
+  ["clear-history", "clearing history preserves conversation and context identities"],
+]) {
+  test(name, () => checkConversationSession(kind));
+}

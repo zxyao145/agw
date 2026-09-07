@@ -15,18 +15,11 @@ import {
   DialogTitle,
 } from "@agw/components";
 
-import {
-  getProjectExtraSettingsError,
-  normalizeProjectExtraSettings,
-  serializeProjectCapabilities,
-} from "../project-form";
+import { serializeProjectCapabilities } from "../project-form";
 import { ProjectFormFields, type ProjectFormFieldsProps } from "./project-form-fields";
 import type { ProjectResponse, ProjectUpdateMutationVariables } from "./types";
 
-interface EditProjectDialogProps extends Omit<
-  ProjectFormFieldsProps,
-  "extraSettingError" | "idPrefix"
-> {
+interface EditProjectDialogProps extends Omit<ProjectFormFieldsProps, "idPrefix"> {
   open: boolean;
   setOpen: (open: boolean) => void;
   editingProject: ProjectResponse | null;
@@ -41,7 +34,6 @@ export function EditProjectDialog({
   name,
   description,
   workspace,
-  extraSetting,
   environmentVariables,
   tools,
   selectedSkillIds,
@@ -49,17 +41,10 @@ export function EditProjectDialog({
   selectedConnectionIds,
   ...formProps
 }: EditProjectDialogProps) {
-  const extraSettingError = getProjectExtraSettingsError(extraSetting);
   const environmentVariablesError = getEnvironmentVariablesError(environmentVariables);
 
   const handleUpdate = () => {
-    if (
-      !editingProject ||
-      editingProject.type !== 0 ||
-      !name.trim() ||
-      extraSettingError ||
-      environmentVariablesError
-    ) {
+    if (!editingProject || editingProject.type !== 0 || !name.trim() || environmentVariablesError) {
       return;
     }
 
@@ -77,7 +62,7 @@ export function EditProjectDialog({
         name,
         description: description.length ? description : null,
         workspace: workspace.trim().length ? workspace.trim() : null,
-        extraSetting: normalizeProjectExtraSettings(extraSetting),
+        extraSetting: editingProject.extraSetting ?? null,
         ...capabilities,
       },
     });
@@ -133,7 +118,6 @@ export function EditProjectDialog({
                     !editingProject ||
                     editingProject.type !== 0 ||
                     !name.trim() ||
-                    Boolean(extraSettingError) ||
                     Boolean(environmentVariablesError) ||
                     updateProjectMutation.isPending
                   }
@@ -150,8 +134,6 @@ export function EditProjectDialog({
             name={name}
             description={description}
             workspace={workspace}
-            extraSetting={extraSetting}
-            extraSettingError={extraSettingError}
             environmentVariables={environmentVariables}
             tools={tools}
             selectedSkillIds={selectedSkillIds}

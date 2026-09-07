@@ -18,18 +18,13 @@ import {
 
 import {
   formatProjectFolderName,
-  getProjectExtraSettingsError,
-  normalizeProjectExtraSettings,
   resolveCreateProjectWorkspace,
   serializeProjectCapabilities,
 } from "../project-form";
 import { ProjectFormFields, type ProjectFormFieldsProps } from "./project-form-fields";
 import type { ProjectCreateRequest } from "./types";
 
-interface CreateProjectDialogProps extends Omit<
-  ProjectFormFieldsProps,
-  "extraSettingError" | "idPrefix"
-> {
+interface CreateProjectDialogProps extends Omit<ProjectFormFieldsProps, "idPrefix"> {
   open: boolean;
   setOpen: (open: boolean) => void;
   createProjectMutation: UseMutationResult<unknown, Error, ProjectCreateRequest, unknown>;
@@ -42,7 +37,6 @@ export function CreateProjectDialog({
   name,
   description,
   workspace,
-  extraSetting,
   environmentVariables,
   tools,
   selectedSkillIds,
@@ -51,11 +45,10 @@ export function CreateProjectDialog({
   ...formProps
 }: CreateProjectDialogProps) {
   const normalizedName = formatProjectFolderName(name);
-  const extraSettingError = getProjectExtraSettingsError(extraSetting);
   const environmentVariablesError = getEnvironmentVariablesError(environmentVariables);
 
   const handleCreate = () => {
-    if (!normalizedName || extraSettingError || environmentVariablesError) {
+    if (!normalizedName || environmentVariablesError) {
       return;
     }
 
@@ -71,7 +64,7 @@ export function CreateProjectDialog({
       name: normalizedName,
       description: description.length ? description : null,
       workspace: resolveCreateProjectWorkspace(normalizedName, workspace),
-      extraSetting: normalizeProjectExtraSettings(extraSetting),
+      extraSetting: null,
       ...capabilities,
     });
   };
@@ -126,7 +119,6 @@ export function CreateProjectDialog({
                   className="cursor-pointer"
                   disabled={
                     !normalizedName ||
-                    Boolean(extraSettingError) ||
                     Boolean(environmentVariablesError) ||
                     createProjectMutation.isPending
                   }
@@ -142,8 +134,6 @@ export function CreateProjectDialog({
             name={name}
             description={description}
             workspace={workspace}
-            extraSetting={extraSetting}
-            extraSettingError={extraSettingError}
             environmentVariables={environmentVariables}
             tools={tools}
             selectedSkillIds={selectedSkillIds}

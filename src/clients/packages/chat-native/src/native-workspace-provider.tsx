@@ -761,7 +761,11 @@ export function NativeWorkspaceProvider({
       const previousPermissionMode = permissionMode;
       setPermissionModeState(nextPermissionMode);
       setOperationError(null);
-      if (!selectedProjectId) return;
+      if (
+        !selectedProjectId ||
+        (selectedConversationIdRef.current !== null && selectedContextIdRef.current === null)
+      )
+        return;
 
       const contextId = ensureContextId();
       const generation = executionGenerationRef.current;
@@ -787,6 +791,8 @@ export function NativeWorkspaceProvider({
 
   const setAgentMode = React.useCallback(
     (nextAgentMode: AgentMode) => {
+      if (selectedConversationIdRef.current !== null && selectedContextIdRef.current === null)
+        return;
       if (!selectedProjectId || !selectedTarget || selectedTarget.type !== "agent") {
         setOperationError("Please select a mode-capable agent.");
         return;
@@ -838,6 +844,7 @@ export function NativeWorkspaceProvider({
         !selectedProjectId ||
         !selectedTarget ||
         isExecuting ||
+        (selectedConversationIdRef.current !== null && selectedContextIdRef.current === null) ||
         (!text.trim() && attachments.length === 0)
       ) {
         return;

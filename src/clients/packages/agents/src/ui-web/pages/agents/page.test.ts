@@ -55,3 +55,14 @@ test("agents page owns and initializes Create and Edit summary state", async () 
   assert.match(source, /setEnableSummary\(false\)/);
   assert.match(source, /setSummaryModelProviderId\(""\)/);
 });
+
+test("agents page loads External Agent defaults and keeps creation identity state", async () => {
+  const source = await readFile(PAGE_URL, "utf8");
+
+  assert.match(source, /apiGet\("\/api\/agents\/external-options"\)/);
+  assert.match(source, /const \[agentType, setAgentType\]/);
+  assert.match(source, /const \[externalAgentKind, setExternalAgentKind\]/);
+  assert.match(source, /const \[extra, setExtra\]/);
+  assert.match(source, /Changing the external agent kind will replace the current Extra Settings/);
+  assert.match(source, /setExtra\(nextOption\?\.defaultExtra \?\? ""\)/);
+});

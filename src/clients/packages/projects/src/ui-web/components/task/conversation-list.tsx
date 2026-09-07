@@ -39,7 +39,6 @@ interface ConversationListProps {
   currentConversationId: string | null;
   refreshSignal?: number;
   onConversationSelect: (conversation: ConversationSummary) => void;
-  onActiveConversationResolved?: (conversation: ConversationSummary) => void;
   onNewConversation: () => void;
   onAllConversationsDeleted: () => void;
   headerActions?: React.ReactNode;
@@ -54,7 +53,6 @@ export function ConversationList({
   currentConversationId,
   refreshSignal,
   onConversationSelect,
-  onActiveConversationResolved,
   onNewConversation,
   onAllConversationsDeleted,
   headerActions,
@@ -72,7 +70,6 @@ export function ConversationList({
     promise: Promise<void>;
     refreshAgain: boolean;
   } | null>(null);
-  const resolvedConversationIdRef = React.useRef<string | null>(null);
   const listScrollRef = React.useRef<HTMLDivElement | null>(null);
   const loadMoreRef = React.useRef<HTMLDivElement | null>(null);
   const queryKey = React.useMemo(() => ["project-conversations", projectId] as const, [projectId]);
@@ -202,14 +199,6 @@ export function ConversationList({
       : conversations;
   }, [conversations, currentConversationQuery.data]);
 
-  const activeConversation = React.useMemo(() => {
-    if (!currentConversationId) {
-      return null;
-    }
-
-    return displayedConversations.find(matchesCurrentSession) ?? null;
-  }, [currentConversationId, displayedConversations, matchesCurrentSession]);
-
   React.useEffect(() => {
     const root = listScrollRef.current;
     const target = loadMoreRef.current;
@@ -233,19 +222,6 @@ export function ConversationList({
     conversationsQuery.hasNextPage,
     conversationsQuery.isFetchingNextPage,
   ]);
-
-  React.useEffect(() => {
-    if (
-      !activeConversation ||
-      !onActiveConversationResolved ||
-      resolvedConversationIdRef.current === activeConversation.conversationId
-    ) {
-      return;
-    }
-
-    resolvedConversationIdRef.current = activeConversation.conversationId;
-    onActiveConversationResolved(activeConversation);
-  }, [activeConversation, onActiveConversationResolved]);
 
   const isRefreshing = conversationsQuery.isFetching && !conversationsQuery.isFetchingNextPage;
 
@@ -373,7 +349,7 @@ export function ConversationList({
           <div className="text-center py-8 text-muted-foreground text-sm">No chat history yet</div>
         ) : (
           displayedConversations.map((conversation) => {
-            const isActive = conversation.conversationId === activeConversation?.conversationId;
+            const isActive = conversation.conversationId === currentConversationId;
 
             return (
               <div

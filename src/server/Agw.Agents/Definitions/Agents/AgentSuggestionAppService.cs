@@ -1,6 +1,5 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Contracts;
-using Agw.Agents.ExternalAgents;
 using Agw.Auth.Contracts;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Agents;
@@ -56,9 +55,10 @@ public class AgentSuggestionAppService
 
         if (agent.Type == AgentType.External)
         {
-            var mode = string.Equals(agent.Name, AgentNames.ClaudeCode, StringComparison.OrdinalIgnoreCase)
-                ? AgentSuggestionMode.ClaudeCode
-                : AgentSuggestionMode.Unsupported;
+            var mode =
+                agent.ExternalAgentKind == ExternalAgentKind.ClaudeCode
+                    ? AgentSuggestionMode.ClaudeCode
+                    : AgentSuggestionMode.Unsupported;
             return new AgentSuggestionsResponse(mode, []);
         }
 

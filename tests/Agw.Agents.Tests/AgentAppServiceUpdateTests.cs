@@ -299,12 +299,61 @@ public class AgentAppServiceUpdateTests : IDisposable
         Assert.Null(agent.UpdateBy);
     }
 
+    [Theory]
+    [InlineData(AgentType.System, "tester")]
+    [InlineData(AgentType.External, "tester")]
+    [InlineData(AgentType.System, "another-user")]
+    [InlineData(AgentType.External, "another-user")]
+    public async Task CreateAgentAsync_ExistingName_RejectsOnlySameOwner(AgentType type, string existingOwner)
+    {
+        // Arrange
+        var existing = CreateExternalAgent();
+        existing.CreateBy = existingOwner;
+        var modelProviderId = Guid.CreateVersion7();
+        var service = CreateService(existing, modelProviderIds: [modelProviderId]);
+        var copy = new Agent
+        {
+            Name = existing.Name,
+            DisplayName = "My copy",
+            Type = type,
+            ExternalAgentKind = type == AgentType.External ? ExternalAgentKind.Pi : ExternalAgentKind.None,
+            ModelProviderId = type == AgentType.System ? modelProviderId : null,
+            CreateBy = "tester",
+        };
+
+        // Act / Assert
+        if (existingOwner == "tester")
+        {
+            var exception = await Assert.ThrowsAsync<AgwException>(() =>
+                service.CreateAgentAsync(copy, null, null, null)
+            );
+            Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+            Assert.Equal("An agent with this name already exists. Choose a different name.", exception.Message);
+            Assert.Equal(
+                1,
+                await _database.Context.Agents.IgnoreQueryFilters().CountAsync(TestContext.Current.CancellationToken)
+            );
+        }
+        else
+        {
+            var created = await service.CreateAgentAsync(copy, null, null, null);
+            Assert.NotNull(created);
+            Assert.Equal(existing.Name, created.Name);
+            Assert.NotEqual(existing.Id, created.Id);
+            Assert.Equal(
+                2,
+                await _database.Context.Agents.IgnoreQueryFilters().CountAsync(TestContext.Current.CancellationToken)
+            );
+        }
+    }
+
     private static Agent CreateExternalAgent() =>
         new()
         {
             Id = Guid.CreateVersion7(),
             Name = "external-agent",
             Type = AgentType.External,
+            ExternalAgentKind = ExternalAgentKind.ClaudeCode,
             DisplayName = "External Agent",
             Description = "Original description",
             SystemPrompt = "original-prompt",

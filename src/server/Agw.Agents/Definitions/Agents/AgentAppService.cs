@@ -1,5 +1,6 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Domain.Behaviors;
+using Agw.Agents.ExternalAgents;
 using Agw.Auth.Contracts;
 using Agw.Integrations.Contracts.References;
 using Agw.Providers.Contracts.References;
@@ -204,6 +205,17 @@ public class AgentAppService
         }
 
         new AgentBehavior(agent).PrepareForCreate();
+        if (await _dbContext.Agents.AnyAsync(existing => existing.CreateBy == user && existing.Name == agent.Name))
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "An agent with this name already exists. Choose a different name."
+            );
+        }
+        if (agent.Type == AgentType.External && ExternalAgentDefaults.ShouldUseDefaultExtra(agent.Extra))
+        {
+            agent.Extra = ExternalAgentDefaults.GetDefaultExtra(agent.ExternalAgentKind);
+        }
         await _dbContext.Agents.AddAsync(agent);
         await SyncAgentMcpToolServerRelationsAsync(agent.Id, mcpToolServerIds, user);
         await SyncAgentSkillRelationsAsync(agent.Id, skillIds);

@@ -81,30 +81,6 @@ export function resolveCreateProjectWorkspace(
   return getDefaultProjectWorkspace(projectName) || null;
 }
 
-export function getProjectExtraSettingsError(value: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  try {
-    JSON.parse(trimmed);
-    return null;
-  } catch {
-    return "Settings must be valid JSON.";
-  }
-}
-
-export function normalizeProjectExtraSettings(value: string): string | null {
-  const error = getProjectExtraSettingsError(value);
-  if (error) {
-    throw new Error(error);
-  }
-
-  const trimmed = value.trim();
-  return trimmed || null;
-}
-
 interface ProjectCapabilitiesInput {
   tools: ToolValueObject[];
   selectedSkillIds: string[];

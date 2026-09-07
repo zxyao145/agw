@@ -193,7 +193,7 @@ test("conversation detail loading does not render an empty-chat state", async ()
 
   assert.match(workspaceSource, /setIsLoadingConversation\(true\)/);
   assert.match(workspaceSource, /conversationLoadAbortRef\.current\?\.abort\(\)/);
-  assert.match(workspaceSource, /isLoadingConversation=\{isLoadingConversation\}/);
+  assert.match(workspaceSource, /isLoadingConversation=\{\s*isLoadingConversation/);
   assert.match(chatSource, /isInitialLoading=\{isLoadingConversation\}/);
 });
 
@@ -225,14 +225,13 @@ test("chat page keeps conversation resource id separate from execution context i
   assert.doesNotMatch(conversationListSource, new RegExp("latest" + "Task" + "Id"));
   assert.match(conversationListSource, /conversation\.conversationId === currentConversationId/);
   assert.doesNotMatch(conversationListSource, /currentContextId/);
-  assert.match(conversationListSource, /onActiveConversationResolved/);
   assert.match(pageSource, /currentConversationId=\{conversationId\}/);
   assert.match(pageSource, /setContextId\(details\.contextId\)/);
-  assert.match(pageSource, /setConversationId\(conversation\.conversationId\)/);
+  assert.match(pageSource, /setConversationId\(details\.conversationId\)/);
   assert.match(pageSource, /conversationId=\{conversationId\}/);
   assert.match(pageSource, /onConversationIdChange=\{handleChatConversationIdChange\}/);
   assert.match(pageSource, /onContextIdChange=\{handleChatContextIdChange\}/);
-  assert.match(pageSource, /syncRoute\(selectedProjectId, conversation\.conversationId\)/);
+  assert.match(pageSource, /syncRoute\(projectId, details\.conversationId\)/);
 });
 
 test("chat routes keep project and conversation parameters without URL settings", async () => {
