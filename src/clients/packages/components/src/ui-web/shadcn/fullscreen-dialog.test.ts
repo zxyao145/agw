@@ -25,3 +25,20 @@ test("Desktop fullscreen Dialog headers reserve native window-control space", as
   assert.match(source, /:is\(button, a, \[role="button"\]\)/);
   assert.match(source, /-webkit-app-region: no-drag/);
 });
+
+test("Desktop fullscreen Dialog headers keep controls outside the drag region", async () => {
+  const source = await readFile(GLOBALS_URL, "utf8");
+
+  assert.match(
+    source,
+    /:root\[data-agw-desktop="true"\]:has\([\s\S]*?\[data-slot="dialog-content"\]\[data-size="fullscreen"\]\[data-state="open"\][\s\S]*?\)[\s\S]*?\.agw-titlebar \{\s*-webkit-app-region: no-drag;/,
+  );
+  assert.match(
+    source,
+    /\[data-slot="dialog-content"\]\[data-size="fullscreen"\][\s\S]*?\[data-slot="dialog-header"\] \{\s*-webkit-app-region: no-drag;/,
+  );
+  assert.match(
+    source,
+    /\[data-slot="dialog-header"\][\s\S]*?\[data-slot="dialog-title"\] \{\s*-webkit-app-region: drag;/,
+  );
+});
