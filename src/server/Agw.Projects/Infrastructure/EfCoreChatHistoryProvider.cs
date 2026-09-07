@@ -361,9 +361,6 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             {
                 projectConversation.Title = titleFromUser;
             }
-
-            projectConversation.UpdateBy = ResolveCurrentUserId();
-            projectConversation.UpdateTime = now;
         }
 
         var taskId = Guid.CreateVersion7();

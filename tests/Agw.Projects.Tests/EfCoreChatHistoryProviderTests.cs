@@ -3,12 +3,14 @@ using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using System.Text.Json;
 using Agw.Infrastructure.Data;
+using Agw.Infrastructure.Data.Interceptors;
 using Agw.Projects.Application.Persistence;
 using Agw.Projects.Domain.Services;
 using Agw.Shared;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
+using Agw.Testing;
 using Microsoft.Agents.AI;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -849,6 +851,64 @@ public class EfCoreChatHistoryProviderTests : IDisposable
             cancellationToken
         );
         Assert.Equal(["question", "answer", "nested answer"], modelHistory.Select(message => message.Text));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AppendAsync_ExistingConversation_PreservesConversationAudit(bool hasUpdateTime)
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var now = new DateTimeOffset(2026, 9, 7, 1, 0, 0, TimeSpan.Zero);
+        var clock = new TestTimeProvider(now);
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(cancellationToken);
+        var options = new DbContextOptionsBuilder<AgwDbContext>()
+            .UseSqlite(connection)
+            .UseSnakeCaseNamingConvention()
+            .AddInterceptors(new EntityModifierInterceptor(new TestAuditUserIdProvider(), clock))
+            .Options;
+        var projectId = Guid.CreateVersion7();
+        var conversation = CreateContext(Guid.CreateVersion7(), projectId, "context-1");
+        conversation.CreateTime = now.AddHours(-2);
+        conversation.UpdateTime = hasUpdateTime ? now.AddHours(-1) : null;
+        conversation.UpdateBy = "previous-writer";
+        await using (var seedContext = new AgwDbContext(options))
+        {
+            await seedContext.Database.EnsureCreatedAsync(cancellationToken);
+            seedContext.Projects.Add(CreateProject(projectId));
+            seedContext.ProjectConversations.Add(conversation);
+            await seedContext.SaveChangesAsync(cancellationToken);
+        }
+
+        var services = new ServiceCollection();
+        services.AddScoped<IProjectsDbContext>(_ => new AgwDbContext(options));
+        await using var serviceProvider = services.BuildServiceProvider();
+        IConversationHistoryWriter writer = new EfCoreChatHistoryProvider(
+            serviceProvider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<EfCoreChatHistoryProvider>.Instance,
+            clock
+        );
+
+        // Act
+        await writer.AppendAsync(
+            projectId,
+            conversation.ContextId,
+            [new ChatMessage(ChatRole.User, "question"), new ChatMessage(ChatRole.Assistant, "answer")],
+            cancellationToken
+        );
+
+        // Assert
+        await using var verifyContext = new AgwDbContext(options);
+        var persistedConversation = await verifyContext.ProjectConversations.SingleAsync(cancellationToken);
+        Assert.Equal(conversation.UpdateTime, persistedConversation.UpdateTime);
+        Assert.Equal(conversation.UpdateBy, persistedConversation.UpdateBy);
+        var records = await verifyContext
+            .ProjectConversationChatHistories.OrderBy(record => record.ConversationSequence)
+            .ToListAsync(cancellationToken);
+        Assert.Equal(["question", "answer"], records.Select(record => record.GetText()));
+        Assert.All(records, record => Assert.Equal(now, record.UpdateTime));
     }
 
     [Fact]
