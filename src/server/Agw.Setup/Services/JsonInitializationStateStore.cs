@@ -73,6 +73,10 @@ public sealed class JsonInitializationStateStore
         {
             await using var stateFileLock = await AcquireStateFileLockAsync(cancellationToken);
             RefreshFromDisk();
+            // Another setup process may have completed while this caller was initializing the database.
+            if (_state.IsInitialized)
+                return;
+
             var nextState = new ServerState
             {
                 SchemaVersion = 3,
