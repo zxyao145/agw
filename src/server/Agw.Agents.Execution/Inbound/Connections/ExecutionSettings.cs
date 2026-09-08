@@ -1,7 +1,7 @@
 using System.Collections.ObjectModel;
 using Agw.Agents.Execution.Commands.Setting;
 
-namespace Agw.Agents.Execution.Connections;
+namespace Agw.Agents.Execution.Inbound.Connections;
 
 public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
 {

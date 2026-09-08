@@ -1,6 +1,6 @@
 using Agw.A2A;
 using Agw.A2A.Extensions;
-using Agw.Agents.Execution.Transport.SignalR;
+using Agw.Agents.Execution.Inbound.SignalR;
 using Agw.Host.Hosting;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;

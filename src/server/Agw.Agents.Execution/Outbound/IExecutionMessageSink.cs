@@ -1,4 +1,4 @@
-namespace Agw.Agents.Execution.Messaging;
+namespace Agw.Agents.Execution.Outbound;
 
 public interface IExecutionMessageSink
 {

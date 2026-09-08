@@ -6,13 +6,14 @@
 
 Connection 生命周期、Command Handler 扩展方式与状态所有权的决策依据见 [`ADR 0001`](../../../docs/adr/0001-execution-connection-command-architecture.md)。
 
-这里刻意区分了六种生命周期：
+这里区分以下对象及其生命周期：
 
 | 对象 | 生命周期 | 主要职责 |
 | --- | --- | --- |
 | `ExecutionHub` | 一次 SignalR Hub 调用 | 接收命令并把 `AgwException` 转为 `HubException` |
 | `ExecutionConnection` | 一条 SignalR 实时连接 | 串行分派命令、管理 attached 状态和 connection 级 DI scope |
-| `ExecutionConnectionContext` | 同一条 SignalR 连接 | 维护 settings、task、workspace、target、runtime 的一致性 |
+| `ExecutionConnectionContext` | 同一条 SignalR 连接 | 维护 settings、task、workspace、target 和 runtime 失效规则 |
+| `IExecutionStarter` 实现 | 同一条 SignalR 连接 | 统一接受启动；InProcess 实现持有可复用 Runtime，Durable 实现委托 Session |
 | `DurableExecutionSession` | 一条连接对持久执行的 attachment | 管理 executionId、订阅、回答、中断与重连；不拥有后台 execution |
 | `RuntimeBase` | 同一执行目标的多轮对话 | 持有当前 `ActiveTurn`，负责中断、等待空闲和释放 |
 | `ActiveTurn` | 一次 `ExecCommand` | 跟踪执行任务、取消源和 HumanGate 响应入口 |
@@ -90,33 +91,37 @@ Checkpoint 和 Agent Session 的持久化仍经过既有 Application Port / Infr
 
 ## 关键目录与入口
 
-共享能力按职责归类，只有存在执行方式差异时才区分 `InProcess` 与 `Durable`。Agent 与 Agentflow 专属实现各自归位；所有命名空间跟随物理目录，类型名、协议和持久化标识保持稳定。
+共享能力按职责归类，只有存在执行方式差异时才区分 `InProcess` 与 `Durable`。Agent 与 Agentflow 专属实现各自归位；类型名、协议和持久化标识保持稳定。
 
 ```text
 Agw.Agents.Execution/
-├── Transport/SignalR/       # Hub、连接注册和客户端回调契约
-├── Connections/            # 连接生命周期与状态
+├── Inbound/
+│   ├── SignalR/            # Hub 与连接注册
+│   ├── Connections/        # 连接生命周期与状态
+│   └── Facades/            # A2A、Jobs 执行入口
+├── Outbound/
+│   ├── IExecutionMessageSink.cs
+│   ├── SignalR/            # SignalR Sink 与客户端消息回调契约
+│   └── Durable/            # ExecutionStreamMessageSink 批量发送
 ├── Commands/               # Abstracts 和八种 command/handler 切片
-├── Facades/                # A2A、Jobs 执行入口
 ├── Configuration/          # ExecutionRuntimeOptions 及相关配置类型
 ├── Runtimes/
 │   ├── RuntimeBase.cs      # 共用运行时生命周期
-│   ├── InProcess/          # RuntimeFactory 与启动类型
-│   └── Durable/            # Coordinator、Client、Session、Worker、SegmentExecutor
+│   ├── Contracts/          # IExecutionStarter、启动请求与回执
+│   ├── InProcess/          # InProcessExecutionStarter、RuntimeFactory 与启动类型
+│   └── Durable/            # DurableExecutionStarter、Coordinator、Client、Session、Worker、SegmentExecutor
 │       └── Contracts/      # 执行请求、结果、分段输入输出及接口
 ├── Turns/                  # ActiveTurn、上下文、TurnPipeline、消息协议
 ├── HumanInteraction/
-│   ├── Contracts/          # 共用审批请求、决定和 Handler 接口
+│   ├── IHumanGateApprovalHandler.cs # 共用审批请求、决定和 Handler 接口
 │   ├── Approvals/          # 权限策略、无人值守审批、权限状态和 ToolApprovalSupport
 │   ├── HumanInteractionContextAccessor.cs
 │   ├── InProcess/          # ExecutionHumanInteractionChannel、HumanGateApprovalCoordinator
 │   └── Durable/            # ResolvedHumanInteractionChannel、DurableHumanInteractionMapper
 │       └── Contracts/      # 持久交互快照与回答
 ├── Messaging/
-│   ├── IExecutionMessageSink.cs
 │   ├── AgwMessageUtil.cs
-│   ├── SignalR/            # 两种执行方式共用的 SignalR Sink
-│   └── Durable/            # EventStream、PG/Redis 实现、ExecutionStreamMessageSink
+│   └── Durable/            # EventStream 接口、PG/Redis 事件存储与回放
 ├── Persistence/Durable/    # ExecutionStore、JSON 和持久状态映射
 ├── Agents/
 │   ├── Runtime/            # AgentRuntime、RuntimeService 全部 partial、接口及资源包装
@@ -143,13 +148,17 @@ Agw.Agents.Execution/
 │   │   └── Durable/        # DurableAgentflowCheckpointStore 和快照
 │   ├── Messaging/          # 消息转换和协议映射
 │   └── Observability/      # 节点追踪
-├── Mapping/                # Project task 投影
+├── Mapping/                # Project task 投影与启动命令映射
 └── Summaries/              # 两类引擎共用摘要服务
 ```
 
+`Inbound` 收纳 SignalR、连接和 Facade 入口，`Commands` 保留独立的命令切片。`Outbound` 只收纳消息发送接口、SignalR 客户端回调契约和两种 Sink；消息转换、事件存储与回放继续由 `Messaging` 负责。移动类型的命名空间跟随目录，这些目录表示职责分组。
+
 `HumanInteraction` 集中两种执行方式的交互能力：`InProcess` 在内存中等待响应，`Durable` 将持久回答注入恢复后的 Tool；共享上下文、审批契约和权限策略只保留一份。跨模块 `IHumanInteractionChannel` 等契约继续位于 `Agw.Agents.Contracts`。
 
-`Runtimes/Durable` 负责协调与领取，`Persistence/Durable` 保存执行事实，`Messaging/Durable` 提供事件批量写入与回放。SignalR Sink 位于 `Messaging/SignalR`，两种执行方式都使用它。只有持久执行需要 Worker、事件存储和持久状态机，不为这些能力创建空的 InProcess 实现。
+人工交互从 [HumanInteraction 总览、契约与调用链](HumanInteraction/README.md) 开始，再分别阅读 [InProcess 等待](HumanInteraction/InProcess/README.md)、[Durable 恢复](HumanInteraction/Durable/README.md) 和 [Approvals 策略](HumanInteraction/Approvals/README.md)。
+
+`Runtimes/Durable` 负责协调与领取，`Persistence/Durable` 保存执行事实，`Messaging/Durable` 提供事件存储与回放。`Outbound/Durable` 中的 Sink 将分段消息批量写入事件流；`Outbound/SignalR` 中的 Sink 向客户端发送消息，两种执行方式都使用它。只有持久执行需要 Worker、事件存储和持久状态机，不为这些能力创建空的 InProcess 实现。
 
 Agent 的进程内执行继续由 `Agents/Runtime` 中的 RuntimeService 驱动；Agentflow 的两种 Runner 分别位于其 `Runners` 子目录。Skills、模型构造和执行仍为同一个 `AgentRuntimeService` 的 partial，不因物理归类拆成新服务。
 
@@ -166,7 +175,7 @@ Agent 的进程内执行继续由 `Agents/Runtime` 中的 RuntimeService 驱动�
 | `InterruptCommand` | 请求中断当前 turn | 否；只转发给当前 `ActiveTurn` |
 | `SetModeCommand` | 切换支持 mode 的 Agent | 是；空闲时立即应用，活动 turn 结束后应用最后一次请求 |
 | `SetPermissionModeCommand` | 切换工具审批策略 | 是；立即更新 settings 和当前活动 turn，不重建 runtime |
-| `HumanResponseCommand` | 提交审批或用户信息交互响应 | 否；只转发给当前 turn 的协调器 |
+| `HumanResponseCommand` | 提交审批或用户信息交互响应 | InProcess 转发给当前 turn；Durable 经 Session 持久化回答并推进恢复状态 |
 | `SubscribeExecutionCommand` | 按 `executionId` 和 event stream cursor 重新订阅集群执行 | 是；替换当前消息订阅，不启动新执行 |
 | `ResumeCheckpointCommand` | 从一个精确的 Agentflow checkpoint occurrence 创建新执行分支 | 是；校验并裁剪 checkpoint 之后的历史，再启动恢复 turn |
 
@@ -178,26 +187,28 @@ Agent 的进程内执行继续由 `Agents/Runtime` 中的 RuntimeService 驱动�
 
 `AddExecutionCommand<TCommand, THandler>(discriminator)` 是唯一注册 seam，同时注册 typed handler、dispatcher adapter 和 SignalR JSON discriminator。新增 compile-time command 只需定义 contract、实现 handler，并调用一次该扩展方法。
 
-### `Connections`
+### `Inbound/Connections`
 
 `ExecutionConnection` 是命令并发与资源生命周期的边界。所有 command 先经过 `_commandGate`，因此同一条 connection 不会并发执行状态变更；它本身只持有 dispatcher、context、DI scope 和 attached 状态。
 
-`ExecutionConnectionContext` 是状态内核，独占：
+`ExecutionConnectionContext` 是连接状态内核，负责：
 
 - 当前不可变 `ExecutionSettings`；
 - 已解析的 `AgentExecutionTask`；
 - 已解析并规范化的 workspace；
 - 当前 `ExecutionTarget`；
-- 可跨 turn 复用的 `RuntimeBase`；
-- user、消息 sink、host cancellation token 和 waiting-for-human 状态。
+- 通过 `InProcessExecutionStarter` 管理可跨 turn 复用的 `RuntimeBase`；
+- 当前 user、消息 sink 和 waiting-for-human 状态，并向 Starter 绑定 Host token。
 
-集群 provider 的持久 identity 与订阅生命周期不进入该状态内核，而由独立的 `DurableExecutionSession` 持有；Context 只在 provider seam 处调用 session。
+集群 provider 的持久 identity 与订阅生命周期由独立的 `DurableExecutionSession` 持有。Context 的普通启动统一调用 `IExecutionStarter`；订阅、中断、回答与 checkpoint 控制仍使用既有 Session 或 Runtime 路径。
 
 它通过 `ApplySettingsAsync`、`StartTurnAsync`、`InterruptTurnAsync`、`SubmitHumanDecisionAsync`、checkpoint 查询和 checkpoint 恢复提供原子操作，并以只读属性共享 project/context/workspace/agent/task/user 数据；它不公开 `RuntimeBase`、`ActiveTurn` 或状态 setter。`ExecCommand` 启动后台 turn 后会很快返回，command gate 随即释放，后续 interrupt 和 HumanGate response 才能进入。
 
-`Messaging` 定义 transport-neutral 的 `IExecutionMessageSink`。Connection 和 runtime 只面向该接口输出消息，SignalR adapter 提供具体实现。
+`Outbound` 定义 transport-neutral 的 `IExecutionMessageSink`。Connection 和 runtime 只面向该接口输出消息，`Outbound/SignalR` 与 `Outbound/Durable` 提供具体实现。
 
 ### `Runtimes`
+
+`IExecutionStarter.StartAsync` 是连接内统一的启动入口，接收已解析的 `ExecutionStartRequest` 并返回 `ExecutionReceipt`。`Accepted` 仅表示已接受启动，不等待执行完成。`InProcessExecutionStarter` 委托 RuntimeFactory 创建或复用 Runtime；`DurableExecutionStarter` 委托 Session 登记和订阅持久执行，Worker 独立领取。接口、两类引擎与两种执行方式的关系见 [Runtimes README](Runtimes/README.md)。
 
 `RuntimeBase` 维护“同一 runtime 同时最多一个活动 turn”的约束。它负责注册 `ActiveTurn`、等待执行结束、清除活动引用、中断转发和异步释放。
 
@@ -235,7 +246,7 @@ turn 是一次用户输入到执行结束的完整过程。`RuntimeTurnContext` 
 
 当 `stream=false` 时，普通消息会缓冲到 runtime 执行结束后再发送。`human-gate-*` 控制消息不缓冲，否则客户端无法及时提交审批结果。runtime 自己产生的 `turn-finished` 会被过滤，避免重复终止消息。
 
-### `Transport/SignalR`
+### `Inbound/SignalR`
 
 SignalR Hub 路由为 `/api/hubs/exec`，公开命令入口、执行 Provider 探测和 Agentflow checkpoint 查询：
 
@@ -247,7 +258,7 @@ GetExecutionProvider() -> "InProcess" | "Distributed"
 GetAgentflowCheckpoints(agentflowId) -> AgentflowCheckpointAvailability[]
 ```
 
-服务端通过 typed client callback 返回消息：
+`Outbound/SignalR` 中的 `IExecutionHubClient` 定义服务端返回消息的 typed client callback：
 
 ```text
 ReceiveMessage(AgwMessage)
@@ -283,7 +294,14 @@ flowchart TB
     Checkpoint --> Context
     Context --> ProjectService["IProjectRuntimeFacade"]
     Context --> TaskService["IProjectTaskFacade"]
-    Context --> Factory["RuntimeFactory"]
+    Context --> Starter["IExecutionStarter"]
+    Starter --> InProcessStarter["InProcessExecutionStarter"]
+    InProcessStarter --> Factory["RuntimeFactory"]
+    Starter --> DurableStarter["DurableExecutionStarter"]
+    DurableStarter --> Session["DurableExecutionSession"]
+    Session --> Coordinator["DurableExecutionCoordinator"]
+    Coordinator --> State[("持久执行状态")]
+    State --> Worker["DistributedExecutionWorker"]
     Factory --> AgentRuntime["AgentRuntime"]
     Factory --> AgentflowRuntime["AgentflowRuntime"]
     AgentRuntime --> RuntimeBase["RuntimeBase"]
@@ -313,6 +331,8 @@ flowchart TB
 
 ### 执行 Agent 或 Agentflow
 
+以下展示 InProcess 路径；Durable 经同一 `IExecutionStarter` 接口登记执行，领取与恢复流程见后文。
+
 ```mermaid
 sequenceDiagram
     participant Client
@@ -320,6 +340,7 @@ sequenceDiagram
     participant Connection as ExecutionConnection
     participant Handler as ExecCommandHandler
     participant Context as ExecutionConnectionContext
+    participant Starter as InProcessExecutionStarter
     participant Factory as RuntimeFactory
     participant Runtime as Agent or Agentflow Runtime
     participant Pipeline as TurnPipeline
@@ -330,10 +351,12 @@ sequenceDiagram
     Connection->>Handler: typed command
     Handler->>Context: StartTurnAsync
     Context->>Context: validate and resolve task/workspace
-    Context->>Factory: StartAsync(turn snapshot)
+    Context->>Starter: StartAsync(ExecutionStartRequest)
+    Starter->>Factory: StartAsync(RuntimeStartRequest)
     Factory->>Runtime: create or reuse
     Runtime->>Runtime: register ActiveTurn
-    Factory-->>Context: RuntimeStartResult
+    Factory-->>Starter: RuntimeStartResult
+    Starter-->>Context: ExecutionReceipt
     Context-->>Client: command accepted
 
     Runtime->>Pipeline: execute message stream
@@ -353,11 +376,11 @@ sequenceDiagram
 3. 首次执行要求客户端提供 `conversationId`。`IProjectTaskFacade` 按当前用户和 Project 创建或校验该 conversation，在同一次提交中写入初始 task record；提交完成后才通过 `IProjectRuntimeFacade` 解析 workspace 并进入 runtime。后续 turn 复用已解析的 conversation/task。
 4. `contextId` 继续用于 Agent session、provider session、trace、usage 和 checkpoint，并必须与 conversation 一致；它不再替代 conversation 资源主键。
 5. target 改变时释放旧 runtime；同一 target 则尝试复用。
-6. Context 从当前 connection 状态创建包含 settings、task、target、用户、workspace 和 message sink 的 `RuntimeTurnContext` 快照。
+6. Context 从当前 connection 状态创建 `ExecutionStartRequest`；`InProcessExecutionStarter` 结合绑定的用户、message sink 和回调生成 `RuntimeTurnContext`，再调用 RuntimeFactory。
 7. `RuntimeFactory` 确保 workspace 存在，并创建 `AgentRuntime` 或 `AgentflowRuntime`。
 8. `RuntimeBase.StartTurn` 先注册 `ActiveTurn`，再启动实际执行，避免 turn 已运行但尚未对 interrupt 可见的竞态。
 9. 后台任务进入 `RuntimeTurnContextAccessor` 作用域，并把输出交给 `TurnPipeline`。
-10. turn 结束后，runtime 清理 `ActiveTurn`；runtime 本身仍留在 connection context 中，供下一轮复用。
+10. turn 结束后，runtime 清理 `ActiveTurn`；runtime 本身仍由连接内的 `InProcessExecutionStarter` 持有，供下一轮复用。
 
 Agent 执行结束时，`AgentRuntimeService` 会在 `finally` 中保存 SDK session state。External Agent 不持久化通用 SDK session state；Claude Code 与 Codex 通过 project conversation 作用域内的 task-session binding 保存 provider session id。Codex 从 `OnThreadStartedAsync` 获取 thread id，并以 `ThreadId + IsResume` 恢复；Claude Code 首次运行使用 `SessionId + IsResume=false`，从 `subtype=init` 消息确认真实 `session_id` 后保存，后续以 `Resume=<session_id> + IsResume=true` 恢复。
 
@@ -492,7 +515,7 @@ flowchart LR
     Coordinator --> Stream
 ```
 
-`ExecutionConnectionContext` 只在 provider seam 处分派到进程内 runtime 或 `DurableExecutionSession`。Session 是连接 attachment，不拥有后台任务；断开 SignalR 只停止当前订阅。Coordinator 每次访问状态都创建独立 DI scope，因此后台订阅不会持有已经释放的 request-scope `DbContext`。
+`ExecutionConnectionContext` 经统一的 `IExecutionStarter` 启动执行，Durable 实现委托 `DurableExecutionSession`。Session 是连接 attachment，不拥有后台任务；断开 SignalR 只停止当前订阅。Coordinator 每次访问状态都创建独立 DI scope，因此后台订阅不会持有已经释放的 request-scope `DbContext`。
 
 ### 首次执行、暂停与回答
 
@@ -671,7 +694,7 @@ stateDiagram-v2
 | connection id 映射 | `ExecutionConnectionRegistry` | SignalR transport 生命周期 |
 | attached、command gate、DI scope | `ExecutionConnection` | connection 生命周期与命令串行化 |
 | settings、resolved task、workspace、target | `ExecutionConnectionContext` | 只能通过原子操作更新 |
-| Agent/Agentflow runtime | `ExecutionConnectionContext` | 空闲 turn 之间复用，不向 handler 暴露 |
+| Agent/Agentflow runtime | `InProcessExecutionStarter` | 空闲 turn 之间复用，Context 维护失效规则，不向 handler 暴露 |
 | SDK AgentSession | `AgentRuntime` | 由 `AgentSessionStateStore` 加载和保存 |
 | 当前 turn | `RuntimeBase` | 同一 runtime 最多一个 |
 | cancellation、interrupt hook | `ActiveTurn` | 一次执行独享 |
@@ -718,7 +741,7 @@ public sealed class StopCommand : AgentRunCommand
 
 ```csharp
 using Agw.Agents.Execution.Commands.Abstracts;
-using Agw.Agents.Execution.Connections;
+using Agw.Agents.Execution.Inbound.Connections;
 
 namespace Agw.Agents.Execution.Commands.Stop;
 
@@ -752,7 +775,7 @@ services.AddExecutionCommand<StopCommand, StopCommandHandler>(nameof(StopCommand
 
 - 活动 turn 期间是否允许执行；由 context 操作统一执行 busy 规则。
 - 是否修改 settings、resolved task、workspace、target 或 runtime；这些状态只能由 context 维护。
-- 是否启动后台工作；执行 Agent/Agentflow 时应走 `RuntimeFactory` 和 `RuntimeBase.StartTurn`。
+- 是否启动后台工作；执行 Agent/Agentflow 时应走 Context 的 `StartTurnAsync` 和 `IExecutionStarter`，InProcess 实现再调用 `RuntimeFactory` 和 `RuntimeBase.StartTurn`。
 - 输出是 system message、error message，还是进入标准 turn 协议。
 - command 是否需要加入客户端 contract 类型和前端调用封装。
 
@@ -777,6 +800,7 @@ services.AddExecutionCommand<StopCommand, StopCommandHandler>(nameof(StopCommand
 | `ExecutionCommandDispatcherTests` | handler 查找、未知命令、重复注册 |
 | `ExecutionCommandHandlerTests` | handler 翻译与 connection context 状态规则 |
 | `ExecutionConnectionTests` | idle/running/HumanGate 断线处理 |
+| `InProcessExecutionStarterTests.cs` / `DurableExecutionStarterTests.cs` | 两类目标的启动回执、取消与拒绝、Durable 断开后幂等重试 |
 | `RuntimeBaseTests` | 单活动 turn、中断和 AsyncLocal 作用域 |
 | `RuntimeTurnContextAccessorTests` | 上下文恢复与并行隔离 |
 | `TurnPipelineTests` | streaming、buffering 和终止状态 |

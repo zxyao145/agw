@@ -7,7 +7,9 @@ using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.Mapping;
 using Agw.Agents.Execution.Messaging;
+using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Runtimes;
+using Agw.Agents.Execution.Runtimes.Contracts;
 using Agw.Agents.Execution.Runtimes.Durable;
 using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Turns;
@@ -18,7 +20,7 @@ using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
 using Microsoft.Extensions.AI;
 
-namespace Agw.Agents.Execution.Connections;
+namespace Agw.Agents.Execution.Inbound.Connections;
 
 public sealed class ExecutionConnectionContext : IAsyncDisposable
 {
@@ -28,14 +30,15 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     private readonly string _userId;
     private readonly IExecutionMessageSink _messageSink;
-    private readonly CancellationToken _hostToken;
     private readonly IRuntimeFactory _runtimeFactory;
     private readonly IProjectTaskFacade _projectTasks;
     private readonly IProjectRuntimeFacade _projects;
     private readonly IProjectDefaultResolver? _projectDefaults;
     private readonly DurableExecutionSession? _durableSession;
     private readonly AgentflowCheckpointStore? _checkpointStore;
-    private RuntimeBase? _runtime;
+    private readonly IExecutionStarter _executionStarter;
+    private readonly InProcessExecutionStarter? _inProcessStarter;
+    private RuntimeBase? Runtime => _inProcessStarter?.Runtime;
     private AgentExecutionTask? _resolvedTask;
     private string? _workspace;
     private ExecutionTarget? _target;
@@ -59,13 +62,27 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             ? throw new AgwException(ErrorCodes.AuthenticationRequired)
             : userId.Trim();
         _messageSink = messageSink;
-        _hostToken = hostToken;
         _runtimeFactory = runtimeFactory;
         _projectTasks = projectTasks;
         _projects = projects;
         _projectDefaults = projectDefaults;
         _durableSession = durableSession;
         _checkpointStore = checkpointStore;
+        if (durableSession == null)
+        {
+            _inProcessStarter = new InProcessExecutionStarter(
+                runtimeFactory,
+                _userId,
+                messageSink,
+                hostToken,
+                pending => _waitingForHuman = pending != null
+            );
+            _executionStarter = _inProcessStarter;
+        }
+        else
+        {
+            _executionStarter = new DurableExecutionStarter(durableSession);
+        }
     }
 
     public ExecutionSettings? Settings { get; private set; }
@@ -92,7 +109,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     {
         get
         {
-            if (_runtime is { HasActiveTurn: true })
+            if (Runtime is { HasActiveTurn: true })
             {
                 return true;
             }
@@ -144,9 +161,9 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             return;
         }
 
-        if (_runtime != null)
+        if (Runtime != null)
         {
-            await _runtime.WhenIdleAsync();
+            await Runtime.WhenIdleAsync();
         }
 
         var agentId =
@@ -179,51 +196,42 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         }
 
         var target = new ExecutionTarget(agentId, command.AgentType);
-        if (_durableSession != null)
-        {
-            await _durableSession.StartAsync(command, _resolvedTask!, Settings, cancellationToken);
-            _target = target;
-            return;
-        }
-
-        if (_target.HasValue && _target.Value != target)
+        if (_inProcessStarter != null && _target.HasValue && _target.Value != target)
         {
             await ReleaseRuntimeAsync();
         }
 
-        var turnContext = new RuntimeTurnContext(
-            Settings,
-            _resolvedTask!,
-            target,
-            _workspace!,
-            _messageSink,
-            pending => _waitingForHuman = pending != null
-        )
-        {
-            UserId = _userId,
-        };
         var requestedMode =
             command.AgentType == AgentRuntimeType.Agent
             && _pendingModeChange is { } pendingModeChange
             && pendingModeChange.AgentId == agentId
                 ? pendingModeChange.Mode
                 : null;
-        var start = await _runtimeFactory.StartAsync(
-            new RuntimeStartRequest(target.AgentId, _resolvedTask!, command, _runtime, turnContext)
+        var start = await _executionStarter.StartAsync(
+            new ExecutionStartRequest(
+                command.ExecutionId.Value,
+                target,
+                _resolvedTask!,
+                Settings,
+                command.Input,
+                command.Stream,
+                _workspace!
+            )
             {
                 RequestedMode = requestedMode,
+                ResumeCheckpoint = command.ResumeCheckpoint,
             },
-            _hostToken
+            cancellationToken
         );
-        _runtime = start.Runtime;
-        _target = start.Runtime == null ? null : target;
-        if (requestedMode != null && start.Runtime != null)
+        command.ExecutionId = start.ExecutionId;
+        _target = start.Accepted || Runtime != null ? target : null;
+        if (requestedMode != null && Runtime != null)
         {
             _pendingModeChange = null;
             await SendModeStatusAsync(agentId, requestedMode);
         }
 
-        if (start.ActiveTurn == null)
+        if (!start.Accepted)
         {
             await SendErrorAsync("Agent execution could not be started.");
         }
@@ -235,7 +243,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         var change = new PendingModeChange(agentId, mode);
         _pendingModeChange = change;
         if (
-            _runtime is not AgentRuntime runtime
+            Runtime is not AgentRuntime runtime
             || _target is not { AgentId: var targetAgentId }
             || targetAgentId != agentId
         )
@@ -261,7 +269,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     {
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
         Settings = (Settings ?? ExecutionSettings.CreateDefault()).WithPermissionMode(permissionMode);
-        var runtime = _runtime;
+        var runtime = Runtime;
         if (runtime == null)
         {
             return;
@@ -296,7 +304,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             return;
         }
 
-        _runtime!.RequestInterrupt();
+        Runtime!.RequestInterrupt();
     }
 
     public async Task SubmitHumanDecisionAsync(HumanResponseCommand command, CancellationToken cancellationToken)
@@ -309,7 +317,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             return;
         }
 
-        if (_runtime == null || !await _runtime.TrySubmitHumanResponseAsync(command, cancellationToken))
+        if (Runtime == null || !await Runtime.TrySubmitHumanResponseAsync(command, cancellationToken))
         {
             await SendSystemMessageAsync("No matching HumanGate request is waiting for this response.");
         }
@@ -338,7 +346,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         IReadOnlySet<Guid>? inProcessOccurrences = null;
         if (
             _durableSession == null
-            && _runtime is AgentflowRuntime runtime
+            && Runtime is AgentflowRuntime runtime
             && _target is { AgentType: AgentRuntimeType.Agentflow, AgentId: var targetId }
             && targetId == agentflowId
         )
@@ -427,7 +435,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         }
 
         if (
-            _runtime is not AgentflowRuntime runtime
+            Runtime is not AgentflowRuntime runtime
             || _target is not { AgentType: AgentRuntimeType.Agentflow, AgentId: var targetId }
             || targetId != command.AgentflowId
             || !runtime.TryGetCheckpoint(command.CheckpointOccurrenceId, out _)
@@ -497,7 +505,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         var hasActiveTurn = HasActiveTurn;
         if (hasActiveTurn && _waitingForHuman)
         {
-            _runtime!.RequestInterrupt();
+            Runtime!.RequestInterrupt();
         }
 
         return hasActiveTurn;
@@ -507,7 +515,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     /// 等待连接内进程执行结束；durable execution 不依赖当前连接存活，因此无需等待。
     /// </summary>
     internal Task WhenIdleAsync() =>
-        _durableSession != null ? Task.CompletedTask : _runtime?.WhenIdleAsync() ?? Task.CompletedTask;
+        _durableSession != null ? Task.CompletedTask : Runtime?.WhenIdleAsync() ?? Task.CompletedTask;
 
     /// <summary>
     /// 将当前连接附着到已有 durable execution，并从指定 cursor 继续回放消息。
@@ -603,10 +611,9 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
 
     private async Task ReleaseRuntimeAsync()
     {
-        if (_runtime != null)
+        if (_inProcessStarter != null)
         {
-            await _runtime.DisposeAsync();
-            _runtime = null;
+            await _inProcessStarter.ReleaseRuntimeAsync();
         }
 
         _target = null;
@@ -626,7 +633,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     private async Task ApplyQueuedModeAsync(AgentRuntime runtime, PendingModeChange change)
     {
         if (
-            !ReferenceEquals(_runtime, runtime)
+            !ReferenceEquals(Runtime, runtime)
             || _target is not { AgentId: var targetAgentId }
             || targetAgentId != change.AgentId
             || _pendingModeChange != change

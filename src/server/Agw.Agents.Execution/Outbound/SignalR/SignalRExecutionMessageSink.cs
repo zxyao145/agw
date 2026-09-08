@@ -1,8 +1,8 @@
-using Agw.Agents.Execution.Transport.SignalR;
+using Agw.Agents.Execution.Inbound.SignalR;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 
-namespace Agw.Agents.Execution.Messaging.SignalR;
+namespace Agw.Agents.Execution.Outbound.SignalR;
 
 internal sealed class SignalRExecutionMessageSink(
     string connectionId,

@@ -1,6 +1,7 @@
 using System.Reflection;
 using Agw.Agents.Execution.Commands.Abstracts;
-using Agw.Agents.Execution.Transport.SignalR;
+using Agw.Agents.Execution.Inbound.SignalR;
+using Agw.Agents.Execution.Outbound.SignalR;
 using Agw.Files.Exceptions;
 using Microsoft.AspNetCore.SignalR;
 

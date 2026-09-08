@@ -8,7 +8,7 @@ using Agw.Agents.Execution.Agentflows.Runners.InProcess;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.HumanInteraction.Approvals;
 using Agw.Agents.Execution.HumanInteraction.Contracts;
-using Agw.Agents.Execution.Messaging;
+using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Agents.Execution.Turns;
 using Agw.Projects.Contracts.Runtime;

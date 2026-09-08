@@ -1,6 +1,6 @@
 using System.Security.Claims;
 using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Connections;
+using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Agents.Execution.Turns;

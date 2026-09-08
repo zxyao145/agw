@@ -1,4 +1,4 @@
-using Agw.Agents.Execution.Transport.SignalR;
+using Agw.Agents.Execution.Inbound.SignalR;
 using Microsoft.AspNetCore.Mvc.Routing;
 
 namespace Agw.Agents.Tests;

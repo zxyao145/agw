@@ -22,6 +22,10 @@ public sealed record HumanGateApprovalDecision(
     JsonElement? ResponseData = null
 );
 
+/// <summary>
+/// InProcess HumanGateApprovalCoordinator
+/// Durable
+/// </summary>
 public interface IHumanGateApprovalHandler
 {
     bool RequiresHumanResponse(HumanGateApprovalRequest request) => true;

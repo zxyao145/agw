@@ -4,7 +4,7 @@ using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Agents.Execution.Commands.Checkpoint;
 using Agw.Agents.Execution.Commands.Mode;
 using Agw.Agents.Execution.Commands.Permission;
-using Agw.Agents.Execution.Connections;
+using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.Exceptions;
 using Microsoft.AspNetCore.SignalR;

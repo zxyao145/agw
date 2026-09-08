@@ -17,7 +17,7 @@
 
 ## 如何区分 Agent 与 Agentflow
 
-运行时通过 `RuntimeTurnContext.Target` 区分执行目标。`Target` 的类型是 [ExecutionTarget](../Connections/ExecutionTarget.cs)，上下文提供两个便捷属性：
+运行时通过 `RuntimeTurnContext.Target` 区分执行目标。`Target` 的类型是 [ExecutionTarget](../Inbound/Connections/ExecutionTarget.cs)，上下文提供两个便捷属性：
 
 ```csharp
 public Guid AgentId => Target.AgentId;
@@ -45,7 +45,7 @@ if (context is { AgentType: AgentRuntimeType.Agentflow })
 
 ## 分派与共享边界
 
-交互式 InProcess 执行由 [RuntimeFactory](../Runtimes/InProcess/RuntimeFactory.cs) 根据目标类型选择 `AgentRuntime` 或 `AgentflowRuntime`：
+交互式启动统一经过 `IExecutionStarter`。其中 [InProcessExecutionStarter](../Runtimes/InProcess/InProcessExecutionStarter.cs) 建立 `RuntimeTurnContext`，再由 [RuntimeFactory](../Runtimes/InProcess/RuntimeFactory.cs) 根据目标类型选择 `AgentRuntime` 或 `AgentflowRuntime`：
 
 - `ExecuteAgentAsync` 调用单 Agent 执行服务，再交给 `TurnPipeline.RunAsync` 输出。
 - `ExecuteAgentflowAsync` 调用 Agentflow Runtime，也交给 `TurnPipeline.RunAsync` 输出。

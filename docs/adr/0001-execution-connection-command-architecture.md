@@ -33,7 +33,7 @@
 - connection 级 DI scope 的释放；
 - 在断线后等待活动 turn 收敛。
 
-`ExecutionConnectionContext` 是深模块，独占 settings、resolved task、workspace、target、runtime 和 HumanGate waiting 状态。它通过原子操作维护状态，不向 handler 暴露 runtime 或可写字段。
+`ExecutionConnectionContext` 是深模块，维护 settings、resolved task、workspace、target、HumanGate waiting 状态与 runtime 失效规则。连接内的 `InProcessExecutionStarter` 持有可复用 runtime；Context 的普通启动经 `IExecutionStarter` 统一接受，Durable 实现委托 Session 登记执行。Context 通过原子操作维护状态，不向 handler 暴露 runtime 或可写字段。启动边界见 [Runtimes README](../../src/server/Agw.Agents.Execution/Runtimes/README.md)。
 
 ### 2. Handler 是薄的命令翻译层
 
@@ -71,7 +71,7 @@ services.AddExecutionCommand<TCommand, THandler>(discriminator);
 
 `ExecutionSettings` 是从可变 transport command 复制出的不可变值。`ExecutionConnectionContext` 可在多个 command/turn 间更新状态。
 
-启动 turn 时，context 生成不可变 `RuntimeTurnContext`，包含：
+启动 turn 时，Context 生成数据请求 `ExecutionStartRequest`。InProcess Starter 结合连接资源生成不可变 `RuntimeTurnContext`，包含：
 
 - `ExecutionSettings`；
 - `TaskProjection`；

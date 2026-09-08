@@ -1,8 +1,8 @@
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Commands.Exec;
-using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.HumanInteraction.Contracts;
-using Agw.Agents.Execution.Messaging;
+using Agw.Agents.Execution.Inbound.Connections;
+using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Turns;

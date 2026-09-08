@@ -2,15 +2,15 @@ using System.Collections.Concurrent;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Commands.Abstracts;
-using Agw.Agents.Execution.Connections;
-using Agw.Agents.Execution.Messaging.SignalR;
+using Agw.Agents.Execution.Inbound.Connections;
+using Agw.Agents.Execution.Outbound.SignalR;
 using Agw.Shared.Exceptions;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Agw.Agents.Execution.Transport.SignalR;
+namespace Agw.Agents.Execution.Inbound.SignalR;
 
 public sealed class ExecutionConnectionRegistry : IAsyncDisposable
 {

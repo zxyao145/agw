@@ -1,6 +1,6 @@
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Configuration;
-using Agw.Agents.Execution.Messaging;
+using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Runtimes.Durable;
 using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Projects.Contracts.Execution;
@@ -9,7 +9,7 @@ using Agw.Shared.Exceptions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
-namespace Agw.Agents.Execution.Connections;
+namespace Agw.Agents.Execution.Inbound.Connections;
 
 /// <summary>
 /// 根据全局执行提供程序，为 SignalR 连接创建进程内或 durable 执行上下文。

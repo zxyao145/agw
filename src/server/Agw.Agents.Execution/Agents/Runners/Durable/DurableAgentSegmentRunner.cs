@@ -6,7 +6,7 @@ using Agw.Agents.Execution.HumanInteraction.Approvals;
 using Agw.Agents.Execution.HumanInteraction.Contracts;
 using Agw.Agents.Execution.HumanInteraction.Durable;
 using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
-using Agw.Agents.Execution.Messaging;
+using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Shared.Data.Entities.Agents;

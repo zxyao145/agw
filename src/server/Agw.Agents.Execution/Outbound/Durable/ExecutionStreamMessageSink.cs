@@ -1,10 +1,11 @@
 using System.Runtime.ExceptionServices;
 using Agw.Agents.Execution.Configuration;
+using Agw.Agents.Execution.Messaging.Durable;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.Logging;
 
-namespace Agw.Agents.Execution.Messaging.Durable;
+namespace Agw.Agents.Execution.Outbound.Durable;
 
 /// <summary>
 /// A bounded serial batch writer for one segment attempt. Replay outages do not fail execution.

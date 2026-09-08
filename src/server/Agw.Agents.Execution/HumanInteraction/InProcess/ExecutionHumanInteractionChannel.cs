@@ -1,5 +1,5 @@
 using Agw.Agents.Execution.HumanInteraction.Contracts;
-using Agw.Agents.Execution.Messaging;
+using Agw.Agents.Execution.Outbound;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution.HumanInteraction.InProcess;

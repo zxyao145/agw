@@ -1,6 +1,6 @@
-using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.HumanInteraction.Contracts;
-using Agw.Agents.Execution.Messaging;
+using Agw.Agents.Execution.Inbound.Connections;
+using Agw.Agents.Execution.Outbound;
 
 namespace Agw.Agents.Execution.Turns;
 

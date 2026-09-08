@@ -5,8 +5,8 @@ using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Configuration;
-using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.HumanInteraction.Approvals;
+using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Mapping;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
@@ -18,7 +18,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using AgentExecuteByIdRequest = Agw.Agents.Execution.Agents.Contracts.AgentExecuteByIdRequest;
 
-namespace Agw.Agents.Execution.Facades;
+namespace Agw.Agents.Execution.Inbound.Facades;
 
 public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentExecutionFacade
 {

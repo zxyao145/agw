@@ -1,4 +1,4 @@
-namespace Agw.Agents.Execution.Transport.SignalR;
+namespace Agw.Agents.Execution.Outbound.SignalR;
 
 public interface IExecutionHubClient
 {

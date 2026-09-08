@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Connections;
+using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Persistence.Durable;
 
 namespace Agw.Agents.Tests;

@@ -3,6 +3,7 @@ using System.Threading.Channels;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.Messaging.Durable;
+using Agw.Agents.Execution.Outbound.Durable;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Runtimes.Durable;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;

@@ -5,7 +5,7 @@ using Agw.Shared.Exceptions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace Agw.Agents.Execution.Connections;
+namespace Agw.Agents.Execution.Inbound.Connections;
 
 internal sealed class ExecutionConnection : IAsyncDisposable
 {

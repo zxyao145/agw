@@ -4,6 +4,7 @@ using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agents.Runners.Durable;
 using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.Messaging.Durable;
+using Agw.Agents.Execution.Outbound.Durable;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Auth.Contracts;

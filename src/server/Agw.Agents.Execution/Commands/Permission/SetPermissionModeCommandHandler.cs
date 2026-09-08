@@ -1,5 +1,5 @@
 using Agw.Agents.Execution.Commands.Abstracts;
-using Agw.Agents.Execution.Connections;
+using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Agents.Execution.Commands.Permission;

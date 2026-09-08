@@ -1,6 +1,7 @@
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Commands.Abstracts;
 using Agw.Agents.Execution.Configuration;
+using Agw.Agents.Execution.Outbound.SignalR;
 using Agw.Files.Exceptions;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
@@ -8,7 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 
-namespace Agw.Agents.Execution.Transport.SignalR;
+namespace Agw.Agents.Execution.Inbound.SignalR;
 
 [Authorize]
 public sealed class ExecutionHub : Hub<IExecutionHubClient>

@@ -7,7 +7,7 @@ using Agw.Agents.Execution.Agentflows.Runners.InProcess;
 using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Agents.Runtime;
-using Agw.Agents.Execution.Messaging;
+using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Summaries;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;

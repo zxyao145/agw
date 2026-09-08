@@ -2,7 +2,7 @@ using System.Data.Common;
 using System.Security.Claims;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Connections;
+using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
