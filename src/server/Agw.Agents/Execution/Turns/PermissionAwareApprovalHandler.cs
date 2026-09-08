@@ -31,7 +31,7 @@ internal sealed class PermissionAwareApprovalHandler : IHumanGateApprovalHandler
     public bool RequiresHumanResponse(HumanGateApprovalRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return request.ToolApprovalRequest == null || _permissionState.Current != PermissionMode.FullAccess;
+        return !CanAutomaticallyApprove(request);
     }
 
     public async ValueTask<HumanGateApprovalDecision> WaitForApprovalAsync(
@@ -40,19 +40,20 @@ internal sealed class PermissionAwareApprovalHandler : IHumanGateApprovalHandler
     )
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (request.ToolApprovalRequest != null && _permissionState.Current == PermissionMode.FullAccess)
+        cancellationToken.ThrowIfCancellationRequested();
+        if (CanAutomaticallyApprove(request))
         {
             return CreateFullAccessDecision(request);
         }
 
         var pendingDecision = _inner.WaitForApprovalAsync(request, cancellationToken);
-        if (request.ToolApprovalRequest != null && _permissionState.Current == PermissionMode.FullAccess)
+        if (CanAutomaticallyApprove(request))
         {
             _coordinator?.ApprovePendingToolRequests();
         }
 
         var decision = await pendingDecision;
-        if (!decision.Approved || request.ToolApprovalRequest == null)
+        if (!decision.Approved || !IsToolApproval(request))
         {
             return decision;
         }
@@ -68,6 +69,14 @@ internal sealed class PermissionAwareApprovalHandler : IHumanGateApprovalHandler
             },
         };
     }
+
+    internal bool CanAutomaticallyApprove(HumanGateApprovalRequest request) =>
+        _permissionState.Current == PermissionMode.FullAccess && IsToolApproval(request);
+
+    internal static bool IsToolApproval(HumanGateApprovalRequest request) =>
+        request.ToolApprovalRequest != null
+        && request.Mode != "interaction"
+        && ToolApprovalSupport.GetToolName(request.ToolApprovalRequest) != "ask_user_question";
 
     private static HumanGateApprovalDecision CreateFullAccessDecision(HumanGateApprovalRequest request) =>
         new(request.RequestId, Approved: true, ResponseText: null, ApprovalScope: "always-tool");

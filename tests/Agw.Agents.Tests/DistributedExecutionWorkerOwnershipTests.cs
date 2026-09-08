@@ -1,5 +1,4 @@
 using Agw.Agents.Execution.Durable;
-using Agw.Shared.Configuration;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Executions;
@@ -117,7 +116,5 @@ public sealed partial class DurableExecutionStoreTests
     private sealed class WorkerInitializationState : IServerInitializationState
     {
         public bool IsInitialized => true;
-        public DatabaseProvider DatabaseProvider => DatabaseProvider.Sqlite;
-        public string DatabaseConnectionString => "Data Source=:memory:";
     }
 }

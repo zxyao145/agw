@@ -3,8 +3,6 @@ using Agw.Auth.Security;
 using Agw.Setup.Contracts;
 using Agw.Setup.Controllers;
 using Agw.Setup.Services;
-using Agw.Shared.Configuration;
-using Agw.Shared.Runtime;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Xunit;
@@ -47,80 +45,28 @@ public sealed class SetupControllerTests
     }
 
     [Fact]
-    public void Index_WhenSetupIsRequired_PrefillsStandaloneSqlitePath()
+    public void Index_WhenSetupIsRequired_RequestsAdministratorPassword()
     {
-        var paths = CreatePaths();
-        var controller = CreateController(isInitialized: false, paths: paths);
+        var controller = CreateController(isInitialized: false);
 
         var result = Assert.IsType<ViewResult>(controller.Index());
-        var model = Assert.IsType<SetupRequest>(result.Model);
 
-        Assert.Equal(DeploymentMode.Standalone, model.DeploymentMode);
-        Assert.Equal(DatabaseProvider.Sqlite, model.Provider);
-        Assert.Equal(paths.DatabaseFile, model.SqlitePath);
+        Assert.Empty(Assert.IsType<SetupRequest>(result.Model).AdminPassword);
+        Assert.Equal(false, controller.ViewData["RequireSetupCode"]);
     }
 
     [Fact]
-    public void Index_WhenControlPlaneRequiresCluster_PrefillsClusterPostgres()
-    {
-        var controller = CreateController(
-            isInitialized: false,
-            deploymentOptions: new SetupDeploymentOptions(DeploymentMode.Cluster)
-        );
-
-        var result = Assert.IsType<ViewResult>(controller.Index());
-        var model = Assert.IsType<SetupRequest>(result.Model);
-
-        Assert.Equal(DeploymentMode.Cluster, model.DeploymentMode);
-        Assert.Equal(DatabaseProvider.Postgres, model.Provider);
-    }
-
-    [Fact]
-    public async Task IndexPost_WhenStandaloneInitializationSucceeds_RedirectsToRoot()
+    public async Task IndexPost_WhenInitializationSucceeds_RedirectsToRoot()
     {
         var initializationService = new StubSetupInitializationService();
         var controller = CreateController(isInitialized: false, initializationService: initializationService);
-        var request = CreateRequest(DeploymentMode.Standalone);
+        var request = CreateRequest();
 
         var result = await controller.Index(request, TestContext.Current.CancellationToken);
 
         var redirect = Assert.IsType<RedirectResult>(result);
         Assert.Equal("/", redirect.Url);
         Assert.Same(request, initializationService.LastRequest);
-    }
-
-    [Fact]
-    public async Task IndexPost_WhenClusterInitializationSucceeds_ReturnsRestartView()
-    {
-        var initializationService = new StubSetupInitializationService();
-        var controller = CreateController(isInitialized: false, initializationService: initializationService);
-        var request = CreateRequest(DeploymentMode.Cluster);
-
-        var result = await controller.Index(request, TestContext.Current.CancellationToken);
-
-        var view = Assert.IsType<ViewResult>(result);
-        Assert.Equal("RestartRequired", view.ViewName);
-        Assert.Same(request, initializationService.LastRequest);
-    }
-
-    [Fact]
-    public async Task IndexPost_WhenControlPlaneReceivesStandalone_ReturnsFormWithoutInitializing()
-    {
-        var initializationService = new StubSetupInitializationService();
-        var controller = CreateController(
-            isInitialized: false,
-            initializationService: initializationService,
-            deploymentOptions: new SetupDeploymentOptions(DeploymentMode.Cluster)
-        );
-
-        var result = await controller.Index(
-            CreateRequest(DeploymentMode.Standalone),
-            TestContext.Current.CancellationToken
-        );
-
-        Assert.IsType<ViewResult>(result);
-        Assert.Null(initializationService.LastRequest);
-        Assert.True(controller.ModelState.ContainsKey(nameof(SetupRequest.DeploymentMode)));
     }
 
     [Fact]
@@ -131,21 +77,48 @@ public sealed class SetupControllerTests
         controller.HttpContext.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.10");
         controller.HttpContext.Request.Host = new HostString("agw.example.com");
 
-        var result = await controller.Index(
-            CreateRequest(DeploymentMode.Standalone),
-            TestContext.Current.CancellationToken
-        );
+        var result = await controller.Index(CreateRequest(), TestContext.Current.CancellationToken);
 
         Assert.IsType<ViewResult>(result);
         Assert.Null(initializationService.LastRequest);
         Assert.True(controller.ModelState.ContainsKey(nameof(SetupRequest.SetupCode)));
     }
 
+    [Fact]
+    public async Task IndexPost_WhenRemoteSetupCodeIsValid_InitializesAndConsumesCode()
+    {
+        var service = new StubSetupInitializationService();
+        var controller = CreateController(isInitialized: false, initializationService: service);
+        controller.HttpContext.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.10");
+        controller.HttpContext.Request.Host = new HostString("agw.example.com");
+        var request = CreateRequest();
+        request.SetupCode = "TEST-CODE";
+
+        Assert.IsType<RedirectResult>(await controller.Index(request, TestContext.Current.CancellationToken));
+        service.LastRequest = null;
+        var repeated = await controller.Index(request, TestContext.Current.CancellationToken);
+
+        Assert.IsType<ViewResult>(repeated);
+        Assert.Null(service.LastRequest);
+        Assert.True(controller.ModelState.ContainsKey(nameof(SetupRequest.SetupCode)));
+    }
+
+    [Fact]
+    public async Task IndexPost_WhenPasswordValidationFails_DoesNotInitialize()
+    {
+        var service = new StubSetupInitializationService();
+        var controller = CreateController(isInitialized: false, initializationService: service);
+        controller.ModelState.AddModelError(nameof(SetupRequest.AdminPassword), "Password is required.");
+
+        var result = await controller.Index(new SetupRequest(), TestContext.Current.CancellationToken);
+
+        Assert.IsType<ViewResult>(result);
+        Assert.Null(service.LastRequest);
+    }
+
     private static SetupController CreateController(
         bool isInitialized = true,
-        StubSetupInitializationService? initializationService = null,
-        AgwDataPaths? paths = null,
-        SetupDeploymentOptions? deploymentOptions = null
+        StubSetupInitializationService? initializationService = null
     )
     {
         var httpContext = new DefaultHttpContext();
@@ -156,34 +129,14 @@ public sealed class SetupControllerTests
             initializationService ?? new StubSetupInitializationService(),
             new SetupCodeService("TEST-CODE"),
             new AuthenticationAttemptLimiter(),
-            TimeProvider.System,
-            paths ?? CreatePaths(),
-            deploymentOptions
+            TimeProvider.System
         )
         {
             ControllerContext = new ControllerContext { HttpContext = httpContext },
         };
     }
 
-    private static SetupRequest CreateRequest(DeploymentMode deploymentMode)
-    {
-        return new SetupRequest
-        {
-            DeploymentMode = deploymentMode,
-            Provider = deploymentMode == DeploymentMode.Cluster ? DatabaseProvider.Postgres : DatabaseProvider.Sqlite,
-            SqlitePath = "/data/agw.db",
-            PostgresHost = "db.internal",
-            PostgresDatabase = "agw",
-            PostgresUsername = "agw",
-            PostgresPassword = "database-password",
-            AdminPassword = "administrator-password",
-        };
-    }
-
-    private static AgwDataPaths CreatePaths()
-    {
-        return AgwDataPaths.Resolve(Path.Combine(Path.GetTempPath(), "agw-controller-tests"), "/unused");
-    }
+    private static SetupRequest CreateRequest() => new() { AdminPassword = "administrator-password" };
 
     private static void AssertApiResult(IActionResult result)
     {
@@ -199,16 +152,13 @@ public sealed class SetupControllerTests
 
         public bool IsInitialized { get; }
 
-        public Task PersistAsync(
-            SetupConfiguration configuration,
-            string passwordHash,
-            CancellationToken cancellationToken = default
-        ) => Task.CompletedTask;
+        public Task PersistAsync(string passwordHash, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class StubSetupInitializationService : ISetupInitializationService
     {
-        public SetupRequest? LastRequest { get; private set; }
+        public SetupRequest? LastRequest { get; set; }
 
         public Task InitializeAsync(SetupRequest request, CancellationToken cancellationToken = default)
         {

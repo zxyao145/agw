@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using Agw.Infrastructure.Configuration;
-using Agw.Shared.Runtime;
 using Agw.Skills.Contracts.Remote;
 using Medallion.Threading;
 using Microsoft.Extensions.Logging;
@@ -10,7 +9,7 @@ namespace Agw.Infrastructure.Skills;
 
 public sealed class RemoteSkillRefreshLockRouter : IRemoteSkillRefreshLock
 {
-    private readonly IServerInitializationState _serverInitializationState;
+    private readonly IOptionsMonitor<DatabaseSettings> _databaseSettings;
     private readonly IOptionsMonitor<DistributedLockSettings> _settings;
     private readonly Func<DistributedLockProvider, string, IDistributedLockProvider> _providerFactory;
     private readonly ILogger<RemoteSkillRefreshLockRouter> _logger;
@@ -23,13 +22,13 @@ public sealed class RemoteSkillRefreshLockRouter : IRemoteSkillRefreshLock
     private IDistributedLockProvider? _distributedLockProvider;
 
     public RemoteSkillRefreshLockRouter(
-        IServerInitializationState serverInitializationState,
+        IOptionsMonitor<DatabaseSettings> databaseSettings,
         IOptionsMonitor<DistributedLockSettings> settings,
         Func<DistributedLockProvider, string, IDistributedLockProvider> providerFactory,
         ILogger<RemoteSkillRefreshLockRouter> logger
     )
     {
-        _serverInitializationState = serverInitializationState;
+        _databaseSettings = databaseSettings;
         _settings = settings;
         _providerFactory = providerFactory;
         _logger = logger;
@@ -37,10 +36,11 @@ public sealed class RemoteSkillRefreshLockRouter : IRemoteSkillRefreshLock
 
     public async Task<IAsyncDisposable> AcquireAsync(Guid skillId, CancellationToken cancellationToken)
     {
+        var databaseSettings = _databaseSettings.CurrentValue;
         var effectiveSettings = DistributedLockSettingsResolver.Resolve(
             _settings.CurrentValue,
-            _serverInitializationState.DatabaseProvider,
-            _serverInitializationState.DatabaseConnectionString
+            databaseSettings.Provider,
+            databaseSettings.ConnectionString
         );
         if (effectiveSettings.Provider == DistributedLockProvider.InMemory)
         {

@@ -172,7 +172,7 @@ After the first clone, configure hooks with `git config core.hooksPath .githooks
 
 ## Local Setup and Configuration
 
-On the first backend run, open `http://localhost:30816/setup` to choose Standalone or Cluster deployment, enter structured SQLite or PostgreSQL settings, and create the administrator password. Standalone supports both databases; Cluster requires PostgreSQL and takes effect after a Server restart. Setup seeds the database and writes `server-state.json` below the Agw data directory.
+On the first backend run, configure Database, Execution, and DistributedLock through appsettings or environment variables, then open `http://localhost:30816/setup` to create the administrator password. Defaults are SQLite and InProcess execution. Standalone and Control Plane can start without `server-state.json`; successful setup initializes the configured database and writes schema v3 authentication/initialization state without requiring another restart. Split Control/Data Hosts require PostgreSQL and Distributed execution. Start Data Plane only after Control Plane has initialized shared authentication state.
 
 Remote web access uses the administrator session cookie. Desktop, mobile, and automation clients use named `Authorization: Bearer agw_...` API tokens. The legacy `X-API-Key` setting is not supported.
 
@@ -184,14 +184,18 @@ Primary backend settings live in `src/server/Agw.Host/appsettings.json` under `D
 
 Configuration guidance:
 
+- `AgwDataDir` can be set in appsettings, environment variables, or Host command-line arguments using standard precedence. The legacy `AGW_DATA_DIR` environment variable remains an alias at environment-provider priority; `AgwDataDir` wins if both environment variables are set. Missing or blank values default to `~/agw`; `~`, `~/...`, and `~\...` expand to the user home; other relative paths use the working directory. Data paths are resolved once at startup, including for password reset; restart after changes.
+
+- `AgwLogDir` independently configures the log directory and defaults to `./logs` relative to the process working directory. It follows standard configuration precedence, supports `~` expansion, and requires restart after changes. Logs are not stored under `AgwDataDir` by default.
 - `Database:Provider` supports `sqlite` and `postgres`.
 - `Database:ConnectionString` defaults to `Data Source=agw.db`.
-- An optional `Setup` section initializes an absent `server-state.json`; inject its passwords through environment variables or Secrets. Existing state always wins and must not be overwritten.
+- `Setup:AdminPassword` optionally initializes an uninitialized Server; inject it through environment variables or Secrets. Initialized authentication state wins over Setup and must not be overwritten. Old Setup deployment fields are rejected before initialization; use Database/Execution/DistributedLock instead.
+- Configuration priority is built-in defaults, legacy state-file deployment keys, then the standard ASP.NET Core configuration chain. The base appsettings omits the five deployment defaults to preserve legacy fallback. Override database provider and connection string together; restart for coordinated deployment changes.
 - `DistributedLock:Provider` supports `inmemory` and `postgres`; null or missing follows `Database:Provider`.
 - When `DistributedLock:ConnectionString` is empty, a PostgreSQL lock reuses `Database:ConnectionString`.
 - `Execution:Provider` supports `InProcess` and `Distributed`. Distributed execution requires PostgreSQL for both the database and distributed lock; its event stream defaults to PostgreSQL and may explicitly use Redis.
 - `OpenTelemetry:OtlpEndpoint` defaults to `http://localhost:4317`.
-- First-run configuration plus administrator password/session state live in `server-state.json` through the `Agw.Setup` persistence adapter. API Token hashes and audit metadata live in the `api_token` database table; do not reintroduce static `SystemInitialization` configuration.
+- Initialization and administrator password/session state live in `server-state.json` through the `Agw.Setup` persistence adapter. New schema v3 files contain no deployment settings; retain v1/v2 deployment fields during authentication writes for low-priority startup fallback. API Token hashes and audit metadata live in the `api_token` database table; do not reintroduce static `SystemInitialization` configuration.
 - Keep secrets out of `appsettings*.json` and frontend environment files; prefer environment-variable overrides.
 - Backend projects target `.NET 10.0` with nullable types, implicit usings, central packages, and build-time style checks.
 

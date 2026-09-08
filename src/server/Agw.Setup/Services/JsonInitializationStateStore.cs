@@ -1,7 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Agw.Auth.Contracts;
-using Agw.Setup.Contracts;
 using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
 
@@ -47,44 +46,41 @@ public sealed class JsonInitializationStateStore
         get { return _state.Tokens != null; }
     }
 
-    public DatabaseProvider DatabaseProvider
+    public IReadOnlyDictionary<string, string?> GetLegacyDeploymentConfiguration()
     {
-        get { return _state.Database.Provider; }
+        var state = _state;
+        var configuration = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        if (state.SchemaVersion >= 3)
+            return configuration;
+
+        if (state.Database?.Provider is { } provider)
+            configuration["Database:Provider"] = provider.ToString().ToLowerInvariant();
+        if (state.Database?.ConnectionString is { } databaseConnectionString)
+            configuration["Database:ConnectionString"] = databaseConnectionString;
+        if (state.Execution?.Provider is { } executionProvider)
+            configuration["Execution:Provider"] = executionProvider;
+        if (state.DistributedLock?.Provider is { } lockProvider)
+            configuration["DistributedLock:Provider"] = lockProvider;
+        if (state.DistributedLock?.ConnectionString is { } lockConnectionString)
+            configuration["DistributedLock:ConnectionString"] = lockConnectionString;
+        return configuration;
     }
 
-    public string DatabaseConnectionString
-    {
-        get { return _state.Database.ConnectionString; }
-    }
-
-    public async Task PersistAsync(
-        SetupConfiguration configuration,
-        string passwordHash,
-        CancellationToken cancellationToken = default
-    )
+    public async Task PersistAsync(string passwordHash, CancellationToken cancellationToken = default)
     {
         await _writeLock.WaitAsync(cancellationToken);
         try
         {
             await using var stateFileLock = await AcquireStateFileLockAsync(cancellationToken);
             RefreshFromDisk();
+            // Another setup process may have completed while this caller was initializing the database.
+            if (_state.IsInitialized)
+                return;
+
             var nextState = new ServerState
             {
-                SchemaVersion = 2,
+                SchemaVersion = 3,
                 IsInitialized = true,
-                Database = new ServerDatabaseState
-                {
-                    Provider = configuration.Provider,
-                    ConnectionString = configuration.ConnectionString,
-                },
-                Execution = new ServerExecutionState
-                {
-                    Provider = configuration.DeploymentMode == DeploymentMode.Cluster ? "distributed" : "inProcess",
-                },
-                DistributedLock =
-                    configuration.DeploymentMode == DeploymentMode.Cluster
-                        ? new ServerDistributedLockState { Provider = "postgres", ConnectionString = string.Empty }
-                        : null,
                 PasswordHash = passwordHash,
                 SessionVersion = 1,
             };
@@ -298,11 +294,14 @@ public sealed class JsonInitializationStateStore
         {
             SchemaVersion = state.SchemaVersion,
             IsInitialized = state.IsInitialized,
-            Database = new ServerDatabaseState
-            {
-                Provider = state.Database.Provider,
-                ConnectionString = state.Database.ConnectionString,
-            },
+            Database =
+                state.Database == null
+                    ? null
+                    : new ServerDatabaseState
+                    {
+                        Provider = state.Database.Provider,
+                        ConnectionString = state.Database.ConnectionString,
+                    },
             Execution =
                 state.Execution == null ? null : new ServerExecutionState { Provider = state.Execution.Provider },
             DistributedLock =
@@ -331,7 +330,9 @@ public sealed class JsonInitializationStateStore
     {
         public int SchemaVersion { get; set; } = 1;
         public bool IsInitialized { get; set; }
-        public ServerDatabaseState Database { get; set; } = new();
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public ServerDatabaseState? Database { get; set; }
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public ServerExecutionState? Execution { get; set; }
@@ -347,19 +348,19 @@ public sealed class JsonInitializationStateStore
 
     private sealed class ServerDatabaseState
     {
-        public DatabaseProvider Provider { get; set; } = DatabaseProvider.Sqlite;
-        public string ConnectionString { get; set; } = string.Empty;
+        public DatabaseProvider? Provider { get; set; }
+        public string? ConnectionString { get; set; }
     }
 
     private sealed class ServerExecutionState
     {
-        public string Provider { get; set; } = string.Empty;
+        public string? Provider { get; set; }
     }
 
     private sealed class ServerDistributedLockState
     {
-        public string Provider { get; set; } = string.Empty;
-        public string ConnectionString { get; set; } = string.Empty;
+        public string? Provider { get; set; }
+        public string? ConnectionString { get; set; }
     }
 
     private sealed class ApiTokenRecord

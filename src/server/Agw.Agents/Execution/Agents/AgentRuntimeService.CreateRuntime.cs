@@ -2,6 +2,7 @@ using Agw.Agents.Execution.Agents.Dtos;
 using Agw.Agents.Execution.Agents.Store;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Runtimes;
+using Agw.Agents.Execution.Turns;
 using Agw.Agents.ExternalAgents;
 using Agw.Auth.Contracts;
 using Agw.Projects.Contracts.Execution;
@@ -87,6 +88,7 @@ public partial class AgentRuntimeService
             new CreateAiAgentRequest
             {
                 Agent = agent,
+                PermissionMode = settings.PermissionMode,
                 EnvironmentVariables = settings.EnvironmentVariables,
                 ProviderSessionId = providerSessionId,
                 ProjectId = projectId,
@@ -112,6 +114,7 @@ public partial class AgentRuntimeService
                 resolvedContextId,
                 ProjectDefaults.GetDefaultProjectIdentifier(projectId)
             );
+            ToolApprovalPermissionState.Apply(agentSession, settings.PermissionMode);
             var summaryModelProviderId = ResolveSummaryModelProviderId(agent);
             return new AgentRuntime(
                 logger: _logger,

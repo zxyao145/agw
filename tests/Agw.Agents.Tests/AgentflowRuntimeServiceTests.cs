@@ -194,7 +194,8 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
             )
         );
 
-        Assert.Contains("unattended Agentflow execution", exception.Message);
+        Assert.Contains("unattended", exception.Message);
+        Assert.Contains("run_shell", exception.Message);
     }
 
     [Theory]
@@ -1363,6 +1364,28 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
             }
 
             return Task.FromResult(agent);
+        }
+
+        public Agw.Agents.Execution.Commands.Setting.PermissionMode? LastPermissionMode { get; private set; }
+
+        public Task<AIAgent?> CreateAgentflowNodeAgentAsync(
+            Guid agentId,
+            Guid? projectId,
+            Guid conversationId,
+            IReadOnlyDictionary<string, string>? environmentVariables,
+            bool deferHumanInteractions,
+            CancellationToken cancellationToken = default,
+            Agw.Agents.Execution.Commands.Setting.PermissionMode? permissionMode = null
+        )
+        {
+            LastPermissionMode = permissionMode;
+            return CreateAgentflowNodeAgentAsync(
+                agentId,
+                projectId,
+                conversationId,
+                environmentVariables,
+                cancellationToken
+            );
         }
 
         public Task<AIAgent?> CreateAgentflowNodeAgentAsync(

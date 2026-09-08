@@ -2,7 +2,6 @@ using Agw.Agents.Application.Persistence;
 using Agw.Infrastructure;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
-using Agw.Shared.Configuration;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Runtime;
 using Microsoft.Data.Sqlite;
@@ -294,8 +293,6 @@ public sealed class DurableExecutionScopeRecoveryServiceTests
             }
             set => _initialized = value;
         }
-        public DatabaseProvider DatabaseProvider => DatabaseProvider.Sqlite;
-        public string DatabaseConnectionString => "Data Source=:memory:";
     }
 
     private sealed class StubMaintenance : IDurableExecutionScopeMaintenance

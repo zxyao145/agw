@@ -5,6 +5,7 @@ using Agw.Jobs.Scheduling.Attempts;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -45,6 +46,7 @@ public sealed class DurableJobRecoveryHostedServiceTests
         var timeProvider = TimeProvider.System;
         var service = new DurableJobRecoveryHostedService(
             services.GetRequiredService<IServiceScopeFactory>(),
+            new InitializationState(true),
             new ImmediateProjectExecutionLock(),
             timeProvider,
             new JobSchedulerWakeSignal(timeProvider),
@@ -96,6 +98,7 @@ public sealed class DurableJobRecoveryHostedServiceTests
         var timeProvider = TimeProvider.System;
         var service = new DurableJobRecoveryHostedService(
             services.GetRequiredService<IServiceScopeFactory>(),
+            new InitializationState(true),
             new ImmediateProjectExecutionLock(),
             timeProvider,
             new JobSchedulerWakeSignal(timeProvider),
@@ -114,6 +117,91 @@ public sealed class DurableJobRecoveryHostedServiceTests
         Assert.False(recorder.Success);
         Assert.Equal("The Job owner is missing.", recorder.ErrorMessage);
         Assert.Equal(0, executionFacade.GetOutcomeCalls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteAsync_BeforeInitialization_WaitsWithoutQueryingDatabase(bool finishSetup)
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(token);
+        var options = new DbContextOptionsBuilder<AgwDbContext>().UseSqlite(connection).Options;
+        var job = new Job
+        {
+            Id = Guid.NewGuid(),
+            ProjectId = Guid.NewGuid(),
+            Status = JobStatus.Running,
+            ActiveExecutionId = Guid.NewGuid(),
+            ActiveAttemptStartedAt = TimeProvider.System.GetUtcNow(),
+            CreateBy = "owner",
+        };
+        await using (var seed = new AgwDbContext(options))
+        {
+            await seed.Database.EnsureCreatedAsync(token);
+            seed.Jobs.Add(job);
+            await seed.SaveChangesAsync(token);
+        }
+        var state = new InitializationState(false);
+        var recorder = new RecordingOutcomeRecorder();
+        var databaseAccesses = 0;
+        await using var provider = new ServiceCollection()
+            .AddScoped<IJobsDbContext>(_ =>
+            {
+                Interlocked.Increment(ref databaseAccesses);
+                return new AgwDbContext(options);
+            })
+            .AddSingleton<IDurableAgentExecutionFacade>(new MissingDurableExecutionFacade())
+            .AddSingleton<IJobAttemptOutcomeRecorder>(recorder)
+            .BuildServiceProvider();
+        using var service = new DurableJobRecoveryHostedService(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            state,
+            new ImmediateProjectExecutionLock(),
+            TimeProvider.System,
+            new JobSchedulerWakeSignal(TimeProvider.System),
+            NullLogger<DurableJobRecoveryHostedService>.Instance
+        );
+        try
+        {
+            await service.StartAsync(token);
+            await state.Checked.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
+            Assert.Equal(0, Volatile.Read(ref databaseAccesses));
+            if (finishSetup)
+            {
+                state.IsInitialized = true;
+                await recorder.Recorded.Task.WaitAsync(TimeSpan.FromSeconds(5), token);
+            }
+        }
+        finally
+        {
+            await service.StopAsync(token);
+        }
+
+        Assert.Equal(finishSetup ? job.Id : (Guid?)null, recorder.JobId);
+        Assert.Equal(finishSetup, Volatile.Read(ref databaseAccesses) > 0);
+    }
+
+    private sealed class InitializationState : IServerInitializationState
+    {
+        private volatile bool _isInitialized;
+
+        public InitializationState(bool isInitialized)
+        {
+            _isInitialized = isInitialized;
+        }
+
+        public TaskCompletionSource Checked { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public bool IsInitialized
+        {
+            get
+            {
+                Checked.TrySetResult();
+                return _isInitialized;
+            }
+            set => _isInitialized = value;
+        }
     }
 
     private sealed class MissingDurableExecutionFacade : IDurableAgentExecutionFacade
@@ -151,6 +239,7 @@ public sealed class DurableJobRecoveryHostedServiceTests
 
     private sealed class RecordingOutcomeRecorder : IJobAttemptOutcomeRecorder
     {
+        public TaskCompletionSource Recorded { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Guid? JobId { get; private set; }
         public Guid? ExecutionId { get; private set; }
         public bool Success { get; private set; }
@@ -168,6 +257,7 @@ public sealed class DurableJobRecoveryHostedServiceTests
             ExecutionId = executionId;
             Success = success;
             ErrorMessage = errorMessage;
+            Recorded.TrySetResult();
             return Task.FromResult<JobAttemptResult>(new JobAttemptResult.Drop());
         }
     }

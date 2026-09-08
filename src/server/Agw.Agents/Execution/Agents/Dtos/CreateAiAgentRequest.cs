@@ -1,3 +1,4 @@
+using Agw.Agents.Execution.Commands.Setting;
 using Agw.Shared.Data.Entities.Agents;
 
 namespace Agw.Agents.Execution.Agents.Dtos;
@@ -5,6 +6,8 @@ namespace Agw.Agents.Execution.Agents.Dtos;
 public sealed class CreateAiAgentRequest
 {
     public Guid? ProjectId { get; init; }
+
+    public PermissionMode? PermissionMode { get; init; }
 
     public Guid ConversationId { get; init; }
 

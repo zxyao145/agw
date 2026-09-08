@@ -1,8 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Agw.Setup.Contracts;
-using Agw.Shared.Configuration;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Runtime;
 using Microsoft.Extensions.Configuration;
 
 namespace Agw.Setup.Services;
@@ -13,47 +11,44 @@ public sealed class ConfiguredSetupBootstrap
 
     private readonly SetupRequest? _request;
 
-    private ConfiguredSetupBootstrap(SetupRequest? request, IReadOnlyDictionary<string, string?> runtimeConfiguration)
+    private ConfiguredSetupBootstrap(SetupRequest? request)
     {
         _request = request;
-        RuntimeConfiguration = runtimeConfiguration;
     }
 
-    public static ConfiguredSetupBootstrap None { get; } = new(null, new Dictionary<string, string?>());
+    public static ConfiguredSetupBootstrap None { get; } = new(null);
 
     public bool IsConfigured => _request != null;
 
     public SetupRequest Request =>
         _request ?? throw new AgwException(ErrorCodes.InvalidSetupConfiguration, "Setup bootstrap is not configured.");
 
-    public IReadOnlyDictionary<string, string?> RuntimeConfiguration { get; }
-
-    public static ConfiguredSetupBootstrap FromConfiguration(IConfiguration configuration, AgwDataPaths paths)
+    public static ConfiguredSetupBootstrap FromConfiguration(IConfiguration configuration)
     {
         var section = configuration.GetSection(SectionName);
         if (!section.Exists())
             return None;
 
-        SetupRequest request;
-        try
-        {
-            request = section.Get<SetupRequest>() ?? new SetupRequest();
-        }
-        catch (InvalidOperationException ex)
+        string[] legacyKeys =
+        [
+            "DeploymentMode",
+            "Provider",
+            "SqlitePath",
+            "PostgresHost",
+            "PostgresPort",
+            "PostgresDatabase",
+            "PostgresUsername",
+            "PostgresPassword",
+        ];
+        if (section.GetChildren().Any(child => legacyKeys.Contains(child.Key, StringComparer.OrdinalIgnoreCase)))
         {
             throw new AgwException(
                 ErrorCodes.InvalidSetupConfiguration,
-                $"The '{SectionName}' configuration could not be parsed.",
-                ex
+                "Setup deployment settings are no longer supported. Use Database, Execution, and DistributedLock configuration; Setup only accepts AdminPassword."
             );
         }
 
-        request.SetupCode = null;
-        if (request.Provider == DatabaseProvider.Sqlite && string.IsNullOrWhiteSpace(request.SqlitePath))
-        {
-            request.SqlitePath = paths.DatabaseFile;
-        }
-
+        var request = new SetupRequest { AdminPassword = section[nameof(SetupRequest.AdminPassword)] ?? string.Empty };
         var validationResults = new List<ValidationResult>();
         if (
             !Validator.TryValidateObject(
@@ -64,30 +59,12 @@ public sealed class ConfiguredSetupBootstrap
             )
         )
         {
-            var errors = validationResults.Select(result =>
-            {
-                var members = string.Join(", ", result.MemberNames);
-                return string.IsNullOrEmpty(members) ? result.ErrorMessage : $"{members}: {result.ErrorMessage}";
-            });
             throw new AgwException(
                 ErrorCodes.InvalidSetupConfiguration,
-                $"The '{SectionName}' configuration is invalid: {string.Join(" ", errors)}"
+                $"The '{SectionName}' configuration is invalid: {string.Join(" ", validationResults.Select(result => result.ErrorMessage))}"
             );
         }
 
-        var connectionString = SetupConnectionStringFactory.Create(request, paths);
-        var runtimeConfiguration = new Dictionary<string, string?>
-        {
-            ["Database:Provider"] = request.Provider == DatabaseProvider.Postgres ? "postgres" : "sqlite",
-            ["Database:ConnectionString"] = connectionString,
-            ["Execution:Provider"] = request.DeploymentMode == DeploymentMode.Cluster ? "Distributed" : "InProcess",
-        };
-        if (request.DeploymentMode == DeploymentMode.Cluster)
-        {
-            runtimeConfiguration["DistributedLock:Provider"] = "postgres";
-            runtimeConfiguration["DistributedLock:ConnectionString"] = string.Empty;
-        }
-
-        return new ConfiguredSetupBootstrap(request, runtimeConfiguration);
+        return new ConfiguredSetupBootstrap(request);
     }
 }

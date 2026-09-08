@@ -7,7 +7,7 @@
 - **统一项目工作区访问**：Agent 和文件工具通过 `IAgwFileSystem` 与 `IAgwFileSystemResolver` 使用项目相对路径。
 - **保持进程工作目录一致**：Files、Git、Claude Code 和 Codex 使用同一个宿主机可见 Workspace。
 - **限制路径范围**：所有文件操作都限制在项目根目录内。
-- **提供自包含 SDK**：公共接口、Local 实现、Git 能力、路径工具和文件异常都由 `Agw.Files` 提供；本模块不依赖 `Agw.Shared`。
+- **提供文件 SDK**：公共接口、Local 实现、Git 能力和文件异常由 `Agw.Files` 提供；通用路径工具 `PathUtil` 由 `Agw.Shared` 提供。
 
 `Agw.Files` 当前只支持宿主机可见的本地文件系统。需要访问网络文件系统时，应先由操作系统、容器平台或部署基础设施完成挂载，再把挂载目录配置为 `Project.Workspace`。应用内的文件 adapter 不是操作系统挂载，不能为 Git 或其他外部进程提供工作目录。
 
@@ -23,7 +23,7 @@
 | 面向 Agent 的文件工具 | `Agw.Tools.Impl.Files` |
 | Project 及其 Workspace 持久化 | `Agw.Projects` |
 
-`Agw.Files` 不负责定义 Agent 工具，也不拥有 Project 数据。`Agw.Projects` 通过 `IProjectFileSystemConfigurationProvider` adapter 提供 Project 名称和 Workspace；Files 不读取 `Project.ExtraSetting`，也不直接依赖 Projects 或 Shared。
+`Agw.Files` 不负责定义 Agent 工具，也不拥有 Project 数据。`Agw.Projects` 通过 `IProjectFileSystemConfigurationProvider` adapter 提供 Project 名称和 Workspace；Files 不读取 `Project.ExtraSetting`，也不直接依赖 Projects；仅通过 Shared 复用通用路径工具。
 
 ## 总体架构
 

@@ -19,7 +19,6 @@ using Agw.Integrations.Extensions;
 using Agw.Jobs;
 using Agw.Projects;
 using Agw.Providers;
-using Agw.Setup.Contracts;
 using Agw.Setup.Middleware;
 using Agw.Setup.Services;
 using Agw.Shared.Contracts.Coordination;
@@ -55,19 +54,11 @@ public static class AgwHostApplication
     {
         var hasControlPlane = profile is AgwHostProfile.ControlPlane or AgwHostProfile.Standalone;
         var hasDataPlane = profile is AgwHostProfile.DataPlane or AgwHostProfile.Standalone;
-        var dataPaths = AgwDataPaths.ResolveFromEnvironment();
-        dataPaths.EnsureCreated();
-        var hasStateFile = File.Exists(dataPaths.StateFile);
         var contentRootPath = AppContext.BaseDirectory;
 
         if (args.Length == 1 && string.Equals(args[0], "serve", StringComparison.OrdinalIgnoreCase))
         {
             args = [];
-        }
-
-        if (profile != AgwHostProfile.DataPlane && await ServerCommand.TryRunAsync(args, dataPaths))
-        {
-            return;
         }
 
         if (
@@ -80,6 +71,17 @@ public static class AgwHostApplication
         )
         {
             Environment.SetEnvironmentVariable("ASPNETCORE_URLS", LocalServerEndpointResolver.ResolveDefaultUrl());
+        }
+
+        var builder = WebApplication.CreateBuilder(
+            new WebApplicationOptions { Args = args, ContentRootPath = contentRootPath }
+        );
+        var dataPaths = AgwDataPaths.ResolveFromConfiguration(builder.Configuration);
+        dataPaths.EnsureCreated();
+
+        if (profile != AgwHostProfile.DataPlane && await ServerCommand.TryRunAsync(args, dataPaths))
+        {
+            return;
         }
 
         // Configure Serilog early in the pipeline
@@ -115,28 +117,14 @@ public static class AgwHostApplication
         {
             Log.Information("Starting Agw {HostProfile} Host", profile);
 
-            var builder = WebApplication.CreateBuilder(
-                new WebApplicationOptions { Args = args, ContentRootPath = contentRootPath }
-            );
-
-            if (profile == AgwHostProfile.DataPlane && !hasStateFile)
-            {
-                throw new AgwException(
-                    ErrorCodes.InvalidSetupConfiguration,
-                    "The Data Plane requires an initialized shared server-state.json."
-                );
-            }
-
+            var stateStore = new JsonInitializationStateStore(dataPaths);
+            ServerDeploymentConfiguration.Apply(builder.Configuration, stateStore.GetLegacyDeploymentConfiguration());
             var configuredSetup =
-                hasControlPlane && !hasStateFile
-                    ? ConfiguredSetupBootstrap.FromConfiguration(builder.Configuration, dataPaths)
+                hasControlPlane && !stateStore.IsInitialized
+                    ? ConfiguredSetupBootstrap.FromConfiguration(builder.Configuration)
                     : ConfiguredSetupBootstrap.None;
-            if (configuredSetup.IsConfigured)
-            {
-                builder.Configuration.AddInMemoryCollection(configuredSetup.RuntimeConfiguration);
-            }
-            builder.Configuration.AddJsonFile(dataPaths.StateFile, optional: true, reloadOnChange: false);
-            ValidateProfileConfiguration(profile, configuredSetup, builder.Configuration, hasStateFile);
+            ServerDeploymentConfiguration.Validate(profile, builder.Configuration, stateStore.IsInitialized);
+            builder.Services.AddSingleton(stateStore);
             builder.Services.AddSingleton(dataPaths);
             builder.Services.AddSingleton(TimeProvider.System);
             builder
@@ -357,8 +345,7 @@ public static class AgwHostApplication
                 .AddJobs(
                     builder.Configuration,
                     new Agw.Jobs.DependencyInjection.RegistrationOptions(
-                        AddScheduler: hasControlPlane
-                            && (profile != AgwHostProfile.ControlPlane || hasStateFile || configuredSetup.IsConfigured),
+                        AddScheduler: hasControlPlane,
                         UseDurableExecution: string.Equals(
                             builder.Configuration["Execution:Provider"],
                             "Distributed",
@@ -370,12 +357,7 @@ public static class AgwHostApplication
                 .AddSkills(builder.Configuration)
                 .AddProjects(builder.Configuration)
                 .AddAuth()
-                .AddSetup(
-                    builder.Configuration,
-                    configuredSetup,
-                    readOnly: profile == AgwHostProfile.DataPlane,
-                    requiredDeploymentMode: profile == AgwHostProfile.ControlPlane ? DeploymentMode.Cluster : null
-                )
+                .AddSetup(builder.Configuration, configuredSetup, readOnly: profile == AgwHostProfile.DataPlane)
                 .AddIntegrations(builder.Configuration);
 
             // 数据库 AuditUserId 提供者
@@ -549,54 +531,6 @@ public static class AgwHostApplication
         finally
         {
             Log.CloseAndFlush();
-        }
-    }
-
-    private static void ValidateProfileConfiguration(
-        AgwHostProfile profile,
-        ConfiguredSetupBootstrap configuredSetup,
-        IConfiguration configuration,
-        bool hasStateFile
-    )
-    {
-        if (profile == AgwHostProfile.Standalone)
-        {
-            return;
-        }
-
-        if (
-            profile == AgwHostProfile.ControlPlane
-            && configuredSetup.IsConfigured
-            && configuredSetup.Request.DeploymentMode != DeploymentMode.Cluster
-        )
-        {
-            throw new AgwException(
-                ErrorCodes.InvalidSetupConfiguration,
-                "The Control Plane Setup configuration requires DeploymentMode=Cluster."
-            );
-        }
-
-        if (profile == AgwHostProfile.ControlPlane && !hasStateFile && !configuredSetup.IsConfigured)
-        {
-            return;
-        }
-
-        var databaseProvider = configuration["Database:Provider"];
-        var executionProvider = configuration["Execution:Provider"];
-        var lockProvider = configuration["DistributedLock:Provider"];
-        if (
-            !string.Equals(databaseProvider, "postgres", StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(executionProvider, "Distributed", StringComparison.OrdinalIgnoreCase)
-            || (
-                !string.IsNullOrWhiteSpace(lockProvider)
-                && !string.Equals(lockProvider, "postgres", StringComparison.OrdinalIgnoreCase)
-            )
-        )
-        {
-            throw new AgwException(
-                ErrorCodes.InvalidSetupConfiguration,
-                $"The {profile} requires PostgreSQL, Distributed execution, and a PostgreSQL distributed lock."
-            );
         }
     }
 }

@@ -99,6 +99,47 @@ public class PermissionAwareApprovalHandlerTests
         Assert.Equal("control", message.AdditionalProperties["presentation"]);
     }
 
+    [Theory]
+    [InlineData("ask_user_question")]
+    [InlineData("human-gate")]
+    public async Task FullAccess_HumanInput_IsNotAutomaticallyApproved(string toolName)
+    {
+        var request =
+            toolName == "human-gate"
+                ? new HumanGateApprovalRequest("human", "node", null, "approval", "Approve?", [])
+                : ToolApprovalSupport.CreateRequest(
+                    new ToolApprovalRequestContent("ask", new FunctionCallContent("call", toolName)),
+                    "node"
+                );
+        var handler = UnattendedApprovalHandler.Create(PermissionMode.FullAccess);
+
+        var error = await Assert.ThrowsAsync<Agw.Shared.Exceptions.AgwException>(async () =>
+            await handler.WaitForApprovalAsync(request, TestContext.Current.CancellationToken)
+        );
+
+        Assert.True(handler.RequiresHumanResponse(request));
+        Assert.Contains("unattended", error.Message);
+    }
+
+    [Fact]
+    public async Task SwitchingToFullAccess_DoesNotApprovePendingQuestion()
+    {
+        var coordinator = new HumanGateApprovalCoordinator();
+        var handler = new PermissionAwareApprovalHandler(coordinator, PermissionMode.AlwaysAsk);
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        var request = ToolApprovalSupport.CreateRequest(
+            new ToolApprovalRequestContent("ask", new FunctionCallContent("call", "ask_user_question")),
+            "node"
+        );
+        var pending = handler.WaitForApprovalAsync(request, cancellation.Token).AsTask();
+
+        handler.SetPermissionMode(PermissionMode.FullAccess);
+
+        Assert.False(pending.IsCompleted);
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+    }
+
     private static HumanGateApprovalRequest CreateToolRequest()
     {
         var approval = new ToolApprovalRequestContent(

@@ -63,7 +63,11 @@ internal sealed class DurableAgentSegmentRunner
             );
         }
 
-        var approvalHandler = new CaptureDurableApprovalHandler();
+        var captureHandler = new CaptureDurableApprovalHandler();
+        var approvalHandler =
+            manifest.Settings.HumanInteractionPolicy == HumanInteractionPolicy.Reject
+                ? UnattendedApprovalHandler.Create(manifest.Settings.PermissionMode)
+                : new PermissionAwareApprovalHandler(captureHandler, manifest.Settings.PermissionMode);
         using var interactionScope = _humanInteractionContextAccessor.Push(
             new ResolvedHumanInteractionChannel(input.ResolvedInteractions)
         );
@@ -94,7 +98,7 @@ internal sealed class DurableAgentSegmentRunner
             };
         }
         // CaptureDurableApprovalHandler 以异常立即截断本次模型调用，确保先把 pending 快照原子写入 PostgreSQL。
-        catch (AgwException) when (approvalHandler.PendingInteraction is { } interaction)
+        catch (AgwException) when (captureHandler.PendingInteraction is { } interaction)
         {
             return new DurableExecutionSegmentResult
             {

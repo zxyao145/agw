@@ -1,5 +1,4 @@
 using Agw.Auth.Contracts;
-using Agw.Setup.Contracts;
 using Agw.Shared.Runtime;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,15 +12,13 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration,
         ConfiguredSetupBootstrap? configuredSetup = null,
-        bool readOnly = false,
-        DeploymentMode? requiredDeploymentMode = null
+        bool readOnly = false
     )
     {
         services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<JsonInitializationStateStore>();
         services
             .AddSingleton(configuredSetup ?? ConfiguredSetupBootstrap.None)
-            .AddSingleton(new SetupDeploymentOptions(requiredDeploymentMode))
-            .AddSingleton<JsonInitializationStateStore>()
             .AddSingleton<IAuthenticationStateReader>(provider =>
                 provider.GetRequiredService<JsonInitializationStateStore>()
             )

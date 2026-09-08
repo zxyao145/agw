@@ -9,7 +9,6 @@ using Agw.Shared.Configuration;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Runtime;
 using Medallion.Threading.Postgres;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -93,6 +92,11 @@ public sealed class PostgresExecutionFencingTests
 
             settings.ApplicationName = databaseName;
             var services = new ServiceCollection();
+            services.Configure<DatabaseSettings>(value =>
+            {
+                value.Provider = DatabaseProvider.Postgres;
+                value.ConnectionString = settings.ConnectionString;
+            });
             services.Configure<DistributedLockSettings>(value =>
             {
                 value.Provider = DistributedLockProvider.Postgres;
@@ -100,7 +104,7 @@ public sealed class PostgresExecutionFencingTests
             });
             await using var provider = services.BuildServiceProvider();
             var router = new ApplicationLockRouter(
-                new InitializationState(settings.ConnectionString),
+                provider.GetRequiredService<IOptionsMonitor<DatabaseSettings>>(),
                 provider.GetRequiredService<IOptionsMonitor<DistributedLockSettings>>(),
                 new InMemoryApplicationLock(),
                 (_, connectionString) =>
@@ -250,17 +254,5 @@ public sealed class PostgresExecutionFencingTests
             await using var drop = new NpgsqlCommand($"DROP DATABASE \"{databaseName}\" WITH (FORCE)", admin);
             await drop.ExecuteNonQueryAsync(CancellationToken.None);
         }
-    }
-
-    private sealed class InitializationState : IServerInitializationState
-    {
-        public InitializationState(string connectionString)
-        {
-            DatabaseConnectionString = connectionString;
-        }
-
-        public bool IsInitialized => true;
-        public DatabaseProvider DatabaseProvider => DatabaseProvider.Postgres;
-        public string DatabaseConnectionString { get; }
     }
 }

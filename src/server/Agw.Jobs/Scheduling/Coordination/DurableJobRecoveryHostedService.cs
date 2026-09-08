@@ -4,6 +4,7 @@ using Agw.Jobs.Execution;
 using Agw.Jobs.Scheduling.Attempts;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -20,9 +21,11 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
     private readonly TimeProvider _timeProvider;
     private readonly JobSchedulerWakeSignal _schedulerWakeSignal;
     private readonly ILogger<DurableJobRecoveryHostedService> _logger;
+    private readonly IServerInitializationState _initializationState;
 
     public DurableJobRecoveryHostedService(
         IServiceScopeFactory scopeFactory,
+        IServerInitializationState initializationState,
         IProjectExecutionLock projectExecutionLock,
         TimeProvider timeProvider,
         JobSchedulerWakeSignal schedulerWakeSignal,
@@ -30,6 +33,7 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
     )
     {
         _scopeFactory = scopeFactory;
+        _initializationState = initializationState;
         _projectExecutionLock = projectExecutionLock;
         _timeProvider = timeProvider;
         _schedulerWakeSignal = schedulerWakeSignal;
@@ -38,6 +42,11 @@ public sealed class DurableJobRecoveryHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        while (!_initializationState.IsInitialized)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(250), _timeProvider, stoppingToken);
+        }
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try

@@ -104,7 +104,7 @@ dotnet restore Agw.slnx
 dotnet run --project src/server/Agw.Standalone.Host
 ```
 
-开发环境后端默认监听 `http://localhost:30816`。首次运行时，打开 `http://localhost:30816/setup`，选择部署模式、填写结构化数据库设置并创建管理员密码。Standalone 支持 SQLite 和 PostgreSQL；Cluster 需要 PostgreSQL，并在浏览器 Setup 完成后重启 Server 才会生效。无人值守部署可在不存在 `server-state.json` 时通过 `Setup` 配置节提供相同字段，密码应使用环境变量或 Secret 注入。运行数据统一保存在当前用户主目录下的 `agw`；通过域名初始化还需要 Server 启动日志中的一次性 Setup Code。
+开发环境后端默认监听 `http://localhost:30816`。数据库、执行模式和锁通过 appsettings 或环境变量配置，默认使用 SQLite 和 InProcess。首次运行时打开 `/setup` 创建管理员密码；无人值守部署可注入 `Setup__AdminPassword`。首次设置会初始化当前配置的数据库，并将管理员认证和初始化状态写入 `server-state.json`，完成后无需额外重启。旧状态文件中的部署配置仍作为低优先级兜底。拆分 Control/Data 部署需要 PostgreSQL 和 Distributed 执行，先初始化 Control Plane，再启动 Data Plane。运行数据保存在当前用户的 `agw` 目录下；通过域名设置时还需输入启动日志中的一次性 Setup Code。详见[部署指南](docs/4.Deployment.md)。
 
 在另一个终端启动前端：
 
@@ -183,7 +183,7 @@ pnpm fmt:check
 
 ## 调试
 
-- **后端：** 在 .NET 调试器中使用 launch profile 启动 `src/server/Agw.Standalone.Host`。它会设置 `ASPNETCORE_ENVIRONMENT=Development`，此时可以访问仅在开发环境开放的 OpenAPI 和 Scalar 端点。Server 日志同时输出到控制台和 `$AGW_DATA_DIR/logs/` 下按 Host 角色区分的文件；未设置 `AGW_DATA_DIR` 时位于 `~/agw/logs/`。
+- **后端：** 在 .NET 调试器中使用 launch profile 启动 `src/server/Agw.Standalone.Host`。它会设置 `ASPNETCORE_ENVIRONMENT=Development`，此时可以访问仅在开发环境开放的 OpenAPI 和 Scalar 端点。Server 日志同时输出到控制台和 `AgwLogDir` 下按 Host 角色区分的文件；默认位置为进程工作目录下的 `./logs`，与 `AgwDataDir` 独立。
 - **Web：** 执行 `pnpm dev:web`，通过浏览器开发者工具调试客户端代码和网络请求，并在 Next.js 终端查看服务端输出。需要连接其他后端时，可执行 `BACKEND_API_BASE_URL=http://host:port pnpm dev:web`。
 - **Desktop：** 执行 `pnpm dev:desktop`。Electron main process 和构建输出显示在启动终端，preload 与 renderer 代码可通过 Electron DevTools 检查；开发环境 renderer 使用 `http://localhost:3000`。
 - **聚焦测试：** 后端可执行 `dotnet test tests/<Project> --filter "FullyQualifiedName~MethodName"`；客户端可在 `src/clients` 下执行 `pnpm exec turbo run test --filter=@agw/web`，并按需替换 package filter。

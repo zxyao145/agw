@@ -1,12 +1,8 @@
 using Agw.Setup.Contracts;
 using Agw.Setup.Services;
-using Agw.Shared.Configuration;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Runtime;
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
-using Npgsql;
 using Xunit;
 
 namespace Agw.Setup.Tests;
@@ -16,102 +12,78 @@ public sealed class ConfiguredSetupBootstrapTests
     [Fact]
     public void FromConfiguration_WhenSetupSectionIsMissing_ReturnsNotConfigured()
     {
-        var configuration = CreateConfiguration(new Dictionary<string, string?>());
-
-        var bootstrap = ConfiguredSetupBootstrap.FromConfiguration(configuration, CreatePaths());
+        var bootstrap = ConfiguredSetupBootstrap.FromConfiguration(new ConfigurationBuilder().Build());
 
         Assert.False(bootstrap.IsConfigured);
-        Assert.Empty(bootstrap.RuntimeConfiguration);
     }
 
     [Fact]
-    public void FromConfiguration_WithMinimalSqliteSetup_UsesServerDatabasePath()
+    public void FromConfiguration_WithPasswordOnly_DoesNotRequireDeploymentFieldsOrReadSetupCode()
     {
-        var paths = CreatePaths();
         var configuration = CreateConfiguration(
-            new Dictionary<string, string?> { ["Setup:AdminPassword"] = "administrator-password" }
+            new Dictionary<string, string?>
+            {
+                ["Setup:AdminPassword"] = "administrator-password",
+                ["Setup:SetupCode"] = "ignored-code",
+            }
         );
 
-        var bootstrap = ConfiguredSetupBootstrap.FromConfiguration(configuration, paths);
-        var connectionString = bootstrap.RuntimeConfiguration["Database:ConnectionString"];
-        var connectionStringBuilder = new SqliteConnectionStringBuilder(connectionString);
+        var bootstrap = ConfiguredSetupBootstrap.FromConfiguration(configuration);
 
         Assert.True(bootstrap.IsConfigured);
-        Assert.Equal(DeploymentMode.Standalone, bootstrap.Request.DeploymentMode);
-        Assert.Equal(DatabaseProvider.Sqlite, bootstrap.Request.Provider);
-        Assert.Equal(paths.DatabaseFile, bootstrap.Request.SqlitePath);
-        Assert.Equal(paths.DatabaseFile, connectionStringBuilder.DataSource);
-        Assert.Equal("sqlite", bootstrap.RuntimeConfiguration["Database:Provider"]);
-        Assert.Equal("InProcess", bootstrap.RuntimeConfiguration["Execution:Provider"]);
-        Assert.False(bootstrap.RuntimeConfiguration.ContainsKey("DistributedLock:Provider"));
+        Assert.Equal("administrator-password", bootstrap.Request.AdminPassword);
+        Assert.Null(bootstrap.Request.SetupCode);
     }
 
-    [Fact]
-    public void FromConfiguration_WithClusterPostgresSetup_MapsRuntimeConfiguration()
+    [Theory]
+    [InlineData("DeploymentMode")]
+    [InlineData("Provider")]
+    [InlineData("SqlitePath")]
+    [InlineData("PostgresHost")]
+    [InlineData("PostgresPort")]
+    [InlineData("PostgresDatabase")]
+    [InlineData("PostgresUsername")]
+    [InlineData("PostgresPassword")]
+    public void FromConfiguration_WithLegacyDeploymentField_RejectsWithoutLeakingValues(string key)
     {
         var configuration = CreateConfiguration(
             new Dictionary<string, string?>
             {
-                ["Setup:DeploymentMode"] = "Cluster",
-                ["Setup:Provider"] = "Postgres",
-                ["Setup:PostgresHost"] = "postgres",
-                ["Setup:PostgresPort"] = "5544",
-                ["Setup:PostgresDatabase"] = "agw_cluster",
-                ["Setup:PostgresUsername"] = "agw",
-                ["Setup:PostgresPassword"] = "p;ass=word",
                 ["Setup:AdminPassword"] = "administrator-password",
+                [$"Setup:{key}"] = "legacy-secret-value",
             }
         );
 
-        var bootstrap = ConfiguredSetupBootstrap.FromConfiguration(configuration, CreatePaths());
-        var connectionString = bootstrap.RuntimeConfiguration["Database:ConnectionString"];
-        var connectionStringBuilder = new NpgsqlConnectionStringBuilder(connectionString);
-
-        Assert.Equal(DeploymentMode.Cluster, bootstrap.Request.DeploymentMode);
-        Assert.Equal(DatabaseProvider.Postgres, bootstrap.Request.Provider);
-        Assert.Equal("postgres", connectionStringBuilder.Host);
-        Assert.Equal(5544, connectionStringBuilder.Port);
-        Assert.Equal("agw_cluster", connectionStringBuilder.Database);
-        Assert.Equal("agw", connectionStringBuilder.Username);
-        Assert.Equal("p;ass=word", connectionStringBuilder.Password);
-        Assert.Equal("postgres", bootstrap.RuntimeConfiguration["Database:Provider"]);
-        Assert.Equal("Distributed", bootstrap.RuntimeConfiguration["Execution:Provider"]);
-        Assert.Equal("postgres", bootstrap.RuntimeConfiguration["DistributedLock:Provider"]);
-        Assert.Equal(string.Empty, bootstrap.RuntimeConfiguration["DistributedLock:ConnectionString"]);
-    }
-
-    [Fact]
-    public void FromConfiguration_WithInvalidSetup_ThrowsWithoutIncludingPassword()
-    {
-        var configuration = CreateConfiguration(
-            new Dictionary<string, string?>
-            {
-                ["Setup:DeploymentMode"] = "Cluster",
-                ["Setup:Provider"] = "Sqlite",
-                ["Setup:AdminPassword"] = "administrator-password",
-            }
-        );
-
-        var exception = Assert.Throws<AgwException>(() =>
-            ConfiguredSetupBootstrap.FromConfiguration(configuration, CreatePaths())
-        );
+        var exception = Assert.Throws<AgwException>(() => ConfiguredSetupBootstrap.FromConfiguration(configuration));
 
         Assert.Equal(ErrorCodes.InvalidSetupConfiguration.Code, exception.Code);
-        Assert.Contains("Cluster deployments require PostgreSQL", exception.Message);
+        Assert.Contains("Database, Execution, and DistributedLock", exception.Message);
         Assert.DoesNotContain("administrator-password", exception.Message);
+        Assert.DoesNotContain("legacy-secret-value", exception.Message);
     }
 
     [Fact]
-    public async Task InitializeIfConfiguredAsync_WhenSetupIsConfigured_InitializesOnce()
+    public void FromConfiguration_WithInvalidPassword_RejectsWithoutLeakingPassword()
+    {
+        var configuration = CreateConfiguration(new Dictionary<string, string?> { ["Setup:AdminPassword"] = "short" });
+
+        var exception = Assert.Throws<AgwException>(() => ConfiguredSetupBootstrap.FromConfiguration(configuration));
+
+        Assert.Equal(ErrorCodes.InvalidSetupConfiguration.Code, exception.Code);
+        Assert.DoesNotContain("short", exception.Message);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InitializeIfConfiguredAsync_RespectsExistingInitialization(bool isInitialized)
     {
         var bootstrap = ConfiguredSetupBootstrap.FromConfiguration(
-            CreateConfiguration(new Dictionary<string, string?> { ["Setup:AdminPassword"] = "administrator-password" }),
-            CreatePaths()
+            CreateConfiguration(new Dictionary<string, string?> { ["Setup:AdminPassword"] = "administrator-password" })
         );
-        var stateStore = new StubInitializationStateStore(isInitialized: false);
         var setupService = new StubSetupInitializationService();
         var initializer = new ConfiguredSetupInitializer(
-            stateStore,
+            new StubInitializationStateStore(isInitialized),
             setupService,
             bootstrap,
             NullLogger<ConfiguredSetupInitializer>.Instance
@@ -119,43 +91,12 @@ public sealed class ConfiguredSetupBootstrapTests
 
         var initialized = await initializer.InitializeIfConfiguredAsync(TestContext.Current.CancellationToken);
 
-        Assert.True(initialized);
-        Assert.Same(bootstrap.Request, setupService.LastRequest);
+        Assert.Equal(!isInitialized, initialized);
+        Assert.Equal(isInitialized ? null : bootstrap.Request, setupService.LastRequest);
     }
 
-    [Fact]
-    public async Task InitializeIfConfiguredAsync_WhenStateExists_DoesNotOverwriteState()
-    {
-        var bootstrap = ConfiguredSetupBootstrap.FromConfiguration(
-            CreateConfiguration(new Dictionary<string, string?> { ["Setup:AdminPassword"] = "administrator-password" }),
-            CreatePaths()
-        );
-        var setupService = new StubSetupInitializationService();
-        var initializer = new ConfiguredSetupInitializer(
-            new StubInitializationStateStore(isInitialized: true),
-            setupService,
-            bootstrap,
-            NullLogger<ConfiguredSetupInitializer>.Instance
-        );
-
-        var initialized = await initializer.InitializeIfConfiguredAsync(TestContext.Current.CancellationToken);
-
-        Assert.False(initialized);
-        Assert.Null(setupService.LastRequest);
-    }
-
-    private static IConfiguration CreateConfiguration(IReadOnlyDictionary<string, string?> values)
-    {
-        return new ConfigurationBuilder().AddInMemoryCollection(values).Build();
-    }
-
-    private static AgwDataPaths CreatePaths()
-    {
-        return AgwDataPaths.Resolve(
-            Path.Combine(Path.GetTempPath(), $"agw-configured-setup-{Guid.CreateVersion7():N}"),
-            "/unused"
-        );
-    }
+    private static IConfiguration CreateConfiguration(IReadOnlyDictionary<string, string?> values) =>
+        new ConfigurationBuilder().AddInMemoryCollection(values).Build();
 
     private sealed class StubInitializationStateStore : IInitializationStateStore
     {
@@ -166,11 +107,8 @@ public sealed class ConfiguredSetupBootstrapTests
 
         public bool IsInitialized { get; }
 
-        public Task PersistAsync(
-            SetupConfiguration configuration,
-            string passwordHash,
-            CancellationToken cancellationToken = default
-        ) => Task.CompletedTask;
+        public Task PersistAsync(string passwordHash, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class StubSetupInitializationService : ISetupInitializationService

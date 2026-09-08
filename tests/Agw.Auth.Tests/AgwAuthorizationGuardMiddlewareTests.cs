@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using Agw.Auth.Middleware;
-using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
 using Microsoft.AspNetCore.Http;
 using Xunit;
@@ -96,7 +95,5 @@ public sealed class AgwAuthorizationGuardMiddlewareTests
         }
 
         public bool IsInitialized { get; }
-        public DatabaseProvider DatabaseProvider => DatabaseProvider.Sqlite;
-        public string DatabaseConnectionString => string.Empty;
     }
 }

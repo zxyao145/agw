@@ -4,13 +4,13 @@ using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.ExternalAgents;
 using Agw.Agents.ExternalAgents.ClaudeCode;
 using Agw.Agents.ExternalAgents.Pi;
-using Agw.Files.Utils;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
 using Agw.Tools.ToolBlocks.Blocks.UserMemory;
 using ClaudeCodeSdk.MAF;
+using ClaudeCodeSdk.Types;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -18,6 +18,7 @@ using OpenAI.CodexSdk;
 using OpenAI.CodexSdk.MAF;
 using PiAgentSdk;
 using PiAgentSdk.MAF;
+using ExecutionPermissionMode = Agw.Agents.Execution.Commands.Setting.PermissionMode;
 
 namespace Agw.Agents.Execution.Agents;
 
@@ -108,7 +109,8 @@ public partial class AgentRuntimeService
                 request.IsResume,
                 environmentVariables,
                 isBackground,
-                requestHistoryProvider
+                requestHistoryProvider,
+                request.PermissionMode
             ),
             ExternalAgentKind.Codex => CreateCodexAgent(
                 request.Agent,
@@ -116,7 +118,8 @@ public partial class AgentRuntimeService
                 request.ProviderSessionId,
                 request.IsResume,
                 environmentVariables,
-                request.OnExternalSessionStartedAsync
+                request.OnExternalSessionStartedAsync,
+                request.PermissionMode
             ),
             ExternalAgentKind.Pi => CreatePiAgent(
                 request.Agent,
@@ -284,7 +287,8 @@ public partial class AgentRuntimeService
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables,
         bool isBackground,
-        AgentRequestChatHistoryProvider requestHistoryProvider
+        AgentRequestChatHistoryProvider requestHistoryProvider,
+        ExecutionPermissionMode? permissionMode
     )
     {
         var options = BuildClaudeCodeAIAgentOptions(
@@ -293,7 +297,8 @@ public partial class AgentRuntimeService
             providerSessionId,
             isResume,
             environmentVariables,
-            new ClaudeCodeChatHistoryProvider(requestHistoryProvider)
+            new ClaudeCodeChatHistoryProvider(requestHistoryProvider),
+            permissionMode
         );
         if (options == null)
         {
@@ -318,7 +323,8 @@ public partial class AgentRuntimeService
         Guid? providerSessionId,
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
-        ChatHistoryProvider? chatHistoryProvider = null
+        ChatHistoryProvider? chatHistoryProvider = null,
+        ExecutionPermissionMode? permissionMode = null
     )
     {
         var extra = agent.Extra;
@@ -335,6 +341,10 @@ public partial class AgentRuntimeService
 
         options = options with
         {
+            PermissionMode =
+                permissionMode == ExecutionPermissionMode.FullAccess
+                    ? PermissionMode.bypassPermissions
+                    : options.PermissionMode,
             WorkingDirectory = PathUtil.ExpandTilde(project.Workspace),
             IncludePartialMessages = true,
             ContinueConversation = false,
@@ -365,7 +375,8 @@ public partial class AgentRuntimeService
         Guid? threadId,
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables,
-        Func<string, CancellationToken, ValueTask>? onThreadStartedAsync
+        Func<string, CancellationToken, ValueTask>? onThreadStartedAsync,
+        ExecutionPermissionMode? permissionMode
     )
     {
         var options = BuildCodexAIAgentOptions(
@@ -374,7 +385,8 @@ public partial class AgentRuntimeService
             threadId,
             isResume,
             environmentVariables,
-            onThreadStartedAsync
+            onThreadStartedAsync,
+            permissionMode
         );
         if (options == null)
         {
@@ -523,7 +535,8 @@ public partial class AgentRuntimeService
         Guid? threadId,
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
-        Func<string, CancellationToken, ValueTask>? onThreadStartedAsync = null
+        Func<string, CancellationToken, ValueTask>? onThreadStartedAsync = null,
+        ExecutionPermissionMode? permissionMode = null
     )
     {
         var extra = agent.Extra;
@@ -539,11 +552,11 @@ public partial class AgentRuntimeService
         }
 
         var workspace = PathUtil.ExpandTilde(project.Workspace);
-        if (!string.IsNullOrWhiteSpace(workspace))
+        if (!string.IsNullOrWhiteSpace(workspace) || permissionMode == ExecutionPermissionMode.FullAccess)
         {
             options = options with
             {
-                ThreadOptions = CreateCodexThreadOptionsWithWorkspace(options.ThreadOptions, workspace),
+                ThreadOptions = CreateCodexThreadOptionsWithWorkspace(options.ThreadOptions, workspace, permissionMode),
             };
         }
 
@@ -600,7 +613,11 @@ public partial class AgentRuntimeService
         };
     }
 
-    private static ThreadOptions CreateCodexThreadOptionsWithWorkspace(ThreadOptions? options, string workspace)
+    private static ThreadOptions CreateCodexThreadOptionsWithWorkspace(
+        ThreadOptions? options,
+        string? workspace,
+        ExecutionPermissionMode? permissionMode = null
+    )
     {
         options ??= new ThreadOptions();
 
@@ -608,13 +625,14 @@ public partial class AgentRuntimeService
         {
             Model = options.Model,
             SandboxMode = options.SandboxMode,
-            WorkingDirectory = workspace,
+            WorkingDirectory = string.IsNullOrWhiteSpace(workspace) ? options.WorkingDirectory : workspace,
             SkipGitRepoCheck = options.SkipGitRepoCheck,
             ModelReasoningEffort = options.ModelReasoningEffort,
             NetworkAccessEnabled = options.NetworkAccessEnabled,
             WebSearchMode = options.WebSearchMode,
             WebSearchEnabled = options.WebSearchEnabled,
-            ApprovalPolicy = options.ApprovalPolicy,
+            ApprovalPolicy =
+                permissionMode == ExecutionPermissionMode.FullAccess ? ApprovalMode.Never : options.ApprovalPolicy,
             AdditionalDirectories = options.AdditionalDirectories,
         };
     }

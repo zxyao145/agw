@@ -262,7 +262,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         string input,
         CancellationToken cancellationToken = default,
         Guid? projectId = null,
-        string? contextId = null
+        string? contextId = null,
+        PermissionMode? permissionMode = null
     )
     {
         var messages = new List<ChatMessage>
@@ -270,7 +271,15 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             new(ChatRole.User, input) { AuthorName = Constants.DefaultInputAuthor },
         };
 
-        return await ExecuteAsync(agentflowId, taskId, messages, cancellationToken, projectId, contextId)
+        return await ExecuteAsync(
+                agentflowId,
+                taskId,
+                messages,
+                cancellationToken,
+                projectId,
+                contextId,
+                permissionMode
+            )
             .ConfigureAwait(false);
     }
 
@@ -280,7 +289,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         List<ChatMessage> messages,
         CancellationToken cancellationToken = default,
         Guid? projectId = null,
-        string? contextId = null
+        string? contextId = null,
+        PermissionMode? permissionMode = null
     )
     {
         var resolvedProjectId = await ResolveProjectIdAsync(projectId, cancellationToken).ConfigureAwait(false);
@@ -293,7 +303,15 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             return null;
         }
 
-        return await ExecuteAsync(agentflowId, resolvedProjectId.Value, taskId, messages, cancellationToken, contextId)
+        return await ExecuteAsync(
+                agentflowId,
+                resolvedProjectId.Value,
+                taskId,
+                messages,
+                cancellationToken,
+                contextId,
+                permissionMode
+            )
             .ConfigureAwait(false);
     }
 
@@ -306,7 +324,8 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         Guid? taskId,
         List<ChatMessage> messages,
         CancellationToken cancellationToken,
-        string? contextId = null
+        string? contextId = null,
+        PermissionMode? permissionMode = null
     )
     {
         if (!await IsProjectVisibleAsync(projectId, cancellationToken).ConfigureAwait(false))
@@ -334,14 +353,15 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                 taskId,
                 conversationId: null,
                 cancellationToken,
-                new PermissionModeState(permissionMode: null)
+                new PermissionModeState(permissionMode)
             )
             .ConfigureAwait(false);
         var workflowLease = await _workflowFactory.CreateAiWorkflow(
             agentflow,
             cancellationToken,
             sessionScope,
-            executionTraceContext
+            executionTraceContext,
+            deferHumanInteractions: true
         );
         if (workflowLease == null)
         {
@@ -350,7 +370,15 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
 
         await using var workflowResources = workflowLease;
         return await _inProcessRunner
-            .ExecuteAsync(agentflow.Id, taskId.Value, resolvedContextId, workflowLease, messages, cancellationToken)
+            .ExecuteAsync(
+                agentflow.Id,
+                taskId.Value,
+                resolvedContextId,
+                workflowLease,
+                messages,
+                cancellationToken,
+                UnattendedApprovalHandler.Create(permissionMode)
+            )
             .ConfigureAwait(false);
     }
 

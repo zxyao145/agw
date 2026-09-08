@@ -13,7 +13,7 @@ These instructions supplement the repository-root `AGENTS.md` for work under `Ag
 - Setup JSON endpoints return Bens.Results envelopes and use shared `AgwException` error codes.
 - Direct loopback setup may be trusted; forwarded or domain setup requires the one-time Setup Code.
 - Never persist administrator password or API Token plaintext. Never return stored password/token hashes or protected credential payloads.
-- Preserve the existing `server-state.json` schema unless a coordinated compatibility change is explicitly requested. Legacy Token removal must happen only after its database import succeeds.
+- New initialization writes schema v3 with only initialization and password/session state. Preserve schema v1/v2 deployment fields during authentication writes; they are a low-priority startup fallback beneath standard configuration. Do not promote authentication values into IConfiguration. Legacy Token removal must happen only after its database import succeeds.
 
 ## Verification
 

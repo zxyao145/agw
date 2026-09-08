@@ -4,7 +4,6 @@ using System.Text;
 using Agw.Auth.Api;
 using Agw.Auth.Contracts;
 using Agw.Auth.Extensions;
-using Agw.Shared.Configuration;
 using Agw.Shared.Runtime;
 using Bens.Results;
 using Microsoft.AspNetCore.Builder;
@@ -161,7 +160,5 @@ public sealed class AuthModuleCompositionTests
     private sealed class InitializationStateStub : IServerInitializationState
     {
         public bool IsInitialized => true;
-        public DatabaseProvider DatabaseProvider => DatabaseProvider.Sqlite;
-        public string DatabaseConnectionString => string.Empty;
     }
 }

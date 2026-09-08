@@ -2,11 +2,13 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Agents.Store;
+using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Turns;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Agentflows;
+using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -463,6 +465,103 @@ public partial class AgentflowRuntimeServiceTests
             Assert.Null(await fixture.Service.GetMermaidAsync(fixture.Flow.Id, TestContext.Current.CancellationToken));
         }
         Assert.Empty(fixture.Agents.CreatedAgents);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteAsync_FullAccess_ApprovesToolAndContinues(bool distributed)
+    {
+        var agent = new ApprovalRequestAgent();
+        var fixture = CreateCharacterizationFixture([AgentflowNodeKind.Agent, AgentflowNodeKind.Output], _ => agent);
+        if (distributed)
+        {
+            var manifest = CreateManifest(fixture.Flow.Id);
+            manifest = manifest with
+            {
+                Settings = manifest.Settings with
+                {
+                    PermissionMode = PermissionMode.FullAccess,
+                    HumanInteractionPolicy = HumanInteractionPolicy.Reject,
+                },
+            };
+            var sink = new RecordingSegmentSink();
+
+            var result = await fixture.Service.ExecuteDurableSegmentAsync(
+                manifest,
+                new(manifest.ExecutionId, 0, [], null),
+                sink,
+                TestContext.Current.CancellationToken
+            );
+
+            Assert.Equal(DurableExecutionSegmentStatus.Completed, result.Status);
+            Assert.Empty(result.PendingInteractions);
+            Assert.Contains(sink.Messages, message => MessageShape(message) == "always-tool");
+        }
+        else
+        {
+            var result = await fixture.Service.ExecuteAsync(
+                fixture.Flow.Id,
+                Guid.CreateVersion7(),
+                "input",
+                TestContext.Current.CancellationToken,
+                permissionMode: PermissionMode.FullAccess
+            );
+
+            Assert.NotNull(result);
+            Assert.Contains(result.Messages, message => MessageShape(message) == "always-tool");
+        }
+        Assert.Equal(2, agent.RunCount);
+        Assert.Equal(PermissionMode.FullAccess, fixture.Agents.LastPermissionMode);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExecuteAsync_FullAccess_RejectsHumanGate(bool distributed)
+    {
+        var agent = new ScriptedAgent(["must not execute"]);
+        var fixture = CreateCharacterizationFixture(
+            [AgentflowNodeKind.HumanGate, AgentflowNodeKind.Agent, AgentflowNodeKind.Output],
+            _ => agent
+        );
+        if (distributed)
+        {
+            var manifest = CreateManifest(fixture.Flow.Id);
+            manifest = manifest with
+            {
+                Settings = manifest.Settings with
+                {
+                    PermissionMode = PermissionMode.FullAccess,
+                    HumanInteractionPolicy = HumanInteractionPolicy.Reject,
+                },
+            };
+
+            var result = await fixture.Service.ExecuteDurableSegmentAsync(
+                manifest,
+                new(manifest.ExecutionId, 0, [], null),
+                new RecordingSegmentSink(),
+                TestContext.Current.CancellationToken
+            );
+
+            Assert.Equal(DurableExecutionSegmentStatus.Failed, result.Status);
+            Assert.Empty(result.PendingInteractions);
+            Assert.Contains("unattended", result.ErrorMessage);
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<AgwException>(() =>
+                fixture.Service.ExecuteAsync(
+                    fixture.Flow.Id,
+                    Guid.CreateVersion7(),
+                    "input",
+                    TestContext.Current.CancellationToken,
+                    permissionMode: PermissionMode.FullAccess
+                )
+            );
+            Assert.Contains("unattended", error.Message);
+        }
+        Assert.Empty(agent.Inputs);
     }
 
     private static CharacterizationFixture CreateCharacterizationFixture(

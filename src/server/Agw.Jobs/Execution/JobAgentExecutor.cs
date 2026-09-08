@@ -60,7 +60,8 @@ public sealed class JobAgentExecutor : IJobAgentExecutor
                     new AgentTarget(Map(job.AgentType.Value), job.AgentId.Value),
                     task,
                     input,
-                    HumanInteractionPolicy: HumanInteractionPolicy.Reject
+                    HumanInteractionPolicy: HumanInteractionPolicy.Reject,
+                    PermissionMode: AgentExecutionPermissionMode.FullAccess
                 ),
                 cancellationToken
             )

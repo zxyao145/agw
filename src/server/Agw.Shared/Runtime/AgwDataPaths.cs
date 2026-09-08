@@ -1,3 +1,7 @@
+using Agw.Shared.Utils;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.EnvironmentVariables;
+
 namespace Agw.Shared.Runtime;
 
 /// <summary>
@@ -5,13 +9,13 @@ namespace Agw.Shared.Runtime;
 /// </summary>
 public sealed class AgwDataPaths
 {
-    private AgwDataPaths(string root)
+    private AgwDataPaths(string root, string logsDirectory)
     {
         Root = root;
         StateFile = Path.Combine(root, "server-state.json");
         DatabaseFile = Path.Combine(root, "database", "agw.db");
         SkillsDirectory = Path.Combine(root, "skills");
-        LogsDirectory = Path.Combine(root, "logs");
+        LogsDirectory = logsDirectory;
         TempDirectory = Path.Combine(root, "temp");
         KeysDirectory = Path.Combine(root, "keys");
         RuntimeDirectory = Path.Combine(root, "runtime");
@@ -19,7 +23,7 @@ public sealed class AgwDataPaths
     }
 
     /// <summary>
-    /// Gets the root directory that contains all Server-managed data.
+    /// Gets the root directory that contains persistent Server data, excluding logs.
     /// </summary>
     public string Root { get; }
 
@@ -39,7 +43,7 @@ public sealed class AgwDataPaths
     public string SkillsDirectory { get; }
 
     /// <summary>
-    /// Gets the directory that stores Server log files.
+    /// Gets the independently configured directory that stores Server log files.
     /// </summary>
     public string LogsDirectory { get; }
 
@@ -71,12 +75,21 @@ public sealed class AgwDataPaths
     /// </summary>
     /// <param name="configuredRoot">The configured data root, or <see langword="null"/> to use the default.</param>
     /// <param name="userHome">The user home directory used to construct the default <c>agw</c> data root.</param>
+    /// <param name="configuredLogsDirectory">The separate log directory, defaulting to ./logs.</param>
     /// <returns>The canonical absolute paths for the Server data directories and files.</returns>
-    public static AgwDataPaths Resolve(string? configuredRoot, string userHome)
+    public static AgwDataPaths Resolve(string? configuredRoot, string userHome, string? configuredLogsDirectory = null)
     {
         var root = string.IsNullOrWhiteSpace(configuredRoot) ? Path.Combine(userHome, "agw") : configuredRoot.Trim();
 
-        return new AgwDataPaths(Path.GetFullPath(root));
+        var logsDirectory = string.IsNullOrWhiteSpace(configuredLogsDirectory)
+            ? "./logs"
+            : configuredLogsDirectory.Trim();
+        return new AgwDataPaths(ResolvePath(root, userHome), ResolvePath(logsDirectory, userHome));
+    }
+
+    private static string ResolvePath(string root, string userHome)
+    {
+        return Path.GetFullPath(PathUtil.ExpandTilde(root, userHome));
     }
 
     /// <summary>
@@ -86,7 +99,43 @@ public sealed class AgwDataPaths
     public static AgwDataPaths ResolveFromEnvironment()
     {
         var userHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        return Resolve(Environment.GetEnvironmentVariable("AGW_DATA_DIR"), userHome);
+        return Resolve(
+            Environment.GetEnvironmentVariable("AGW_DATA_DIR"),
+            userHome,
+            Environment.GetEnvironmentVariable("AgwLogDir")
+        );
+    }
+
+    /// <summary>
+    /// Resolves Server data paths from the standard configuration chain's AgwDataDir key, with AGW_DATA_DIR as an environment alias.
+    /// The root is selected once at startup and defaults to ~/agw.
+    /// </summary>
+    public static AgwDataPaths ResolveFromConfiguration(IConfiguration configuration)
+    {
+        var configuredRoot = configuration["AgwDataDir"];
+        if (configuration is IConfigurationRoot root)
+        {
+            // Resolve the legacy environment alias at its provider's priority, below command-line overrides.
+            foreach (var provider in root.Providers.Reverse())
+            {
+                if (
+                    provider.TryGet("AgwDataDir", out configuredRoot)
+                    || (
+                        provider is EnvironmentVariablesConfigurationProvider
+                        && provider.TryGet("AGW_DATA_DIR", out configuredRoot)
+                    )
+                )
+                {
+                    break;
+                }
+            }
+        }
+
+        return Resolve(
+            configuredRoot,
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            configuration["AgwLogDir"]
+        );
     }
 
     /// <summary>
