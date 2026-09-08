@@ -306,91 +306,82 @@ Agw 采用基于领域的模块化单体架构。`src/server/Agw.Host` 是共享
 Controller -> AppService / RuntimeService -> DomainService -> IRepository / IUnitOfWork -> EF Core
 ```
 
-模块介绍（展示运行时相关的仓库内项目直接引用，省略数据库 Provider 专用 migration 项目；`A --> B` 表示 A 引用 B）：
+后端与 Pi SDK 的简化依赖概览：省略 Contracts 项目及其相关引用，并省略可通过其他路径表达的重复连线；不包含测试项目和 NuGet 包。图从上往下排列，`A --> B` 表示 A 引用 B：
 
 ```mermaid
 flowchart TB
-    subgraph Composition["组合根"]
-        HOST["Agw.Host"]
+    subgraph hosts["Host"]
+        agwStandaloneHost["Agw.Standalone.Host"]
+        agwControlPlaneHost["Agw.ControlPlane.Host"]
+        agwDataPlaneHost["Agw.DataPlane.Host"]
+        agwHost["Agw.Host"]
     end
 
-    subgraph Boundaries["协议与引导"]
-        direction LR
-        A2A["Agw.A2A"]
-        AUTH["Agw.Auth"]
-        SETUP["Agw.Setup"]
+    subgraph persistence["基础设施与初始化"]
+        agwInfrastructure["Agw.Infrastructure"]
+        agwMigrationsPostgres["Agw.Migrations.Postgres"]
+        agwMigrationsSqlite["Agw.Migrations.Sqlite"]
+        agwSetup["Agw.Setup"]
     end
 
-    subgraph Adapters["技术适配器"]
-        INFRA["Agw.Infrastructure"]
+    subgraph modules["功能模块"]
+        subgraph entryLayer["第一层：入口与业务流程"]
+            agwA2A["Agw.A2A"]
+            agwAgentsExecution["Agw.Agents.Execution"]
+            agwProjects["Agw.Projects"]
+            agwJobs["Agw.Jobs"]
+        end
+
+        subgraph definitionLayer["第二层：Agent 定义"]
+            agwAgents["Agw.Agents"]
+        end
+
+        subgraph capabilityLayer["第三层：能力支持"]
+            agwIntegrations["Agw.Integrations"]
+            agwProviders["Agw.Providers"]
+            agwTools["Agw.Tools"]
+            agwSkills["Agw.Skills"]
+        end
+
+        subgraph serviceLayer["第四层：基础服务"]
+            agwAuth["Agw.Auth"]
+            agwFiles["Agw.Files"]
+        end
     end
 
-    subgraph Core["业务模块"]
-        direction LR
-        AGENTS["Agw.Agents"]
-        JOBS["Agw.Jobs"]
-        PROJECTS["Agw.Projects"]
-        PROVIDERS["Agw.Providers"]
-        INTEGRATIONS["Agw.Integrations"]
-        SKILLS["Agw.Skills"]
-        TOOLS["Agw.Tools"]
-        FILES["Agw.Files"]
+    subgraph foundation["数据与共享"]
+        agwData["Agw.Data"]
+        agwShared["Agw.Shared"]
     end
 
-    subgraph Foundation["基础层"]
-        direction LR
-        SHARED["Agw.Shared"]
-        DATA["Agw.Data"]
+    subgraph sdk["Pi SDK"]
+        piAgentSdkMAF["PiAgentSdk.MAF"]
+        piAgentSdk["PiAgentSdk"]
     end
 
-    HOST --> A2A
-    HOST --> AUTH
-    HOST --> INFRA
-    HOST --> SETUP
-
-    SETUP --> AUTH
-    SETUP --> INFRA
-    SETUP --> SHARED
-    SETUP --> SKILLS
-
-    A2A --> AGENTS
-    A2A --> PROJECTS
-
-    INFRA --> AGENTS
-    INFRA --> AUTH
-    INFRA --> INTEGRATIONS
-    INFRA --> PROVIDERS
-    INFRA --> PROJECTS
-    INFRA --> SKILLS
-    INFRA --> JOBS
-
-    SKILLS --> SHARED
-    JOBS --> AGENTS
-    JOBS --> PROJECTS
-    JOBS --> SHARED
-    JOBS --> SKILLS
-
-    AGENTS --> AUTH
-    AGENTS --> FILES
-    AGENTS --> INTEGRATIONS
-    AGENTS --> PROVIDERS
-    AGENTS --> TOOLS
-    AGENTS --> SHARED
-    AGENTS --> SKILLS
-
-    PROJECTS --> FILES
-    PROJECTS --> SHARED
-    TOOLS --> AUTH
-    TOOLS --> FILES
-    TOOLS --> SHARED
-
-    AUTH --> SHARED
-    INTEGRATIONS --> SHARED
-    PROVIDERS --> SHARED
-
-    %% 仅用于布局：让基础层保持在业务模块下方。
-    FILES ~~~ SHARED
-    SHARED --> DATA
+    agwStandaloneHost --> agwControlPlaneHost & agwDataPlaneHost
+    agwControlPlaneHost --> agwHost
+    agwDataPlaneHost --> agwHost
+    agwHost --> agwMigrationsPostgres & agwMigrationsSqlite & agwSetup & agwAgentsExecution
+    agwHost --> agwA2A
+    agwInfrastructure --> agwAgents & agwProjects & agwJobs
+    agwMigrationsPostgres --> agwInfrastructure
+    agwMigrationsSqlite --> agwInfrastructure
+    agwSetup --> agwInfrastructure
+    agwAgentsExecution --> agwAgents
+    agwAgents --> agwIntegrations & agwProviders & agwTools & agwSkills
+    agwAgents --> piAgentSdkMAF
+    agwA2A --> agwAuth
+    agwProjects --> agwIntegrations & agwSkills & agwFiles
+    agwJobs --> agwSkills & agwAuth
+    agwIntegrations --> agwAuth
+    agwProviders --> agwData
+    agwTools --> agwFiles & agwAuth
+    agwSkills --> agwData
+    agwFiles --> agwShared
+    agwAuth --> agwData
+    agwData --> agwShared
+    piAgentSdkMAF --> piAgentSdk
 ```
 
 - Agw.Providers  

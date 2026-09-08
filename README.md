@@ -303,91 +303,82 @@ A typical backend flow is:
 Controller -> AppService / RuntimeService -> DomainService -> IRepository / IUnitOfWork -> EF Core
 ```
 
-Module overview (runtime-facing in-repository project references; provider-specific migration projects are omitted, and `A --> B` means A references B):
+Simplified dependency overview for the backend and Pi SDK. Contracts projects and their references are omitted, along with redundant references already represented by other paths. Test projects and NuGet packages are excluded. The diagram runs from top to bottom; `A --> B` means A references B:
 
 ```mermaid
 flowchart TB
-    subgraph Composition["Composition root"]
-        HOST["Agw.Host"]
+    subgraph hosts["Host"]
+        agwStandaloneHost["Agw.Standalone.Host"]
+        agwControlPlaneHost["Agw.ControlPlane.Host"]
+        agwDataPlaneHost["Agw.DataPlane.Host"]
+        agwHost["Agw.Host"]
     end
 
-    subgraph Boundaries["Protocol and bootstrap"]
-        direction LR
-        A2A["Agw.A2A"]
-        AUTH["Agw.Auth"]
-        SETUP["Agw.Setup"]
+    subgraph persistence["Infrastructure and initialization"]
+        agwInfrastructure["Agw.Infrastructure"]
+        agwMigrationsPostgres["Agw.Migrations.Postgres"]
+        agwMigrationsSqlite["Agw.Migrations.Sqlite"]
+        agwSetup["Agw.Setup"]
     end
 
-    subgraph Adapters["Technical adapters"]
-        INFRA["Agw.Infrastructure"]
+    subgraph modules["Functional modules"]
+        subgraph entryLayer["Layer 1: Entry points and business flows"]
+            agwA2A["Agw.A2A"]
+            agwAgentsExecution["Agw.Agents.Execution"]
+            agwProjects["Agw.Projects"]
+            agwJobs["Agw.Jobs"]
+        end
+
+        subgraph definitionLayer["Layer 2: Agent definitions"]
+            agwAgents["Agw.Agents"]
+        end
+
+        subgraph capabilityLayer["Layer 3: Supporting capabilities"]
+            agwIntegrations["Agw.Integrations"]
+            agwProviders["Agw.Providers"]
+            agwTools["Agw.Tools"]
+            agwSkills["Agw.Skills"]
+        end
+
+        subgraph serviceLayer["Layer 4: Foundation services"]
+            agwAuth["Agw.Auth"]
+            agwFiles["Agw.Files"]
+        end
     end
 
-    subgraph Core["Business modules"]
-        direction LR
-        AGENTS["Agw.Agents"]
-        JOBS["Agw.Jobs"]
-        PROJECTS["Agw.Projects"]
-        PROVIDERS["Agw.Providers"]
-        INTEGRATIONS["Agw.Integrations"]
-        SKILLS["Agw.Skills"]
-        TOOLS["Agw.Tools"]
-        FILES["Agw.Files"]
+    subgraph foundation["Data and shared"]
+        agwData["Agw.Data"]
+        agwShared["Agw.Shared"]
     end
 
-    subgraph Foundation["Foundation"]
-        direction LR
-        SHARED["Agw.Shared"]
-        DATA["Agw.Data"]
+    subgraph sdk["Pi SDK"]
+        piAgentSdkMAF["PiAgentSdk.MAF"]
+        piAgentSdk["PiAgentSdk"]
     end
 
-    HOST --> A2A
-    HOST --> AUTH
-    HOST --> INFRA
-    HOST --> SETUP
-
-    SETUP --> AUTH
-    SETUP --> INFRA
-    SETUP --> SHARED
-    SETUP --> SKILLS
-
-    A2A --> AGENTS
-    A2A --> PROJECTS
-
-    INFRA --> AGENTS
-    INFRA --> AUTH
-    INFRA --> INTEGRATIONS
-    INFRA --> PROVIDERS
-    INFRA --> PROJECTS
-    INFRA --> SKILLS
-    INFRA --> JOBS
-
-    SKILLS --> SHARED
-    JOBS --> AGENTS
-    JOBS --> PROJECTS
-    JOBS --> SHARED
-    JOBS --> SKILLS
-
-    AGENTS --> AUTH
-    AGENTS --> FILES
-    AGENTS --> INTEGRATIONS
-    AGENTS --> PROVIDERS
-    AGENTS --> TOOLS
-    AGENTS --> SHARED
-    AGENTS --> SKILLS
-
-    PROJECTS --> FILES
-    PROJECTS --> SHARED
-    TOOLS --> AUTH
-    TOOLS --> FILES
-    TOOLS --> SHARED
-
-    AUTH --> SHARED
-    INTEGRATIONS --> SHARED
-    PROVIDERS --> SHARED
-
-    %% Layout only: keep the foundation below the business modules.
-    FILES ~~~ SHARED
-    SHARED --> DATA
+    agwStandaloneHost --> agwControlPlaneHost & agwDataPlaneHost
+    agwControlPlaneHost --> agwHost
+    agwDataPlaneHost --> agwHost
+    agwHost --> agwMigrationsPostgres & agwMigrationsSqlite & agwSetup & agwAgentsExecution
+    agwHost --> agwA2A
+    agwInfrastructure --> agwAgents & agwProjects & agwJobs
+    agwMigrationsPostgres --> agwInfrastructure
+    agwMigrationsSqlite --> agwInfrastructure
+    agwSetup --> agwInfrastructure
+    agwAgentsExecution --> agwAgents
+    agwAgents --> agwIntegrations & agwProviders & agwTools & agwSkills
+    agwAgents --> piAgentSdkMAF
+    agwA2A --> agwAuth
+    agwProjects --> agwIntegrations & agwSkills & agwFiles
+    agwJobs --> agwSkills & agwAuth
+    agwIntegrations --> agwAuth
+    agwProviders --> agwData
+    agwTools --> agwFiles & agwAuth
+    agwSkills --> agwData
+    agwFiles --> agwShared
+    agwAuth --> agwData
+    agwData --> agwShared
+    piAgentSdkMAF --> piAgentSdk
 ```
 
 - Agw.Providers
