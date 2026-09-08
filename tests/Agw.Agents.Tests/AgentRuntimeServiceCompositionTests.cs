@@ -224,7 +224,7 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void WrapExternalAgent_UsesHistoryAdapterWithoutCreatingSdkAgent()
     {
-        var historyProvider = new InMemoryChatHistoryProvider();
+        var historyProvider = new StubRequestHistoryProvider();
         var service = CreateRuntimeService(historyProvider);
 
         var agent = service.WrapExternalAgent(new StubAIAgent(), isBackground: false);
@@ -240,7 +240,7 @@ public class AgentRuntimeServiceCompositionTests
         // Arrange
         var logger = new CapturingLogger<ObservabilityMiddleware>();
         var innerAgent = new CapturingStubAIAgent();
-        var service = CreateRuntimeService(new InMemoryChatHistoryProvider(), logger);
+        var service = CreateRuntimeService(new StubRequestHistoryProvider(), logger);
         var agent = service.WrapExternalAgent(
             innerAgent,
             isBackground: false,
@@ -270,7 +270,7 @@ public class AgentRuntimeServiceCompositionTests
         // Arrange
         var logger = new CapturingLogger<ObservabilityMiddleware>();
         var innerAgent = new CapturingStubAIAgent();
-        var service = CreateRuntimeService(new InMemoryChatHistoryProvider(), logger);
+        var service = CreateRuntimeService(new StubRequestHistoryProvider(), logger);
         var agent = service.WrapExternalAgent(
             innerAgent,
             isBackground: false,
@@ -325,7 +325,7 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void WrapClaudeCodeAgent_UsesSessionTrackerWithoutExternalHistoryAdapter()
     {
-        var service = CreateRuntimeService(new InMemoryChatHistoryProvider());
+        var service = CreateRuntimeService(new StubRequestHistoryProvider());
 
         var agent = service.WrapClaudeCodeAgent(
             new StubAIAgent(),
@@ -342,7 +342,7 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void WrapPiAgent_DecoratesWithoutExternalHistoryOrSessionTracker()
     {
-        var service = CreateRuntimeService(new InMemoryChatHistoryProvider());
+        var service = CreateRuntimeService(new StubRequestHistoryProvider());
 
         var agent = service.WrapPiAgent(new StubAIAgent(), isBackground: false);
 
@@ -356,7 +356,7 @@ public class AgentRuntimeServiceCompositionTests
     public async Task WrapPiAgent_ComposedInner_ReleasesSeparatelyOwnedPiAgentOnce()
     {
         // Arrange
-        var service = CreateRuntimeService(new InMemoryChatHistoryProvider());
+        var service = CreateRuntimeService(new StubRequestHistoryProvider());
         var owner = new DisposableStubAIAgent();
         var composed = owner
             .AsBuilder()

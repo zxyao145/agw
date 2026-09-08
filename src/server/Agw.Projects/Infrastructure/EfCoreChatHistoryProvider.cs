@@ -13,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Agw.Projects.Infrastructure;
 
@@ -22,7 +23,13 @@ internal partial class ChatHistoryProviderStateJsonContext : JsonSerializerConte
 /// <summary>
 /// Persists agent chat history in EF Core while keeping the conversation key in session state.
 /// </summary>
-public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSessionState, IConversationHistoryWriter
+public sealed partial class EfCoreChatHistoryProvider
+    : ChatHistoryProvider,
+        IProviderSessionState,
+        IConversationHistoryWriter,
+        IConversationHistoryPersistence,
+        IConversationHistoryRequests,
+        IStreamingConversationHistoryProvider
 {
     private static readonly JsonSerializerOptions DefaultJsonSerializerOptions = new(JsonSerializerDefaults.Web)
     {
@@ -42,6 +49,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
     private readonly TimeProvider _timeProvider;
     private readonly JsonSerializerOptions _jsonSerializerOptions;
     private readonly ProviderSessionState<State> _state;
+    private readonly ConversationHistoryOptions _options;
 
     /// <summary>
     /// 创建 EF Core 聊天历史提供器，并配置默认的规范化 context 会话状态。
@@ -59,9 +67,11 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         IApplicationLock applicationLock,
         ILogger<EfCoreChatHistoryProvider> logger,
         TimeProvider timeProvider,
-        JsonSerializerOptions? jsonSerializerOptions = null
+        JsonSerializerOptions? jsonSerializerOptions = null,
+        IOptions<ConversationHistoryOptions>? options = null
     )
     {
+        _options = options?.Value ?? new ConversationHistoryOptions();
         _serviceScopeFactory = serviceScopeFactory;
         _applicationLock = applicationLock;
         _logger = logger;
@@ -136,26 +146,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
         ArgumentNullException.ThrowIfNull(context);
 
         var state = _state.GetOrInitializeState(context.Session);
-        await using var scope = _serviceScopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<IProjectsDbContext>();
-
-        var projectConversation = await dbContext
-            .ProjectConversations.AsNoTracking()
-            .SingleOrDefaultAsync(
-                context => context.ProjectId == state.ProjectId && context.ContextId == state.ContextId,
-                cancellationToken
-            )
-            .ConfigureAwait(false);
-        if (projectConversation == null)
-        {
-            return [];
-        }
-
-        var records = await dbContext
-            .ProjectConversationChatHistories.AsNoTracking()
-            .Where(record => record.ConversationId == projectConversation.Id && record.ConversationPayload != null)
-            .ToListAsync(cancellationToken)
-            .ConfigureAwait(false);
+        var records = await ReadHistoryRecordsAsync(state, cancellationToken).ConfigureAwait(false);
         var payloads = records
             .Where(record => HasHistoryScope(record, state.HistoryScope))
             .OrderBy(record => record.ConversationSequence ?? long.MinValue)
@@ -271,19 +262,55 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
     )
     {
         ArgumentNullException.ThrowIfNull(messages);
-        var persistableMessages = messages
+        contextId = ContextIdUtil.NormalizeContextId(contextId);
+        var records = CreateRecords(messages, historyScope, Guid.CreateVersion7(), _timeProvider.GetUtcNow());
+        if (records.Count == 0)
+            return;
+        var buffer = GetBuffer(projectId, contextId, expectedGeneration);
+        if (buffer != null)
+        {
+            await buffer.AppendAsync(records, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+        await AppendRecordsAsync(projectId, contextId, records, expectedGeneration, isExecutionBound, cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private List<PendingHistoryRecord> CreateRecords(
+        IEnumerable<ChatMessage> messages,
+        string? historyScope,
+        Guid taskId,
+        DateTimeOffset now
+    )
+    {
+        return messages
             .Where(message => !ConversationHandoffMetadata.IsHandoffMessage(message))
             .Where(message => !ConversationHistoryMetadata.IsPersistenceExcluded(message))
             .Select(RemoveBlankTextualContent)
             .OfType<ChatMessage>()
+            .Select(message => new PendingHistoryRecord(
+                Guid.CreateVersion7(),
+                taskId,
+                now,
+                message.AuthorName,
+                message.Role == ChatRole.User ? ExtractFirstText(message) : null,
+                JsonSerializer.Serialize(message, _jsonSerializerOptions),
+                CreateMetadata(message, historyScope)
+            ))
             .ToList();
-        if (persistableMessages.Count == 0)
-        {
+    }
+
+    private async Task AppendRecordsAsync(
+        Guid projectId,
+        string contextId,
+        IReadOnlyList<PendingHistoryRecord> records,
+        int expectedGeneration,
+        bool isExecutionBound,
+        CancellationToken cancellationToken
+    )
+    {
+        if (records.Count == 0)
             return;
-        }
-
-        contextId = ContextIdUtil.NormalizeContextId(contextId);
-
         await using var lifecycleLease = await _applicationLock
             .AcquireAsync(ProjectLifecycleLock.GetResourceName(projectId), cancellationToken)
             .ConfigureAwait(false);
@@ -309,13 +336,15 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                 .ConfigureAwait(false)
         )
         {
+            if (isExecutionBound)
+                throw new AgwException(ErrorCodes.ConversationSessionConflict);
             return;
         }
 
-        var now = _timeProvider.GetUtcNow();
-        var firstUserText = ExtractFirstText(
-            persistableMessages.FirstOrDefault(message => message.Role == ChatRole.User)
-        );
+        var now = records[0].Timestamp;
+        var firstUserText = records
+            .Select(record => record.UserText)
+            .FirstOrDefault(text => !string.IsNullOrWhiteSpace(text));
         var projectConversation = await dbContext
             .ProjectConversations.SingleOrDefaultAsync(
                 x => x.ProjectId == projectId && x.ContextId == contextId,
@@ -363,7 +392,31 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
             }
         }
 
-        var taskId = Guid.CreateVersion7();
+        var ids = records.Select(record => record.Id).ToArray();
+        var existingRows = await dbContext
+            .ProjectConversationChatHistories.Where(record =>
+                record.ConversationId == projectConversation.Id && ids.Contains(record.Id)
+            )
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        var existingById = existingRows.ToDictionary(record => record.Id);
+        var pending = records.Where(record => !existingById.ContainsKey(record.Id)).ToList();
+        var updated = false;
+        foreach (var record in records.Where(record => record.IsStreamingSnapshot))
+        {
+            if (
+                !existingById.TryGetValue(record.Id, out var existing)
+                || existing.ConversationPayload == record.Payload
+            )
+                continue;
+            existing.ConversationPayload = record.Payload;
+            existing.Metadata = record.Metadata;
+            existing.AgentName = record.AgentName;
+            existing.UpdateTime = _timeProvider.GetUtcNow();
+            updated = true;
+        }
+        if (pending.Count == 0 && !updated)
+            return;
 
         var nextSequence =
             await dbContext
@@ -373,26 +426,10 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                 .ConfigureAwait(false)
             ?? -1;
 
-        foreach (ChatMessage message in persistableMessages)
+        foreach (var record in pending)
         {
-            // user input
             nextSequence++;
-
-            dbContext.ProjectConversationChatHistories.Add(
-                new ProjectConversationChatHistory
-                {
-                    Id = Guid.CreateVersion7(),
-                    ConversationId = projectConversation.Id,
-                    TaskId = taskId,
-                    Status = TaskExecutionStatus.Succeeded,
-                    AgentName = message.AuthorName,
-                    ConversationSequence = nextSequence,
-                    ConversationPayload = JsonSerializer.Serialize(message, _jsonSerializerOptions),
-                    Metadata = CreateMetadata(message, historyScope),
-                    CreateTime = now,
-                    UpdateTime = now,
-                }
-            );
+            dbContext.ProjectConversationChatHistories.Add(ToEntity(record, projectConversation.Id, nextSequence));
         }
 
         await dbContext
@@ -483,7 +520,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                 while (
                     toolMessageEnd < allMessages.Count
                     && (
-                        allMessages[toolMessageEnd].Role == ChatRole.Tool
+                        allMessages[toolMessageEnd].Role != ChatRole.Assistant
                         || toolMessageEnd >= messages.Count
                             && allMessages[toolMessageEnd].GetAgentRequestMessageSourceType()
                                 == AgentRequestMessageSourceType.AIContextProvider
@@ -517,6 +554,9 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                 );
 
                 var pendingCallIds = new HashSet<string>(matchedCallIds, StringComparer.Ordinal);
+                // A user can add instructions while approving a pending call. Keep the call
+                // paired across those messages, and replay its results before the new instructions.
+                var deferredMessages = new List<ChatMessage>();
                 for (
                     var toolMessageIndex = index + 1;
                     toolMessageIndex < toolMessageEnd && toolMessageIndex < messages.Count;
@@ -525,7 +565,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                 {
                     var toolMessage = allMessages[toolMessageIndex];
                     AddFilteredMessage(
-                        result,
+                        toolMessage.Role == ChatRole.Tool ? result : deferredMessages,
                         toolMessage,
                         toolMessage
                             .Contents.Where(content =>
@@ -536,6 +576,7 @@ public sealed class EfCoreChatHistoryProvider : ChatHistoryProvider, IProviderSe
                     );
                 }
 
+                result.AddRange(deferredMessages);
                 index = toolMessageEnd;
                 continue;
             }

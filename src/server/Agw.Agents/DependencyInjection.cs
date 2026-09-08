@@ -202,6 +202,8 @@ public static class DependencyInjection
             || options.Distributed.LockAcquireTimeoutMilliseconds <= 0
             || eventStream.ReadPollingMilliseconds <= 0
             || eventStream.ReadBatchSize <= 0
+            || eventStream.WriteIntervalMilliseconds < 0
+            || eventStream.WriteBatchSize <= 0
             || (eventStream.Provider == ExecutionEventStreamProvider.Redis && eventStream.Redis.StreamTtlMinutes <= 0)
         )
         {

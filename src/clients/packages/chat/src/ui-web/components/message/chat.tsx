@@ -322,6 +322,14 @@ export function Chat({
   const checkpointResumeDisabled =
     isExecuting || isTransitioning || isHydratingSession || reconnectState !== null;
 
+  React.useEffect(() => {
+    if (!isExecuting || !onConversationChange) return;
+    const timer = window.setInterval(() => {
+      if (window.document.visibilityState === "visible") void onConversationChange();
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [isExecuting, onConversationChange]);
+
   const notifyExecutionError = React.useCallback(
     (error: unknown) => {
       if (onExecutionError) {

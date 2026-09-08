@@ -98,7 +98,10 @@ internal sealed class DurableAgentSegmentRunner
             };
         }
         // CaptureDurableApprovalHandler 以异常立即截断本次模型调用，确保先把 pending 快照原子写入 PostgreSQL。
-        catch (AgwException) when (captureHandler.PendingInteraction is { } interaction)
+        catch (AgwException exception)
+            when (ReferenceEquals(exception, captureHandler.Interruption)
+                && captureHandler.PendingInteraction is { } interaction
+            )
         {
             return new DurableExecutionSegmentResult
             {
@@ -218,6 +221,8 @@ internal sealed class DurableAgentSegmentRunner
         /// </summary>
         public DurableHumanInteractionSnapshot? PendingInteraction { get; private set; }
 
+        public AgwException? Interruption { get; private set; }
+
         /// <summary>
         /// 保存待处理请求；durable 模式不会在当前 segment 的进程内等待用户回答。
         /// </summary>
@@ -228,10 +233,12 @@ internal sealed class DurableAgentSegmentRunner
         {
             cancellationToken.ThrowIfCancellationRequested();
             PendingInteraction = DurableHumanInteractionMapper.FromRequest(request);
-            throw new AgwException(
+            Interruption = new AgwException(
                 ErrorCodes.DurableExecutionConflict,
                 $"Human interaction '{PendingInteraction.RequestId}' is pending."
             );
+            ConversationHistoryPersistenceContext.IgnoreInterruption(Interruption);
+            throw Interruption;
         }
     }
 }

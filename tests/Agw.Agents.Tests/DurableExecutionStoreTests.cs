@@ -774,11 +774,16 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task ExecutionStreamMessageSink_OnlyTerminalControlMessage_IsPublishedExplicitly()
+    public async Task ExecutionStreamMessageSink_OnlyDeferredControlMessages_DisposalDoesNotAppendEvents()
     {
         var stream = new RecordingExecutionEventStream();
         var executionId = Guid.CreateVersion7();
-        var sink = new ExecutionStreamMessageSink(stream, executionId, segmentIndex: 2, NullLogger.Instance);
+        await using var sink = new ExecutionStreamMessageSink(
+            stream,
+            executionId,
+            segmentIndex: 2,
+            NullLogger.Instance
+        );
         var interaction = DurableHumanInteractionMapper.ToMessage(CreateInteraction("request-1"));
 
         await sink.WriteAsync(interaction, TestContext.Current.CancellationToken);
@@ -786,11 +791,9 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
 
         Assert.Empty(stream.Appends);
 
-        await sink.WriteTerminalAsync("completed", TestContext.Current.CancellationToken);
+        await sink.DisposeAsync();
 
-        var append = Assert.Single(stream.Appends);
-        Assert.Equal(int.MaxValue, append.Sequence);
-        Assert.Equal("turn-finished", append.Message.AdditionalProperties?["type"]);
+        Assert.Empty(stream.Appends);
     }
 
     private static async Task<Guid> RegisterExecutionAsync(
@@ -912,10 +915,14 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
                 TestDurablePersistence.Create(Context)
             );
 
-        public ServiceProvider CreateServiceProvider()
+        public ServiceProvider CreateServiceProvider(
+            params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors
+        )
         {
             var services = new ServiceCollection();
-            services.AddScoped<IAgentsDbContext>(_ => new AgwDbContext(_options));
+            services.AddScoped<IAgentsDbContext>(_ => new AgwDbContext(
+                new DbContextOptionsBuilder<AgwDbContext>(_options).AddInterceptors(interceptors).Options
+            ));
             return services.BuildServiceProvider();
         }
 

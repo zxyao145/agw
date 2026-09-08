@@ -2,184 +2,134 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Tools;
+using Agw.Projects.Domain.Services;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
 
-public sealed class AgentRequestContextAgentTests
+public sealed partial class AgentRequestContextAgentTests
 {
-    [Fact]
-    public async Task RunAsync_WithMemory_PersistsOriginalOnceAndForwardsComposite()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Run_WithMemory_PersistsOriginalOnceAndForwardsComposite(bool streaming)
     {
-        // Arrange
-        var recordingHistory = new RecordingChatHistoryProvider();
-        var requestHistory = new AgentRequestChatHistoryProvider(recordingHistory);
-        var innerAgent = new HistoryNotifyingAgent(requestHistory);
-        var agent = CreateAgent(innerAgent, requestHistory, "private memory");
+        using var owner = EnterHistoryUser();
+        await using var fixture = await StreamingHistoryFixture.CreateAsync();
+        var innerAgent = new HistoryNotifyingAgent(fixture.Provider);
+        var agent = CreateAgent(innerAgent, fixture.Provider, "private memory");
+        var session = await InitializeHistorySessionAsync(agent, fixture);
         var request = new ChatMessage(ChatRole.User, "current request") { MessageId = "request-1" };
 
-        // Act
-        await agent.RunAsync([request], cancellationToken: TestContext.Current.CancellationToken);
+        if (streaming)
+            await DrainAsync(
+                agent.RunStreamingAsync([request], session, cancellationToken: TestContext.Current.CancellationToken)
+            );
+        else
+            await agent.RunAsync([request], session, cancellationToken: TestContext.Current.CancellationToken);
 
-        // Assert
         var forwarded = Assert.Single(innerAgent.RequestMessages);
         Assert.Equal("private memory\n\n## Current Request\n\ncurrent request", forwarded.Text);
         Assert.True(ConversationHistoryMetadata.IsPersistenceExcluded(forwarded));
         Assert.False(ConversationHistoryMetadata.IsPersistenceExcluded(request));
-        Assert.Equal(AgentRequestMessageSourceType.External, request.GetAgentRequestMessageSourceType());
-        var historyCall = Assert.Single(recordingHistory.Calls);
-        Assert.Equal(request.MessageId, Assert.Single(historyCall.RequestMessages).MessageId);
-        Assert.Equal("answer", Assert.Single(historyCall.ResponseMessages).Text);
-        await requestHistory.PersistPendingAsync(agent, innerAgent.Session!, TestContext.Current.CancellationToken);
-        Assert.Single(recordingHistory.Calls);
-    }
-
-    [Fact]
-    public async Task RunStreamingAsync_WithMemory_PersistsOriginalOnceAndForwardsComposite()
-    {
-        // Arrange
-        var recordingHistory = new RecordingChatHistoryProvider();
-        var requestHistory = new AgentRequestChatHistoryProvider(recordingHistory);
-        var innerAgent = new HistoryNotifyingAgent(requestHistory);
-        var agent = CreateAgent(innerAgent, requestHistory, "private memory");
-        var request = new ChatMessage(ChatRole.User, "current request") { MessageId = "request-1" };
-
-        // Act
-        var updates = new List<AgentResponseUpdate>();
-        await foreach (
-            var update in agent.RunStreamingAsync([request], cancellationToken: TestContext.Current.CancellationToken)
-        )
-        {
-            updates.Add(update);
-        }
-
-        // Assert
-        Assert.Equal(
-            "private memory\n\n## Current Request\n\ncurrent request",
-            Assert.Single(innerAgent.RequestMessages).Text
-        );
-        var historyCall = Assert.Single(recordingHistory.Calls);
-        Assert.Equal(request.MessageId, Assert.Single(historyCall.RequestMessages).MessageId);
-        Assert.Equal("answer", Assert.Single(historyCall.ResponseMessages).Text);
-        Assert.Equal("answer", Assert.Single(updates).Text);
+        var records = await fixture.ReadAsync();
+        Assert.Equal(["current request", "answer"], records.Select(record => record.GetText()));
+        Assert.Equal(request.MessageId, records[0].ToChatMessage()!.MessageId);
+        Assert.Equal(records[0].TaskId, records[1].TaskId);
+        await fixture.Provider.PersistPendingAsync(agent, session, TestContext.Current.CancellationToken);
+        Assert.Equal(2, (await fixture.ReadAsync()).Count);
     }
 
     [Fact]
     public async Task RunAsync_InnerDoesNotNotifyHistory_FallbackPersistsOriginalRequest()
     {
-        // Arrange
-        var recordingHistory = new RecordingChatHistoryProvider();
-        var requestHistory = new AgentRequestChatHistoryProvider(recordingHistory);
+        using var owner = EnterHistoryUser();
+        await using var fixture = await StreamingHistoryFixture.CreateAsync();
         var innerAgent = new HistoryNotifyingAgent(historyProvider: null);
-        var agent = CreateAgent(innerAgent, requestHistory, memoryText: null);
-        var request = new ChatMessage(ChatRole.User, "current request");
-
-        // Act
-        await agent.RunAsync([request], cancellationToken: TestContext.Current.CancellationToken);
-
-        // Assert
+        var agent = CreateAgent(innerAgent, fixture.Provider, memoryText: null);
+        var session = await InitializeHistorySessionAsync(agent, fixture);
+        await agent.RunAsync(
+            [new ChatMessage(ChatRole.User, "current request")],
+            session,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
         Assert.True(ConversationHistoryMetadata.IsPersistenceExcluded(Assert.Single(innerAgent.RequestMessages)));
-        var historyCall = Assert.Single(recordingHistory.Calls);
-        Assert.Equal(request.Text, Assert.Single(historyCall.RequestMessages).Text);
-        Assert.Empty(historyCall.ResponseMessages);
+        Assert.Equal("current request", Assert.Single(await fixture.ReadAsync()).GetText());
     }
 
     [Fact]
-    public async Task HistoryProvider_NonTransientContextMessage_PreservesItWithOriginalRequest()
+    public async Task HistoryProvider_StagedInputAndInjectedContext_PreservesOriginalAndExistingSourceFilter()
     {
-        // Arrange
-        var recordingHistory = new RecordingChatHistoryProvider();
-        var historyProvider = new AgentRequestChatHistoryProvider(recordingHistory);
+        using var owner = EnterHistoryUser();
+        await using var fixture = await StreamingHistoryFixture.CreateAsync();
         var agent = new HistoryNotifyingAgent(historyProvider: null);
-        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
-        historyProvider.StageRequest(session, [new ChatMessage(ChatRole.User, "original")]);
+        var session = await InitializeHistorySessionAsync(agent, fixture);
+        fixture.Provider.StageRequest(session, [new ChatMessage(ChatRole.User, "original")]);
         var transient = new ChatMessage(ChatRole.User, "transient");
         ConversationHistoryMetadata.ExcludeFromPersistence(transient);
-        var retainedContext = new ChatMessage(ChatRole.User, "retained context").WithAgentRequestMessageSource(
+        var context = new ChatMessage(ChatRole.User, "injected context").WithAgentRequestMessageSource(
             AgentRequestMessageSourceType.AIContextProvider,
-            "RetainedProvider"
+            "ContextProvider"
         );
-
-        // Act
-        await historyProvider.InvokedAsync(
+        await fixture.Provider.InvokedAsync(
             new ChatHistoryProvider.InvokedContext(
                 agent,
                 session,
-                [transient, retainedContext],
+                [transient, context],
                 [new ChatMessage(ChatRole.Assistant, "answer")]
             ),
             TestContext.Current.CancellationToken
         );
-
-        // Assert
-        var call = Assert.Single(recordingHistory.Calls);
-        Assert.Equal(["original", "retained context"], call.RequestMessages.Select(message => message.Text));
-        Assert.Equal("answer", Assert.Single(call.ResponseMessages).Text);
+        Assert.Equal(
+            ["original", "injected context", "answer"],
+            (await fixture.ReadAsync()).Select(record => record.GetText())
+        );
     }
 
     [Fact]
     public async Task RunAsync_InnerReportsFailure_PersistsOriginalAndPreservesInvokeException()
     {
-        // Arrange
+        using var owner = EnterHistoryUser();
+        await using var fixture = await StreamingHistoryFixture.CreateAsync();
         var failure = new InvalidOperationException("SDK failure");
-        var recordingHistory = new RecordingChatHistoryProvider();
-        var requestHistory = new AgentRequestChatHistoryProvider(recordingHistory);
-        var innerAgent = new HistoryNotifyingAgent(requestHistory, failure);
-        var agent = CreateAgent(innerAgent, requestHistory, "private memory");
-        var request = new ChatMessage(ChatRole.User, "current request");
-
-        // Act
+        var innerAgent = new HistoryNotifyingAgent(fixture.Provider, failure);
+        var agent = CreateAgent(innerAgent, fixture.Provider, "private memory");
+        var session = await InitializeHistorySessionAsync(agent, fixture);
         var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            agent.RunAsync([request], cancellationToken: TestContext.Current.CancellationToken)
+            agent.RunAsync(
+                [new ChatMessage(ChatRole.User, "current request")],
+                session,
+                cancellationToken: TestContext.Current.CancellationToken
+            )
         );
-
-        // Assert
         Assert.Same(failure, thrown);
-        Assert.Collection(
-            recordingHistory.Calls,
-            persisted =>
-            {
-                Assert.Null(persisted.InvokeException);
-                Assert.Equal(request.Text, Assert.Single(persisted.RequestMessages).Text);
-                Assert.Empty(persisted.ResponseMessages);
-            },
-            failed => Assert.Same(failure, failed.InvokeException)
-        );
+        Assert.Equal("current request", Assert.Single(await fixture.ReadAsync()).GetText());
     }
 
     [Fact]
     public async Task RunAsync_SystemChatClientPipeline_PreservesTransientMarkerAndPersistsOnlyOriginalRequest()
     {
-        // Arrange
-        var recordingHistory = new RecordingChatHistoryProvider();
-        var requestHistory = new AgentRequestChatHistoryProvider(recordingHistory);
+        using var owner = EnterHistoryUser();
+        await using var fixture = await StreamingHistoryFixture.CreateAsync();
         var chatClient = new CapturingChatClient();
         await using var capabilities = CreateCapabilities();
-        using var services = new ServiceCollection().BuildServiceProvider();
         var innerAgent = chatClient.AsAgwAgent(
-            CreateDefinition(requestHistory),
+            CreateDefinition(fixture.Provider),
             capabilities,
             NullLoggerFactory.Instance,
-            services
+            fixture.Services
         );
-        var agent = CreateAgent(innerAgent, requestHistory, "private memory");
-        var request = new ChatMessage(ChatRole.User, "current request") { MessageId = "request-1" };
-
-        // Act
-        await agent.RunAsync([request], cancellationToken: TestContext.Current.CancellationToken);
-
-        // Assert
+        var agent = CreateAgent(innerAgent, fixture.Provider, "private memory");
+        var session = await InitializeHistorySessionAsync(agent, fixture);
+        await agent.RunAsync(
+            [new ChatMessage(ChatRole.User, "current request")],
+            session,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
         Assert.Single(chatClient.Requests);
-        var historyCall = Assert.Single(recordingHistory.Calls);
-        Assert.Equal(request.MessageId, Assert.Single(historyCall.RequestMessages).MessageId);
-        Assert.DoesNotContain(
-            historyCall.RequestMessages,
-            message => message.Text?.Contains("private memory", StringComparison.Ordinal) == true
-        );
-        Assert.Equal("answer", Assert.Single(historyCall.ResponseMessages).Text);
+        Assert.Equal(["current request", "answer"], (await fixture.ReadAsync()).Select(record => record.GetText()));
     }
 
     [Theory]
@@ -190,17 +140,15 @@ public sealed class AgentRequestContextAgentTests
         string approvalScope
     )
     {
-        // Arrange
-        var recordingHistory = new RecordingChatHistoryProvider();
-        var requestHistory = new AgentRequestChatHistoryProvider(recordingHistory);
-        var innerAgent = new HistoryNotifyingAgent(requestHistory);
-        var agent = CreateAgent(innerAgent, requestHistory, memoryText: null);
-        var toolCall = new FunctionCallContent(
-            "call-1",
-            "read_file",
-            new Dictionary<string, object?> { ["path"] = "README.md" }
+        using var owner = EnterHistoryUser();
+        await using var fixture = await StreamingHistoryFixture.CreateAsync();
+        var innerAgent = new HistoryNotifyingAgent(fixture.Provider);
+        var agent = CreateAgent(innerAgent, fixture.Provider, memoryText: null);
+        var session = await InitializeHistorySessionAsync(agent, fixture);
+        var approvalRequest = new ToolApprovalRequestContent(
+            "approval-1",
+            new FunctionCallContent("call-1", "read_file", new Dictionary<string, object?> { ["path"] = "README.md" })
         );
-        var approvalRequest = new ToolApprovalRequestContent("approval-1", toolCall);
         AIContent approval = approvalScope switch
         {
             "once" => approvalRequest.CreateResponse(approved: true),
@@ -210,92 +158,85 @@ public sealed class AgentRequestContextAgentTests
         var persistedApproval = approval is AlwaysApproveToolApprovalResponseContent alwaysApproval
             ? alwaysApproval.InnerResponse
             : (ToolApprovalResponseContent)approval;
-        persistedApproval.AdditionalProperties = new AdditionalPropertiesDictionary
-        {
-            ["approvalScope"] = approvalScope,
-        };
-        var request = new ChatMessage(ChatRole.User, [approval]) { MessageId = "approval-response-1" };
-
-        // Act
-        await agent.RunAsync([request], cancellationToken: TestContext.Current.CancellationToken);
-
-        // Assert
-        var forwardedMessage = Assert.Single(innerAgent.RequestMessages);
-        Assert.Same(approval, Assert.Single(forwardedMessage.Contents));
-        Assert.False(ConversationHistoryMetadata.IsModelHistoryExcluded(forwardedMessage));
-
-        var persistedMessage = Assert.Single(Assert.Single(recordingHistory.Calls).RequestMessages);
-        Assert.True(ConversationHistoryMetadata.IsModelHistoryExcluded(persistedMessage));
-        var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-        var serialized = JsonSerializer.Serialize(persistedMessage, jsonOptions);
-        var restoredMessage = JsonSerializer.Deserialize<ChatMessage>(serialized, jsonOptions);
-        Assert.NotNull(restoredMessage);
-        var restoredApproval = Assert.IsType<ToolApprovalResponseContent>(Assert.Single(restoredMessage.Contents));
-        Assert.True(restoredApproval.Approved);
-        Assert.Equal("approval-1", restoredApproval.RequestId);
-        Assert.Equal(approvalScope, restoredApproval.AdditionalProperties!["approvalScope"]?.ToString());
+        persistedApproval.AdditionalProperties = new() { ["approvalScope"] = approvalScope };
+        await agent.RunAsync(
+            [new ChatMessage(ChatRole.User, [approval])],
+            session,
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+        Assert.Same(approval, Assert.Single(Assert.Single(innerAgent.RequestMessages).Contents));
+        var message = (await fixture.ReadAsync())[0].ToChatMessage()!;
+        Assert.True(ConversationHistoryMetadata.IsModelHistoryExcluded(message));
+        var stored = Assert.IsType<ToolApprovalResponseContent>(Assert.Single(message.Contents));
+        Assert.True(stored.Approved);
+        Assert.Equal("approval-1", stored.RequestId);
+        Assert.Equal(approvalScope, stored.AdditionalProperties!["approvalScope"]?.ToString());
     }
 
     [Fact]
-    public async Task StageRequest_DoesNotStoreRequestInSessionStateBag()
+    public async Task StageRequest_FreezesInputOutsideSessionStateAndPersistsOnce()
     {
-        // Arrange
-        var recordingHistory = new RecordingChatHistoryProvider();
-        var requestHistory = new AgentRequestChatHistoryProvider(recordingHistory);
+        using var owner = EnterHistoryUser();
+        await using var fixture = await StreamingHistoryFixture.CreateAsync();
         var agent = new HistoryNotifyingAgent(historyProvider: null);
-        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
-
-        // Act
-        requestHistory.StageRequest(session, [new ChatMessage(ChatRole.User, "sensitive current request")]);
-
-        // Assert
+        var session = await InitializeHistorySessionAsync(agent, fixture);
+        var input = new ChatMessage(ChatRole.User, "sensitive current request");
+        fixture.Provider.StageRequest(session, [input]);
+        input.Contents.Clear();
         Assert.DoesNotContain(
             "sensitive current request",
             session.StateBag.Serialize().GetRawText(),
             StringComparison.Ordinal
         );
-        await requestHistory.PersistPendingAsync(agent, session, TestContext.Current.CancellationToken);
-        Assert.Equal(
-            "sensitive current request",
-            Assert.Single(Assert.Single(recordingHistory.Calls).RequestMessages).Text
-        );
+        await fixture.Provider.PersistPendingAsync(agent, session, TestContext.Current.CancellationToken);
+        await fixture.Provider.PersistPendingAsync(agent, session, TestContext.Current.CancellationToken);
+        Assert.Equal("sensitive current request", Assert.Single(await fixture.ReadAsync()).GetText());
     }
 
     [Fact]
     public async Task RunStreamingAsync_GetAsyncEnumeratorThrows_PersistsOriginalAndPreservesFailure()
     {
-        // Arrange
+        using var owner = EnterHistoryUser();
+        await using var fixture = await StreamingHistoryFixture.CreateAsync();
         var failure = new InvalidOperationException("enumerator failure");
-        var recordingHistory = new RecordingChatHistoryProvider();
-        var requestHistory = new AgentRequestChatHistoryProvider(recordingHistory);
-        var innerAgent = new GetEnumeratorThrowingAgent(failure);
-        var agent = CreateAgent(innerAgent, requestHistory, memoryText: null);
-        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
-        var request = new ChatMessage(ChatRole.User, "current request");
-
-        // Act
-        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-        {
-            await foreach (
-                var _ in agent.RunStreamingAsync(
-                    [request],
+        var agent = CreateAgent(new GetEnumeratorThrowingAgent(failure), fixture.Provider, memoryText: null);
+        var session = await InitializeHistorySessionAsync(agent, fixture);
+        var thrown = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            DrainAsync(
+                agent.RunStreamingAsync(
+                    [new ChatMessage(ChatRole.User, "current request")],
                     session,
                     cancellationToken: TestContext.Current.CancellationToken
                 )
-            ) { }
-        });
-
-        // Assert
+            )
+        );
         Assert.Same(failure, thrown);
-        var historyCall = Assert.Single(recordingHistory.Calls);
-        Assert.Equal(request.Text, Assert.Single(historyCall.RequestMessages).Text);
-        await requestHistory.PersistPendingAsync(agent, session, TestContext.Current.CancellationToken);
-        Assert.Single(recordingHistory.Calls);
+        Assert.Equal("current request", Assert.Single(await fixture.ReadAsync()).GetText());
+    }
+
+    private static IDisposable EnterHistoryUser() =>
+        UserInfoUtil.Push(
+            new System.Security.Claims.ClaimsPrincipal(
+                new System.Security.Claims.ClaimsIdentity(
+                    [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, "tester")],
+                    "Test"
+                )
+            )
+        );
+
+    private static async Task<AgentSession> InitializeHistorySessionAsync(
+        AIAgent agent,
+        StreamingHistoryFixture fixture
+    )
+    {
+        var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        fixture.Provider.InitializeSessionState(session, "streaming", fixture.ProjectId);
+        return session;
     }
 
     private static AgentRequestContextAgent CreateAgent(
         AIAgent innerAgent,
-        AgentRequestChatHistoryProvider historyProvider,
+        ChatHistoryProvider historyProvider,
         string? memoryText
     ) =>
         new(
@@ -323,9 +264,9 @@ public sealed class AgentRequestContextAgentTests
             ChatHistoryProvider = historyProvider,
         };
 
-    private static AgentCapabilityComposition CreateCapabilities() =>
+    private static AgentCapabilityComposition CreateCapabilities(IReadOnlyList<AITool>? tools = null) =>
         new(
-            tools: [],
+            tools: tools ?? [],
             pluginSkills: [],
             warnings: [],
             contextProviders: [],
@@ -500,35 +441,4 @@ public sealed class AgentRequestContextAgentTests
             yield return new ChatResponseUpdate(ChatRole.Assistant, "answer");
         }
     }
-
-    private sealed class RecordingChatHistoryProvider : ChatHistoryProvider
-    {
-        public List<HistoryCall> Calls { get; } = [];
-
-        protected override ValueTask<IEnumerable<ChatMessage>> InvokingCoreAsync(
-            InvokingContext context,
-            CancellationToken cancellationToken = default
-        ) => ValueTask.FromResult<IEnumerable<ChatMessage>>([]);
-
-        protected override ValueTask InvokedCoreAsync(
-            InvokedContext context,
-            CancellationToken cancellationToken = default
-        )
-        {
-            Calls.Add(
-                new HistoryCall(
-                    context.RequestMessages.ToList(),
-                    context.ResponseMessages?.ToList() ?? [],
-                    context.InvokeException
-                )
-            );
-            return ValueTask.CompletedTask;
-        }
-    }
-
-    private sealed record HistoryCall(
-        IReadOnlyList<ChatMessage> RequestMessages,
-        IReadOnlyList<ChatMessage> ResponseMessages,
-        Exception? InvokeException
-    );
 }

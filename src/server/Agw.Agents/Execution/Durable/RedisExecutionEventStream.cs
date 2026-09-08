@@ -1,4 +1,3 @@
-using Agw.Agents.Execution.Turns;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
 using Microsoft.Extensions.AI;
@@ -32,51 +31,71 @@ internal sealed class RedisExecutionEventStream : IExecutionEventStream
     /// <summary>
     /// 使用确定性 stream ID 追加消息，并刷新 execution stream 的 TTL。
     /// </summary>
-    public async ValueTask AppendAsync(
+    public ValueTask AppendAsync(
         Guid executionId,
         int segmentIndex,
         int sequence,
         AgwMessage message,
         CancellationToken cancellationToken
+    ) => AppendBatchAsync(executionId, segmentIndex, [new(sequence, message)], cancellationToken);
+
+    public async ValueTask AppendBatchAsync(
+        Guid executionId,
+        int segmentIndex,
+        IReadOnlyList<ExecutionStreamWrite> messages,
+        CancellationToken cancellationToken
     )
     {
-        ArgumentNullException.ThrowIfNull(message);
         cancellationToken.ThrowIfCancellationRequested();
-        if (segmentIndex < 0)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "segmentIndex must be non-negative.");
-        }
-        if (sequence < 0)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "sequence must be non-negative.");
-        }
-
+        if (segmentIndex < 0 || messages.Any(entry => entry.Sequence < 0))
+            throw new AgwException(ErrorCodes.InvalidParam, "Event stream positions must be non-negative.");
+        if (messages.Count == 0)
+            return;
         try
         {
             var database = _connection.GetDatabase();
             var key = GetKey(executionId);
-            var streamId = CreateStreamId(segmentIndex, sequence, IsTerminal(message));
-            var payload = JsonUtil.Serialize(message);
+            var entries = messages.DistinctBy(entry => entry.Sequence).OrderBy(entry => entry.Sequence).ToArray();
+            var batch = database.CreateBatch();
+            var writes = entries
+                .Select(entry =>
+                {
+                    var id = CreateStreamId(segmentIndex, entry.Sequence, entry.IsTerminal);
+                    return (
+                        Id: id,
+                        Task: batch.StreamAddAsync(key, [new NameValueEntry(PayloadField, entry.PayloadJson)], id)
+                    );
+                })
+                .ToArray();
+            cancellationToken.ThrowIfCancellationRequested();
+            batch.Execute();
+            // Observe every task, including failures, before verifying duplicate positions.
             try
             {
-                await database
-                    .StreamAddAsync(key, [new NameValueEntry(PayloadField, payload)], streamId)
-                    .ConfigureAwait(false);
+                await Task.WhenAll(writes.Select(write => write.Task)).ConfigureAwait(false);
             }
-            catch (RedisServerException exception) when (IsDuplicateStreamId(exception))
+            catch (RedisException) { }
+            foreach (var write in writes)
             {
-                // at-least-once 分段可能重放相同逻辑位置；已存在该 ID 即视为该位置已经发布。
-                var existing = await database.StreamRangeAsync(key, streamId, streamId, count: 1).ConfigureAwait(false);
-                if (existing.Length == 0)
+                try
                 {
-                    throw new AgwException(
-                        ErrorCodes.DurableExecutionConflict,
-                        $"Execution stream entry '{streamId}' could not be verified after a duplicate append.",
-                        exception
-                    );
+                    await write.Task.ConfigureAwait(false);
+                }
+                catch (RedisServerException exception)
+                {
+                    // Verify positions instead of depending on Redis's error wording. A later ID
+                    // without this position is a permanent gap; unrelated failures remain unavailable.
+                    var existing = await database.StreamRangeAsync(key, write.Id, "+", count: 1).ConfigureAwait(false);
+                    if (existing.Length == 0)
+                        throw;
+                    if (existing[0].Id != write.Id)
+                        throw new AgwException(
+                            ErrorCodes.DurableExecutionConflict,
+                            $"Execution stream entry '{write.Id}' is missing before an existing later position.",
+                            exception
+                        );
                 }
             }
-
             await database.KeyExpireAsync(key, TimeSpan.FromMinutes(_options.StreamTtlMinutes)).ConfigureAwait(false);
         }
         catch (RedisException exception)
@@ -157,11 +176,6 @@ internal sealed class RedisExecutionEventStream : IExecutionEventStream
         $"{segmentIndex + 1}-{(terminal ? TerminalSequence : sequence)}";
 
     /// <summary>
-    /// 判断消息是否应使用 terminal 保留 sequence。
-    /// </summary>
-    private static bool IsTerminal(AgwMessage message) => TurnMessageProtocol.IsFinished(message);
-
-    /// <summary>
     /// 从 Redis Stream entry 中读取指定字段。
     /// </summary>
     private static RedisValue GetField(StreamEntry entry, string name)
@@ -176,11 +190,4 @@ internal sealed class RedisExecutionEventStream : IExecutionEventStream
 
         return RedisValue.Null;
     }
-
-    /// <summary>
-    /// 判断 Redis 服务端错误是否表示确定性 stream ID 已经存在。
-    /// </summary>
-    private static bool IsDuplicateStreamId(RedisServerException exception) =>
-        exception.Message.Contains("equal or smaller", StringComparison.OrdinalIgnoreCase)
-        || exception.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase);
 }

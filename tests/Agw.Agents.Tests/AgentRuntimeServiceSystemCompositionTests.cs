@@ -518,7 +518,7 @@ public class AgentRuntimeServiceSystemCompositionTests
                 NullLogger<AgentCapabilityComposer>.Instance,
                 [new ProjectInstructionsSource()]
             ),
-            chatHistoryProvider: new InMemoryChatHistoryProvider(),
+            chatHistoryProvider: new StubRequestHistoryProvider(),
             providerSessionState: null!,
             providerSessions: null!,
             dataPaths,

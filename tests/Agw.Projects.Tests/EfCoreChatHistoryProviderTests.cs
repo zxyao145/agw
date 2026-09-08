@@ -20,7 +20,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Projects.Tests;
 
-public class EfCoreChatHistoryProviderTests : IDisposable
+public partial class EfCoreChatHistoryProviderTests : IDisposable
 {
     private readonly IDisposable _userScope = UserInfoUtil.Push(
         new ClaimsPrincipal(

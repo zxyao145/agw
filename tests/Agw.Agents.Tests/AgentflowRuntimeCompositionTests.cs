@@ -88,7 +88,8 @@ public partial class AgentflowRuntimeServiceTests
             .Select(parameter => parameter.ParameterType)
             .ToHashSet();
 
-        Assert.Equal(6, types.Count);
+        Assert.Equal(7, types.Count);
+        Assert.Contains(typeof(IConversationHistoryPersistence), types);
         Assert.Contains(typeof(AgentflowExecutionContextFactory), types);
         Assert.Contains(typeof(AgentflowWorkflowFactory), types);
         Assert.Contains(typeof(InProcessAgentflowRunner), types);

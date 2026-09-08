@@ -303,6 +303,31 @@ internal sealed class DurableExecutionCoordinator
             if (now >= nextStatusCheck)
             {
                 var snapshot = await GetSnapshotAsync(executionId, userId, cancellationToken).ConfigureAwait(false);
+                if (snapshot.Status == DurableExecutionStatus.WaitingForHuman || IsTerminal(snapshot.Status))
+                {
+                    // The first read may have raced the last batch commit. State is published after that batch:
+                    // drain again before synthesizing a control message that can end the subscription.
+                    IReadOnlyList<ExecutionStreamEntry> tail;
+                    try
+                    {
+                        tail = await _eventStream
+                            .ReadAsync(executionId, cursor, cancellationToken)
+                            .ConfigureAwait(false);
+                    }
+                    catch (AgwException exception) when (exception.Code == ErrorCodes.DurableExecutionUnavailable.Code)
+                    {
+                        tail = [];
+                    }
+                    foreach (var entry in tail)
+                    {
+                        cursor = entry.Cursor;
+                        yield return entry;
+                        if (TurnMessageProtocol.IsFinished(entry.Message))
+                            yield break;
+                    }
+                    if (tail.Count > 0)
+                        continue;
+                }
                 if (snapshot.Status == DurableExecutionStatus.WaitingForHuman)
                 {
                     // pending 只在 checkpoint 与请求已经原子落库后合成，回答不会指向未持久化边界。

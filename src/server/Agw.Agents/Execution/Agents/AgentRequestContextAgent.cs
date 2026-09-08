@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -12,13 +13,13 @@ internal sealed class AgentRequestContextAgent : DelegatingAIAgent
 {
     private const string CurrentRequestHeading = "\n\n## Current Request\n\n";
 
-    private readonly AgentRequestChatHistoryProvider _historyProvider;
+    private readonly IConversationHistoryRequests _historyProvider;
     private readonly Func<CancellationToken, ValueTask<ChatMessage?>>? _createMemoryContextAsync;
     private readonly ILogger _logger;
 
     public AgentRequestContextAgent(
         AIAgent innerAgent,
-        AgentRequestChatHistoryProvider historyProvider,
+        ChatHistoryProvider historyProvider,
         Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync,
         ILogger logger
     )
@@ -26,7 +27,12 @@ internal sealed class AgentRequestContextAgent : DelegatingAIAgent
     {
         ArgumentNullException.ThrowIfNull(historyProvider);
         ArgumentNullException.ThrowIfNull(logger);
-        _historyProvider = historyProvider;
+        _historyProvider =
+            historyProvider.GetService<IConversationHistoryRequests>()
+            ?? throw new AgwException(
+                ErrorCodes.AgentExecutionFailed,
+                "The history provider must support original request persistence."
+            );
         _createMemoryContextAsync = createMemoryContextAsync;
         _logger = logger;
     }
@@ -102,29 +108,40 @@ internal sealed class AgentRequestContextAgent : DelegatingAIAgent
             throw;
         }
 
-        await using (enumerator)
+        try
         {
+            while (true)
+            {
+                AgentResponseUpdate update;
+                try
+                {
+                    if (!await enumerator.MoveNextAsync().ConfigureAwait(false))
+                        break;
+                    update = enumerator.Current;
+                }
+                catch (Exception exception)
+                {
+                    executionFailure = exception;
+                    throw;
+                }
+                yield return update;
+            }
+        }
+        finally
+        {
+            // SDK disposal may still notify history. Keep request/stream state until those callbacks finish.
             try
             {
-                while (true)
-                {
-                    AgentResponseUpdate update;
-                    try
-                    {
-                        if (!await enumerator.MoveNextAsync().ConfigureAwait(false))
-                        {
-                            break;
-                        }
-                        update = enumerator.Current;
-                    }
-                    catch (Exception exception)
-                    {
-                        executionFailure = exception;
-                        throw;
-                    }
-
-                    yield return update;
-                }
+                await enumerator.DisposeAsync().ConfigureAwait(false);
+            }
+            catch (Exception exception) when (executionFailure != null)
+            {
+                _logger.LogError(exception, "Agent stream disposal failed while preserving an execution failure.");
+            }
+            catch (Exception exception)
+            {
+                executionFailure = exception;
+                throw;
             }
             finally
             {

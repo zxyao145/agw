@@ -30,7 +30,23 @@ public partial class AgentRuntimeService
         }
     }
 
-    public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
+    public IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
+        AgentRuntime session,
+        AgwUserInput input,
+        IHumanGateApprovalHandler? approvalHandler,
+        CancellationToken cancellationToken = default
+    ) =>
+        ConversationHistoryPersistenceContext.RunStreaming(
+            ExecuteStreamingWithHistoryAsync(session, input, approvalHandler, cancellationToken),
+            _chatHistoryProvider as IConversationHistoryPersistence,
+            session._projectId,
+            session._contextId,
+            session.SessionStateScope?.Generation
+                ?? ConversationSessionContext.GetGeneration(session._projectId, session._contextId),
+            allowCreateConversation: session.SessionStateScope?.ProjectConversationId == Guid.Empty
+        );
+
+    private async IAsyncEnumerable<AgwMessage> ExecuteStreamingWithHistoryAsync(
         AgentRuntime session,
         AgwUserInput input,
         IHumanGateApprovalHandler? approvalHandler,
@@ -45,15 +61,16 @@ public partial class AgentRuntimeService
             var requestMessages = await CreateExecutionInputMessagesAsync(session, input, cancellationToken)
                 .ConfigureAwait(false);
             await foreach (
-                var message in session
-                    .ExecuteStreamingAsync(requestMessages, input, approvalHandler, cancellationToken)
+                var message in ConversationHistoryPersistenceContext
+                    .ObserveAsync(
+                        session.ExecuteStreamingAsync(requestMessages, input, approvalHandler, cancellationToken),
+                        cancellationToken
+                    )
                     .ConfigureAwait(false)
             )
             {
                 yield return AgwMessageUtil.PostAgwMessage(session, message);
             }
-
-            yield return TurnMessageFactory.CreateFinished();
         }
         finally
         {
@@ -68,6 +85,8 @@ public partial class AgentRuntimeService
                 );
             }
         }
+        await ConversationHistoryPersistenceContext.FlushAsync(CancellationToken.None).ConfigureAwait(false);
+        yield return TurnMessageFactory.CreateFinished();
     }
 
     public async Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
@@ -82,7 +101,23 @@ public partial class AgentRuntimeService
     /// <summary>
     /// 使用恢复后的 MAF session 执行 approval 响应分段，并在结束时保存 Agent session。
     /// </summary>
-    internal async IAsyncEnumerable<AgwMessage> ExecuteDurableSegmentStreamingAsync(
+    internal IAsyncEnumerable<AgwMessage> ExecuteDurableSegmentStreamingAsync(
+        AgentRuntime session,
+        ChatMessage message,
+        AgwUserInput summaryInput,
+        IHumanGateApprovalHandler approvalHandler,
+        CancellationToken cancellationToken = default
+    ) =>
+        ConversationHistoryPersistenceContext.RunStreaming(
+            ExecuteDurableSegmentWithHistoryAsync(session, message, summaryInput, approvalHandler, cancellationToken),
+            _chatHistoryProvider as IConversationHistoryPersistence,
+            session._projectId,
+            session._contextId,
+            session.SessionStateScope?.Generation
+                ?? ConversationSessionContext.GetGeneration(session._projectId, session._contextId)
+        );
+
+    private async IAsyncEnumerable<AgwMessage> ExecuteDurableSegmentWithHistoryAsync(
         AgentRuntime session,
         ChatMessage message,
         AgwUserInput summaryInput,
@@ -98,8 +133,11 @@ public partial class AgentRuntimeService
         try
         {
             await foreach (
-                var output in session
-                    .ExecuteStreamingSegmentAsync(message, summaryInput, approvalHandler, cancellationToken)
+                var output in ConversationHistoryPersistenceContext
+                    .ObserveAsync(
+                        session.ExecuteStreamingSegmentAsync(message, summaryInput, approvalHandler, cancellationToken),
+                        cancellationToken
+                    )
                     .ConfigureAwait(false)
             )
             {
@@ -135,8 +173,8 @@ public partial class AgentRuntimeService
         {
             var requestMessages = await CreateExecutionInputMessagesAsync(session, input, cancellationToken)
                 .ConfigureAwait(false);
-            var messages = await session
-                .ExecuteAsync(requestMessages, input, approvalHandler, cancellationToken)
+            var messages = await ConversationHistoryPersistenceContext
+                .ObserveAsync(session.ExecuteAsync(requestMessages, input, approvalHandler, cancellationToken))
                 .ConfigureAwait(false);
             return messages.Select(message => AgwMessageUtil.PostAgwMessage(session, message)).ToArray();
         }
@@ -250,6 +288,13 @@ public partial class AgentRuntimeService
             throw new AgwException(ErrorCodes.AiAgentCreationFailed);
         }
 
+        await using var historyScope = ConversationHistoryPersistenceContext.BeginScope(
+            _chatHistoryProvider as IConversationHistoryPersistence,
+            projectId.Value,
+            resolvedContextId,
+            ConversationSessionContext.GetGeneration(projectId.Value, resolvedContextId),
+            allowCreateConversation: !conversationId.HasValue
+        );
         AgentSession? session = null;
         AgentSessionStateScope? sessionScope = null;
         ToolTurnPersistence? turnPersistence = null;
@@ -304,6 +349,7 @@ public partial class AgentRuntimeService
         catch (Exception exception)
         {
             executionFailure = exception;
+            ConversationHistoryPersistenceContext.RecordFailure(exception);
             throw;
         }
         finally

@@ -26,6 +26,21 @@ async function checkConversationSession(kind: string, strictMode = false) {
   const dom = new JSDOM("<div id='root'></div>", {
     url: "http://localhost/desktop/chat/?projectId=project-1&conversationId=conversation-1",
   });
+  const refreshTimers = new Map<number, () => void>();
+  if (kind === "history-refresh") {
+    Object.defineProperty(dom.window.document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+    dom.window.setInterval = ((callback: () => void, delay: number) => {
+      assert.equal(delay, 5_000);
+      refreshTimers.set(1, callback);
+      return 1;
+    }) as typeof dom.window.setInterval;
+    dom.window.clearInterval = (id) => {
+      refreshTimers.delete(id!);
+    };
+  }
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
   Object.defineProperty(globalThis, "window", { configurable: true, value: dom.window });
   const actHost = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
@@ -48,6 +63,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
       onExecute: (text: string, attachments: []) => void;
     };
     newChat?: () => void;
+    refreshSignal?: number;
     selectAgent?: (selection: { agentType: number; agentId: string }) => void;
   } = {};
   const executions: (ExecutionRequest & { contextId: string })[] = [];
@@ -121,9 +137,11 @@ async function checkConversationSession(kind: string, strictMode = false) {
       // A cached sidebar publishes its summary in the child's effect, before the
       // workspace's route hydration effect. A summary is not a hydrated session.
       ConversationList: (props: {
+        refreshSignal?: number;
         onNewConversation?: () => void;
         onActiveConversationResolved?: (value: unknown) => void;
       }) => {
+        observed.refreshSignal = props.refreshSignal;
         observed.newChat = props.onNewConversation;
         React.useEffect(() => {
           props.onActiveConversationResolved?.(conversation);
@@ -284,6 +302,31 @@ async function checkConversationSession(kind: string, strictMode = false) {
       await React.act(async () => observed.input!.onExecute("too early", []));
       assert.equal(executions.length, 0);
       await React.act(async () => finishHistory());
+      if (kind === "history-refresh") {
+        assert.equal(refreshTimers.size, 0, "idle history does not poll");
+        await React.act(async () => observed.input!.onExecute("long answer", []));
+        assert.equal(refreshTimers.size, 1);
+        const before = observed.refreshSignal!;
+        await React.act(async () => {
+          refreshTimers.get(1)!();
+        });
+        assert.equal(
+          observed.refreshSignal,
+          before + 1,
+          "running history refreshes before turn end",
+        );
+        Object.defineProperty(dom.window.document, "visibilityState", {
+          configurable: true,
+          value: "hidden",
+        });
+        await React.act(async () => {
+          refreshTimers.get(1)!();
+        });
+        assert.equal(observed.refreshSignal, before + 1, "hidden history does not poll");
+        await React.act(async () => observed.input!.onClearSession());
+        assert.equal(refreshTimers.size, 0, "ending execution removes its timer");
+        return;
+      }
       if (kind === "restore" || kind === "restore-failure") {
         assert.equal(detailsRequests, strictMode ? 2 : 1);
         assert.equal(messageRequests, detailsRequests);
@@ -424,6 +467,7 @@ for (const [kind, name] of [
   ["new-chat", "New Chat replaces both conversation and context identities"],
   ["project-switch", "switching projects starts a fresh conversation and context"],
   ["clear-history", "clearing history preserves conversation and context identities"],
+  ["history-refresh", "running conversations refresh persisted history until execution stops"],
 ]) {
   test(name, () => checkConversationSession(kind));
 }

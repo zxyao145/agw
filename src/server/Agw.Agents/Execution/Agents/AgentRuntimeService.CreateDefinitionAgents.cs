@@ -84,7 +84,6 @@ public partial class AgentRuntimeService
         AIAgent? aiAgent = null;
         try
         {
-            var requestHistoryProvider = new AgentRequestChatHistoryProvider(_chatHistoryProvider);
             var skillsProvider = await CreateSkillsProviderAsync(agentDefinition, project, capabilities.PluginSkills)
                 .ConfigureAwait(false);
             if (skillsProvider != null)
@@ -120,7 +119,7 @@ public partial class AgentRuntimeService
                     SystemPrompt = agentDefinition.SystemPrompt,
                     ModelId = model.Name,
                     OpenTelemetrySourceName = provider.Name,
-                    ChatHistoryProvider = requestHistoryProvider,
+                    ChatHistoryProvider = _chatHistoryProvider,
                     CompactionProvider = new CompactionProvider(
                         new ContextWindowCompactionStrategy(model.MaxContextWindowTokens, model.MaxOutputTokens),
                         stateKey: $"agw.compaction.{agentDefinition.Id:N}",
@@ -135,7 +134,7 @@ public partial class AgentRuntimeService
             var userMemoryProvider = capabilities.ContextProviders.OfType<UserMemoryProvider>().SingleOrDefault();
             Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync =
                 userMemoryProvider == null ? null : userMemoryProvider.CreateContextMessageAsync;
-            aiAgent = new AgentRequestContextAgent(aiAgent, requestHistoryProvider, createMemoryContextAsync, _logger);
+            aiAgent = new AgentRequestContextAgent(aiAgent, _chatHistoryProvider, createMemoryContextAsync, _logger);
             var agentBuilder = aiAgent
                 .AsBuilder()
                 .Use(
@@ -181,7 +180,7 @@ public partial class AgentRuntimeService
         var options = new OpenAIClientOptions { Endpoint = new Uri(provider.Endpoint) };
         var client = new OpenAIClient(credential, options);
         var chatCompletionClient = client.GetChatClient(model.Name);
-        return chatCompletionClient.AsIChatClient();
+        return OpenAiReasoningChatClient.Create(chatCompletionClient, options.Endpoint);
     }
 
     private IChatClient CreateAnthropicChatClient(

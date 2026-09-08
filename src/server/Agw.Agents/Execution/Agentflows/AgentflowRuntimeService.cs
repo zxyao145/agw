@@ -26,6 +26,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
     private readonly AgentflowExecutionContextFactory _executionContextFactory;
     private readonly DurableAgentflowSegmentRunner _durableRunner;
     private readonly InProcessAgentflowRunner _inProcessRunner;
+    private readonly IConversationHistoryPersistence? _historyPersistence;
 
     public AgentflowRuntimeService(
         AgentflowWorkflowFactory workflowFactory,
@@ -33,9 +34,11 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         InProcessAgentflowRunner inProcessRunner,
         DurableAgentflowSegmentRunner durableRunner,
         IProjectDefaultResolver projectDefaults,
-        IProjectRuntimeFacade projectRuntimeFacade
+        IProjectRuntimeFacade projectRuntimeFacade,
+        IConversationHistoryPersistence? historyPersistence = null
     )
     {
+        _historyPersistence = historyPersistence;
         _workflowFactory = workflowFactory;
         _executionContextFactory = executionContextFactory;
         _inProcessRunner = inProcessRunner;
@@ -155,38 +158,69 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                 permissionState
             )
             .ConfigureAwait(false);
-        var workflowLease = await _workflowFactory.CreateAiWorkflow(
-            agentflow,
-            cancellationToken,
-            sessionScope,
-            executionTraceContext,
-            environmentVariables
-        );
-        if (workflowLease == null)
-        {
-            yield break;
-        }
-
-        await using var workflowResources = workflowLease;
         await foreach (
-            var message in _inProcessRunner
-                .ExecuteStreamingAsync(
-                    agentflow.Id,
-                    input,
-                    sessionScope,
-                    executionTraceContext,
-                    workflowLease,
-                    humanGateApprovalHandler,
-                    executionUserId,
-                    sourceExecutionId,
-                    checkpointState,
-                    resumeCheckpoint,
-                    cancellationToken
-                )
-                .ConfigureAwait(false)
+            var message in ConversationHistoryPersistenceContext.RunStreaming(
+                ExecutePreparedAsync(cancellationToken),
+                _historyPersistence,
+                resolvedProjectId.Value,
+                resolvedContextId,
+                ConversationSessionContext.GetGeneration(resolvedProjectId.Value, resolvedContextId),
+                allowCreateConversation: sessionScope.ConversationId == Guid.Empty
+            )
         )
         {
             yield return message;
+        }
+
+        async IAsyncEnumerable<AgwMessage> ExecutePreparedAsync(
+            [EnumeratorCancellation] CancellationToken executionToken
+        )
+        {
+            var workflowLease = await _workflowFactory.CreateAiWorkflow(
+                agentflow,
+                executionToken,
+                sessionScope,
+                executionTraceContext,
+                environmentVariables
+            );
+            if (workflowLease == null)
+            {
+                yield break;
+            }
+
+            AgwMessage? finished = null;
+            {
+                await using var workflowResources = workflowLease;
+                await foreach (
+                    var message in ConversationHistoryPersistenceContext
+                        .ObserveAsync(
+                            _inProcessRunner.ExecuteStreamingAsync(
+                                agentflow.Id,
+                                input,
+                                sessionScope,
+                                executionTraceContext,
+                                workflowLease,
+                                humanGateApprovalHandler,
+                                executionUserId,
+                                sourceExecutionId,
+                                checkpointState,
+                                resumeCheckpoint,
+                                executionToken
+                            ),
+                            executionToken
+                        )
+                        .ConfigureAwait(false)
+                )
+                {
+                    if (TurnMessageProtocol.IsFinished(message))
+                        finished = message;
+                    else
+                        yield return message;
+                }
+            }
+            await ConversationHistoryPersistenceContext.FlushAsync(CancellationToken.None).ConfigureAwait(false);
+            if (finished != null)
+                yield return finished;
         }
     }
 
@@ -356,6 +390,13 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                 new PermissionModeState(permissionMode)
             )
             .ConfigureAwait(false);
+        await using var historyScope = ConversationHistoryPersistenceContext.BeginScope(
+            _historyPersistence,
+            projectId,
+            resolvedContextId,
+            ConversationSessionContext.GetGeneration(projectId, resolvedContextId),
+            allowCreateConversation: sessionScope.ConversationId == Guid.Empty
+        );
         var workflowLease = await _workflowFactory.CreateAiWorkflow(
             agentflow,
             cancellationToken,
@@ -369,15 +410,17 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         }
 
         await using var workflowResources = workflowLease;
-        return await _inProcessRunner
-            .ExecuteAsync(
-                agentflow.Id,
-                taskId.Value,
-                resolvedContextId,
-                workflowLease,
-                messages,
-                cancellationToken,
-                UnattendedApprovalHandler.Create(permissionMode)
+        return await ConversationHistoryPersistenceContext
+            .ObserveAsync(
+                _inProcessRunner.ExecuteAsync(
+                    agentflow.Id,
+                    taskId.Value,
+                    resolvedContextId,
+                    workflowLease,
+                    messages,
+                    cancellationToken,
+                    UnattendedApprovalHandler.Create(permissionMode)
+                )
             )
             .ConfigureAwait(false);
     }

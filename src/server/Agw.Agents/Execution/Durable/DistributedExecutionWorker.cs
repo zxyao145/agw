@@ -213,7 +213,7 @@ internal sealed class DistributedExecutionWorker : BackgroundService
             try
             {
                 result = await executor
-                    .RunAsync(snapshot.CreateSegmentInput(), segmentCancellation.Token)
+                    .RunAsync(snapshot.CreateSegmentInput(), segmentCancellation.Token, executionLock.HandleLostToken)
                     .ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

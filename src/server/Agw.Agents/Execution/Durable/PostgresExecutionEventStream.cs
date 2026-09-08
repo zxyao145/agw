@@ -32,57 +32,84 @@ internal sealed class PostgresExecutionEventStream : IExecutionEventStream
     /// <summary>
     /// 在 execution、segment 和 sequence 的唯一位置幂等追加一条加密消息。
     /// </summary>
-    public async ValueTask AppendAsync(
+    public ValueTask AppendAsync(
         Guid executionId,
         int segmentIndex,
         int sequence,
         AgwMessage message,
         CancellationToken cancellationToken
+    ) => AppendBatchAsync(executionId, segmentIndex, [new(sequence, message)], cancellationToken);
+
+    public async ValueTask AppendBatchAsync(
+        Guid executionId,
+        int segmentIndex,
+        IReadOnlyList<ExecutionStreamWrite> messages,
+        CancellationToken cancellationToken
     )
     {
-        ArgumentNullException.ThrowIfNull(message);
-        if (segmentIndex < 0)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "segmentIndex must be non-negative.");
-        }
-        if (sequence < 0)
-        {
-            throw new AgwException(ErrorCodes.InvalidParam, "sequence must be non-negative.");
-        }
-
-        var payload = JsonUtil.Serialize(message);
+        if (segmentIndex < 0 || messages.Any(entry => entry.Sequence < 0))
+            throw new AgwException(ErrorCodes.InvalidParam, "Event stream positions must be non-negative.");
+        var pending = messages.DistinctBy(entry => entry.Sequence).ToList();
+        if (pending.Count == 0)
+            return;
         try
         {
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<IAgentsDbContext>();
-            dbContext.DurableExecutionEvents.Add(
-                new DurableExecutionEventRecord
-                {
-                    Id = Guid.CreateVersion7(),
-                    ExecutionId = executionId,
-                    SegmentIndex = segmentIndex,
-                    Sequence = sequence,
-                    PayloadJson = payload,
-                }
-            );
-            await dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (DbUpdateException exception)
-        {
-            if (
-                await ExistsAtPositionAsync(executionId, segmentIndex, sequence, cancellationToken)
-                    .ConfigureAwait(false)
-            )
+            while (pending.Count > 0)
             {
-                return;
+                try
+                {
+                    await InsertBatchAsync(executionId, segmentIndex, pending, cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+                catch (DbUpdateException)
+                {
+                    // The failed batch is atomic. A replay can overlap a committed prefix: only retry missing positions.
+                    await using var scope = _scopeFactory.CreateAsyncScope();
+                    var db = scope.ServiceProvider.GetRequiredService<IAgentsDbContext>();
+                    var positions = pending.Select(entry => entry.Sequence).ToArray();
+                    var existing = await db
+                        .DurableExecutionEvents.AsNoTracking()
+                        .Where(entry =>
+                            entry.ExecutionId == executionId
+                            && entry.SegmentIndex == segmentIndex
+                            && positions.Contains(entry.Sequence)
+                        )
+                        .Select(entry => entry.Sequence)
+                        .ToListAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    if (existing.Count == 0)
+                        throw;
+                    pending.RemoveAll(entry => existing.Contains(entry.Sequence));
+                }
+                // Each retry removes at least one now-committed position, bounding retries by batch size.
             }
-
-            throw CreateUnavailableException("append", exception);
         }
         catch (Exception exception) when (IsDatabaseFailure(exception))
         {
-            throw CreateUnavailableException("append", exception);
+            throw CreateUnavailableException("append batch", exception);
         }
+    }
+
+    private async Task InsertBatchAsync(
+        Guid executionId,
+        int segmentIndex,
+        IReadOnlyList<ExecutionStreamWrite> messages,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<IAgentsDbContext>();
+        db.DurableExecutionEvents.AddRange(
+            messages.Select(entry => new DurableExecutionEventRecord
+            {
+                Id = Guid.CreateVersion7(),
+                ExecutionId = executionId,
+                SegmentIndex = segmentIndex,
+                Sequence = entry.Sequence,
+                PayloadJson = entry.PayloadJson,
+            })
+        );
+        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -144,38 +171,6 @@ internal sealed class PostgresExecutionEventStream : IExecutionEventStream
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// 在唯一索引冲突后确认同一逻辑位置是否已经写入。
-    /// 分段重放可能产生不同文本，但已经发布的位置不能覆盖或再次发送。
-    /// </summary>
-    private async Task<bool> ExistsAtPositionAsync(
-        Guid executionId,
-        int segmentIndex,
-        int sequence,
-        CancellationToken cancellationToken
-    )
-    {
-        try
-        {
-            await using var scope = _scopeFactory.CreateAsyncScope();
-            var dbContext = scope.ServiceProvider.GetRequiredService<IAgentsDbContext>();
-            return await dbContext
-                .DurableExecutionEvents.AsNoTracking()
-                .AnyAsync(
-                    item =>
-                        item.ExecutionId == executionId
-                        && item.SegmentIndex == segmentIndex
-                        && item.Sequence == sequence,
-                    cancellationToken
-                )
-                .ConfigureAwait(false);
-        }
-        catch (Exception exception) when (IsDatabaseFailure(exception))
-        {
-            throw CreateUnavailableException("verify", exception);
-        }
     }
 
     /// <summary>

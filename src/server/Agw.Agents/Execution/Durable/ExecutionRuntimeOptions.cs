@@ -79,6 +79,11 @@ public sealed class ExecutionEventStreamOptions
     /// </summary>
     public ExecutionEventStreamProvider Provider { get; set; } = ExecutionEventStreamProvider.Postgres;
 
+    /// <summary>Zero preserves immediate writes; otherwise batches start their timer at the first pending event.</summary>
+    public int WriteIntervalMilliseconds { get; set; } = 250;
+
+    public int WriteBatchSize { get; set; } = 100;
+
     /// <summary>
     /// 获取或设置订阅端没有新消息时的轮询间隔毫秒数。
     /// </summary>

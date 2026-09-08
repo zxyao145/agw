@@ -503,8 +503,10 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         Assert.Equal(6, storedMessages.SelectMany(message => message.Contents).OfType<FunctionResultContent>().Count());
     }
 
-    [Fact]
-    public async Task AsAgwAgent_StalledCompactionState_RebuildsFromCompleteHistory()
+    [Theory]
+    [InlineData("function-loop-context-v1")]
+    [InlineData("function-loop-context-v2")]
+    public async Task AsAgwAgent_StalledCompactionState_RebuildsFromCompleteHistory(string legacyVersion)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         var historyProvider = new MutableChatHistoryProvider();
@@ -525,7 +527,11 @@ public sealed class AgwAgentExtensionsTests : IDisposable
             session,
             cancellationToken: cancellationToken
         );
-        session.StateBag.SetValue("stalled-compaction.agw-index-version", "function-loop-context-v1");
+        session.StateBag.SetValue("stalled-compaction.agw-index-version", legacyVersion);
+        session = await agent.DeserializeSessionAsync(
+            await agent.SerializeSessionAsync(session, cancellationToken: cancellationToken),
+            cancellationToken: cancellationToken
+        );
 
         historyProvider.Messages =
         [
@@ -546,7 +552,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         Assert.True(
             session.StateBag.TryGetValue<string>("stalled-compaction.agw-index-version", out var compactionIndexVersion)
         );
-        Assert.Equal("function-loop-context-v2", compactionIndexVersion);
+        Assert.Equal("function-result-order-v3", compactionIndexVersion);
     }
 
     [Fact]

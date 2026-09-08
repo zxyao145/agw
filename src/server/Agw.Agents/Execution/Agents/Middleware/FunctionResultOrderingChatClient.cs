@@ -26,109 +26,66 @@ internal sealed class FunctionResultOrderingChatClient : DelegatingChatClient
     private static IEnumerable<ChatMessage> OrderMessages(IEnumerable<ChatMessage> messages)
     {
         var messageList = messages as IList<ChatMessage> ?? messages.ToList();
-        var lastFunctionResultIndex = -1;
-        for (var index = messageList.Count - 1; index >= 0; index--)
+        var contextCount = messageList
+            .TakeWhile(message =>
+                message.GetAgentRequestMessageSourceType() == AgentRequestMessageSourceType.AIContextProvider
+            )
+            .Count();
+        var resultCount = messageList
+            .Skip(contextCount)
+            .TakeWhile(message =>
+                message.Role == ChatRole.Tool && message.Contents.OfType<FunctionResultContent>().Any()
+            )
+            .Count();
+        if (contextCount > 0 && resultCount > 0)
         {
-            if (IsFunctionResultMessage(messageList[index]))
-            {
-                lastFunctionResultIndex = index;
-                break;
-            }
+            // Before history is loaded, only injected context may precede the in-flight results.
+            messageList = messageList
+                .Skip(contextCount)
+                .Take(resultCount)
+                .Concat(messageList.Take(contextCount))
+                .Concat(messageList.Skip(contextCount + resultCount))
+                .ToList();
         }
-
-        if (lastFunctionResultIndex <= 0)
+        var ordered = new List<ChatMessage>(messageList.Count);
+        for (var index = 0; index < messageList.Count; index++)
         {
-            return messageList;
-        }
-
-        var functionResultStart = lastFunctionResultIndex;
-        while (functionResultStart > 0 && IsFunctionResultMessage(messageList[functionResultStart - 1]))
-        {
-            functionResultStart--;
-        }
-
-        var functionResultEnd = lastFunctionResultIndex + 1;
-        while (functionResultEnd < messageList.Count && IsFunctionResultMessage(messageList[functionResultEnd]))
-        {
-            functionResultEnd++;
-        }
-
-        var resultCallIds = messageList
-            .Skip(functionResultStart)
-            .Take(functionResultEnd - functionResultStart)
-            .SelectMany(message => message.Contents)
-            .OfType<FunctionResultContent>()
-            .Select(content => content.CallId)
-            .ToHashSet(StringComparer.Ordinal);
-        var functionCallIndex = -1;
-        HashSet<string>? functionCallIds = null;
-        for (var index = functionResultStart - 1; index >= 0; index--)
-        {
-            if (messageList[index].Role != ChatRole.Assistant)
-            {
+            var message = messageList[index];
+            ordered.Add(message);
+            if (message.Role != ChatRole.Assistant)
                 continue;
-            }
-
-            var candidateCallIds = messageList[index]
+            var callIds = message
                 .Contents.OfType<FunctionCallContent>()
-                .Select(content => content.CallId)
+                .Select(call => call.CallId)
                 .ToHashSet(StringComparer.Ordinal);
-            if (resultCallIds.IsSubsetOf(candidateCallIds))
-            {
-                functionCallIndex = index;
-                functionCallIds = candidateCallIds;
-                break;
-            }
-        }
+            if (callIds.Count == 0)
+                continue;
 
-        var insertionIndex = 0;
-        if (functionCallIndex >= 0 && functionCallIds != null)
-        {
-            insertionIndex = functionCallIndex + 1;
+            var deferred = new List<ChatMessage>();
+            // Work on the merged history/request, stopping at the next assistant response.
+            // A result may cross intervening user/context messages only when its call is known.
             while (
-                insertionIndex < functionResultStart
-                && IsFunctionResultMessageForCalls(messageList[insertionIndex], functionCallIds)
+                index + 1 < messageList.Count
+                && (
+                    messageList[index + 1].Role != ChatRole.Assistant
+                    || messageList[index + 1].GetAgentRequestMessageSourceType()
+                        == AgentRequestMessageSourceType.AIContextProvider
+                )
             )
             {
-                insertionIndex++;
+                var next = messageList[++index];
+                var results = next.Contents.OfType<FunctionResultContent>().ToList();
+                if (
+                    next.Role == ChatRole.Tool
+                    && results.Count > 0
+                    && results.All(result => callIds.Contains(result.CallId))
+                )
+                    ordered.Add(next);
+                else
+                    deferred.Add(next);
             }
-
-            if (insertionIndex == functionResultStart)
-            {
-                return messageList;
-            }
+            ordered.AddRange(deferred);
         }
-
-        for (var index = insertionIndex; index < functionResultStart; index++)
-        {
-            if (
-                messageList[index].GetAgentRequestMessageSourceType() != AgentRequestMessageSourceType.AIContextProvider
-            )
-            {
-                return messageList;
-            }
-        }
-
-        // Per-service persistence prepends the matching function call, while context providers can
-        // leave their messages before the in-flight result. Move only that final result group.
-        var reordered = messageList.ToList();
-        var functionResults = reordered.GetRange(functionResultStart, functionResultEnd - functionResultStart);
-        reordered.RemoveRange(functionResultStart, functionResults.Count);
-        reordered.InsertRange(insertionIndex, functionResults);
-        return reordered;
-    }
-
-    private static bool IsFunctionResultMessage(ChatMessage message) =>
-        message.Role == ChatRole.Tool && message.Contents.OfType<FunctionResultContent>().Any();
-
-    private static bool IsFunctionResultMessageForCalls(ChatMessage message, IReadOnlySet<string> functionCallIds)
-    {
-        if (message.Role != ChatRole.Tool)
-        {
-            return false;
-        }
-
-        var functionResults = message.Contents.OfType<FunctionResultContent>().ToList();
-        return functionResults.Count > 0 && functionResults.All(result => functionCallIds.Contains(result.CallId));
+        return ordered;
     }
 }

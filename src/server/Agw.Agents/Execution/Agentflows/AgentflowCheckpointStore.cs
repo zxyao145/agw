@@ -89,6 +89,10 @@ public sealed class AgentflowCheckpointStore
         var chatMessages = markers.Select(marker => CreateMessage(occurrenceId, marker)).ToArray();
         var messages = chatMessages.Select(item => item.ToAiMessage()).OfType<AgwMessage>().ToArray();
 
+        // Flush before acquiring the history lock: a flush uses the same Project -> History lock order.
+        await using var historyBarrier = await ConversationHistoryPersistenceContext
+            .EnterBarrierAsync(cancellationToken)
+            .ConfigureAwait(false);
         await using var lifecycleLock = await _applicationLock
             .AcquireAsync(ProjectLifecycleLock.GetResourceName(projectId), cancellationToken)
             .ConfigureAwait(false);

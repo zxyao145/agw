@@ -76,8 +76,14 @@ public static class AgwAgentExtensions
 
         chatClientBuilder
             .UseMessageInjection()
+            // Order request context before it is captured, then pair against the loaded history.
             .Use(static innerClient => new FunctionResultOrderingChatClient(innerClient))
-            .UsePerServiceCallChatHistoryPersistence();
+            .UsePerServiceCallChatHistoryPersistence()
+            .Use(static innerClient => new FunctionResultOrderingChatClient(innerClient));
+        if (definition.ChatHistoryProvider?.GetService<IStreamingConversationHistoryProvider>() is { } streamingHistory)
+        {
+            chatClientBuilder.Use(innerClient => new StreamingChatHistoryClient(innerClient, streamingHistory));
+        }
         if (definition.CompactionProvider != null)
         {
             chatClientBuilder

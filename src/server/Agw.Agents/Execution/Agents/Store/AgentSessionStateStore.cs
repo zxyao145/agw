@@ -124,6 +124,19 @@ public sealed class AgentSessionStateStore
             return;
         }
 
+        IAsyncDisposable barrier;
+        try
+        {
+            barrier = await ConversationHistoryPersistenceContext
+                .EnterBarrierAsync(cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception exception) when (ConversationHistoryPersistenceContext.HasExecutionFailure)
+        {
+            _logger.LogError(exception, "Session state was not advanced because its history could not be saved.");
+            return;
+        }
+        await using var historyBarrier = barrier;
         var ownerUserId = UserInfoUtil.RequiredUserId;
         var serializedSession = await aiAgent
             .SerializeSessionAsync(session, cancellationToken: cancellationToken)

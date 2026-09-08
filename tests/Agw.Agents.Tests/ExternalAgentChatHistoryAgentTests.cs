@@ -14,7 +14,7 @@ namespace Agw.Agents.Tests;
 public class ExternalAgentChatHistoryAgentTests
 {
     [Fact]
-    public async Task RunStreamingAsync_NoResponse_FallbackPersistsRequestAtCompletion()
+    public async Task RunStreamingAsync_NoResponse_DoesNotWriteResponseHistory()
     {
         var provider = new RecordingChatHistoryProvider();
         var innerAgent = new PausableExternalAgent();
@@ -36,10 +36,7 @@ public class ExternalAgentChatHistoryAgentTests
 
         innerAgent.Complete();
         Assert.False(await firstUpdate);
-        var requestCall = Assert.Single(provider.Calls);
-        Assert.Equal("request", Assert.Single(requestCall.RequestMessages).Text);
-        Assert.Empty(requestCall.ResponseMessages);
-        Assert.Same(session, requestCall.Session);
+        Assert.Empty(provider.Calls);
     }
 
     [Fact]
@@ -68,7 +65,7 @@ public class ExternalAgentChatHistoryAgentTests
         }
 
         var responseCall = Assert.Single(provider.Calls, call => call.ResponseMessages.Count > 0);
-        Assert.Equal("request", Assert.Single(responseCall.RequestMessages).Text);
+        Assert.Empty(responseCall.RequestMessages);
         Assert.Equal(
             Enumerable.Range(0, 20).Select(index => $"update-{index}"),
             responseCall.ResponseMessages.Select(message => message.Text)
@@ -539,7 +536,7 @@ public class ExternalAgentChatHistoryAgentTests
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => enumerator.MoveNextAsync().AsTask());
 
         Assert.Equal("external failure", exception.Message);
-        Assert.Equal(2, provider.AttemptCount);
+        Assert.Equal(1, provider.AttemptCount);
     }
 
     [Fact]
@@ -563,7 +560,7 @@ public class ExternalAgentChatHistoryAgentTests
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => enumerator.MoveNextAsync().AsTask());
 
         Assert.Equal("persistence failure", exception.Message);
-        Assert.Equal(2, provider.AttemptCount);
+        Assert.Equal(1, provider.AttemptCount);
     }
 
     [Fact]
@@ -604,10 +601,9 @@ public class ExternalAgentChatHistoryAgentTests
         Func<string, CancellationToken, ValueTask>? onProviderSessionStartedAsync = null
     )
     {
-        var requestHistoryProvider = new AgentRequestChatHistoryProvider(provider);
         AIAgent agent = new ExternalAgentChatHistoryAgent(
             innerAgent,
-            requestHistoryProvider,
+            provider,
             TimeProvider.System,
             NullLogger<ExternalAgentChatHistoryAgent>.Instance
         );
@@ -615,12 +611,7 @@ public class ExternalAgentChatHistoryAgentTests
         {
             agent = new ClaudeCodeProviderSessionTrackingAgent(agent, onProviderSessionStartedAsync);
         }
-        return new AgentRequestContextAgent(
-            agent,
-            requestHistoryProvider,
-            createMemoryContextAsync: null,
-            NullLogger<AgentRequestContextAgent>.Instance
-        );
+        return agent;
     }
 
     private static AgentResponseUpdate CreateClaudeInitUpdate(Guid sessionId) =>

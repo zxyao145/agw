@@ -30,7 +30,21 @@ public static class DependencyInjection
         services.AddScoped<ProjectResolver>();
         services.AddScoped<IConversationHandoffProvider, ConversationHandoffProvider>();
 
+        services
+            .AddOptions<ConversationHistoryOptions>()
+            .Bind(configuration.GetSection(ConversationHistoryOptions.SectionName))
+            .Validate(options => Enum.IsDefined(options.Mode), "Unknown conversation history mode.")
+            .Validate(
+                options =>
+                    options.FlushIntervalSeconds > 0 && options.FlushIntervalSeconds <= (uint.MaxValue - 1) / 1000,
+                "History flush interval must be positive and fit the supported timer range."
+            )
+            .Validate(options => options.MaxBufferedBytes > 0, "History buffer limit must be positive.")
+            .ValidateOnStart();
         services.AddSingleton<EfCoreChatHistoryProvider>();
+        services.AddSingleton<IConversationHistoryPersistence>(sp =>
+            sp.GetRequiredService<EfCoreChatHistoryProvider>()
+        );
         services.AddSingleton<ChatHistoryProvider>(sp =>
         {
             return sp.GetRequiredService<EfCoreChatHistoryProvider>();

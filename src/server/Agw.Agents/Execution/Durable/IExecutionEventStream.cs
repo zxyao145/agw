@@ -1,3 +1,6 @@
+using Agw.Agents.Execution.Turns;
+using Agw.Shared.Utils;
+
 namespace Agw.Agents.Execution.Durable;
 
 /// <summary>
@@ -6,6 +9,23 @@ namespace Agw.Agents.Execution.Durable;
 /// <param name="Cursor">该消息在具体事件流实现中的游标。</param>
 /// <param name="Message">可发送给客户端的 Agw 消息。</param>
 internal sealed record ExecutionStreamEntry(string Cursor, AgwMessage Message);
+
+/// <summary>
+/// An immutable wire snapshot shared by the batch writer and both event stores.
+/// </summary>
+internal sealed record ExecutionStreamWrite
+{
+    public int Sequence { get; }
+    public string PayloadJson { get; }
+    public bool IsTerminal { get; }
+
+    public ExecutionStreamWrite(int sequence, AgwMessage message)
+    {
+        Sequence = sequence;
+        PayloadJson = JsonUtil.Serialize(message);
+        IsTerminal = TurnMessageProtocol.IsFinished(message);
+    }
+}
 
 /// <summary>
 /// Distributed execution 输出的可回放传输抽象；它不提供执行状态或一致性保证。
@@ -23,6 +43,24 @@ internal interface IExecutionEventStream
         AgwMessage message,
         CancellationToken cancellationToken
     );
+
+    async ValueTask AppendBatchAsync(
+        Guid executionId,
+        int segmentIndex,
+        IReadOnlyList<ExecutionStreamWrite> messages,
+        CancellationToken cancellationToken
+    )
+    {
+        foreach (var entry in messages)
+            await AppendAsync(
+                    executionId,
+                    segmentIndex,
+                    entry.Sequence,
+                    JsonUtil.Deserialize<AgwMessage>(entry.PayloadJson)!,
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+    }
 
     /// <summary>
     /// 读取指定 cursor 之后的一批消息。
