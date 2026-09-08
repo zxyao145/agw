@@ -1,7 +1,8 @@
-using Agw.Agents.Execution.Agentflows;
-using Agw.Agents.Execution.Durable;
+using Agw.Agents.Execution.Agentflows.Checkpoints;
+using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.Messaging;
-using Agw.Agents.Execution.Runtimes;
+using Agw.Agents.Execution.Runtimes.Durable;
+using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Exceptions;

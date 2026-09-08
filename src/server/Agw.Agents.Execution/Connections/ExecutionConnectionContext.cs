@@ -1,12 +1,15 @@
 using System.Security.Claims;
-using Agw.Agents.Execution.Agentflows;
+using Agw.Agents.Execution.Agentflows.Checkpoints;
+using Agw.Agents.Execution.Agentflows.Runtime;
+using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Commands.Checkpoint;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
-using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Mapping;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Runtimes;
+using Agw.Agents.Execution.Runtimes.Durable;
+using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Turns;
 using Agw.Auth.Contracts;
 using Agw.Projects.Contracts.Execution;

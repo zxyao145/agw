@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
-using Agw.Agents.Execution.Agentflows;
-using Agw.Agents.Execution.Agents;
+using Agw.Agents.Execution.Agentflows.Messaging;
+using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Tools;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Compaction;

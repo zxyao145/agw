@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using System.Reflection;
 using Agw.Agents.Definitions.Agents;
-using Agw.Agents.Execution.Agents;
-using Agw.Agents.Execution.Agents.AIContextProviders.AgwWorkspace;
+using Agw.Agents.Execution.Agents.Composition;
+using Agw.Agents.Execution.Agents.Context.Workspace;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Mcp;

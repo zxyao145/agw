@@ -1,10 +1,12 @@
 using System.Text.Json;
-using Agw.Agents.Execution.Agents;
+using Agw.Agents.Execution.Agents.Context;
+using Agw.Agents.Execution.Agents.ExternalAgents;
+using Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode;
+using Agw.Agents.Execution.Agents.ExternalAgents.Pi;
+using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Middleware;
-using Agw.Agents.Execution.Agents.Utils;
+using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.ExternalAgents;
-using Agw.Agents.ExternalAgents.ClaudeCode;
-using Agw.Agents.ExternalAgents.Pi;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;

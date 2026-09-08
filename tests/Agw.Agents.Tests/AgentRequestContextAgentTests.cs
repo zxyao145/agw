@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using Agw.Agents.Execution.Agents;
+using Agw.Agents.Execution.Agents.Composition;
+using Agw.Agents.Execution.Agents.Context;
 using Agw.Agents.Execution.Agents.Tools;
 using Agw.Projects.Domain.Services;
 using Microsoft.Agents.AI;

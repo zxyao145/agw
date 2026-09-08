@@ -1,13 +1,21 @@
 using System.Security.Claims;
 using Agw.Agents.Application.Persistence;
-using Agw.Agents.Execution.Agentflows;
+using Agw.Agents.Execution.Agentflows.Checkpoints;
+using Agw.Agents.Execution.Agentflows.Context;
+using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Agentflows.Observability;
-using Agw.Agents.Execution.Agents;
-using Agw.Agents.Execution.Agents.Dtos;
-using Agw.Agents.Execution.Agents.Store;
+using Agw.Agents.Execution.Agentflows.Runners.Durable;
+using Agw.Agents.Execution.Agentflows.Runners.InProcess;
+using Agw.Agents.Execution.Agentflows.Runtime;
+using Agw.Agents.Execution.Agentflows.Workflows;
+using Agw.Agents.Execution.Agents.Contracts;
+using Agw.Agents.Execution.Agents.Runtime;
+using Agw.Agents.Execution.Agents.Sessions;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Runtimes;
+using Agw.Agents.Execution.HumanInteraction;
+using Agw.Agents.Execution.HumanInteraction.Contracts;
+using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
 using Agw.Projects.Contracts.Runtime;
@@ -20,7 +28,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
-using RuntimeAgentExecutionResult = Agw.Agents.Execution.Agents.Dtos.AgentExecutionResult;
+using RuntimeAgentExecutionResult = Agw.Agents.Execution.Agents.Contracts.AgentExecutionResult;
 
 namespace Agw.Agents.Tests;
 

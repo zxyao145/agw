@@ -1,7 +1,9 @@
 using System.Text.Json;
-using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Commands.Hitl;
-using Agw.Agents.Execution.Durable;
+using Agw.Agents.Execution.HumanInteraction.Approvals;
+using Agw.Agents.Execution.HumanInteraction.Contracts;
+using Agw.Agents.Execution.HumanInteraction.Durable;
+using Agw.Agents.Execution.HumanInteraction.InProcess;
 using Agw.Agents.Execution.Turns;
 using Microsoft.Extensions.AI;
 

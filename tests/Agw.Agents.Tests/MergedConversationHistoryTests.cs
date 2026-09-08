@@ -1,5 +1,5 @@
-using Agw.Agents.ExternalAgents.ClaudeCode;
-using Agw.Agents.ExternalAgents.Pi;
+using Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode;
+using Agw.Agents.Execution.Agents.ExternalAgents.Pi;
 using Agw.Projects.Domain.Services;
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;

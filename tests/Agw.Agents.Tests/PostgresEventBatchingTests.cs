@@ -1,5 +1,7 @@
 using Agw.Agents.Application.Persistence;
-using Agw.Agents.Execution.Durable;
+using Agw.Agents.Execution.Configuration;
+using Agw.Agents.Execution.Messaging.Durable;
+using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Infrastructure.Data;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Projects;

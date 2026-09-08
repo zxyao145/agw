@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Agw.Agents.Execution.Commands.Hitl;
+using Agw.Agents.Execution.HumanInteraction.InProcess;
 using Agw.Agents.Execution.Messaging;
-using Agw.Agents.Execution.Turns;
 
 namespace Agw.Agents.Tests;
 

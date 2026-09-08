@@ -1,6 +1,7 @@
-using Agw.Agents.Execution.Agentflows;
-using Agw.Agents.Execution.Agents.Store;
-using Agw.Agents.Execution.Turns;
+using Agw.Agents.Execution.Agentflows.Context;
+using Agw.Agents.Execution.Agentflows.Workflows;
+using Agw.Agents.Execution.Agents.Sessions;
+using Agw.Agents.Execution.HumanInteraction.Approvals;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 

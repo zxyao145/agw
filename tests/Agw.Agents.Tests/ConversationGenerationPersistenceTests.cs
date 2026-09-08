@@ -1,6 +1,7 @@
 using Agw.Agents.Application.Persistence;
-using Agw.Agents.Execution.Agentflows;
-using Agw.Agents.Execution.Durable;
+using Agw.Agents.Execution.Agentflows.Checkpoints;
+using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
+using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Infrastructure.Agents;
 using Agw.Projects.Application.Persistence;
 using Agw.Shared.Coordination;

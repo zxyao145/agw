@@ -1,6 +1,8 @@
-using Agw.Agents.Execution.Agents.AIContextProviders.PlanMode;
+using Agw.Agents.Execution.Agents.Composition;
+using Agw.Agents.Execution.Agents.Context.PlanMode;
+using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Middleware;
-using Agw.Agents.Execution.Agents.Utils;
+using Agw.Agents.Execution.Agents.Runtime;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;

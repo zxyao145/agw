@@ -90,106 +90,68 @@ Checkpoint 和 Agent Session 的持久化仍经过既有 Application Port / Infr
 
 ## 关键目录与入口
 
-下面列出主要扩展点；同目录的 DTO、状态对象和内部 helper 省略。
+共享能力按职责归类，只有存在执行方式差异时才区分 `InProcess` 与 `Durable`。Agent 与 Agentflow 专属实现各自归位；所有命名空间跟随物理目录，类型名、协议和持久化标识保持稳定。
 
 ```text
 Agw.Agents.Execution/
-├── Agentflows/
-│   ├── AgentflowRuntimeService.cs
-│   ├── AgentflowWorkflowFactory.cs
-│   ├── AgentflowExecutionContextFactory.cs
-│   ├── InProcessAgentflowRunner.cs
-│   ├── DurableAgentflowSegmentRunner.cs
-│   ├── AgentflowMessageMapper.cs
-│   ├── AgentflowCheckpointSupport.cs
-│   ├── AgentflowWorkflowCompiler.cs
-│   ├── AgentflowCheckpointStore.cs
-│   ├── AgentflowNodeScopedAgent.cs
-│   ├── AgentflowMessageTransforms.cs
-│   ├── HumanGateApproval.cs
-│   └── IAgentflowRuntimeService.cs
-├── Agents/
-│   ├── Dtos/
-│   ├── Middleware/
-│   ├── Utils/
-│   ├── AgentRuntimeService.*.cs
-│   ├── ExternalAgentChatHistoryAgent.cs
-│   ├── AgentSessionStateStore.cs
-│   └── IAgentRuntimeService.cs
-├── Commands/
-│   ├── Abstracts/
-│   │   ├── AgentRunCommand.cs
-│   │   └── IExecutionCommandHandler.cs
-│   ├── Checkpoint/
-│   │   ├── ResumeCheckpointCommand.cs
-│   │   └── ResumeCheckpointCommandHandler.cs
-│   ├── Exec/
-│   │   ├── ExecCommand.cs
-│   │   └── ExecCommandHandler.cs
-│   ├── Hitl/
-│   │   ├── HumanResponseCommand.cs
-│   │   └── HumanResponseCommandHandler.cs
-│   ├── Interrupt/
-│   │   ├── InterruptCommand.cs
-│   │   └── InterruptCommandHandler.cs
-│   ├── Mode/
-│   │   ├── SetModeCommand.cs
-│   │   └── SetModeCommandHandler.cs
-│   ├── Permission/
-│   │   ├── SetPermissionModeCommand.cs
-│   │   └── SetPermissionModeCommandHandler.cs
-│   ├── Setting/
-│   │   ├── SettingCommand.cs
-│   │   └── SettingCommandHandler.cs
-│   ├── Subscribe/
-│   │   ├── SubscribeExecutionCommand.cs
-│   │   └── SubscribeExecutionCommandHandler.cs
-│   ├── ExecutionCommandDispatcher.cs
-│   └── ExecutionCommandRegistration.cs
-├── Messaging/
-│   └── IExecutionMessageSink.cs
+├── Transport/SignalR/       # Hub、连接注册和客户端回调契约
+├── Connections/            # 连接生命周期与状态
+├── Commands/               # Abstracts 和八种 command/handler 切片
+├── Facades/                # A2A、Jobs 执行入口
+├── Configuration/          # ExecutionRuntimeOptions 及相关配置类型
 ├── Runtimes/
-│   ├── RuntimeBase.cs
-│   ├── RuntimeFactory.cs
-│   ├── AgentRuntime.cs
-│   └── AgentflowRuntime.cs
-├── Connections/
-│   ├── ExecutionConnection.cs
-│   ├── ExecutionConnectionContext.cs
-│   ├── ExecutionConnectionContextFactory.cs
-│   ├── ExecutionSettings.cs
-│   └── ExecutionTarget.cs
-├── Durable/
-│   ├── DistributedExecutionWorker.cs
-│   ├── DurableExecutionCoordinator.cs
-│   ├── DurableAgentSegmentRunner.cs
-│   ├── DurableExecutionSegmentExecutor.cs
-│   ├── DurableExecutionSession.cs
-│   ├── DurableExecutionStore.cs
-│   ├── DurableAgentflowCheckpointStore.cs
-│   ├── ExecutionRuntimeOptions.cs
-│   ├── IExecutionEventStream.cs
-│   ├── PostgresExecutionEventStream.cs
-│   └── RedisExecutionEventStream.cs
-├── Summaries/
-│   ├── AgentTurnSummaryService.cs
-│   ├── IAgentTurnSummaryService.cs
-│   ├── ISummaryChatClientFactory.cs
-│   └── SummaryChatClientFactory.cs
-├── Transport/SignalR/
-│   ├── ExecutionHub.cs
-│   ├── ExecutionConnectionRegistry.cs
-│   ├── IExecutionHubClient.cs
-│   └── SignalRExecutionMessageSink.cs
-├── Turns/
-│   ├── ActiveTurn.cs
-│   ├── RuntimeTurnContext.cs
-│   ├── RuntimeTurnContextAccessor.cs
-│   ├── TurnPipeline.cs
-│   ├── TurnMessageFactory.cs
-│   └── HumanGateApprovalCoordinator.cs
-└── AgwMessageUtil.cs
+│   ├── RuntimeBase.cs      # 共用运行时生命周期
+│   ├── InProcess/          # RuntimeFactory 与启动类型
+│   └── Durable/            # Coordinator、Client、Session、Worker、SegmentExecutor
+│       └── Contracts/      # 执行请求、结果、分段输入输出及接口
+├── Turns/                  # ActiveTurn、上下文、TurnPipeline、消息协议
+├── HumanInteraction/
+│   ├── Contracts/          # 共用审批请求、决定和 Handler 接口
+│   ├── Approvals/          # 权限策略、无人值守审批、权限状态和 ToolApprovalSupport
+│   ├── HumanInteractionContextAccessor.cs
+│   ├── InProcess/          # ExecutionHumanInteractionChannel、HumanGateApprovalCoordinator
+│   └── Durable/            # ResolvedHumanInteractionChannel、DurableHumanInteractionMapper
+│       └── Contracts/      # 持久交互快照与回答
+├── Messaging/
+│   ├── IExecutionMessageSink.cs
+│   ├── AgwMessageUtil.cs
+│   ├── SignalR/            # 两种执行方式共用的 SignalR Sink
+│   └── Durable/            # EventStream、PG/Redis 实现、ExecutionStreamMessageSink
+├── Persistence/Durable/    # ExecutionStore、JSON 和持久状态映射
+├── Agents/
+│   ├── Runtime/            # AgentRuntime、RuntimeService 全部 partial、接口及资源包装
+│   ├── Runners/Durable/    # DurableAgentSegmentRunner
+│   ├── Composition/        # 能力组合和解析后的 Agent 定义
+│   ├── Context/            # 请求上下文包装
+│   │   ├── Workspace/      # 工作区和项目指令
+│   │   └── PlanMode/       # Plan 模式工具约束
+│   ├── History/            # 流式历史和外部 Agent 历史适配
+│   ├── Sessions/           # SDK Session 状态与作用域
+│   ├── ExternalAgents/     # 外部 SDK 适配与交互桥接
+│   ├── Tools/              # 工具执行和状态持久化
+│   ├── Middleware/         # 执行中间件
+│   └── Contracts/          # Agent 执行请求和结果
+├── Agentflows/
+│   ├── Runtime/            # AgentflowRuntime、RuntimeService 和接口
+│   ├── Workflows/          # Factory、Compiler、Lease 和 Metadata
+│   │   └── Builders/       # 多 Agent 协作块
+│   ├── Context/            # 执行上下文和节点 Session 适配
+│   ├── Runners/
+│   │   ├── InProcess/
+│   │   └── Durable/
+│   ├── Checkpoints/        # 检查点存储、恢复、指纹和数据类型
+│   │   └── Durable/        # DurableAgentflowCheckpointStore 和快照
+│   ├── Messaging/          # 消息转换和协议映射
+│   └── Observability/      # 节点追踪
+├── Mapping/                # Project task 投影
+└── Summaries/              # 两类引擎共用摘要服务
 ```
+
+`HumanInteraction` 集中两种执行方式的交互能力：`InProcess` 在内存中等待响应，`Durable` 将持久回答注入恢复后的 Tool；共享上下文、审批契约和权限策略只保留一份。跨模块 `IHumanInteractionChannel` 等契约继续位于 `Agw.Agents.Contracts`。
+
+`Runtimes/Durable` 负责协调与领取，`Persistence/Durable` 保存执行事实，`Messaging/Durable` 提供事件批量写入与回放。SignalR Sink 位于 `Messaging/SignalR`，两种执行方式都使用它。只有持久执行需要 Worker、事件存储和持久状态机，不为这些能力创建空的 InProcess 实现。
+
+Agent 的进程内执行继续由 `Agents/Runtime` 中的 RuntimeService 驱动；Agentflow 的两种 Runner 分别位于其 `Runners` 子目录。Skills、模型构造和执行仍为同一个 `AgentRuntimeService` 的 partial，不因物理归类拆成新服务。
 
 ### `Commands`
 

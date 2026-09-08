@@ -1,7 +1,8 @@
 using System.Security.Claims;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
-using Agw.Agents.Execution.Durable;
+using Agw.Agents.Execution.Persistence.Durable;
+using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Agents.Execution.Turns;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Agentflows;

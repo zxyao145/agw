@@ -1,5 +1,7 @@
-using Agw.Agents.Execution.Agentflows;
-using Agw.Agents.Execution.Durable;
+using Agw.Agents.Execution.Agentflows.Messaging;
+using Agw.Agents.Execution.Agentflows.Workflows;
+using Agw.Agents.Execution.HumanInteraction.Contracts;
+using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;

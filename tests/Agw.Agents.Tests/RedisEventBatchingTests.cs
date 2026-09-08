@@ -1,5 +1,6 @@
 using System.Reflection;
-using Agw.Agents.Execution.Durable;
+using Agw.Agents.Execution.Configuration;
+using Agw.Agents.Execution.Messaging.Durable;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.Options;
 using StackExchange.Redis;

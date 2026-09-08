@@ -1,0 +1,105 @@
+using Agw.Agents.Execution.Agents.Contracts;
+using Agw.Agents.Execution.Commands.Setting;
+using Agw.Agents.Execution.HumanInteraction.Contracts;
+using Agw.Shared.Exceptions;
+using Microsoft.Agents.AI;
+using RuntimeAgentExecutionResult = Agw.Agents.Execution.Agents.Contracts.AgentExecutionResult;
+
+namespace Agw.Agents.Execution.Agents.Runtime;
+
+public interface IAgentRuntimeService
+{
+    Task<AIAgent?> CreateAiAgentAsync(Guid agentId, CancellationToken cancellationToken = default);
+
+    Task<AIAgent?> CreateAiAgentAsync(
+        Guid agentId,
+        Guid? projectId,
+        bool resume,
+        CancellationToken cancellationToken = default
+    );
+
+    Task<AIAgent?> CreateAiAgentAsync(
+        Guid agentId,
+        Guid? projectId,
+        bool resume,
+        IReadOnlyDictionary<string, string>? environmentVariables,
+        CancellationToken cancellationToken = default
+    );
+
+    Task<AIAgent?> CreateAgentflowNodeAgentAsync(
+        Guid agentId,
+        Guid? projectId,
+        IReadOnlyDictionary<string, string>? environmentVariables,
+        CancellationToken cancellationToken = default
+    ) => CreateAiAgentAsync(agentId, projectId, resume: false, environmentVariables, cancellationToken);
+
+    Task<AIAgent?> CreateAgentflowNodeAgentAsync(
+        Guid agentId,
+        Guid? projectId,
+        Guid conversationId,
+        IReadOnlyDictionary<string, string>? environmentVariables,
+        CancellationToken cancellationToken = default
+    ) => CreateAgentflowNodeAgentAsync(agentId, projectId, environmentVariables, cancellationToken);
+
+    /// <summary>
+    /// 创建 Agentflow node Agent，并允许 durable 调用方延迟人机交互 Tool。
+    /// </summary>
+    Task<AIAgent?> CreateAgentflowNodeAgentAsync(
+        Guid agentId,
+        Guid? projectId,
+        Guid conversationId,
+        IReadOnlyDictionary<string, string>? environmentVariables,
+        bool deferHumanInteractions,
+        CancellationToken cancellationToken = default,
+        PermissionMode? permissionMode = null
+    ) => CreateAgentflowNodeAgentAsync(agentId, projectId, conversationId, environmentVariables, cancellationToken);
+
+    Task<AgentRuntime?> CreateRuntimeAsync(
+        Guid agentId,
+        AgentExecutionTask task,
+        SettingCommand settings,
+        CancellationToken cancellationToken = default
+    );
+
+    Task SetModeAsync(AgentRuntime runtime, string mode, CancellationToken cancellationToken = default) =>
+        Task.FromException(
+            new AgwException(ErrorCodes.InvalidParam, "The Agent runtime service does not support mode changes.")
+        );
+
+    Task SetPermissionModeAsync(
+        AgentRuntime runtime,
+        PermissionMode permissionMode,
+        CancellationToken cancellationToken = default
+    ) => Task.CompletedTask;
+
+    IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
+        AgentRuntime session,
+        AgwUserInput input,
+        CancellationToken cancellationToken = default
+    );
+
+    IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
+        AgentRuntime session,
+        AgwUserInput input,
+        IHumanGateApprovalHandler? approvalHandler,
+        CancellationToken cancellationToken = default
+    ) => ExecuteStreamingAsync(session, input, cancellationToken);
+
+    Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
+        AgentRuntime session,
+        AgwUserInput input,
+        CancellationToken cancellationToken = default
+    );
+
+    Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
+        AgentRuntime session,
+        AgwUserInput input,
+        IHumanGateApprovalHandler? approvalHandler,
+        CancellationToken cancellationToken = default
+    ) => ExecuteAsync(session, input, cancellationToken);
+
+    Task<RuntimeAgentExecutionResult?> ExecuteByIdAsync(
+        AgentExecuteByIdRequest request,
+        CancellationToken cancellationToken = default
+    );
+}

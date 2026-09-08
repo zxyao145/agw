@@ -1,6 +1,6 @@
 using System.Linq.Expressions;
 using Agw.Agents.Definitions.Agents;
-using Agw.Agents.Execution.Agents.Dtos;
+using Agw.Agents.Execution.Agents.Contracts;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;

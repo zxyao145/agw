@@ -1,12 +1,14 @@
 using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using Agw.Agents.Contracts.Catalog;
-using Agw.Agents.Execution.Agentflows;
-using Agw.Agents.Execution.Agents;
+using Agw.Agents.Execution.Agentflows.Runtime;
+using Agw.Agents.Execution.Agentflows.Workflows;
+using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Durable;
+using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.Facades;
-using Agw.Agents.Execution.Runtimes;
+using Agw.Agents.Execution.HumanInteraction.Contracts;
+using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
@@ -14,7 +16,7 @@ using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using AgentsDtos = Agw.Agents.Execution.Agents.Dtos;
+using AgentsDtos = Agw.Agents.Execution.Agents.Contracts;
 
 namespace Agw.Agents.Tests;
 

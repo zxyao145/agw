@@ -1,7 +1,8 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using Agw.Agents.Execution.Agentflows;
-using Agw.Agents.Execution.Runtimes;
+using Agw.Agents.Execution.Agents.Runtime;
+using Agw.Agents.Execution.HumanInteraction.Contracts;
+using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Summaries;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;

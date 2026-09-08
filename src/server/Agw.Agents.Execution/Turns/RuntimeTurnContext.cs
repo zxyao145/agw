@@ -1,5 +1,5 @@
-using Agw.Agents.Execution.Agentflows;
 using Agw.Agents.Execution.Connections;
+using Agw.Agents.Execution.HumanInteraction.Contracts;
 using Agw.Agents.Execution.Messaging;
 
 namespace Agw.Agents.Execution.Turns;

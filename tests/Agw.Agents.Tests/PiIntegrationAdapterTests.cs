@@ -1,6 +1,6 @@
 using System.Text.Json;
-using Agw.Agents.Execution.Turns;
-using Agw.Agents.ExternalAgents.Pi;
+using Agw.Agents.Execution.Agents.ExternalAgents.Pi;
+using Agw.Agents.Execution.HumanInteraction;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using PiAgentSdk;

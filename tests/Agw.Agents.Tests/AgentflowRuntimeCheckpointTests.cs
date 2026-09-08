@@ -1,8 +1,8 @@
 using Agw.Agents.Application.Persistence;
-using Agw.Agents.Execution.Agentflows;
-using Agw.Agents.Execution.Agents.Store;
-using Agw.Agents.Execution.Durable;
-using Agw.Agents.Execution.Turns;
+using Agw.Agents.Execution.Agentflows.Checkpoints;
+using Agw.Agents.Execution.Agents.Sessions;
+using Agw.Agents.Execution.HumanInteraction.Approvals;
+using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
 using Agw.Shared.Coordination;

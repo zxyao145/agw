@@ -1,4 +1,4 @@
-using Agw.Agents.Execution.Durable;
+using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Shared.Data.Entities.Agentflows;
 
 namespace Agw.Agents.Tests;

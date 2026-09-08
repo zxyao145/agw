@@ -233,9 +233,9 @@ public sealed partial class BackendArchitectureTests
         var serverRoot = GetServerRoot();
         var allowed = new HashSet<string>(
             [
-                "Agw.Agents.Execution/Durable/DistributedExecutionWorker.cs",
-                "Agw.Agents.Execution/Durable/DurableExecutionSegmentExecutor.cs",
-                "Agw.Agents.Execution/Durable/DurableExecutionStore.cs",
+                "Agw.Agents.Execution/Runtimes/Durable/DistributedExecutionWorker.cs",
+                "Agw.Agents.Execution/Runtimes/Durable/DurableExecutionSegmentExecutor.cs",
+                "Agw.Agents.Execution/Persistence/Durable/DurableExecutionStore.cs",
                 "Agw.Auth/Contracts/UserInfoUtil.cs",
                 "Agw.Infrastructure/Data/DbSeeder.cs",
                 "Agw.Infrastructure/Repositories/JobRepo.cs",

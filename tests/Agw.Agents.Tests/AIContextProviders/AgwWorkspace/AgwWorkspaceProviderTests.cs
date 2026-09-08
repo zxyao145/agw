@@ -1,5 +1,5 @@
 using System.Runtime.CompilerServices;
-using Agw.Agents.Execution.Agents.AIContextProviders.AgwWorkspace;
+using Agw.Agents.Execution.Agents.Context.Workspace;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Utils;

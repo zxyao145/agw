@@ -1,0 +1,253 @@
+using System.Runtime.CompilerServices;
+using Agw.Shared.Exceptions;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Logging;
+
+namespace Agw.Agents.Execution.Agents.Context;
+
+/// <summary>
+/// Stages the original request and forwards a transient, optionally memory-enriched copy to the inner Agent.
+/// </summary>
+internal sealed class AgentRequestContextAgent : DelegatingAIAgent
+{
+    private const string CurrentRequestHeading = "\n\n## Current Request\n\n";
+
+    private readonly IConversationHistoryRequests _historyProvider;
+    private readonly Func<CancellationToken, ValueTask<ChatMessage?>>? _createMemoryContextAsync;
+    private readonly ILogger _logger;
+
+    public AgentRequestContextAgent(
+        AIAgent innerAgent,
+        ChatHistoryProvider historyProvider,
+        Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync,
+        ILogger logger
+    )
+        : base(innerAgent)
+    {
+        ArgumentNullException.ThrowIfNull(historyProvider);
+        ArgumentNullException.ThrowIfNull(logger);
+        _historyProvider =
+            historyProvider.GetService<IConversationHistoryRequests>()
+            ?? throw new AgwException(
+                ErrorCodes.AgentExecutionFailed,
+                "The history provider must support original request persistence."
+            );
+        _createMemoryContextAsync = createMemoryContextAsync;
+        _logger = logger;
+    }
+
+    protected override async Task<AgentResponse> RunCoreAsync(
+        IEnumerable<ChatMessage> messages,
+        AgentSession? session = null,
+        AgentRunOptions? options = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var requestMessages = messages.ToList();
+        var safeSession = session ?? await InnerAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
+        _historyProvider.StageRequest(safeSession, SelectPersistableRequestMessages(requestMessages));
+        Exception? executionFailure = null;
+        try
+        {
+            var forwardedMessages = await CreateForwardedMessagesAsync(requestMessages, cancellationToken)
+                .ConfigureAwait(false);
+            return await InnerAgent
+                .RunAsync(forwardedMessages, safeSession, options, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            executionFailure = exception;
+            throw;
+        }
+        finally
+        {
+            await PersistPendingWithoutMaskingExecutionFailureAsync(safeSession, executionFailure)
+                .ConfigureAwait(false);
+        }
+    }
+
+    protected override async IAsyncEnumerable<AgentResponseUpdate> RunCoreStreamingAsync(
+        IEnumerable<ChatMessage> messages,
+        AgentSession? session = null,
+        AgentRunOptions? options = null,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default
+    )
+    {
+        var requestMessages = messages.ToList();
+        var safeSession = session ?? await InnerAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
+        _historyProvider.StageRequest(safeSession, SelectPersistableRequestMessages(requestMessages));
+        Exception? executionFailure = null;
+        IReadOnlyList<ChatMessage> forwardedMessages;
+        try
+        {
+            forwardedMessages = await CreateForwardedMessagesAsync(requestMessages, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            executionFailure = exception;
+            await PersistPendingWithoutMaskingExecutionFailureAsync(safeSession, executionFailure)
+                .ConfigureAwait(false);
+            throw;
+        }
+
+        IAsyncEnumerator<AgentResponseUpdate> enumerator;
+        try
+        {
+            enumerator = InnerAgent
+                .RunStreamingAsync(forwardedMessages, safeSession, options, cancellationToken)
+                .GetAsyncEnumerator(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            executionFailure = exception;
+            await PersistPendingWithoutMaskingExecutionFailureAsync(safeSession, executionFailure)
+                .ConfigureAwait(false);
+            throw;
+        }
+
+        try
+        {
+            while (true)
+            {
+                AgentResponseUpdate update;
+                try
+                {
+                    if (!await enumerator.MoveNextAsync().ConfigureAwait(false))
+                        break;
+                    update = enumerator.Current;
+                }
+                catch (Exception exception)
+                {
+                    executionFailure = exception;
+                    throw;
+                }
+                yield return update;
+            }
+        }
+        finally
+        {
+            // SDK disposal may still notify history. Keep request/stream state until those callbacks finish.
+            try
+            {
+                await enumerator.DisposeAsync().ConfigureAwait(false);
+            }
+            catch (Exception exception) when (executionFailure != null)
+            {
+                _logger.LogError(exception, "Agent stream disposal failed while preserving an execution failure.");
+            }
+            catch (Exception exception)
+            {
+                executionFailure = exception;
+                throw;
+            }
+            finally
+            {
+                await PersistPendingWithoutMaskingExecutionFailureAsync(safeSession, executionFailure)
+                    .ConfigureAwait(false);
+            }
+        }
+    }
+
+    private async Task<IReadOnlyList<ChatMessage>> CreateForwardedMessagesAsync(
+        IReadOnlyList<ChatMessage> requestMessages,
+        CancellationToken cancellationToken
+    )
+    {
+        var forwardedMessages = requestMessages.Select(CloneForTransientForwarding).ToList();
+        if (_createMemoryContextAsync == null)
+        {
+            return forwardedMessages;
+        }
+
+        var memoryMessage = await _createMemoryContextAsync(cancellationToken).ConfigureAwait(false);
+        if (memoryMessage == null || string.IsNullOrWhiteSpace(memoryMessage.Text))
+        {
+            return forwardedMessages;
+        }
+
+        var requestIndex = forwardedMessages.FindIndex(message =>
+            message.Role == ChatRole.User
+            && message.GetAgentRequestMessageSourceType() == AgentRequestMessageSourceType.External
+        );
+        if (requestIndex < 0)
+        {
+            return forwardedMessages;
+        }
+
+        var composite = forwardedMessages[requestIndex];
+        composite.Contents = [new TextContent(memoryMessage.Text + CurrentRequestHeading), .. composite.Contents];
+        composite = composite.WithAgentRequestMessageSource(
+            AgentRequestMessageSourceType.AIContextProvider,
+            memoryMessage.GetAgentRequestMessageSourceId() ?? ConversationHistoryMetadata.UserMemorySourceId
+        );
+        ConversationHistoryMetadata.ExcludeFromPersistence(composite);
+        forwardedMessages[requestIndex] = composite;
+        return forwardedMessages;
+    }
+
+    private static ChatMessage CloneForTransientForwarding(ChatMessage message)
+    {
+        var clone = message.Clone();
+        clone.Contents = message.Contents.ToList();
+        if (message.AdditionalProperties != null)
+        {
+            clone.AdditionalProperties = new AdditionalPropertiesDictionary(message.AdditionalProperties);
+        }
+        ConversationHistoryMetadata.ExcludeFromPersistence(clone);
+        return clone;
+    }
+
+    private static IReadOnlyList<ChatMessage> SelectPersistableRequestMessages(IEnumerable<ChatMessage> messages) =>
+        messages
+            .Where(message => !ConversationHistoryMetadata.IsPersistenceExcluded(message))
+            .Select(CreatePersistableRequestMessage)
+            .ToList();
+
+    private static ChatMessage CreatePersistableRequestMessage(ChatMessage message)
+    {
+        if (
+            !message.Contents.Any(static content =>
+                content
+                    is AlwaysApproveToolApprovalResponseContent
+                        or ToolApprovalResponseContent { ToolCall: FunctionCallContent }
+            )
+        )
+        {
+            return message;
+        }
+
+        // Persist standard approval responses for audit, but keep these framework control messages
+        // out of model history and cross-Agent handoff. The MAF wrapper itself is not JSON-serializable.
+        var persistableMessage = message.Clone();
+        if (message.AdditionalProperties != null)
+        {
+            persistableMessage.AdditionalProperties = new AdditionalPropertiesDictionary(message.AdditionalProperties);
+        }
+
+        persistableMessage.Contents = message
+            .Contents.Select(static content =>
+                content is AlwaysApproveToolApprovalResponseContent approval ? approval.InnerResponse : content
+            )
+            .ToList();
+        ConversationHistoryMetadata.ExcludeFromModelHistory(persistableMessage);
+        return persistableMessage;
+    }
+
+    private async Task PersistPendingWithoutMaskingExecutionFailureAsync(
+        AgentSession session,
+        Exception? executionFailure
+    )
+    {
+        try
+        {
+            await _historyProvider.PersistPendingAsync(this, session, CancellationToken.None).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (executionFailure != null)
+        {
+            _logger.LogError(exception, "Agent request persistence failed while preserving an execution failure.");
+        }
+    }
+}

@@ -2,11 +2,12 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
-using Agw.Agents.Execution.Agentflows;
-using Agw.Agents.Execution.Agentflows.Builders;
+using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
+using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Agentflows.Observability;
+using Agw.Agents.Execution.Agentflows.Workflows;
+using Agw.Agents.Execution.Agentflows.Workflows.Builders;
 using Agw.Agents.Execution.Agents.Middleware;
-using Agw.Agents.Execution.Durable;
 using Agw.Agents.Execution.Summaries;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Agentflows;
@@ -29,10 +30,10 @@ public class AgentflowWorkflowCompilerTests
         var assembly = typeof(AgentflowWorkflowCompiler).Assembly;
         var builderTypeNames = new[]
         {
-            "Agw.Agents.Execution.Agentflows.Builders.ConcurrentBlockBuilder",
-            "Agw.Agents.Execution.Agentflows.Builders.GroupChatBlockBuilder",
-            "Agw.Agents.Execution.Agentflows.Builders.HandoffBlockBuilder",
-            "Agw.Agents.Execution.Agentflows.Builders.MagenticBlockBuilder",
+            "Agw.Agents.Execution.Agentflows.Workflows.Builders.ConcurrentBlockBuilder",
+            "Agw.Agents.Execution.Agentflows.Workflows.Builders.GroupChatBlockBuilder",
+            "Agw.Agents.Execution.Agentflows.Workflows.Builders.HandoffBlockBuilder",
+            "Agw.Agents.Execution.Agentflows.Workflows.Builders.MagenticBlockBuilder",
         };
 
         foreach (var builderTypeName in builderTypeNames)

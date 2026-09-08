@@ -1,4 +1,4 @@
-using Agw.Agents.Execution.Agents;
+using Agw.Agents.Execution.Agents.Runtime;
 
 namespace Agw.Agents.Tests;
 
@@ -9,13 +9,38 @@ public class ExecutionStructureTests
     {
         var executionTypes = new Dictionary<string, string>
         {
+            ["AgentRuntimeService"] = "Agw.Agents.Execution.Agents.Runtime",
+            ["AgentflowRuntimeService"] = "Agw.Agents.Execution.Agentflows.Runtime",
+            ["DurableAgentSegmentRunner"] = "Agw.Agents.Execution.Agents.Runners.Durable",
+            ["InProcessAgentflowRunner"] = "Agw.Agents.Execution.Agentflows.Runners.InProcess",
+            ["DurableAgentflowSegmentRunner"] = "Agw.Agents.Execution.Agentflows.Runners.Durable",
+            ["AgentflowWorkflowCompiler"] = "Agw.Agents.Execution.Agentflows.Workflows",
+            ["AgentflowCheckpointStore"] = "Agw.Agents.Execution.Agentflows.Checkpoints",
+            ["DurableAgentflowCheckpointStore"] = "Agw.Agents.Execution.Agentflows.Checkpoints.Durable",
+            ["DurableAgentflowCheckpoint"] = "Agw.Agents.Execution.Agentflows.Checkpoints.Durable",
+            ["HumanGateApprovalRequest"] = "Agw.Agents.Execution.HumanInteraction.Contracts",
+            ["IHumanGateApprovalHandler"] = "Agw.Agents.Execution.HumanInteraction.Contracts",
+            ["HumanInteractionContextAccessor"] = "Agw.Agents.Execution.HumanInteraction",
+            ["PermissionAwareApprovalHandler"] = "Agw.Agents.Execution.HumanInteraction.Approvals",
+            ["ExecutionHumanInteractionChannel"] = "Agw.Agents.Execution.HumanInteraction.InProcess",
+            ["HumanGateApprovalCoordinator"] = "Agw.Agents.Execution.HumanInteraction.InProcess",
+            ["ResolvedHumanInteractionChannel"] = "Agw.Agents.Execution.HumanInteraction.Durable",
+            ["DurableHumanInteractionMapper"] = "Agw.Agents.Execution.HumanInteraction.Durable",
+            ["DurableHumanInteractionSnapshot"] = "Agw.Agents.Execution.HumanInteraction.Durable.Contracts",
+            ["DurableExecutionCoordinator"] = "Agw.Agents.Execution.Runtimes.Durable",
+            ["DistributedExecutionWorker"] = "Agw.Agents.Execution.Runtimes.Durable",
+            ["IDurableExecutionClient"] = "Agw.Agents.Execution.Runtimes.Durable.Contracts",
+            ["DurableExecutionStore"] = "Agw.Agents.Execution.Persistence.Durable",
+            ["SignalRExecutionMessageSink"] = "Agw.Agents.Execution.Messaging.SignalR",
+            ["IExecutionEventStream"] = "Agw.Agents.Execution.Messaging.Durable",
+            ["ExecutionRuntimeOptions"] = "Agw.Agents.Execution.Configuration",
             ["ExecutionCommandDispatcher"] = "Agw.Agents.Execution.Commands",
             ["ExecutionConnection"] = "Agw.Agents.Execution.Connections",
             ["ExecutionConnectionContext"] = "Agw.Agents.Execution.Connections",
-            ["RuntimeFactory"] = "Agw.Agents.Execution.Runtimes",
+            ["RuntimeFactory"] = "Agw.Agents.Execution.Runtimes.InProcess",
             ["RuntimeBase"] = "Agw.Agents.Execution.Runtimes",
-            ["AgentRuntime"] = "Agw.Agents.Execution.Runtimes",
-            ["AgentflowRuntime"] = "Agw.Agents.Execution.Runtimes",
+            ["AgentRuntime"] = "Agw.Agents.Execution.Agents.Runtime",
+            ["AgentflowRuntime"] = "Agw.Agents.Execution.Agentflows.Runtime",
             ["ActiveTurn"] = "Agw.Agents.Execution.Turns",
             ["TurnPipeline"] = "Agw.Agents.Execution.Turns",
             ["RuntimeTurnContextAccessor"] = "Agw.Agents.Execution.Turns",
