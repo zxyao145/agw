@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Connections;
 using Agw.Agents.Execution.Durable;
@@ -14,7 +15,7 @@ public class ExecutionSettingsTests
             .CreateDefault()
             .WithPermissionMode(PermissionMode.FullAccess)
             .WithHumanInteractionPolicy(HumanInteractionPolicy.Reject);
-        var snapshot = DurableExecutionSettings.FromSettings(settings);
+        var snapshot = DurableExecutionMapper.FromSettings(settings);
 
         var restored = JsonSerializer.Deserialize<DurableExecutionSettings>(JsonSerializer.Serialize(snapshot))!;
 

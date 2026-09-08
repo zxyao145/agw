@@ -701,7 +701,7 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
                             TaskId = Guid.CreateVersion7(),
                             ContextId = "context",
                         },
-                        Settings = DurableExecutionSettings.FromSettings(
+                        Settings = DurableExecutionMapper.FromSettings(
                             ExecutionSettings.FromCommand(new SettingCommand(projectId, contextId: "context"))
                         ),
                     }

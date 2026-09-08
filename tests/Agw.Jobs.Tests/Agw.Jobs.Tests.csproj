@@ -20,5 +20,6 @@
   <ItemGroup>
     <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
     <ProjectReference Include="../../src/server/Agw.Jobs/Agw.Jobs.csproj" />
+    <ProjectReference Include="../../src/server/Agw.Agents.Execution/Agw.Agents.Execution.csproj" />
   </ItemGroup>
 </Project>

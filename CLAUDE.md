@@ -22,7 +22,8 @@ Agw.Migrations.Postgres/ # PostgreSQL migrations and provider-specific model sna
 Agw.Shared/          # Errors, results, coordination, platform utilities, and stable shared values
 Agw.A2A/             # A2A discovery, protocol types, and endpoints
 Agw.Auth/            # Cookie/Bearer/LocalTrusted auth, CSRF, and guards
-Agw.Agents/          # Agent/Agentflow definitions, tools, and runtimes
+Agw.Agents/          # Agent/Agentflow definitions, catalog, domain rules, and persistence seams
+Agw.Agents.Execution/ # Agents execution implementation, external-agent adapters, SignalR, and durable workers
 Agw.Agents.Contracts/ # Cross-module Agent catalog, execution, and turn contracts
 Agw.Files/           # Project file/Git APIs and path security
 Agw.Integrations/    # Plugin catalog, connections, credentials, OAuth, and MCP
@@ -43,6 +44,8 @@ Agw.Tools/           # Tool/ToolBlock catalog and materialization
 Backend modules use `Api → Application → Domain ← Infrastructure`. Api owns protocol adapters, Application owns use cases, Domain contains data-only entities/value objects plus framework-free Behaviors, Policies, and genuine cross-boundary DomainServices, and Infrastructure implements persistence and external adapters. Dependencies point inward.
 
 Modules that own persisted entities expose an `I<Module>DbContext` persistence seam from `Application/Persistence`. The single scoped `AgwDbContext` implements all eight seams; module code may use only its own interface, while cross-module transactions remain explicit Infrastructure adapters.
+
+`Agw.Agents` and `Agw.Agents.Execution` are two assemblies of the same logical Agents module. Execution references Agents one-way; Host composes `AddAgents` and `AddAgentExecution`. Agents owns the shared topology and persistence seams, including the data-only durable manifest. Mermaid management uses `IAgentflowMermaidProvider` from Contracts. Architecture checks map both assemblies to Agents ownership while enforcing their physical project references separately.
 
 Persisted data ownership is logical rather than physical. Every entity and table has exactly one owning module, while entity CLR types and EF configurations may remain in `Agw.Data` and all module seams may share the single `AgwDbContext`, database, and schema. Physical co-location does not grant cross-module query or write ownership.
 
@@ -83,7 +86,7 @@ The Expo Router app root is `src/clients/mobile`. Follow the nested `src/clients
 
 - [`docs/2.Architecture.md`](docs/2.Architecture.md): module responsibilities, runtime boundaries, client packages, and domain relationships.
 - [`docs/6.Agentflow.md`](docs/6.Agentflow.md): graph routing, cycle constraints, checkpoint branching, editor history, and Chat attribution.
-- [`src/server/Agw.Agents/Execution/README.md`](src/server/Agw.Agents/Execution/README.md): SignalR commands, in-process/distributed runtimes, turn lifecycle, and extension points.
+- [`src/server/Agw.Agents.Execution/README.md`](src/server/Agw.Agents.Execution/README.md): SignalR commands, in-process/distributed runtimes, turn lifecycle, and extension points.
 - [`src/server/Agw.Files/README.zh-CN.md`](src/server/Agw.Files/README.zh-CN.md): workspace resolution, path security, file APIs, and Git behavior.
 - [`src/clients/desktop/README.md`](src/clients/desktop/README.md): Desktop runtime, packaging, server profiles, and security boundaries.
 

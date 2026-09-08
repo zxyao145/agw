@@ -39,7 +39,9 @@ public sealed partial class BackendArchitectureTests
             ["Agw.DataPlane.Host"] = Set("Agw.Host"),
             ["Agw.Host"] = Set(
                 "Agw.A2A",
+                "Agw.Agents",
                 "Agw.Agents.Contracts",
+                "Agw.Agents.Execution",
                 "Agw.Auth",
                 "Agw.Infrastructure",
                 "Agw.Jobs.Contracts",
@@ -63,6 +65,18 @@ public sealed partial class BackendArchitectureTests
             ),
 
             ["Agw.Agents"] = Set(
+                "Agw.Agents.Contracts",
+                "Agw.Auth",
+                "Agw.Data",
+                "Agw.Integrations",
+                "Agw.Projects.Contracts",
+                "Agw.Providers",
+                "Agw.Shared",
+                "Agw.Skills",
+                "Agw.Tools"
+            ),
+            ["Agw.Agents.Execution"] = Set(
+                "Agw.Agents",
                 "Agw.Agents.Contracts",
                 "Agw.Auth",
                 "Agw.Data",
@@ -170,8 +184,8 @@ public sealed partial class BackendArchitectureTests
 
         // Act
         var actualFacadeFiles = GetSourceFiles(serverRoot)
-            .Where(path => GuardedModules.Contains(GetOwningProject(serverRoot, path)))
-            .Where(path => DeclaresNamespace(path, GetOwningProject(serverRoot, path)))
+            .Where(path => GuardedModules.Contains(GetOwningModule(serverRoot, path)))
+            .Where(path => DeclaresNamespace(path, GetOwningModule(serverRoot, path)))
             .Select(path => NormalizePath(Path.GetRelativePath(serverRoot, path)))
             .OrderBy(static path => path, StringComparer.Ordinal)
             .ToArray();
@@ -288,7 +302,7 @@ public sealed partial class BackendArchitectureTests
         var owners = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         foreach (var sourceFile in sourceFiles)
         {
-            var project = GetOwningProject(serverRoot, sourceFile);
+            var project = GetOwningModule(serverRoot, sourceFile);
             foreach (var line in File.ReadLines(sourceFile))
             {
                 var match = NamespaceDeclarationRegex().Match(line);
@@ -323,7 +337,7 @@ public sealed partial class BackendArchitectureTests
         var owners = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         foreach (var sourceFile in sourceFiles)
         {
-            var project = GetOwningProject(serverRoot, sourceFile);
+            var project = GetOwningModule(serverRoot, sourceFile);
             foreach (var line in File.ReadLines(sourceFile))
             {
                 var match = ImplementationTypeDeclarationRegex().Match(line);
@@ -353,7 +367,7 @@ public sealed partial class BackendArchitectureTests
         IReadOnlyDictionary<string, IReadOnlySet<string>> implementationOwners
     )
     {
-        var owningProject = GetOwningProject(serverRoot, sourceFile);
+        var owningProject = GetOwningModule(serverRoot, sourceFile);
         if (owningProject == "Agw.Infrastructure")
         {
             yield break;
@@ -402,7 +416,7 @@ public sealed partial class BackendArchitectureTests
         string sourceFile
     )
     {
-        var owningProject = GetOwningProject(serverRoot, sourceFile);
+        var owningProject = GetOwningModule(serverRoot, sourceFile);
         if (owningProject == "Agw.Infrastructure")
         {
             yield break;
@@ -447,7 +461,7 @@ public sealed partial class BackendArchitectureTests
         IReadOnlyDictionary<string, IReadOnlySet<string>> namespaceOwners
     )
     {
-        var owningProject = GetOwningProject(serverRoot, sourceFile);
+        var owningProject = GetOwningModule(serverRoot, sourceFile);
         var relativePath = NormalizePath(Path.GetRelativePath(serverRoot, sourceFile));
         var lineNumber = 0;
         foreach (var line in File.ReadLines(sourceFile))
@@ -533,11 +547,15 @@ public sealed partial class BackendArchitectureTests
                 && string.Equals(match.Groups["namespace"].Value, expectedNamespace, StringComparison.Ordinal)
             );
 
-    private static string GetOwningProject(string serverRoot, string sourceFile)
+    private static string GetOwningModule(string serverRoot, string sourceFile)
     {
         var relativePath = Path.GetRelativePath(serverRoot, sourceFile);
         var projectDirectory = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0];
-        return projectDirectory;
+        return projectDirectory switch
+        {
+            "Agw.Agents.Execution" => "Agw.Agents",
+            _ => projectDirectory,
+        };
     }
 
     private static bool ContainsInternalLayer(string namespaceName) =>

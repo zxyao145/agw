@@ -18,7 +18,9 @@ public partial class AgentflowRuntimeServiceTests
     [Theory]
     [InlineData("InProcess")]
     [InlineData("Distributed")]
-    public async Task AddAgents_RuntimeCollaborators_AreScopedAndResolveThroughTheSameFacade(string executionProvider)
+    public async Task AddAgentExecution_RuntimeCollaborators_AreScopedAndResolveThroughTheSameFacade(
+        string executionProvider
+    )
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
@@ -31,7 +33,11 @@ public partial class AgentflowRuntimeServiceTests
             .Build();
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddAgents(configuration, new DependencyInjection.RegistrationOptions(false, false, false));
+        services.AddAgents(configuration);
+        services.AddAgentExecution(
+            configuration,
+            new Agw.Agents.Execution.DependencyInjection.RegistrationOptions(false, false, false)
+        );
         services.AddSingleton<IApplicationLock, InMemoryApplicationLock>();
         services.AddScoped<IRepository<Agentflow>>(_ => new TestRepository<Agentflow>([], flow => flow.Id));
         services.AddScoped<IRepository<AgentflowNode>>(_ => new TestRepository<AgentflowNode>([], node => node.NodeId));
@@ -69,6 +75,10 @@ public partial class AgentflowRuntimeServiceTests
         var runtime = first.ServiceProvider.GetRequiredService<AgentflowRuntimeService>();
 
         Assert.Same(runtime, first.ServiceProvider.GetRequiredService<IAgentflowRuntimeService>());
+        Assert.Same(
+            runtime,
+            first.ServiceProvider.GetRequiredService<Agw.Agents.Contracts.Catalog.IAgentflowMermaidProvider>()
+        );
         foreach (var type in types)
         {
             Assert.Same(first.ServiceProvider.GetRequiredService(type), first.ServiceProvider.GetRequiredService(type));

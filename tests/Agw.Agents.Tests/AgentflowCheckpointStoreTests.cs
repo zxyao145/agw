@@ -779,7 +779,7 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
                     ProjectId = fixture.ProjectId,
                     ContextId = fixture.ContextId,
                 },
-                Settings = DurableExecutionSettings.FromSettings(
+                Settings = DurableExecutionMapper.FromSettings(
                     ExecutionSettings.FromCommand(new SettingCommand(fixture.ProjectId, contextId: fixture.ContextId))
                 ),
             };

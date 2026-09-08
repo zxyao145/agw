@@ -2,11 +2,13 @@ namespace Agw.Agents.Tests;
 
 public sealed class AgwAgentArchitectureTests
 {
-    [Fact]
-    public void AgentRuntimeSource_DoesNotUseHarnessAgentWrappers()
+    [Theory]
+    [InlineData("Agw.Agents")]
+    [InlineData("Agw.Agents.Execution")]
+    public void AgentRuntimeSource_DoesNotUseHarnessAgentWrappers(string project)
     {
         var repositoryRoot = FindRepositoryRoot(AppContext.BaseDirectory);
-        var sourceRoot = Path.Combine(repositoryRoot, "src", "server", "Agw.Agents");
+        var sourceRoot = Path.Combine(repositoryRoot, "src", "server", project);
         var forbiddenTerms = new[]
         {
             string.Concat("Harness", "Agent"),
@@ -31,7 +33,7 @@ public sealed class AgwAgentArchitectureTests
 
         Assert.Empty(violations);
 
-        var projectFile = File.ReadAllText(Path.Combine(sourceRoot, "Agw.Agents.csproj"));
+        var projectFile = File.ReadAllText(Path.Combine(sourceRoot, $"{project}.csproj"));
         Assert.DoesNotContain(string.Concat("Microsoft.Agents.AI.", "Harness"), projectFile, StringComparison.Ordinal);
     }
 

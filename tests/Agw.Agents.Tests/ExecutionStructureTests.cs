@@ -49,7 +49,8 @@ public class ExecutionStructureTests
     [Fact]
     public void AgentflowsController_ShouldDependOnApplicationBoundary()
     {
-        var assembly = typeof(AgentRuntimeService).Assembly;
+        var assembly = typeof(Agw.Agents.Definitions.Agents.AgentflowAppService).Assembly;
+        Assert.NotEqual(assembly, typeof(AgentRuntimeService).Assembly);
         var controllerType = assembly.GetType("Agw.Agents.Definitions.Controllers.AgentflowsController");
         var appServiceType = assembly.GetType("Agw.Agents.Definitions.Agents.AgentflowAppService");
         var legacyDomainServiceType = assembly.GetType("Agw.Agents.Definitions.Domain.AgentflowDomainService");
@@ -65,5 +66,7 @@ public class ExecutionStructureTests
             .ToArray();
 
         Assert.Contains(appServiceType!, parameterTypes);
+        Assert.Contains(typeof(Agw.Agents.Contracts.Catalog.IAgentflowMermaidProvider), parameterTypes);
+        Assert.DoesNotContain(parameterTypes, type => type.Assembly == typeof(AgentRuntimeService).Assembly);
     }
 }

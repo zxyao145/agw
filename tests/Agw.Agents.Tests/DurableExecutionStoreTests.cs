@@ -826,8 +826,8 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
             AgentId = Guid.CreateVersion7(),
             AgentType = AgentRuntimeType.Agent,
             Input = CreateInput("hello"),
-            Task = DurableProjectTaskSnapshot.FromProjection(task),
-            Settings = DurableExecutionSettings.FromSettings(CreateSettings(task.ProjectId, task.ContextId)),
+            Task = DurableExecutionMapper.FromProjection(task),
+            Settings = DurableExecutionMapper.FromSettings(CreateSettings(task.ProjectId, task.ContextId)),
         };
     }
 

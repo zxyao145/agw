@@ -1366,7 +1366,7 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
             return Task.FromResult(agent);
         }
 
-        public Agw.Agents.Execution.Commands.Setting.PermissionMode? LastPermissionMode { get; private set; }
+        public Agw.Agents.Contracts.Execution.PermissionMode? LastPermissionMode { get; private set; }
 
         public Task<AIAgent?> CreateAgentflowNodeAgentAsync(
             Guid agentId,
@@ -1375,7 +1375,7 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
             IReadOnlyDictionary<string, string>? environmentVariables,
             bool deferHumanInteractions,
             CancellationToken cancellationToken = default,
-            Agw.Agents.Execution.Commands.Setting.PermissionMode? permissionMode = null
+            Agw.Agents.Contracts.Execution.PermissionMode? permissionMode = null
         )
         {
             LastPermissionMode = permissionMode;

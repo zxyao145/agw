@@ -852,14 +852,14 @@ public class AgentRuntimeServiceCompositionTests
             "/workspace",
             null,
             false,
-            permissionMode: Agw.Agents.Execution.Commands.Setting.PermissionMode.FullAccess
+            permissionMode: Agw.Agents.Contracts.Execution.PermissionMode.FullAccess
         );
         var claude = BuildClaudeCodeAIAgentOptions(
             "{}",
             "/workspace",
             null,
             false,
-            permissionMode: Agw.Agents.Execution.Commands.Setting.PermissionMode.FullAccess
+            permissionMode: Agw.Agents.Contracts.Execution.PermissionMode.FullAccess
         );
 
         Assert.Equal(OpenAI.CodexSdk.ApprovalMode.Never, codex!.ThreadOptions!.ApprovalPolicy);
@@ -877,7 +877,7 @@ public class AgentRuntimeServiceCompositionTests
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         Func<string, CancellationToken, ValueTask>? onThreadStartedAsync = null,
         string? projectExtra = null,
-        Agw.Agents.Execution.Commands.Setting.PermissionMode? permissionMode = null
+        Agw.Agents.Contracts.Execution.PermissionMode? permissionMode = null
     )
     {
         var method = typeof(AgentRuntimeService).GetMethod(
@@ -910,7 +910,7 @@ public class AgentRuntimeServiceCompositionTests
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         ChatHistoryProvider? chatHistoryProvider = null,
         string? projectExtra = null,
-        Agw.Agents.Execution.Commands.Setting.PermissionMode? permissionMode = null
+        Agw.Agents.Contracts.Execution.PermissionMode? permissionMode = null
     )
     {
         var method = typeof(AgentRuntimeService).GetMethod(

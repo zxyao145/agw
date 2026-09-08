@@ -3,9 +3,9 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
 using ClaudeCodeSdk.MAF;
-using ClaudeCodeSdk.Types;
 using OpenAI.CodexSdk.MAF;
 using PiAgentSdk.MAF;
+using PermissionMode = ClaudeCodeSdk.Types.PermissionMode;
 
 namespace Agw.Agents.ExternalAgents;
 

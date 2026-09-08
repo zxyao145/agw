@@ -1,6 +1,6 @@
 # Agent execution flow
 
-Agw exposes the authenticated SignalR Hub at `/api/hubs/exec`. The Hub is a transport adapter over connection-scoped command handling and either the in-process or distributed execution provider. Detailed state ownership, extension rules, checkpoint storage, and distributed recovery are documented in the [Execution subsystem README](../src/server/Agw.Agents/Execution/README.md).
+Agw exposes the authenticated SignalR Hub at `/api/hubs/exec`. The Hub is a transport adapter over connection-scoped command handling and either the in-process or distributed execution provider. Detailed state ownership, extension rules, checkpoint storage, and distributed recovery are documented in the [Execution subsystem README](../src/server/Agw.Agents.Execution/README.md).
 
 ## Hub contract
 

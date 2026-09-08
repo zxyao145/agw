@@ -1,6 +1,5 @@
 using System.Text.Json;
-using Agw.Agents.Execution.Durable;
-using Agw.Shared.Exceptions;
+using Agw.Shared.Utils;
 
 namespace Agw.Agents.Application.Persistence;
 
@@ -8,16 +7,17 @@ public sealed record DurableExecutionScope(Guid ProjectId, Guid ProjectConversat
 
 public static class DurableExecutionManifestScopeReader
 {
+    public static string ResolveUserId(this DurableExecutionManifest manifest) =>
+        string.IsNullOrWhiteSpace(manifest.UserId) ? Constants.AdminUserId : manifest.UserId;
+
     public static DurableExecutionScope? Read(string json, Guid executionId, string ownerUserId)
     {
         try
         {
-            var manifest = DurableExecutionJson.DeserializeRequired<DurableExecutionManifest>(
-                json,
-                "execution manifest"
-            );
+            var manifest = JsonUtil.Deserialize<DurableExecutionManifest>(json);
             if (
-                manifest.SchemaVersion != DurableExecutionManifest.CurrentSchemaVersion
+                manifest == null
+                || manifest.SchemaVersion != DurableExecutionManifest.CurrentSchemaVersion
                 || manifest.ExecutionId != executionId
                 || !string.Equals(manifest.ResolveUserId(), ownerUserId, StringComparison.Ordinal)
                 || manifest.Task == null
@@ -33,10 +33,6 @@ public static class DurableExecutionManifestScopeReader
             return new DurableExecutionScope(manifest.Task.ProjectId, manifest.Task.ProjectConversationId);
         }
         catch (JsonException)
-        {
-            return null;
-        }
-        catch (AgwException exception) when (exception.Code == ErrorCodes.DurableExecutionConflict.Code)
         {
             return null;
         }

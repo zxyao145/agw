@@ -2,7 +2,6 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Agents.Execution.Agents;
 using Agw.Agents.Execution.Agents.Tools;
-using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;

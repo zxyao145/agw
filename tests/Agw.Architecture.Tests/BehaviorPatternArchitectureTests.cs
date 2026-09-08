@@ -157,7 +157,7 @@ public sealed partial class BackendArchitectureTests
             yield return $"{relativePath}: entity Behavior must live under Domain/Behaviors";
         }
 
-        var owningProject = GetOwningProject(serverRoot, sourceFile);
+        var owningProject = GetOwningModule(serverRoot, sourceFile);
         foreach (
             var match in behaviorMatches.Where(match => EntityOwners[match.Groups["entity"].Value] != owningProject)
         )
