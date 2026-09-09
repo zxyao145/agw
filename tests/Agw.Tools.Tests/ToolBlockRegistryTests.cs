@@ -130,7 +130,15 @@ public sealed class ToolBlockRegistryTests
         )
         {
             _throwOnMaterialize = throwOnMaterialize;
-            Descriptor = new ToolBlockDescriptor(id, id, id, scopes, memberToolNames ?? []);
+            Descriptor = new ToolBlockDescriptor(
+                id,
+                id,
+                id,
+                scopes,
+                (memberToolNames ?? [])
+                    .Select(static name => new ToolBlockMemberDescriptor(name, AgwToolPermission.None))
+                    .ToArray()
+            );
         }
 
         public ToolBlockDescriptor Descriptor { get; }

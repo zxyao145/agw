@@ -25,7 +25,7 @@ import {
   type BackgroundAgentsToolBlockDefinition,
   type ProjectMemoryToolBlockDefinition,
   type ToolBlockName,
-  type ToolInfo,
+  type ToolLiteInfo,
   type ToolName,
   type ToolValueObject,
 } from "./tool-values";
@@ -36,7 +36,7 @@ type ToolsPanelProps = {
   scope: "agent" | "project";
   idPrefix?: string;
   ownerLabel?: string;
-  toolsQuery: UseQueryResult<ToolInfo[], Error>;
+  toolsQuery: UseQueryResult<ToolLiteInfo[], Error>;
   values: ToolValueObject[];
   setValues: (value: ToolValueObject[]) => void;
   disabled?: boolean;

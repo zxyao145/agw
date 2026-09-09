@@ -11,7 +11,7 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Extensions;
 using Agw.Shared.Utils;
-using Agw.Tools.ToolBlocks.Blocks.UserMemory;
+using Agw.Tools.Impl.ToolBlocks.UserMemory;
 using ClaudeCodeSdk.MAF;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -56,7 +56,9 @@ public partial class AgentRuntimeService
         AIAgent? aiAgent = null;
         try
         {
-            var userMemoryProvider = capabilities.ContextProviders.OfType<UserMemoryProvider>().SingleOrDefault();
+            var userMemoryProvider = capabilities
+                .ContextProviders.Select(static provider => provider.GetService<UserMemoryProvider>())
+                .SingleOrDefault(static provider => provider != null);
             Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync =
                 userMemoryProvider == null ? null : userMemoryProvider.CreateContextMessageAsync;
             if (

@@ -4,12 +4,12 @@
 
 `InteractionRules` 是纯规则：校验响应 ID、请求 / 响应类型，以及工具授权范围。用户输入的字段语义由工具协议校验。
 
-| 权限模式 | 普通工具 | 已批准响应的有效范围 | UserInput / HumanGate |
-| --- | --- | --- | --- |
-| `FullAccess` | 自动批准 | `AlwaysTool` | 仍需人响应 |
-| `AlwaysAsk` | 等待决定 | `Once` | 仍需人响应 |
-| `AllowSameArguments` | 相同参数的已有授权可复用，否则等待 | `AlwaysArguments` | 仍需人响应 |
-| 未指定 | 遵循工具能力声明及用户决定 | 保留合法提交范围 | 仍需人响应 |
+| 权限模式 | `None` / `ReadOnly` | `Write` / `Execute` | 已批准响应的有效范围 | UserInput / HumanGate |
+| --- | --- | --- | --- | --- |
+| `FullAccess` | 直接执行 | 自动批准 | `AlwaysTool` | 仍需人响应 |
+| `AlwaysAsk` | 直接执行 | 等待决定 | `Once` | 仍需人响应 |
+| `AllowSameArguments` | 直接执行 | 相同参数授权可复用，否则等待 | `AlwaysArguments` | 仍需人响应 |
+| 未指定 | 直接执行 | 遵循显式审批及用户决定 | 保留合法提交范围 | 仍需人响应 |
 
 工具被拒绝时范围统一为 `Once`，不产生授权。`HumanInteractionPolicy.Reject` 用于 Jobs 等无人值守执行：先检查普通工具能否自动批准，其余人工请求明确失败。
 

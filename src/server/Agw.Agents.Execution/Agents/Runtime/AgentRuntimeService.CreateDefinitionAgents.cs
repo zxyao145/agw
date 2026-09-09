@@ -9,7 +9,7 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Exceptions;
-using Agw.Tools.ToolBlocks.Blocks.UserMemory;
+using Agw.Tools.Impl.ToolBlocks.UserMemory;
 using Anthropic;
 using Anthropic.Core;
 using Microsoft.Agents.AI;
@@ -133,7 +133,9 @@ public partial class AgentRuntimeService
                 _loggerFactory,
                 _services
             );
-            var userMemoryProvider = capabilities.ContextProviders.OfType<UserMemoryProvider>().SingleOrDefault();
+            var userMemoryProvider = capabilities
+                .ContextProviders.Select(static provider => provider.GetService<UserMemoryProvider>())
+                .SingleOrDefault(static provider => provider != null);
             Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync =
                 userMemoryProvider == null ? null : userMemoryProvider.CreateContextMessageAsync;
             aiAgent = new AgentRequestContextAgent(aiAgent, _chatHistoryProvider, createMemoryContextAsync, _logger);

@@ -3885,9 +3885,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ApiResultOfToolInfo[]"];
-            "application/json": components["schemas"]["ApiResultOfToolInfo[]"];
-            "text/json": components["schemas"]["ApiResultOfToolInfo[]"];
+            "text/plain": components["schemas"]["ApiResultOfToolLiteInfo[]"];
+            "application/json": components["schemas"]["ApiResultOfToolLiteInfo[]"];
+            "text/json": components["schemas"]["ApiResultOfToolLiteInfo[]"];
           };
         };
       };
@@ -3923,9 +3923,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ApiResultOfDictionaryOfstringAndListOfToolInfo"];
-            "application/json": components["schemas"]["ApiResultOfDictionaryOfstringAndListOfToolInfo"];
-            "text/json": components["schemas"]["ApiResultOfDictionaryOfstringAndListOfToolInfo"];
+            "text/plain": components["schemas"]["ApiResultOfDictionaryOfstringAndListOfToolLiteInfo"];
+            "application/json": components["schemas"]["ApiResultOfDictionaryOfstringAndListOfToolLiteInfo"];
+            "text/json": components["schemas"]["ApiResultOfDictionaryOfstringAndListOfToolLiteInfo"];
           };
         };
       };
@@ -3963,9 +3963,9 @@ export interface paths {
             [name: string]: unknown;
           };
           content: {
-            "text/plain": components["schemas"]["ApiResultOfToolInfo"];
-            "application/json": components["schemas"]["ApiResultOfToolInfo"];
-            "text/json": components["schemas"]["ApiResultOfToolInfo"];
+            "text/plain": components["schemas"]["ApiResultOfToolLiteInfo"];
+            "application/json": components["schemas"]["ApiResultOfToolLiteInfo"];
+            "text/json": components["schemas"]["ApiResultOfToolLiteInfo"];
           };
         };
       };
@@ -4640,9 +4640,9 @@ export interface components {
       title: string;
       detail: null | string;
     };
-    ApiResultOfDictionaryOfstringAndListOfToolInfo: {
+    ApiResultOfDictionaryOfstringAndListOfToolLiteInfo: {
       data?: null | {
-        [key: string]: components["schemas"]["ToolInfo"][];
+        [key: string]: components["schemas"]["ToolLiteInfo"][];
       };
       /** Format: int32 */
       code: number;
@@ -4887,15 +4887,15 @@ export interface components {
       title: string;
       detail: null | string;
     };
-    ApiResultOfToolInfo: {
-      data?: null | components["schemas"]["ToolInfo"];
+    ApiResultOfToolLiteInfo: {
+      data?: null | components["schemas"]["ToolLiteInfo"];
       /** Format: int32 */
       code: number;
       title: string;
       detail: null | string;
     };
-    "ApiResultOfToolInfo[]": {
-      data?: null | components["schemas"]["ToolInfo"][];
+    "ApiResultOfToolLiteInfo[]": {
+      data?: null | components["schemas"]["ToolLiteInfo"][];
       /** Format: int32 */
       code: number;
       title: string;
@@ -5786,6 +5786,8 @@ export interface components {
     };
     /** @enum {unknown} */
     ToolCatalogItemKind: "tool" | "toolBlock";
+    /** @enum {unknown} */
+    AgwToolPermission: "none" | "readOnly" | "write" | "execute" | null;
     ToolDefinition:
       | components["schemas"]["ToolDefinitionAskUserQuestionToolDefinition"]
       | components["schemas"]["ToolDefinitionBashToolDefinition"]
@@ -5841,51 +5843,19 @@ export interface components {
       name: "web_search";
       options: components["schemas"]["EmptyToolOptions"];
     };
-    /** @description Represents a selectable Tool or Tool Block in the Tools catalog. */
-    ToolInfo: {
+    /** @description Describes a selectable Tool or ToolBlock without execution implementation details. */
+    ToolLiteInfo: {
       kind: components["schemas"]["ToolCatalogItemKind"];
-      /** @description Gets the name of the tool (method name or custom name). */
       name: string;
       displayName: string;
-      /** @description Gets the description of the tool. */
       description: string;
-      /** @description Gets the category of the tool for grouping purposes. */
       category: string;
-      /** @description Gets the full type name of the class containing the tool. */
-      typeName: string;
       memberToolNames?: string[];
       scopes: components["schemas"]["ToolScope"];
       requiresWorkspace: boolean;
-      /** @description Gets the parameters of the tool. */
-      parameters: components["schemas"]["ToolParameterInfo"][];
-      /** @description Gets whether this is an asynchronous tool. */
-      isAsync: boolean;
-      /** @description Gets whether this tool requires user confirmation before execution. */
+      requiredPermission?: null | components["schemas"]["AgwToolPermission"];
+      /** @description Whether this Tool or any ToolBlock member may require execution approval. */
       requiresConfirmation: boolean;
-      /**
-       * Format: int32
-       * @description Gets the execution timeout in milliseconds.
-       */
-      timeoutMs: number;
-    };
-    /** @description Represents information about a parameter of a tool. */
-    ToolParameterInfo: {
-      /** @description Gets the name of the parameter. */
-      name: string;
-      /** @description Gets the type of the parameter. */
-      type: string;
-      /** @description Gets the description of the parameter. */
-      description: null | string;
-      /** @description Gets whether the parameter is optional. */
-      isOptional: boolean;
-      /** @description Gets the default value for the parameter if it has one. */
-      defaultValue?: unknown;
-      /** @description Gets the JSON schema type hint (e.g., "string", "number", "boolean"). */
-      schemaType: null | string;
-      /** @description Gets the format hint (e.g., "date-time", "email", "uri"). */
-      format: null | string;
-      /** @description Gets allowed enum values if applicable. */
-      enumValues?: null | string[];
     };
     ToolScope: number;
     ToolValueObject:

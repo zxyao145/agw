@@ -368,6 +368,7 @@ public static class AgwHostApplication
             builder.Services.AddHybridCache();
 
             var app = builder.Build();
+            _ = app.Services.GetRequiredService<ToolRegistryService>();
             var databaseSettings = app.Services.GetRequiredService<IOptions<DatabaseSettings>>().Value;
             Log.Information("Database provider: {DatabaseProvider}", databaseSettings.Provider);
             var databaseConnectionString = DatabaseConnectionStringResolver.Resolve(

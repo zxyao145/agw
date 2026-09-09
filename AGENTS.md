@@ -256,6 +256,7 @@ Read [`docs/rules.md`](docs/rules.md) before coding. Its rules are mandatory.
 - Keep request and response DTOs in `Contracts/` folders inside the owning module.
 - Controller class names must end with `Controller`.
 - Persisted auditable entities use the shared `BaseEntity` and audit interfaces. Keep audit stamping and `ISoftDelete` handling in the registered EF Core interceptors instead of adding module-specific persistence paths.
+- Every `IAgwTool`, `IContextualTool`, attributed Tool, and ToolBlock member must explicitly declare `AgwToolPermission`. Standalone Tool definitions and attributed containers must remain stateless; ToolBlock runtime state belongs in its Provider, session, or owned storage. Concrete implementations live under `Agw.Tools/Impl/Tools`, `Impl/ContextualTools`, and `Impl/ToolBlocks`; keep specialized executors, providers, and storage adapters with their implementation group.
 
 ### Date and Time
 

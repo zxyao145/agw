@@ -28,7 +28,7 @@ import type {
   McpToolServerDto,
   ModelProviderDto,
   SkillDto,
-  ToolInfo,
+  ToolLiteInfo,
   ToolValueObject,
 } from "./types";
 
@@ -66,7 +66,7 @@ interface CreateAgentDialogProps {
   agentOptions: Array<{ id: string; name: string; displayName?: string }>;
   modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
   skillsQuery: UseQueryResult<SkillDto[], Error>;
-  toolsQuery: UseQueryResult<ToolInfo[], Error>;
+  toolsQuery: UseQueryResult<ToolLiteInfo[], Error>;
   mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
   selectedMcpToolServerIds: string[];
   createAgentMutation: UseMutationResult<unknown, Error, AgentCreateRequest, unknown>;

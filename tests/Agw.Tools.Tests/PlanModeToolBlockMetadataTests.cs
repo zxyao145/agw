@@ -2,8 +2,8 @@ using System.Runtime.CompilerServices;
 using Agw.Files.Abstracts;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Tools.ToolBlocks.Blocks.BackgroundAgents;
-using Agw.Tools.ToolBlocks.Blocks.FileAccess;
+using Agw.Tools.Impl.ToolBlocks.BackgroundAgents;
+using Agw.Tools.Impl.ToolBlocks.FileAccess;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -27,7 +27,7 @@ public sealed class PlanModeToolBlockMetadataTests
     }
 
     [Fact]
-    public async Task BackgroundAgents_MarksOnlyResultReadsAllowedInPlan()
+    public async Task BackgroundAgents_AllMembersSkipApproval_OnlyResultReadsAllowedInPlan()
     {
         var childAgent = new ChatClientAgent(
             new StubChatClient(),
@@ -43,8 +43,9 @@ public sealed class PlanModeToolBlockMetadataTests
             BackgroundAgents = [childAgent],
         };
 
-        await using var contribution = await new BackgroundAgentsToolBlock().MaterializeAsync(
-            new BackgroundAgentsToolBlockDefinition(),
+        await using var contribution = await new ToolBlockRegistry([new BackgroundAgentsToolBlock()]).MaterializeAsync(
+            [new BackgroundAgentsToolBlockDefinition()],
+            ToolBlockScope.Agent,
             context,
             TestContext.Current.CancellationToken
         );
@@ -52,6 +53,24 @@ public sealed class PlanModeToolBlockMetadataTests
         Assert.Equal(
             ["background_agents_get_all_tasks", "background_agents_get_task_results"],
             contribution.PlanModeAllowedToolNames.Order(StringComparer.Ordinal)
+        );
+        var session = await childAgent.CreateSessionAsync(TestContext.Current.CancellationToken);
+        var runtimeContext = await Assert
+            .Single(contribution.ContextProviders)
+            .InvokingAsync(
+                new AIContextProvider.InvokingContext(childAgent, session, new AIContext()),
+                TestContext.Current.CancellationToken
+            );
+        var tools = runtimeContext.Tools!.ToArray();
+        Assert.Equal(6, tools.Length);
+        Assert.All(
+            tools,
+            tool =>
+            {
+                Assert.Equal(AgwToolPermission.ReadOnly, AgwToolMetadataBinding.GetMetadata(tool)?.RequiredPermission);
+                var function = Assert.IsAssignableFrom<AIFunction>(tool);
+                Assert.Null(function.GetService<ApprovalRequiredAIFunction>());
+            }
         );
     }
 

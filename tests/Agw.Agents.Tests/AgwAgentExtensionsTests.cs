@@ -10,6 +10,11 @@ using Agw.Infrastructure.Data;
 using Agw.Projects.Application.Persistence;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Tooling;
+using Agw.Tools.Impl.ToolBlocks.Mode;
+using Agw.Tools.Impl.ToolBlocks.Todo;
+using Agw.Tools.Runtime;
+using Agw.Tools.ToolBlocks;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Compaction;
 using Microsoft.Data.Sqlite;
@@ -593,8 +598,10 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         Assert.Null(agent.GetService<LoopAgent>());
     }
 
-    [Fact]
-    public async Task AsAgwAgent_PlanModeModelRequestsPnpmFmt_DoesNotInvokeShellOrRequestApproval()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AsAgwAgent_PlanModeModelRequestsPnpmFmt_DoesNotInvokeShellOrRequestApproval(bool throughRegistry)
     {
         var invocationCount = 0;
         var shellFunction = AIFunctionFactory.Create(
@@ -608,12 +615,16 @@ public sealed class AgwAgentExtensionsTests : IDisposable
             new AIFunctionFactoryOptions { Name = "run_shell" }
         );
         var modeProvider = new AgentModeProvider(new AgentModeProviderOptions { DefaultMode = "plan" });
+        await using var contribution = await MaterializeBlockAsync(new ModeToolBlock(), new ModeToolBlockDefinition());
         var client = new IllegalShellCallChatClient();
         var agent = client.AsAgwAgent(
             CreateDefinition(),
             CreateCapabilities(
                 tools: [new ApprovalRequiredAIFunction(shellFunction)],
-                contextProviders: [modeProvider, new DynamicSkillToolsProvider()],
+                contextProviders: throughRegistry
+                    ? [.. contribution.ContextProviders, new DynamicSkillToolsProvider()]
+                    : [modeProvider, new DynamicSkillToolsProvider()],
+                autoApprovalRules: [ToolApprovalAgent.AllToolsAutoApprovalRule],
                 planModeAllowedToolNames: new HashSet<string>(
                     ["mode_get", "mode_set", "load_skill", "read_skill_resource"],
                     StringComparer.OrdinalIgnoreCase
@@ -777,10 +788,13 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         );
     }
 
-    [Fact]
-    public async Task AsAgwAgent_TodoMutations_StreamingEmitsSnapshotAfterEachResult()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AsAgwAgent_TodoMutations_StreamingEmitsSnapshotAfterEachResult(bool throughRegistry)
     {
-        var agent = CreateTodoMutationAgent();
+        await using var contribution = await MaterializeBlockAsync(new TodoToolBlock(), new TodoToolBlockDefinition());
+        var agent = CreateTodoMutationAgent(throughRegistry ? contribution.ContextProviders : null);
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
         var updates = new List<AgentResponseUpdate>();
 
@@ -798,10 +812,13 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         AssertTodoSnapshots(updates);
     }
 
-    [Fact]
-    public async Task AsAgwAgent_TodoMutations_NonStreamingEmitsSnapshotAfterEachResult()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AsAgwAgent_TodoMutations_NonStreamingEmitsSnapshotAfterEachResult(bool throughRegistry)
     {
-        var agent = CreateTodoMutationAgent();
+        await using var contribution = await MaterializeBlockAsync(new TodoToolBlock(), new TodoToolBlockDefinition());
+        var agent = CreateTodoMutationAgent(throughRegistry ? contribution.ContextProviders : null);
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
 
         var response = await agent.RunAsync(
@@ -1127,12 +1144,32 @@ public sealed class AgwAgentExtensionsTests : IDisposable
 
     private static ResolvedAgentDefinition CreateDefinition() => CreateDefinition(new InMemoryChatHistoryProvider());
 
-    private static AIAgent CreateTodoMutationAgent() =>
+    private static AIAgent CreateTodoMutationAgent(IReadOnlyList<AIContextProvider>? providers = null) =>
         new TodoFunctionCallingStubChatClient().AsAgwAgent(
             CreateDefinition(),
-            CreateCapabilities(contextProviders: [new TodoProvider()], loopEvaluators: [new StopLoopEvaluator()]),
+            CreateCapabilities(
+                contextProviders: providers ?? [new TodoProvider()],
+                loopEvaluators: [new StopLoopEvaluator()]
+            ),
             NullLoggerFactory.Instance,
             new ServiceCollection().BuildServiceProvider()
+        );
+
+    private static ValueTask<ToolContribution> MaterializeBlockAsync(
+        IToolBlock block,
+        ToolBlockDefinition definition
+    ) =>
+        new ToolBlockRegistry([block]).MaterializeAsync(
+            [definition],
+            ToolBlockScope.Agent,
+            new ToolMaterializationContext
+            {
+                Agent = new Agw.Shared.Data.Entities.Agents.Agent(),
+                Project = new Project(),
+                Workspace = "/workspace",
+                DefaultMode = "plan",
+            },
+            TestContext.Current.CancellationToken
         );
 
     private static void AssertTodoSnapshots(IReadOnlyList<AgentResponseUpdate> updates)

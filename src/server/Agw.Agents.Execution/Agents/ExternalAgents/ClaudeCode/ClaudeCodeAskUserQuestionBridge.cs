@@ -3,7 +3,7 @@ using System.Text.Json;
 using Agw.Agents.Execution.HumanInteraction;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
-using Agw.Tools.Impl.Basic;
+using Agw.Tools.Impl.Tools.Basic;
 using ClaudeCodeSdk.Types;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;

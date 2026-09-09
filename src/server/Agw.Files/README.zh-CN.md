@@ -20,7 +20,7 @@
 | Local 文件系统实现与项目解析 | `Agw.Files.Application.Storage` |
 | 文件系统公共契约 | `Agw.Files.Abstracts`、`Agw.Files.Abstracts.Dtos` |
 | Git 命令及返回模型 | `Agw.Files.Services` |
-| 面向 Agent 的文件工具 | `Agw.Tools.Impl.Files` |
+| 面向 Agent 的文件工具 | `Agw.Tools.Impl.Tools.Files` |
 | Project 及其 Workspace 持久化 | `Agw.Projects` |
 
 `Agw.Files` 不负责定义 Agent 工具，也不拥有 Project 数据。`Agw.Projects` 通过 `IProjectFileSystemConfigurationProvider` adapter 提供 Project 名称和 Workspace；Files 不读取 `Project.ExtraSetting`，也不直接依赖 Projects；仅通过 Shared 复用通用路径工具。

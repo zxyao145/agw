@@ -11,15 +11,20 @@ public sealed class AiToolAttribute : Attribute
     /// <summary>
     /// Initializes a new instance of the <see cref="AiToolAttribute"/> class.
     /// </summary>
-    public AiToolAttribute() { }
+    public AiToolAttribute(AgwToolPermission requiredPermission)
+    {
+        RequiredPermission = requiredPermission;
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="AiToolAttribute"/> class with a name.
     /// </summary>
     /// <param name="name">The name of the tool. If not specified, the method name is used.</param>
-    public AiToolAttribute(string name)
+    /// <param name="requiredPermission">The permission required to invoke the tool.</param>
+    public AiToolAttribute(string name, AgwToolPermission requiredPermission)
     {
         Name = name;
+        RequiredPermission = requiredPermission;
     }
 
     /// <summary>
@@ -33,10 +38,7 @@ public sealed class AiToolAttribute : Attribute
     /// </summary>
     public string Category { get; set; } = "General";
 
-    /// <summary>
-    /// Gets or sets whether the tool requires confirmation before execution.
-    /// </summary>
-    public bool RequiresConfirmation { get; set; }
+    public AgwToolPermission RequiredPermission { get; }
 
     /// <summary>
     /// Gets or sets whether the tool is trusted for use in Plan mode.

@@ -4,7 +4,7 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Tools.HumanInteraction;
-using Agw.Tools.ToolBlocks.Blocks.Mode;
+using Agw.Tools.Impl.ToolBlocks.Mode;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;

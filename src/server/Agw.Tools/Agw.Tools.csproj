@@ -11,10 +11,8 @@
   </ItemGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <ProjectReference Include="..\Agw.Agents.Contracts\Agw.Agents.Contracts.csproj" />
+    <!--  UserMemory, Project    -->
     <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
-    <ProjectReference Include="..\Agw.Data\Agw.Data.csproj" />
     <ProjectReference Include="..\Agw.Files\Agw.Files.csproj" />
-    <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
   </ItemGroup>
 </Project>

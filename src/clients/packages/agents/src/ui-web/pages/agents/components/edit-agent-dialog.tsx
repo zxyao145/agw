@@ -26,7 +26,7 @@ import type {
   McpToolServerDto,
   ModelProviderDto,
   SkillDto,
-  ToolInfo,
+  ToolLiteInfo,
   ToolValueObject,
 } from "./types";
 
@@ -61,7 +61,7 @@ interface EditAgentDialogProps {
   modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
   externalAgentOptionsQuery: UseQueryResult<ExternalAgentOptionDto[], Error>;
   skillsQuery: UseQueryResult<SkillDto[], Error>;
-  toolsQuery: UseQueryResult<ToolInfo[], Error>;
+  toolsQuery: UseQueryResult<ToolLiteInfo[], Error>;
   mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
   selectedMcpToolServerIds: string[];
   updateAgentMutation: UseMutationResult<

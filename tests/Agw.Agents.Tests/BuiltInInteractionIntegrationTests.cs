@@ -11,9 +11,10 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Tooling;
 using Agw.Tools.HumanInteraction;
-using Agw.Tools.Impl.Basic;
+using Agw.Tools.Impl.ToolBlocks.Mode;
+using Agw.Tools.Impl.Tools.Basic;
 using Agw.Tools.Runtime;
-using Agw.Tools.ToolBlocks.Blocks.Mode;
+using Agw.Tools.ToolBlocks;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,8 +45,9 @@ public sealed class BuiltInInteractionIntegrationTests
             .AddSingleton(accessor)
             .AddSingleton<IHumanInteractionContextAccessor>(accessor)
             .BuildServiceProvider();
-        await using var modeTools = await new ModeToolBlock().MaterializeAsync(
-            new ModeToolBlockDefinition(),
+        await using var modeTools = await new ToolBlockRegistry([new ModeToolBlock()]).MaterializeAsync(
+            [new ModeToolBlockDefinition()],
+            ToolBlockScope.Agent,
             new ToolMaterializationContext
             {
                 Agent = new Agent(),
@@ -118,6 +120,7 @@ public sealed class BuiltInInteractionIntegrationTests
                         new { answers = new Dictionary<string, string> { ["Database?"] = "PostgreSQL" } }
                     ),
             };
+        AgentResponse finalResponse;
         if (durable)
         {
             var registry = new InteractionRequestRegistry();
@@ -149,7 +152,7 @@ public sealed class BuiltInInteractionIntegrationTests
                     permissions
                 )
             )
-                await agent.RunAsync(
+                finalResponse = await agent.RunAsync(
                     [new ChatMessage(ChatRole.User, [MafApprovalAdapter.CreateResponse(approval, answer)])],
                     session,
                     cancellationToken: token
@@ -165,15 +168,26 @@ public sealed class BuiltInInteractionIntegrationTests
                     ct
                 );
             using (accessor.Push(interactions, interactions.Requests, interactions.PermissionState))
-                await agent.RunAsync("run", session, cancellationToken: token);
+                finalResponse = await agent.RunAsync("run", session, cancellationToken: token);
             Assert.Single(sink.Messages);
         }
         Assert.NotNull(model.Result);
         if (toolName == "mode_set")
+        {
             Assert.Equal(
                 cancelled ? "plan" : "execute",
-                await ((AgentModeProvider)providers[0]).GetModeAsync(session, token)
+                await providers[0].GetService<AgentModeProvider>()!.GetModeAsync(session, token)
             );
+            if (durable && !cancelled)
+            {
+                Assert.Contains(
+                    finalResponse.Messages,
+                    message =>
+                        message.AdditionalProperties?.GetValueOrDefault("type")?.ToString()
+                        == ToolMessageTypes.ModeStatus
+                );
+            }
+        }
         else
         {
             var result = JsonSerializer.SerializeToElement(

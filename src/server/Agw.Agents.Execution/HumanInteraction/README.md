@@ -117,7 +117,7 @@ Durable 的等待由持久状态承载，暂停期间不保留原调用 Task。�
    var tool = new HumanInteractionRequiredAIFunction(function, new TitleInputProtocol());
    ```
 
-   静态工具在 `ToAITool` 或物化时返回包装后的函数，可参考 [ask_user_question](../../Agw.Tools/Impl/Basic/AskUserQuestionTool.cs)。动态工具在生成它的 provider 之后包装，可参考 [mode_set](../../Agw.Tools/ToolBlocks/Blocks/Mode/ModeSetHumanInteractionProvider.cs)。通过现有 `AgentCapabilityComposer` 装配后，Durable 的 `DeferredHumanInteractionProvider` 会在最终工具集合上识别协议并建立暂停边界。
+   静态工具在 `ToAITool` 或物化时返回包装后的函数，可参考 [ask_user_question](../../Agw.Tools/Impl/Tools/Basic/AskUserQuestionTool.cs)。动态工具在生成它的 provider 之后包装，可参考 [mode_set](../../Agw.Tools/Impl/ToolBlocks/Mode/ModeSetHumanInteractionProvider.cs)。通过现有 `AgentCapabilityComposer` 装配后，Durable 的 `DeferredHumanInteractionProvider` 会在最终工具集合上识别协议并建立暂停边界。
 
 3. **接入客户端展示。** 复用已有 `inputKind` 时遵循其载荷和响应格式；新增形式时，在共享 `chat-core` 解析层、Web/Desktop 的 `chat` 面板及 `chat-native` 面板增加对应展示。客户端提交 `kind: "user-input"`、原 `interactionId`、`cancelled` 和可选 `responseData`。
 

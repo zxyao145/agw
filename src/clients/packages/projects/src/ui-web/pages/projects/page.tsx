@@ -38,7 +38,7 @@ import type {
   ProjectUpdateMutationVariables,
 } from "./components/types";
 import { syncDefaultProjectWorkspace, toProjectCapabilityFormState } from "./project-form";
-import { type ToolInfo, type ToolValueObject } from "@agw/tools";
+import { type ToolLiteInfo, type ToolValueObject } from "@agw/tools";
 
 function toggleSelection(setter: React.Dispatch<React.SetStateAction<string[]>>, value: string) {
   setter((current) =>
@@ -57,7 +57,7 @@ export default function ProjectsPage() {
   });
   const toolsQuery = useQuery({
     queryKey: ["tools"],
-    queryFn: async () => (await apiGet("/api/tools")) as unknown as ToolInfo[],
+    queryFn: async () => (await apiGet("/api/tools")) as unknown as ToolLiteInfo[],
   });
   const mcpToolServersQuery = useQuery({
     queryKey: ["mcpToolServers"],

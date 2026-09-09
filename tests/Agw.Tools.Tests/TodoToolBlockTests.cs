@@ -2,8 +2,8 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Tools.ToolBlocks.Blocks.Mode;
-using Agw.Tools.ToolBlocks.Blocks.Todo;
+using Agw.Tools.Impl.ToolBlocks.Mode;
+using Agw.Tools.Impl.ToolBlocks.Todo;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -11,6 +11,25 @@ namespace Agw.Tools.Tests;
 
 public sealed class TodoToolBlockTests
 {
+    [Fact]
+    public async Task MaterializeAsync_MemberPermissions_AreDeclaredByToolBlock()
+    {
+        // Arrange
+        var registry = new ToolBlockRegistry([new TodoToolBlock()]);
+
+        // Act
+        await using var contribution = await registry.MaterializeAsync(
+            [new TodoToolBlockDefinition()],
+            ToolBlockScope.Agent,
+            CreateContext(),
+            TestContext.Current.CancellationToken
+        );
+
+        // Assert
+        Assert.Equal(AgwToolPermission.None, contribution.DynamicToolMetadata["todos_add"].RequiredPermission);
+        Assert.Equal(AgwToolPermission.ReadOnly, contribution.DynamicToolMetadata["todos_get_all"].RequiredPermission);
+    }
+
     [Fact]
     public async Task MaterializeAsync_WithoutMode_EvaluatorDoesNotRequireModeProvider()
     {

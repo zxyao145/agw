@@ -1,6 +1,6 @@
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Tools.ContextualTools.WebSearch;
+using Agw.Tools.Impl.ContextualTools.WebSearch;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Tools.Tests;
@@ -38,13 +38,13 @@ public sealed class WebSearchContextualToolTests
     }
 
     [Fact]
-    public void Descriptor_IsAnIndependentTool()
+    public void Metadata_DeclaresIndependentReadOnlyTool()
     {
-        var descriptor = new WebSearchContextualTool().Descriptor;
+        var tool = new WebSearchContextualTool();
 
-        Assert.Equal("web_search", descriptor.Name);
-        Assert.Equal(Agw.Tools.Contracts.ToolCatalogItemKind.Tool, descriptor.Kind);
-        Assert.Empty(descriptor.MemberToolNames);
+        Assert.Equal("web_search", tool.Name);
+        Assert.Equal("Web", tool.Category);
+        Assert.Equal(Agw.Tools.Contracts.AgwToolPermission.ReadOnly, tool.RequiredPermission);
     }
 
     private static ToolMaterializationContext CreateContext(bool supportsHosted) =>

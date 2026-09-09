@@ -2,7 +2,7 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Shared.Coordination;
 using Agw.Shared.Exceptions;
-using Agw.Tools.ToolBlocks.Blocks.ProjectMemory;
+using Agw.Tools.Impl.ToolBlocks.ProjectMemory;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 

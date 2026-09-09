@@ -17,7 +17,7 @@ import { Label } from "@agw/components";
 import { Switch } from "@agw/components";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@agw/components";
 import { Textarea } from "@agw/components";
-import { ToolsPanel, type ToolInfo, type ToolValueObject } from "@agw/tools";
+import { ToolsPanel, type ToolLiteInfo, type ToolValueObject } from "@agw/tools";
 
 import { getAgentExtraSettingsError } from "./agent-extra-settings";
 import {
@@ -65,7 +65,7 @@ interface AgentFormFieldsProps {
   agentOptions: Array<{ id: string; name: string; displayName?: string }>;
   modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
   skillsQuery: UseQueryResult<SkillDto[], Error>;
-  toolsQuery: UseQueryResult<ToolInfo[], Error>;
+  toolsQuery: UseQueryResult<ToolLiteInfo[], Error>;
   mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
   toggleSkill: (skillId: string) => void;
   selectedMcpToolServerIds: string[];

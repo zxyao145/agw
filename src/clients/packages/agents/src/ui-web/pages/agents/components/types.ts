@@ -67,5 +67,5 @@ export interface ExternalAgentUpdateRequest {
 export type AgentUpdateRequest = SystemAgentUpdateRequest | ExternalAgentUpdateRequest;
 
 export type { McpToolServerDto, SkillDto } from "@agw/integrations";
-export type { ToolInfo, ToolValueObject } from "@agw/tools";
+export type { ToolLiteInfo, ToolValueObject } from "@agw/tools";
 export type { ModelProviderDto } from "../../../../types/agentflow";

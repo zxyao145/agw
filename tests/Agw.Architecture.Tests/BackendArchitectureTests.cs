@@ -115,7 +115,7 @@ public sealed partial class BackendArchitectureTests
             ["Agw.Projects.Contracts"] = Set("Agw.Shared"),
             ["Agw.Providers"] = Set("Agw.Agents.Contracts", "Agw.Data", "Agw.Shared"),
             ["Agw.Skills"] = Set("Agw.Agents.Contracts", "Agw.Data", "Agw.Shared"),
-            ["Agw.Tools"] = Set("Agw.Agents.Contracts", "Agw.Auth", "Agw.Data", "Agw.Files", "Agw.Shared"),
+            ["Agw.Tools"] = Set("Agw.Auth", "Agw.Files"),
 
             ["Agw.Auth"] = Set("Agw.Data", "Agw.Shared"),
             ["Agw.Shared"] = Set(),

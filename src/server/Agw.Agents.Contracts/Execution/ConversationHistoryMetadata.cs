@@ -12,7 +12,7 @@ public static class ConversationHistoryMetadata
     public const string ModelHistoryExcludedKey = "modelHistoryExcluded";
     public const string PersistenceExcludedKey = "persistenceExcluded";
     public const string UserMemorySourceId = "Agw.UserMemory";
-    public const string LegacyUserMemorySourceId = "Agw.Tools.ToolBlocks.Blocks.UserMemory.UserMemoryProvider";
+    public const string LegacyUserMemorySourceId = "Agw.Tools.Impl.ToolBlocks.UserMemory.UserMemoryProvider";
 
     /// <summary>
     /// 判断消息是否应从后续模型历史和跨 Agent 交接中排除。

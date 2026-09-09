@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Agw.Shared.Exceptions;
 using Agw.Tools.HumanInteraction;
-using Agw.Tools.Impl.Basic;
+using Agw.Tools.Impl.Tools.Basic;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 

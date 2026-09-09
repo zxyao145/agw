@@ -141,7 +141,7 @@ export function ChatInputToolbar({
         </SelectTrigger>
         <SelectContent position="popper" align="start">
           {(Object.keys(permissionLabels) as PermissionMode[]).map((mode) => (
-            <SelectItem key={mode} value={mode}>
+            <SelectItem key={mode} value={mode} className="px-2">
               {permissionLabels[mode]}
             </SelectItem>
           ))}

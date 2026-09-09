@@ -5,10 +5,10 @@ using Agw.Host.Controllers;
 using Agw.Host.Hosting;
 using Agw.Integrations.Controllers;
 using Agw.Jobs.Api;
-using Agw.Manager.Api.Controllers;
 using Agw.Projects.Controllers;
 using Agw.Setup.Controllers;
 using Agw.Skills.Controllers;
+using Agw.Tools.Api.Controllers;
 using Microsoft.AspNetCore.Mvc.ApplicationParts;
 
 namespace Agw.ControlPlane.Host;
