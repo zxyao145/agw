@@ -2,7 +2,7 @@ using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 
-namespace Agw.Agents.Execution.Mapping;
+namespace Agw.Agents.Execution.Runtimes;
 
 internal static class ProjectTaskProjectionMapper
 {
