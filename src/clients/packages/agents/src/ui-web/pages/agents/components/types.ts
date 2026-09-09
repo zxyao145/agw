@@ -21,6 +21,7 @@ export interface ExternalAgentOptionDto {
   kind: ExternalAgentKind;
   displayName: string;
   defaultExtra: string;
+  supportedProviderTypes: string[];
 }
 
 export interface AgentCreateRequest {

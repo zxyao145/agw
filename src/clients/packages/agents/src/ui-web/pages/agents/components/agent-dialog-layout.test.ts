@@ -195,7 +195,11 @@ test("Agent forms use SearchableSelect for type, external kind, and model provid
   assert.match(source, /SearchableSelect,[\s\S]*type SearchableSelectOption/);
   assert.match(source, /const modelProviderOptions = React\.useMemo<SearchableSelectOption\[]>/);
   assert.equal(source.match(/<SearchableSelect\s/g)?.length, 4);
-  assert.equal(source.match(/options=\{modelProviderOptions\}/g)?.length, 2);
+  assert.equal(source.match(/options=\{modelProviderOptions\}/g)?.length, 1);
+  assert.match(
+    source,
+    /options=\{isExternalAgent \? compatibleModelProviderOptions : modelProviderOptions\}/,
+  );
   assert.match(source, /ariaLabel="Agent Type"/);
   assert.match(source, /ariaLabel="External Agent"/);
   assert.match(source, /options=\{externalAgentKindOptions\}/);

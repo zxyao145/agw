@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents.Context;
 using Agw.Agents.Execution.Agents.Contracts;
 using Agw.Agents.Execution.Agents.ExternalAgents;
@@ -42,6 +43,9 @@ public partial class AgentRuntimeService
         bool isBackground = false
     )
     {
+        var modelConfiguration = await _agentAppService
+            .GetExternalModelRuntimeConfigurationAsync(request.Agent.ExternalAgentKind, request.Agent.ModelProviderId)
+            .ConfigureAwait(false);
         var capabilities = await _capabilityComposer
             .ComposeAsync(
                 request.Agent,
@@ -69,7 +73,8 @@ public partial class AgentRuntimeService
                     _chatHistoryProvider,
                     createMemoryContextAsync,
                     out aiAgent,
-                    isBackground
+                    isBackground,
+                    modelConfiguration
                 )
             )
             {
@@ -98,7 +103,8 @@ public partial class AgentRuntimeService
         ChatHistoryProvider historyProvider,
         Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync,
         [NotNullWhen(true)] out AIAgent? aiAgent,
-        bool isBackground = false
+        bool isBackground,
+        AgentModelRuntimeConfiguration? modelConfiguration
     )
     {
         var kind = ExternalAgentKindResolver.Resolve(request.Agent);
@@ -112,7 +118,8 @@ public partial class AgentRuntimeService
                 environmentVariables,
                 isBackground,
                 historyProvider,
-                request.PermissionMode
+                request.PermissionMode,
+                modelConfiguration
             ),
             ExternalAgentKind.Codex => CreateCodexAgent(
                 request.Agent,
@@ -121,7 +128,8 @@ public partial class AgentRuntimeService
                 request.IsResume,
                 environmentVariables,
                 request.OnExternalSessionStartedAsync,
-                request.PermissionMode
+                request.PermissionMode,
+                modelConfiguration
             ),
             ExternalAgentKind.Pi => CreatePiAgent(
                 request.Agent,
@@ -132,7 +140,8 @@ public partial class AgentRuntimeService
                 request.OnExternalSessionStartedAsync,
                 isBackground,
                 historyProvider,
-                createMemoryContextAsync
+                createMemoryContextAsync,
+                modelConfiguration
             ),
             _ => null,
         };
@@ -204,12 +213,14 @@ public partial class AgentRuntimeService
         Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync
     )
     {
+        var ownedResource = aiAgent as IAsyncDisposable;
         if (onProviderSessionStartedAsync != null)
         {
             aiAgent = new ClaudeCodeProviderSessionTrackingAgent(aiAgent, onProviderSessionStartedAsync);
         }
 
-        return DecorateExternalAgent(aiAgent, historyProvider, isBackground, createMemoryContextAsync);
+        var decorated = DecorateExternalAgent(aiAgent, historyProvider, isBackground, createMemoryContextAsync);
+        return ownedResource == null ? decorated : new ResourceOwningAIAgent(decorated, ownedResource);
     }
 
     internal AIAgent WrapPiAgent(
@@ -272,7 +283,8 @@ public partial class AgentRuntimeService
         IReadOnlyDictionary<string, string>? environmentVariables,
         bool isBackground,
         ChatHistoryProvider historyProvider,
-        AgwPermissionMode? permissionMode
+        AgwPermissionMode? permissionMode,
+        AgentModelRuntimeConfiguration? modelConfiguration
     )
     {
         var options = BuildClaudeCodeAIAgentOptions(
@@ -294,11 +306,22 @@ public partial class AgentRuntimeService
             _humanInteractionContextAccessor,
             allowInteraction: !isBackground
         );
+        options = ExternalAgentModelOptions.ApplyClaudeCode(options, modelConfiguration);
         options = options with { CanUseTool = interactionBridge.HandleAsync };
-        return new ClaudeCodeAIAgent(options, _logger)
-            .AsBuilder()
-            .Use(runFunc: interactionBridge.BindRunAsync, runStreamingFunc: interactionBridge.BindRunStreamingAsync)
-            .Build();
+        var modelSettings = modelConfiguration == null ? null : ClaudeCodeModelSettings.Create(options);
+        try
+        {
+            var aiAgent = new ClaudeCodeAIAgent(modelSettings?.Options ?? options, _logger)
+                .AsBuilder()
+                .Use(runFunc: interactionBridge.BindRunAsync, runStreamingFunc: interactionBridge.BindRunStreamingAsync)
+                .Build();
+            return modelSettings == null ? aiAgent : new ResourceOwningAIAgent(aiAgent, modelSettings);
+        }
+        catch
+        {
+            modelSettings?.Dispose();
+            throw;
+        }
     }
 
     private static ClaudeCodeAIAgentOptions? BuildClaudeCodeAIAgentOptions(
@@ -360,7 +383,8 @@ public partial class AgentRuntimeService
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables,
         Func<string, CancellationToken, ValueTask>? onThreadStartedAsync,
-        AgwPermissionMode? permissionMode
+        AgwPermissionMode? permissionMode,
+        AgentModelRuntimeConfiguration? modelConfiguration
     )
     {
         var options = BuildCodexAIAgentOptions(
@@ -378,6 +402,7 @@ public partial class AgentRuntimeService
             return null;
         }
 
+        options = ExternalAgentModelOptions.ApplyCodex(options, modelConfiguration);
         options = DisableExternalSdkChatHistoryPersistence(options);
         return new CodexAIAgent(options, _logger);
     }
@@ -391,7 +416,8 @@ public partial class AgentRuntimeService
         Func<string, CancellationToken, ValueTask>? onSessionStartedAsync,
         bool isBackground,
         ChatHistoryProvider historyProvider,
-        Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync
+        Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync,
+        AgentModelRuntimeConfiguration? modelConfiguration
     )
     {
         var paths = PiRuntimePaths.Create(_dataPaths, ResolveExecutionUserId());
@@ -418,6 +444,7 @@ public partial class AgentRuntimeService
             return null;
         }
 
+        options = ExternalAgentModelOptions.ApplyPi(options, modelConfiguration);
         var piAgent = new PiAgentAIAgent(options, _logger);
         var interactionAgent = piAgent
             .AsBuilder()

@@ -3,6 +3,14 @@
     <NoWarn>$(NoWarn);MAAI001</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <Content
+      Include="Agents/ExternalAgents/Pi/agw-model-provider.mjs"
+      Link="external-agents/pi/agw-model-provider.mjs"
+      CopyToOutputDirectory="PreserveNewest"
+      CopyToPublishDirectory="PreserveNewest"
+    />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="CodexSdk.MAF" />
     <PackageReference Include="ClaudeCodeSdk.MAF" />
     <ProjectReference Include="../../sdks/pi-agent-sdk-csharp/src/PiAgentSdk.MAF/PiAgentSdk.MAF.csproj" />

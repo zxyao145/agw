@@ -79,7 +79,8 @@ public class AgentsController : ControllerBase
                 .SupportedKinds.Select(kind => new ExternalAgentOptionResponse(
                     kind,
                     ExternalAgentDefaults.GetDisplayName(kind),
-                    ExternalAgentDefaults.GetDefaultExtra(kind)
+                    ExternalAgentDefaults.GetDefaultExtra(kind),
+                    ExternalAgentDefaults.GetSupportedProviderTypes(kind)
                 ))
                 .ToArray()
         );

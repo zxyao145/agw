@@ -18,6 +18,7 @@ import {
   type AgentEnvironmentVariableEntry,
 } from "./agent-environment-variables";
 import { AgentFormFields } from "./agent-form-fields";
+import { getExternalModelProviderError } from "./external-model-provider";
 import type { ConnectionOption } from "./connection-selector";
 import type {
   AgentDto,
@@ -118,6 +119,14 @@ export function EditAgentDialog({
   const effectiveSummaryModelProviderId = isExternalAgent
     ? summaryModelProviderId
     : summaryModelProviderId || modelProviderId;
+  const modelProviderError = isExternalAgent
+    ? getExternalModelProviderError(
+        editingAgent?.externalAgentKind ?? 0,
+        modelProviderId,
+        modelProvidersQuery.data,
+        externalAgentOptionsQuery.data,
+      )
+    : null;
   const extraError = isExternalAgent ? getAgentExtraSettingsError(extra) : null;
   const environmentVariablesError = getAgentEnvironmentVariablesError(environmentVariables);
 
@@ -203,6 +212,7 @@ export function EditAgentDialog({
                       (!displayName.trim() ||
                         !modelProviderId.trim() ||
                         (enableSummary && !effectiveSummaryModelProviderId))) ||
+                    Boolean(modelProviderError) ||
                     Boolean(extraError) ||
                     Boolean(environmentVariablesError) ||
                     updateAgentMutation.isPending

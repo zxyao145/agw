@@ -133,6 +133,23 @@ public class AgentAppService
         return snapshot == null ? null : new AgentModelRuntimeConfiguration(snapshot.Model, snapshot.Provider);
     }
 
+    public async Task<AgentModelRuntimeConfiguration?> GetExternalModelRuntimeConfigurationAsync(
+        ExternalAgentKind kind,
+        Guid? modelProviderId
+    )
+    {
+        if (!modelProviderId.HasValue)
+        {
+            return null;
+        }
+
+        var configuration =
+            await GetModelRuntimeConfigurationAsync(modelProviderId.Value).ConfigureAwait(false)
+            ?? throw new AgwException(ErrorCodes.ResourceNotFound, "Model provider is unavailable.");
+        ExternalAgentDefaults.ValidateProviderType(kind, configuration.Provider.ProviderType);
+        return configuration;
+    }
+
     public async Task<IReadOnlyList<McpServer>> ListEnabledMcpToolServersByAgentAsync(Guid agentId)
     {
         var user = _userInfoService.RequiredUserId;
@@ -204,6 +221,10 @@ public class AgentAppService
             return null;
         }
 
+        if (agent.Type == AgentType.External)
+        {
+            await GetExternalModelRuntimeConfigurationAsync(agent.ExternalAgentKind, agent.ModelProviderId);
+        }
         new AgentBehavior(agent).PrepareForCreate();
         if (await _dbContext.Agents.AnyAsync(existing => existing.CreateBy == user && existing.Name == agent.Name))
         {
@@ -238,6 +259,14 @@ public class AgentAppService
         if (existing.Type == AgentType.External)
         {
             ValidateExternalAgentUpdate(command);
+            var modelProviderId = command.IsSpecified(AgentUpdateField.ModelProviderId)
+                ? command.ModelProviderId
+                : existing.ModelProviderId;
+            if (await HasInvalidModelProviderAsync(modelProviderId))
+            {
+                return null;
+            }
+            await GetExternalModelRuntimeConfigurationAsync(existing.ExternalAgentKind, modelProviderId);
             new AgentBehavior(existing).ApplyUpdate(agent => ApplyExternalAgentUpdate(agent, command));
         }
         else

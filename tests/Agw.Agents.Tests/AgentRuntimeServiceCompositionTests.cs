@@ -382,6 +382,24 @@ public class AgentRuntimeServiceCompositionTests
     }
 
     [Fact]
+    public async Task WrapClaudeCodeAgent_WithOwnedSettings_DisposesSettingsAfterDecoration()
+    {
+        var service = CreateRuntimeService(new StubRequestHistoryProvider());
+        var settings = Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode.ClaudeCodeModelSettings.Create(
+            new ClaudeCodeAIAgentOptions { EnvironmentVariables = new() { ["ANTHROPIC_API_KEY"] = "test-key" } }
+        );
+        var path = settings.Options.Settings!;
+        var ownedAgent = new ResourceOwningAIAgent(new StubAIAgent(), settings);
+        var agent = service.WrapClaudeCodeAgent(ownedAgent, false, static (_, _) => ValueTask.CompletedTask);
+
+        var disposable = Assert.IsAssignableFrom<IAsyncDisposable>(agent);
+        await disposable.DisposeAsync();
+        await disposable.DisposeAsync();
+
+        Assert.False(File.Exists(path));
+    }
+
+    [Fact]
     public void BuildPiAgentAIAgentOptions_PreservesAgentExtraAndOverridesRuntimeState()
     {
         // Arrange

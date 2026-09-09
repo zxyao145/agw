@@ -8852,7 +8852,8 @@
         "required": [
           "kind",
           "displayName",
-          "defaultExtra"
+          "defaultExtra",
+          "supportedProviderTypes"
         ],
         "type": "object",
         "properties": {
@@ -8864,6 +8865,12 @@
           },
           "defaultExtra": {
             "type": "string"
+          },
+          "supportedProviderTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderType"
+            }
           }
         }
       },

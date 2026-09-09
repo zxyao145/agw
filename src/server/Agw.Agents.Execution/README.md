@@ -386,6 +386,16 @@ Agent 执行结束时，`AgentRuntimeService` 会在 `finally` 中保存 SDK ses
 
 Codex 的 SDK ChatHistoryProvider 会被禁用，由 `AgentRequestContextAgent` 暂存原始请求，`ExternalAgentChatHistoryAgent` 按 20 条响应或 1 秒窗口聚合流式更新并交给 EF Provider；正常结束、取消、异常和消费方提前释放都会提交剩余内容。Provider 按 `ConversationHistory` 配置决定实际数据库写入时机。Claude Code 则直接使用 `ClaudeCodeSdk.MAF` 的 ChatHistoryProvider；SDK 会在每个完整 Assistant 消息结束后聚合并分阶段交给 Agw 历史 Provider，不再经过外层历史包装器。External Agent 返回的 System/User 展示消息仍会标记 `modelHistoryExcluded`，因此可在 UI 历史中显示，但不会重新进入模型上下文或跨目标 handoff。
 
+### External Agent 模型配置
+
+Claude Code、Codex 和 Pi 的 `ModelProviderId` 均为可选。选择后，运行时通过 Providers 边界解析当前用户的模型、Endpoint 和启用的凭据，覆盖 Extra Settings 及环境变量中的对应配置；Claude Code 仅接受 Anthropic，Codex 仅接受 OpenAI Responses，Pi 接受三种现有 ProviderType。创建、更新和运行时校验协议兼容性，所选配置不可访问或执行时没有可用凭据会明确失败。
+
+创建和编辑弹窗均可取消选择，提交 `modelProviderId: null`。未选择时沿用 Extra Settings 或外部工具自身配置；修改在下一次创建执行实例时生效，既有会话按外部工具规则恢复。运行时覆盖不会写回 Agent.Extra 或宿主工具配置文件。
+
+Claude Code 的 `settings.json.env` 会覆盖继承的进程环境。因此绑定模型时，Agw 通过运行期专用的 `--settings` 文件覆盖模型地址与认证变量，保留其他设置。该文件仅当前操作系统用户可读写，在执行实例释放时删除；命令行仅传文件路径。未绑定模型时不创建该覆盖文件。
+
+Pi 通过显式加载随应用发布的 `agw-model-provider.mjs` 注册进程内供应商；模型参数和凭据通过独立进程环境传递。保持宿主配置目录、用户会话目录以及 `--no-extensions`，不会改写宿主 `models.json` 或 `auth.json`。
+
 ### 在执行目标之间交接 Conversation
 
 同一个 Project Conversation 从一个 Agent/Agentflow 切换到另一个目标时，`IConversationHandoffProvider` 只提取其他目标新增的公开文字，并从候选尾部选取总计最多 32,000 个字符。Tool 协议、控制消息、私有 reasoning、`modelHistoryExcluded` 展示记录和已经注入过的 handoff 都不会进入候选；相同 `messageId` 只保留最后一条。Handoff 消息只作为本次请求的 AI Context Provider 输入，不会再次持久化。当前用户消息保存 `conversationHandoffThroughSequence` cursor，后续切回同一目标时只注入 cursor 之后的新内容。

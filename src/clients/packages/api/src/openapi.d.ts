@@ -5050,6 +5050,7 @@ export interface components {
       kind: components["schemas"]["ExternalAgentKind"];
       displayName: string;
       defaultExtra: string;
+      supportedProviderTypes: components["schemas"]["ProviderType"][];
     };
     FileItem: {
       name: string;

@@ -1,5 +1,6 @@
 using Agw.Agents.Definitions.Agents;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Tooling;
 
 namespace Agw.Agents.Definitions.Contracts;
@@ -22,7 +23,12 @@ public record AgentCreateRequest(
     string? Extra = null
 );
 
-public sealed record ExternalAgentOptionResponse(ExternalAgentKind Kind, string DisplayName, string DefaultExtra);
+public sealed record ExternalAgentOptionResponse(
+    ExternalAgentKind Kind,
+    string DisplayName,
+    string DefaultExtra,
+    IReadOnlyList<ProviderType> SupportedProviderTypes
+);
 
 public sealed record AgentEnabledUpdateRequest(Guid AgentId, bool Enable);
 
