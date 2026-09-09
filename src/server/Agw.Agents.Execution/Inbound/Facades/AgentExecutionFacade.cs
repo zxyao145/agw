@@ -5,7 +5,7 @@ using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Configuration;
-using Agw.Agents.Execution.HumanInteraction.Approvals;
+using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Mapping;
 using Agw.Agents.Execution.Messaging;
@@ -112,7 +112,7 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
                     .ExecuteStreamingAsync(
                         runtime,
                         request.Input,
-                        UnattendedApprovalHandler.Create(MapPermissionMode(request.PermissionMode)),
+                        new UnattendedInteractionHandler(MapPermissionMode(request.PermissionMode)),
                         cancellationToken
                     )
                     .ConfigureAwait(false)
@@ -133,9 +133,7 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
                     request.Task.ProjectId,
                     request.Task.ContextId,
                     request.ExecutionId,
-                    humanGateApprovalHandler: UnattendedApprovalHandler.Create(
-                        MapPermissionMode(request.PermissionMode)
-                    ),
+                    interactionHandler: new UnattendedInteractionHandler(MapPermissionMode(request.PermissionMode)),
                     permissionMode: MapPermissionMode(request.PermissionMode)
                 )
                 .ConfigureAwait(false)
@@ -446,10 +444,7 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
     }
 
     private static bool IsHumanInteraction(AgwMessage message) =>
-        AgentExecutionMessageProtocol.GetMessageType(message)
-            is "human-interaction-request"
-                or "tool-approval-request"
-                or "human-gate-request";
+        AgentExecutionMessageProtocol.GetMessageType(message) is "interaction-request";
 
     private static string ExtractText(AgwUserInput input) =>
         string.Join(

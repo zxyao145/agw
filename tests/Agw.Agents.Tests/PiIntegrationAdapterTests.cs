@@ -30,11 +30,12 @@ public sealed class PiIntegrationAdapterTests
             .AsBuilder()
             .Use(runFunc: bridge.BindRunAsync, runStreamingFunc: bridge.BindRunStreamingAsync)
             .Build();
-        var channel = new TestHumanInteractionChannel(interaction => new HumanInteractionResponse(
-            interaction.RequestId,
-            Cancelled: false,
-            JsonSerializer.SerializeToElement(new { confirmed = true })
-        ));
+        var channel = new TestHumanInteractionChannel(interaction => new UserInputResponse
+        {
+            InteractionId = "test-interaction",
+            Cancelled = false,
+            ResponseData = JsonSerializer.SerializeToElement(new { confirmed = true }),
+        });
         using var scope = accessor.Push(channel);
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
 
@@ -106,11 +107,12 @@ public sealed class PiIntegrationAdapterTests
             .AsBuilder()
             .Use(runFunc: bridge.BindRunAsync, runStreamingFunc: bridge.BindRunStreamingAsync)
             .Build();
-        var channel = new TestHumanInteractionChannel(interaction => new HumanInteractionResponse(
-            interaction.RequestId,
-            Cancelled: false,
-            JsonSerializer.SerializeToElement(new { value })
-        ));
+        var channel = new TestHumanInteractionChannel(interaction => new UserInputResponse
+        {
+            InteractionId = "test-interaction",
+            Cancelled = false,
+            ResponseData = JsonSerializer.SerializeToElement(new { value }),
+        });
         using var scope = accessor.Push(channel);
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
 
@@ -267,19 +269,16 @@ public sealed class PiIntegrationAdapterTests
 
     private sealed class TestHumanInteractionChannel : IHumanInteractionChannel
     {
-        private readonly Func<HumanInteractionRequest, HumanInteractionResponse> _respond;
+        private readonly Func<UserInputRequest, UserInputResponse> _respond;
 
-        public TestHumanInteractionChannel(Func<HumanInteractionRequest, HumanInteractionResponse> respond)
+        public TestHumanInteractionChannel(Func<UserInputRequest, UserInputResponse> respond)
         {
             _respond = respond;
         }
 
-        public List<HumanInteractionRequest> Requests { get; } = [];
+        public List<UserInputRequest> Requests { get; } = [];
 
-        public ValueTask<HumanInteractionResponse> RequestAsync(
-            HumanInteractionRequest request,
-            CancellationToken cancellationToken
-        )
+        public ValueTask<UserInputResponse> RequestAsync(UserInputRequest request, CancellationToken cancellationToken)
         {
             Requests.Add(request);
             return ValueTask.FromResult(_respond(request));

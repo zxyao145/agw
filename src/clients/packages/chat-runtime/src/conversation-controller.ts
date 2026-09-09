@@ -1,3 +1,4 @@
+import type { InteractionResponse } from "@agw/execution-core";
 import {
   addTokenUsage,
   createUuidV7,
@@ -9,11 +10,11 @@ import {
 import {
   buildConversationRenderModel,
   getAgentflowCheckpointMessage,
-  getPendingHumanGate,
+  getPendingInteraction,
   prepareClaudeHistory,
   type AgentflowCheckpointAvailability,
   type ConversationRenderItem,
-  type PendingHumanGate,
+  type PendingInteraction,
 } from "@agw/chat-core";
 import {
   getAgentMode,
@@ -74,7 +75,7 @@ export type ConversationControllerState = {
   isExecuting: boolean;
   isTransitioning: boolean;
   reconnectState: ExecutionReconnectState | null;
-  pendingHumanGate: PendingHumanGate | null;
+  pendingInteraction: PendingInteraction | null;
   checkpointAvailability: AgentflowCheckpointAvailability[];
   permissionMode: PermissionMode;
   agentMode: AgentMode;
@@ -85,6 +86,7 @@ type Listener = () => void;
 
 export class ConversationController {
   private readonly listeners = new Set<Listener>();
+  private readonly pendingInteractions = new Map<string, PendingInteraction>();
   private options: ConversationControllerOptions;
   private state: ConversationControllerState;
   private session: ExecutionSession | null = null;
@@ -105,7 +107,7 @@ export class ConversationController {
       isExecuting: false,
       isTransitioning: false,
       reconnectState: null,
-      pendingHumanGate: null,
+      pendingInteraction: null,
       checkpointAvailability: [],
       permissionMode: options.permissionMode ?? "fullAccess",
       agentMode: getLatestAgentMode(options.sessionSeed.messages),
@@ -127,7 +129,7 @@ export class ConversationController {
     this.options = options;
     if (previousKey !== nextKey) {
       void this.disposeSession();
-      this.patch({ pendingHumanGate: null, checkpointAvailability: [] });
+      this.patch({ pendingInteraction: null, checkpointAvailability: [] });
     }
   }
 
@@ -139,7 +141,7 @@ export class ConversationController {
       contextId: seed.contextId,
       rawMessages: prepareHistory(seed.messages),
       usage: seed.usage ?? EMPTY_TOKEN_USAGE,
-      pendingHumanGate: null,
+      pendingInteraction: null,
       checkpointAvailability: [],
       agentMode: getLatestAgentMode(seed.messages),
       isExecuting: false,
@@ -166,7 +168,7 @@ export class ConversationController {
     this.activeStreamingScopeId = userMessage.messageId;
     this.patch({
       rawMessages: [...this.state.rawMessages, scopedUserMessage],
-      pendingHumanGate: null,
+      pendingInteraction: null,
       isExecuting: true,
       error: null,
     });
@@ -199,7 +201,7 @@ export class ConversationController {
     const { contextId } = this.state;
     if (!contextId || !this.options.projectId) return;
     await this.options.adapter.clearRecords?.(this.options.projectId, contextId);
-    this.patch({ rawMessages: [], usage: EMPTY_TOKEN_USAGE, pendingHumanGate: null });
+    this.patch({ rawMessages: [], usage: EMPTY_TOKEN_USAGE, pendingInteraction: null });
   }
 
   public async setMode(mode: AgentMode): Promise<void> {
@@ -221,8 +223,13 @@ export class ConversationController {
     this.patch({ permissionMode: mode, isTransitioning: true });
     try {
       await (await this.ensureSession(this.ensureContextId())).setPermissionMode(mode);
-      if (mode === "fullAccess" && this.state.pendingHumanGate?.requestType === "tool-approval") {
-        this.patch({ pendingHumanGate: null });
+      if (mode === "fullAccess") {
+        for (const [id, interaction] of this.pendingInteractions) {
+          if (interaction.kind === "tool-approval") this.pendingInteractions.delete(id);
+        }
+        this.patch({
+          pendingInteraction: Array.from(this.pendingInteractions.values()).at(-1) ?? null,
+        });
       }
     } catch (error) {
       this.patch({ permissionMode: previous });
@@ -232,18 +239,23 @@ export class ConversationController {
     }
   }
 
-  public async submitHumanResponse(args: {
-    approved: boolean;
-    responseText?: string;
-    approvalScope?: "once" | "always-tool" | "always-arguments";
-    responseData?: unknown;
-  }): Promise<void> {
-    const request = this.state.pendingHumanGate;
-    if (!request || !this.session) return;
+  public async submitHumanResponse(response: InteractionResponse): Promise<void> {
+    const request = this.pendingInteractions.get(response.interactionId);
+    if (
+      !request ||
+      !this.session ||
+      request.interactionId !== response.interactionId ||
+      request.kind !== response.kind
+    )
+      return;
+    const session = this.session;
     try {
-      await this.session.submitHumanResponse({ requestId: request.requestId, ...args });
-      if (this.state.pendingHumanGate?.requestId === request.requestId) {
-        this.patch({ pendingHumanGate: null });
+      await session.submitHumanResponse({ executionId: request.executionId, response });
+      if (this.session === session) {
+        this.pendingInteractions.delete(response.interactionId);
+        this.patch({
+          pendingInteraction: Array.from(this.pendingInteractions.values()).at(-1) ?? null,
+        });
       }
     } catch (error) {
       this.fail(error);
@@ -265,7 +277,7 @@ export class ConversationController {
 
     const resumeExecutionId = createUuidV7();
     this.resumeBuffer = [];
-    this.patch({ isTransitioning: true, pendingHumanGate: null, error: null });
+    this.patch({ isTransitioning: true, pendingInteraction: null, error: null });
     try {
       const session = await this.ensureSession(this.ensureContextId());
       await session.resumeCheckpoint({
@@ -335,12 +347,13 @@ export class ConversationController {
     const usage = getMessageTokenUsage(message);
     if (usage) this.patch({ usage: addTokenUsage(this.state.usage, usage) });
 
-    const humanGate = getPendingHumanGate(message);
-    if (humanGate) {
+    const interaction = getPendingInteraction(message);
+    if (interaction) {
       this.patch({
-        pendingHumanGate: {
-          ...humanGate,
-          streamingScopeId: humanGate.streamingScopeId ?? this.activeStreamingScopeId ?? undefined,
+        pendingInteraction: {
+          ...interaction,
+          streamingScopeId:
+            interaction.streamingScopeId ?? this.activeStreamingScopeId ?? undefined,
         },
       });
       return;
@@ -358,7 +371,7 @@ export class ConversationController {
       this.activeStreamingScopeId = null;
       this.patch({
         isExecuting: false,
-        pendingHumanGate: null,
+        pendingInteraction: null,
         error: terminal === "failed" ? "Execution failed." : this.state.error,
       });
       void this.options.adapter.onConversationChange?.();
@@ -406,7 +419,7 @@ export class ConversationController {
     this.state = {
       ...this.state,
       items: buildConversationRenderModel(this.state.rawMessages, {
-        pendingHumanGate: this.state.pendingHumanGate,
+        pendingInteraction: this.state.pendingInteraction,
         checkpointAvailability: this.state.checkpointAvailability,
       }),
     };
@@ -414,6 +427,14 @@ export class ConversationController {
 
   private patch(patch: Partial<ConversationControllerState>): void {
     if (this.disposed) return;
+    if (patch.pendingInteraction) {
+      this.pendingInteractions.set(
+        patch.pendingInteraction.interactionId,
+        patch.pendingInteraction,
+      );
+    } else if (patch.pendingInteraction === null) {
+      this.pendingInteractions.clear();
+    }
     this.state = { ...this.state, ...patch };
     this.rebuildItems();
     for (const listener of this.listeners) listener();

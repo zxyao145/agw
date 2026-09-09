@@ -15,13 +15,14 @@ public class ClaudeCodeAskUserQuestionBridgeTests
     {
         // Arrange
         var accessor = new HumanInteractionContextAccessor();
-        var channel = new TestHumanInteractionChannel(request => new HumanInteractionResponse(
-            request.RequestId,
-            Cancelled: false,
-            JsonSerializer.SerializeToElement(
+        var channel = new TestHumanInteractionChannel(request => new UserInputResponse
+        {
+            InteractionId = "test-interaction",
+            Cancelled = false,
+            ResponseData = JsonSerializer.SerializeToElement(
                 new { answers = new Dictionary<string, string> { ["Continue?"] = "Yes" } }
-            )
-        ));
+            ),
+        });
         var bridge = new ClaudeCodeAskUserQuestionBridge(accessor, allowInteraction: true);
         PermissionResult? permissionResult = null;
         var innerAgent = new CallbackAgent(async cancellationToken =>
@@ -48,9 +49,9 @@ public class ClaudeCodeAskUserQuestionBridgeTests
 
         // Assert
         var request = Assert.Single(channel.Requests);
-        Assert.Equal("questions", request.InteractionKind);
-        Assert.Equal("AskUserQuestion", request.ToolName);
-        Assert.Equal("call-1", request.CallId);
+        Assert.Equal("questions", request.InputKind);
+        Assert.Equal("AskUserQuestion", request.Source.ToolName);
+        Assert.Equal("call-1", request.Source.CallId);
         Assert.Equal("Continue?", request.Payload.GetProperty("questions")[0].GetProperty("question").GetString());
         var allow = Assert.IsType<PermissionResultAllow>(permissionResult);
         Assert.True(allow.UpdatedInput.HasValue);
@@ -112,11 +113,12 @@ public class ClaudeCodeAskUserQuestionBridgeTests
     {
         // Arrange
         var accessor = new HumanInteractionContextAccessor();
-        var channel = new TestHumanInteractionChannel(request => new HumanInteractionResponse(
-            request.RequestId,
-            Cancelled: true,
-            ResponseData: null
-        ));
+        var channel = new TestHumanInteractionChannel(request => new UserInputResponse
+        {
+            InteractionId = "test-interaction",
+            Cancelled = true,
+            ResponseData = null,
+        });
         var bridge = new ClaudeCodeAskUserQuestionBridge(accessor, allowInteraction: true);
         PermissionResult? permissionResult = null;
         var innerAgent = new CallbackAgent(async cancellationToken =>
@@ -201,13 +203,14 @@ public class ClaudeCodeAskUserQuestionBridgeTests
     }
 
     private static TestHumanInteractionChannel CreateAnsweringChannel(string answer) =>
-        new(request => new HumanInteractionResponse(
-            request.RequestId,
-            Cancelled: false,
-            JsonSerializer.SerializeToElement(
+        new(request => new UserInputResponse
+        {
+            InteractionId = "test-interaction",
+            Cancelled = false,
+            ResponseData = JsonSerializer.SerializeToElement(
                 new { answers = new Dictionary<string, string> { ["Continue?"] = answer } }
-            )
-        ));
+            ),
+        });
 
     private static JsonElement CreateQuestionInput() =>
         JsonSerializer.SerializeToElement(
@@ -232,19 +235,16 @@ public class ClaudeCodeAskUserQuestionBridgeTests
 
     private sealed class TestHumanInteractionChannel : IHumanInteractionChannel
     {
-        private readonly Func<HumanInteractionRequest, HumanInteractionResponse> _respond;
+        private readonly Func<UserInputRequest, UserInputResponse> _respond;
 
-        public TestHumanInteractionChannel(Func<HumanInteractionRequest, HumanInteractionResponse> respond)
+        public TestHumanInteractionChannel(Func<UserInputRequest, UserInputResponse> respond)
         {
             _respond = respond;
         }
 
-        public List<HumanInteractionRequest> Requests { get; } = [];
+        public List<UserInputRequest> Requests { get; } = [];
 
-        public ValueTask<HumanInteractionResponse> RequestAsync(
-            HumanInteractionRequest request,
-            CancellationToken cancellationToken
-        )
+        public ValueTask<UserInputResponse> RequestAsync(UserInputRequest request, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             Requests.Add(request);

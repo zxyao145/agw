@@ -3,6 +3,26 @@ import test from "node:test";
 import { HubConnectionBuilder, HubConnectionState, type IRetryPolicy } from "@microsoft/signalr";
 import type { AiMessage } from "@agw/api";
 
+test("human response dispatch binds the nested response to the requested or active execution", async () => {
+  const { ExecutionSession } = await import("./execution-session.ts");
+  const commands: unknown[] = [];
+  const session = Object.assign(Object.create(ExecutionSession.prototype), {
+    activeExecutionId: "active-execution",
+    dispatch: async (command: unknown) => {
+      commands.push(command);
+    },
+  }) as InstanceType<typeof ExecutionSession>;
+  const response = { kind: "user-input" as const, interactionId: "input-1", cancelled: true };
+
+  await session.submitHumanResponse({ response, executionId: undefined });
+  await session.submitHumanResponse({ response, executionId: "request-execution" });
+
+  assert.deepEqual(commands, [
+    { type: "HumanResponseCommand", executionId: "active-execution", response },
+    { type: "HumanResponseCommand", executionId: "request-execution", response },
+  ]);
+});
+
 test("buildSettingCommand keeps target data out of settings", async () => {
   const { buildSettingCommand } = await import("./execution-hub" + ".ts");
 
@@ -638,47 +658,59 @@ test("getTurnFinishedStatus reads terminal AgwMessage", async () => {
   );
 });
 
-test("getPendingHumanGate parses a structured question interaction", async () => {
-  const { getPendingHumanGate } = await import("./execution-hub" + ".ts");
+test("getPendingInteraction parses a structured question interaction", async () => {
+  const { getPendingInteraction } = await import("./execution-hub" + ".ts");
 
-  const request = getPendingHumanGate({
+  const request = getPendingInteraction({
     messageId: "interaction-message-1",
     role: "system",
     author: "Agw",
     contents: [{ type: "TextContent", content: "Input needed" }],
     additionalProperties: {
-      type: "human-interaction-request",
-      requestId: "interaction-1",
-      interactionKind: "questions",
-      toolName: "ask_user_question",
-      callId: "call-1",
-      streamingScopeId: "user-message-1",
-      prompt: "Choose before continuing.",
-      payload: {
-        questions: [
-          {
-            question: "Which database?",
-            header: "Database",
-            multiSelect: false,
-            options: [
-              { label: "PostgreSQL", description: "Use the production database." },
-              { label: "SQLite", description: "Use a local database." },
-            ],
-          },
-        ],
+      type: "interaction-request",
+      interaction: {
+        kind: "user-input",
+        interactionId: "interaction-1",
+        source: { toolName: "ask_user_question", callId: "call-1" },
+        prompt: "Choose before continuing.",
+        inputKind: "questions",
+        payload: {
+          questions: [
+            {
+              question: "Which database?",
+              header: "Database",
+              multiSelect: false,
+              options: [
+                { label: "PostgreSQL", description: "Use the production database." },
+                { label: "SQLite", description: "Use a local database." },
+              ],
+            },
+          ],
+        },
       },
+      streamingScopeId: "user-message-1",
     },
   });
 
   assert.deepEqual(request, {
-    requestType: "human-interaction",
-    requestId: "interaction-1",
-    mode: "interaction",
-    interactionKind: "questions",
-    toolName: "ask_user_question",
-    callId: "call-1",
-    streamingScopeId: "user-message-1",
+    kind: "user-input",
+    interactionId: "interaction-1",
+    source: { toolName: "ask_user_question", callId: "call-1" },
     prompt: "Choose before continuing.",
+    inputKind: "questions",
+    payload: {
+      questions: [
+        {
+          question: "Which database?",
+          header: "Database",
+          multiSelect: false,
+          options: [
+            { label: "PostgreSQL", description: "Use the production database." },
+            { label: "SQLite", description: "Use a local database." },
+          ],
+        },
+      ],
+    },
     questions: [
       {
         question: "Which database?",
@@ -690,6 +722,7 @@ test("getPendingHumanGate parses a structured question interaction", async () =>
         ],
       },
     ],
+    streamingScopeId: "user-message-1",
   });
 });
 
@@ -712,33 +745,34 @@ test("getMessageStreamingScopeId keeps a restored turn bound to its original use
   );
 });
 
-test("getPendingHumanGate parses a mode change interaction", async () => {
-  const { getPendingHumanGate } = await import("./execution-hub" + ".ts");
+test("getPendingInteraction parses a mode change interaction", async () => {
+  const { getPendingInteraction } = await import("./execution-hub" + ".ts");
 
-  const request = getPendingHumanGate({
+  const request = getPendingInteraction({
     messageId: "mode-interaction-message-1",
     role: "system",
     author: "Agw",
     contents: [{ type: "TextContent", content: "Confirm mode change" }],
     additionalProperties: {
-      type: "human-interaction-request",
-      requestId: "mode-interaction-1",
-      interactionKind: "mode-change",
-      toolName: "mode_set",
-      callId: "mode-call-1",
-      prompt: "The agent wants to switch to Execute mode.",
-      payload: { mode: "execute" },
+      type: "interaction-request",
+      interaction: {
+        kind: "user-input",
+        interactionId: "mode-interaction-1",
+        source: { toolName: "mode_set", callId: "mode-call-1" },
+        prompt: "The agent wants to switch to Execute mode.",
+        inputKind: "mode-change",
+        payload: { mode: "execute" },
+      },
     },
   });
 
   assert.deepEqual(request, {
-    requestType: "human-interaction",
-    requestId: "mode-interaction-1",
-    mode: "interaction",
-    interactionKind: "mode-change",
-    toolName: "mode_set",
-    callId: "mode-call-1",
+    kind: "user-input",
+    interactionId: "mode-interaction-1",
+    source: { toolName: "mode_set", callId: "mode-call-1" },
     prompt: "The agent wants to switch to Execute mode.",
+    inputKind: "mode-change",
+    payload: { mode: "execute" },
     modeChange: { mode: "execute" },
   });
 });

@@ -274,9 +274,7 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
 
         return GetMessageType(message)
             is "agentflow-checkpoint"
-                or "human-interaction-request"
-                or "human-gate-request"
-                or "tool-approval-request"
+                or "interaction-request"
                 or "turn-start"
                 or "turn-finished";
     }

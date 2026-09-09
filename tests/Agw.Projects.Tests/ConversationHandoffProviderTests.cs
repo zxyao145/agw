@@ -369,7 +369,7 @@ public class ConversationHandoffProviderTests
             CreateRecord(
                 conversationId,
                 4,
-                CreateTypedAssistantMessage("pending approval", "approval", "tool-approval-request")
+                CreateTypedAssistantMessage("pending approval", "approval", "interaction-request")
             ),
             CreateRecord(
                 conversationId,

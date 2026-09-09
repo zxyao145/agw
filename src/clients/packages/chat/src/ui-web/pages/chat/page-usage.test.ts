@@ -21,7 +21,7 @@ test("task client preserves normalized usage in conversation details", async () 
 test("shared chat initializes seeded usage and accumulates streamed usage before control messages", async () => {
   const chatSource = await readFile(CHAT_COMPONENT_URL, "utf8");
   const usageReadIndex = chatSource.indexOf("const messageUsage = getMessageTokenUsage(message)");
-  const humanGateIndex = chatSource.indexOf("const humanGate = getPendingHumanGate(message)");
+  const interactionIndex = chatSource.indexOf("const interaction = getPendingInteraction(message)");
 
   assert.match(
     chatSource,
@@ -32,8 +32,8 @@ test("shared chat initializes seeded usage and accumulates streamed usage before
     /setConversationUsage\(\(current\) => addTokenUsage\(current, messageUsage\)\)/,
   );
   assert.notEqual(usageReadIndex, -1);
-  assert.notEqual(humanGateIndex, -1);
-  assert.ok(usageReadIndex < humanGateIndex);
+  assert.notEqual(interactionIndex, -1);
+  assert.ok(usageReadIndex < interactionIndex);
   assert.match(chatSource, /setConversationUsage\(sessionSeed\.usage\)/);
   assert.doesNotMatch(chatSource, /setConversationUsage\(EMPTY_TOKEN_USAGE\)/);
 });

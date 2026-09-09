@@ -22,6 +22,9 @@ internal sealed class ModeSetHumanInteractionProvider : AIContextProvider
     {
         if (context.AIContext.Tools != null)
         {
+            // mode_set 由前置 AgentModeProvider 动态生成，在这里声明它需要用户确认。
+            // 包装后先通过 HumanInteraction 获取输入，确认后才调用原函数；mode_get 保持普通读取。
+            // 这是 UserInput 语义，FullAccess 不会代替用户确认；Durable 适配在最终工具集合上完成。
             context.AIContext.Tools = context
                 .AIContext.Tools.Select(static tool =>
                     tool is AIFunction function
@@ -37,18 +40,17 @@ internal sealed class ModeSetHumanInteractionProvider : AIContextProvider
 
     private sealed class ModeSetInteractionProtocol : IHumanInteractionProtocol
     {
-        public HumanInteractionRequest CreateRequest(string requestId, AIFunctionArguments arguments)
+        public UserInputRequest CreateRequest(AIFunctionArguments arguments)
         {
             var mode = ReadMode(arguments);
-            return new HumanInteractionRequest(
-                requestId,
+            return new UserInputRequest(
                 InteractionKind,
                 $"The agent wants to switch to {ToDisplayName(mode)} mode.",
                 JsonSerializer.SerializeToElement(new { mode })
             );
         }
 
-        public AIFunctionArguments BindResponse(AIFunctionArguments arguments, HumanInteractionResponse response)
+        public AIFunctionArguments BindResponse(AIFunctionArguments arguments, UserInputResponse response)
         {
             if (
                 response.ResponseData is not { ValueKind: JsonValueKind.Object } responseData
@@ -62,7 +64,7 @@ internal sealed class ModeSetHumanInteractionProvider : AIContextProvider
             return arguments;
         }
 
-        public object CreateCancelledResult(AIFunctionArguments arguments, HumanInteractionResponse response)
+        public object CreateCancelledResult(AIFunctionArguments arguments, UserInputResponse response)
         {
             var mode = ReadMode(arguments);
             return $"Mode change to \"{mode}\" was cancelled by the user.";

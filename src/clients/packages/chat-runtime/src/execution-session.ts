@@ -1,3 +1,4 @@
+import type { HumanResponseCommandInput } from "@agw/execution-core";
 import {
   HubConnection,
   HubConnectionBuilder,
@@ -35,17 +36,17 @@ import {
 } from "@agw/execution-core";
 import {
   getAgentflowCheckpointMessage,
-  getPendingHumanGate,
+  getPendingInteraction,
   type AgentflowCheckpointAvailability,
-  type PendingHumanGate,
+  type PendingInteraction,
 } from "@agw/chat-core";
 
-export { getAgentflowCheckpointMessage, getPendingHumanGate } from "@agw/chat-core";
+export { getAgentflowCheckpointMessage, getPendingInteraction } from "@agw/chat-core";
 export type {
   AgentflowCheckpointAvailability,
   AgentflowCheckpointMarkerInfo,
   AgentflowCheckpointMessage,
-  PendingHumanGate,
+  PendingInteraction,
 } from "@agw/chat-core";
 
 export type ExecutionRuntimeConfig = {
@@ -563,17 +564,11 @@ export class ExecutionSession {
     }
   }
 
-  public async submitHumanResponse(args: {
-    requestId: string;
-    approved: boolean;
-    responseText?: string | null;
-    approvalScope?: "once" | "always-tool" | "always-arguments";
-    responseData?: unknown;
-  }): Promise<void> {
+  public async submitHumanResponse(args: HumanResponseCommandInput): Promise<void> {
     await this.dispatch(
       buildHumanResponseCommand({
-        ...(this.activeExecutionId ? { executionId: this.activeExecutionId } : {}),
-        ...args,
+        executionId: args.executionId ?? this.activeExecutionId ?? undefined,
+        response: args.response,
       }),
     );
   }
@@ -900,3 +895,9 @@ export class ExecutionSession {
 }
 
 export { ExecutionSession as ExecutionHubClient };
+
+export type {
+  InteractionResponse,
+  ApprovalScope,
+  HumanResponseCommandInput,
+} from "@agw/execution-core";

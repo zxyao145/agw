@@ -28,13 +28,35 @@ export type ExecutionCommandRequest<TInput = ExecutionUserInput> = {
 
 export type TurnFinishedStatus = "completed" | "interrupted" | "failed";
 
+export type ApprovalScope = "Once" | "AlwaysTool" | "AlwaysArguments";
+export type InteractionSource = {
+  nodeId?: string;
+  nodeName?: string;
+  toolName?: string;
+  callId?: string;
+  providerRequestId?: string;
+  /** SDK workflow request port, independent of the business node ID. */
+  providerScopeId?: string;
+};
+type InteractionRequestBase = {
+  interactionId: string;
+  prompt: string;
+  source: InteractionSource;
+};
+export type InteractionRequest = InteractionRequestBase &
+  (
+    | { kind: "tool-approval"; arguments?: unknown }
+    | { kind: "workflow-gate"; mode: string; inputPreview?: string }
+    | { kind: "user-input"; inputKind: string; payload: unknown }
+  );
+export type InteractionResponse = { interactionId: string } & (
+  | { kind: "tool-approval"; approved: boolean; scope: ApprovalScope }
+  | { kind: "workflow-gate"; approved: boolean; responseText?: string }
+  | { kind: "user-input"; cancelled: boolean; responseData?: unknown }
+);
 export type HumanResponseCommandInput = {
   executionId?: string;
-  requestId: string;
-  approved: boolean;
-  responseText?: string | null;
-  approvalScope?: "once" | "always-tool" | "always-arguments";
-  responseData?: unknown;
+  response: InteractionResponse;
 };
 
 export type ResumeCheckpointCommandInput = {
@@ -109,11 +131,7 @@ export function buildHumanResponseCommand(input: HumanResponseCommandInput) {
   return {
     type: "HumanResponseCommand" as const,
     ...(input.executionId ? { executionId: input.executionId } : {}),
-    requestId: input.requestId,
-    approved: input.approved,
-    ...(input.responseText === undefined ? {} : { responseText: input.responseText }),
-    ...(input.approvalScope === undefined ? {} : { approvalScope: input.approvalScope }),
-    ...(input.responseData === undefined ? {} : { responseData: input.responseData }),
+    response: input.response,
   };
 }
 

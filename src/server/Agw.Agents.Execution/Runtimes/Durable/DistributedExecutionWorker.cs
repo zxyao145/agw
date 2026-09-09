@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Security.Claims;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Configuration;
+using Agw.Agents.Execution.HumanInteraction;
+using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.Messaging.Durable;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
@@ -206,11 +208,47 @@ internal sealed class DistributedExecutionWorker : BackgroundService
                 return;
             }
 
+            var permissions = new InteractionPermissionState(
+                snapshot.Manifest.Settings.PermissionMode,
+                executionId,
+                snapshot.Manifest.Settings.PermissionVersion
+            );
             using var segmentCancellation = CancellationTokenSource.CreateLinkedTokenSource(ownershipToken);
+            using var interactionControl = scope
+                .ServiceProvider.GetService<HumanInteractionContextAccessor>()
+                ?.Push(
+                    null,
+                    permissions: permissions,
+                    refreshPermissions: async token =>
+                    {
+                        using var linked = CancellationTokenSource.CreateLinkedTokenSource(
+                            token,
+                            segmentCancellation.Token
+                        );
+                        await using var controlScope = _scopeFactory.CreateAsyncScope();
+                        var controlStore = controlScope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
+                        var current = await controlStore
+                            .GetAuthorizedAsync(executionId, snapshot.Manifest.ResolveUserId(), linked.Token)
+                            .ConfigureAwait(false);
+                        if (
+                            current.Status != DurableExecutionStatus.Running
+                            || current.StateVersion != snapshot.StateVersion
+                        )
+                        {
+                            await segmentCancellation.CancelAsync().ConfigureAwait(false);
+                            segmentCancellation.Token.ThrowIfCancellationRequested();
+                        }
+                        permissions.Set(
+                            current.Manifest.Settings.PermissionMode,
+                            current.Manifest.Settings.PermissionVersion
+                        );
+                    }
+                );
             using var monitorCancellation = CancellationTokenSource.CreateLinkedTokenSource(ownershipToken);
             var interruptMonitor = MonitorInterruptAsync(
                 executionId,
                 snapshot.StateVersion,
+                permissions,
                 segmentCancellation,
                 monitorCancellation.Token
             );
@@ -289,6 +327,7 @@ internal sealed class DistributedExecutionWorker : BackgroundService
     private async Task MonitorInterruptAsync(
         Guid executionId,
         Guid expectedStateVersion,
+        InteractionPermissionState permissions,
         CancellationTokenSource segmentCancellation,
         CancellationToken cancellationToken
     )
@@ -305,6 +344,10 @@ internal sealed class DistributedExecutionWorker : BackgroundService
             }
             if (snapshot.Status == DurableExecutionStatus.Running && snapshot.StateVersion == expectedStateVersion)
             {
+                permissions.Set(
+                    snapshot.Manifest.Settings.PermissionMode,
+                    snapshot.Manifest.Settings.PermissionVersion
+                );
                 continue;
             }
 

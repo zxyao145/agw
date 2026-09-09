@@ -2,7 +2,7 @@ using Agw.Agents.Execution.Agents.Contracts;
 using Agw.Agents.Execution.Agents.ExternalAgents;
 using Agw.Agents.Execution.Agents.Sessions;
 using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.HumanInteraction.Approvals;
+using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Auth.Contracts;
 using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Agents;
@@ -113,7 +113,7 @@ public partial class AgentRuntimeService
                 resolvedContextId,
                 ProjectDefaults.GetDefaultProjectIdentifier(projectId)
             );
-            ToolApprovalPermissionState.Apply(agentSession, settings.PermissionMode);
+            MafSessionApprovalState.Apply(agentSession, settings.PermissionMode);
             var summaryModelProviderId = ResolveSummaryModelProviderId(agent);
             return new AgentRuntime(
                 logger: _logger,

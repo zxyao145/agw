@@ -3,7 +3,8 @@ using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Agents.Tools;
-using Agw.Agents.Execution.HumanInteraction.Approvals;
+using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
+using Agw.Tools.HumanInteraction;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
@@ -72,12 +73,14 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         CancellationToken cancellationToken = default
     )
     {
+        options = CreateInteractionOptions(options);
+        var interactionNodeId = (
+            (InteractionSource)options.AdditionalProperties![HumanInteractionToolMetadata.SourceKey]!
+        ).NodeId;
         var scopedSession = await PrepareSessionAsync(session, cancellationToken).ConfigureAwait(false);
         var pendingFunctionCallIds = GetPendingFunctionCallIds(scopedSession);
         var input = AgentflowMessageTransforms.ApplyInstructions(
-            ToolApprovalSupport.RestoreWorkflowResponses(
-                AgentflowMessageTransforms.CreatePortableAgentInput(messages.ToList(), pendingFunctionCallIds)
-            ),
+            AgentflowMessageTransforms.CreatePortableAgentInput(messages.ToList(), pendingFunctionCallIds),
             _instructions
         );
         UpdatePendingFunctionCallIds(input.SelectMany(message => message.Contents), pendingFunctionCallIds);
@@ -90,7 +93,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
             var response = await InnerAgent
                 .RunAsync(input, scopedSession, options, cancellationToken)
                 .ConfigureAwait(false);
-            AddNodeName(response.Messages);
+            AddNodeAttribution(response.Messages, interactionNodeId);
             turnPersistence.RecordRange(response.Messages);
             UpdatePendingFunctionCallIds(
                 response.Messages.SelectMany(message => message.Contents),
@@ -100,7 +103,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
             var snapshots = await turnPersistence.CompleteAsync(CancellationToken.None).ConfigureAwait(false);
             foreach (var snapshot in snapshots)
             {
-                AddNodeName(snapshot);
+                AddNodeAttribution(snapshot, interactionNodeId);
                 response.Messages.Add(snapshot);
             }
             activity?.Complete();
@@ -134,12 +137,14 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default
     )
     {
+        options = CreateInteractionOptions(options);
+        var interactionNodeId = (
+            (InteractionSource)options.AdditionalProperties![HumanInteractionToolMetadata.SourceKey]!
+        ).NodeId;
         var scopedSession = await PrepareSessionAsync(session, cancellationToken).ConfigureAwait(false);
         var pendingFunctionCallIds = GetPendingFunctionCallIds(scopedSession);
         var input = AgentflowMessageTransforms.ApplyInstructions(
-            ToolApprovalSupport.RestoreWorkflowResponses(
-                AgentflowMessageTransforms.CreatePortableAgentInput(messages.ToList(), pendingFunctionCallIds)
-            ),
+            AgentflowMessageTransforms.CreatePortableAgentInput(messages.ToList(), pendingFunctionCallIds),
             _instructions
         );
         UpdatePendingFunctionCallIds(input.SelectMany(message => message.Contents), pendingFunctionCallIds);
@@ -163,7 +168,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                     }
 
                     update = enumerator.Current;
-                    AddNodeName(update);
+                    AddNodeAttribution(update, interactionNodeId);
                     var responseMessage = ToolStateSnapshots.ToMessage(update);
                     turnPersistence.Record(responseMessage);
 
@@ -190,7 +195,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
             foreach (var stateSnapshot in stateSnapshots)
             {
                 var stateSnapshotUpdate = ToolStateSnapshots.ToUpdate(stateSnapshot);
-                AddNodeName(stateSnapshotUpdate);
+                AddNodeAttribution(stateSnapshotUpdate, interactionNodeId);
                 yield return stateSnapshotUpdate;
             }
 
@@ -200,6 +205,24 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         {
             await FinalizeTurnAsync(turnPersistence, scopedSession, activity, executionFailure).ConfigureAwait(false);
         }
+    }
+
+    private AgentRunOptions CreateInteractionOptions(AgentRunOptions? options)
+    {
+        var scoped = options?.Clone() ?? new AgentRunOptions();
+        scoped.AdditionalProperties ??= [];
+        var parent =
+            scoped.AdditionalProperties.TryGetValue(HumanInteractionToolMetadata.SourceKey, out var value)
+            && value is InteractionSource source
+                ? source.NodeId
+                : null;
+        scoped.AdditionalProperties[HumanInteractionToolMetadata.SourceKey] = new InteractionSource
+        {
+            NodeId = string.IsNullOrWhiteSpace(parent) ? _nodeId : $"{parent}/{_nodeId}",
+            NodeName = _name,
+            ProviderScopeId = MafApprovalAdapter.GetWorkflowRequestScope(this),
+        };
+        return scoped;
     }
 
     private async Task FinalizeTurnAsync(
@@ -306,43 +329,55 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
 
     private Task PersistToolBlockMessagesAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken)
     {
-        AddNodeName(messages);
+        AddNodeAttribution(messages);
         return _sessionScope?.PersistToolBlockMessagesAsync(messages, cancellationToken) ?? Task.CompletedTask;
     }
 
-    private void AddNodeName(IEnumerable<ChatMessage> messages)
+    private void AddNodeAttribution(IEnumerable<ChatMessage> messages, string? interactionNodeId = null)
     {
         foreach (var message in messages)
         {
-            AddNodeName(message);
+            AddNodeAttribution(message, interactionNodeId);
         }
     }
 
-    private void AddNodeName(ChatMessage message)
+    private void AddNodeAttribution(ChatMessage message, string? interactionNodeId = null)
     {
-        if (_messageNodeName == null || message.AdditionalProperties?.ContainsKey(NodeNamePropertyName) == true)
+        if (
+            (_messageNodeName == null || message.AdditionalProperties?.ContainsKey(NodeNamePropertyName) == true)
+            && (interactionNodeId == null || message.AdditionalProperties?.ContainsKey("interactionNodeId") == true)
+        )
         {
             return;
         }
 
-        message.AdditionalProperties = CreateNodeProperties(message.AdditionalProperties);
+        message.AdditionalProperties = CreateNodeProperties(message.AdditionalProperties, interactionNodeId);
     }
 
-    private void AddNodeName(AgentResponseUpdate update)
+    private void AddNodeAttribution(AgentResponseUpdate update, string? interactionNodeId = null)
     {
-        if (_messageNodeName == null || update.AdditionalProperties?.ContainsKey(NodeNamePropertyName) == true)
+        if (
+            (_messageNodeName == null || update.AdditionalProperties?.ContainsKey(NodeNamePropertyName) == true)
+            && (interactionNodeId == null || update.AdditionalProperties?.ContainsKey("interactionNodeId") == true)
+        )
         {
             return;
         }
 
-        update.AdditionalProperties = CreateNodeProperties(update.AdditionalProperties);
+        update.AdditionalProperties = CreateNodeProperties(update.AdditionalProperties, interactionNodeId);
     }
 
-    private AdditionalPropertiesDictionary CreateNodeProperties(AdditionalPropertiesDictionary? properties)
+    private AdditionalPropertiesDictionary CreateNodeProperties(
+        AdditionalPropertiesDictionary? properties,
+        string? interactionNodeId
+    )
     {
         var result =
             properties == null ? new AdditionalPropertiesDictionary() : new AdditionalPropertiesDictionary(properties);
-        result[NodeNamePropertyName] = _messageNodeName;
+        if (_messageNodeName is not null)
+            result.TryAdd(NodeNamePropertyName, _messageNodeName);
+        if (interactionNodeId is not null)
+            result.TryAdd("interactionNodeId", interactionNodeId);
         return result;
     }
 

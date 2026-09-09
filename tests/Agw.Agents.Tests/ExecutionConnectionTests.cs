@@ -1,6 +1,5 @@
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Commands.Exec;
-using Agw.Agents.Execution.HumanInteraction.Contracts;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Runtimes;
@@ -52,9 +51,7 @@ public class ExecutionConnectionTests
         var fixture = CreateFixture(holdTurnOpen: true);
         await using var connection = fixture.Connection;
         await fixture.Context.StartTurnAsync(CreateExecCommand(), TestContext.Current.CancellationToken);
-        fixture.RuntimeFactory.StartRequest!.TurnContext.PendingHumanGateChanged!(
-            new HumanGateApprovalRequest("request", "node", null, "approval", "approve?", [])
-        );
+        fixture.RuntimeFactory.StartRequest!.TurnContext.PendingInteractionCountChanged!(1);
         var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         await connection.DetachAsync(() => removed.TrySetResult());

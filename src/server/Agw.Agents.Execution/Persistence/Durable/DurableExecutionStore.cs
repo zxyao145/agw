@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
+using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
@@ -43,38 +44,43 @@ internal sealed record DurableExecutionSnapshot
     /// <summary>
     /// 获取当前等待边界的全部人工请求。
     /// </summary>
-    public IReadOnlyList<DurableHumanInteractionSnapshot> PendingInteractions { get; init; } = [];
+    public IReadOnlyList<InteractionRequest> PendingInteractions { get; init; } = [];
 
     /// <summary>
     /// 获取当前等待边界已经持久化的人工回答。
     /// </summary>
-    public IReadOnlyList<DurableHumanResponseEnvelope> Responses { get; init; } = [];
+    public IReadOnlyList<InteractionResponse> Responses { get; init; } = [];
 
     /// <summary>
     /// 获取执行失败时保存的错误信息。
     /// </summary>
     public string? ErrorMessage { get; init; }
 
+    public IReadOnlyList<UserInputInteraction> InputCatalog { get; init; } = [];
+    public IReadOnlyList<DurableResolvedInteraction> ResolvedInputs { get; init; } = [];
+}
+
+internal static class DurableExecutionSnapshotExtensions
+{
     /// <summary>
     /// 返回当前仍未收到回答的人工请求。
     /// </summary>
-    public IReadOnlyList<DurableHumanInteractionSnapshot> GetUnansweredInteractions()
+    public static IReadOnlyList<InteractionRequest> GetUnansweredInteractions(this DurableExecutionSnapshot snapshot)
     {
-        var answered = Responses.Select(item => item.RequestId).ToHashSet(StringComparer.Ordinal);
-        return PendingInteractions.Where(item => !answered.Contains(item.RequestId)).ToArray();
+        var answered = snapshot.Responses.Select(item => item.InteractionId).ToHashSet(StringComparer.Ordinal);
+        return snapshot.PendingInteractions.Where(item => !answered.Contains(item.InteractionId)).ToArray();
     }
 
     /// <summary>
     /// 从持久化 checkpoint、pending 和 response 构造下一分段输入。
     /// </summary>
-    public DurableExecutionSegmentInput CreateSegmentInput()
+    public static DurableExecutionSegmentInput CreateSegmentInput(this DurableExecutionSnapshot snapshot)
     {
-        var responses = Responses.ToDictionary(item => item.RequestId, StringComparer.Ordinal);
+        var responses = snapshot.Responses.ToDictionary(item => item.InteractionId, StringComparer.Ordinal);
         if (
-            responses.Count != Responses.Count
-            || responses.Count != PendingInteractions.Count
-            || Responses.Any(item => item.ExecutionId != Manifest.ExecutionId)
-            || PendingInteractions.Any(item => !responses.ContainsKey(item.RequestId))
+            responses.Count != snapshot.Responses.Count
+            || responses.Count != snapshot.PendingInteractions.Count
+            || snapshot.PendingInteractions.Any(item => !responses.ContainsKey(item.InteractionId))
         )
         {
             throw new AgwException(
@@ -83,10 +89,22 @@ internal sealed record DurableExecutionSnapshot
             );
         }
 
-        var resolved = PendingInteractions
-            .Select(item => new DurableResolvedInteraction(item, responses[item.RequestId]))
+        var resolved = snapshot
+            .PendingInteractions.Select(item => new DurableResolvedInteraction(item, responses[item.InteractionId]))
             .ToArray();
-        return new DurableExecutionSegmentInput(Manifest.ExecutionId, SegmentIndex, resolved, Checkpoint);
+        return new DurableExecutionSegmentInput(
+            snapshot.Manifest.ExecutionId,
+            snapshot.SegmentIndex,
+            resolved,
+            snapshot.Checkpoint
+        )
+        {
+            InputCatalog = snapshot.InputCatalog,
+            ResolvedInputs = snapshot
+                .ResolvedInputs.Concat(resolved.Where(item => item.Request is UserInputInteraction))
+                .DistinctBy(item => item.Request.InteractionId)
+                .ToArray(),
+        };
     }
 }
 
@@ -394,6 +412,9 @@ internal sealed class DurableExecutionStore
     )
     {
         ArgumentNullException.ThrowIfNull(result);
+        await using var permissionLock = await _applicationLock
+            .AcquireAsync($"agw:execution:permissions:{result.ExecutionId:N}", cancellationToken)
+            .ConfigureAwait(false);
         ClearTrackedDurableExecutions();
         var record =
             await FindAsync(result.ExecutionId, userId: null, tracking: true, cancellationToken).ConfigureAwait(false)
@@ -429,6 +450,75 @@ internal sealed class DurableExecutionStore
         }
     }
 
+    internal async Task<DurableExecutionSnapshot> SetPermissionModeAsync(
+        Guid executionId,
+        string userId,
+        PermissionMode mode,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!Enum.IsDefined(mode))
+            throw new AgwException(ErrorCodes.InvalidParam, "Unknown permission mode.");
+        await using var permissionLock = await _applicationLock
+            .AcquireAsync($"agw:execution:permissions:{executionId:N}", cancellationToken)
+            .ConfigureAwait(false);
+        for (var attempt = 0; ; attempt++)
+        {
+            ClearTrackedDurableExecutions();
+            var record =
+                await FindAsync(executionId, userId, tracking: true, cancellationToken).ConfigureAwait(false)
+                ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
+            var snapshot = ToSnapshot(record);
+            await EnsureSessionCurrentAsync(snapshot, cancellationToken).ConfigureAwait(false);
+            if (
+                snapshot.Manifest.Settings.PermissionMode == mode
+                || record.Status
+                    is DurableExecutionStatus.Completed
+                        or DurableExecutionStatus.Failed
+                        or DurableExecutionStatus.Interrupted
+            )
+                return snapshot;
+            record.ManifestJson = DurableExecutionJson.Serialize(
+                snapshot.Manifest with
+                {
+                    Settings = snapshot.Manifest.Settings with
+                    {
+                        PermissionMode = mode,
+                        PermissionVersion = checked(snapshot.Manifest.Settings.PermissionVersion + 1),
+                    },
+                }
+            );
+            if (record.Status == DurableExecutionStatus.WaitingForHuman)
+            {
+                var responses = snapshot.Responses.ToDictionary(item => item.InteractionId, StringComparer.Ordinal);
+                foreach (var request in snapshot.GetUnansweredInteractions())
+                    if (InteractionRules.AutomaticallyApprove(request, mode) is { } response)
+                        responses.Add(response.InteractionId, response);
+                record.ResponsesJson = DurableExecutionJson.Serialize(responses.Values.ToArray());
+                if (responses.Count == snapshot.PendingInteractions.Count)
+                    record.Status = DurableExecutionStatus.Resuming;
+            }
+            try
+            {
+                await SaveStateAsync(
+                        record,
+                        cancellationToken,
+                        preserveExecutionVersion: snapshot.Status == DurableExecutionStatus.Running
+                    )
+                    .ConfigureAwait(false);
+                return ToSnapshot(record);
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < 2) { }
+            catch (DbUpdateConcurrencyException)
+            {
+                throw new AgwException(
+                    ErrorCodes.DurableExecutionConflict,
+                    "The permission mode changed concurrently. Retry the command."
+                );
+            }
+        }
+    }
+
     /// <summary>
     /// 校验 pending request 后持久化人工回答；全部回答到齐时把状态推进到 Resuming。
     /// </summary>
@@ -439,24 +529,26 @@ internal sealed class DurableExecutionStore
     )
     {
         ArgumentNullException.ThrowIfNull(request);
-        var requestId = request.RequestId.Trim();
+        await using var permissionLock = await _applicationLock
+            .AcquireAsync($"agw:execution:permissions:{request.ExecutionId:N}", cancellationToken)
+            .ConfigureAwait(false);
+        var requestId = request.Response.InteractionId;
         ClearTrackedDurableExecutions();
         var record =
             await FindAsync(request.ExecutionId, userId, tracking: true, cancellationToken).ConfigureAwait(false)
             ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
         var snapshot = ToSnapshot(record);
         await EnsureSessionCurrentAsync(snapshot, cancellationToken);
-        var response = new DurableHumanResponseEnvelope
-        {
-            ExecutionId = request.ExecutionId,
-            RequestId = requestId,
-            Approved = request.Approved,
-            ResponseText = request.ResponseText,
-            ApprovalScope = string.IsNullOrWhiteSpace(request.ApprovalScope) ? "once" : request.ApprovalScope.Trim(),
-            ResponseData = request.ResponseData,
-        };
+        var pending =
+            snapshot.PendingInteractions.SingleOrDefault(item => item.InteractionId == requestId)
+            ?? throw new AgwException(ErrorCodes.HumanInteractionNotFound);
+        var response = InteractionRules.ValidateAndNormalize(
+            pending,
+            request.Response,
+            snapshot.Manifest.Settings.PermissionMode
+        );
         var existing = snapshot.Responses.SingleOrDefault(item =>
-            string.Equals(item.RequestId, requestId, StringComparison.Ordinal)
+            string.Equals(item.InteractionId, requestId, StringComparison.Ordinal)
         );
         if (existing != null)
         {
@@ -476,7 +568,7 @@ internal sealed class DurableExecutionStore
         if (
             snapshot.Status != DurableExecutionStatus.WaitingForHuman
             || !snapshot.PendingInteractions.Any(item =>
-                string.Equals(item.RequestId, requestId, StringComparison.Ordinal)
+                string.Equals(item.InteractionId, requestId, StringComparison.Ordinal)
             )
         )
         {
@@ -601,8 +693,41 @@ internal sealed class DurableExecutionStore
                 record.SegmentIndex = checked(result.SegmentIndex + 1);
                 record.CheckpointJson =
                     result.Checkpoint == null ? null : DurableExecutionJson.Serialize(result.Checkpoint);
-                record.PendingInteractionsJson = DurableExecutionJson.Serialize(result.PendingInteractions);
-                record.ResponsesJson = null;
+                var previous = ToSnapshot(record);
+                var retainedInputs = previous
+                    .ResolvedInputs.Concat(
+                        previous
+                            .PendingInteractions.OfType<UserInputInteraction>()
+                            .Select(request => new
+                            {
+                                Request = request,
+                                Response = previous
+                                    .Responses.OfType<UserInputResponse>()
+                                    .SingleOrDefault(response => response.InteractionId == request.InteractionId),
+                            })
+                            .Where(item => item.Response is not null)
+                            .Select(item => new DurableResolvedInteraction(item.Request, item.Response!))
+                    )
+                    .DistinctBy(item => item.Request.InteractionId)
+                    .ToArray();
+                record.PendingInteractionsJson = DurableExecutionJson.Serialize(
+                    new DurableInteractionState
+                    {
+                        Pending = result.PendingInteractions,
+                        InputCatalog = result.InputCatalog,
+                        ResolvedInputs = retainedInputs,
+                    }
+                );
+                var automaticResponses = result
+                    .PendingInteractions.Select(request =>
+                        InteractionRules.AutomaticallyApprove(request, previous.Manifest.Settings.PermissionMode)
+                    )
+                    .OfType<InteractionResponse>()
+                    .ToArray();
+                record.ResponsesJson =
+                    automaticResponses.Length == 0 ? null : DurableExecutionJson.Serialize(automaticResponses);
+                if (automaticResponses.Length == result.PendingInteractions.Count)
+                    record.Status = DurableExecutionStatus.Resuming;
                 record.ErrorMessage = null;
                 break;
             case DurableExecutionSegmentStatus.Completed:
@@ -626,13 +751,13 @@ internal sealed class DurableExecutionStore
     /// <summary>
     /// 校验等待边界包含非空且互不重复的 requestId。
     /// </summary>
-    private static void ValidatePendingInteractions(IReadOnlyList<DurableHumanInteractionSnapshot> pending)
+    private static void ValidatePendingInteractions(IReadOnlyList<InteractionRequest> pending)
     {
-        var distinct = pending.Select(item => item.RequestId).Distinct(StringComparer.Ordinal).Count();
+        var distinct = pending.Select(item => item.InteractionId).Distinct(StringComparer.Ordinal).Count();
         if (
             pending.Count == 0
             || distinct != pending.Count
-            || pending.Any(item => string.IsNullOrWhiteSpace(item.RequestId) || item.RequestId.Length > 128)
+            || pending.Any(item => string.IsNullOrWhiteSpace(item.InteractionId) || item.InteractionId.Length > 128)
         )
         {
             throw new AgwException(
@@ -695,6 +820,12 @@ internal sealed class DurableExecutionStore
             );
         }
 
+        var interactionState = string.IsNullOrWhiteSpace(record.PendingInteractionsJson)
+            ? new DurableInteractionState()
+            : DurableExecutionJson.DeserializeRequired<DurableInteractionState>(
+                record.PendingInteractionsJson,
+                "durable interaction state"
+            );
         return new DurableExecutionSnapshot
         {
             Manifest = manifest,
@@ -707,15 +838,12 @@ internal sealed class DurableExecutionStore
                     record.CheckpointJson,
                     "durable execution checkpoint"
                 ),
-            PendingInteractions = string.IsNullOrWhiteSpace(record.PendingInteractionsJson)
-                ? []
-                : DurableExecutionJson.DeserializeRequired<DurableHumanInteractionSnapshot[]>(
-                    record.PendingInteractionsJson,
-                    "durable execution pending interactions"
-                ),
+            PendingInteractions = interactionState.Pending,
+            InputCatalog = interactionState.InputCatalog,
+            ResolvedInputs = interactionState.ResolvedInputs,
             Responses = string.IsNullOrWhiteSpace(record.ResponsesJson)
                 ? []
-                : DurableExecutionJson.DeserializeRequired<DurableHumanResponseEnvelope[]>(
+                : DurableExecutionJson.DeserializeRequired<InteractionResponse[]>(
                     record.ResponsesJson,
                     "durable execution responses"
                 ),
@@ -758,10 +886,17 @@ internal sealed class DurableExecutionStore
     /// <summary>
     /// 更新时间与乐观并发版本后保存状态变更。
     /// </summary>
-    private async Task SaveStateAsync(DurableExecutionRecord record, CancellationToken cancellationToken)
+    private async Task SaveStateAsync(
+        DurableExecutionRecord record,
+        CancellationToken cancellationToken,
+        bool preserveExecutionVersion = false
+    )
     {
-        record.StateChangedAt = _timeProvider.GetUtcNow();
-        record.StateVersion = Guid.CreateVersion7();
+        if (!preserveExecutionVersion)
+        {
+            record.StateChangedAt = _timeProvider.GetUtcNow();
+            record.StateVersion = Guid.CreateVersion7();
+        }
         if (string.IsNullOrWhiteSpace(record.UserId))
         {
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

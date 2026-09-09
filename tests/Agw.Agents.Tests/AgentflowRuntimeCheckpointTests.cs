@@ -1,7 +1,7 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Agents.Sessions;
-using Agw.Agents.Execution.HumanInteraction.Approvals;
+using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
@@ -37,7 +37,7 @@ public partial class AgentflowRuntimeServiceTests
         );
         var manifest = await database.SeedAsync(fixture);
         var checkpointState = new AgentflowCheckpointRuntimeState();
-        var permissionState = new PermissionModeState(null);
+        var permissionState = new MafPermissionState(permissionMode: null);
         var messages = new List<AgwMessage>();
         await foreach (
             var message in fixture.Service.ExecuteStreamingWithPermissionStateAsync(
@@ -216,7 +216,7 @@ public partial class AgentflowRuntimeServiceTests
                 null,
                 null,
                 manifest.Task.ProjectConversationId,
-                new PermissionModeState(null),
+                new MafPermissionState(permissionMode: null),
                 manifest.ExecutionId,
                 state,
                 null

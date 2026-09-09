@@ -182,13 +182,13 @@ public partial class ExecutionCommandHandlerTests
         await using var context = CreateContext(new FakeRuntimeFactory(), CreateTask("unused"), sink: sink);
 
         await new HumanResponseCommandHandler().HandleAsync(
-            new HumanResponseCommand("missing", approved: true),
+            new HumanResponseCommand(new WorkflowGateDecision { InteractionId = "missing", Approved = true }),
             context,
             TestContext.Current.CancellationToken
         );
 
         var content = Assert.IsType<AgwTextContent>(Assert.Single(sink.Messages).Contents[0]);
-        Assert.Equal("No matching HumanGate request is waiting for this response.", content.Content);
+        Assert.Equal("No matching interaction is waiting for this response.", content.Content);
     }
 
     [Fact]

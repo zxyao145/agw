@@ -4,10 +4,9 @@ using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
 using Agw.Agents.Execution.Agentflows.Context;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.HumanInteraction;
-using Agw.Agents.Execution.HumanInteraction.Approvals;
-using Agw.Agents.Execution.HumanInteraction.Contracts;
+using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.HumanInteraction.Durable;
-using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
+using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Shared.Exceptions;
@@ -41,6 +40,16 @@ public sealed class DurableAgentflowSegmentRunner
 
     internal bool IsAvailable => _humanInteractionContextAccessor != null;
 
+    internal MafPermissionState CreatePermissionState(DurableExecutionManifest manifest) =>
+        new(
+            _humanInteractionContextAccessor?.PermissionState
+                ?? new InteractionPermissionState(
+                    manifest.Settings.PermissionMode,
+                    manifest.ExecutionId,
+                    manifest.Settings.PermissionVersion
+                )
+        );
+
     internal async Task<DurableExecutionSegmentResult> RunAsync(
         DurableExecutionManifest manifest,
         DurableExecutionSegmentInput input,
@@ -50,8 +59,30 @@ public sealed class DurableAgentflowSegmentRunner
         CancellationToken cancellationToken
     )
     {
+        var registry = new InteractionRequestRegistry(
+            input
+                .InputCatalog.Concat(
+                    input.ResolvedInteractions.Select(item => item.Request).OfType<UserInputInteraction>()
+                )
+                .DistinctBy(item => item.InteractionId)
+        );
+        var handler = new DurableInteractionHandler(
+            sessionScope.PermissionState.Permissions,
+            manifest.Settings.HumanInteractionPolicy,
+            registry,
+            _humanInteractionContextAccessor!.RefreshPermissionsAsync
+        );
         using var interactionScope = _humanInteractionContextAccessor!.Push(
-            new ResolvedHumanInteractionChannel(input.ResolvedInteractions)
+            new ResolvedHumanInteractionChannel(
+                input
+                    .ResolvedInputs.Concat(
+                        input.ResolvedInteractions.Where(item => item.Request is UserInputInteraction)
+                    )
+                    .DistinctBy(item => item.Request.InteractionId)
+                    .ToArray()
+            ),
+            registry,
+            sessionScope.PermissionState.Permissions
         );
         var workflow = workflowLease.Workflow;
         var humanGateNodes = workflowLease.Metadata.HumanGateNodes;
@@ -109,11 +140,11 @@ public sealed class DurableAgentflowSegmentRunner
                 await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
             }
             var responses = input.ResolvedInteractions.ToDictionary(
-                item => item.Request.RequestId,
+                item => item.Request.InteractionId,
                 StringComparer.Ordinal
             );
             var consumed = new HashSet<string>(StringComparer.Ordinal);
-            var pending = new Dictionary<string, DurableHumanInteractionSnapshot>(StringComparer.Ordinal);
+            var pending = new Dictionary<string, InteractionRequest>(StringComparer.Ordinal);
             var executorsWithUpdates = new HashSet<string>(StringComparer.Ordinal);
             var pendingCheckpointRequests = new Dictionary<string, PendingCheckpointRequest>(StringComparer.Ordinal);
             // Manifest 的 Marker 只用于新恢复分支的首段，后续 HITL 分段不能再次跳过。
@@ -142,7 +173,7 @@ public sealed class DurableAgentflowSegmentRunner
                             break;
                         }
 
-                        var approvalRequest = CreateDurableApprovalRequest(externalRequest, humanGateNodes);
+                        var approvalRequest = CreateInteractionRequest(externalRequest, humanGateNodes, registry);
                         if (approvalRequest == null)
                         {
                             return CreateDurableFailure(
@@ -151,57 +182,59 @@ public sealed class DurableAgentflowSegmentRunner
                             );
                         }
 
-                        if (responses.TryGetValue(approvalRequest.RequestId, out var resolved))
+                        if (responses.TryGetValue(approvalRequest.InteractionId, out var resolved))
+                        {
+                            var response = InteractionRules.ValidateAndNormalize(
+                                approvalRequest,
+                                resolved.Response,
+                                sessionScope.PermissionState.Current
+                            );
+                            if (
+                                await SendDurableResponseAsync(
+                                        run,
+                                        externalRequest,
+                                        approvalRequest,
+                                        response,
+                                        sink,
+                                        cancellationToken
+                                    )
+                                    .ConfigureAwait(false)
+                            )
+                                return new DurableExecutionSegmentResult
+                                {
+                                    ExecutionId = input.ExecutionId,
+                                    SegmentIndex = input.SegmentIndex,
+                                    Status = DurableExecutionSegmentStatus.Completed,
+                                };
+                            consumed.Add(approvalRequest.InteractionId);
+                            break;
+                        }
+
+                        InteractionResolution resolution;
+                        try
+                        {
+                            resolution = await handler.ResolveAsync(approvalRequest, cancellationToken);
+                        }
+                        catch (AgwException exception)
+                        {
+                            return CreateDurableFailure(input, exception.Message);
+                        }
+                        if (resolution is InteractionResolution.Resolved automatic)
                         {
                             await SendDurableResponseAsync(
                                     run,
                                     externalRequest,
                                     approvalRequest,
-                                    resolved.Response,
+                                    automatic.Response,
                                     sink,
                                     cancellationToken
                                 )
                                 .ConfigureAwait(false);
-                            consumed.Add(approvalRequest.RequestId);
-                            break;
                         }
-
-                        var handler =
-                            manifest.Settings.HumanInteractionPolicy == HumanInteractionPolicy.Reject
-                                ? UnattendedApprovalHandler.Create(manifest.Settings.PermissionMode)
-                                : new PermissionAwareApprovalHandler(
-                                    new UnattendedApprovalHandler(),
-                                    manifest.Settings.PermissionMode
-                                );
-                        if (
-                            !handler.RequiresHumanResponse(approvalRequest)
-                            || manifest.Settings.HumanInteractionPolicy == HumanInteractionPolicy.Reject
-                        )
+                        else
                         {
-                            HumanGateApprovalDecision decision;
-                            try
-                            {
-                                decision = await handler.WaitForApprovalAsync(approvalRequest, cancellationToken);
-                            }
-                            catch (AgwException exception)
-                            {
-                                return CreateDurableFailure(input, exception.Message);
-                            }
-                            await run.SendResponseAsync(
-                                externalRequest.CreateResponse(
-                                    ToolApprovalSupport.CreateWorkflowResponse(
-                                        approvalRequest.ToolApprovalRequest!,
-                                        decision
-                                    )
-                                )
-                            );
-                            break;
+                            pending.TryAdd(approvalRequest.InteractionId, approvalRequest);
                         }
-
-                        pending.TryAdd(
-                            approvalRequest.RequestId,
-                            DurableHumanInteractionMapper.FromRequest(approvalRequest)
-                        );
                         break;
                     }
 
@@ -286,6 +319,15 @@ public sealed class DurableAgentflowSegmentRunner
                             break;
                         }
 
+                        var missingWaitingResponse = responses.Keys.FirstOrDefault(id => !consumed.Contains(id));
+                        if (missingWaitingResponse is not null)
+                        {
+                            return CreateDurableFailure(
+                                input,
+                                $"Agentflow did not restore human request '{missingWaitingResponse}'."
+                            );
+                        }
+
                         await run.CancelRunAsync().ConfigureAwait(false);
                         var durableCheckpoint = checkpointStore.Latest;
                         if (durableCheckpoint == null)
@@ -299,6 +341,7 @@ public sealed class DurableAgentflowSegmentRunner
                             SegmentIndex = input.SegmentIndex,
                             Status = DurableExecutionSegmentStatus.WaitingForHuman,
                             PendingInteractions = pending.Values.ToArray(),
+                            InputCatalog = registry.Snapshot(),
                             Checkpoint = durableCheckpoint,
                         };
 
@@ -354,54 +397,44 @@ public sealed class DurableAgentflowSegmentRunner
     /// <summary>
     /// 把 PostgreSQL 中持久化的人工回答发送给恢复后的 Agentflow external request。
     /// </summary>
-    private static async Task SendDurableResponseAsync(
+    private static async Task<bool> SendDurableResponseAsync(
         StreamingRun run,
         ExternalRequest externalRequest,
-        HumanGateApprovalRequest request,
-        DurableHumanResponseEnvelope response,
+        InteractionRequest request,
+        InteractionResponse response,
         IExecutionMessageSink sink,
         CancellationToken cancellationToken
     )
     {
-        if (request.ToolApprovalRequest is { } toolApprovalRequest)
+        if (
+            externalRequest.TryGetDataAs<Microsoft.Extensions.AI.ToolApprovalRequestContent>(out var toolApproval)
+            && toolApproval is not null
+        )
         {
-            var decision = new HumanGateApprovalDecision(
-                response.RequestId,
-                response.Approved,
-                response.ResponseText,
-                response.ApprovalScope,
-                response.ResponseData
-            );
             await run.SendResponseAsync(
-                    externalRequest.CreateResponse(
-                        ToolApprovalSupport.CreateWorkflowResponse(toolApprovalRequest, decision)
-                    )
+                    externalRequest.CreateResponse(MafApprovalAdapter.CreateWorkflowResponse(toolApproval, response))
                 )
                 .ConfigureAwait(false);
-            return;
+            return false;
         }
 
-        var humanDecision = new HumanGateApprovalDecision(
-            response.RequestId,
-            response.Approved,
-            response.ResponseText,
-            response.ApprovalScope,
-            response.ResponseData
-        );
-        if (!response.Approved)
+        var decision = (WorkflowGateDecision)response;
+        if (!decision.Approved)
         {
             await sink.WriteAsync(
-                    CreateHumanGateRejectedMessage(request, Guid.CreateVersion7().Normalize()),
+                    CreateHumanGateRejectedMessage((WorkflowGateInteraction)request, Guid.CreateVersion7().Normalize()),
                     cancellationToken
                 )
                 .ConfigureAwait(false);
             await run.CancelRunAsync().ConfigureAwait(false);
-            return;
+            return true;
         }
-
         await run.SendResponseAsync(
-                externalRequest.CreateResponse(CreateHumanGateResponseMessages(request.Messages, humanDecision))
+                externalRequest.CreateResponse(
+                    CreateHumanGateResponseMessages(GetHumanGateMessages(externalRequest), decision)
+                )
             )
             .ConfigureAwait(false);
+        return false;
     }
 }

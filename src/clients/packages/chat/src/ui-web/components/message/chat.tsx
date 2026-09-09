@@ -1,5 +1,7 @@
 "use client";
 
+import type { InteractionResponse } from "@agw/execution-core";
+
 import * as React from "react";
 import { useQuery } from "@agw/components/query";
 import { toast } from "sonner";
@@ -16,7 +18,7 @@ import {
   getAgentflowCheckpointMessage,
   hasPersistedDurableExecution,
   getMessageStreamingScopeId,
-  getPendingHumanGate,
+  getPendingInteraction,
   getTurnFinishedStatus,
   getLatestAgentMode,
   isUserTurnMessage,
@@ -24,7 +26,7 @@ import {
   type AgentMode,
   type AgentflowCheckpointAvailability,
   type ExecutionReconnectState,
-  type PendingHumanGate,
+  type PendingInteraction,
   type PermissionMode,
 } from "../../../services/execution-hub";
 import {
@@ -198,7 +200,9 @@ export function Chat({
   const [hasOlderMessages, setHasOlderMessages] = React.useState(sessionSeed.hasOlderMessages);
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = React.useState(false);
   const [isJumpingToTop, setIsJumpingToTop] = React.useState(false);
-  const [pendingHumanGate, setPendingHumanGate] = React.useState<PendingHumanGate | null>(null);
+  const [pendingInteraction, setPendingInteraction] = React.useState<PendingInteraction | null>(
+    null,
+  );
   const [checkpointAvailability, setCheckpointAvailability] = React.useState<
     AgentflowCheckpointAvailability[]
   >([]);
@@ -299,10 +303,10 @@ export function Chat({
     () =>
       buildConversationRenderModel(messages, {
         collapseToolRuns: true,
-        pendingHumanGate,
+        pendingInteraction,
         checkpointAvailability,
       }),
-    [checkpointAvailability, messages, pendingHumanGate],
+    [checkpointAvailability, messages, pendingInteraction],
   );
   const latestAvailableCheckpoint = React.useMemo(
     () =>
@@ -390,7 +394,7 @@ export function Chat({
 
     previousTargetKeyRef.current = targetKey;
     detachExecution();
-    setPendingHumanGate(null);
+    setPendingInteraction(null);
     setCheckpointAvailability([]);
     setClaudeCommands([]);
     confirmedAgentModeRef.current = DEFAULT_AGENT_MODE;
@@ -402,7 +406,7 @@ export function Chat({
     olderMessagesAbortRef.current?.abort();
     olderMessagesAbortRef.current = null;
     detachExecution();
-    setPendingHumanGate(null);
+    setPendingInteraction(null);
     setCheckpointAvailability([]);
     autoScrollStateRef.current = {
       shouldAutoScroll: true,
@@ -472,7 +476,7 @@ export function Chat({
 
   React.useEffect(() => {
     syncConversationScrollPosition();
-  }, [messages, pendingHumanGate?.requestId, syncConversationScrollPosition]);
+  }, [messages, pendingInteraction?.interactionId, syncConversationScrollPosition]);
 
   React.useEffect(() => {
     const conversationContent = conversationContentRef.current;
@@ -552,17 +556,17 @@ export function Chat({
         return;
       }
 
-      const humanGate = getPendingHumanGate(message);
-      if (humanGate) {
+      const interaction = getPendingInteraction(message);
+      if (interaction) {
         streamingMessageBatcherRef.current?.flush(generation);
-        setPendingHumanGate(
-          humanGate.requestType === "human-interaction"
+        setPendingInteraction(
+          interaction.kind === "user-input"
             ? {
-                ...humanGate,
+                ...interaction,
                 streamingScopeId:
-                  humanGate.streamingScopeId ?? activeStreamingScopeRef.current ?? undefined,
+                  interaction.streamingScopeId ?? activeStreamingScopeRef.current ?? undefined,
               }
-            : humanGate,
+            : interaction,
         );
         return;
       }
@@ -583,7 +587,7 @@ export function Chat({
         streamingMessageBatcherRef.current?.flush(generation);
         activeStreamingScopeRef.current = null;
         setIsExecuting(false);
-        setPendingHumanGate(null);
+        setPendingInteraction(null);
         if (hadActiveTurn) void onConversationChange?.();
         const client = executionClientRef.current;
         if (client) {
@@ -683,7 +687,7 @@ export function Chat({
         configuredSessionRef.current = null;
         setReconnectState(null);
         setIsExecuting(false);
-        setPendingHumanGate(null);
+        setPendingInteraction(null);
         if (error) notifyExecutionError(error);
       },
       onReconnecting: (state) => {
@@ -773,7 +777,7 @@ export function Chat({
               activeStreamingScopeRef.current = null;
               setReconnectState(null);
               setIsExecuting(false);
-              setPendingHumanGate(null);
+              setPendingInteraction(null);
               if (error) notifyExecutionError(error);
             },
             onReconnecting: (state) => {
@@ -1001,7 +1005,7 @@ export function Chat({
         messagesRef.current = nextMessages;
         return nextMessages;
       });
-      setPendingHumanGate(null);
+      setPendingInteraction(null);
       setIsExecuting(true);
       const generation = executionGenerationRef.current;
       let didReportExecutionError = false;
@@ -1043,7 +1047,7 @@ export function Chat({
         if (generation === executionGenerationRef.current) {
           activeStreamingScopeRef.current = null;
           setIsExecuting(false);
-          setPendingHumanGate(null);
+          setPendingInteraction(null);
           reportExecutionErrorOnce(error);
         }
       }
@@ -1086,8 +1090,8 @@ export function Chat({
             generation === executionGenerationRef.current &&
             nextPermissionMode === "fullAccess"
           ) {
-            setPendingHumanGate((current) =>
-              current?.requestType === "tool-approval" ? null : current,
+            setPendingInteraction((current) =>
+              current?.kind === "tool-approval" ? null : current,
             );
           }
         })
@@ -1165,7 +1169,7 @@ export function Chat({
       streamingMessageBatcherRef.current?.flush(generation);
       checkpointResumeBufferRef.current = [];
       activeStreamingScopeRef.current = null;
-      setPendingHumanGate(null);
+      setPendingInteraction(null);
       setIsTransitioning(true);
 
       void ensureConfiguredClient(contextId, generation)
@@ -1232,28 +1236,24 @@ export function Chat({
     ],
   );
 
-  const submitHumanGateResponse = React.useCallback(
-    (
-      approved: boolean,
-      responseText?: string,
-      approvalScope: "once" | "always-tool" | "always-arguments" = "once",
-      responseData?: unknown,
-    ) => {
+  const submitInteractionResponse = React.useCallback(
+    (response: InteractionResponse) => {
       const client = executionClientRef.current;
-      if (!pendingHumanGate || !client) {
-        toast.error("No active HumanGate request");
+      if (
+        !pendingInteraction ||
+        !client ||
+        pendingInteraction.interactionId !== response.interactionId ||
+        pendingInteraction.kind !== response.kind
+      ) {
         return;
       }
 
       const generation = executionGenerationRef.current;
-      const requestId = pendingHumanGate.requestId;
+      const interactionId = pendingInteraction.interactionId;
       void client
         .submitHumanResponse({
-          requestId,
-          approved,
-          responseText,
-          approvalScope,
-          responseData,
+          executionId: pendingInteraction.executionId,
+          response,
         })
         .then(() => {
           if (
@@ -1263,7 +1263,9 @@ export function Chat({
             return;
           }
 
-          setPendingHumanGate((current) => (current?.requestId === requestId ? null : current));
+          setPendingInteraction((current) =>
+            current?.interactionId === interactionId ? null : current,
+          );
         })
         .catch((error) => {
           if (
@@ -1274,7 +1276,7 @@ export function Chat({
           }
         });
     },
-    [notifyExecutionError, pendingHumanGate],
+    [notifyExecutionError, pendingInteraction],
   );
 
   const clearInFlightRef = React.useRef(false);
@@ -1286,7 +1288,7 @@ export function Chat({
       olderMessagesAbortRef.current?.abort();
       olderMessagesAbortRef.current = null;
       await interruptAndDispose("Conversation cleared.");
-      setPendingHumanGate(null);
+      setPendingInteraction(null);
       setCheckpointAvailability([]);
       messagesRef.current = [];
       setMessages([]);
@@ -1593,9 +1595,7 @@ export function Chat({
               isInitialLoading={isLoadingConversation}
               onLoadOlderMessages={() => void loadOlderMessages()}
               permissionMode={permissionMode}
-              onHumanResponse={({ approved, responseText, approvalScope = "once", responseData }) =>
-                submitHumanGateResponse(approved, responseText, approvalScope, responseData)
-              }
+              onHumanResponse={submitInteractionResponse}
               showCheckpointResume={target?.type === "agentflow"}
               checkpointResumeDisabled={checkpointResumeDisabled}
               onCheckpointResume={handleResumeCheckpoint}

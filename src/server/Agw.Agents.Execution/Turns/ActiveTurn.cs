@@ -1,4 +1,3 @@
-using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Agents.Execution.Turns;
@@ -10,14 +9,14 @@ public sealed class ActiveTurn : IAsyncDisposable
 {
     private readonly CancellationTokenSource _cancellationTokenSource;
     private readonly Action? _interruptAction;
-    private readonly Func<HumanResponseCommand, CancellationToken, ValueTask<bool>>? _submitHumanResponseAsync;
+    private readonly Func<InteractionResponse, CancellationToken, ValueTask<bool>>? _submitHumanResponseAsync;
     private readonly Func<PermissionMode, CancellationToken, ValueTask>? _setPermissionModeAsync;
 
     public ActiveTurn(
         Task executionTask,
         CancellationTokenSource cancellationTokenSource,
         Action? interruptAction = null,
-        Func<HumanResponseCommand, CancellationToken, ValueTask<bool>>? submitHumanResponseAsync = null,
+        Func<InteractionResponse, CancellationToken, ValueTask<bool>>? submitHumanResponseAsync = null,
         Func<PermissionMode, CancellationToken, ValueTask>? setPermissionModeAsync = null
     )
     {
@@ -48,10 +47,7 @@ public sealed class ActiveTurn : IAsyncDisposable
         _cancellationTokenSource.Cancel();
     }
 
-    public ValueTask<bool> TrySubmitHumanResponseAsync(
-        HumanResponseCommand command,
-        CancellationToken cancellationToken
-    )
+    public ValueTask<bool> TrySubmitHumanResponseAsync(InteractionResponse command, CancellationToken cancellationToken)
     {
         return _submitHumanResponseAsync?.Invoke(command, cancellationToken) ?? ValueTask.FromResult(false);
     }

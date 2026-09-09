@@ -588,7 +588,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
             new ServiceCollection().BuildServiceProvider()
         );
 
-        Assert.IsType<ToolApprovalAgent>(agent);
+        Assert.NotNull(agent.GetService<ToolApprovalAgent>());
         Assert.NotNull(agent.GetService<OpenTelemetryAgent>());
         Assert.Null(agent.GetService<LoopAgent>());
     }

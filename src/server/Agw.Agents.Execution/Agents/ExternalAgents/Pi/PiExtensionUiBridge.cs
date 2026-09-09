@@ -77,20 +77,15 @@ internal sealed class PiExtensionUiBridge
             }
         );
         var prompt = request.Title ?? request.Message ?? "Pi requires user input to continue.";
-        var interaction = new HumanInteractionRequest(request.Id, request.Method, prompt, payload)
+        var interaction = new UserInputRequest(request.Method, prompt, payload)
         {
-            ToolName = "PiExtensionUI",
-            CallId = request.Id,
+            Source = new InteractionSource { ToolName = "PiExtensionUI", CallId = request.Id },
         };
 
         try
         {
             var response = await channel.RequestAsync(interaction, cancellationToken).ConfigureAwait(false);
-            if (
-                response.Cancelled
-                || !string.Equals(response.RequestId, request.Id, StringComparison.Ordinal)
-                || !response.ResponseData.HasValue
-            )
+            if (response.Cancelled || !response.ResponseData.HasValue)
             {
                 return PiExtensionUiResponse.Cancel(request.Id);
             }

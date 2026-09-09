@@ -107,6 +107,8 @@ public sealed record DurableExecutionSettings
     /// </summary>
     public PermissionMode? PermissionMode { get; init; }
 
+    public long PermissionVersion { get; init; }
+
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public HumanInteractionPolicy HumanInteractionPolicy { get; init; } = HumanInteractionPolicy.Allow;
 

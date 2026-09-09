@@ -4,8 +4,8 @@ using Agw.Agents.Execution.Agentflows.Context;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agentflows.Workflows;
-using Agw.Agents.Execution.HumanInteraction.Approvals;
-using Agw.Agents.Execution.HumanInteraction.Contracts;
+using Agw.Agents.Execution.HumanInteraction.Application;
+using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.Turns;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
@@ -44,7 +44,7 @@ public sealed class InProcessAgentflowRunner
         AgentflowAgentSessionScope sessionScope,
         AgentflowExecutionTraceContext executionTraceContext,
         AgentflowWorkflowLease workflowLease,
-        IHumanGateApprovalHandler? humanGateApprovalHandler,
+        IInteractionHandler? interactionHandler,
         string executionUserId,
         Guid? sourceExecutionId,
         AgentflowCheckpointRuntimeState? checkpointState,
@@ -98,251 +98,286 @@ public sealed class InProcessAgentflowRunner
         var resumedCheckpointNodeIds =
             resumeCheckpoint?.Markers.Select(item => item.NodeId).ToHashSet(StringComparer.Ordinal) ?? [];
 
-        await foreach (var evt in run.WatchStreamAsync(cancellationToken).ConfigureAwait(false))
+        var executionCancellationToken = cancellationToken;
+        using var interactionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cancellationToken = interactionCancellation.Token;
+        var pendingInteractions = new List<Task<AgwMessage?>>();
+        await using var events = run.WatchStreamAsync(cancellationToken).GetAsyncEnumerator(cancellationToken);
+        Task<bool>? nextEvent = null;
+        try
         {
-            _logger.LogInformation("WorkflowEvent Type {Type}", evt.GetType().Name);
-            switch (evt)
+            while (true)
             {
-                case ExecutorInvokedEvent invoke:
-                    _logger.LogInformation("Starting {ExecutorId}", invoke.ExecutorId);
-                    break;
-
-                case ExecutorCompletedEvent complete:
-                    _logger.LogInformation("Completed {ExecutorId}, {Data}", complete.ExecutorId, complete.Data);
-                    break;
-
-                case RequestInfoEvent requestInfo:
+                nextEvent ??= events.MoveNextAsync().AsTask();
+                if (pendingInteractions.Count > 0)
                 {
-                    var externalRequest = requestInfo.Request;
-                    _logger.LogInformation(
-                        "External request {RequestId} from port {PortId}",
-                        externalRequest.RequestId,
-                        externalRequest.PortInfo.PortId
-                    );
-
-                    if (TryCreateCheckpointRequest(externalRequest, checkpointNodeNames, out var checkpointRequest))
+                    var ready = await Task.WhenAny(pendingInteractions.Cast<Task>().Append(nextEvent))
+                        .ConfigureAwait(false);
+                    if (ready != nextEvent)
                     {
-                        if (resumedCheckpointNodeIds.Remove(checkpointRequest.NodeId))
+                        var resolved = (Task<AgwMessage?>)ready;
+                        pendingInteractions.Remove(resolved);
+                        if (resolved.IsCanceled && cancellationToken.IsCancellationRequested)
                         {
-                            await ContinueCheckpointRequestsAsync(run, [checkpointRequest], cancellationToken)
-                                .ConfigureAwait(false);
+                            await run.CancelRunAsync().ConfigureAwait(false);
+                            yield break;
                         }
-                        else
+                        if (await resolved.ConfigureAwait(false) is { } rejection)
                         {
-                            pendingCheckpointRequests[externalRequest.RequestId] = checkpointRequest;
-                        }
-                        break;
-                    }
-
-                    if (
-                        externalRequest.TryGetDataAs(
-                            out Microsoft.Extensions.AI.ToolApprovalRequestContent? toolApprovalRequest
-                        )
-                    )
-                    {
-                        if (humanGateApprovalHandler == null)
-                        {
-                            _logger.LogWarning(
-                                "Tool approval {RequestId} has no active approval handler.",
-                                externalRequest.RequestId
-                            );
-                            await run.CancelRunAsync();
-                            yield return CreateToolApprovalUnavailableMessage(
-                                toolApprovalRequest,
-                                Guid.CreateVersion7().Normalize()
-                            );
+                            await run.CancelRunAsync().ConfigureAwait(false);
+                            yield return rejection;
                             yield return TurnMessageFactory.CreateFinished();
                             yield break;
                         }
-
-                        var toolApprovalGate = ToolApprovalSupport.CreateRequest(
-                            toolApprovalRequest,
-                            externalRequest.PortInfo.PortId
-                        );
-                        if (humanGateApprovalHandler.RequiresHumanResponse(toolApprovalGate))
-                        {
-                            yield return ToolApprovalSupport.CreateMessage(toolApprovalGate);
-                        }
-
-                        var toolDecision = await humanGateApprovalHandler.WaitForApprovalAsync(
-                            toolApprovalGate,
-                            cancellationToken
-                        );
-                        var response = ToolApprovalSupport.CreateWorkflowResponse(toolApprovalRequest, toolDecision);
-                        await run.SendResponseAsync(externalRequest.CreateResponse(response));
-                        break;
+                        continue;
                     }
-
-                    if (!humanGateNodes.TryGetValue(externalRequest.PortInfo.PortId, out var humanGateNode))
-                    {
-                        break;
-                    }
-
-                    var approvalRequest = CreateHumanGateApprovalRequest(externalRequest, humanGateNode);
-                    using var humanGateActivity = AgentflowNodeExecutionActivity.StartHumanGate(
-                        executionTraceContext,
-                        agentflowId,
-                        humanGateNode.NodeId,
-                        humanGateNode.Name,
-                        approvalRequest.Messages
-                    );
-
-                    if (humanGateApprovalHandler == null)
-                    {
-                        humanGateActivity.Fail(
-                            "HumanGateApprovalHandlerUnavailable: No approval handler was provided."
-                        );
-                        _logger.LogWarning(
-                            "HumanGate {PortId} requested approval but no approval handler was provided.",
-                            externalRequest.PortInfo.PortId
-                        );
-                        await run.CancelRunAsync();
-                        yield return CreateHumanGateUnavailableMessage(
-                            humanGateNode,
-                            Guid.CreateVersion7().Normalize()
-                        );
-                        yield return TurnMessageFactory.CreateFinished();
-                        yield break;
-                    }
-
-                    var approvalTask = humanGateApprovalHandler
-                        .WaitForApprovalAsync(approvalRequest, cancellationToken)
-                        .AsTask();
-
-                    yield return CreateHumanGateApprovalRequestMessage(
-                        approvalRequest,
-                        Guid.CreateVersion7().Normalize()
-                    );
-
-                    HumanGateApprovalDecision decision;
-                    try
-                    {
-                        decision = await approvalTask;
-                    }
-                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                    {
-                        humanGateActivity.Cancel();
-                        await run.CancelRunAsync();
-                        yield break;
-                    }
-                    catch (Exception exception)
-                    {
-                        humanGateActivity.Fail(exception);
-                        throw;
-                    }
-
-                    if (!decision.Approved)
-                    {
-                        humanGateActivity.Reject();
-                        await run.CancelRunAsync();
-                        yield return CreateHumanGateRejectedMessage(approvalRequest, Guid.CreateVersion7().Normalize());
-                        yield return TurnMessageFactory.CreateFinished();
-                        yield break;
-                    }
-
-                    var responseMessages = CreateHumanGateResponseMessages(approvalRequest.Messages, decision);
-                    try
-                    {
-                        await run.SendResponseAsync(externalRequest.CreateResponse(responseMessages));
-                        humanGateActivity.Complete();
-                    }
-                    catch (OperationCanceledException)
-                    {
-                        humanGateActivity.Cancel();
-                        throw;
-                    }
-                    catch (Exception exception)
-                    {
-                        humanGateActivity.Fail(exception);
-                        throw;
-                    }
-
-                    break;
                 }
-
-                case AgentResponseUpdateEvent updateEvt when updateEvt.Data is AgentResponseUpdate update:
-                    _logger.LogInformation(
-                        "AgentResponseUpdateEvent {ExecutorId}, {Data}",
-                        updateEvt.ExecutorId,
-                        updateEvt.Data
-                    );
-                    executorsWithUpdates.Add(updateEvt.ExecutorId);
-                    foreach (var chatMsg in MapEvent(evt))
-                    {
-                        yield return chatMsg;
-                    }
-
+                bool available;
+                try
+                {
+                    available = await nextEvent.ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    available = false;
+                }
+                if (!available)
                     break;
+                var evt = events.Current;
+                nextEvent = null;
+                _logger.LogInformation("WorkflowEvent Type {Type}", evt.GetType().Name);
+                switch (evt)
+                {
+                    case ExecutorInvokedEvent invoke:
+                        _logger.LogInformation("Starting {ExecutorId}", invoke.ExecutorId);
+                        break;
 
-                case AgentResponseEvent responseEvt when responseEvt.Data is AgentResponse response:
-                    _logger.LogInformation(
-                        "AgentResponseEvent {ExecutorId}, {Data}",
-                        responseEvt.ExecutorId,
-                        responseEvt.Data
-                    );
-                    if (executorsWithUpdates.Contains(responseEvt.ExecutorId))
+                    case ExecutorCompletedEvent complete:
+                        _logger.LogInformation("Completed {ExecutorId}, {Data}", complete.ExecutorId, complete.Data);
+                        break;
+
+                    case RequestInfoEvent requestInfo:
                     {
+                        var externalRequest = requestInfo.Request;
+                        _logger.LogInformation(
+                            "External request {RequestId} from port {PortId}",
+                            externalRequest.RequestId,
+                            externalRequest.PortInfo.PortId
+                        );
+
+                        if (TryCreateCheckpointRequest(externalRequest, checkpointNodeNames, out var checkpointRequest))
+                        {
+                            if (resumedCheckpointNodeIds.Remove(checkpointRequest.NodeId))
+                            {
+                                await ContinueCheckpointRequestsAsync(run, [checkpointRequest], cancellationToken)
+                                    .ConfigureAwait(false);
+                            }
+                            else
+                            {
+                                pendingCheckpointRequests[externalRequest.RequestId] = checkpointRequest;
+                            }
+                            break;
+                        }
+
+                        var request = CreateInteractionRequest(
+                            externalRequest,
+                            humanGateNodes,
+                            interactionHandler?.Requests
+                        );
+                        if (request is null)
+                            break;
+                        if (interactionHandler is null)
+                        {
+                            await run.CancelRunAsync().ConfigureAwait(false);
+                            yield return request is WorkflowGateInteraction gate
+                                ? CreateHumanGateUnavailableMessage(
+                                    humanGateNodes[gate.Source.NodeId!],
+                                    Guid.CreateVersion7().Normalize()
+                                )
+                                : CreateToolApprovalUnavailableMessage(
+                                    GetToolApproval(externalRequest),
+                                    Guid.CreateVersion7().Normalize()
+                                );
+                            yield return TurnMessageFactory.CreateFinished();
+                            yield break;
+                        }
+                        // Keep consuming workflow events while each independent request awaits its response.
+                        pendingInteractions.Add(
+                            ResolveWorkflowInteractionAsync(
+                                run,
+                                externalRequest,
+                                request,
+                                interactionHandler,
+                                executionTraceContext,
+                                agentflowId,
+                                cancellationToken
+                            )
+                        );
                         break;
                     }
 
-                    foreach (var responseMsg in MapEvent(evt))
-                    {
-                        yield return responseMsg;
-                    }
-
-                    break;
-
-                case WorkflowOutputEvent outputEvt:
-                    _logger.LogInformation("Workflow output: {Data}", outputEvt.Data);
-                    foreach (var outputMessage in MapEvent(evt))
-                    {
-                        yield return outputMessage;
-                    }
-
-                    break;
-
-                case SuperStepCompletedEvent completed:
-                    var checkpointMarkers = CreateCheckpointMarkers(pendingCheckpointRequests.Values);
-                    var recorded = await _checkpointSupport
-                        .RecordCheckpointAsync(
-                            sourceExecutionId,
-                            sessionScope.ProjectId,
-                            sessionScope.ConversationId,
-                            executionTraceContext.ContextId,
-                            executionTraceContext.TaskId,
-                            agentflowId,
-                            executionUserId,
-                            isDurable: false,
-                            definitionFingerprint,
-                            checkpointedRun.Store,
-                            completed.CompletionInfo?.Checkpoint,
-                            checkpointMarkers,
-                            cancellationToken
-                        )
-                        .ConfigureAwait(false);
-                    if (recorded != null)
-                    {
-                        checkpointState?.Register(recorded.Snapshot);
-                        foreach (var checkpointMessage in recorded.Messages)
+                    case AgentResponseUpdateEvent updateEvt when updateEvt.Data is AgentResponseUpdate update:
+                        _logger.LogInformation(
+                            "AgentResponseUpdateEvent {ExecutorId}, {Data}",
+                            updateEvt.ExecutorId,
+                            updateEvt.Data
+                        );
+                        executorsWithUpdates.Add(updateEvt.ExecutorId);
+                        foreach (var chatMsg in MapEvent(evt))
                         {
-                            yield return checkpointMessage;
+                            yield return chatMsg;
                         }
-                    }
-                    _checkpointSupport.LogCheckpoint(completed, checkpointMarkers);
-                    await ContinueCheckpointRequestsAsync(run, pendingCheckpointRequests.Values, cancellationToken)
-                        .ConfigureAwait(false);
-                    pendingCheckpointRequests.Clear();
-                    break;
 
-                case WorkflowErrorEvent error:
-                    _logger.LogError(error.Exception, "Workflow error");
-                    yield return CreateWorkflowErrorMessage(error.Exception, Guid.CreateVersion7().Normalize());
-                    yield return TurnMessageFactory.CreateFinished();
-                    yield break;
+                        break;
+
+                    case AgentResponseEvent responseEvt when responseEvt.Data is AgentResponse response:
+                        _logger.LogInformation(
+                            "AgentResponseEvent {ExecutorId}, {Data}",
+                            responseEvt.ExecutorId,
+                            responseEvt.Data
+                        );
+                        if (executorsWithUpdates.Contains(responseEvt.ExecutorId))
+                        {
+                            break;
+                        }
+
+                        foreach (var responseMsg in MapEvent(evt))
+                        {
+                            yield return responseMsg;
+                        }
+
+                        break;
+
+                    case WorkflowOutputEvent outputEvt:
+                        _logger.LogInformation("Workflow output: {Data}", outputEvt.Data);
+                        foreach (var outputMessage in MapEvent(evt))
+                        {
+                            yield return outputMessage;
+                        }
+
+                        break;
+
+                    case SuperStepCompletedEvent completed:
+                        var checkpointMarkers = CreateCheckpointMarkers(pendingCheckpointRequests.Values);
+                        var recorded = await _checkpointSupport
+                            .RecordCheckpointAsync(
+                                sourceExecutionId,
+                                sessionScope.ProjectId,
+                                sessionScope.ConversationId,
+                                executionTraceContext.ContextId,
+                                executionTraceContext.TaskId,
+                                agentflowId,
+                                executionUserId,
+                                isDurable: false,
+                                definitionFingerprint,
+                                checkpointedRun.Store,
+                                completed.CompletionInfo?.Checkpoint,
+                                checkpointMarkers,
+                                cancellationToken
+                            )
+                            .ConfigureAwait(false);
+                        if (recorded != null)
+                        {
+                            checkpointState?.Register(recorded.Snapshot);
+                            foreach (var checkpointMessage in recorded.Messages)
+                            {
+                                yield return checkpointMessage;
+                            }
+                        }
+                        _checkpointSupport.LogCheckpoint(completed, checkpointMarkers);
+                        await ContinueCheckpointRequestsAsync(run, pendingCheckpointRequests.Values, cancellationToken)
+                            .ConfigureAwait(false);
+                        pendingCheckpointRequests.Clear();
+                        break;
+
+                    case WorkflowErrorEvent error:
+                        _logger.LogError(error.Exception, "Workflow error");
+                        yield return CreateWorkflowErrorMessage(error.Exception, Guid.CreateVersion7().Normalize());
+                        yield return TurnMessageFactory.CreateFinished();
+                        yield break;
+                }
             }
         }
+        finally
+        {
+            await interactionCancellation.CancelAsync().ConfigureAwait(false);
+            await ((Task)Task.WhenAll(pendingInteractions)).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            if (nextEvent is not null)
+                await ((Task)nextEvent).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        }
+        if (!executionCancellationToken.IsCancellationRequested)
+            yield return TurnMessageFactory.CreateFinished();
+    }
 
-        yield return TurnMessageFactory.CreateFinished();
+    private static ToolApprovalRequestContent GetToolApproval(ExternalRequest request)
+    {
+        request.TryGetDataAs<ToolApprovalRequestContent>(out var approval);
+        return approval!;
+    }
+
+    private static async Task<AgwMessage?> ResolveWorkflowInteractionAsync(
+        StreamingRun run,
+        ExternalRequest externalRequest,
+        InteractionRequest request,
+        IInteractionHandler handler,
+        AgentflowExecutionTraceContext trace,
+        Guid agentflowId,
+        CancellationToken cancellationToken
+    )
+    {
+        using var activity = request is WorkflowGateInteraction gate
+            ? AgentflowNodeExecutionActivity.StartHumanGate(
+                trace,
+                agentflowId,
+                gate.Source.NodeId!,
+                gate.Source.NodeName,
+                GetHumanGateMessages(externalRequest)
+            )
+            : null;
+        try
+        {
+            var response = InteractionResults.RequireResolved(
+                await handler.ResolveAsync(request, cancellationToken).ConfigureAwait(false)
+            );
+            if (response is WorkflowGateDecision decision)
+            {
+                if (!decision.Approved)
+                {
+                    activity?.Reject();
+                    return CreateHumanGateRejectedMessage(
+                        (WorkflowGateInteraction)request,
+                        Guid.CreateVersion7().Normalize()
+                    );
+                }
+                await run.SendResponseAsync(
+                        externalRequest.CreateResponse(
+                            CreateHumanGateResponseMessages(GetHumanGateMessages(externalRequest), decision)
+                        )
+                    )
+                    .ConfigureAwait(false);
+            }
+            else
+            {
+                await run.SendResponseAsync(
+                        externalRequest.CreateResponse(
+                            MafApprovalAdapter.CreateWorkflowResponse(GetToolApproval(externalRequest), response)
+                        )
+                    )
+                    .ConfigureAwait(false);
+            }
+            activity?.Complete();
+            return null;
+        }
+        catch (OperationCanceledException)
+        {
+            activity?.Cancel();
+            throw;
+        }
+        catch (Exception exception)
+        {
+            activity?.Fail(exception);
+            throw;
+        }
     }
 
     internal async Task<AgentflowExecutionResult> ExecuteAsync(
@@ -352,7 +387,7 @@ public sealed class InProcessAgentflowRunner
         AgentflowWorkflowLease workflowLease,
         List<ChatMessage> messages,
         CancellationToken cancellationToken,
-        IHumanGateApprovalHandler? approvalHandler = null
+        IInteractionHandler? approvalHandler = null
     )
     {
         var workflow = workflowLease.Workflow;
@@ -394,17 +429,19 @@ public sealed class InProcessAgentflowRunner
                     );
                 }
 
-                var request = ToolApprovalSupport.CreateRequest(
+                var request = MafApprovalAdapter.CreateRequest(
                     toolApprovalRequest,
                     requestInfo.Request.PortInfo.PortId
                 );
-                var decision = await (approvalHandler ?? UnattendedApprovalHandler.Create(null)).WaitForApprovalAsync(
-                    request,
-                    cancellationToken
+                var decision = InteractionResults.RequireResolved(
+                    await (approvalHandler ?? new UnattendedInteractionHandler(null)).ResolveAsync(
+                        request,
+                        cancellationToken
+                    )
                 );
                 await run.SendResponseAsync(
                     requestInfo.Request.CreateResponse(
-                        ToolApprovalSupport.CreateWorkflowResponse(toolApprovalRequest, decision)
+                        MafApprovalAdapter.CreateWorkflowResponse(toolApprovalRequest, decision)
                     )
                 );
             }

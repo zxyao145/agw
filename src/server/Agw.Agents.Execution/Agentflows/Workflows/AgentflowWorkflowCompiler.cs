@@ -6,7 +6,7 @@ using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agentflows.Workflows.Builders;
 using Agw.Agents.Execution.Agents.Sessions;
-using Agw.Agents.Execution.HumanInteraction.Approvals;
+using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.Summaries;
 using Agw.Shared.Data.Entities.Agentflows;
 using Microsoft.Agents.AI;
@@ -25,7 +25,7 @@ internal sealed class AgentflowAgentSessionScope
         AgentSessionStateStore? sessionStateStore = null,
         IConversationHistoryWriter? conversationHistoryWriter = null,
         Guid conversationId = default,
-        PermissionModeState? permissionState = null
+        MafPermissionState? permissionState = null
     )
     {
         ProviderSessionState = providerSessionState;
@@ -35,7 +35,7 @@ internal sealed class AgentflowAgentSessionScope
         TaskId = taskId;
         SessionStateStore = sessionStateStore;
         ConversationHistoryWriter = conversationHistoryWriter;
-        PermissionState = permissionState ?? new PermissionModeState(permissionMode: null);
+        PermissionState = permissionState ?? new MafPermissionState(permissionMode: null);
     }
 
     public IProviderSessionState ProviderSessionState { get; }
@@ -48,7 +48,7 @@ internal sealed class AgentflowAgentSessionScope
 
     public Guid? TaskId { get; }
 
-    public PermissionModeState PermissionState { get; }
+    public MafPermissionState PermissionState { get; }
 
     private AgentSessionStateStore? SessionStateStore { get; }
 

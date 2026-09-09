@@ -84,14 +84,59 @@ Object.defineProperty(window, "matchMedia", {
 
 const { cleanup, fireEvent, render, screen } = await import("@testing-library/react");
 const { HumanInteractionQuestions } = await import("./human-interaction-questions.tsx");
+const { HumanInteractionPanel } = await import("./human-interaction-panel.tsx");
 
 afterEach(() => cleanup());
 after(() => dom.window.close());
 
+for (const inputKind of ["confirm", "select", "input", "editor"]) {
+  test(`Pi ${inputKind} submits provider data and retains an explicit cancellation action`, () => {
+    const submitted: unknown[] = [];
+    let cancelled = false;
+    render(
+      React.createElement(HumanInteractionPanel, {
+        request: {
+          kind: "user-input",
+          interactionId: `pi-${inputKind}`,
+          source: {},
+          prompt: "Pi input",
+          inputKind,
+          payload: { Options: ["A", "B"], Placeholder: "Answer", Prefill: "Original" },
+        },
+        onSubmit: (value) => {
+          submitted.push(value);
+        },
+        onCancel: () => {
+          cancelled = true;
+        },
+      }),
+    );
+    if (inputKind === "select")
+      fireEvent.click(screen.getByRole("button", { name: "B", exact: true }));
+    else if (inputKind !== "confirm")
+      fireEvent.change(screen.getByRole("textbox"), { target: { value: "  revised\ntext  " } });
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: inputKind === "confirm" ? "Confirm" : "Submit",
+        exact: true,
+      }),
+    );
+    assert.deepEqual(submitted, [
+      inputKind === "confirm"
+        ? { confirmed: true }
+        : { value: inputKind === "select" ? "B" : "  revised\ntext  " },
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel", exact: true }));
+    assert.equal(cancelled, true);
+  });
+}
+
 const request = {
-  requestType: "human-interaction" as const,
-  requestId: "request-1",
-  mode: "interaction",
+  kind: "user-input" as const,
+  interactionId: "request-1",
+  source: {},
+  inputKind: "questions",
+  payload: {},
   prompt: "Choose one.",
   questions: [
     {

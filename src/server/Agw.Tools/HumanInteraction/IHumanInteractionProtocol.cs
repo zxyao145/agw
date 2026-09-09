@@ -4,9 +4,9 @@ namespace Agw.Tools.HumanInteraction;
 
 public interface IHumanInteractionProtocol
 {
-    HumanInteractionRequest CreateRequest(string requestId, AIFunctionArguments arguments);
+    UserInputRequest CreateRequest(AIFunctionArguments arguments);
 
-    AIFunctionArguments BindResponse(AIFunctionArguments arguments, HumanInteractionResponse response);
+    AIFunctionArguments BindResponse(AIFunctionArguments arguments, UserInputResponse response);
 
-    object? CreateCancelledResult(AIFunctionArguments arguments, HumanInteractionResponse response);
+    object? CreateCancelledResult(AIFunctionArguments arguments, UserInputResponse response);
 }

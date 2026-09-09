@@ -1,6 +1,6 @@
 using Agw.Agents.Contracts.Catalog;
 using Agw.Agents.Execution.Agentflows.Workflows;
-using Agw.Agents.Execution.HumanInteraction.Contracts;
+using Agw.Agents.Execution.HumanInteraction.Application;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Execution.Agentflows.Runtime;
@@ -14,7 +14,7 @@ public interface IAgentflowRuntimeService : IAgentflowMermaidProvider
         Guid? projectId = null,
         string? contextId = null,
         Guid? taskId = null,
-        IHumanGateApprovalHandler? humanGateApprovalHandler = null,
+        IInteractionHandler? interactionHandler = null,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         Guid? conversationId = null,
         PermissionMode? permissionMode = null

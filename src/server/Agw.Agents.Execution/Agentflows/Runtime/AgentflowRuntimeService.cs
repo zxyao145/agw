@@ -6,8 +6,8 @@ using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agentflows.Runners.Durable;
 using Agw.Agents.Execution.Agentflows.Runners.InProcess;
 using Agw.Agents.Execution.Agentflows.Workflows;
-using Agw.Agents.Execution.HumanInteraction.Approvals;
-using Agw.Agents.Execution.HumanInteraction.Contracts;
+using Agw.Agents.Execution.HumanInteraction.Application;
+using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Agents.Execution.Turns;
@@ -64,7 +64,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         Guid? projectId = null,
         string? contextId = null,
         Guid? taskId = null,
-        IHumanGateApprovalHandler? humanGateApprovalHandler = null,
+        IInteractionHandler? interactionHandler = null,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         Guid? conversationId = null,
         PermissionMode? permissionMode = null
@@ -76,10 +76,10 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             projectId,
             contextId,
             taskId,
-            humanGateApprovalHandler,
+            interactionHandler,
             environmentVariables,
             conversationId,
-            new PermissionModeState(permissionMode),
+            new MafPermissionState(permissionMode),
             sourceExecutionId: null,
             checkpointState: null,
             resumeCheckpoint: null
@@ -92,10 +92,10 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         Guid? projectId,
         string? contextId,
         Guid? taskId,
-        IHumanGateApprovalHandler? humanGateApprovalHandler,
+        IInteractionHandler? interactionHandler,
         IReadOnlyDictionary<string, string>? environmentVariables,
         Guid? conversationId,
-        PermissionModeState permissionState,
+        MafPermissionState permissionState,
         Guid? sourceExecutionId,
         AgentflowCheckpointRuntimeState checkpointState,
         AgentflowCheckpointSnapshot? resumeCheckpoint
@@ -107,7 +107,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
             projectId,
             contextId,
             taskId,
-            humanGateApprovalHandler,
+            interactionHandler,
             environmentVariables,
             conversationId,
             permissionState,
@@ -123,10 +123,10 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         Guid? projectId,
         string? contextId,
         Guid? taskId,
-        IHumanGateApprovalHandler? humanGateApprovalHandler,
+        IInteractionHandler? interactionHandler,
         IReadOnlyDictionary<string, string>? environmentVariables,
         Guid? conversationId,
-        PermissionModeState permissionState,
+        MafPermissionState permissionState,
         Guid? sourceExecutionId,
         AgentflowCheckpointRuntimeState? checkpointState,
         AgentflowCheckpointSnapshot? resumeCheckpoint
@@ -207,7 +207,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                                 sessionScope,
                                 executionTraceContext,
                                 workflowLease,
-                                humanGateApprovalHandler,
+                                interactionHandler,
                                 executionUserId,
                                 sourceExecutionId,
                                 checkpointState,
@@ -275,7 +275,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                 manifest.Task.TaskId,
                 manifest.Task.ProjectConversationId,
                 cancellationToken,
-                new PermissionModeState(manifest.Settings.PermissionMode)
+                _durableRunner.CreatePermissionState(manifest)
             )
             .ConfigureAwait(false);
         var workflowLease = await _workflowFactory.CreateAiWorkflow(
@@ -394,7 +394,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                 taskId,
                 conversationId: null,
                 cancellationToken,
-                new PermissionModeState(permissionMode)
+                new MafPermissionState(permissionMode)
             )
             .ConfigureAwait(false);
         await using var historyScope = ConversationHistoryPersistenceContext.BeginScope(
@@ -426,7 +426,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
                     workflowLease,
                     messages,
                     cancellationToken,
-                    UnattendedApprovalHandler.Create(permissionMode)
+                    new UnattendedInteractionHandler(permissionMode)
                 )
             )
             .ConfigureAwait(false);

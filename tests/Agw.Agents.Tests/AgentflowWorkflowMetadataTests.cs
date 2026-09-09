@@ -69,13 +69,15 @@ public partial class AgentflowRuntimeServiceTests
         ]);
         fixture.Nodes[1].ConfigJson = """{"humanPrompt":"original prompt"}""";
         var first = new List<AgwMessage>();
+        var firstHandler = new FixedApprovalHandler(false);
+        var secondHandler = new FixedApprovalHandler(false);
 
         await foreach (
             var message in fixture.Service.ExecuteStreamingAsync(
                 fixture.Flow.Id,
                 "input",
                 TestContext.Current.CancellationToken,
-                humanGateApprovalHandler: new FixedApprovalHandler(false)
+                interactionHandler: firstHandler
             )
         )
         {
@@ -88,16 +90,16 @@ public partial class AgentflowRuntimeServiceTests
                 fixture.Flow.Id,
                 "input",
                 TestContext.Current.CancellationToken,
-                humanGateApprovalHandler: new FixedApprovalHandler(false)
+                interactionHandler: secondHandler
             )
         );
 
-        var original = Assert.Single(first, message => MessageShape(message) == "human-gate-request");
-        var updated = Assert.Single(second, message => MessageShape(message) == "human-gate-request");
-        Assert.Equal("original prompt", original.AdditionalProperties!["prompt"]);
-        Assert.Equal("Node 1", original.AdditionalProperties["nodeName"]);
-        Assert.Equal("updated prompt", updated.AdditionalProperties!["prompt"]);
-        Assert.Equal("updated name", updated.AdditionalProperties["nodeName"]);
+        var original = Assert.Single(firstHandler.Requests);
+        var updated = Assert.Single(secondHandler.Requests);
+        Assert.Equal("original prompt", original.Prompt);
+        Assert.Equal("Node 1", original.Source.NodeName);
+        Assert.Equal("updated prompt", updated.Prompt);
+        Assert.Equal("updated name", updated.Source.NodeName);
         Assert.Equal(2, fixture.NodeRepository.ListCallCount);
     }
 }

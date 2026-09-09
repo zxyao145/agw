@@ -1,0 +1,151 @@
+using Agw.Agents.Execution.HumanInteraction.Application;
+using Agw.Agents.Execution.Outbound;
+using Agw.Shared.Exceptions;
+
+namespace Agw.Agents.Execution.HumanInteraction.InProcess;
+
+/// <summary>Owns the complete interaction lifecycle for one in-process turn.</summary>
+public sealed class InProcessInteractionSession : IInteractionHandler, IHumanInteractionChannel
+{
+    private readonly object _sync = new();
+    private readonly Dictionary<string, PendingInteraction> _pending = new(StringComparer.Ordinal);
+    private readonly IExecutionMessageSink _sink;
+    private readonly InteractionPermissionState _permissions;
+    private readonly Action<int>? _pendingCountChanged;
+    private bool _closed;
+    public IInteractionRequestRegistry Requests { get; } = new InteractionRequestRegistry();
+    internal InteractionPermissionState PermissionState => _permissions;
+
+    public InProcessInteractionSession(
+        IExecutionMessageSink sink,
+        PermissionMode? permissionMode = null,
+        Action<int>? pendingCountChanged = null
+    )
+        : this(sink, new InteractionPermissionState(permissionMode), pendingCountChanged) { }
+
+    internal InProcessInteractionSession(
+        IExecutionMessageSink sink,
+        InteractionPermissionState permissions,
+        Action<int>? pendingCountChanged = null
+    )
+    {
+        _sink = sink;
+        _permissions = permissions;
+        _pendingCountChanged = pendingCountChanged;
+    }
+
+    public async ValueTask<InteractionResolution> ResolveAsync(
+        InteractionRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        cancellationToken.ThrowIfCancellationRequested();
+        PendingInteraction pending;
+        lock (_sync)
+        {
+            if (_closed)
+                throw new AgwException(ErrorCodes.AgentExecutionFailed, "The interaction session has ended.");
+            if (InteractionRules.AutomaticallyApprove(request, _permissions.Current) is { } automatic)
+                return new InteractionResolution.Resolved(automatic);
+
+            pending = new PendingInteraction(request, new(TaskCreationOptions.RunContinuationsAsynchronously));
+            if (!_pending.TryAdd(request.InteractionId, pending))
+                throw new AgwException(ErrorCodes.InvalidParam, "This interaction is already pending.");
+            _pendingCountChanged?.Invoke(_pending.Count);
+        }
+
+        try
+        {
+            // A response can arrive while WriteAsync is still running.
+            await _sink
+                .WriteAsync(
+                    InteractionMessageMapper.Create(request, Guid.CreateVersion7().ToString("N")),
+                    cancellationToken
+                )
+                .ConfigureAwait(false);
+            var response = await pending.Completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
+            return new InteractionResolution.Resolved(
+                InteractionRules.ValidateAndNormalize(request, response, _permissions.Current)
+            );
+        }
+        finally
+        {
+            lock (_sync)
+            {
+                if (_pending.TryGetValue(request.InteractionId, out var current) && ReferenceEquals(current, pending))
+                {
+                    _pending.Remove(request.InteractionId);
+                    _pendingCountChanged?.Invoke(_pending.Count);
+                }
+            }
+        }
+    }
+
+    public async ValueTask<UserInputResponse> RequestAsync(
+        UserInputRequest request,
+        CancellationToken cancellationToken
+    )
+    {
+        var interaction = new UserInputInteraction
+        {
+            InteractionId = Guid.CreateVersion7().ToString("N"),
+            Prompt = request.Prompt,
+            Source = request.Source,
+            InputKind = request.InputKind,
+            Payload = request.Payload,
+        };
+        var result = await ResolveAsync(interaction, cancellationToken).ConfigureAwait(false);
+        return (UserInputResponse)((InteractionResolution.Resolved)result).Response;
+    }
+
+    public ValueTask<bool> TrySubmitAsync(InteractionResponse response, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(response);
+        if (cancellationToken.IsCancellationRequested)
+            return ValueTask.FromResult(false);
+        lock (_sync)
+        {
+            if (!_pending.TryGetValue(response.InteractionId, out var pending))
+                return ValueTask.FromResult(false);
+            var decision = InteractionRules.ValidateAndNormalize(pending.Request, response, _permissions.Current);
+            _pending.Remove(response.InteractionId);
+            pending.Completion.TrySetResult(decision);
+            _pendingCountChanged?.Invoke(_pending.Count);
+            return ValueTask.FromResult(true);
+        }
+    }
+
+    public void SetPermissionMode(PermissionMode mode)
+    {
+        lock (_sync)
+        {
+            _permissions.Set(mode);
+            foreach (var (id, pending) in _pending.ToArray())
+            {
+                if (InteractionRules.AutomaticallyApprove(pending.Request, mode) is not { } decision)
+                    continue;
+                _pending.Remove(id);
+                pending.Completion.TrySetResult(decision);
+            }
+            _pendingCountChanged?.Invoke(_pending.Count);
+        }
+    }
+
+    public void CancelAll()
+    {
+        lock (_sync)
+        {
+            _closed = true;
+            foreach (var pending in _pending.Values)
+                pending.Completion.TrySetCanceled();
+            _pending.Clear();
+            _pendingCountChanged?.Invoke(0);
+        }
+    }
+
+    private sealed record PendingInteraction(
+        InteractionRequest Request,
+        TaskCompletionSource<InteractionResponse> Completion
+    );
+}

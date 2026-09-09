@@ -275,7 +275,7 @@ Starter 保存 Runtime 引用，Context 维护 settings、target、generation �
 2. Starter 用请求数据和连接资源构造 `RuntimeTurnContext`，把旧 Runtime 一起交给 Factory。
 3. Factory 建立会话代次上下文，通过 `IConversationExecutionGate` 获取 conversation 执行 lease，并链接 Host token 与 lease 丢失信号。
 4. Factory 经文件系统 resolver 检查 workspace，按 Agent / Agentflow 类型创建或复用 Runtime。
-5. 为本轮创建 `PermissionModeState`、`HumanGateApprovalCoordinator` 和 `PermissionAwareApprovalHandler`。
+5. 为本轮创建 `MafPermissionState` 和共享同一权限状态的 `InProcessInteractionSession`。
 6. Factory 调用 `RuntimeBase.StartTurn`，安装执行、中断、人工回答与权限切换委托。
 7. Starter 保存返回的 Runtime，并根据是否取得 ActiveTurn 返回回执。
 8. 后台执行把引擎消息交给 TurnPipeline；turn 完全空闲后释放 conversation lease。
@@ -300,7 +300,7 @@ AgentflowRuntime 的复用依赖外层 Context / Starter 已处理 target、sett
 
 Agent 路径调用 AgentRuntimeService 的流式或非流式方法；Agentflow 路径通过 AgentflowRuntime 调用 RuntimeService 与 InProcess Runner。两者的输出最终都进入 TurnPipeline，后者发送 `turn-start`、普通消息与 `turn-finished`，并统一处理执行失败和取消。
 
-`stream=false` 时普通输出缓冲到结束；需要用户处理的控制消息保持可见。人工交互通过 `HumanInteractionContextAccessor` 暴露本轮的 `ExecutionHumanInteractionChannel`，Coordinator 按请求等待并接收回答。等待期间 ActiveTurn 和执行资源仍然存活。
+`stream=false` 时普通输出缓冲到结束；需要用户处理的控制消息保持可见。人工交互通过 `HumanInteractionContextAccessor` 暴露本轮的 `InProcessInteractionSession`；该对象统一登记、发布、等待和清理，并按 pending 总数报告等待状态。等待期间 ActiveTurn 和执行资源仍然存活。
 
 启动方法收到的 cancellation token 只在 Starter 受理前检查；Factory 仍使用连接创建时绑定的 Host token。普通断线不直接取消正在运行的 turn，连接先标记 detached，等待持久化与收尾后再释放 scope；若正在等待人工回答，则请求中断。Host 关闭和显式 interrupt 通过既有执行取消链终止工作。
 
@@ -449,7 +449,7 @@ InProcess 在内存中等待用户回答；Durable 将等待边界保存后释�
 4. 相同回答可幂等重试，冲突回答被拒绝。当前批次回答全部到齐后，状态变为 `Resuming`。
 5. Worker 重新领取；SegmentInput 携带请求与回答的配对结果，Runner 把响应注入 SDK / Workflow，并通过 `ResolvedHumanInteractionChannel` 为实际 Tool 提供已保存的信息。
 
-权限策略仍使用共享的 `PermissionAwareApprovalHandler` 或 `UnattendedApprovalHandler`。无人值守拒绝策略不会创建一个永远等不到回答的后台等待。审批规则和交互协议的归属是 [HumanInteraction](../HumanInteraction/)，Worker 只协调持久状态。
+权限判断和响应归一共用 `InteractionRules`；`DurableInteractionHandler` 返回显式 `Resolved` / `Pending`，`UnattendedInteractionHandler` 明确拒绝无法提供人工输入的调用。无人值守拒绝策略不会创建一个永远等不到回答的后台等待。审批规则和交互协议的归属是 [HumanInteraction](../HumanInteraction/)，Worker 只协调持久状态。
 
 显式 checkpoint 分支与“同一次 execution 的人工回答续跑”也不同：Durable 的 `ResumeCheckpointAsync` 等待来源 execution 的锁，在 checkpoint 能力中校验并准备新的恢复 execution，再让 Session 附着新 ID。它是专门的控制路径，不重复登记一个普通启动清单。
 

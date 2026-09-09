@@ -1,4 +1,3 @@
-using Agw.Agents.Execution.HumanInteraction.Contracts;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Outbound;
 
@@ -12,7 +11,7 @@ public sealed record RuntimeTurnContext
         ExecutionTarget target,
         string workspace,
         IExecutionMessageSink messageSink,
-        Action<HumanGateApprovalRequest?>? pendingHumanGateChanged = null
+        Action<int>? pendingInteractionCountChanged = null
     )
     {
         Settings = settings;
@@ -20,7 +19,7 @@ public sealed record RuntimeTurnContext
         Target = target;
         Workspace = workspace;
         MessageSink = messageSink;
-        PendingHumanGateChanged = pendingHumanGateChanged;
+        PendingInteractionCountChanged = pendingInteractionCountChanged;
     }
 
     public ExecutionSettings Settings { get; }
@@ -45,5 +44,5 @@ public sealed record RuntimeTurnContext
 
     public IExecutionMessageSink MessageSink { get; }
 
-    public Action<HumanGateApprovalRequest?>? PendingHumanGateChanged { get; }
+    public Action<int>? PendingInteractionCountChanged { get; }
 }

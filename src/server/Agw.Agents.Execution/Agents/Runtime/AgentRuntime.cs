@@ -1,8 +1,8 @@
 using System.Runtime.CompilerServices;
 using Agw.Agents.Execution.Agents.Sessions;
 using Agw.Agents.Execution.Agents.Tools;
-using Agw.Agents.Execution.HumanInteraction.Approvals;
-using Agw.Agents.Execution.HumanInteraction.Contracts;
+using Agw.Agents.Execution.HumanInteraction.Application;
+using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Summaries;
@@ -94,7 +94,7 @@ public sealed class AgentRuntime : RuntimeBase
 
     public async Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
         AgwUserInput input,
-        IHumanGateApprovalHandler? approvalHandler,
+        IInteractionHandler? approvalHandler,
         CancellationToken cancellationToken = default
     )
     {
@@ -112,7 +112,7 @@ public sealed class AgentRuntime : RuntimeBase
     internal async Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
         IReadOnlyList<ChatMessage> requestMessages,
         AgwUserInput summaryInput,
-        IHumanGateApprovalHandler? approvalHandler,
+        IInteractionHandler? approvalHandler,
         CancellationToken cancellationToken = default
     )
     {
@@ -155,9 +155,16 @@ public sealed class AgentRuntime : RuntimeBase
                 var approvalResponses = new List<AIContent>(approvals.Count);
                 foreach (var approval in approvals)
                 {
-                    var request = ToolApprovalSupport.CreateRequest(approval, "standalone", Agent.Name);
-                    var decision = await approvalHandler.WaitForApprovalAsync(request, cancellationToken);
-                    approvalResponses.Add(ToolApprovalSupport.CreateResponse(approval, decision));
+                    var request = MafApprovalAdapter.CreateRequest(
+                        approval,
+                        "standalone",
+                        Agent.Name,
+                        approvalHandler.Requests
+                    );
+                    var decision = InteractionResults.RequireResolved(
+                        await approvalHandler.ResolveAsync(request, cancellationToken)
+                    );
+                    approvalResponses.Add(MafApprovalAdapter.CreateResponse(approval, decision));
                 }
 
                 currentRequestMessages = [new ChatMessage(ChatRole.User, approvalResponses)];
@@ -208,7 +215,7 @@ public sealed class AgentRuntime : RuntimeBase
 
     public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         AgwUserInput input,
-        IHumanGateApprovalHandler? approvalHandler,
+        IInteractionHandler? approvalHandler,
         [EnumeratorCancellation] CancellationToken cancellationToken = default
     )
     {
@@ -233,7 +240,7 @@ public sealed class AgentRuntime : RuntimeBase
         List<AgwContent> contents,
         string? messageId,
         string? author,
-        IHumanGateApprovalHandler? approvalHandler,
+        IInteractionHandler? approvalHandler,
         [EnumeratorCancellation] CancellationToken cancellationToken = default
     )
     {
@@ -262,7 +269,7 @@ public sealed class AgentRuntime : RuntimeBase
     internal async IAsyncEnumerable<AgwMessage> ExecuteStreamingSegmentAsync(
         ChatMessage message,
         AgwUserInput summaryInput,
-        IHumanGateApprovalHandler approvalHandler,
+        IInteractionHandler approvalHandler,
         [EnumeratorCancellation] CancellationToken cancellationToken = default
     )
     {
@@ -281,7 +288,7 @@ public sealed class AgentRuntime : RuntimeBase
     internal async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         IReadOnlyList<ChatMessage> requestMessages,
         AgwUserInput summaryInput,
-        IHumanGateApprovalHandler? approvalHandler,
+        IInteractionHandler? approvalHandler,
         [EnumeratorCancellation] CancellationToken cancellationToken = default
     )
     {
@@ -302,7 +309,7 @@ public sealed class AgentRuntime : RuntimeBase
     private async IAsyncEnumerable<AgwMessage> ExecuteStreamingCoreAsync(
         IReadOnlyList<ChatMessage> requestMessages,
         AgwUserInput summaryInput,
-        IHumanGateApprovalHandler? approvalHandler,
+        IInteractionHandler? approvalHandler,
         [EnumeratorCancellation] CancellationToken cancellationToken
     )
     {
@@ -352,14 +359,17 @@ public sealed class AgentRuntime : RuntimeBase
                 var approvalResponses = new List<AIContent>(approvals.Count);
                 foreach (var approval in approvals)
                 {
-                    var request = ToolApprovalSupport.CreateRequest(approval, "standalone", Agent.Name);
-                    if (approvalHandler.RequiresHumanResponse(request))
-                    {
-                        yield return ToolApprovalSupport.CreateMessage(request);
-                    }
-
-                    var decision = await approvalHandler.WaitForApprovalAsync(request, cancellationToken);
-                    approvalResponses.Add(ToolApprovalSupport.CreateResponse(approval, decision));
+                    var request = MafApprovalAdapter.CreateRequest(
+                        approval,
+                        "standalone",
+                        Agent.Name,
+                        approvalHandler.Requests
+                    );
+                    var resolution = await approvalHandler.ResolveAsync(request, cancellationToken);
+                    if (resolution is InteractionResolution.Pending)
+                        yield break;
+                    var decision = ((InteractionResolution.Resolved)resolution).Response;
+                    approvalResponses.Add(MafApprovalAdapter.CreateResponse(approval, decision));
                 }
 
                 currentRequestMessages = [new ChatMessage(ChatRole.User, approvalResponses)];

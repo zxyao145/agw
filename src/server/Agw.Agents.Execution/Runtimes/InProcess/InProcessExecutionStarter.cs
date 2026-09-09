@@ -1,4 +1,3 @@
-using Agw.Agents.Execution.HumanInteraction.Contracts;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Runtimes.Contracts;
@@ -15,7 +14,7 @@ internal sealed class InProcessExecutionStarter : IExecutionStarter
     private readonly string _userId;
     private readonly IExecutionMessageSink _messageSink;
     private readonly CancellationToken _hostToken;
-    private readonly Action<HumanGateApprovalRequest?> _pendingHumanGateChanged;
+    private readonly Action<int> _pendingInteractionCountChanged;
     private ExecutionTarget? _target;
 
     public InProcessExecutionStarter(
@@ -23,14 +22,14 @@ internal sealed class InProcessExecutionStarter : IExecutionStarter
         string userId,
         IExecutionMessageSink messageSink,
         CancellationToken hostToken,
-        Action<HumanGateApprovalRequest?> pendingHumanGateChanged
+        Action<int> pendingInteractionCountChanged
     )
     {
         _runtimeFactory = runtimeFactory;
         _userId = userId;
         _messageSink = messageSink;
         _hostToken = hostToken;
-        _pendingHumanGateChanged = pendingHumanGateChanged;
+        _pendingInteractionCountChanged = pendingInteractionCountChanged;
     }
 
     // 供现有连接控制路径处理中断、模式和 checkpoint；不进入公共启动契约。
@@ -51,7 +50,7 @@ internal sealed class InProcessExecutionStarter : IExecutionStarter
             request.Target,
             request.Workspace,
             _messageSink,
-            _pendingHumanGateChanged
+            _pendingInteractionCountChanged
         )
         {
             UserId = _userId,
@@ -83,6 +82,6 @@ internal sealed class InProcessExecutionStarter : IExecutionStarter
         }
 
         _target = null;
-        _pendingHumanGateChanged(null);
+        _pendingInteractionCountChanged(0);
     }
 }

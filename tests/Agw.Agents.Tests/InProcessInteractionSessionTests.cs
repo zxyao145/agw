@@ -1,0 +1,121 @@
+using Agw.Agents.Execution.HumanInteraction.Application;
+using Agw.Agents.Execution.HumanInteraction.InProcess;
+using Agw.Agents.Execution.Turns;
+using Agw.Shared.Exceptions;
+
+namespace Agw.Agents.Tests;
+
+public class InProcessInteractionSessionTests
+{
+    [Fact]
+    public async Task ResolveAsync_ResponseDuringPublication_CompletesMatchingRequest()
+    {
+        var sink = new InteractionTestSink();
+        var session = new InProcessInteractionSession(sink);
+        sink.OnWrite = async (message, token) =>
+            Assert.True(
+                await session.TrySubmitAsync(
+                    InteractionTestData.Decision(InteractionTestData.Read(message), true, "looks good"),
+                    token
+                )
+            );
+        var result = await session.ResolveAsync(
+            InteractionTestData.Gate("gate"),
+            TestContext.Current.CancellationToken
+        );
+        var decision = Assert.IsType<WorkflowGateDecision>(
+            Assert.IsType<InteractionResolution.Resolved>(result).Response
+        );
+        Assert.True(decision.Approved);
+        Assert.Equal("looks good", decision.ResponseText);
+        Assert.False(await session.TrySubmitAsync(decision, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task ResolveAsync_PublicationFails_RemovesPendingRequest()
+    {
+        var waiting = 0;
+        var failure = new IOException("send failed");
+        var sink = new InteractionTestSink { OnWrite = (_, _) => ValueTask.FromException(failure) };
+        var session = new InProcessInteractionSession(sink, pendingCountChanged: count => waiting = count);
+        var request = InteractionTestData.Gate("gate");
+        Assert.Same(
+            failure,
+            await Assert.ThrowsAsync<IOException>(async () =>
+                await session.ResolveAsync(request, TestContext.Current.CancellationToken)
+            )
+        );
+        Assert.Equal(0, waiting);
+        Assert.False(
+            await session.TrySubmitAsync(
+                InteractionTestData.Decision(request, true),
+                TestContext.Current.CancellationToken
+            )
+        );
+    }
+
+    [Fact]
+    public async Task ResolveAsync_CancelledRequest_LeavesOtherWaitersAvailable()
+    {
+        var waiting = 0;
+        var session = new InProcessInteractionSession(
+            new InteractionTestSink(),
+            pendingCountChanged: count => waiting = count
+        );
+        using var cancellation = new CancellationTokenSource();
+        var first = session.ResolveAsync(InteractionTestData.Gate("first"), cancellation.Token).AsTask();
+        var second = session
+            .ResolveAsync(InteractionTestData.Gate("second"), TestContext.Current.CancellationToken)
+            .AsTask();
+        await cancellation.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
+        Assert.Equal(1, waiting);
+        Assert.True(
+            await session.TrySubmitAsync(
+                InteractionTestData.Decision(InteractionTestData.Gate("second"), false),
+                TestContext.Current.CancellationToken
+            )
+        );
+        await second;
+        Assert.Equal(0, waiting);
+    }
+
+    [Fact]
+    public async Task TrySubmitAsync_WrongResponseKind_DoesNotConsumeRequest()
+    {
+        var session = new InProcessInteractionSession(new InteractionTestSink());
+        var request = InteractionTestData.Gate("gate");
+        var pending = session.ResolveAsync(request, TestContext.Current.CancellationToken).AsTask();
+        await Assert.ThrowsAsync<AgwException>(async () =>
+            await session.TrySubmitAsync(
+                new ToolApprovalDecision { InteractionId = "gate", Approved = true },
+                TestContext.Current.CancellationToken
+            )
+        );
+        Assert.False(pending.IsCompleted);
+        await session.TrySubmitAsync(
+            InteractionTestData.Decision(request, true),
+            TestContext.Current.CancellationToken
+        );
+        await pending;
+    }
+
+    [Fact]
+    public async Task ActiveTurn_TrySubmitHumanResponseAsync_ForwardsTypedDecision()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var decision = InteractionTestData.Decision(InteractionTestData.Gate("gate"), true);
+        InteractionResponse? forwarded = null;
+        var turn = new ActiveTurn(
+            Task.CompletedTask,
+            cancellation,
+            submitHumanResponseAsync: (response, _) =>
+            {
+                forwarded = response;
+                return ValueTask.FromResult(true);
+            }
+        );
+        Assert.True(await turn.TrySubmitHumanResponseAsync(decision, TestContext.Current.CancellationToken));
+        Assert.Same(decision, forwarded);
+    }
+}

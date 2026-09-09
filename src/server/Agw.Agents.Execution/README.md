@@ -77,7 +77,7 @@ Checkpoint 和 Agent Session 的持久化仍经过既有 Application Port / Infr
 | 能力 | `InProcess`（默认） | `Distributed`（集群） |
 | --- | --- | --- |
 | 运行位置 | 当前 Agw 进程 | 任意获得 execution 分布式锁的 Agw Server |
-| HITL 等待状态 | `HumanGateApprovalCoordinator` 内存 | PostgreSQL pending + response 快照 |
+| HITL 等待状态 | `InProcessInteractionSession` 内存 | PostgreSQL pending + response 快照 |
 | Agentflow 恢复点 | 当前 workflow run | PostgreSQL 中的加密 JSON checkpoint |
 | 消息传输 | 当前 SignalR connection | `IExecutionEventStream`，可选择 PostgreSQL 或 Redis Stream 并按 cursor 重放 |
 | 进程重启 | 活动 turn 失效 | 从持久状态继续 |
@@ -113,11 +113,11 @@ Agw.Agents.Execution/
 │       └── Contracts/      # 执行请求、结果、分段输入输出及接口
 ├── Turns/                  # ActiveTurn、上下文、TurnPipeline、消息协议
 ├── HumanInteraction/
-│   ├── IHumanGateApprovalHandler.cs # 共用审批请求、决定和 Handler 接口
-│   ├── Approvals/          # 权限策略、无人值守审批、权限状态和 ToolApprovalSupport
+│   ├── Application/        # 类型化交互编排、纯权限规则、稳定请求关联
+│   ├── Infrastructure/Maf/ # SDK 内容适配与 session 授权缓存
 │   ├── HumanInteractionContextAccessor.cs
-│   ├── InProcess/          # ExecutionHumanInteractionChannel、HumanGateApprovalCoordinator
-│   └── Durable/            # ResolvedHumanInteractionChannel、DurableHumanInteractionMapper
+│   ├── InProcess/          # InProcessInteractionSession：登记、发布、等待、清理
+│   └── Durable/            # 显式 Pending 与严格匹配的回答恢复 channel
 │       └── Contracts/      # 持久交互快照与回答
 ├── Messaging/
 │   ├── AgwMessageUtil.cs
@@ -156,7 +156,7 @@ Agw.Agents.Execution/
 
 `HumanInteraction` 集中两种执行方式的交互能力：`InProcess` 在内存中等待响应，`Durable` 将持久回答注入恢复后的 Tool；共享上下文、审批契约和权限策略只保留一份。跨模块 `IHumanInteractionChannel` 等契约继续位于 `Agw.Agents.Contracts`。
 
-人工交互从 [HumanInteraction 总览、契约与调用链](HumanInteraction/README.md) 开始，再分别阅读 [InProcess 等待](HumanInteraction/InProcess/README.md)、[Durable 恢复](HumanInteraction/Durable/README.md) 和 [Approvals 策略](HumanInteraction/Approvals/README.md)。
+人工交互从 [HumanInteraction 场景与装配](HumanInteraction/README.md) 开始，再分别阅读 [InProcess 等待](HumanInteraction/InProcess/README.md)、[Durable 恢复](HumanInteraction/Durable/README.md)、[权限规则](HumanInteraction/Application/README.md) 和 [新增输入协议](HumanInteraction/Extending.md)。
 
 `Runtimes/Durable` 负责协调与领取，`Persistence/Durable` 保存执行事实，`Messaging/Durable` 提供事件存储与回放。`Outbound/Durable` 中的 Sink 将分段消息批量写入事件流；`Outbound/SignalR` 中的 Sink 向客户端发送消息，两种执行方式都使用它。只有持久执行需要 Worker、事件存储和持久状态机，不为这些能力创建空的 InProcess 实现。
 
@@ -216,7 +216,7 @@ Agent 的进程内执行继续由 `Agents/Runtime` 中的 RuntimeService 驱动�
 
 Definition Agent 的 Skill provider 明确把 Skill 内容与 Project Workspace 分开：模型通过 `load_skill`、`read_skill_resource` 和 `run_skill_script` 访问 Skill，不应使用 Shell 或 Project 文件工具寻找 Skill 文件。只读的 load/read Tool 自动批准；脚本执行仍受 Tool 审批策略控制。Local Skill 只发现 `.py`、`.js` 和 `.cs` 脚本，`Agw.Skills.Execution.LocalSkillScriptRunner` 在 Skill 根目录内校验路径，以无 Shell 的 `ArgumentList` 传递字符串参数，并使用 30 秒超时。Plugin Skill 不允许执行脚本。
 
-`AgentflowRuntime` 保存 Agentflow id、task、settings 和 `AgentflowRuntimeService`。每个 Agentflow turn 都会创建新的 `HumanGateApprovalCoordinator`，workflow 本身由 `AgentflowWorkflowCompiler` 生成。
+`AgentflowRuntime` 保存 Agentflow id、task、settings 和 `AgentflowRuntimeService`。每个 Agentflow turn 都会创建新的 `InProcessInteractionSession`，workflow 本身由 `AgentflowWorkflowCompiler` 生成。
 
 `RuntimeFactory` 负责把已解析好的 execution/turn 输入对应到具体 runtime，并将 runtime 输出接入统一的 `TurnPipeline`。task 与 workspace 的解析由 `ExecutionConnectionContext` 统一完成。Agent runtime 只有在 project 和 context 仍兼容时才会复用；settings 或 target 变化会先释放旧 runtime。
 
@@ -431,7 +431,7 @@ Agentflow 不读取内部 Agent 节点的 `EnableSummary`。流程总结只发�
 
 `InterruptCommandHandler` 只作用于当前活动 turn。`ActiveTurn.RequestInterrupt` 会先调用 runtime 专用 interrupt hook，再取消 linked cancellation source。没有活动 turn 时，服务端返回 system message。
 
-Agentflow 进入 HumanGate、Tool 请求审批或 `HumanInteractionRequiredAIFunction` 请求用户输入后，`HumanGateApprovalCoordinator` 按 `requestId` 保存待处理响应。用户信息交互通过 `human-interaction-request` control message 携带来源 `toolName`/`callId`、`interactionKind` 和结构化 `payload`，客户端可将交互面板嵌入对应的 function call，并在 `HumanResponseCommand.responseData` 中返回结构化数据。`HumanResponseCommandHandler` 将响应转发给当前 `ActiveTurn`；request id 不匹配或已结束时返回 system message。
+工具审批、HumanGate 和用户输入分别使用类型化请求。`InProcessInteractionSession` 在一个操作内登记 pending、发布 `interaction-request` 并等待响应；连接等待状态来自整个 pending 集合。客户端提交 `HumanResponseCommand.response`，其中 `kind` 和 `interactionId` 必须匹配原请求。普通工具决定携带 `approved` / `scope`，HumanGate 携带 `approved` / 可选 `responseText`，用户输入携带 `cancelled` / `responseData`。命令 handler 只负责翻译和转发，交互模块负责响应校验与生命周期。完整场景和扩展示例见 [HumanInteraction](HumanInteraction/README.md)。
 
 Claude Code External Agent 的原生 `AskUserQuestion` 通过 SDK stdio `can_use_tool` 回调接入同一套 channel。Agw 在每次 Agent run 内显式绑定当前 channel，把原生 `tool_use_id` 作为 `callId` 发出问卷 control message，并将客户端提交的 `answers` 作为 `updatedInput` 返回 Claude Code。后台执行和没有活动 channel 的调用会被拒绝；External Agent 仍不进入 Distributed HITL 恢复流程。
 
@@ -538,9 +538,9 @@ sequenceDiagram
     W->>W: defer ask_user_question at approval boundary
     W->>PG: transaction: checkpoint + pending + status=WaitingForHuman
     P->>PG: poll current status
-    P-->>C: human-interaction-request
+    P-->>C: interaction-request(kind=user-input)
 
-    C->>P: HumanResponseCommand(executionId, requestId)
+    C->>P: HumanResponseCommand(executionId, response.interactionId)
     P->>L: acquire(executionId)
     P->>PG: append response; all answered => Resuming
     W->>L: acquire(executionId)
@@ -550,7 +550,7 @@ sequenceDiagram
     W->>PG: Completed or next WaitingForHuman
 ```
 
-问题只在 checkpoint、pending 和 `WaitingForHuman` 已经提交后展示，因此回答不会指向尚未持久化的请求。恢复消息同时携带启动清单中的原始用户消息 ID 作为 `streamingScopeId`；它与持久化的 `callId` 一起把 Card 精确放回原 Tool call，不能使用 Server B 新建的 `turn-start.messageId`。模型 Tool 参数中的 `answers` 不会被当作用户回答；客户端只接收 questions/metadata，真正回答由 `HumanResponseCommand.responseData` 提交。
+问题只在 checkpoint、pending 和 `WaitingForHuman` 已经提交后展示，因此回答不会指向尚未持久化的请求。恢复消息同时携带启动清单中的原始用户消息 ID 作为 `streamingScopeId`；它与持久化的 `callId` 一起把 Card 精确放回原 Tool call，不能使用 Server B 新建的 `turn-start.messageId`。模型 Tool 参数中的 `answers` 不会被当作用户回答；客户端只接收 questions/metadata，真正回答由 `HumanResponseCommand.response.responseData` 提交。
 
 恢复路径分两种：
 
@@ -698,7 +698,7 @@ stateDiagram-v2
 | SDK AgentSession | `AgentRuntime` | 由 `AgentSessionStateStore` 加载和保存 |
 | 当前 turn | `RuntimeBase` | 同一 runtime 最多一个 |
 | cancellation、interrupt hook | `ActiveTurn` | 一次执行独享 |
-| 待处理的审批与用户交互请求 | `HumanGateApprovalCoordinator` | 每个 turn 独享 |
+| 待处理的审批与用户交互请求 | `InProcessInteractionSession` | 每个 turn 独享 |
 | settings/task/target/user/workspace/message sink 快照 | `RuntimeTurnContext` | AsyncLocal，只读、仅在 turn 内可见 |
 | durable manifest / owner / status / segment | PostgreSQL | 单行 execution 状态机 |
 | pending / response / checkpoint / error | PostgreSQL | 加密 JSON，与状态转换原子提交 |

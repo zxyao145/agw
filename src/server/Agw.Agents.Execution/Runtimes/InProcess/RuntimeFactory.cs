@@ -1,10 +1,8 @@
 using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Commands.Exec;
-using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.HumanInteraction;
-using Agw.Agents.Execution.HumanInteraction.Approvals;
-using Agw.Agents.Execution.HumanInteraction.Contracts;
+using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.HumanInteraction.InProcess;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Outbound;
@@ -178,10 +176,13 @@ public sealed class RuntimeFactory : IRuntimeFactory
                     await _agentRuntimeService.SetModeAsync(session, request.RequestedMode, cancellationToken);
                 }
 
-                var permissionState = new PermissionModeState(request.TurnContext.Settings.PermissionMode);
+                var permissionState = new MafPermissionState(request.TurnContext.Settings.PermissionMode);
                 permissionState.Register(session.Session);
-                var coordinator = new HumanGateApprovalCoordinator(request.TurnContext.PendingHumanGateChanged);
-                var approvalHandler = new PermissionAwareApprovalHandler(coordinator, permissionState);
+                var interactions = new InProcessInteractionSession(
+                    request.TurnContext.MessageSink,
+                    permissionState.Permissions,
+                    request.TurnContext.PendingInteractionCountChanged
+                );
                 return StartTurn(
                     session,
                     request.TurnContext,
@@ -189,20 +190,15 @@ public sealed class RuntimeFactory : IRuntimeFactory
                     () =>
                     {
                         session.CancelActiveRequest();
-                        coordinator.CancelAll();
+                        interactions.CancelAll();
                     },
                     ct =>
-                        ExecuteAgentAsync(
-                            session,
-                            request.Command,
-                            approvalHandler,
-                            request.TurnContext.MessageSink,
-                            ct
-                        ),
-                    coordinator.TrySubmitAsync,
+                        ExecuteAgentAsync(session, request.Command, interactions, request.TurnContext.MessageSink, ct),
+                    interactions.TrySubmitAsync,
                     (mode, _) =>
                     {
-                        approvalHandler.SetPermissionMode(mode);
+                        permissionState.Set(mode);
+                        interactions.SetPermissionMode(mode);
                         return ValueTask.CompletedTask;
                     }
                 );
@@ -221,27 +217,31 @@ public sealed class RuntimeFactory : IRuntimeFactory
                     );
                 }
 
-                var permissionState = new PermissionModeState(request.TurnContext.Settings.PermissionMode);
-                var coordinator = new HumanGateApprovalCoordinator(request.TurnContext.PendingHumanGateChanged);
-                var approvalHandler = new PermissionAwareApprovalHandler(coordinator, permissionState);
+                var permissionState = new MafPermissionState(request.TurnContext.Settings.PermissionMode);
+                var interactions = new InProcessInteractionSession(
+                    request.TurnContext.MessageSink,
+                    permissionState.Permissions,
+                    request.TurnContext.PendingInteractionCountChanged
+                );
                 return StartTurn(
                     session,
                     request.TurnContext,
                     executionCts,
-                    coordinator.CancelAll,
+                    interactions.CancelAll,
                     ct =>
                         ExecuteAgentflowAsync(
                             session,
                             request.Command,
-                            approvalHandler,
+                            interactions,
                             permissionState,
                             request.TurnContext.MessageSink,
                             ct
                         ),
-                    coordinator.TrySubmitAsync,
+                    interactions.TrySubmitAsync,
                     (mode, _) =>
                     {
-                        approvalHandler.SetPermissionMode(mode);
+                        permissionState.Set(mode);
+                        interactions.SetPermissionMode(mode);
                         return ValueTask.CompletedTask;
                     }
                 );
@@ -295,13 +295,15 @@ public sealed class RuntimeFactory : IRuntimeFactory
     private async Task ExecuteAgentAsync(
         AgentRuntime session,
         ExecCommand command,
-        IHumanGateApprovalHandler approvalHandler,
+        InProcessInteractionSession interactions,
         IExecutionMessageSink sink,
         CancellationToken cancellationToken
     )
     {
         using var interactionScope = _humanInteractionContextAccessor.Push(
-            new ExecutionHumanInteractionChannel(approvalHandler, sink)
+            interactions,
+            interactions.Requests,
+            interactions.PermissionState
         );
         session.ResetCancellationToken();
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
@@ -309,13 +311,10 @@ public sealed class RuntimeFactory : IRuntimeFactory
             session.CancellationToken
         );
         var linkedToken = linkedCts.Token;
-        var effectiveApprovalHandler = command.Stream
-            ? approvalHandler
-            : new MessageSinkApprovalHandler(approvalHandler, sink);
         var messages = command.Stream
-            ? _agentRuntimeService.ExecuteStreamingAsync(session, command.Input, effectiveApprovalHandler, linkedToken)
+            ? _agentRuntimeService.ExecuteStreamingAsync(session, command.Input, interactions, linkedToken)
             : ToAsyncEnumerable(() =>
-                _agentRuntimeService.ExecuteAsync(session, command.Input, effectiveApprovalHandler, linkedToken)
+                _agentRuntimeService.ExecuteAsync(session, command.Input, interactions, linkedToken)
             );
         await TurnPipeline.RunAsync(messages, command.Stream, sink, linkedToken);
     }
@@ -323,17 +322,19 @@ public sealed class RuntimeFactory : IRuntimeFactory
     private async Task ExecuteAgentflowAsync(
         AgentflowRuntime runtime,
         ExecCommand command,
-        IHumanGateApprovalHandler humanGateApprovalHandler,
-        PermissionModeState permissionState,
+        InProcessInteractionSession interactions,
+        MafPermissionState permissionState,
         IExecutionMessageSink sink,
         CancellationToken cancellationToken
     )
     {
         using var interactionScope = _humanInteractionContextAccessor.Push(
-            new ExecutionHumanInteractionChannel(humanGateApprovalHandler, sink)
+            interactions,
+            interactions.Requests,
+            interactions.PermissionState
         );
         await TurnPipeline.RunAsync(
-            runtime.ExecuteStreamingAsync(command, humanGateApprovalHandler, permissionState, cancellationToken),
+            runtime.ExecuteStreamingAsync(command, interactions, permissionState, cancellationToken),
             command.Stream,
             sink,
             cancellationToken
@@ -346,7 +347,7 @@ public sealed class RuntimeFactory : IRuntimeFactory
         CancellationTokenSource executionCts,
         Action interruptAction,
         Func<CancellationToken, Task> executeAsync,
-        Func<HumanResponseCommand, CancellationToken, ValueTask<bool>>? submitHumanResponseAsync = null,
+        Func<InteractionResponse, CancellationToken, ValueTask<bool>>? submitHumanResponseAsync = null,
         Func<PermissionMode, CancellationToken, ValueTask>? setPermissionModeAsync = null
     )
     {
@@ -407,32 +408,5 @@ public sealed class RuntimeFactory : IRuntimeFactory
         return string.Equals(session._contextId, contextId, StringComparison.Ordinal)
             && session._projectId == projectId
             && (session.SessionStateScope?.Generation ?? 0) == generation;
-    }
-
-    private sealed class MessageSinkApprovalHandler : IHumanGateApprovalHandler
-    {
-        private readonly IHumanGateApprovalHandler _inner;
-        private readonly IExecutionMessageSink _sink;
-
-        public MessageSinkApprovalHandler(IHumanGateApprovalHandler inner, IExecutionMessageSink sink)
-        {
-            _inner = inner;
-            _sink = sink;
-        }
-
-        public bool RequiresHumanResponse(HumanGateApprovalRequest request) => _inner.RequiresHumanResponse(request);
-
-        public async ValueTask<HumanGateApprovalDecision> WaitForApprovalAsync(
-            HumanGateApprovalRequest request,
-            CancellationToken cancellationToken
-        )
-        {
-            if (RequiresHumanResponse(request))
-            {
-                await _sink.WriteAsync(ToolApprovalSupport.CreateMessage(request), cancellationToken);
-            }
-
-            return await _inner.WaitForApprovalAsync(request, cancellationToken);
-        }
     }
 }

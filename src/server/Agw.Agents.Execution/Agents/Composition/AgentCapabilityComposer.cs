@@ -8,6 +8,7 @@ using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Tooling;
 using Agw.Tools;
+using Agw.Tools.HumanInteraction;
 using Agw.Tools.Runtime;
 using Agw.Tools.ToolBlocks;
 using Microsoft.Extensions.AI;
@@ -107,7 +108,6 @@ public sealed class AgentCapabilityComposer
                 EnvironmentVariables = environmentVariables,
                 BackgroundAgentFactory = backgroundAgentFactory,
                 SupportsHostedWebSearch = supportsHostedWebSearch,
-                DeferHumanInteractions = deferHumanInteractions,
             };
 
             if (agent.Type == AgentType.External)
@@ -250,6 +250,9 @@ public sealed class AgentCapabilityComposer
             {
                 _logger.LogWarning("Tool Block warning for agent {AgentId}: {Warning}", agent.Id, warning);
             }
+
+            if (deferHumanInteractions)
+                contextProviders.Add(new DeferredHumanInteractionProvider());
 
             return new AgentCapabilityComposition(
                 tools,

@@ -1,4 +1,3 @@
-using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.Turns;
 
 namespace Agw.Agents.Execution.Runtimes;
@@ -30,7 +29,7 @@ public abstract class RuntimeBase : IAsyncDisposable
         CancellationTokenSource executionCts,
         Action interruptAction,
         Func<CancellationToken, Task> executeAsync,
-        Func<HumanResponseCommand, CancellationToken, ValueTask<bool>>? submitHumanResponseAsync = null,
+        Func<InteractionResponse, CancellationToken, ValueTask<bool>>? submitHumanResponseAsync = null,
         Func<PermissionMode, CancellationToken, ValueTask>? setPermissionModeAsync = null
     )
     {
@@ -113,10 +112,7 @@ public abstract class RuntimeBase : IAsyncDisposable
         ActiveTurn?.RequestInterrupt();
     }
 
-    public ValueTask<bool> TrySubmitHumanResponseAsync(
-        HumanResponseCommand command,
-        CancellationToken cancellationToken
-    )
+    public ValueTask<bool> TrySubmitHumanResponseAsync(InteractionResponse command, CancellationToken cancellationToken)
     {
         return ActiveTurn?.TrySubmitHumanResponseAsync(command, cancellationToken) ?? ValueTask.FromResult(false);
     }

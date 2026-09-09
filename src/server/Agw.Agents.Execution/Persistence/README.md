@@ -27,7 +27,7 @@
 | 聊天历史、适用的 SDK Session | 保存到数据库 | 复用相同的持久化能力 |
 | Agentflow 检查点 occurrence | 落库；恢复还要求当前 Runtime 持有该 occurrence | 落库；可在新 Worker 重建恢复上下文 |
 | 当前 turn、取消信号 | 进程内对象 | 当前分段仍在内存执行，执行事实另存数据库 |
-| 人工交互等待 | `HumanGateApprovalCoordinator` 在内存中等待 | pending / response 与状态持久化，等待期间释放 Worker 执行资源 |
+| 人工交互等待 | `InProcessInteractionSession` 在内存中等待 | pending / response 与状态持久化，等待期间释放 Worker 执行资源 |
 | 客户端断线 | 普通运行中的 turn 继续，输出被丢弃；等待 HumanGate 时中断 | 停止当前订阅，后台 execution 继续 |
 | 服务进程退出 | 已提交数据保留，当前 turn 和人工等待失效 | 未完成 execution 可由 Worker 按持久边界继续或重试 |
 | 输出重连回放 | 通过历史读取已提交消息；没有这套 durable cursor 回放 | PostgreSQL 或 Redis 事件流按 cursor 回放 |
@@ -417,7 +417,7 @@ Redis 是事件回放的可选实现，启用后仍需要 PostgreSQL 状态库�
 | 1 | `SettingCommand` | 设置 `projectId`、`contextId`、环境变量和权限模式 |
 | 2 | `ExecCommand` | 指定 Agent / Agentflow、会话和输入；Distributed 使用稳定 `executionId` 且 `stream=true` |
 | 3 | 保存收到的消息与 cursor | cursor 仅表示事件消费位置，不是执行状态或检查点 ID |
-| 4 | `HumanResponseCommand` | 携带等待请求的 `executionId`、`requestId`、审批结果或结构化 `responseData` |
+| 4 | `HumanResponseCommand` | 携带 `executionId` 和类型化 `response`（`kind`、`interactionId`、决定或用户输入） |
 | 5 | 重连后重发设置，再发送 `SubscribeExecutionCommand` | 使用原 execution ID 和最后 cursor，附着已有执行；不创建新 execution |
 | 6 | `InterruptCommand` | 明确中断指定 execution；断开连接只会结束 Distributed 的当前订阅 |
 

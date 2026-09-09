@@ -13,7 +13,7 @@ export const ChatScreen = React.forwardRef<NativeConversationHistoryHandle>(
       <NativeConversationHistoryHost
         ref={ref}
         messages={workspace.messages}
-        pendingHumanGate={workspace.pendingHumanGate}
+        pendingInteraction={workspace.pendingInteraction}
         checkpointAvailability={workspace.checkpointAvailability}
         loading={workspace.isChatLoading}
         reconnecting={workspace.reconnectState !== null}

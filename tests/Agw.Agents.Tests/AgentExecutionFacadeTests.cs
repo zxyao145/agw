@@ -6,7 +6,7 @@ using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Configuration;
-using Agw.Agents.Execution.HumanInteraction.Contracts;
+using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.Inbound.Facades;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Projects.Contracts.Execution;
@@ -269,7 +269,7 @@ public sealed class AgentExecutionFacadeTests
             Guid? projectId = null,
             string? contextId = null,
             Guid? taskId = null,
-            IHumanGateApprovalHandler? humanGateApprovalHandler = null,
+            IInteractionHandler? interactionHandler = null,
             IReadOnlyDictionary<string, string>? environmentVariables = null,
             Guid? conversationId = null,
             PermissionMode? permissionMode = null
@@ -281,7 +281,7 @@ public sealed class AgentExecutionFacadeTests
                 "agent",
                 AiRole.Assistant,
                 [],
-                new Dictionary<string, object?> { ["type"] = "human-interaction-request" }
+                new Dictionary<string, object?> { ["type"] = "interaction-request" }
             );
         }
 

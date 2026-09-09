@@ -3,6 +3,9 @@ using Agw.Agents.Execution.Agents.Context.PlanMode;
 using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Runtime;
+using Agw.Agents.Execution.HumanInteraction;
+using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
+using Agw.Tools.HumanInteraction;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
@@ -57,6 +60,10 @@ public static class AgwAgentExtensions
             .AsBuilder()
             .UseApprovalResponseBinding(loggerFactory)
             .UseApprovalNotRequiredFunctionBypassing()
+            .Use(inner => new HumanInteractionDescriptionChatClient(
+                inner,
+                services.GetService(typeof(IHumanInteractionContextAccessor)) as IHumanInteractionContextAccessor
+            ))
             .UseFunctionInvocation(
                 loggerFactory,
                 functionInvokingClient =>
@@ -171,8 +178,44 @@ public static class AgwAgentExtensions
             );
         }
 
+        var interactions =
+            services.GetService(typeof(HumanInteractionContextAccessor)) as HumanInteractionContextAccessor;
+        agentBuilder.Use((inner, _) => new MafApprovalGrantAgent(inner, interactions));
         agentBuilder.UseToolApproval(
-            new ToolApprovalAgentOptions { AutoApprovalRules = capabilities.AutoApprovalRules }
+            new ToolApprovalAgentOptions
+            {
+                AutoApprovalRules =
+                [
+                    async context =>
+                    {
+                        if (interactions is not null)
+                            await interactions.RefreshPermissionsAsync().ConfigureAwait(false);
+                        var source =
+                            context.RunOptions?.AdditionalProperties?.GetValueOrDefault(
+                                HumanInteractionToolMetadata.SourceKey
+                            ) as InteractionSource;
+                        if (
+                            interactions?.Requests?.IsUserInputCall(
+                                source?.NodeId ?? "standalone",
+                                context.FunctionCallContent.CallId
+                            ) == true
+                        )
+                            return false;
+                        var mode =
+                            context.Session is { } approvalSession && interactions?.PermissionState is { } permissions
+                                ? MafSessionApprovalState.Synchronize(approvalSession, permissions)
+                            : context.Session is { } existingSession
+                                ? MafSessionApprovalState.GetPermissionMode(existingSession)
+                            : null;
+                        if (MafSessionApprovalState.TryApprove(context, mode))
+                            return true;
+                        foreach (var rule in capabilities.AutoApprovalRules)
+                            if (await rule(context).ConfigureAwait(false))
+                                return true;
+                        return false;
+                    },
+                ],
+            }
         );
         agentBuilder.UseOpenTelemetry(sourceName: definition.OpenTelemetrySourceName);
         var agent = agentBuilder.Build(services);

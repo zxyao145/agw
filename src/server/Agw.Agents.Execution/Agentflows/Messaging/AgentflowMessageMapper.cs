@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Agw.Agents.Execution.Agentflows.Workflows;
-using Agw.Agents.Execution.HumanInteraction.Approvals;
-using Agw.Agents.Execution.HumanInteraction.Contracts;
+using Agw.Agents.Execution.HumanInteraction.Application;
+using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
@@ -46,18 +46,23 @@ internal static class AgentflowMessageMapper
     /// <summary>
     /// 将 Agentflow external request 映射为可持久化的 Tool approval 或 HumanGate 请求。
     /// </summary>
-    internal static HumanGateApprovalRequest? CreateDurableApprovalRequest(
+    internal static InteractionRequest? CreateInteractionRequest(
         ExternalRequest externalRequest,
-        IReadOnlyDictionary<string, AgentflowHumanGateNode> humanGateNodes
+        IReadOnlyDictionary<string, AgentflowHumanGateNode> humanGateNodes,
+        IInteractionRequestRegistry? registry = null
     )
     {
         if (externalRequest.TryGetDataAs(out Microsoft.Extensions.AI.ToolApprovalRequestContent? toolApprovalRequest))
         {
-            return ToolApprovalSupport.CreateRequest(toolApprovalRequest, externalRequest.PortInfo.PortId);
+            return MafApprovalAdapter.CreateRequest(
+                toolApprovalRequest,
+                externalRequest.PortInfo.PortId,
+                registry: registry
+            );
         }
 
         return humanGateNodes.TryGetValue(externalRequest.PortInfo.PortId, out var humanGateNode)
-            ? CreateHumanGateApprovalRequest(externalRequest, humanGateNode)
+            ? CreateWorkflowGateInteraction(externalRequest, humanGateNode)
             : null;
     }
 
@@ -76,11 +81,14 @@ internal static class AgentflowMessageMapper
             ErrorMessage = error,
         };
 
-    internal static HumanGateApprovalRequest CreateHumanGateApprovalRequest(
+    internal static WorkflowGateInteraction CreateWorkflowGateInteraction(
         ExternalRequest externalRequest,
         AgentflowHumanGateNode node
     )
     {
+        // 显式 HumanGate 使用 WorkflowGateInteraction 表达工作流是否继续，FullAccess 不会跳过它。
+        // 这里只提取节点配置和输入预览；等待、发布及拒绝后的终止交给交互会话与 Runner。
+        // 节点和 SDK 请求 ID 共同确定交互身份，使 checkpoint 恢复仍能关联同一次关卡请求。
         var config = ReadHumanGateConfig(node);
         var messages =
             externalRequest.TryGetDataAs<List<ChatMessage>>(out var requestedMessages) && requestedMessages != null
@@ -90,12 +98,24 @@ internal static class AgentflowMessageMapper
         var mode = string.IsNullOrWhiteSpace(config.HumanMode) ? DefaultHumanGateMode : config.HumanMode.Trim();
         var prompt = string.IsNullOrWhiteSpace(config.HumanPrompt) ? DefaultHumanGatePrompt : config.HumanPrompt.Trim();
 
-        return new HumanGateApprovalRequest(externalRequest.RequestId, node.NodeId, node.Name, mode, prompt, messages);
+        return new WorkflowGateInteraction
+        {
+            InteractionId = InteractionIdentity.ForProviderRequest(node.NodeId, externalRequest.RequestId),
+            Source = new InteractionSource
+            {
+                NodeId = node.NodeId,
+                NodeName = node.Name,
+                ProviderRequestId = externalRequest.RequestId,
+            },
+            Mode = mode,
+            Prompt = prompt,
+            InputPreview = messages.LastOrDefault()?.Text,
+        };
     }
 
     internal static List<ChatMessage> CreateHumanGateResponseMessages(
         IReadOnlyList<ChatMessage> messages,
-        HumanGateApprovalDecision decision
+        WorkflowGateDecision decision
     )
     {
         var responseMessages = messages.ToList();
@@ -112,44 +132,16 @@ internal static class AgentflowMessageMapper
         return responseMessages;
     }
 
-    internal static AgwMessage CreateHumanGateApprovalRequestMessage(HumanGateApprovalRequest request, string messageId)
-    {
-        var additionalProperties = new AdditionalPropertiesDictionary
-        {
-            { "type", "human-gate-request" },
-            { "requestId", request.RequestId },
-            { "nodeId", request.NodeId },
-            { "mode", request.Mode },
-            { "prompt", request.Prompt },
-        };
+    internal static IReadOnlyList<ChatMessage> GetHumanGateMessages(ExternalRequest request) =>
+        request.TryGetDataAs<List<ChatMessage>>(out var messages) && messages is not null ? messages : [];
 
-        if (!string.IsNullOrWhiteSpace(request.NodeName))
-        {
-            additionalProperties["nodeName"] = request.NodeName;
-        }
-
-        var latestMessageText = request.Messages.LastOrDefault()?.Text;
-        if (!string.IsNullOrWhiteSpace(latestMessageText))
-        {
-            additionalProperties["inputPreview"] = latestMessageText;
-        }
-
-        return new AgwMessage(
-            messageId,
-            Constants.DefaultAgentAuthor,
-            AiRole.System,
-            [new AgwTextContent { Content = request.Prompt }],
-            additionalProperties
-        );
-    }
-
-    internal static AgwMessage CreateHumanGateRejectedMessage(HumanGateApprovalRequest request, string messageId)
+    internal static AgwMessage CreateHumanGateRejectedMessage(WorkflowGateInteraction request, string messageId)
     {
         var additionalProperties = new AdditionalPropertiesDictionary
         {
             { "type", "human-gate-rejected" },
-            { "requestId", request.RequestId },
-            { "nodeId", request.NodeId },
+            { "requestId", request.InteractionId },
+            { "nodeId", request.Source.NodeId },
         };
 
         return new AgwMessage(
@@ -186,7 +178,7 @@ internal static class AgentflowMessageMapper
         var properties = new AdditionalPropertiesDictionary
         {
             { "type", "tool-approval-unavailable" },
-            { "requestId", request.RequestId },
+            { "providerRequestId", request.RequestId },
         };
         return new AgwMessage(
             messageId,

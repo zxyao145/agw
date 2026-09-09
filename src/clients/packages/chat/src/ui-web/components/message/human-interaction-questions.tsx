@@ -4,7 +4,7 @@ import * as React from "react";
 import { Check, ChevronLeft, ChevronRight, MessageCircleQuestion, X } from "lucide-react";
 
 import { Badge, Button, Checkbox, RadioGroup, RadioGroupItem, Textarea, cn } from "@agw/components";
-import type { PendingHumanGate } from "../../../services/execution-hub";
+import type { PendingInteraction } from "../../../services/execution-hub";
 import type {
   HumanInteractionQuestion,
   HumanInteractionQuestionResponse,
@@ -18,7 +18,7 @@ import {
 import MdCard from "./renders/md-card";
 
 type HumanInteractionQuestionsProps = {
-  request: PendingHumanGate & { questions: HumanInteractionQuestion[] };
+  request: PendingInteraction & { questions: HumanInteractionQuestion[] };
   embedded?: boolean;
   onSubmit: (response: HumanInteractionQuestionResponse) => void;
   onCancel: () => void;
@@ -40,7 +40,7 @@ export function HumanInteractionQuestions({
     setSelections(createQuestionSelections(request.questions));
     setFocusedOptions({});
     setActiveQuestionIndex(0);
-  }, [request.questions, request.requestId]);
+  }, [request.questions, request.interactionId]);
 
   const response = React.useMemo(
     () => buildQuestionResponse(request.questions, selections),
@@ -203,7 +203,7 @@ export function HumanInteractionQuestions({
             <div className="grid gap-2">
               {question.options.map((option, optionIndex) => {
                 const checked = selection.selected.includes(option.label);
-                const id = `${request.requestId}-${questionIndex}-${optionIndex}`;
+                const id = `${request.interactionId}-${questionIndex}-${optionIndex}`;
                 return (
                   <label
                     key={option.label}
@@ -229,7 +229,7 @@ export function HumanInteractionQuestions({
                 );
               })}
               <OtherOption
-                id={`${request.requestId}-${questionIndex}-other`}
+                id={`${request.interactionId}-${questionIndex}-other`}
                 checked={selection.otherSelected}
                 multiSelect
                 value={selection.otherText}
@@ -245,7 +245,7 @@ export function HumanInteractionQuestions({
             >
               {question.options.map((option, optionIndex) => {
                 const checked = selection.selected.includes(option.label);
-                const id = `${request.requestId}-${questionIndex}-${optionIndex}`;
+                const id = `${request.interactionId}-${questionIndex}-${optionIndex}`;
                 return (
                   <label
                     key={option.label}
@@ -264,7 +264,7 @@ export function HumanInteractionQuestions({
                 );
               })}
               <OtherOption
-                id={`${request.requestId}-${questionIndex}-other`}
+                id={`${request.interactionId}-${questionIndex}-other`}
                 checked={selection.otherSelected}
                 multiSelect={false}
                 value={selection.otherText}

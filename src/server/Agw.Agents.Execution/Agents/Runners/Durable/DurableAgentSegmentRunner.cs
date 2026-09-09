@@ -2,10 +2,10 @@ using System.Runtime.ExceptionServices;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.HumanInteraction;
-using Agw.Agents.Execution.HumanInteraction.Approvals;
-using Agw.Agents.Execution.HumanInteraction.Contracts;
+using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.HumanInteraction.Durable;
 using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
+using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
@@ -69,13 +69,33 @@ internal sealed class DurableAgentSegmentRunner
             );
         }
 
-        var captureHandler = new CaptureDurableApprovalHandler();
-        var approvalHandler =
-            manifest.Settings.HumanInteractionPolicy == HumanInteractionPolicy.Reject
-                ? UnattendedApprovalHandler.Create(manifest.Settings.PermissionMode)
-                : new PermissionAwareApprovalHandler(captureHandler, manifest.Settings.PermissionMode);
+        var permissions = new MafPermissionState(
+            _humanInteractionContextAccessor.PermissionState
+                ?? new InteractionPermissionState(
+                    manifest.Settings.PermissionMode,
+                    manifest.ExecutionId,
+                    manifest.Settings.PermissionVersion
+                )
+        );
+        permissions.Register(runtime.Session);
+        var registry = new InteractionRequestRegistry(input.InputCatalog);
+        var approvalHandler = new DurableInteractionHandler(
+            permissions.Permissions,
+            manifest.Settings.HumanInteractionPolicy,
+            registry,
+            _humanInteractionContextAccessor!.RefreshPermissionsAsync
+        );
         using var interactionScope = _humanInteractionContextAccessor.Push(
-            new ResolvedHumanInteractionChannel(input.ResolvedInteractions)
+            new ResolvedHumanInteractionChannel(
+                input
+                    .ResolvedInputs.Concat(
+                        input.ResolvedInteractions.Where(item => item.Request is UserInputInteraction)
+                    )
+                    .DistinctBy(item => item.Request.InteractionId)
+                    .ToArray()
+            ),
+            registry,
+            permissions.Permissions
         );
         Exception? failure = null;
         try
@@ -86,7 +106,7 @@ internal sealed class DurableAgentSegmentRunner
                     ? _runtimeService.ExecuteStreamingAsync(runtime, manifest.Input, approvalHandler, cancellationToken)
                     : _runtimeService.ExecuteDurableSegmentStreamingAsync(
                         runtime,
-                        CreateApprovalResponseMessage(input.ResolvedInteractions),
+                        CreateApprovalResponseMessage(input.ResolvedInteractions, permissions.Current),
                         manifest.Input,
                         approvalHandler,
                         cancellationToken
@@ -100,21 +120,12 @@ internal sealed class DurableAgentSegmentRunner
             {
                 ExecutionId = manifest.ExecutionId,
                 SegmentIndex = input.SegmentIndex,
-                Status = DurableExecutionSegmentStatus.Completed,
-            };
-        }
-        // CaptureDurableApprovalHandler 以异常立即截断本次模型调用，确保先把 pending 快照原子写入 PostgreSQL。
-        catch (AgwException exception)
-            when (ReferenceEquals(exception, captureHandler.Interruption)
-                && captureHandler.PendingInteraction is { } interaction
-            )
-        {
-            return new DurableExecutionSegmentResult
-            {
-                ExecutionId = manifest.ExecutionId,
-                SegmentIndex = input.SegmentIndex,
-                Status = DurableExecutionSegmentStatus.WaitingForHuman,
-                PendingInteractions = [interaction],
+                Status =
+                    approvalHandler.Pending.Count == 0
+                        ? DurableExecutionSegmentStatus.Completed
+                        : DurableExecutionSegmentStatus.WaitingForHuman,
+                PendingInteractions = approvalHandler.Pending.ToArray(),
+                InputCatalog = registry.Snapshot(),
             };
         }
         catch (OperationCanceledException)
@@ -159,7 +170,8 @@ internal sealed class DurableAgentSegmentRunner
     /// 把 PostgreSQL 中已解析的人工回答还原为 MAF Tool approval 响应消息。
     /// </summary>
     private static ChatMessage CreateApprovalResponseMessage(
-        IReadOnlyList<DurableResolvedInteraction> resolvedInteractions
+        IReadOnlyList<DurableResolvedInteraction> resolvedInteractions,
+        PermissionMode? permissionMode
     )
     {
         if (resolvedInteractions.Count == 0)
@@ -174,33 +186,34 @@ internal sealed class DurableAgentSegmentRunner
         foreach (var resolved in resolvedInteractions)
         {
             var request = resolved.Request;
-            if (string.IsNullOrWhiteSpace(request.ToolName) || string.IsNullOrWhiteSpace(request.CallId))
-            {
+            var source = request.Source;
+            if (
+                string.IsNullOrWhiteSpace(source.ToolName)
+                || string.IsNullOrWhiteSpace(source.CallId)
+                || string.IsNullOrWhiteSpace(source.ProviderRequestId)
+            )
                 throw new AgwException(
                     ErrorCodes.DurableExecutionConflict,
-                    $"Human response '{request.RequestId}' does not contain a Tool call snapshot."
+                    "The interaction has no resumable tool identity."
                 );
-            }
-
-            var argumentPayload = request.Arguments ?? request.Payload;
-            var arguments = argumentPayload.HasValue
-                ? JsonUtil.Deserialize<Dictionary<string, object?>>(argumentPayload.Value.GetRawText())
+            var argumentsPayload = request switch
+            {
+                ToolApprovalInteraction tool => tool.Arguments,
+                UserInputInteraction input => input.Arguments ?? input.Payload,
+                _ => throw new AgwException(
+                    ErrorCodes.DurableExecutionConflict,
+                    "An Agent can only resume tool interactions."
+                ),
+            };
+            var arguments = argumentsPayload.HasValue
+                ? JsonUtil.Deserialize<Dictionary<string, object?>>(argumentsPayload.Value.GetRawText())
                 : null;
-            var toolCall = new FunctionCallContent(request.CallId, request.ToolName, arguments);
-            var approval = new ToolApprovalRequestContent(request.RequestId, toolCall);
-            var response = resolved.Response;
-            contents.Add(
-                ToolApprovalSupport.CreateResponse(
-                    approval,
-                    new HumanGateApprovalDecision(
-                        response.RequestId,
-                        response.Approved,
-                        response.ResponseText,
-                        response.ApprovalScope,
-                        response.ResponseData
-                    )
-                )
+            var approval = new ToolApprovalRequestContent(
+                source.ProviderRequestId,
+                new FunctionCallContent(source.CallId, source.ToolName, arguments)
             );
+            var decision = InteractionRules.ValidateAndNormalize(request, resolved.Response, permissionMode);
+            contents.Add(MafApprovalAdapter.CreateResponse(approval, decision));
         }
 
         return new ChatMessage(ChatRole.User, contents) { AuthorName = "human" };
@@ -216,35 +229,4 @@ internal sealed class DurableAgentSegmentRunner
             AiRole.System,
             [new AgwErrorContent { Content = exception.Message }]
         );
-
-    /// <summary>
-    /// 捕获首次人工审批请求并立即结束当前 durable segment。
-    /// </summary>
-    private sealed class CaptureDurableApprovalHandler : IHumanGateApprovalHandler
-    {
-        /// <summary>
-        /// 获取本分段首次捕获、需要写入 PostgreSQL 持久等待的人工请求。
-        /// </summary>
-        public DurableHumanInteractionSnapshot? PendingInteraction { get; private set; }
-
-        public AgwException? Interruption { get; private set; }
-
-        /// <summary>
-        /// 保存待处理请求；durable 模式不会在当前 segment 的进程内等待用户回答。
-        /// </summary>
-        public ValueTask<HumanGateApprovalDecision> WaitForApprovalAsync(
-            HumanGateApprovalRequest request,
-            CancellationToken cancellationToken
-        )
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            PendingInteraction = DurableHumanInteractionMapper.FromRequest(request);
-            Interruption = new AgwException(
-                ErrorCodes.DurableExecutionConflict,
-                $"Human interaction '{PendingInteraction.RequestId}' is pending."
-            );
-            ConversationHistoryPersistenceContext.IgnoreInterruption(Interruption);
-            throw Interruption;
-        }
-    }
 }

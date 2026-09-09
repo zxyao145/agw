@@ -1,6 +1,5 @@
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
-using Agw.Agents.Execution.HumanInteraction.Durable;
 using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Outbound;
@@ -149,8 +148,13 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
         SetActiveExecution(null);
     }
 
+    public Task SetPermissionModeAsync(PermissionMode mode, CancellationToken cancellationToken) =>
+        ActiveExecutionId is { } executionId
+            ? _coordinator.SetPermissionModeAsync(executionId, _userId, mode, cancellationToken)
+            : Task.CompletedTask;
+
     /// <summary>
-    /// 将 HumanResponseCommand 持久化到 PostgreSQL，并重新展示同批次中尚未回答的请求。
+    /// 提交类型化响应；请求发布统一由持久 execution 订阅负责。
     /// </summary>
     public async Task RespondAsync(HumanResponseCommand command, CancellationToken cancellationToken)
     {
@@ -164,32 +168,11 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
 
         await _coordinator
             .SubmitHumanResponseAsync(
-                new SubmitDurableHumanResponseRequest(
-                    executionId.Value,
-                    command.RequestId,
-                    command.Approved,
-                    command.ResponseText,
-                    command.ApprovalScope,
-                    command.ResponseData
-                ),
+                new SubmitDurableHumanResponseRequest(executionId.Value, command.Response),
                 _userId,
                 cancellationToken
             )
             .ConfigureAwait(false);
-        var remaining = await _coordinator
-            .GetPendingAsync(executionId.Value, _userId, cancellationToken)
-            .ConfigureAwait(false);
-        foreach (var interaction in remaining)
-        {
-            if (string.Equals(interaction.RequestId, command.RequestId, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            await _messageSink
-                .WriteAsync(DurableHumanInteractionMapper.ToMessage(interaction, executionId.Value), cancellationToken)
-                .ConfigureAwait(false);
-        }
     }
 
     /// <summary>

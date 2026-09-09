@@ -388,7 +388,7 @@ internal class AskUserQuestionTool : IAgwTool
 
     private sealed class AskUserQuestionInteractionProtocol : IHumanInteractionProtocol
     {
-        public HumanInteractionRequest CreateRequest(string requestId, AIFunctionArguments arguments)
+        public UserInputRequest CreateRequest(AIFunctionArguments arguments)
         {
             var toolParams = DeserializeArguments(arguments);
             ValidateQuestions(toolParams.Questions);
@@ -398,15 +398,17 @@ internal class AskUserQuestionTool : IAgwTool
             using var payload = JsonDocument.Parse(
                 JsonUtil.Serialize(new { toolParams.Questions, toolParams.Metadata })
             );
-            return new HumanInteractionRequest(
-                requestId,
+            return new UserInputRequest(
                 "questions",
                 "The agent needs your input to continue.",
                 payload.RootElement.Clone()
-            );
+            )
+            {
+                Arguments = payload.RootElement.Clone(),
+            };
         }
 
-        public AIFunctionArguments BindResponse(AIFunctionArguments arguments, HumanInteractionResponse response)
+        public AIFunctionArguments BindResponse(AIFunctionArguments arguments, UserInputResponse response)
         {
             if (!response.ResponseData.HasValue)
             {
@@ -428,7 +430,7 @@ internal class AskUserQuestionTool : IAgwTool
             return new AIFunctionArguments(values) { Services = arguments.Services };
         }
 
-        public object CreateCancelledResult(AIFunctionArguments arguments, HumanInteractionResponse response)
+        public object CreateCancelledResult(AIFunctionArguments arguments, UserInputResponse response)
         {
             var toolParams = DeserializeArguments(arguments);
             ValidateQuestions(toolParams.Questions);

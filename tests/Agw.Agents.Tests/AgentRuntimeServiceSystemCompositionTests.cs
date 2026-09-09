@@ -372,7 +372,29 @@ public class AgentRuntimeServiceSystemCompositionTests
             var approvalRules = Assert.IsAssignableFrom<
                 IReadOnlyList<Func<ToolAutoApprovalRuleContext, ValueTask<bool>>>
             >(rulesField.GetValue(approvalAgent));
-            Assert.Same(AgentSkillsProvider.ReadOnlyToolsAutoApprovalRule, Assert.Single(approvalRules));
+            var rule = Assert.Single(approvalRules);
+            Assert.True(
+                await rule(
+                    new ToolAutoApprovalRuleContext(
+                        new FunctionCallContent("read", "load_skill"),
+                        aiAgent!,
+                        null,
+                        [],
+                        null
+                    )
+                )
+            );
+            Assert.False(
+                await rule(
+                    new ToolAutoApprovalRuleContext(
+                        new FunctionCallContent("write", "run_shell"),
+                        aiAgent!,
+                        null,
+                        [],
+                        null
+                    )
+                )
+            );
             Assert.DoesNotContain(ToolApprovalAgent.AllToolsAutoApprovalRule, approvalRules);
 
             await Assert.IsAssignableFrom<IAsyncDisposable>(aiAgent).DisposeAsync();

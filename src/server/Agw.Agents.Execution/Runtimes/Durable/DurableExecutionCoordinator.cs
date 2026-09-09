@@ -3,10 +3,10 @@ using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Configuration;
-using Agw.Agents.Execution.HumanInteraction.Durable;
 using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Messaging.Durable;
+using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Agents.Execution.Turns;
@@ -143,8 +143,20 @@ internal sealed class DurableExecutionCoordinator
         }
     }
 
+    public async Task SetPermissionModeAsync(
+        Guid executionId,
+        string userId,
+        PermissionMode mode,
+        CancellationToken cancellationToken
+    )
+    {
+        await using var scope = _scopeFactory.CreateAsyncScope();
+        var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
+        await store.SetPermissionModeAsync(executionId, userId, mode, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>
-    /// 在 execution 分布式锁内校验 pending request，并把人工回答原子写入 PostgreSQL。
+    /// 由 Store 在短时控制锁内校验并原子提交回答，不等待运行中的 SDK 分段。
     /// </summary>
     public async Task SubmitHumanResponseAsync(
         SubmitDurableHumanResponseRequest request,
@@ -153,18 +165,15 @@ internal sealed class DurableExecutionCoordinator
     )
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (request.ExecutionId == Guid.Empty || string.IsNullOrWhiteSpace(request.RequestId))
+        if (request.ExecutionId == Guid.Empty || string.IsNullOrWhiteSpace(request.Response.InteractionId))
         {
-            throw new AgwException(ErrorCodes.InvalidParam, "executionId and requestId are required.");
+            throw new AgwException(ErrorCodes.InvalidParam, "executionId and interactionId are required.");
         }
-        if (request.RequestId.Trim().Length > 128)
+        if (request.Response.InteractionId.Trim().Length > 128)
         {
-            throw new AgwException(ErrorCodes.InvalidParam, "requestId is too long.");
+            throw new AgwException(ErrorCodes.InvalidParam, "interactionId is too long.");
         }
 
-        await using var executionLock = await _applicationLock
-            .AcquireAsync(DurableExecutionLock.GetResourceName(request.ExecutionId), cancellationToken)
-            .ConfigureAwait(false);
         await using var scope = _scopeFactory.CreateAsyncScope();
         var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
         await store.SubmitHumanResponseAsync(request, userId, cancellationToken).ConfigureAwait(false);
@@ -183,21 +192,6 @@ internal sealed class DurableExecutionCoordinator
         var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
         var snapshot = await store.GetAuthorizedAsync(executionId, userId, cancellationToken).ConfigureAwait(false);
         return ToStatus(snapshot);
-    }
-
-    /// <summary>
-    /// 获取已鉴权 execution 当前仍未收到回答的人工请求。
-    /// </summary>
-    public async Task<IReadOnlyList<DurableHumanInteractionSnapshot>> GetPendingAsync(
-        Guid executionId,
-        string userId,
-        CancellationToken cancellationToken
-    )
-    {
-        await using var scope = _scopeFactory.CreateAsyncScope();
-        var store = scope.ServiceProvider.GetRequiredService<DurableExecutionStore>();
-        var snapshot = await store.GetAuthorizedAsync(executionId, userId, cancellationToken).ConfigureAwait(false);
-        return snapshot.Status == DurableExecutionStatus.WaitingForHuman ? snapshot.GetUnansweredInteractions() : [];
     }
 
     /// <summary>
@@ -340,15 +334,16 @@ internal sealed class DurableExecutionCoordinator
                     // pending 只在 checkpoint 与请求已经原子落库后合成，回答不会指向未持久化边界。
                     foreach (var interaction in snapshot.GetUnansweredInteractions())
                     {
-                        if (!emittedInteractions.Add(interaction.RequestId))
+                        if (!emittedInteractions.Add(interaction.InteractionId))
                         {
                             continue;
                         }
 
                         yield return new ExecutionStreamEntry(
                             cursor ?? "0-0",
-                            DurableHumanInteractionMapper.ToMessage(
+                            InteractionMessageMapper.Create(
                                 interaction,
+                                Guid.CreateVersion7().ToString("N"),
                                 executionId,
                                 ResolveStreamingScopeId(snapshot.Manifest)
                             )

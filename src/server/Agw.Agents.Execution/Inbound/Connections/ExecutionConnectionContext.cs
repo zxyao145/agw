@@ -75,7 +75,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 _userId,
                 messageSink,
                 hostToken,
-                pending => _waitingForHuman = pending != null
+                pendingCount => _waitingForHuman = pendingCount > 0
             );
             _executionStarter = _inProcessStarter;
         }
@@ -268,6 +268,8 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     public async Task SetPermissionModeAsync(PermissionMode permissionMode, CancellationToken cancellationToken)
     {
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
+        if (_durableSession != null)
+            await _durableSession.SetPermissionModeAsync(permissionMode, cancellationToken);
         Settings = (Settings ?? ExecutionSettings.CreateDefault()).WithPermissionMode(permissionMode);
         var runtime = Runtime;
         if (runtime == null)
@@ -317,9 +319,9 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             return;
         }
 
-        if (Runtime == null || !await Runtime.TrySubmitHumanResponseAsync(command, cancellationToken))
+        if (Runtime == null || !await Runtime.TrySubmitHumanResponseAsync(command.Response, cancellationToken))
         {
-            await SendSystemMessageAsync("No matching HumanGate request is waiting for this response.");
+            await SendSystemMessageAsync("No matching interaction is waiting for this response.");
         }
     }
 

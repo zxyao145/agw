@@ -6,7 +6,7 @@ using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
 using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agents.Sessions;
 using Agw.Agents.Execution.HumanInteraction;
-using Agw.Agents.Execution.HumanInteraction.Contracts;
+using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Persistence.Durable;
@@ -95,14 +95,14 @@ public partial class AgentflowRuntimeServiceTests
                 fixture.Flow.Id,
                 "input",
                 TestContext.Current.CancellationToken,
-                humanGateApprovalHandler: unavailable ? null : new FixedApprovalHandler(false)
+                interactionHandler: unavailable ? null : new FixedApprovalHandler(false)
             )
         );
 
         Assert.Equal(
             unavailable
                 ? ["input", "human-gate-unavailable", "turn-finished"]
-                : ["input", "human-gate-request", "human-gate-rejected", "turn-finished"],
+                : ["input", "human-gate-rejected", "turn-finished"],
             messages.Select(MessageShape)
         );
         Assert.Empty(agent.Inputs);
@@ -119,19 +119,21 @@ public partial class AgentflowRuntimeServiceTests
         );
         fixture.Nodes[0].ConfigJson = """{"humanMode":" review ","humanPrompt":" Approve now "}""";
 
+        var handler = new FixedApprovalHandler(true, " accepted ");
         var messages = await CollectAsync(
             fixture.Service.ExecuteStreamingAsync(
                 fixture.Flow.Id,
                 "input",
                 TestContext.Current.CancellationToken,
-                humanGateApprovalHandler: new FixedApprovalHandler(true, " accepted ")
+                interactionHandler: handler
             )
         );
 
-        Assert.Equal(["input", "human-gate-request", "turn-finished"], messages.Select(MessageShape));
-        Assert.Equal("review", messages[1].AdditionalProperties!["mode"]);
-        Assert.Equal("Approve now", messages[1].AdditionalProperties!["prompt"]);
-        Assert.Equal("input", messages[1].AdditionalProperties!["inputPreview"]);
+        Assert.Equal(["input", "turn-finished"], messages.Select(MessageShape));
+        var gate = Assert.IsType<WorkflowGateInteraction>(Assert.Single(handler.Requests));
+        Assert.Equal("review", gate.Mode);
+        Assert.Equal("Approve now", gate.Prompt);
+        Assert.Equal("input", gate.InputPreview);
         Assert.Empty(agent.Inputs);
     }
 
@@ -148,7 +150,7 @@ public partial class AgentflowRuntimeServiceTests
         );
 
         Assert.Equal(["input", "", "tool-approval-unavailable", "turn-finished"], messages.Select(MessageShape));
-        Assert.Equal("approval-1", messages[2].AdditionalProperties!["requestId"]);
+        Assert.Equal("approval-1", messages[2].AdditionalProperties!["providerRequestId"]);
     }
 
     [Fact]
@@ -288,7 +290,7 @@ public partial class AgentflowRuntimeServiceTests
             sink.Messages,
             message => MessageShape(message).StartsWith("turn-", StringComparison.Ordinal)
         );
-        Assert.Equal("approval-1", request.RequestId);
+        Assert.Equal("approval-1", request.Source.ProviderRequestId);
     }
 
     [Fact]
@@ -297,13 +299,7 @@ public partial class AgentflowRuntimeServiceTests
         var fixture = CreateCharacterizationFixture([AgentflowNodeKind.Agent, AgentflowNodeKind.Output]);
         var manifest = CreateManifest(fixture.Flow.Id);
         var sink = new RecordingSegmentSink();
-        var request = new DurableHumanInteractionSnapshot
-        {
-            RequestId = "unmatched",
-            Kind = "interaction",
-            NodeId = "missing",
-            Prompt = "unused",
-        };
+        var request = InteractionTestData.Gate("unmatched", "missing", prompt: "unused");
 
         var result = await fixture.Service.ExecuteDurableSegmentAsync(
             manifest,
@@ -379,34 +375,16 @@ public partial class AgentflowRuntimeServiceTests
         Assert.Empty(fixture.Agents.CreatedAgents);
     }
 
-    [Fact]
-    public async Task ExecuteDurableSegmentAsync_ParallelHumanGates_RestoresEveryResponse()
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task ExecuteDurableSegmentAsync_ParallelHumanGates_RestoresEveryResponse(
+        bool firstApproved,
+        bool secondApproved
+    )
     {
-        var fixture = CreateCharacterizationFixture([
-            AgentflowNodeKind.HumanGate,
-            AgentflowNodeKind.HumanGate,
-            AgentflowNodeKind.Agent,
-            AgentflowNodeKind.Output,
-        ]);
-        fixture.Edges.Remove(fixture.Edges.Queryable.Single(edge => edge.EdgeId == "edge-0"));
-        await fixture.Edges.AddAsync(
-            new AgentflowEdge
-            {
-                AgentflowId = fixture.Flow.Id,
-                EdgeId = "input-second",
-                SourceNodeId = "input",
-                TargetNodeId = "node-1",
-            }
-        );
-        await fixture.Edges.AddAsync(
-            new AgentflowEdge
-            {
-                AgentflowId = fixture.Flow.Id,
-                EdgeId = "parallel",
-                SourceNodeId = "node-0",
-                TargetNodeId = "node-2",
-            }
-        );
+        var fixture = await CreateParallelGateFixtureAsync();
         var manifest = CreateManifest(fixture.Flow.Id);
         var sink = new RecordingSegmentSink();
         var waiting = await fixture.Service.ExecuteDurableSegmentAsync(
@@ -424,7 +402,12 @@ public partial class AgentflowRuntimeServiceTests
             new(
                 manifest.ExecutionId,
                 1,
-                waiting.PendingInteractions.Select(request => CreateResponse(manifest, request, true)).ToArray(),
+                waiting
+                    .PendingInteractions.Select(
+                        (request, index) =>
+                            CreateResponse(manifest, request, index == 0 ? firstApproved : secondApproved)
+                    )
+                    .ToArray(),
                 waiting.Checkpoint
             ),
             sink,
@@ -433,6 +416,10 @@ public partial class AgentflowRuntimeServiceTests
 
         Assert.Equal(DurableExecutionSegmentStatus.Completed, result.Status);
         Assert.Empty(result.PendingInteractions);
+        Assert.Equal(
+            firstApproved && secondApproved ? 0 : 1,
+            sink.Messages.Count(message => MessageShape(message) == "human-gate-rejected")
+        );
         Assert.DoesNotContain(
             sink.Messages,
             message => MessageShape(message).StartsWith("turn-", StringComparison.Ordinal)
@@ -579,7 +566,8 @@ public partial class AgentflowRuntimeServiceTests
         IProviderSessionState? providerSessionState = null,
         IProjectDefaultResolver? projectDefaults = null,
         IProjectRuntimeFacade? projectRuntimeFacade = null,
-        IRuntimeTurnContextAccessor? turnContextAccessor = null
+        IRuntimeTurnContextAccessor? turnContextAccessor = null,
+        HumanInteractionContextAccessor? interactionAccessor = null
     )
     {
         var flow = new Agentflow
@@ -644,7 +632,9 @@ public partial class AgentflowRuntimeServiceTests
             providerSessionState ?? new StubProviderSessionState(),
             new RecordingSummaryService(),
             sessionStateStore: sessionStateStore,
-            humanInteractionContextAccessor: interactions ? new HumanInteractionContextAccessor() : null,
+            humanInteractionContextAccessor: interactions
+                ? interactionAccessor ?? new HumanInteractionContextAccessor()
+                : null,
             checkpointStore: checkpointStore,
             projectDefaults: projectDefaults,
             projectRuntimeFacade: projectRuntimeFacade,
@@ -682,21 +672,10 @@ public partial class AgentflowRuntimeServiceTests
 
     private static DurableResolvedInteraction CreateResponse(
         DurableExecutionManifest manifest,
-        DurableHumanInteractionSnapshot request,
+        InteractionRequest request,
         bool approved,
         string approvalScope = "once"
-    ) =>
-        new(
-            request,
-            new DurableHumanResponseEnvelope
-            {
-                ExecutionId = manifest.ExecutionId,
-                RequestId = request.RequestId,
-                Approved = approved,
-                ResponseText = " accepted ",
-                ApprovalScope = approvalScope,
-            }
-        );
+    ) => new(request, InteractionTestData.Decision(request, approved, " accepted ", approvalScope));
 
     private static async Task<List<AgwMessage>> CollectAsync(IAsyncEnumerable<AgwMessage> stream)
     {
@@ -723,10 +702,11 @@ public partial class AgentflowRuntimeServiceTests
         }
     }
 
-    private sealed class FixedApprovalHandler : IHumanGateApprovalHandler
+    private sealed class FixedApprovalHandler : IInteractionHandler
     {
         private readonly bool _approved;
         private readonly string? _text;
+        public List<InteractionRequest> Requests { get; } = [];
 
         public FixedApprovalHandler(bool approved, string? text = null)
         {
@@ -734,13 +714,14 @@ public partial class AgentflowRuntimeServiceTests
             _text = text;
         }
 
-        public async ValueTask<HumanGateApprovalDecision> WaitForApprovalAsync(
-            HumanGateApprovalRequest request,
+        public async ValueTask<InteractionResolution> ResolveAsync(
+            InteractionRequest request,
             CancellationToken cancellationToken
         )
         {
+            Requests.Add(request);
             await Task.Delay(20, cancellationToken);
-            return new HumanGateApprovalDecision(request.RequestId, _approved, _text);
+            return new InteractionResolution.Resolved(InteractionTestData.Decision(request, _approved, _text));
         }
     }
 

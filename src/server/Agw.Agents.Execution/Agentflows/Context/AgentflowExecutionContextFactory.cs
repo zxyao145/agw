@@ -1,6 +1,6 @@
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Agents.Sessions;
-using Agw.Agents.Execution.HumanInteraction.Approvals;
+using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.Messaging;
 using Microsoft.Extensions.AI;
 
@@ -38,7 +38,7 @@ public sealed class AgentflowExecutionContextFactory
         Guid? taskId,
         Guid? conversationId,
         CancellationToken cancellationToken,
-        PermissionModeState permissionState
+        MafPermissionState permissionState
     )
     {
         var resolvedConversationId =

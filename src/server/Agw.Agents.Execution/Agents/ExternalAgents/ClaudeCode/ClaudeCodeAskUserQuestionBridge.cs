@@ -77,6 +77,9 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
 
         try
         {
+            // 将 Claude 原生 AskUserQuestion 转为 UserInput；FullAccess 下仍需要用户提供真实答案。
+            // 只发送问题，忽略原始 input 中可能携带的模型答案；tool_use_id 保留为来源调用标识。
+            // channel 负责交互 ID 与等待，校验后的用户答案才会作为 updatedInput 返回 SDK。
             var toolParams =
                 JsonUtil.Deserialize<AskUserQuestionToolParams>(input.GetRawText())
                 ?? throw new AgwException(ErrorCodes.InvalidParam, "Question arguments are invalid.");
@@ -85,19 +88,11 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
             var payload = JsonSerializer.SerializeToElement(
                 new Dictionary<string, JsonElement> { ["questions"] = questions }
             );
-            var request = new HumanInteractionRequest(Guid.CreateVersion7().ToString("N"), "questions", Prompt, payload)
+            var request = new UserInputRequest("questions", Prompt, payload)
             {
-                ToolName = ToolName,
-                CallId = context.ToolUseId,
+                Source = new InteractionSource { ToolName = ToolName, CallId = context.ToolUseId },
             };
             var response = await channel.RequestAsync(request, cancellationToken).ConfigureAwait(false);
-            if (!string.Equals(request.RequestId, response.RequestId, StringComparison.Ordinal))
-            {
-                return Deny(
-                    $"Human interaction response '{response.RequestId}' does not match request '{request.RequestId}'."
-                );
-            }
-
             if (response.Cancelled)
             {
                 return Deny("User cancelled the question request without answering.");

@@ -199,10 +199,6 @@ internal sealed class ExecutionStreamMessageSink : IExecutionMessageSink, IAsync
             return false;
         }
 
-        return type
-            is "human-interaction-request"
-                or "tool-approval-request"
-                or "human-gate-request"
-                or TurnMessageProtocol.FinishedType;
+        return type is "interaction-request" or TurnMessageProtocol.FinishedType;
     }
 }

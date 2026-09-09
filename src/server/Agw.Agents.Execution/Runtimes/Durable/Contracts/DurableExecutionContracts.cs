@@ -26,7 +26,11 @@ internal sealed record DurableExecutionSegmentInput(
     int SegmentIndex,
     IReadOnlyList<DurableResolvedInteraction> ResolvedInteractions,
     DurableAgentflowCheckpoint? Checkpoint
-);
+)
+{
+    public IReadOnlyList<UserInputInteraction> InputCatalog { get; init; } = [];
+    public IReadOnlyList<DurableResolvedInteraction> ResolvedInputs { get; init; } = [];
+}
 
 /// <summary>
 /// 分段执行器与 PostgreSQL 状态机之间的持久边界。
@@ -51,7 +55,9 @@ internal sealed record DurableExecutionSegmentResult
     /// <summary>
     /// 获取本分段捕获的待处理人工交互。
     /// </summary>
-    public IReadOnlyList<DurableHumanInteractionSnapshot> PendingInteractions { get; init; } = [];
+    public IReadOnlyList<InteractionRequest> PendingInteractions { get; init; } = [];
+
+    public IReadOnlyList<UserInputInteraction> InputCatalog { get; init; } = [];
 
     /// <summary>
     /// 获取本分段生成的最新 Agentflow checkpoint。

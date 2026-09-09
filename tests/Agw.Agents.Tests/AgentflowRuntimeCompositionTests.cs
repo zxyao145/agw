@@ -7,6 +7,7 @@ using Agw.Agents.Execution.Agentflows.Runners.InProcess;
 using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Agents.Runtime;
+using Agw.Agents.Execution.HumanInteraction.InProcess;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Summaries;
 using Agw.Shared.Contracts.Coordination;
@@ -166,22 +167,30 @@ public partial class AgentflowRuntimeServiceTests
         );
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         var messages = new List<AgwMessage>();
+        var sink = new InteractionTestSink
+        {
+            OnWrite = (message, _) =>
+            {
+                messages.Add(message);
+                cancellation.Cancel();
+                return ValueTask.CompletedTask;
+            },
+        };
+        var interactions = new InProcessInteractionSession(sink);
 
         await foreach (
             var message in fixture.Service.ExecuteStreamingAsync(
                 fixture.Flow.Id,
                 "input",
                 cancellation.Token,
-                humanGateApprovalHandler: new CancellingApprovalHandler()
+                interactionHandler: interactions
             )
         )
         {
             messages.Add(message);
-            if (MessageShape(message) == "human-gate-request")
-                cancellation.Cancel();
         }
 
-        Assert.Equal(["input", "human-gate-request"], messages.Select(MessageShape));
+        Assert.Equal(["input", "interaction-request"], messages.Select(MessageShape));
         Assert.Empty(agent.Inputs);
         Assert.Equal(1, agent.DisposeCount);
     }

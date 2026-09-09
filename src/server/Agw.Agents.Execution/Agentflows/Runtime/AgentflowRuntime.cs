@@ -1,8 +1,8 @@
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.HumanInteraction.Approvals;
-using Agw.Agents.Execution.HumanInteraction.Contracts;
+using Agw.Agents.Execution.HumanInteraction.Application;
+using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.Runtimes;
 
 namespace Agw.Agents.Execution.Agentflows.Runtime;
@@ -30,20 +30,20 @@ public sealed class AgentflowRuntime : RuntimeBase
 
     internal IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         ExecCommand command,
-        IHumanGateApprovalHandler humanGateApprovalHandler,
+        IInteractionHandler interactionHandler,
         CancellationToken cancellationToken
     ) =>
         ExecuteStreamingAsync(
             command,
-            humanGateApprovalHandler,
-            new PermissionModeState(_settings.PermissionMode),
+            interactionHandler,
+            new MafPermissionState(_settings.PermissionMode),
             cancellationToken
         );
 
     internal IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         ExecCommand command,
-        IHumanGateApprovalHandler humanGateApprovalHandler,
-        PermissionModeState permissionState,
+        IInteractionHandler interactionHandler,
+        MafPermissionState permissionState,
         CancellationToken cancellationToken
     ) =>
         _runtimeService.ExecuteStreamingWithPermissionStateAsync(
@@ -53,7 +53,7 @@ public sealed class AgentflowRuntime : RuntimeBase
             ProjectDefaults.GetDefaultProjectIdentifier(_settings.ProjectId),
             _task.ContextId,
             _task.TaskId,
-            humanGateApprovalHandler,
+            interactionHandler,
             _settings.EnvironmentVariables,
             _task.ProjectConversationId,
             permissionState,

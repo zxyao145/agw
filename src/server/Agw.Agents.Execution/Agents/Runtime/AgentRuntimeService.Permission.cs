@@ -1,4 +1,4 @@
-using Agw.Agents.Execution.HumanInteraction.Approvals;
+using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 
 namespace Agw.Agents.Execution.Agents.Runtime;
 
@@ -11,7 +11,7 @@ public partial class AgentRuntimeService
     )
     {
         ArgumentNullException.ThrowIfNull(runtime);
-        ToolApprovalPermissionState.Apply(runtime.Session, permissionMode);
+        MafSessionApprovalState.Apply(runtime.Session, permissionMode);
         if (runtime.SessionStateScope != null)
         {
             await _sessionStateStore.SaveAsync(

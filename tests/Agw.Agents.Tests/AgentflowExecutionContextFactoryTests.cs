@@ -1,7 +1,7 @@
 using Agw.Agents.Execution.Agentflows.Context;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Agents.Sessions;
-using Agw.Agents.Execution.HumanInteraction.Approvals;
+using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -20,7 +20,7 @@ public class AgentflowExecutionContextFactoryTests
         var projectId = Guid.CreateVersion7();
         var taskId = Guid.CreateVersion7();
         Guid? conversationId = explicitConversation ? Guid.CreateVersion7() : null;
-        var permissionState = new PermissionModeState(PermissionMode.AlwaysAsk);
+        var permissionState = new MafPermissionState(PermissionMode.AlwaysAsk);
 
         var scope = await factory.CreateSessionScopeAsync(
             projectId,

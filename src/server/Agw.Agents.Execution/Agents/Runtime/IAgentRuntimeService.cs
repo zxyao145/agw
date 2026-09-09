@@ -1,6 +1,6 @@
 using Agw.Agents.Execution.Agents.Contracts;
 using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.HumanInteraction.Contracts;
+using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
 using RuntimeAgentExecutionResult = Agw.Agents.Execution.Agents.Contracts.AgentExecutionResult;
@@ -81,7 +81,7 @@ public interface IAgentRuntimeService
     IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         AgentRuntime session,
         AgwUserInput input,
-        IHumanGateApprovalHandler? approvalHandler,
+        IInteractionHandler? approvalHandler,
         CancellationToken cancellationToken = default
     ) => ExecuteStreamingAsync(session, input, cancellationToken);
 
@@ -94,7 +94,7 @@ public interface IAgentRuntimeService
     Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
         AgentRuntime session,
         AgwUserInput input,
-        IHumanGateApprovalHandler? approvalHandler,
+        IInteractionHandler? approvalHandler,
         CancellationToken cancellationToken = default
     ) => ExecuteAsync(session, input, cancellationToken);
 

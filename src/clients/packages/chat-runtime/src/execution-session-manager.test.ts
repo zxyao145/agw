@@ -27,35 +27,161 @@ function createExecutionClient() {
   };
 }
 
-function createQuestionInteraction(requestId = "interaction-1"): AiMessage {
+function createQuestionInteraction(interactionId = "interaction-1"): AiMessage {
   return {
-    messageId: `message-${requestId}`,
+    messageId: `message-${interactionId}`,
     role: "system",
     author: "$agw",
     contents: [{ type: "TextContent", content: "Choose before continuing." }],
     additionalProperties: {
-      type: "human-interaction-request",
-      requestId,
-      interactionKind: "questions",
-      toolName: "ask_user_question",
-      callId: "call-1",
-      prompt: "Choose before continuing.",
-      payload: {
-        questions: [
-          {
-            question: "What should happen next?",
-            header: "Next step",
-            multiSelect: false,
-            options: [
-              { label: "Continue", description: "Keep running the workflow." },
-              { label: "Stop", description: "Stop the workflow." },
-            ],
-          },
-        ],
+      type: "interaction-request",
+      interaction: {
+        kind: "user-input",
+        interactionId,
+        inputKind: "questions",
+        source: { toolName: "ask_user_question", callId: "call-1" },
+        prompt: "Choose before continuing.",
+        payload: {
+          questions: [
+            {
+              question: "What should happen next?",
+              header: "Next step",
+              multiSelect: false,
+              options: [
+                { label: "Continue", description: "Keep running the workflow." },
+                { label: "Stop", description: "Stop the workflow." },
+              ],
+            },
+          ],
+        },
       },
     },
   };
 }
+
+function createGateInteraction(interactionId: string): AiMessage {
+  return {
+    messageId: `message-${interactionId}`,
+    role: "system",
+    contents: [],
+    additionalProperties: {
+      type: "interaction-request",
+      interaction: {
+        kind: "workflow-gate",
+        interactionId,
+        prompt: "Continue?",
+        mode: "approval",
+        source: { nodeId: `node-${interactionId}` },
+      },
+    },
+  };
+}
+
+for (const detachedDuringPublication of [false, true]) {
+  test(`parallel gates survive detach and replay once (published detached: ${detachedDuringPublication})`, async () => {
+    let handlers!: ExecutionHubHandlers;
+    const manager = new ExecutionSessionManager((value) => {
+      handlers = value;
+      return createExecutionClient();
+    });
+    const handle = manager.attach(sessionKey, { onMessage: () => undefined });
+    if (detachedDuringPublication) handle.detach();
+    const first = createGateInteraction("first");
+    const second = createGateInteraction("second");
+    handlers.onMessage(first);
+    handlers.onMessage(second);
+    handlers.onMessage(first);
+    handle.detach();
+
+    const replayed: AiMessage[] = [];
+    manager.attach(sessionKey, { onMessage: (message) => replayed.push(message) });
+    await Promise.resolve();
+
+    assert.deepEqual(replayed, [first, second]);
+  });
+}
+
+test("completing the visible parallel gate surfaces and retains the other gate", async () => {
+  let handlers!: ExecutionHubHandlers;
+  const manager = new ExecutionSessionManager((value) => {
+    handlers = value;
+    return createExecutionClient();
+  });
+  const visible: AiMessage[] = [];
+  const handle = manager.attach(sessionKey, { onMessage: (message) => visible.push(message) });
+  const first = createGateInteraction("first");
+  const second = createGateInteraction("second");
+  handlers.onMessage(first);
+  handlers.onMessage(second);
+  visible.length = 0;
+
+  await handle.submitHumanResponse({
+    response: { kind: "workflow-gate", interactionId: "second", approved: true },
+  });
+
+  assert.deepEqual(visible, [first]);
+  assert.equal(handle.getStatus(), "waiting-approval");
+  handle.detach();
+  const replayed: AiMessage[] = [];
+  const reattached = manager.attach(sessionKey, { onMessage: (message) => replayed.push(message) });
+  await Promise.resolve();
+  assert.deepEqual(replayed, [first]);
+  await reattached.submitHumanResponse({
+    response: { kind: "workflow-gate", interactionId: "first", approved: true },
+  });
+  reattached.detach();
+  const afterCompletion: AiMessage[] = [];
+  manager.attach(sessionKey, { onMessage: (message) => afterCompletion.push(message) });
+  await Promise.resolve();
+  assert.deepEqual(afterCompletion, []);
+});
+
+test("a terminal message invalidates parallel gates already scheduled for replay", async () => {
+  let handlers!: ExecutionHubHandlers;
+  const manager = new ExecutionSessionManager((value) => {
+    handlers = value;
+    return createExecutionClient();
+  });
+  const handle = manager.attach(sessionKey, { onMessage: () => undefined });
+  handlers.onMessage(createGateInteraction("first"));
+  handlers.onMessage(createGateInteraction("second"));
+  handle.detach();
+  const replayed: AiMessage[] = [];
+  manager.attach(sessionKey, { onMessage: (message) => replayed.push(message) });
+  const terminal = createTurnFinishedMessage();
+  handlers.onMessage(terminal);
+  await Promise.resolve();
+  assert.deepEqual(replayed, [terminal]);
+});
+
+test("submission completion does not clear the next queued interaction during replay", async () => {
+  let handlers!: ExecutionHubHandlers;
+  let finish!: () => void;
+  const manager = new ExecutionSessionManager((value) => {
+    handlers = value;
+    return {
+      ...createExecutionClient(),
+      submitHumanResponse: () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    };
+  });
+  const handle = manager.attach(sessionKey, { onMessage: () => undefined });
+  handlers.onMessage(createQuestionInteraction("first"));
+  const submitting = handle.submitHumanResponse({
+    response: { kind: "user-input", interactionId: "first", cancelled: true },
+  });
+  const next = createQuestionInteraction("second");
+  handlers.onMessage(next);
+  finish();
+  await submitting;
+  handle.detach();
+  const replayed: AiMessage[] = [];
+  manager.attach(sessionKey, { onMessage: (message) => replayed.push(message) });
+  await Promise.resolve();
+  assert.deepEqual(replayed, [next]);
+});
 
 function createTurnFinishedMessage(): AiMessage {
   return {
@@ -317,7 +443,14 @@ test("manager clears the replayed question interaction after a response is submi
   const firstHandle = manager.attach(sessionKey, { onMessage: () => undefined });
 
   clientHandlers?.onMessage(interaction);
-  await firstHandle.submitHumanResponse({ requestId: "interaction-1", approved: true });
+  await firstHandle.submitHumanResponse({
+    response: {
+      kind: "user-input",
+      interactionId: "interaction-1",
+      cancelled: false,
+      responseData: { answers: {} },
+    },
+  });
   firstHandle.detach();
 
   const replayed: AiMessage[] = [];
@@ -343,7 +476,14 @@ test("manager keeps the question interaction when response submission fails", as
 
   clientHandlers?.onMessage(interaction);
   await assert.rejects(
-    firstHandle.submitHumanResponse({ requestId: "interaction-1", approved: true }),
+    firstHandle.submitHumanResponse({
+      response: {
+        kind: "user-input",
+        interactionId: "interaction-1",
+        cancelled: false,
+        responseData: { answers: {} },
+      },
+    }),
     /response failed/,
   );
   firstHandle.detach();
