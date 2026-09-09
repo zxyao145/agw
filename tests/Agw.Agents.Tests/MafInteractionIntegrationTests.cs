@@ -39,7 +39,7 @@ public sealed class MafInteractionIntegrationTests : IDisposable
         var agent = CreateAgent(model, services, completed, deferred: false);
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
         var sink = new InteractionTestSink();
-        var interactions = new InProcessInteractionSession(sink, PermissionMode.FullAccess);
+        var interactions = new InProcessInteractionSession(sink, AgwPermissionMode.FullAccess);
         sink.OnWrite = async (message, token) =>
         {
             var request = Assert.IsType<UserInputInteraction>(InteractionTestData.Read(message));
@@ -67,7 +67,7 @@ public sealed class MafInteractionIntegrationTests : IDisposable
         var agent = CreateAgent(model, services, completed, deferred: true);
         var session = await agent.CreateSessionAsync(token);
         var registry = new InteractionRequestRegistry();
-        var permissions = new InteractionPermissionState(PermissionMode.FullAccess);
+        var permissions = new InteractionPermissionState(AgwPermissionMode.FullAccess);
         ToolApprovalRequestContent firstApproval;
         UserInputInteraction first;
         using (accessor.Push(new ResolvedHumanInteractionChannel([]), registry, permissions))

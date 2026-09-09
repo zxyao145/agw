@@ -69,7 +69,7 @@ public sealed class AgentflowRuntime : RuntimeBase
 
     internal void RemoveCheckpointsAfter(long boundarySequence) => _checkpointState.RemoveAfter(boundarySequence);
 
-    internal void SetPermissionMode(PermissionMode permissionMode)
+    internal void SetPermissionMode(AgwPermissionMode permissionMode)
     {
         _settings.PermissionMode = permissionMode;
     }

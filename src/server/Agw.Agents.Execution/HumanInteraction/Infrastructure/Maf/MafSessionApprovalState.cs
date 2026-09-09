@@ -10,16 +10,16 @@ internal static class MafSessionApprovalState
 {
     internal const string GrantStateKey = "Agw.ToolApproval.Grants";
 
-    internal static PermissionMode? GetPermissionMode(AgentSession session) =>
+    internal static AgwPermissionMode? GetPermissionMode(AgentSession session) =>
         session.StateBag.TryGetValue<MafSessionGrantState>(GrantStateKey, out var state, JsonSerializerOptions.Default)
             ? state?.PermissionMode
             : null;
 
     // Session state is accessed only by its SDK execution flow, never by the control monitor.
-    public static void Apply(AgentSession session, PermissionMode? permissionMode) =>
+    public static void Apply(AgentSession session, AgwPermissionMode? permissionMode) =>
         GetOrCreateState(session, permissionMode);
 
-    internal static PermissionMode? Synchronize(AgentSession session, InteractionPermissionState permissions)
+    internal static AgwPermissionMode? Synchronize(AgentSession session, InteractionPermissionState permissions)
     {
         var snapshot = permissions.Snapshot;
         var state = GetOrCreateState(session, snapshot.Mode);
@@ -35,20 +35,20 @@ internal static class MafSessionApprovalState
         AgentSession session,
         FunctionCallContent functionCall,
         ApprovalScope scope,
-        PermissionMode? permissionMode
+        AgwPermissionMode? permissionMode
     )
     {
         ArgumentNullException.ThrowIfNull(functionCall);
         var state = GetOrCreateState(session, permissionMode);
         if (
-            permissionMode == PermissionMode.AlwaysAsk
+            permissionMode == AgwPermissionMode.AlwaysAsk
             || scope is not (ApprovalScope.AlwaysTool or ApprovalScope.AlwaysArguments)
         )
         {
             return;
         }
 
-        if (permissionMode == PermissionMode.AllowSameArguments)
+        if (permissionMode == AgwPermissionMode.AllowSameArguments)
         {
             scope = ApprovalScope.AlwaysArguments;
         }
@@ -81,7 +81,7 @@ internal static class MafSessionApprovalState
         session.StateBag.SetValue(GrantStateKey, state, JsonSerializerOptions.Default);
     }
 
-    public static bool TryApprove(ToolAutoApprovalRuleContext context, PermissionMode? permissionMode)
+    public static bool TryApprove(ToolAutoApprovalRuleContext context, AgwPermissionMode? permissionMode)
     {
         ArgumentNullException.ThrowIfNull(context);
         if (context.Session is not { } session)
@@ -90,7 +90,7 @@ internal static class MafSessionApprovalState
         }
 
         var state = GetOrCreateState(session, permissionMode);
-        if (permissionMode == PermissionMode.AlwaysAsk)
+        if (permissionMode == AgwPermissionMode.AlwaysAsk)
         {
             return false;
         }
@@ -100,13 +100,13 @@ internal static class MafSessionApprovalState
         return state.Grants.Any(grant =>
             string.Equals(grant.ToolName, functionCall.Name, StringComparison.Ordinal)
             && (
-                (grant.Scope == ApprovalScope.AlwaysTool && permissionMode != PermissionMode.AllowSameArguments)
+                (grant.Scope == ApprovalScope.AlwaysTool && permissionMode != AgwPermissionMode.AllowSameArguments)
                 || (grant.Scope == ApprovalScope.AlwaysArguments && JsonNode.DeepEquals(grant.Arguments, arguments))
             )
         );
     }
 
-    private static MafSessionGrantState GetOrCreateState(AgentSession session, PermissionMode? permissionMode)
+    private static MafSessionGrantState GetOrCreateState(AgentSession session, AgwPermissionMode? permissionMode)
     {
         ArgumentNullException.ThrowIfNull(session);
         if (

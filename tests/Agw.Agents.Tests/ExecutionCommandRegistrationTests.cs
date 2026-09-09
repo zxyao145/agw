@@ -87,7 +87,7 @@ public class ExecutionCommandRegistrationTests
         );
 
         var setPermissionMode = Assert.IsType<SetPermissionModeCommand>(command);
-        Assert.Equal(PermissionMode.AllowSameArguments, setPermissionMode.PermissionMode);
+        Assert.Equal(AgwPermissionMode.AllowSameArguments, setPermissionMode.PermissionMode);
     }
 
     [Fact]

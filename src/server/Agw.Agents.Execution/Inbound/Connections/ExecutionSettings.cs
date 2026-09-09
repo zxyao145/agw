@@ -11,7 +11,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         Guid projectId,
         string? contextId,
         IReadOnlyDictionary<string, string> environmentVariables,
-        PermissionMode? permissionMode,
+        AgwPermissionMode? permissionMode,
         bool resume,
         HumanInteractionPolicy humanInteractionPolicy = HumanInteractionPolicy.Allow
     )
@@ -30,7 +30,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
 
     public IReadOnlyDictionary<string, string> EnvironmentVariables => _environmentVariables;
 
-    public PermissionMode? PermissionMode { get; }
+    public AgwPermissionMode? PermissionMode { get; }
 
     public bool Resume { get; }
 
@@ -51,7 +51,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
     public static ExecutionSettings CreateDefault() =>
         FromCommand(new SettingCommand(ProjectDefaults.DefaultBuiltInId));
 
-    public ExecutionSettings WithPermissionMode(PermissionMode permissionMode) =>
+    public ExecutionSettings WithPermissionMode(AgwPermissionMode permissionMode) =>
         new(ProjectId, ContextId, _environmentVariables, permissionMode, Resume, HumanInteractionPolicy);
 
     public ExecutionSettings WithHumanInteractionPolicy(HumanInteractionPolicy policy) =>

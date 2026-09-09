@@ -11,10 +11,10 @@ public class MafSessionApprovalStateTests
 {
     [Theory]
     [InlineData(null)]
-    [InlineData(PermissionMode.AlwaysAsk)]
-    [InlineData(PermissionMode.AllowSameArguments)]
-    [InlineData(PermissionMode.FullAccess)]
-    public void Record_Once_DoesNotGrantLaterCalls(PermissionMode? mode)
+    [InlineData(AgwPermissionMode.AlwaysAsk)]
+    [InlineData(AgwPermissionMode.AllowSameArguments)]
+    [InlineData(AgwPermissionMode.FullAccess)]
+    public void Record_Once_DoesNotGrantLaterCalls(AgwPermissionMode? mode)
     {
         var session = new TestSession();
         var call = CreateCall("run_shell", "{\"command\":\"pwd\"}");
@@ -32,9 +32,9 @@ public class MafSessionApprovalStateTests
         var session = new TestSession();
         var call = CreateCall("run_shell", "{\"command\":\"pwd\"}");
 
-        MafSessionApprovalState.Record(session, call, scope, PermissionMode.AlwaysAsk);
+        MafSessionApprovalState.Record(session, call, scope, AgwPermissionMode.AlwaysAsk);
 
-        Assert.False(MafSessionApprovalState.TryApprove(CreateContext(session, call), PermissionMode.AlwaysAsk));
+        Assert.False(MafSessionApprovalState.TryApprove(CreateContext(session, call), AgwPermissionMode.AlwaysAsk));
     }
 
     [Fact]
@@ -137,28 +137,28 @@ public class MafSessionApprovalStateTests
         var session = new TestSession();
         var call = CreateCall("run_shell", "{\"command\":\"pwd\"}");
 
-        MafSessionApprovalState.Record(session, call, scope, PermissionMode.AllowSameArguments);
+        MafSessionApprovalState.Record(session, call, scope, AgwPermissionMode.AllowSameArguments);
 
         Assert.True(
-            MafSessionApprovalState.TryApprove(CreateContext(session, call), PermissionMode.AllowSameArguments)
+            MafSessionApprovalState.TryApprove(CreateContext(session, call), AgwPermissionMode.AllowSameArguments)
         );
         Assert.False(
             MafSessionApprovalState.TryApprove(
                 CreateContext(session, CreateCall("run_shell", "{\"command\":\"ls\"}")),
-                PermissionMode.AllowSameArguments
+                AgwPermissionMode.AllowSameArguments
             )
         );
     }
 
     [Theory]
-    [InlineData(null, PermissionMode.AlwaysAsk)]
-    [InlineData(null, PermissionMode.AllowSameArguments)]
-    [InlineData(null, PermissionMode.FullAccess)]
-    [InlineData(PermissionMode.AllowSameArguments, null)]
-    [InlineData(PermissionMode.FullAccess, PermissionMode.AllowSameArguments)]
+    [InlineData(null, AgwPermissionMode.AlwaysAsk)]
+    [InlineData(null, AgwPermissionMode.AllowSameArguments)]
+    [InlineData(null, AgwPermissionMode.FullAccess)]
+    [InlineData(AgwPermissionMode.AllowSameArguments, null)]
+    [InlineData(AgwPermissionMode.FullAccess, AgwPermissionMode.AllowSameArguments)]
     public void Apply_ModeChanges_RevokesGrantsWithoutRestoringThemOnReturn(
-        PermissionMode? originalMode,
-        PermissionMode? nextMode
+        AgwPermissionMode? originalMode,
+        AgwPermissionMode? nextMode
     )
     {
         var session = new TestSession();
@@ -179,12 +179,17 @@ public class MafSessionApprovalStateTests
     {
         var session = new TestSession();
         var call = CreateCall("run_shell", "{}");
-        MafSessionApprovalState.Record(session, call, ApprovalScope.AlwaysArguments, PermissionMode.AllowSameArguments);
+        MafSessionApprovalState.Record(
+            session,
+            call,
+            ApprovalScope.AlwaysArguments,
+            AgwPermissionMode.AllowSameArguments
+        );
 
-        MafSessionApprovalState.Apply(session, PermissionMode.AllowSameArguments);
+        MafSessionApprovalState.Apply(session, AgwPermissionMode.AllowSameArguments);
 
         Assert.True(
-            MafSessionApprovalState.TryApprove(CreateContext(session, call), PermissionMode.AllowSameArguments)
+            MafSessionApprovalState.TryApprove(CreateContext(session, call), AgwPermissionMode.AllowSameArguments)
         );
     }
 
@@ -197,7 +202,7 @@ public class MafSessionApprovalStateTests
 
         var approved = MafSessionApprovalState.TryApprove(
             CreateContext(session, call),
-            PermissionMode.AllowSameArguments
+            AgwPermissionMode.AllowSameArguments
         );
 
         Assert.False(approved);
@@ -214,19 +219,19 @@ public class MafSessionApprovalStateTests
             session,
             CreateCall("new_tool", "{}"),
             ApprovalScope.AlwaysArguments,
-            PermissionMode.AllowSameArguments
+            AgwPermissionMode.AllowSameArguments
         );
 
         Assert.False(
             MafSessionApprovalState.TryApprove(
                 CreateContext(session, CreateCall("old_tool", "{}")),
-                PermissionMode.AllowSameArguments
+                AgwPermissionMode.AllowSameArguments
             )
         );
         Assert.True(
             MafSessionApprovalState.TryApprove(
                 CreateContext(session, CreateCall("new_tool", "{}")),
-                PermissionMode.AllowSameArguments
+                AgwPermissionMode.AllowSameArguments
             )
         );
     }
@@ -236,7 +241,7 @@ public class MafSessionApprovalStateTests
     {
         var context = CreateContext(new TestSession(), CreateCall("run_shell", "{}"));
 
-        var approved = MafSessionApprovalState.TryApprove(context, PermissionMode.FullAccess);
+        var approved = MafSessionApprovalState.TryApprove(context, AgwPermissionMode.FullAccess);
 
         Assert.False(approved);
     }
@@ -273,7 +278,7 @@ public class MafSessionApprovalStateTests
             )
         );
         Assert.False(MafSessionApprovalState.TryApprove(CreateContext(new TestSession(), call), null));
-        MafSessionApprovalState.Apply(restored, PermissionMode.AlwaysAsk);
+        MafSessionApprovalState.Apply(restored, AgwPermissionMode.AlwaysAsk);
         Assert.True(MafSessionApprovalState.TryApprove(CreateContext(original, call), null));
     }
 
@@ -296,9 +301,9 @@ public class MafSessionApprovalStateTests
         MafSessionApprovalState.Apply(session, null);
         MafSessionApprovalState.Record(session, call, ApprovalScope.AlwaysTool, null);
         Assert.True(MafSessionApprovalState.TryApprove(CreateContext(session, call), null));
-        MafSessionApprovalState.Apply(session, PermissionMode.AlwaysAsk);
-        MafSessionApprovalState.Record(session, call, ApprovalScope.Once, PermissionMode.AlwaysAsk);
-        MafSessionApprovalState.TryApprove(CreateContext(session, call), PermissionMode.FullAccess);
+        MafSessionApprovalState.Apply(session, AgwPermissionMode.AlwaysAsk);
+        MafSessionApprovalState.Record(session, call, ApprovalScope.Once, AgwPermissionMode.AlwaysAsk);
+        MafSessionApprovalState.TryApprove(CreateContext(session, call), AgwPermissionMode.FullAccess);
 
         Assert.True(
             JsonElement.DeepEquals(
@@ -319,10 +324,10 @@ public class MafSessionApprovalStateTests
         MafSessionApprovalState.Record(session, call, ApprovalScope.AlwaysTool, state.Current);
         var before = session.StateBag.Serialize();
 
-        await Task.Run(() => state.Set(PermissionMode.AlwaysAsk), TestContext.Current.CancellationToken);
+        await Task.Run(() => state.Set(AgwPermissionMode.AlwaysAsk), TestContext.Current.CancellationToken);
 
         Assert.Same(permissions, state.Permissions);
-        Assert.Equal(PermissionMode.AlwaysAsk, permissions.Current);
+        Assert.Equal(AgwPermissionMode.AlwaysAsk, permissions.Current);
         Assert.Equal(permissions.Current, state.Current);
         Assert.True(JsonElement.DeepEquals(before, session.StateBag.Serialize()));
         state.Register(session);

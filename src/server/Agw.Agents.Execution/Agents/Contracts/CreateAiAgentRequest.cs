@@ -6,7 +6,7 @@ public sealed class CreateAiAgentRequest
 {
     public Guid? ProjectId { get; init; }
 
-    public PermissionMode? PermissionMode { get; init; }
+    public AgwPermissionMode? PermissionMode { get; init; }
 
     public Guid ConversationId { get; init; }
 

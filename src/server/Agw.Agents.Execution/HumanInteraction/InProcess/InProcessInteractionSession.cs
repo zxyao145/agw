@@ -18,7 +18,7 @@ public sealed class InProcessInteractionSession : IInteractionHandler, IHumanInt
 
     public InProcessInteractionSession(
         IExecutionMessageSink sink,
-        PermissionMode? permissionMode = null,
+        AgwPermissionMode? permissionMode = null,
         Action<int>? pendingCountChanged = null
     )
         : this(sink, new InteractionPermissionState(permissionMode), pendingCountChanged) { }
@@ -116,7 +116,7 @@ public sealed class InProcessInteractionSession : IInteractionHandler, IHumanInt
         }
     }
 
-    public void SetPermissionMode(PermissionMode mode)
+    public void SetPermissionMode(AgwPermissionMode mode)
     {
         lock (_sync)
         {

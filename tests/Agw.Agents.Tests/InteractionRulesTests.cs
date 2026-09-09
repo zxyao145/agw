@@ -7,10 +7,10 @@ namespace Agw.Agents.Tests;
 public class InteractionRulesTests
 {
     [Theory]
-    [InlineData(PermissionMode.AlwaysAsk, ApprovalScope.Once)]
-    [InlineData(PermissionMode.AllowSameArguments, ApprovalScope.AlwaysArguments)]
-    [InlineData(PermissionMode.FullAccess, ApprovalScope.AlwaysTool)]
-    public void ValidateAndNormalize_ApprovedTool_EnforcesMode(PermissionMode mode, ApprovalScope scope)
+    [InlineData(AgwPermissionMode.AlwaysAsk, ApprovalScope.Once)]
+    [InlineData(AgwPermissionMode.AllowSameArguments, ApprovalScope.AlwaysArguments)]
+    [InlineData(AgwPermissionMode.FullAccess, ApprovalScope.AlwaysTool)]
+    public void ValidateAndNormalize_ApprovedTool_EnforcesMode(AgwPermissionMode mode, ApprovalScope scope)
     {
         var request = InteractionTestData.Tool("tool");
         var result = Assert.IsType<ToolApprovalDecision>(
@@ -31,7 +31,7 @@ public class InteractionRulesTests
     [Fact]
     public async Task FullAccess_OnlyOrdinaryTools_AreAutomatic()
     {
-        var handler = new UnattendedInteractionHandler(PermissionMode.FullAccess);
+        var handler = new UnattendedInteractionHandler(AgwPermissionMode.FullAccess);
         var result = await handler.ResolveAsync(
             InteractionTestData.Tool("tool"),
             TestContext.Current.CancellationToken
@@ -58,7 +58,7 @@ public class InteractionRulesTests
         var waiting = 0;
         var session = new InProcessInteractionSession(
             new InteractionTestSink(),
-            PermissionMode.AlwaysAsk,
+            AgwPermissionMode.AlwaysAsk,
             count => waiting = count
         );
         var tool = session
@@ -70,7 +70,7 @@ public class InteractionRulesTests
         var gate = session
             .ResolveAsync(InteractionTestData.Gate("gate"), TestContext.Current.CancellationToken)
             .AsTask();
-        session.SetPermissionMode(PermissionMode.FullAccess);
+        session.SetPermissionMode(AgwPermissionMode.FullAccess);
         Assert.IsType<ToolApprovalDecision>(Assert.IsType<InteractionResolution.Resolved>(await tool).Response);
         Assert.Equal(2, waiting);
         Assert.False(input.IsCompleted);

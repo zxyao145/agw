@@ -20,7 +20,6 @@ using OpenAI.CodexSdk;
 using OpenAI.CodexSdk.MAF;
 using PiAgentSdk;
 using PiAgentSdk.MAF;
-using ExecutionPermissionMode = Agw.Agents.Contracts.Execution.PermissionMode;
 
 namespace Agw.Agents.Execution.Agents.Runtime;
 
@@ -271,7 +270,7 @@ public partial class AgentRuntimeService
         IReadOnlyDictionary<string, string>? environmentVariables,
         bool isBackground,
         ChatHistoryProvider historyProvider,
-        ExecutionPermissionMode? permissionMode
+        AgwPermissionMode? permissionMode
     )
     {
         var options = BuildClaudeCodeAIAgentOptions(
@@ -307,7 +306,7 @@ public partial class AgentRuntimeService
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         ChatHistoryProvider? chatHistoryProvider = null,
-        ExecutionPermissionMode? permissionMode = null
+        AgwPermissionMode? permissionMode = null
     )
     {
         var extra = agent.Extra;
@@ -325,7 +324,7 @@ public partial class AgentRuntimeService
         options = options with
         {
             PermissionMode =
-                permissionMode == ExecutionPermissionMode.FullAccess
+                permissionMode == AgwPermissionMode.FullAccess
                     ? ClaudeCodeSdk.Types.PermissionMode.bypassPermissions
                     : options.PermissionMode,
             WorkingDirectory = PathUtil.ExpandTilde(project.Workspace),
@@ -359,7 +358,7 @@ public partial class AgentRuntimeService
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables,
         Func<string, CancellationToken, ValueTask>? onThreadStartedAsync,
-        ExecutionPermissionMode? permissionMode
+        AgwPermissionMode? permissionMode
     )
     {
         var options = BuildCodexAIAgentOptions(
@@ -519,7 +518,7 @@ public partial class AgentRuntimeService
         bool isResume,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         Func<string, CancellationToken, ValueTask>? onThreadStartedAsync = null,
-        ExecutionPermissionMode? permissionMode = null
+        AgwPermissionMode? permissionMode = null
     )
     {
         var extra = agent.Extra;
@@ -535,7 +534,7 @@ public partial class AgentRuntimeService
         }
 
         var workspace = PathUtil.ExpandTilde(project.Workspace);
-        if (!string.IsNullOrWhiteSpace(workspace) || permissionMode == ExecutionPermissionMode.FullAccess)
+        if (!string.IsNullOrWhiteSpace(workspace) || permissionMode == AgwPermissionMode.FullAccess)
         {
             options = options with
             {
@@ -599,7 +598,7 @@ public partial class AgentRuntimeService
     private static ThreadOptions CreateCodexThreadOptionsWithWorkspace(
         ThreadOptions? options,
         string? workspace,
-        ExecutionPermissionMode? permissionMode = null
+        AgwPermissionMode? permissionMode = null
     )
     {
         options ??= new ThreadOptions();
@@ -615,7 +614,7 @@ public partial class AgentRuntimeService
             WebSearchMode = options.WebSearchMode,
             WebSearchEnabled = options.WebSearchEnabled,
             ApprovalPolicy =
-                permissionMode == ExecutionPermissionMode.FullAccess ? ApprovalMode.Never : options.ApprovalPolicy,
+                permissionMode == AgwPermissionMode.FullAccess ? ApprovalMode.Never : options.ApprovalPolicy,
             AdditionalDirectories = options.AdditionalDirectories,
         };
     }

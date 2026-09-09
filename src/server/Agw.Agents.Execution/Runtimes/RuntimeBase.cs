@@ -30,7 +30,7 @@ public abstract class RuntimeBase : IAsyncDisposable
         Action interruptAction,
         Func<CancellationToken, Task> executeAsync,
         Func<InteractionResponse, CancellationToken, ValueTask<bool>>? submitHumanResponseAsync = null,
-        Func<PermissionMode, CancellationToken, ValueTask>? setPermissionModeAsync = null
+        Func<AgwPermissionMode, CancellationToken, ValueTask>? setPermissionModeAsync = null
     )
     {
         var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -118,7 +118,7 @@ public abstract class RuntimeBase : IAsyncDisposable
     }
 
     public ValueTask<bool> TrySetActivePermissionModeAsync(
-        PermissionMode permissionMode,
+        AgwPermissionMode permissionMode,
         CancellationToken cancellationToken
     )
     {

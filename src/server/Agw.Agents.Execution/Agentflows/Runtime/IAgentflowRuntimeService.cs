@@ -17,7 +17,7 @@ public interface IAgentflowRuntimeService : IAgentflowMermaidProvider
         IInteractionHandler? interactionHandler = null,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         Guid? conversationId = null,
-        PermissionMode? permissionMode = null
+        AgwPermissionMode? permissionMode = null
     );
 
     Task<AgentflowExecutionResult?> ExecuteAsync(
@@ -27,7 +27,7 @@ public interface IAgentflowRuntimeService : IAgentflowMermaidProvider
         CancellationToken cancellationToken = default,
         Guid? projectId = null,
         string? contextId = null,
-        PermissionMode? permissionMode = null
+        AgwPermissionMode? permissionMode = null
     );
 
     Task<AgentflowExecutionResult?> ExecuteAsync(
@@ -37,7 +37,7 @@ public interface IAgentflowRuntimeService : IAgentflowMermaidProvider
         CancellationToken cancellationToken = default,
         Guid? projectId = null,
         string? contextId = null,
-        PermissionMode? permissionMode = null
+        AgwPermissionMode? permissionMode = null
     );
 
     Task<AgentflowWorkflowLease?> CreateAiWorkflow(Guid agentflowId, CancellationToken cancellationToken = default);

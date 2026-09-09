@@ -453,7 +453,7 @@ internal sealed class DurableExecutionStore
     internal async Task<DurableExecutionSnapshot> SetPermissionModeAsync(
         Guid executionId,
         string userId,
-        PermissionMode mode,
+        AgwPermissionMode mode,
         CancellationToken cancellationToken
     )
     {

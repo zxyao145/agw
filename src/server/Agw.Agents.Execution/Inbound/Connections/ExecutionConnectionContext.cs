@@ -265,7 +265,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         await SendModeStatusAsync(agentId, mode);
     }
 
-    public async Task SetPermissionModeAsync(PermissionMode permissionMode, CancellationToken cancellationToken)
+    public async Task SetPermissionModeAsync(AgwPermissionMode permissionMode, CancellationToken cancellationToken)
     {
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
         if (_durableSession != null)

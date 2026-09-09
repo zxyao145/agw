@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Agw.Agents.Contracts.Execution;
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
-public enum PermissionMode
+public enum AgwPermissionMode
 {
     [JsonStringEnumMemberName("fullAccess")]
     FullAccess,

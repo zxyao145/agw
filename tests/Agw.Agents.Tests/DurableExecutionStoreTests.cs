@@ -128,7 +128,7 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
         var executionId = Guid.CreateVersion7();
         var token = TestContext.Current.CancellationToken;
         var settings = CreateSettings(task.ProjectId, task.ContextId)
-            .WithPermissionMode(PermissionMode.FullAccess)
+            .WithPermissionMode(AgwPermissionMode.FullAccess)
             .WithHumanInteractionPolicy(HumanInteractionPolicy.Reject);
         await database
             .CreateStore()
@@ -145,7 +145,7 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
 
         var restored = await database.CreateStore().GetAsync(executionId, token);
 
-        Assert.Equal(PermissionMode.FullAccess, restored.Manifest.Settings.PermissionMode);
+        Assert.Equal(AgwPermissionMode.FullAccess, restored.Manifest.Settings.PermissionMode);
         Assert.Equal(HumanInteractionPolicy.Reject, restored.Manifest.Settings.HumanInteractionPolicy);
     }
 

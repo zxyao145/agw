@@ -109,7 +109,7 @@ public partial class AgentRuntimeService
         IReadOnlyDictionary<string, string>? environmentVariables,
         bool deferHumanInteractions,
         CancellationToken cancellationToken = default,
-        PermissionMode? permissionMode = null
+        AgwPermissionMode? permissionMode = null
     )
     {
         var agent = await _agentAppService.GetAgentForCurrentUserAsync(agentId);

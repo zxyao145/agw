@@ -4,7 +4,7 @@ internal sealed class UnattendedInteractionHandler : IInteractionHandler
 {
     private readonly InteractionPermissionState _permissions;
 
-    public UnattendedInteractionHandler(PermissionMode? mode) => _permissions = new(mode);
+    public UnattendedInteractionHandler(AgwPermissionMode? mode) => _permissions = new(mode);
 
     public ValueTask<InteractionResolution> ResolveAsync(
         InteractionRequest request,

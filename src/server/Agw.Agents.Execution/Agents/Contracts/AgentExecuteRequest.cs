@@ -31,7 +31,7 @@ public sealed class AgentExecuteByIdRequest
         ContextId = contextId;
     }
 
-    public PermissionMode? PermissionMode { get; init; }
+    public AgwPermissionMode? PermissionMode { get; init; }
 
     public List<ChatMessage> Input { get; private set; }
 
@@ -46,7 +46,7 @@ public sealed class AgentExecuteByIdRequest
 
 public sealed class AgentExecuteRequest
 {
-    public PermissionMode? PermissionMode { get; init; }
+    public AgwPermissionMode? PermissionMode { get; init; }
 
     public required Agent Agent { get; init; }
 

@@ -30,7 +30,10 @@ public partial class AgentflowRuntimeServiceTests
             interactionAccessor: accessor
         );
         var manifest = CreateManifest(fixture.Flow.Id);
-        manifest = manifest with { Settings = manifest.Settings with { PermissionMode = PermissionMode.FullAccess } };
+        manifest = manifest with
+        {
+            Settings = manifest.Settings with { PermissionMode = AgwPermissionMode.FullAccess },
+        };
         var input = new DurableExecutionSegmentInput(manifest.ExecutionId, 0, [], null);
         var ledger = new List<DurableResolvedInteraction>();
         var sink = new RecordingSegmentSink();

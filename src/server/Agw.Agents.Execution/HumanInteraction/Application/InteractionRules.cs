@@ -5,8 +5,8 @@ namespace Agw.Agents.Execution.HumanInteraction.Application;
 /// <summary>Shared permission and response rules, independent of SDK, transport and persistence.</summary>
 internal static class InteractionRules
 {
-    public static ToolApprovalDecision? AutomaticallyApprove(InteractionRequest request, PermissionMode? mode) =>
-        request is ToolApprovalInteraction && mode == PermissionMode.FullAccess
+    public static ToolApprovalDecision? AutomaticallyApprove(InteractionRequest request, AgwPermissionMode? mode) =>
+        request is ToolApprovalInteraction && mode == AgwPermissionMode.FullAccess
             ? new ToolApprovalDecision
             {
                 InteractionId = request.InteractionId,
@@ -18,7 +18,7 @@ internal static class InteractionRules
     public static InteractionResponse ValidateAndNormalize(
         InteractionRequest request,
         InteractionResponse response,
-        PermissionMode? mode
+        AgwPermissionMode? mode
     )
     {
         if (!string.Equals(request.InteractionId, response.InteractionId, StringComparison.Ordinal))
@@ -35,9 +35,9 @@ internal static class InteractionRules
                         ? ApprovalScope.Once
                         : mode switch
                         {
-                            PermissionMode.FullAccess => ApprovalScope.AlwaysTool,
-                            PermissionMode.AlwaysAsk => ApprovalScope.Once,
-                            PermissionMode.AllowSameArguments => ApprovalScope.AlwaysArguments,
+                            AgwPermissionMode.FullAccess => ApprovalScope.AlwaysTool,
+                            AgwPermissionMode.AlwaysAsk => ApprovalScope.Once,
+                            AgwPermissionMode.AllowSameArguments => ApprovalScope.AlwaysArguments,
                             _ => decision.Scope,
                         },
                 },

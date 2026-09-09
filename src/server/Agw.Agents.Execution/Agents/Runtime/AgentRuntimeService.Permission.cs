@@ -6,7 +6,7 @@ public partial class AgentRuntimeService
 {
     public async Task SetPermissionModeAsync(
         AgentRuntime runtime,
-        PermissionMode permissionMode,
+        AgwPermissionMode permissionMode,
         CancellationToken cancellationToken = default
     )
     {

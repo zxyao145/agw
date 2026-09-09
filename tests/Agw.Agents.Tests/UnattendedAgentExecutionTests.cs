@@ -87,7 +87,7 @@ public sealed class UnattendedAgentExecutionTests
             session,
             persistence,
             TestContext.Current.CancellationToken,
-            new UnattendedInteractionHandler(PermissionMode.FullAccess)
+            new UnattendedInteractionHandler(AgwPermissionMode.FullAccess)
         );
 
         Assert.Equal(approvalRounds, agent.ExecutedTools);
@@ -125,7 +125,7 @@ public sealed class UnattendedAgentExecutionTests
                 session,
                 persistence,
                 cancellation.Token,
-                new UnattendedInteractionHandler(PermissionMode.FullAccess)
+                new UnattendedInteractionHandler(AgwPermissionMode.FullAccess)
             )
         );
 

@@ -7,7 +7,7 @@ internal sealed class MafPermissionState
 {
     internal InteractionPermissionState Permissions { get; }
 
-    public MafPermissionState(PermissionMode? permissionMode)
+    public MafPermissionState(AgwPermissionMode? permissionMode)
         : this(new InteractionPermissionState(permissionMode)) { }
 
     internal MafPermissionState(InteractionPermissionState permissions)
@@ -16,7 +16,7 @@ internal sealed class MafPermissionState
         Permissions = permissions;
     }
 
-    public PermissionMode? Current => Permissions.Current;
+    public AgwPermissionMode? Current => Permissions.Current;
 
     public void Register(AgentSession session)
     {
@@ -24,5 +24,5 @@ internal sealed class MafPermissionState
         MafSessionApprovalState.Synchronize(session, Permissions);
     }
 
-    public void Set(PermissionMode? permissionMode) => Permissions.Set(permissionMode);
+    public void Set(AgwPermissionMode? permissionMode) => Permissions.Set(permissionMode);
 }

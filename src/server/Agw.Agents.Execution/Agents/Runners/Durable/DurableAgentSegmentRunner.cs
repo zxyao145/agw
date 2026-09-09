@@ -171,7 +171,7 @@ internal sealed class DurableAgentSegmentRunner
     /// </summary>
     private static ChatMessage CreateApprovalResponseMessage(
         IReadOnlyList<DurableResolvedInteraction> resolvedInteractions,
-        PermissionMode? permissionMode
+        AgwPermissionMode? permissionMode
     )
     {
         if (resolvedInteractions.Count == 0)

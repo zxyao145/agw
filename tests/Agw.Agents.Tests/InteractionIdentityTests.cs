@@ -80,7 +80,7 @@ public class InteractionIdentityTests
     public async Task DurableResolution_RefreshesPermissionsBeforeAuthorizingInsideNestedScope()
     {
         var accessor = new HumanInteractionContextAccessor();
-        var permissions = new InteractionPermissionState(PermissionMode.FullAccess);
+        var permissions = new InteractionPermissionState(AgwPermissionMode.FullAccess);
         var refreshed = 0;
         using var worker = accessor.Push(
             null,
@@ -88,7 +88,7 @@ public class InteractionIdentityTests
             refreshPermissions: _ =>
             {
                 refreshed++;
-                permissions.Set(PermissionMode.AlwaysAsk, 1);
+                permissions.Set(AgwPermissionMode.AlwaysAsk, 1);
                 return ValueTask.CompletedTask;
             }
         );
@@ -106,6 +106,6 @@ public class InteractionIdentityTests
         );
         Assert.IsType<InteractionResolution.Pending>(result);
         Assert.Equal(1, refreshed);
-        Assert.Equal(PermissionMode.AlwaysAsk, permissions.Current);
+        Assert.Equal(AgwPermissionMode.AlwaysAsk, permissions.Current);
     }
 }

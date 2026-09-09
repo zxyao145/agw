@@ -148,7 +148,7 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
         SetActiveExecution(null);
     }
 
-    public Task SetPermissionModeAsync(PermissionMode mode, CancellationToken cancellationToken) =>
+    public Task SetPermissionModeAsync(AgwPermissionMode mode, CancellationToken cancellationToken) =>
         ActiveExecutionId is { } executionId
             ? _coordinator.SetPermissionModeAsync(executionId, _userId, mode, cancellationToken)
             : Task.CompletedTask;

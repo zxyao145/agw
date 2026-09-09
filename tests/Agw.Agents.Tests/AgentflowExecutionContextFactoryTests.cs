@@ -20,7 +20,7 @@ public class AgentflowExecutionContextFactoryTests
         var projectId = Guid.CreateVersion7();
         var taskId = Guid.CreateVersion7();
         Guid? conversationId = explicitConversation ? Guid.CreateVersion7() : null;
-        var permissionState = new MafPermissionState(PermissionMode.AlwaysAsk);
+        var permissionState = new MafPermissionState(AgwPermissionMode.AlwaysAsk);
 
         var scope = await factory.CreateSessionScopeAsync(
             projectId,

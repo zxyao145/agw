@@ -133,10 +133,10 @@ public partial class AgentflowRuntimeServiceTests
     }
 
     [Theory]
-    [InlineData(PermissionMode.AlwaysAsk, "always-tool", "once")]
-    [InlineData(PermissionMode.AllowSameArguments, "once", "always-arguments")]
+    [InlineData(AgwPermissionMode.AlwaysAsk, "always-tool", "once")]
+    [InlineData(AgwPermissionMode.AllowSameArguments, "once", "always-arguments")]
     public async Task ExecuteDurableSegmentAsync_ManualScope_EnforcesPermissionMode(
-        PermissionMode mode,
+        AgwPermissionMode mode,
         string submittedScope,
         string expectedScope
     )

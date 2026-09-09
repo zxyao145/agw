@@ -105,7 +105,7 @@ public sealed class BuiltInInteractionIntegrationTests
             services
         );
         var session = await agent.CreateSessionAsync(token);
-        var permissions = new InteractionPermissionState(PermissionMode.FullAccess);
+        var permissions = new InteractionPermissionState(AgwPermissionMode.FullAccess);
         UserInputResponse Answer(UserInputInteraction request) =>
             new()
             {
@@ -158,7 +158,7 @@ public sealed class BuiltInInteractionIntegrationTests
         else
         {
             var sink = new InteractionTestSink();
-            var interactions = new InProcessInteractionSession(sink, PermissionMode.FullAccess);
+            var interactions = new InProcessInteractionSession(sink, AgwPermissionMode.FullAccess);
             sink.OnWrite = async (message, ct) =>
                 await interactions.TrySubmitAsync(
                     Answer(Assert.IsType<UserInputInteraction>(InteractionTestData.Read(message))),

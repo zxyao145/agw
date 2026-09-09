@@ -105,7 +105,7 @@ public sealed record DurableExecutionSettings
     /// <summary>
     /// 获取工具调用的权限模式。
     /// </summary>
-    public PermissionMode? PermissionMode { get; init; }
+    public AgwPermissionMode? PermissionMode { get; init; }
 
     public long PermissionVersion { get; init; }
 

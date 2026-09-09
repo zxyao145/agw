@@ -13,17 +13,17 @@ public class ExecutionSettingsTests
     {
         var settings = ExecutionSettings
             .CreateDefault()
-            .WithPermissionMode(PermissionMode.FullAccess)
+            .WithPermissionMode(AgwPermissionMode.FullAccess)
             .WithHumanInteractionPolicy(HumanInteractionPolicy.Reject);
         var snapshot = DurableExecutionMapper.FromSettings(settings);
 
         var restored = JsonSerializer.Deserialize<DurableExecutionSettings>(JsonSerializer.Serialize(snapshot))!;
 
-        Assert.Equal(PermissionMode.FullAccess, restored.ToCommand(Guid.CreateVersion7(), "context").PermissionMode);
+        Assert.Equal(AgwPermissionMode.FullAccess, restored.ToCommand(Guid.CreateVersion7(), "context").PermissionMode);
         Assert.Equal(HumanInteractionPolicy.Reject, restored.HumanInteractionPolicy);
         Assert.Equal(
             HumanInteractionPolicy.Reject,
-            settings.WithPermissionMode(PermissionMode.AlwaysAsk).HumanInteractionPolicy
+            settings.WithPermissionMode(AgwPermissionMode.AlwaysAsk).HumanInteractionPolicy
         );
         Assert.NotEqual(settings, settings.WithHumanInteractionPolicy(HumanInteractionPolicy.Allow));
     }
@@ -67,19 +67,19 @@ public class ExecutionSettingsTests
     public void PermissionMode_RoundTripsAndParticipatesInEquality()
     {
         var projectId = Guid.CreateVersion7();
-        var command = new SettingCommand(projectId, contextId: "context", permissionMode: PermissionMode.FullAccess);
+        var command = new SettingCommand(projectId, contextId: "context", permissionMode: AgwPermissionMode.FullAccess);
 
         var settings = ExecutionSettings.FromCommand(command);
         var roundTripped = settings.ToCommand();
 
-        Assert.Equal(PermissionMode.FullAccess, settings.PermissionMode);
-        Assert.Equal(PermissionMode.FullAccess, roundTripped.PermissionMode);
+        Assert.Equal(AgwPermissionMode.FullAccess, settings.PermissionMode);
+        Assert.Equal(AgwPermissionMode.FullAccess, roundTripped.PermissionMode);
         Assert.NotEqual(
             settings,
             ExecutionSettings.FromCommand(
-                new SettingCommand(projectId, contextId: "context", permissionMode: PermissionMode.AlwaysAsk)
+                new SettingCommand(projectId, contextId: "context", permissionMode: AgwPermissionMode.AlwaysAsk)
             )
         );
-        Assert.Equal("\"fullAccess\"", JsonSerializer.Serialize(PermissionMode.FullAccess));
+        Assert.Equal("\"fullAccess\"", JsonSerializer.Serialize(AgwPermissionMode.FullAccess));
     }
 }

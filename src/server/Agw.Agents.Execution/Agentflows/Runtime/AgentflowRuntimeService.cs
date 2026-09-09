@@ -67,7 +67,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         IInteractionHandler? interactionHandler = null,
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         Guid? conversationId = null,
-        PermissionMode? permissionMode = null
+        AgwPermissionMode? permissionMode = null
     ) =>
         ExecuteStreamingCoreAsync(
             agentflowId,
@@ -304,7 +304,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         CancellationToken cancellationToken = default,
         Guid? projectId = null,
         string? contextId = null,
-        PermissionMode? permissionMode = null
+        AgwPermissionMode? permissionMode = null
     )
     {
         var messages = new List<ChatMessage>
@@ -331,7 +331,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         CancellationToken cancellationToken = default,
         Guid? projectId = null,
         string? contextId = null,
-        PermissionMode? permissionMode = null
+        AgwPermissionMode? permissionMode = null
     )
     {
         var resolvedProjectId = await ResolveProjectIdAsync(projectId, cancellationToken).ConfigureAwait(false);
@@ -366,7 +366,7 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         List<ChatMessage> messages,
         CancellationToken cancellationToken,
         string? contextId = null,
-        PermissionMode? permissionMode = null
+        AgwPermissionMode? permissionMode = null
     )
     {
         if (!await IsProjectVisibleAsync(projectId, cancellationToken).ConfigureAwait(false))

@@ -51,7 +51,7 @@ public interface IAgentRuntimeService
         IReadOnlyDictionary<string, string>? environmentVariables,
         bool deferHumanInteractions,
         CancellationToken cancellationToken = default,
-        PermissionMode? permissionMode = null
+        AgwPermissionMode? permissionMode = null
     ) => CreateAgentflowNodeAgentAsync(agentId, projectId, conversationId, environmentVariables, cancellationToken);
 
     Task<AgentRuntime?> CreateRuntimeAsync(
@@ -68,7 +68,7 @@ public interface IAgentRuntimeService
 
     Task SetPermissionModeAsync(
         AgentRuntime runtime,
-        PermissionMode permissionMode,
+        AgwPermissionMode permissionMode,
         CancellationToken cancellationToken = default
     ) => Task.CompletedTask;
 

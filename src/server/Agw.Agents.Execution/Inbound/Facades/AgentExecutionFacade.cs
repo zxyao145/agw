@@ -384,13 +384,13 @@ public sealed class AgentExecutionFacade : IAgentExecutionFacade, IDurableAgentE
         );
     }
 
-    private static PermissionMode? MapPermissionMode(AgentExecutionPermissionMode? mode) =>
+    private static AgwPermissionMode? MapPermissionMode(AgentExecutionPermissionMode? mode) =>
         mode switch
         {
             null => null,
-            AgentExecutionPermissionMode.FullAccess => PermissionMode.FullAccess,
-            AgentExecutionPermissionMode.AlwaysAsk => PermissionMode.AlwaysAsk,
-            AgentExecutionPermissionMode.AllowSameArguments => PermissionMode.AllowSameArguments,
+            AgentExecutionPermissionMode.FullAccess => AgwPermissionMode.FullAccess,
+            AgentExecutionPermissionMode.AlwaysAsk => AgwPermissionMode.AlwaysAsk,
+            AgentExecutionPermissionMode.AllowSameArguments => AgwPermissionMode.AllowSameArguments,
             _ => throw new AgwException(ErrorCodes.InvalidParam, "Unsupported execution permission mode."),
         };
 

@@ -146,7 +146,7 @@ internal sealed class DurableExecutionCoordinator
     public async Task SetPermissionModeAsync(
         Guid executionId,
         string userId,
-        PermissionMode mode,
+        AgwPermissionMode mode,
         CancellationToken cancellationToken
     )
     {

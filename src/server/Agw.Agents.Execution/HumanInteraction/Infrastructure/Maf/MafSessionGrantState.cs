@@ -6,7 +6,7 @@ public sealed class MafSessionGrantState
 {
     public Guid? PermissionScopeId { get; set; }
     public long PermissionVersion { get; set; }
-    public PermissionMode? PermissionMode { get; set; }
+    public AgwPermissionMode? PermissionMode { get; set; }
     public List<MafToolGrant> Grants { get; set; } = [];
 }
 

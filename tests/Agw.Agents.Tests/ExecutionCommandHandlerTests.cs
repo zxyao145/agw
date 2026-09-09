@@ -267,12 +267,12 @@ public partial class ExecutionCommandHandlerTests
         await using var context = CreateContext(new FakeRuntimeFactory(), CreateTask("permission-context"));
 
         await new SetPermissionModeCommandHandler().HandleAsync(
-            new SetPermissionModeCommand { PermissionMode = PermissionMode.AllowSameArguments },
+            new SetPermissionModeCommand { PermissionMode = AgwPermissionMode.AllowSameArguments },
             context,
             TestContext.Current.CancellationToken
         );
 
-        Assert.Equal(PermissionMode.AllowSameArguments, context.Settings!.PermissionMode);
+        Assert.Equal(AgwPermissionMode.AllowSameArguments, context.Settings!.PermissionMode);
     }
 
     [Fact]
@@ -283,14 +283,14 @@ public partial class ExecutionCommandHandlerTests
         await context.StartTurnAsync(CreateExecCommand(Guid.CreateVersion7()), TestContext.Current.CancellationToken);
 
         await new SetPermissionModeCommandHandler().HandleAsync(
-            new SetPermissionModeCommand { PermissionMode = PermissionMode.FullAccess },
+            new SetPermissionModeCommand { PermissionMode = AgwPermissionMode.FullAccess },
             context,
             TestContext.Current.CancellationToken
         );
 
-        Assert.Equal(PermissionMode.FullAccess, context.Settings!.PermissionMode);
-        Assert.Equal([PermissionMode.FullAccess], runtimeFactory.ActiveChanges);
-        Assert.Equal([PermissionMode.FullAccess], runtimeFactory.RuntimeChanges);
+        Assert.Equal(AgwPermissionMode.FullAccess, context.Settings!.PermissionMode);
+        Assert.Equal([AgwPermissionMode.FullAccess], runtimeFactory.ActiveChanges);
+        Assert.Equal([AgwPermissionMode.FullAccess], runtimeFactory.RuntimeChanges);
 
         runtimeFactory.CompleteHeldTurn();
         await runtimeFactory.Runtime.WhenIdleAsync();
@@ -589,9 +589,9 @@ public partial class ExecutionCommandHandlerTests
 
         public TestRuntime Runtime { get; } = new();
 
-        public List<PermissionMode> ActiveChanges { get; } = [];
+        public List<AgwPermissionMode> ActiveChanges { get; } = [];
 
-        public List<PermissionMode> RuntimeChanges { get; } = [];
+        public List<AgwPermissionMode> RuntimeChanges { get; } = [];
 
         public Task<RuntimeStartResult> StartAsync(RuntimeStartRequest request, CancellationToken cancellationToken)
         {
@@ -610,7 +610,7 @@ public partial class ExecutionCommandHandlerTests
 
         public Task SetPermissionModeAsync(
             RuntimeBase runtime,
-            PermissionMode permissionMode,
+            AgwPermissionMode permissionMode,
             CancellationToken cancellationToken
         )
         {

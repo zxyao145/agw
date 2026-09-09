@@ -10,14 +10,14 @@ public sealed class ActiveTurn : IAsyncDisposable
     private readonly CancellationTokenSource _cancellationTokenSource;
     private readonly Action? _interruptAction;
     private readonly Func<InteractionResponse, CancellationToken, ValueTask<bool>>? _submitHumanResponseAsync;
-    private readonly Func<PermissionMode, CancellationToken, ValueTask>? _setPermissionModeAsync;
+    private readonly Func<AgwPermissionMode, CancellationToken, ValueTask>? _setPermissionModeAsync;
 
     public ActiveTurn(
         Task executionTask,
         CancellationTokenSource cancellationTokenSource,
         Action? interruptAction = null,
         Func<InteractionResponse, CancellationToken, ValueTask<bool>>? submitHumanResponseAsync = null,
-        Func<PermissionMode, CancellationToken, ValueTask>? setPermissionModeAsync = null
+        Func<AgwPermissionMode, CancellationToken, ValueTask>? setPermissionModeAsync = null
     )
     {
         ExecutionTask =
@@ -53,7 +53,7 @@ public sealed class ActiveTurn : IAsyncDisposable
     }
 
     public async ValueTask<bool> TrySetPermissionModeAsync(
-        PermissionMode permissionMode,
+        AgwPermissionMode permissionMode,
         CancellationToken cancellationToken
     )
     {

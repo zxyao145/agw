@@ -14,7 +14,7 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
         Guid projectId,
         Dictionary<string, string>? environmentVariables = null,
         string? contextId = null,
-        PermissionMode? permissionMode = null
+        AgwPermissionMode? permissionMode = null
     )
     {
         ProjectId = projectId;
@@ -33,7 +33,7 @@ public class SettingCommand : AgentRunCommand, IEquatable<SettingCommand>
         set => _environmentVariables = value ?? new Dictionary<string, string>();
     }
 
-    public PermissionMode? PermissionMode { get; set; }
+    public AgwPermissionMode? PermissionMode { get; set; }
 
     [JsonIgnore]
     public bool Resume { get; set; }

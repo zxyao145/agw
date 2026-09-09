@@ -4,5 +4,5 @@ namespace Agw.Agents.Execution.Commands.Permission;
 
 public sealed class SetPermissionModeCommand : AgentRunCommand
 {
-    public PermissionMode? PermissionMode { get; set; }
+    public AgwPermissionMode? PermissionMode { get; set; }
 }

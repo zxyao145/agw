@@ -13,10 +13,10 @@ namespace Agw.Agents.Tests;
 public sealed partial class DurableExecutionStoreTests
 {
     [Theory]
-    [InlineData(PermissionMode.AlwaysAsk, ApprovalScope.Once)]
-    [InlineData(PermissionMode.AllowSameArguments, ApprovalScope.AlwaysArguments)]
+    [InlineData(AgwPermissionMode.AlwaysAsk, ApprovalScope.Once)]
+    [InlineData(AgwPermissionMode.AllowSameArguments, ApprovalScope.AlwaysArguments)]
     public async Task SubmitHumanResponseAsync_ToolScope_NormalizesBeforePersisting(
-        PermissionMode mode,
+        AgwPermissionMode mode,
         ApprovalScope expected
     )
     {
@@ -55,7 +55,7 @@ public sealed partial class DurableExecutionStoreTests
         var result = await store.SetPermissionModeAsync(
             id,
             "user-id",
-            PermissionMode.FullAccess,
+            AgwPermissionMode.FullAccess,
             TestContext.Current.CancellationToken
         );
         Assert.Equal(DurableExecutionStatus.WaitingForHuman, result.Status);
@@ -66,7 +66,7 @@ public sealed partial class DurableExecutionStoreTests
             store.SetPermissionModeAsync(
                 id,
                 "foreign-owner",
-                PermissionMode.AlwaysAsk,
+                AgwPermissionMode.AlwaysAsk,
                 TestContext.Current.CancellationToken
             )
         );
@@ -82,7 +82,7 @@ public sealed partial class DurableExecutionStoreTests
         var running = Assert.IsType<DurableExecutionSnapshot>(
             await store.TryBeginSegmentAsync(id, DateTimeOffset.MaxValue, token)
         );
-        var updated = await store.SetPermissionModeAsync(id, "user-id", PermissionMode.FullAccess, token);
+        var updated = await store.SetPermissionModeAsync(id, "user-id", AgwPermissionMode.FullAccess, token);
         Assert.Equal(running.StateVersion, updated.StateVersion);
         Assert.Equal(1, updated.Manifest.Settings.PermissionVersion);
         var saved = await store.SaveSegmentResultAsync(
@@ -185,13 +185,13 @@ public class InteractionPermissionVersionTests
     [Fact]
     public void Synchronize_ModeReturnsToOriginal_RevokesPreviousGrant()
     {
-        var permissions = new InteractionPermissionState(PermissionMode.AllowSameArguments);
+        var permissions = new InteractionPermissionState(AgwPermissionMode.AllowSameArguments);
         var session = new PermissionSession();
         var call = new FunctionCallContent("call", "tool", new Dictionary<string, object?> { ["path"] = "a" });
         MafSessionApprovalState.Synchronize(session, permissions);
         MafSessionApprovalState.Record(session, call, ApprovalScope.AlwaysArguments, permissions.Current);
-        permissions.Set(PermissionMode.AlwaysAsk, 1);
-        permissions.Set(PermissionMode.AllowSameArguments, 2);
+        permissions.Set(AgwPermissionMode.AlwaysAsk, 1);
+        permissions.Set(AgwPermissionMode.AllowSameArguments, 2);
         MafSessionApprovalState.Synchronize(session, permissions);
         Assert.True(
             session.StateBag.TryGetValue<MafSessionGrantState>(MafSessionApprovalState.GrantStateKey, out var grants)

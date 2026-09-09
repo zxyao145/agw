@@ -474,7 +474,7 @@ public partial class AgentflowRuntimeServiceTests
             {
                 Settings = manifest.Settings with
                 {
-                    PermissionMode = PermissionMode.FullAccess,
+                    PermissionMode = AgwPermissionMode.FullAccess,
                     HumanInteractionPolicy = HumanInteractionPolicy.Reject,
                 },
             };
@@ -498,14 +498,14 @@ public partial class AgentflowRuntimeServiceTests
                 Guid.CreateVersion7(),
                 "input",
                 TestContext.Current.CancellationToken,
-                permissionMode: PermissionMode.FullAccess
+                permissionMode: AgwPermissionMode.FullAccess
             );
 
             Assert.NotNull(result);
             Assert.Contains(result.Messages, message => MessageShape(message) == "always-tool");
         }
         Assert.Equal(2, agent.RunCount);
-        Assert.Equal(PermissionMode.FullAccess, fixture.Agents.LastPermissionMode);
+        Assert.Equal(AgwPermissionMode.FullAccess, fixture.Agents.LastPermissionMode);
     }
 
     [Theory]
@@ -525,7 +525,7 @@ public partial class AgentflowRuntimeServiceTests
             {
                 Settings = manifest.Settings with
                 {
-                    PermissionMode = PermissionMode.FullAccess,
+                    PermissionMode = AgwPermissionMode.FullAccess,
                     HumanInteractionPolicy = HumanInteractionPolicy.Reject,
                 },
             };
@@ -549,7 +549,7 @@ public partial class AgentflowRuntimeServiceTests
                     Guid.CreateVersion7(),
                     "input",
                     TestContext.Current.CancellationToken,
-                    permissionMode: PermissionMode.FullAccess
+                    permissionMode: AgwPermissionMode.FullAccess
                 )
             );
             Assert.Contains("unattended", error.Message);

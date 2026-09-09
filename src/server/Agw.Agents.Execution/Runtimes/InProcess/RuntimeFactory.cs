@@ -38,7 +38,7 @@ public interface IRuntimeFactory
 
     Task SetPermissionModeAsync(
         RuntimeBase runtime,
-        PermissionMode permissionMode,
+        AgwPermissionMode permissionMode,
         CancellationToken cancellationToken
     ) => Task.CompletedTask;
 }
@@ -275,7 +275,7 @@ public sealed class RuntimeFactory : IRuntimeFactory
 
     public Task SetPermissionModeAsync(
         RuntimeBase runtime,
-        PermissionMode permissionMode,
+        AgwPermissionMode permissionMode,
         CancellationToken cancellationToken
     )
     {
@@ -348,7 +348,7 @@ public sealed class RuntimeFactory : IRuntimeFactory
         Action interruptAction,
         Func<CancellationToken, Task> executeAsync,
         Func<InteractionResponse, CancellationToken, ValueTask<bool>>? submitHumanResponseAsync = null,
-        Func<PermissionMode, CancellationToken, ValueTask>? setPermissionModeAsync = null
+        Func<AgwPermissionMode, CancellationToken, ValueTask>? setPermissionModeAsync = null
     )
     {
         var activeTurn = runtime.StartTurn(
