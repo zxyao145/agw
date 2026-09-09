@@ -165,7 +165,7 @@ export function Conversation({
           )
         : null}
       <div
-        className="relative mx-auto w-full max-w-225 pb-40"
+        className="agw-conversation-list"
         style={{ height: totalSize }}
         role="list"
         aria-label="Conversation messages"
@@ -180,7 +180,7 @@ export function Conversation({
               ref={virtualizer.measureElement}
               data-index={virtualRow.index}
               role="listitem"
-              className="absolute top-0 left-0 w-full py-2"
+              className="agw-msg-item"
               style={{ transform: `translateY(${virtualRow.start}px)` }}
             >
               {isLoader ? (
