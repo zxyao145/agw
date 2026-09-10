@@ -9,6 +9,10 @@ namespace Agw.Agents.Execution.Agents.Runtime;
 
 public interface IAgentRuntimeService
 {
+    /// <summary>Only reuse runtimes whose definition is still current. Implementations without version checks rebuild.</summary>
+    Task<bool> IsRuntimeCurrentAsync(AgentRuntime runtime, CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
+
     Task<AIAgent?> CreateAiAgentAsync(Guid agentId, CancellationToken cancellationToken = default);
 
     Task<AIAgent?> CreateAiAgentAsync(

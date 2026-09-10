@@ -12,6 +12,20 @@ namespace Agw.Agents.Execution.Agents.Runtime;
 
 public partial class AgentRuntimeService
 {
+    public async Task<bool> IsRuntimeCurrentAsync(AgentRuntime runtime, CancellationToken cancellationToken = default)
+    {
+        if (runtime.IsDisposed || runtime.DefinitionVersion == null || runtime.SessionStateScope == null)
+        {
+            return false;
+        }
+
+        var version = await _agentAppService.GetRuntimeDefinitionVersionAsync(
+            runtime.SessionStateScope.AgentId,
+            cancellationToken
+        );
+        return version.HasValue && version == runtime.DefinitionVersion;
+    }
+
     /// <summary>
     /// 根据任务、Agent 配置和归一化 context 创建可恢复的 Agent 运行时。
     /// </summary>
@@ -127,7 +141,10 @@ public partial class AgentRuntimeService
                 summaryModelProviderId: summaryModelProviderId,
                 summaryService: _summaryService,
                 conversationHistoryWriter: _conversationHistoryWriter
-            );
+            )
+            {
+                DefinitionVersion = agent.UpdateTime ?? agent.CreateTime,
+            };
         }
         catch
         {

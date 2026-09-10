@@ -68,19 +68,33 @@ internal sealed class InProcessExecutionStarter : IExecutionStarter
         {
             UserId = _userId,
         };
-        var start = await _runtimeFactory.StartAsync(
-            new RuntimeStartRequest(
-                request.Target.AgentId,
-                request.Task,
-                ExecutionStartCommandMapper.Map(request),
-                Runtime,
-                context
-            )
+        RuntimeStartResult start;
+        try
+        {
+            start = await _runtimeFactory.StartAsync(
+                new RuntimeStartRequest(
+                    request.Target.AgentId,
+                    request.Task,
+                    ExecutionStartCommandMapper.Map(request),
+                    Runtime,
+                    context
+                )
+                {
+                    RequestedMode = request.RequestedMode,
+                },
+                _hostToken
+            );
+        }
+        catch
+        {
+            // Replacement may fail after the previous Agent and its process have been released.
+            if (Runtime is AgentRuntime { IsDisposed: true })
             {
-                RequestedMode = request.RequestedMode,
-            },
-            _hostToken
-        );
+                Runtime = null;
+                _target = null;
+            }
+            throw;
+        }
         Runtime = start.Runtime;
         _target = Runtime == null ? null : request.Target;
         return new ExecutionReceipt(request.ExecutionId, start.ActiveTurn != null);

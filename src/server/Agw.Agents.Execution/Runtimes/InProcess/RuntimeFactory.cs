@@ -139,7 +139,6 @@ public sealed class RuntimeFactory : IRuntimeFactory
         CancellationToken cancellationToken
     )
     {
-        var executionCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         await EnsureWorkspaceAsync(request.TurnContext.ProjectId, cancellationToken);
 
         switch (request.Command.AgentType)
@@ -155,6 +154,8 @@ public sealed class RuntimeFactory : IRuntimeFactory
                         request.Task.ContextId,
                         request.Task.Generation
                     )
+                    || session!.SessionStateScope?.AgentId != request.AgentId
+                    || !await _agentRuntimeService.IsRuntimeCurrentAsync(session, cancellationToken)
                 )
                 {
                     await DisposeRuntimeAsync(request.CurrentRuntime);
@@ -168,7 +169,6 @@ public sealed class RuntimeFactory : IRuntimeFactory
 
                 if (session == null)
                 {
-                    executionCts.Dispose();
                     return default;
                 }
 
@@ -193,7 +193,7 @@ public sealed class RuntimeFactory : IRuntimeFactory
                 return StartTurn(
                     session,
                     request.TurnContext,
-                    executionCts,
+                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken),
                     () =>
                     {
                         session.CancelActiveRequest();
@@ -239,7 +239,7 @@ public sealed class RuntimeFactory : IRuntimeFactory
                 return StartTurn(
                     session,
                     request.TurnContext,
-                    executionCts,
+                    CancellationTokenSource.CreateLinkedTokenSource(cancellationToken),
                     interactions.CancelAll,
                     ct =>
                         ExecuteAgentflowAsync(
@@ -260,7 +260,6 @@ public sealed class RuntimeFactory : IRuntimeFactory
                 );
             }
             default:
-                executionCts.Dispose();
                 return default;
         }
     }

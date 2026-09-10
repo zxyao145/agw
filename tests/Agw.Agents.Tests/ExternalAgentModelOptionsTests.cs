@@ -17,6 +17,121 @@ namespace Agw.Agents.Tests;
 public class ExternalAgentModelOptionsTests
 {
     [Theory]
+    [InlineData(ExternalAgentKind.ClaudeCode, "model")]
+    [InlineData(ExternalAgentKind.ClaudeCode, "provider")]
+    [InlineData(ExternalAgentKind.ClaudeCode, "default")]
+    [InlineData(ExternalAgentKind.Codex, "model")]
+    [InlineData(ExternalAgentKind.Codex, "provider")]
+    [InlineData(ExternalAgentKind.Codex, "default")]
+    [InlineData(ExternalAgentKind.Pi, "model")]
+    [InlineData(ExternalAgentKind.Pi, "provider")]
+    [InlineData(ExternalAgentKind.Pi, "default")]
+    public void Apply_RebuiltForExistingSession_UpdatesModelAndProviderTogether(ExternalAgentKind kind, string change)
+    {
+        // Arrange
+        var sessionId = Guid.CreateVersion7();
+        var original = Configuration(
+            kind == ExternalAgentKind.Codex ? ProviderType.OpenAIResponses : ProviderType.Anthropic
+        );
+        var oldRouting = ReadResumedRouting(kind, sessionId, original);
+        AgentModelRuntimeConfiguration? updated =
+            change == "default"
+                ? null
+                : original with
+                {
+                    Model = original.Model with { Name = "new-model" },
+                    Provider =
+                        change == "provider"
+                            ? original.Provider with
+                            {
+                                Id = Guid.CreateVersion7(),
+                                Endpoint = "https://new.invalid/v1",
+                                AuthConfigs = [new ProviderAuthConfigSnapshot(true, "new-key")],
+                            }
+                            : original.Provider,
+                };
+
+        // Act
+        var routing = ReadResumedRouting(kind, sessionId, updated);
+
+        // Assert
+        if (updated == null)
+        {
+            Assert.True(string.IsNullOrEmpty(routing.Model));
+            Assert.True(string.IsNullOrEmpty(routing.Endpoint));
+            Assert.True(string.IsNullOrEmpty(routing.ApiKey));
+        }
+        else
+        {
+            Assert.Equal(updated.Model.Name, routing.Model);
+            Assert.Equal(updated.Provider.Endpoint, routing.Endpoint);
+            Assert.Equal(updated.Provider.AuthConfigs[0].ApiKey, routing.ApiKey);
+        }
+        Assert.Equal("selected-model", oldRouting.Model);
+        Assert.Equal("https://selected.invalid/v1", oldRouting.Endpoint);
+        Assert.Equal("selected-key", oldRouting.ApiKey);
+    }
+
+    private static (string? Model, string? Endpoint, string? ApiKey) ReadResumedRouting(
+        ExternalAgentKind kind,
+        Guid sessionId,
+        AgentModelRuntimeConfiguration? configuration
+    )
+    {
+        switch (kind)
+        {
+            case ExternalAgentKind.ClaudeCode:
+                var claude = ExternalAgentModelOptions.ApplyClaudeCode(
+                    new ClaudeCodeAIAgentOptions { Resume = sessionId.ToString("N") },
+                    configuration
+                );
+                Assert.Equal(sessionId.ToString("N"), claude.Resume);
+                return (
+                    claude.Model,
+                    claude.BaseUrl,
+                    claude.EnvironmentVariables?.GetValueOrDefault("ANTHROPIC_API_KEY")
+                );
+            case ExternalAgentKind.Codex:
+                var codex = ExternalAgentModelOptions.ApplyCodex(
+                    new CodexAIAgentOptions { ThreadId = sessionId, IsResume = true },
+                    configuration
+                );
+                Assert.Equal(sessionId, codex.ThreadId);
+                Assert.True(codex.IsResume);
+                return (codex.ThreadOptions?.Model, codex.CodexOptions?.BaseUrl, codex.CodexOptions?.ApiKey);
+            case ExternalAgentKind.Pi:
+                var pi = ExternalAgentModelOptions.ApplyPi(
+                    new PiAgentAIAgentOptions { SessionId = sessionId.ToString("D"), IsResume = true },
+                    configuration
+                );
+                Assert.Equal(sessionId.ToString("D"), pi.SessionId);
+                Assert.True(pi.IsResume);
+                var environment = pi.SessionOptions.EnvironmentVariables;
+                var json = environment?.GetValueOrDefault(ExternalAgentModelOptions.PiConfigurationEnvironmentVariable);
+                if (json == null)
+                    return (pi.SessionOptions.Model, null, null);
+                using (var document = JsonDocument.Parse(json))
+                {
+                    Assert.Equal(
+                        pi.SessionOptions.Model,
+                        document.RootElement.GetProperty("model").GetProperty("id").GetString()
+                    );
+                    Assert.Equal(
+                        pi.SessionOptions.Provider,
+                        document.RootElement.GetProperty("providerId").GetString()
+                    );
+                    return (
+                        pi.SessionOptions.Model,
+                        document.RootElement.GetProperty("baseUrl").GetString(),
+                        environment![ExternalAgentModelOptions.ApiKeyEnvironmentVariable]
+                    );
+                }
+            default:
+                throw new NotSupportedException();
+        }
+    }
+
+    [Theory]
     [InlineData(ExternalAgentKind.ClaudeCode, ProviderType.Anthropic, true)]
     [InlineData(ExternalAgentKind.ClaudeCode, ProviderType.OpenAIResponses, false)]
     [InlineData(ExternalAgentKind.ClaudeCode, ProviderType.OpenAIChatCompletions, false)]

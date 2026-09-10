@@ -32,6 +32,8 @@ public sealed class AgentRuntime : RuntimeBase
     private readonly IConversationHistoryWriter? _conversationHistoryWriter;
     public AgentSessionStateScope? SessionStateScope { get; }
     public AgentType AgentType { get; }
+    internal DateTimeOffset? DefinitionVersion { get; init; }
+    internal bool IsDisposed => _disposed;
     public readonly Guid _projectId;
     public readonly string _contextId;
 
