@@ -104,7 +104,7 @@ dotnet restore Agw.slnx
 dotnet run --project src/server/Agw.Standalone.Host
 ```
 
-开发环境后端默认监听 `http://localhost:30816`。数据库、执行模式和锁通过 appsettings 或环境变量配置，默认使用 SQLite 和 InProcess。首次运行时打开 `/setup` 创建管理员密码；无人值守部署可注入 `Setup__AdminPassword`。首次设置会初始化当前配置的数据库，并将管理员认证和初始化状态写入 `server-state.json`，完成后无需额外重启。旧状态文件中的部署配置仍作为低优先级兜底。拆分 Control/Data 部署需要 PostgreSQL 和 Distributed 执行，先初始化 Control Plane，再启动 Data Plane。运行数据保存在当前用户的 `agw` 目录下；通过域名设置时还需输入启动日志中的一次性 Setup Code。详见[部署指南](docs/4.Deployment.md)。
+开发环境后端默认监听 `http://localhost:30816`。数据库、执行模式和锁通过 appsettings 或环境变量配置，默认使用 SQLite 和 InProcess。首次运行时打开 `/setup` 创建管理员密码；无人值守部署可注入 `Setup__AdminPassword`。首次设置会初始化当前配置的数据库，并将管理员认证和初始化状态写入 `server-state.json`，完成后无需额外重启。旧状态文件中的部署配置仍作为低优先级兜底。拆分 Control/Data 部署需要 PostgreSQL 和 Distributed 执行，先初始化 Control Plane，再启动 Data Plane。Server 状态默认保存在当前用户的 `agw` 目录下，日志和 Project Workspace 使用独立位置；通过域名设置时还需输入启动日志中的一次性 Setup Code。详见[部署指南](docs/4.Deployment.md)。
 
 在另一个终端启动前端：
 
@@ -131,6 +131,8 @@ Agw Desktop 在 `src/clients/desktop/` 下拥有独立的 Electron main/preload 
 Web、Desktop 和 Mobile 的 Chat 都支持文字与图片混合输入；每条消息最多附带 5 张 JPEG、PNG、GIF 或 WebP 图片，单张不超过 5 MB，总计不超过 10 MB。
 
 管理列表支持复制 System Agent、完整 Agentflow 图和非内建 Project；External Agent 与内建 Project 不允许复制。
+
+Claude Code、Codex 和 Pi 都可选择 Model Provider：Claude Code 要求 Anthropic，Codex 要求 OpenAI Responses，Pi 支持三种 ProviderType；取消选择后沿用外部工具自身配置。Agent 定义修改在下一轮生效并保留会话。Chat 只提供目标支持的权限模式，Codex 和 Pi 仅支持 Full access。权限能力查询与重连行为见[执行契约](docs/ws-flow.md)。
 
 ### 项目 Workspace
 
@@ -300,10 +302,10 @@ git push origin v0.1.0
 
 Agw 采用基于领域的模块化单体架构。`src/server/Agw.Host` 是共享 Hosting Module，`Agw.ControlPlane.Host`、`Agw.DataPlane.Host`、`Agw.Standalone.Host` 是三个可执行组合根；`src/clients` pnpm Workspace 包含 Web、Electron Desktop、Expo Mobile 以及共享业务和基础设施 package。
 
-典型的后端流程如下：
+Application 负责用例与持久化。有领域规则时，由 Application 求值 Policy，并通过手动构造的 Behavior 应用纯数据 Decision；简单 CRUD 直接使用持久化接缝。典型后端流程如下：
 
 ```text
-Controller -> AppService / RuntimeService -> DomainService -> IRepository / IUnitOfWork -> EF Core
+Controller -> Application -> I<Module>DbContext / persistence adapter -> EF Core
 ```
 
 后端与 Pi SDK 的简化依赖概览：省略 Contracts 项目及其相关引用，并省略可通过其他路径表达的重复连线；不包含测试项目和 NuGet 包。图从上往下排列，`A --> B` 表示 A 引用 B：
@@ -430,13 +432,13 @@ flowchart TB
 - [Chat Suggestions 设计](docs/5.Chat%20Suggestions.md)：Agent 感知的 slash commands、Claude init commands、文件建议与失败降级。
 - [Agentflow 指南](docs/6.Agentflow.md)：图路由与循环规则、Checkpoint 分支恢复、编辑器撤销和未保存状态、Chat 消息归属。
 - [Agent 执行流程](docs/ws-flow.md)：SignalR 命令、执行 Provider、turn 消息与断线行为。
-- [Execution 子系统](src/server/Agw.Agents/Execution/README.md)：进程内与分布式执行、目录职责、数据流、Definition Agent 自动上下文压缩与 command 扩展方式。
+- [Execution 子系统](src/server/Agw.Agents.Execution/README.md)：进程内与分布式执行、目录职责、数据流、Definition Agent 自动上下文压缩与 command 扩展方式。
 - [Files 模块](src/server/Agw.Files/README.zh-CN.md)：Project Workspace 解析、路径边界、Git 行为与挂载要求。
 - [Mobile Client](src/clients/mobile/README.md)：Expo 开发、Server Profile 与 Token、图片输入和 React Native 安全包边界。
 
 ## 配置
 
-后端主要配置位于 [`src/server/Agw.Host/appsettings.json`](src/server/Agw.Host/appsettings.json):
+后端主要配置位于 [`src/server/Agw.Host/appsettings.json`](src/server/Agw.Host/appsettings.json)。下例展开有效部署默认值；基础文件省略 Database、Execution 和锁的默认键，以保留旧状态文件的兜底。模板中为空的 OTLP endpoint 会回退到下例地址：
 
 ```json
 {
@@ -465,6 +467,7 @@ flowchart TB
 ```
 
 - 数据库 Provider 支持：`sqlite` 和 `postgres`。
+- Host 模板每 10 秒刷新对话历史；省略该间隔时使用代码中的 5 秒兜底。见[对话持久化](docs/operations/conversation-persistence.md)。
 - 分布式执行锁 Provider 支持 `inmemory` 和 `postgres`。`DistributedLock:Provider` 为 `null` 或不存在时，SQLite 使用进程内锁，PostgreSQL 使用 advisory lock；PostgreSQL 锁连接串为空时复用 `Database:ConnectionString`。
 - `Execution:Provider` 支持 `InProcess` 和 `Distributed`。分布式执行要求数据库与分布式锁都使用 PostgreSQL；消息回放默认使用 PostgreSQL，也可以显式改用 Redis。
 - 请勿将机密信息写入固定配置文件；建议优先使用环境变量进行覆盖。

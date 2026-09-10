@@ -82,7 +82,7 @@ ToolBlock 成员不会作为独立 catalog item 出现。若将 `todos_add` 写�
 
 ## Catalog
 
-`GET /api/tools` 是唯一的 Tool catalog 接口。三个目录接口统一通过 Bens.Results Envelope 返回 [`ToolLiteInfo`](Contracts/ToolLiteInfo.cs)，保留标识、展示与分类、成员名称、选择范围、Workspace 要求和权限／审批元数据。
+`GET /api/tools` 是唯一的 Tool catalog 接口。该接口通过 Bens.Results Envelope 返回 [`ToolLiteInfo`](Contracts/ToolLiteInfo.cs)，保留标识、展示与分类、成员名称、选择范围、Workspace 要求和权限／审批元数据。
 
 HTTP 响应不再包含 `typeName`、`parameters`、`isAsync`、`timeoutMs`；Registry 内部仍保留原来的 `ToolInfo`，提供给模型的 Schema 和运行时审批逻辑不受影响。
 
@@ -319,7 +319,7 @@ flowchart TB
 
 例如，在 `AllowSameArguments` 下批准 `file_access_write` 的 `{"path":"notes.md","content":"draft"}` 后，同一工具使用相同参数、仅交换属性顺序，可以复用授权。改变路径、正文或工具名，都需要重新决定。系统不推断 Shell 命令或文件路径是否“等价”，只比较实际 JSON 参数。
 
-`InteractionPermissionState` 保存模式、单调递增的版本和执行作用域 ID。模式改变会清除 session 授权；同一 execution 内版本改变也会清除，包括两次 SDK 检查之间发生 `A → B → A` 的情况。重复设置未改变的模式会保留有效授权。控制链只更新权限状态，由 SDK 自己的执行链在记录或检查授权前同步 session。
+`InteractionPermissionState` 保存模式、单调递增的版本和执行作用域 ID，每轮捕获独立快照。控制命令只更新下轮设置；模式或版本变化（包括 `A → B → A`）在新 turn 开始时使旧授权失效。重复选择同一模式保留有效授权，SDK 执行链在记录或检查授权前按本轮快照同步 session。
 
 Agw 授权与 MAF 的 `toolApprovalState` 分开保存，因为后者还包含待处理请求和已收集的回答。撤销时只清除 Agw 授权，不删除 SDK 队列。Adapter 给 MAF 返回单次调用响应，并附带 Agw 授权范围元数据，不创建 SDK 的长期授权 wrapper，从而保留 Agentflow 和 Durable 的继续执行状态。
 
@@ -348,15 +348,15 @@ sequenceDiagram
         Store-->>Client: Coordinator 发布已提交的 interaction-request
         Client->>Store: 命令与 Coordinator 校验并保存响应
         Store->>Store: 当前边界回答齐全，进入 Resuming
-        Store->>Runner: Worker 恢复状态、回答与最新权限
+        Store->>Runner: Worker 恢复状态、回答与本轮原始权限快照
     end
     Runner->>MAF: 绑定原始请求的 ToolApprovalResponseContent
     MAF->>MAF: 执行获批调用，或返回拒绝结果
 ```
 
-InProcess 保留异步等待 Task；先登记再发布，因此客户端立即回答也不会早于等待项建立。取消或发布失败时清理对应 pending。Durable 正常结束当前分段，将等待持久化，不保留原调用 Task；请求和 session/checkpoint 提交成功后才发布。响应按所有者、execution generation、交互身份和类型校验；同一边界可以先保存部分回答，齐全后再恢复，并在恢复前应用最新权限。
+InProcess 保留异步等待 Task；先登记再发布，因此客户端立即回答也不会早于等待项建立。取消或发布失败时清理对应 pending。Durable 正常结束当前分段，将等待持久化，不保留原调用 Task；请求和 session/checkpoint 提交成功后才发布。响应按所有者、execution generation、交互身份和类型校验；同一边界可以先保存部分回答，齐全后再恢复，并在恢复前应用本轮原始权限快照。
 
-切换到 `FullAccess` 后，已有的普通 Tool 审批等待和后续请求都可以自动批准。Durable 命令先更新持久 manifest，再由 Worker 在权限检查处刷新。两种执行方式中的用户输入与 HumanGate 都继续等待真实响应。
+切换到 `FullAccess` 只选择下轮策略，当前全部 pending 保持不变。Durable 在 manifest 中单独保存 `NextPermissionMode` 与 `NextPermissionVersion`，Worker 继续使用本轮快照。`permission-status` 分别报告本轮和下轮选择；用户输入与 HumanGate 在两种模式下仍需真实响应。
 
 ### 配置执行策略与提交审批
 
@@ -373,7 +373,7 @@ InProcess 保留异步等待 Task；先登记再发布，因此客户端立即�
 }
 ```
 
-执行期间使用专门命令切换策略，无需重建 runtime：
+通过专门命令选择下轮策略；当前 turn 继续使用原快照：
 
 ```json
 {
@@ -399,7 +399,7 @@ InProcess 保留异步等待 Task；先登记再发布，因此客户端立即�
 }
 ```
 
-`scope` 的准确 JSON 值是 `Once`、`AlwaysTool`、`AlwaysArguments`。拒绝时发送 `approved: false` 和 `scope: "Once"`。服务端在接收响应时按当前权限模式归一，客户端不能通过修改 `scope` 越过当前模式允许的授权范围，也不能在这个响应中替换工具参数。
+`scope` 的准确 JSON 值是 `Once`、`AlwaysTool`、`AlwaysArguments`。拒绝时发送 `approved: false` 和 `scope: "Once"`。服务端在接收响应时按本轮权限快照归一，客户端不能通过修改 `scope` 越过当前模式允许的授权范围，也不能在这个响应中替换工具参数。
 
 直接从后端执行时，根据入口设置 `AgentExecuteRequest`、`AgentExecuteByIdRequest` 或 `CreateAiAgentRequest` 的 `PermissionMode`；Agentflow runtime 执行入口也接受该模式。Jobs 使用执行 Facade 的 `AgentExecutionPermissionMode.FullAccess`，同时指定 `HumanInteractionPolicy.Reject`：普通工具审批可以继续，需要真实用户决定的请求会明确失败，不会无限等待。
 
@@ -419,7 +419,7 @@ InProcess 保留异步等待 Task；先登记再发布，因此客户端立即�
 
 后台 Agent 不能为新审批暂停，也不暴露交互 channel。新的审批请求通过 `BackgroundAgentApprovalMiddleware` 明确失败；父级 `background-agents` 工具的权限声明不会取消这一约束。
 
-前述“声明 → MAF”流程针对 Agw 的 System/Definition Agent。External Agent SDK 内部工具使用各自的权限机制：创建外部 Agent 时，Agw 将 `FullAccess` 映射为 Claude Code 的 `bypassPermissions`、Codex 的 `ApprovalMode.Never`；其他模式保留 Provider 原有配置，Codex 的 sandbox 与网络配置也保持原值。不能假定 `AlwaysAsk`／`AllowSameArguments`、Agw session 授权或运行中切换命令会一一映射到外部 CLI 的内部工具策略。外部用户输入桥接仍需真实输入。审批也不会替代 Workspace 路径检查、资源所有权、凭据或操作系统／容器限制。
+前述“声明 → MAF”流程针对 Agw 的 System/Definition Agent。Claude Code 通过原生工具审批桥接支持三种模式；Codex 和 Pi 当前 SDK 接入仅支持 Full access，显式选择其他模式会失败。客户端先查询 `/api/agents/permission-capabilities`。外部权限变更在下轮前重建实例时生效，保留 provider session；当前 turn 不变。外部用户输入桥接仍需真实输入，审批不替代 Workspace、归属、凭据或操作系统限制。详见[执行契约](../../../docs/ws-flow.md#permission-capabilities)。
 
 ### 新工具如何声明权限
 

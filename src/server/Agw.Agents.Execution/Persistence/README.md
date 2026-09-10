@@ -139,7 +139,7 @@ flowchart TB
 | `PendingInteractionsJson` | 加密的当前等待边界人工请求 |
 | `ResponsesJson` | 加密的当前等待边界已收到回答 |
 | `ErrorMessage` | 加密的执行错误信息 |
-| `StateChangedAt` | 最近一次状态转换的 UTC 时间；用于筛选可能遗留的 Running 记录 |
+| `StateChangedAt` | 最后一次状态转换的 UTC 时间；用于筛选可能遗留的 Running 记录 |
 | `StateVersion` | EF 乐观并发 token，区分不同领取和状态更新 |
 
 [`DurableExecutionRecordConfiguration`](../../Agw.Data/Entities/Executions/DurableExecutionRecordConfiguration.cs) 配置主键、并发 token 及状态时间、用户项目会话、归属回填索引。`StateVersion` 是并发凭据，`StateChangedAt` 是状态转换时间，两者都不等同于独立的 Worker 心跳。
@@ -318,7 +318,7 @@ Manifest、checkpoint、pending、response 和错误使用实体上的 `[Encrypt
 | 配置 | 默认值 | 作用 |
 | --- | --- | --- |
 | `Mode` | `Interval` | `Interval` 定时提交、`TurnEnd` 回合结束提交、`Immediate` Provider 每次追加提交 |
-| `FlushIntervalSeconds` | `5` | 从第一条待写历史起计算的定时提交间隔 |
+| `FlushIntervalSeconds` | Host 模板 `10`；省略配置时 `5` | 从第一条待写历史起计算的定时提交间隔 |
 | `MaxBufferedBytes` | `16777216` | 每个执行作用域默认 16 MiB，达到阈值提前提交 |
 
 模型读取合并数据库与本作用域待写历史；普通历史 API 返回已提交内容。正常结束、取消、异常和枚举器释放时都会尝试刷新剩余历史；保存 Session / 检查点等必要边界也会提前刷新，因此 `TurnEnd` 不表示所有状态都等到最后才保存。
@@ -347,7 +347,7 @@ export Database__Provider=sqlite
 export Database__ConnectionString='Data Source=agw.db'
 export DistributedLock__Provider=inmemory
 export ConversationHistory__Mode=Interval
-export ConversationHistory__FlushIntervalSeconds=5
+export ConversationHistory__FlushIntervalSeconds=10
 dotnet run --project src/server/Agw.Standalone.Host
 ```
 

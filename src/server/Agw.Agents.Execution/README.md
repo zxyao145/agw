@@ -48,7 +48,7 @@ Checkpoint 和 Agent Session 的持久化仍经过既有 Application Port / Infr
 
 ## 历史与事件批量写入
 
-`ConversationHistory` 默认使用 `Interval`，首条待写消息后每 5 秒批量提交；也支持 `TurnEnd` 和 `Immediate`。每个执行作用域默认最多缓冲 16 MiB 的序列化内容，达到阈值会提前提交。模型读取合并数据库和本作用域的待写历史，普通历史 API 返回已提交内容。
+Host 模板的 `ConversationHistory` 使用 `Interval`，首条待写消息后每 10 秒批量提交；省略间隔配置时，`ConversationHistoryOptions` 兜底为 5 秒；也支持 `TurnEnd` 和 `Immediate`。每个执行作用域默认最多缓冲 16 MiB 的序列化内容，达到阈值会提前提交。模型读取合并数据库和本作用域的待写历史，普通历史 API 返回已提交内容。
 
 `EfCoreChatHistoryProvider` 同时负责原始输入暂存、请求去重、流式响应状态和数据库持久化。`AgentRequestContextAgent` 通过 Contracts 中的 `IConversationHistoryRequests` 暂存原始输入，再向 SDK 转发包含记忆的临时副本；Claude/Pi 历史适配器直接委托给 EF Provider。待写输入按 SDK session 实例隔离，不写入可序列化的 SDK state；释放枚举器时先完成 SDK 的历史回调，再保存残留输入并清理状态。
 
@@ -182,7 +182,7 @@ Agent 的进程内执行继续由 `Agents/Runtime` 中的 RuntimeService 驱动�
 | `ExecCommand` | 指定 conversation、Agent/Agentflow 目标和用户输入，启动一个 turn | 是；持久化 conversation/task 后创建或复用 runtime |
 | `InterruptCommand` | 请求中断当前 turn | 否；只转发给当前 `ActiveTurn` |
 | `SetModeCommand` | 切换支持 mode 的 Agent | 是；空闲时立即应用，活动 turn 结束后应用最后一次请求 |
-| `SetPermissionModeCommand` | 切换工具审批策略 | 是；立即更新 settings 和当前活动 turn，不重建 runtime |
+| `SetPermissionModeCommand` | 选择下轮工具审批策略 | 是；更新下轮 settings，当前 turn 和待答请求保持快照；外部 runtime 按权限版本在下轮重建 |
 | `HumanResponseCommand` | 提交审批或用户信息交互响应 | InProcess 转发给当前 turn；Durable 经 Session 持久化回答并推进恢复状态 |
 | `SubscribeExecutionCommand` | 按 `executionId` 和 event stream cursor 重新订阅集群执行 | 是；替换当前消息订阅，不启动新执行 |
 | `ResumeCheckpointCommand` | 从一个精确的 Agentflow checkpoint occurrence 创建新执行分支 | 是；校验并裁剪 checkpoint 之后的历史，再启动恢复 turn |
@@ -226,7 +226,7 @@ Definition Agent 的 Skill provider 明确把 Skill 内容与 Project Workspace 
 
 `AgentflowRuntime` 保存 Agentflow id、task、settings 和 `AgentflowRuntimeService`。每个 Agentflow turn 都会创建新的 `InProcessInteractionSession`，workflow 本身由 `AgentflowWorkflowCompiler` 生成。
 
-`RuntimeFactory` 负责把已解析好的 execution/turn 输入对应到具体 runtime，并将 runtime 输出接入统一的 `TurnPipeline`。task 与 workspace 的解析由 `ExecutionConnectionContext` 统一完成。Agent runtime 只有在 project 和 context 仍兼容时才会复用；settings 或 target 变化会先释放旧 runtime。
+`RuntimeFactory` 负责把已解析好的 execution/turn 输入对应到具体 runtime，并将 runtime 输出接入统一的 `TurnPipeline`。task 与 workspace 的解析由 `ExecutionConnectionContext` 统一完成。Agent runtime 只有在 project、context、generation 和 Agent definition 版本仍兼容时才会复用；settings 或 target 变化会先释放旧 runtime。
 
 External Agent 通过持久化的 `Agent.ExternalAgentKind` 选择 Claude Code、Codex 或 Pi，`Agent.Name` 只是用户定义的稳定标识，不参与运行时分派。同一种外部实现可以有多个独立定义。三种 SDK 配置统一从 `Agent.Extra` 解析；创建时为空或空 JSON 对象会保存该实现的默认配置，运行时仍保留同样的兜底行为。`Project.ExtraSetting` 不参与外部 Agent 配置，也不作为回退来源。工作目录继续由 `Project.Workspace` 提供，环境变量按 Agent、Project、本次执行的顺序合并。Pi 的显式扩展和历史持久化超时分别配置在 `Agent.Extra` 的 `sessionOptions.extensions` 和 `historyPersistenceTimeout` 中。
 
@@ -252,11 +252,11 @@ turn 是一次用户输入到执行结束的完整过程。`RuntimeTurnContext` 
 4. 收到取消时发送 `turn-finished(status=interrupted)`；
 5. runtime 抛错时先发送 `AgwErrorContent`，再发送 `turn-finished(status=failed)`。
 
-当 `stream=false` 时，普通消息会缓冲到 runtime 执行结束后再发送。`human-gate-*` 控制消息不缓冲，否则客户端无法及时提交审批结果。runtime 自己产生的 `turn-finished` 会被过滤，避免重复终止消息。
+当 `stream=false` 时，普通消息会缓冲到 runtime 执行结束后再发送。`interaction-request` 等人工交互控制消息不缓冲，否则客户端无法及时提交审批结果。runtime 自己产生的 `turn-finished` 会被过滤，避免重复终止消息。
 
 ### `Inbound/SignalR`
 
-SignalR Hub 路由为 `/api/hubs/exec`，公开命令入口、执行 Provider 探测和 Agentflow checkpoint 查询：
+SignalR Hub 路由为 `/api/hubs/exec`，公开命令入口、执行 Provider 探测、Agentflow checkpoint 查询，以及 InProcess 状态恢复操作：
 
 客户端固定使用 WebSocket 并跳过 negotiate，避免负载均衡把协商和握手分配到不同 Server。Desktop 的 Bearer Token 在 WebSocket 握手中按 SignalR 约定通过 `access_token` 查询参数传递；服务端只在该 Hub 的 WebSocket 请求中接受此参数，其他 HTTP 或 WebSocket 路径仍只接受 `Authorization` Header。反向代理访问日志不得记录查询参数。
 
@@ -264,6 +264,8 @@ SignalR Hub 路由为 `/api/hubs/exec`，公开命令入口、执行 Provider �
 DispatchCommand(AgentRunCommand)
 GetExecutionProvider() -> "InProcess" | "Distributed"
 GetAgentflowCheckpoints(agentflowId) -> AgentflowCheckpointAvailability[]
+FindInProcessExecution(projectId, contextId) -> originalConnectionId | null
+RecoverInProcessExecution(originalConnectionId, interrupt) -> boolean
 ```
 
 `Outbound/SignalR` 中的 `IExecutionHubClient` 定义服务端返回消息的 typed client callback：

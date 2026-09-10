@@ -52,7 +52,9 @@ clients/
 │   ├── auth/                         # authentication state and Web UI
 │   ├── agents/                       # Agents and Agentflows
 │   ├── projects/                     # Projects, tasks, histories, and file explorer
-│   ├── chat/                         # Chat domain, execution state, SignalR, reusable Chat UI
+│   ├── chat-runtime/                 # platform-neutral SignalR, session/activity, Conversation state
+│   ├── chat/                         # shared Web/Desktop DOM Chat renderer
+│   ├── chat-native/                  # React Native Chat host, Composer, and Context History
 │   ├── providers/                    # Providers and models
 │   ├── integrations/                 # plugins, connections, shared capabilities
 │   ├── jobs/                         # scheduled jobs and logs
@@ -100,5 +102,5 @@ Rules:
 - `desktop/renderer` is part of `@agw/desktop`, not a separate workspace package. It imports public `@agw/*` package entry points through its own route shell.
 - Desktop builds and packages its own static renderer export. No root tool assembles Desktop from Web artifacts.
 - Electron bridge contracts remain internal to `desktop/src/shared/contracts`; business packages do not depend on them.
-- Mobile is a workspace package and uses the same root install and Turborepo tasks. It may consume React Native-safe packages such as `@agw/api`, `@agw/execution-core`, `@agw/chat-core`, and `@agw/projects-core`, but never Web/Desktop applications or Web UI barrels.
+- Mobile is a workspace package and uses the same root install and Turborepo tasks. It consumes `@agw/chat-native` as its Chat host alongside React Native-safe packages such as `@agw/api`, `@agw/execution-core`, and `@agw/projects-core`. Only `@agw/chat-native` owns Mobile's transitive `@agw/chat-core`/`@agw/chat-runtime` dependencies; Mobile never imports them directly, Web/Desktop applications, or Web UI barrels.
 - Mobile native `android/` and `ios/` projects are Expo CNG output and are not hand-maintained.

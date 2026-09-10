@@ -448,11 +448,11 @@ requires a new decision. Shell command equivalence and filesystem-path
 equivalence are not inferred: approval compares the actual JSON arguments.
 
 `InteractionPermissionState` holds a mode, a monotonically increasing version,
-and an execution scope ID. A mode change clears session grants. A version change
-within the same execution also clears them, including `A → B → A` between SDK
-checks. Reapplying an unchanged mode preserves valid grants. Control paths update
-the permission state; the SDK execution path synchronizes its own session before
-recording or checking grants.
+and an execution scope ID. Each turn captures a snapshot. Control commands update
+only the next turn; a changed mode or version, including `A → B → A`, invalidates
+old grants when that turn starts. Reapplying an unchanged mode preserves valid
+grants. The SDK execution path synchronizes its own session against the active
+turn snapshot before recording or checking grants.
 
 Agw deliberately keeps these grants separate from MAF's `toolApprovalState`,
 which also contains pending requests and collected answers. Revocation clears
@@ -488,7 +488,7 @@ sequenceDiagram
         Store-->>Client: Coordinator publishes committed interaction-request
         Client->>Store: Command and Coordinator validate and save response
         Store->>Store: All current boundary responses received: Resuming
-        Store->>Runner: Worker restores state, responses, and latest permissions
+        Store->>Runner: Worker restores state, responses, and the original turn permission snapshot
     end
     Runner->>MAF: ToolApprovalResponseContent bound to the original request
     MAF->>MAF: Execute approved call or return its denial
@@ -500,13 +500,14 @@ publication failure clean up the pending entry. Durable ends the current segment
 normally and persists the wait; no original task remains suspended. Requests and
 session/checkpoint state are committed before publication. Responses are checked
 against ownership, execution generation, identity, and type; partial answers are
-retained until the current boundary is complete. Resume applies the latest
-permission state before continuing.
+retained until the current boundary is complete. Resume applies the original
+turn permission snapshot before continuing.
 
-Switching to `FullAccess` resolves pending ordinary tool approvals as well as
-future ones. In Durable execution the command first updates the persisted
-manifest and the worker refreshes it at permission checks. User input and
-HumanGate requests remain pending in either execution mode.
+Switching to `FullAccess` selects the next turn's policy and leaves all current
+pending requests unchanged. Durable stores `NextPermissionMode` and
+`NextPermissionVersion` separately from the active execution snapshot.
+`permission-status` reports active and next choices; user input and HumanGate
+still require actual responses in either mode.
 
 ### Configure execution and submit decisions
 
@@ -526,7 +527,7 @@ Set the initial policy while the connection is idle, before sending `ExecCommand
 }
 ```
 
-Change policy during a turn without rebuilding the runtime:
+Select the next turn's policy, including while the current turn is running:
 
 ```json
 {
@@ -561,7 +562,7 @@ submit its ID in a typed response:
 
 `scope` uses the exact JSON strings `Once`, `AlwaysTool`, and `AlwaysArguments`.
 To deny, send `approved: false` and `scope: "Once"`. The server applies its
-current permission mode when accepting the response; the client cannot widen
+active turn's permission snapshot when accepting the response; the client cannot widen
 authorization beyond that mode by changing `scope`. It also cannot substitute new tool arguments
 in this response.
 
@@ -601,14 +602,14 @@ channel. A new approval request fails through `BackgroundAgentApprovalMiddleware
 the parent `background-agents` permission declaration does not remove this rule.
 
 The declaration-to-MAF flow above describes Agw's System/Definition Agents.
-External Agent SDK tools have their own permission mechanisms. During external
-Agent construction, Agw maps `FullAccess` to Claude Code `bypassPermissions` and
-Codex `ApprovalMode.Never`; other modes retain the configured provider options.
-Codex sandbox and network settings are preserved. Do not assume that
-`AlwaysAsk`/`AllowSameArguments`, Agw session grants, or live mode changes translate
-one-to-one to an external CLI's internal tool policy. External input bridges still
-require actual user input. Approval also does not replace workspace path checks,
-resource ownership, credentials, or operating-system/container restrictions.
+Claude Code supports all three permission modes through its native tool-approval
+bridge. Codex and Pi support only Full access in the current SDK integration;
+explicitly selecting another mode fails. Query `/api/agents/permission-capabilities`
+for the target before offering choices. External runtime permission changes take
+effect through a rebuild before the next turn, preserving the provider session.
+External input bridges still require actual user input. Approval does not replace
+workspace path checks, ownership, credentials, or operating-system restrictions.
+See the [execution contract](../../../docs/ws-flow.md#permission-capabilities).
 
 ### Declare permissions when adding tools
 

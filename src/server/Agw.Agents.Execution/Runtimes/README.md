@@ -286,13 +286,16 @@ Factory 构造参数允许不提供 conversation gate；提供时 lease 覆盖�
 
 | 场景 | 处理位置与结果 |
 | --- | --- |
-| 同目标、同一兼容会话的下一轮输入 | Starter 传入旧 Runtime，Factory 尝试复用 |
-| Agent 会话 Project、规范化 Context 或 Generation 不兼容 | Factory 释放旧 Runtime 并重建 |
+| 同目标、同一兼容会话且 Agent definition 版本未变 | Starter 传入旧 Runtime，Factory 通过当前用户的 `UpdateTime ?? CreateTime` 检查后复用 |
+| Agent 会话 Project、规范化 Context、Generation 或 definition 版本不兼容 | Factory 释放旧 Runtime 并重建；保留 Conversation 与外部 provider-session 绑定 |
+| 外部 Agent 的 PermissionVersion 改变 | Starter 在下一轮释放旧 Runtime；当前 turn 和待答交互不变 |
 | Agent ID 或 Agent / Agentflow 类型变化 | Context / Starter 释放旧目标 Runtime |
 | settings 内容变化 | Context 在空闲时释放 Runtime，并清空任务、workspace 和 target 缓存 |
 | Conversation Generation 变化 | 下一次启动重新检查代次，释放 Runtime 并重新解析任务与 workspace |
 | 普通 turn 完成 | 清理 ActiveTurn，保留 Runtime 供下一轮使用 |
 | 连接最终释放 | 释放 Runtime，再释放 connection DI scope |
+
+Agent definition 变更只在新 turn 开始时检查；运行中或等待人工响应时不会替换实例。重建失败后 Starter 清除已释放的 Runtime 引用，后续请求可重试。独立修改关联 Provider 不改变 Agent 行版本，不构成单独的缓存失效信号。
 
 AgentflowRuntime 的复用依赖外层 Context / Starter 已处理 target、settings 与 generation 的失效。复用该包装对象不等于复用一个永不结束的 Workflow run：RuntimeService 仍按执行创建 Workflow Lease 和运行资源。
 
@@ -521,7 +524,8 @@ Coordinator 的状态操作创建短 DI scope，Worker 的每次领取和执行�
 | 事件 | InProcess | Durable |
 | --- | --- | --- |
 | 启动请求在受理前取消 | Starter 检查 token；尚未进入 Factory 时不创建 Runtime | 登记 / 鉴权 / attachment 使用请求 token；若登记已经提交，取消调用不等于撤销持久 execution |
-| 普通执行期间断线 | detached 后等待当前 turn 收敛，再释放连接 scope | 取消当前订阅并释放 attachment，execution 继续 |
+| 普通执行期间断线 | detached 后等待当前 turn 收敛，再释放连接 scope；同一用户可经 Hub 发现原连接并查询/停止，输出不重放 | 取消当前订阅并释放 attachment，execution 继续 |
+| 权限模式切换 | 更新连接的下轮设置；当前 turn 保持快照 | 更新 manifest 的 NextPermissionMode/NextPermissionVersion；当前 execution 恢复继续使用原权限 |
 | 人工等待期间断线 | 请求中断等待中的 ActiveTurn | pending 保留在状态库，可由后续连接回答 |
 | 显式中断 | 调用 ActiveTurn 的 hook 并取消执行 token | 先持久写入 Interrupted，再由 Worker 的状态监测取消旧 segment |
 | Host 关闭 | Host token 取消执行，完成资源收尾 | Worker 取消当前段并释放锁，保留可恢复的持久状态 |

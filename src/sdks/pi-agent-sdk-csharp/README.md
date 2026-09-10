@@ -143,10 +143,12 @@ The SDK starts from a sanitized environment instead of inheriting every host var
 
 Agw reuses the host Pi configuration directory at `~/.pi/agent`, including `auth.json`, `settings.json`, and `models.json`. It keeps only Session files under the Agw user-scoped Session directory. To avoid executing unrelated or incompatible host extensions in the server process, Agw starts Pi with `--no-extensions`.
 
-Because the host configuration directory is process-level, every Agw user running under the same server OS account shares the same provider identity and quota from `auth.json` and `models.json`. Within Pi's filesystem integration, per-user isolation applies only to the Session directory.
+Without an Agw Model Provider binding, users running under the same Server OS account share the host provider configuration and quota from `auth.json` and `models.json`; only Pi Session files have separate per-user directories.
+
+When `Agent.ModelProviderId` is selected, Agw resolves the current user's model, endpoint, and credentials and explicitly loads its bundled `agw-model-provider.mjs` extension. That extension registers a process-local provider from dedicated environment variables, overriding the corresponding Extra/environment model settings without rewriting `models.json` or `auth.json`. The host config directory and `--no-extensions` remain; only the explicit bundled/configured extensions load. Clearing the binding returns to the host configuration. See [External Agent model configuration](../../server/Agw.Agents.Execution/README.md#external-agent-模型配置).
 
 
-Explicit Agent, Project, or turn environment variables are passed to Pi after the sanitized host environment and therefore override ordinary `models.json` key expressions. Pi itself resolves credentials in this order: `--api-key`, `auth.json`, environment variables, then `models.json`. Consequently, an existing `auth.json` entry for the same provider still has priority over an environment variable; Agw does not place plaintext API keys in process arguments to bypass that rule.
+For unbound Agents, explicit Agent, Project, or turn environment variables are passed to Pi after the sanitized host environment and therefore override ordinary `models.json` key expressions. Pi itself resolves credentials in this order: `--api-key`, `auth.json`, environment variables, then `models.json`. Consequently, an existing `auth.json` entry for the same provider still has priority over an environment variable; Agw does not place plaintext API keys in process arguments to bypass that rule.
 
 Project trust defaults to `--no-approve`. Pi does not provide an in-process sandbox: unattended or untrusted work should run in a container, VM, or policy-controlled sandbox with only required files, credentials, and network access.
 

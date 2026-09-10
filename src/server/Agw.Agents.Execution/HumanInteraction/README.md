@@ -68,7 +68,7 @@ flowchart TB
     subgraph persistedBoundary["持久等待边界"]
         pending --> commit["Store 原子提交：请求、输入目录、已接受回答及 session / checkpoint"]
         commit --> waiting["WaitingForHuman"]
-        accept["校验所有者、generation、交互 ID 与类型，按最新权限归一"] --> save["保存类型化响应"]
+        accept["校验所有者、generation、交互 ID 与类型，按本轮权限快照归一"] --> save["保存类型化响应"]
         save --> allAnswered{"当前边界的回答齐全？"}
         allAnswered -->|"否"| remaining["保留已接受回答，继续等待其余请求"]
         allAnswered -->|"是"| resuming["Resuming"]
@@ -81,7 +81,7 @@ flowchart TB
     command --> accept
 
     resuming --> worker["Worker 加载已保存的回答与 session / checkpoint"]
-    worker --> restore["Runner 恢复原请求，再次校验并应用最新权限"]
+    worker --> restore["Runner 恢复原请求，再次校验并应用本轮权限快照"]
     restore -->|"工具审批 / 工作流决定"| execution["响应交回 MAF 或 HumanGate"]
     restore -->|"用户输入：审批响应作为恢复信号"| resumeInput["MAF 恢复输入工具的调用"]
     resumeInput -->|"UserInputRequest"| channel["ResolvedHumanInteractionChannel：严格匹配节点、调用与载荷"]

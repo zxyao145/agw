@@ -22,7 +22,7 @@ Cookie and `LocalTrusted` requests use the built-in administrator ID. Bearer req
 
 The Host must call `UseAuthorization()` after `UseRouting()` so endpoint authorization metadata remains effective. A2A and the execution SignalR Hub additionally use `RequireAuthorization()`.
 
-`UserInfoUtil.UserId` is nullable. Call `RequiredUserId` when authentication is mandatory: it throws `AuthenticationRequired` for anonymous flows and returns `"1001"` when an authenticated principal has no usable user ID.
+`UserInfoUtil.UserId` is nullable. Call `RequiredUserId` when authentication is mandatory: it throws `AuthenticationRequired` for anonymous flows and for authenticated principals without a usable stable user ID. There is no administrator-ID fallback.
 
 ## State seam
 

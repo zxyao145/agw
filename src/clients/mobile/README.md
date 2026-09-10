@@ -32,10 +32,10 @@ pnpm --filter @agw/mobile native:generate -- --clean
 - HTTP 连接必须确认明文传输风险；公网使用仍建议 HTTPS。
 - 删除 Mobile Profile 不会撤销服务端 token，撤销操作需在 Agw Web 完成。
 - Chat、Files 与 History 切换时保留当前 Workspace、会话和执行状态。
-- 执行连接使用官方 SignalR Client 自动重连；Distributed 执行会按 cursor 重新订阅，InProcess 执行断线后无法恢复流式输出并会明确报错。
+- 执行连接由 `@agw/chat-runtime` 使用官方 SignalR Client 自动重连。Distributed 按 cursor 重新订阅；InProcess 通过 Hub 查询原执行是否仍在运行并保留停止能力，不重放断线期间的输出。查询失败保留重试入口，不能直接视为执行结束。
 
 Chat 可从图库选择 JPEG、PNG、GIF 或 WebP 图片；每条消息最多 5 张、单张最多 5 MB、总计最多 10 MB，与服务端校验一致。
 
 ## 共享代码边界
 
-Mobile 通过 workspace 依赖复用 `@agw/api`、`@agw/execution-core`、`@agw/chat-core` 和 `@agw/projects-core`，不再维护独立 OpenAPI 副本或 Metro 源码别名，也不导入 Web UI。
+Mobile 通过 `@agw/chat-native` 复用 Chat、Composer、Context History 和 Workspace 状态；该包封装 `@agw/chat-core` 与 `@agw/chat-runtime`，Mobile 不直接导入这两个包。其他共享依赖包括 `@agw/api`、`@agw/execution-core` 和 `@agw/projects-core`。不维护独立 OpenAPI 副本或 Metro 源码别名，也不导入 Web UI。

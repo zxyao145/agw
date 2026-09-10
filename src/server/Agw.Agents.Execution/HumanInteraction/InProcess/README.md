@@ -6,7 +6,7 @@
 
 响应必须同时匹配 `InteractionId` 和请求变体。错误类型不会消费 pending；完成后重复响应不再接受。发布失败、等待取消、整轮结束都会清理对应等待。所有路径根据剩余集合数量更新连接状态，完成一个请求不会隐藏另一个请求。
 
-`SetPermissionMode(FullAccess)` 与登记共享同一把锁，完成已有普通工具审批，保留 UserInput 和 HumanGate。SDK session 授权在下一次授权检查中同步，控制线程不修改 SDK 状态。
+执行入口为本轮捕获权限快照。客户端 `SetPermissionModeCommand` 只更新连接的下轮设置，不调用当前 session 的 `SetPermissionMode`，也不完成已有审批。底层 session 方法仍可在显式直接调用时归一 pending，但不能把它接到当前 turn 的客户端权限切换路径。SDK session 授权由执行路径按本轮版本同步。
 
 `InProcessAgentflowRunner` 同时消费工作流事件与人工响应任务。因此并行 HumanGate 可以同时显示、分别作答。任意 HumanGate 拒绝后终止工作流，并取消其他等待。用户输入取消只返回协议的取消结果；显式中断和等待期间的连接断开则取消本轮执行。
 

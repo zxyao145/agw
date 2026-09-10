@@ -16,7 +16,7 @@ Execution 已承担完整的运行时、连接与 turn 生命周期、人工交�
 - Host 分别调用 `AddAgents` 与 `AddAgentExecution`。A2A、Jobs 保持 Contracts 调用方式。
 - 管理侧依赖 `IAgentflowMermaidProvider`，由同一个 scoped Agentflow runtime 实现，继续构建实际 Workflow 生成 Mermaid。
 - Durable manifest、task snapshot、settings 保持单份纯数据定义，位于 Agents 的持久化接缝；映射到运行时任务和 command 的方法位于 Execution。
-- `PermissionMode` 移到 Contracts，保留原 JSON enum 名称。执行命令、manifest 和 checkpoint 的持久化格式不因程序集拆分改变。
+- `AgwPermissionMode` 位于 Contracts，保留原 JSON enum 名称。执行命令、manifest 和 checkpoint 的持久化格式不因程序集拆分改变。
 - 架构测试将两个程序集映射到 Agents 逻辑所有权；项目引用矩阵仍单独精确约束物理依赖。跨模块数据访问与用户隔离检查继续覆盖执行工程。
 - Entities、EF configurations、单一 AgwDbContext 与数据库所有权保持现有安排。
 

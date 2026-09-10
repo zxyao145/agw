@@ -18,7 +18,7 @@ A PostgreSQL-owned execution lifecycle with replayable output through PostgreSQL
 
 ## Module DbContext
 
-The owner Module's inward persistence interface. Agents, Projects, Jobs, Auth, Integrations, Providers, Skills, and Tools expose only their owned `DbSet` values plus `SaveChangesAsync`. A single scoped `AgwDbContext` implements every Module DbContext; this does not imply separate databases or separate EF Core contexts.
+The owner Module's inward persistence interface. Agents, Projects, Jobs, Auth, Integrations, Providers, Skills, and Tools expose their owned `DbSet` values and save operations; Agents and Projects also provide generation-checked `SaveConversationChangesAsync`. A single scoped `AgwDbContext` implements every Module DbContext; this does not imply separate databases or separate EF Core contexts.
 
 ## Agents Execution Assembly
 

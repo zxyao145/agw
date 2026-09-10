@@ -2,13 +2,13 @@
 
 Agw 分别配置对话历史和分布式事件的写入节奏。配置来自 appsettings、环境变量和 Host 参数，遵循 ASP.NET Core 标准优先级；修改后重启生效。多副本部署应保持执行节点配置一致。
 
-## 默认配置
+## Host 模板配置
 
 ```json
 {
   "ConversationHistory": {
     "Mode": "Interval",
-    "FlushIntervalSeconds": 5,
+    "FlushIntervalSeconds": 10,
     "MaxBufferedBytes": 16777216
   },
   "Execution": {
@@ -24,9 +24,11 @@ Agw 分别配置对话历史和分布式事件的写入节奏。配置来自 app
 
 | 历史模式 | 常规提交时机 |
 | --- | --- |
-| `Interval` | 从首条待写消息开始计时，默认 5 秒后提交；没有后续消息也会触发 |
+| `Interval` | 从首条待写消息开始计时，Host 模板为 10 秒后提交；没有后续消息也会触发 |
 | `TurnEnd` | 回合结束时提交 |
 | `Immediate` | 历史 Provider 每次追加时立即提交 |
+
+`ConversationHistoryOptions` 的代码兜底仍为 5 秒；只有省略 `FlushIntervalSeconds` 配置时才使用它。以下行为按部署的有效间隔执行。
 
 两种延迟模式均在缓冲达到 `MaxBufferedBytes` 时提前提交。该值按消息与元数据的序列化 UTF-8 字节数估算，默认每个执行作用域 16 MiB；单次追加可能跨过阈值，达到阈值的调用会等待提交。它不是整个进程的堆内存上限。
 
@@ -68,7 +70,7 @@ Web/Desktop 的可见 Chat 在运行期间每 5 秒刷新会话列表，结束�
 ConversationHistory__Mode=TurnEnd
 ```
 
-将历史间隔调整为 10 秒：
+显式配置与 Host 模板相同的 10 秒间隔：
 
 ```bash
 ConversationHistory__Mode=Interval
@@ -84,7 +86,7 @@ Execution__Distributed__EventStream__WriteIntervalMilliseconds=0
 
 历史间隔和缓冲阈值必须为正；历史间隔还必须符合 .NET Timer 的范围。事件写入间隔可为 0，批量条数必须为正。无效配置在启动时拒绝。
 
-升级不需要数据库迁移，也不改变 REST/SignalR 格式。突发进程退出或掉电可能丢失尚未提交的历史；`TurnEnd` 下可能涉及本轮自上个必要提交边界以来的记录。正常关闭会尝试刷新，但不提供断电持久性保证。分布式未完成执行仍沿用已有的至少一次分段恢复语义。
+调整写入节奏本身不需要数据库迁移，也不改变 REST/SignalR 格式。突发进程退出或掉电可能丢失尚未提交的历史；`TurnEnd` 下可能涉及本轮自上个必要提交边界以来的记录。正常关闭会尝试刷新，但不提供断电持久性保证。分布式未完成执行仍沿用已有的至少一次分段恢复语义。
 
 优化主要减少事务提交、锁竞争和磁盘同步次数。每条消息/事件的存储格式保持兼容，累计存储量仍取决于记录总量及清理策略。
 
