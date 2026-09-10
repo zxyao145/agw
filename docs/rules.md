@@ -124,7 +124,7 @@ All HTTP client usage must go through `IHttpClientFactory`. Never instantiate `H
 
 ### What to do
 
-- Resolve `IHttpClientFactory` via `IocUtil.GetSingletonRequiredService<IHttpClientFactory>()`.
+- Inject `IHttpClientFactory` through an explicit constructor in DI-managed services.
 - Create short-lived `HttpClient` instances with `httpClientFactory.CreateClient()`.
 
 ### What NOT to do
@@ -162,7 +162,7 @@ Direct `new HttpClient()` causes socket exhaustion and DNS staleness. `IHttpClie
 
 ## 7. Backend Service Registration and Boundaries
 
-- Register new backend services in the relevant module `DependencyInjection.cs` or extension method and ensure `Agw.Host/Program.cs` composes the module.
+- Register new backend services in the owning module DI seam and compose them through the appropriate Host role; shared composition lives in `Agw.Host`, with role-specific mapping in the Control/Data Plane Host Modules.
 - `Agw.Integrations` treats `IPluginCatalog` as the source of truth for plugin, connector, authentication, capability-source, and bundled Skill definitions; definitions are code/content assets and are not EF entities. These Available integrations are global read-only catalog data.
 - Persist each user's setup in `PluginInstallation`, Agent-selectable accounts or endpoints in `Connection`, and protected or environment-referenced secrets in their dedicated credential entities.
 - User-facing surfaces call catalog definitions Available integrations and Connection instances Configured integrations. Developer contracts retain `PluginDefinition`, `PluginInstallation`, `Connection`, and `ConnectionId`.

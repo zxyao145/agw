@@ -4,7 +4,7 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Tools.HumanInteraction;
-using Agw.Tools.ToolBlocks.Blocks.Mode;
+using Agw.Tools.Impl.ToolBlocks.Mode;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,6 +13,30 @@ namespace Agw.Tools.Tests;
 
 public sealed class ModeToolBlockTests
 {
+    [Fact]
+    public async Task DeferredProvider_AfterModeTools_DescribesGeneratedModeSet()
+    {
+        var fixture = await MaterializeAsync();
+        await using var contribution = fixture.Contribution;
+        var provider = new DeferredHumanInteractionProvider();
+        var context = await provider.InvokingAsync(
+            new AIContextProvider.InvokingContext(new TestAgent(), fixture.Session, fixture.Context),
+            TestContext.Current.CancellationToken
+        );
+        var tools = context.Tools!.OfType<AIFunction>().ToDictionary(tool => tool.Name);
+        var modeSet = tools["mode_set"];
+        Assert.NotNull(modeSet.GetService<ApprovalRequiredAIFunction>());
+        Assert.Null(tools["mode_get"].GetService<ApprovalRequiredAIFunction>());
+        var protocol = Assert.IsAssignableFrom<IHumanInteractionProtocol>(
+            modeSet.GetService<IHumanInteractionProtocol>()
+        );
+        var request = protocol.CreateRequest(
+            new AIFunctionArguments(new Dictionary<string, object?> { ["mode"] = "execute" })
+        );
+        Assert.Equal("mode-change", request.InputKind);
+        Assert.Equal("execute", request.Payload.GetProperty("mode").GetString());
+    }
+
     [Fact]
     public async Task MaterializeAsync_ModeSetRequiresHumanConfirmationAndModeGetDoesNot()
     {
@@ -60,16 +84,17 @@ public sealed class ModeToolBlockTests
         var request = await channel.RequestReceived.Task.WaitAsync(TestContext.Current.CancellationToken);
 
         Assert.False(pendingResult.IsCompleted);
-        Assert.Equal(ModeSetHumanInteractionProvider.InteractionKind, request.InteractionKind);
-        Assert.Equal("mode_set", request.ToolName);
+        Assert.Equal(ModeSetHumanInteractionProvider.InteractionKind, request.InputKind);
+        Assert.Equal("mode_set", request.Source.ToolName);
         Assert.Equal("execute", request.Payload.GetProperty("mode").GetString());
 
         channel.Submit(
-            new HumanInteractionResponse(
-                request.RequestId,
-                Cancelled: false,
-                JsonSerializer.SerializeToElement(new { confirmed = true })
-            )
+            new UserInputResponse
+            {
+                InteractionId = "test-interaction",
+                Cancelled = false,
+                ResponseData = JsonSerializer.SerializeToElement(new { confirmed = true }),
+            }
         );
 
         Assert.Equal("Mode changed to \"execute\".", ReadStringResult(await pendingResult));
@@ -91,7 +116,14 @@ public sealed class ModeToolBlockTests
             .AsTask();
         var request = await channel.RequestReceived.Task.WaitAsync(TestContext.Current.CancellationToken);
 
-        channel.Submit(new HumanInteractionResponse(request.RequestId, Cancelled: true, ResponseData: null));
+        channel.Submit(
+            new UserInputResponse
+            {
+                InteractionId = "test-interaction",
+                Cancelled = true,
+                ResponseData = null,
+            }
+        );
 
         Assert.Equal(
             "Mode change to \"execute\" was cancelled by the user.",
@@ -196,19 +228,20 @@ public sealed class ModeToolBlockTests
         }
 
         public IHumanInteractionChannel? Current { get; }
+        public IInteractionRequestRegistry? Requests => null;
     }
 
     private sealed class TestHumanInteractionChannel : IHumanInteractionChannel
     {
-        private readonly TaskCompletionSource<HumanInteractionResponse> _response = new(
+        private readonly TaskCompletionSource<UserInputResponse> _response = new(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
 
-        public TaskCompletionSource<HumanInteractionRequest> RequestReceived { get; } =
+        public TaskCompletionSource<UserInputRequest> RequestReceived { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public async ValueTask<HumanInteractionResponse> RequestAsync(
-            HumanInteractionRequest request,
+        public async ValueTask<UserInputResponse> RequestAsync(
+            UserInputRequest request,
             CancellationToken cancellationToken
         )
         {
@@ -216,7 +249,7 @@ public sealed class ModeToolBlockTests
             return await _response.Task.WaitAsync(cancellationToken);
         }
 
-        public void Submit(HumanInteractionResponse response) => _response.TrySetResult(response);
+        public void Submit(UserInputResponse response) => _response.TrySetResult(response);
     }
 
     private sealed class TestAgent : AIAgent

@@ -8,7 +8,7 @@ namespace Agw.Domain.Attributes;
 /// This attribute is deprecated. Use <see cref="AiToolAttribute"/> instead.
 /// </remarks>
 [Obsolete(
-    "Use AiToolAttribute from Agw.Domain.Tools namespace instead. This attribute will be removed in a future version."
+    "Use AiToolAttribute from Agw.Tools.Contracts.Attributes instead. This attribute will be removed in a future version."
 )]
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
 public class ToolAttribute : Attribute

@@ -1,4 +1,7 @@
 import * as React from "react";
+import { toast } from "sonner";
+import { Button } from "@agw/components";
+import { getExternalModelProviderError } from "./external-model-provider";
 import { UseQueryResult } from "@agw/components/query";
 
 import {
@@ -17,7 +20,7 @@ import { Label } from "@agw/components";
 import { Switch } from "@agw/components";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@agw/components";
 import { Textarea } from "@agw/components";
-import { ToolsPanel, type ToolInfo, type ToolValueObject } from "@agw/tools";
+import { ToolsPanel, type ToolLiteInfo, type ToolValueObject } from "@agw/tools";
 
 import { getAgentExtraSettingsError } from "./agent-extra-settings";
 import {
@@ -65,7 +68,7 @@ interface AgentFormFieldsProps {
   agentOptions: Array<{ id: string; name: string; displayName?: string }>;
   modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
   skillsQuery: UseQueryResult<SkillDto[], Error>;
-  toolsQuery: UseQueryResult<ToolInfo[], Error>;
+  toolsQuery: UseQueryResult<ToolLiteInfo[], Error>;
   mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
   toggleSkill: (skillId: string) => void;
   selectedMcpToolServerIds: string[];
@@ -137,6 +140,41 @@ export function AgentFormFields({
       })),
     [modelProvidersQuery.data],
   );
+  const modelProviderError = isExternalAgent
+    ? getExternalModelProviderError(
+        externalAgentKind,
+        modelProviderId,
+        modelProvidersQuery.data,
+        externalAgentOptionsQuery.data,
+      )
+    : null;
+  const compatibleModelProviderOptions = modelProviderOptions.filter(
+    (option) =>
+      !getExternalModelProviderError(
+        externalAgentKind,
+        option.value,
+        modelProvidersQuery.data,
+        externalAgentOptionsQuery.data,
+      ),
+  );
+  const handleExternalAgentKindChange = (value: string) => {
+    const nextKind = Number(value) as ExternalAgentKindValue;
+    if (
+      modelProviderId &&
+      getExternalModelProviderError(
+        nextKind,
+        modelProviderId,
+        modelProvidersQuery.data,
+        externalAgentOptionsQuery.data,
+      )
+    ) {
+      setModelProviderId("");
+      toast.info(
+        "Model provider selection cleared because it is incompatible with this external agent.",
+      );
+    }
+    setExternalAgentKind?.(nextKind);
+  };
   const externalAgentKindOptions = React.useMemo<SearchableSelectOption[]>(
     () =>
       (externalAgentOptionsQuery.data ?? []).map((option) => ({
@@ -235,9 +273,7 @@ export function AgentFormFields({
                   value={
                     externalAgentKind === ExternalAgentKind.None ? "" : externalAgentKind.toString()
                   }
-                  onValueChange={(value) =>
-                    setExternalAgentKind?.(Number(value) as ExternalAgentKindValue)
-                  }
+                  onValueChange={handleExternalAgentKindChange}
                   options={externalAgentKindOptions}
                   placeholder="Select an external agent..."
                   searchPlaceholder="Search external agents..."
@@ -260,18 +296,32 @@ export function AgentFormFields({
           ) : null}
 
           <div className="grid gap-2">
-            <Label htmlFor={`${idPrefix}modelProviderId`}>
-              Model Provider
-              {isExternalAgent ? (
-                <span className="ml-2 text-xs text-muted-foreground">(Optional)</span>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor={`${idPrefix}modelProviderId`}>
+                Model Provider
+                {isExternalAgent ? (
+                  <span className="ml-2 text-xs text-muted-foreground">(Optional)</span>
+                ) : null}
+              </Label>
+              {isExternalAgent && modelProviderId ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto shrink-0 px-2 py-1 text-xs"
+                  aria-label="Clear model provider selection"
+                  onClick={() => setModelProviderId("")}
+                >
+                  Clear selection
+                </Button>
               ) : null}
-            </Label>
+            </div>
             <SearchableSelect
               id={`${idPrefix}modelProviderId`}
               ariaLabel="Model Provider"
               value={modelProviderId}
               onValueChange={setModelProviderId}
-              options={modelProviderOptions}
+              options={isExternalAgent ? compatibleModelProviderOptions : modelProviderOptions}
               placeholder={
                 isExternalAgent
                   ? "Optional: Select a model provider..."
@@ -281,6 +331,16 @@ export function AgentFormFields({
               isLoading={modelProvidersQuery.isLoading}
               clearable={isExternalAgent}
             />
+            {modelProviderError ? (
+              <p role="alert" className="text-xs text-destructive">
+                {modelProviderError}
+              </p>
+            ) : null}
+            {isExternalAgent && !modelProviderId ? (
+              <p className="text-xs text-muted-foreground">
+                Uses Extra Settings or the external agent's default model configuration.
+              </p>
+            ) : null}
           </div>
 
           {isExternalAgent ? (

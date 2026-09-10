@@ -1,5 +1,6 @@
 using Agw.Infrastructure.Data;
 using Agw.Shared.Data.Entities.Agentflows;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Agents.Tests;
@@ -18,7 +19,17 @@ public sealed partial class AgentflowAppServiceTests
                 )
             )
         );
-        await using var connection = await OpenConnectionAsync(token);
+        var connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = $"agentflow-concurrent-{Guid.NewGuid():N}",
+            Mode = SqliteOpenMode.Memory,
+            Cache = SqliteCacheMode.Shared,
+            ForeignKeys = true,
+            Pooling = false,
+        }.ToString();
+        // Keep the shared database alive while each concurrent context uses its own connection.
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(token);
         await using var seed = await CreateDbContextAsync(connection, token);
         var first = Guid.NewGuid();
         var second = Guid.NewGuid();
@@ -38,7 +49,7 @@ public sealed partial class AgentflowAppServiceTests
         );
         await seed.SaveChangesAsync(token);
         var options = new DbContextOptionsBuilder<AgwDbContext>()
-            .UseSqlite(connection)
+            .UseSqlite(connectionString)
             .UseSnakeCaseNamingConvention()
             .Options;
         var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

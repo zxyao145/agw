@@ -60,25 +60,17 @@ export type ToolBlockValue = {
 
 export type ToolValueObject = ToolValue | ToolBlockValue;
 
-export type ToolInfo = {
+export type ToolLiteInfo = {
   kind: "tool" | "toolBlock";
   name: string;
   displayName: string;
   description: string;
   category: string;
-  typeName: string;
   memberToolNames: string[];
   scopes: number;
   requiresWorkspace: boolean;
-  parameters: Array<{
-    name: string;
-    type: string;
-    description?: string;
-    isOptional: boolean;
-  }>;
-  isAsync: boolean;
+  requiredPermission?: "none" | "readOnly" | "write" | "execute" | null;
   requiresConfirmation: boolean;
-  timeoutMs: number;
 };
 
 export function parseToolValues(value: ToolValueObject[] | null | undefined): ToolValueObject[] {

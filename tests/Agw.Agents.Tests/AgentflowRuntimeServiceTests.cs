@@ -1,13 +1,21 @@
 using System.Security.Claims;
 using Agw.Agents.Application.Persistence;
-using Agw.Agents.Execution.Agentflows;
+using Agw.Agents.Execution.Agentflows.Checkpoints;
+using Agw.Agents.Execution.Agentflows.Context;
+using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Agentflows.Observability;
-using Agw.Agents.Execution.Agents;
-using Agw.Agents.Execution.Agents.Dtos;
-using Agw.Agents.Execution.Agents.Store;
+using Agw.Agents.Execution.Agentflows.Runners.Durable;
+using Agw.Agents.Execution.Agentflows.Runners.InProcess;
+using Agw.Agents.Execution.Agentflows.Runtime;
+using Agw.Agents.Execution.Agentflows.Workflows;
+using Agw.Agents.Execution.Agents.Contracts;
+using Agw.Agents.Execution.Agents.Runtime;
+using Agw.Agents.Execution.Agents.Sessions;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Runtimes;
+using Agw.Agents.Execution.HumanInteraction;
+using Agw.Agents.Execution.HumanInteraction.Application;
+using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
 using Agw.Projects.Contracts.Runtime;
@@ -20,7 +28,7 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
-using RuntimeAgentExecutionResult = Agw.Agents.Execution.Agents.Dtos.AgentExecutionResult;
+using RuntimeAgentExecutionResult = Agw.Agents.Execution.Agents.Contracts.AgentExecutionResult;
 
 namespace Agw.Agents.Tests;
 
@@ -248,6 +256,7 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
             new RecordingSummaryService()
         );
         var messages = new List<AgwMessage>();
+        var handler = new DelayedApprovalHandler(approvalScope);
 
         await foreach (
             var message in service.ExecuteStreamingAsync(
@@ -257,19 +266,14 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
                 Guid.CreateVersion7(),
                 "interactive-context",
                 Guid.CreateVersion7(),
-                new DelayedApprovalHandler(approvalScope)
+                handler
             )
         )
         {
             messages.Add(message);
         }
 
-        Assert.Single(
-            messages,
-            message =>
-                message.AdditionalProperties?.TryGetValue("type", out var type) == true
-                && string.Equals(type?.ToString(), "tool-approval-request", StringComparison.Ordinal)
-        );
+        Assert.IsType<ToolApprovalInteraction>(Assert.Single(handler.Requests));
         Assert.Contains(
             messages.SelectMany(message => message.Contents).OfType<AgwTextContent>(),
             content => content.Content == approvalScope
@@ -492,7 +496,7 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
                 "run",
                 TestContext.Current.CancellationToken,
                 taskId: Guid.CreateVersion7(),
-                humanGateApprovalHandler: new DelayedApprovalHandler("once")
+                interactionHandler: new DelayedApprovalHandler("once")
             )
         ) { }
 
@@ -731,7 +735,7 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
                 agentflow.Id,
                 "cancel",
                 cancellationSource.Token,
-                humanGateApprovalHandler: new CancellingApprovalHandler()
+                interactionHandler: new CancellingApprovalHandler()
             )
         ) { }
 
@@ -1180,34 +1184,38 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
             Task.FromResult<string?>(null);
     }
 
-    private sealed class DelayedApprovalHandler : IHumanGateApprovalHandler
+    private sealed class DelayedApprovalHandler : IInteractionHandler
     {
         private readonly string _approvalScope;
+        public List<InteractionRequest> Requests { get; } = [];
 
         public DelayedApprovalHandler(string approvalScope = "once")
         {
             _approvalScope = approvalScope;
         }
 
-        public async ValueTask<HumanGateApprovalDecision> WaitForApprovalAsync(
-            HumanGateApprovalRequest request,
+        public async ValueTask<InteractionResolution> ResolveAsync(
+            InteractionRequest request,
             CancellationToken cancellationToken
         )
         {
+            Requests.Add(request);
             await Task.Delay(20, cancellationToken);
-            return new HumanGateApprovalDecision(request.RequestId, true, "approved", _approvalScope);
+            return new InteractionResolution.Resolved(
+                InteractionTestData.Decision(request, true, "approved", _approvalScope)
+            );
         }
     }
 
-    private sealed class CancellingApprovalHandler : IHumanGateApprovalHandler
+    private sealed class CancellingApprovalHandler : IInteractionHandler
     {
-        public async ValueTask<HumanGateApprovalDecision> WaitForApprovalAsync(
-            HumanGateApprovalRequest request,
+        public async ValueTask<InteractionResolution> ResolveAsync(
+            InteractionRequest request,
             CancellationToken cancellationToken
         )
         {
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
-            return new HumanGateApprovalDecision(request.RequestId, true, null);
+            return new InteractionResolution.Resolved(InteractionTestData.Decision(request, true, null));
         }
     }
 
@@ -1366,7 +1374,7 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
             return Task.FromResult(agent);
         }
 
-        public Agw.Agents.Execution.Commands.Setting.PermissionMode? LastPermissionMode { get; private set; }
+        public Agw.Agents.Contracts.Execution.AgwPermissionMode? LastPermissionMode { get; private set; }
 
         public Task<AIAgent?> CreateAgentflowNodeAgentAsync(
             Guid agentId,
@@ -1375,7 +1383,7 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
             IReadOnlyDictionary<string, string>? environmentVariables,
             bool deferHumanInteractions,
             CancellationToken cancellationToken = default,
-            Agw.Agents.Execution.Commands.Setting.PermissionMode? permissionMode = null
+            Agw.Agents.Contracts.Execution.AgwPermissionMode? permissionMode = null
         )
         {
             LastPermissionMode = permissionMode;
@@ -1527,6 +1535,9 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
                     AlwaysApproveToolApprovalResponseContent { AlwaysApproveTool: true } => "always-tool",
                     AlwaysApproveToolApprovalResponseContent { AlwaysApproveToolWithArguments: true } =>
                         "always-arguments",
+                    ToolApprovalResponseContent single
+                        when single.AdditionalProperties?.TryGetValue("Agw.ToolApproval.Grant", out var grant)
+                            == true => grant?.ToString() == "AlwaysTool" ? "always-tool" : "always-arguments",
                     _ => "once",
                 };
                 yield return new AgentResponseUpdate(ChatRole.Assistant, approvalScope);

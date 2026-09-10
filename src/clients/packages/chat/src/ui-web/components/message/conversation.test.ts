@@ -155,7 +155,7 @@ test("DOM renderer applies the requested width and alignment rules", async () =>
     readFile(PRESENTED_MESSAGE_URL, "utf8"),
   ]);
   assert.match(conversation, /max-w-\[80%\]/);
-  assert.match(message, /bg-\[#f3f3f4\]/);
+  assert.match(message, /isUser \? "agw-msg-user"/);
   assert.match(message, /message\.width === "full"/);
   assert.match(message, /text-destructive/);
 });

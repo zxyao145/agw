@@ -1,13 +1,17 @@
-using Agw.Agents.Execution.Agentflows;
+using System.Collections.Concurrent;
+using System.Reflection;
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Commands.Exec;
-using Agw.Agents.Execution.Connections;
-using Agw.Agents.Execution.Messaging;
+using Agw.Agents.Execution.Inbound.Connections;
+using Agw.Agents.Execution.Inbound.SignalR;
+using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Runtimes;
+using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Turns;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
@@ -51,9 +55,7 @@ public class ExecutionConnectionTests
         var fixture = CreateFixture(holdTurnOpen: true);
         await using var connection = fixture.Connection;
         await fixture.Context.StartTurnAsync(CreateExecCommand(), TestContext.Current.CancellationToken);
-        fixture.RuntimeFactory.StartRequest!.TurnContext.PendingHumanGateChanged!(
-            new HumanGateApprovalRequest("request", "node", null, "approval", "approve?", [])
-        );
+        fixture.RuntimeFactory.StartRequest!.TurnContext.PendingInteractionCountChanged!(1);
         var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         await connection.DetachAsync(() => removed.TrySetResult());
@@ -61,6 +63,156 @@ public class ExecutionConnectionTests
         Assert.True(fixture.RuntimeFactory.TurnCancellation!.IsCancellationRequested);
         fixture.RuntimeFactory.CompleteTurn();
         await removed.Task.WaitAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task RecoverInProcessExecution_RunningAfterDetach_StaysBusyUntilCompletion()
+    {
+        var fixture = CreateFixture(holdTurnOpen: true);
+        await using var connection = fixture.Connection;
+        await fixture.Context.StartTurnAsync(CreateExecCommand(), TestContext.Current.CancellationToken);
+        var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await connection.DetachAsync(() => removed.TrySetResult());
+
+        Assert.True(await connection.RecoverInProcessExecutionAsync(false, TestContext.Current.CancellationToken));
+        Assert.False(fixture.RuntimeFactory.TurnCancellation!.IsCancellationRequested);
+        Assert.True(await connection.RecoverInProcessExecutionAsync(true, TestContext.Current.CancellationToken));
+        Assert.True(fixture.RuntimeFactory.TurnCancellation.IsCancellationRequested);
+
+        fixture.RuntimeFactory.CompleteTurn();
+        await removed.Task.WaitAsync(TestContext.Current.CancellationToken);
+        Assert.False(await connection.RecoverInProcessExecutionAsync(false, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task RecoverInProcessExecution_ForeignOrMissingConnection_DoesNotExposeOrInterruptTurn()
+    {
+        var fixture = CreateFixture(holdTurnOpen: true);
+        await using var connection = fixture.Connection;
+        await fixture.Context.StartTurnAsync(CreateExecCommand(), TestContext.Current.CancellationToken);
+        await using var registry = new ExecutionConnectionRegistry(
+            null!,
+            null!,
+            new TestLifetime(),
+            NullLoggerFactory.Instance
+        );
+        var connections =
+            (ConcurrentDictionary<string, ExecutionConnection>)
+                typeof(ExecutionConnectionRegistry)
+                    .GetField("_connections", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .GetValue(registry)!;
+        connections["old-connection"] = connection;
+
+        Assert.False(
+            await registry.RecoverInProcessExecutionAsync(
+                "old-connection",
+                "another-user",
+                true,
+                TestContext.Current.CancellationToken
+            )
+        );
+        Assert.False(
+            await registry.RecoverInProcessExecutionAsync(
+                "missing",
+                "user-id",
+                true,
+                TestContext.Current.CancellationToken
+            )
+        );
+        Assert.False(fixture.RuntimeFactory.TurnCancellation!.IsCancellationRequested);
+        Assert.True(
+            await registry.RecoverInProcessExecutionAsync(
+                "old-connection",
+                "user-id",
+                true,
+                TestContext.Current.CancellationToken
+            )
+        );
+        Assert.True(fixture.RuntimeFactory.TurnCancellation.IsCancellationRequested);
+        fixture.RuntimeFactory.CompleteTurn();
+    }
+
+    [Fact]
+    public async Task FindInProcessExecution_OwnActiveConversation_ReturnsOriginalConnectionOnly()
+    {
+        var fixture = CreateFixture(holdTurnOpen: true);
+        await using var connection = fixture.Connection;
+        await fixture.Context.StartTurnAsync(CreateExecCommand(), TestContext.Current.CancellationToken);
+        await using var registry = new ExecutionConnectionRegistry(
+            null!,
+            null!,
+            new TestLifetime(),
+            NullLoggerFactory.Instance
+        );
+        var connections =
+            (ConcurrentDictionary<string, ExecutionConnection>)
+                typeof(ExecutionConnectionRegistry)
+                    .GetField("_connections", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .GetValue(registry)!;
+        connections["before-reload"] = connection;
+        var projectId = fixture.Context.ProjectId!.Value;
+        var contextId = fixture.Context.ContextId!;
+        var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await connection.DetachAsync(() => removed.TrySetResult());
+        try
+        {
+            Assert.Equal(
+                "before-reload",
+                await registry.FindInProcessExecutionAsync(
+                    projectId,
+                    contextId,
+                    "user-id",
+                    TestContext.Current.CancellationToken
+                )
+            );
+            Assert.Null(
+                await registry.FindInProcessExecutionAsync(
+                    projectId,
+                    contextId,
+                    "another-user",
+                    TestContext.Current.CancellationToken
+                )
+            );
+            Assert.Null(
+                await registry.FindInProcessExecutionAsync(
+                    Guid.CreateVersion7(),
+                    contextId,
+                    "user-id",
+                    TestContext.Current.CancellationToken
+                )
+            );
+            Assert.Null(
+                await registry.FindInProcessExecutionAsync(
+                    projectId,
+                    "another-context",
+                    "user-id",
+                    TestContext.Current.CancellationToken
+                )
+            );
+            Assert.False(fixture.RuntimeFactory.TurnCancellation!.IsCancellationRequested);
+        }
+        finally
+        {
+            fixture.RuntimeFactory.CompleteTurn();
+            await removed.Task.WaitAsync(TestContext.Current.CancellationToken);
+        }
+        Assert.Null(
+            await registry.FindInProcessExecutionAsync(
+                projectId,
+                contextId,
+                "user-id",
+                TestContext.Current.CancellationToken
+            )
+        );
+    }
+
+    private sealed class TestLifetime : IHostApplicationLifetime
+    {
+        public CancellationToken ApplicationStarted => CancellationToken.None;
+        public CancellationToken ApplicationStopping => CancellationToken.None;
+        public CancellationToken ApplicationStopped => CancellationToken.None;
+
+        public void StopApplication() { }
     }
 
     private static ConnectionFixture CreateFixture(bool holdTurnOpen)

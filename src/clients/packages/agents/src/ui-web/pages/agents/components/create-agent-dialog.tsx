@@ -13,6 +13,7 @@ import {
 } from "@agw/components";
 
 import { AgentFormFields } from "./agent-form-fields";
+import { getExternalModelProviderError } from "./external-model-provider";
 import { getAgentExtraSettingsError, normalizeAgentExtraSettings } from "./agent-extra-settings";
 import {
   getAgentEnvironmentVariablesError,
@@ -28,7 +29,7 @@ import type {
   McpToolServerDto,
   ModelProviderDto,
   SkillDto,
-  ToolInfo,
+  ToolLiteInfo,
   ToolValueObject,
 } from "./types";
 
@@ -66,7 +67,7 @@ interface CreateAgentDialogProps {
   agentOptions: Array<{ id: string; name: string; displayName?: string }>;
   modelProvidersQuery: UseQueryResult<ModelProviderDto[], Error>;
   skillsQuery: UseQueryResult<SkillDto[], Error>;
-  toolsQuery: UseQueryResult<ToolInfo[], Error>;
+  toolsQuery: UseQueryResult<ToolLiteInfo[], Error>;
   mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
   selectedMcpToolServerIds: string[];
   createAgentMutation: UseMutationResult<unknown, Error, AgentCreateRequest, unknown>;
@@ -118,6 +119,14 @@ export function CreateAgentDialog({
   toggleMcpToolServer,
 }: CreateAgentDialogProps) {
   const isExternalAgent = agentType === 1;
+  const modelProviderError = isExternalAgent
+    ? getExternalModelProviderError(
+        externalAgentKind,
+        modelProviderId,
+        modelProvidersQuery.data,
+        externalAgentOptionsQuery.data,
+      )
+    : null;
   const extraError = isExternalAgent ? getAgentExtraSettingsError(extra) : null;
   const environmentVariablesError = getAgentEnvironmentVariablesError(environmentVariables);
 
@@ -210,6 +219,7 @@ export function CreateAgentDialog({
                   disabled={
                     (!isExternalAgent && (!displayName.trim() || !modelProviderId.trim())) ||
                     (isExternalAgent && externalAgentKind === 0) ||
+                    Boolean(modelProviderError) ||
                     Boolean(extraError) ||
                     Boolean(environmentVariablesError) ||
                     createAgentMutation.isPending

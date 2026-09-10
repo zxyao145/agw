@@ -2,10 +2,12 @@ using System.Collections;
 using System.Linq.Expressions;
 using System.Reflection;
 using Agw.Agents.Definitions.Agents;
-using Agw.Agents.Execution.Agents;
-using Agw.Agents.Execution.Agents.AIContextProviders.AgwWorkspace;
-using Agw.Agents.Execution.Agents.Dtos;
+using Agw.Agents.Execution.Agents.Composition;
+using Agw.Agents.Execution.Agents.Context;
+using Agw.Agents.Execution.Agents.Context.Workspace;
+using Agw.Agents.Execution.Agents.Contracts;
 using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Mcp;
@@ -20,7 +22,9 @@ using Agw.Shared.Runtime;
 using Agw.Shared.Tooling;
 using Agw.Skills.Contracts.Registration;
 using Agw.Skills.Execution;
+using Agw.Tools.Contracts;
 using Agw.Tools.Contracts.Abstractions;
+using Agw.Tools.Impl.ToolBlocks.UserMemory;
 using Agw.Tools.ToolBlocks;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Compaction;
@@ -34,10 +38,15 @@ namespace Agw.Agents.Tests;
 
 public class AgentRuntimeServiceSystemCompositionTests
 {
-    [Fact]
-    public async Task CreateAiAgentAsync_SystemAgent_ComposesProjectCapabilitiesAndPassesEffectiveEnvironmentToMcp()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CreateAiAgentAsync_SystemAgent_ComposesProjectCapabilitiesAndPassesEffectiveEnvironmentToMcp(
+        bool includeUserMemory
+    )
     {
         var cancellationToken = TestContext.Current.CancellationToken;
+        using var toolServices = new ServiceCollection().BuildServiceProvider();
         var root = Path.Combine(Path.GetTempPath(), $"agw-system-composition-{Guid.CreateVersion7():N}");
         Directory.CreateDirectory(Path.Combine(root, "agent-skill"));
         Directory.CreateDirectory(Path.Combine(root, "project-skill"));
@@ -212,6 +221,14 @@ public class AgentRuntimeServiceSystemCompositionTests
             AgentConnectionRelations = [new AgentConnectionRelation { ConnectionId = connectionId }],
         };
         var toolRegistry = CreateToolRegistry();
+        if (includeUserMemory)
+        {
+            project.Tools =
+            [
+                .. project.Tools!,
+                new ToolBlockValue { Definition = new UserMemoryToolBlockDefinition() },
+            ];
+        }
         var mcpMaterializer = new TestMcpToolMaterializer();
         var connectionResource = new TrackingResource();
         var remoteSkillResolver = new TestRemoteSkillContentResolver();
@@ -246,7 +263,8 @@ public class AgentRuntimeServiceSystemCompositionTests
             connectionResolver,
             mcpMaterializer,
             [classSkillRegistration],
-            remoteSkillResolver
+            remoteSkillResolver,
+            toolBlocks: [new UserMemoryToolBlock(toolServices.GetRequiredService<IServiceScopeFactory>())]
         );
         var request = new CreateAiAgentRequest
         {
@@ -271,7 +289,23 @@ public class AgentRuntimeServiceSystemCompositionTests
             var aiAgent = await agentTask;
 
             Assert.NotNull(aiAgent);
-            Assert.NotNull(aiAgent!.GetService<AgentRequestContextAgent>());
+            var requestContextAgent = aiAgent!.GetService<AgentRequestContextAgent>();
+            Assert.NotNull(requestContextAgent);
+            var memoryFactoryField = typeof(AgentRequestContextAgent).GetField(
+                "_createMemoryContextAsync",
+                BindingFlags.Instance | BindingFlags.NonPublic
+            );
+            Assert.NotNull(memoryFactoryField);
+            var memoryFactory = memoryFactoryField.GetValue(requestContextAgent);
+            if (includeUserMemory)
+            {
+                var callback = Assert.IsType<Func<CancellationToken, ValueTask<ChatMessage?>>>(memoryFactory);
+                Assert.IsType<UserMemoryProvider>(callback.Target);
+            }
+            else
+            {
+                Assert.Null(memoryFactory);
+            }
             var agentOptions = FindInObjectGraph<ChatClientAgentOptions>(aiAgent!);
             var chatOptions = Assert.IsType<ChatOptions>(agentOptions.ChatOptions);
             Assert.Equal("You are a helpful agent.", chatOptions.Instructions);
@@ -299,7 +333,7 @@ public class AgentRuntimeServiceSystemCompositionTests
 
             Assert.NotNull(agentOptions.AIContextProviders);
             var contextProviders = agentOptions.AIContextProviders.ToArray();
-            Assert.Equal(2, contextProviders.Length);
+            Assert.Equal(includeUserMemory ? 3 : 2, contextProviders.Length);
             Assert.DoesNotContain(contextProviders, provider => provider is CompactionProvider);
             var compactionScope = Assert.IsType<LocalHistoryCompactionScopeChatClient>(
                 aiAgent!.GetService<LocalHistoryCompactionScopeChatClient>()
@@ -307,7 +341,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             var compactionProvider = FindInObjectGraph<CompactionProvider>(compactionScope);
             Assert.Equal($"agw.compaction.{agent.Id:N}", Assert.Single(compactionProvider.StateKeys));
             var instructionsProvider = Assert.IsType<AgwWorkspaceProvider>(contextProviders[0]);
-            var skillsProvider = Assert.IsType<AgentSkillsProvider>(contextProviders[1]);
+            var skillsProvider = Assert.IsType<AgentSkillsProvider>(contextProviders[^1]);
             var instructionsContext = await instructionsProvider.InvokingAsync(
                 new AIContextProvider.InvokingContext(aiAgent, null, new AIContext()),
                 cancellationToken
@@ -370,7 +404,29 @@ public class AgentRuntimeServiceSystemCompositionTests
             var approvalRules = Assert.IsAssignableFrom<
                 IReadOnlyList<Func<ToolAutoApprovalRuleContext, ValueTask<bool>>>
             >(rulesField.GetValue(approvalAgent));
-            Assert.Same(AgentSkillsProvider.ReadOnlyToolsAutoApprovalRule, Assert.Single(approvalRules));
+            var rule = Assert.Single(approvalRules);
+            Assert.True(
+                await rule(
+                    new ToolAutoApprovalRuleContext(
+                        new FunctionCallContent("read", "load_skill"),
+                        aiAgent!,
+                        null,
+                        [],
+                        null
+                    )
+                )
+            );
+            Assert.False(
+                await rule(
+                    new ToolAutoApprovalRuleContext(
+                        new FunctionCallContent("write", "run_shell"),
+                        aiAgent!,
+                        null,
+                        [],
+                        null
+                    )
+                )
+            );
             Assert.DoesNotContain(ToolApprovalAgent.AllToolsAutoApprovalRule, approvalRules);
 
             await Assert.IsAssignableFrom<IAsyncDisposable>(aiAgent).DisposeAsync();
@@ -503,7 +559,8 @@ public class AgentRuntimeServiceSystemCompositionTests
         IConnectionCapabilityResolver connectionCapabilityResolver,
         IMcpToolMaterializer mcpToolMaterializer,
         IEnumerable<IAgentSkillRegistration>? skillRegistrations = null,
-        IRemoteSkillContentResolver? remoteSkillContentResolver = null
+        IRemoteSkillContentResolver? remoteSkillContentResolver = null,
+        IEnumerable<IToolBlock>? toolBlocks = null
     )
     {
         return new AgentRuntimeService(
@@ -514,11 +571,11 @@ public class AgentRuntimeServiceSystemCompositionTests
                 toolRegistry,
                 connectionCapabilityResolver,
                 mcpToolMaterializer,
-                new ToolBlockRegistry([]),
+                new ToolBlockRegistry(toolBlocks ?? []),
                 NullLogger<AgentCapabilityComposer>.Instance,
                 [new ProjectInstructionsSource()]
             ),
-            chatHistoryProvider: new InMemoryChatHistoryProvider(),
+            chatHistoryProvider: new StubRequestHistoryProvider(),
             providerSessionState: null!,
             providerSessions: null!,
             dataPaths,
@@ -743,6 +800,8 @@ public class AgentRuntimeServiceSystemCompositionTests
         }
 
         public string Name { get; }
+
+        public AgwToolPermission RequiredPermission => AgwToolPermission.None;
 
         public AITool ToAITool() =>
             AIFunctionFactory.Create((Func<string>)(() => Name), new AIFunctionFactoryOptions { Name = Name });

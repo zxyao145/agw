@@ -1,5 +1,7 @@
 "use client";
 
+import { getPermissionStatus, type InteractionResponse } from "@agw/execution-core";
+
 import * as React from "react";
 import { useQuery } from "@agw/components/query";
 import { toast } from "sonner";
@@ -14,9 +16,8 @@ import {
   DEFAULT_AGENT_MODE,
   getAgentMode,
   getAgentflowCheckpointMessage,
-  hasPersistedDurableExecution,
   getMessageStreamingScopeId,
-  getPendingHumanGate,
+  getPendingInteraction,
   getTurnFinishedStatus,
   getLatestAgentMode,
   isUserTurnMessage,
@@ -24,7 +25,7 @@ import {
   type AgentMode,
   type AgentflowCheckpointAvailability,
   type ExecutionReconnectState,
-  type PendingHumanGate,
+  type PendingInteraction,
   type PermissionMode,
 } from "../../../services/execution-hub";
 import {
@@ -98,8 +99,8 @@ export interface ChatProps {
   showUserInputNavigation?: boolean;
   /** 将 SignalR 重连状态同步给更高层的工作区遮罩。 */
   onReconnectStateChange?: (state: ExecutionReconnectState | null) => void;
-  /** 历史水合完成后，允许仅对已有 durable attachment 自动重订阅。 */
-  restoreDurableExecution?: boolean;
+  /** 历史水合后查询服务端活动执行，并恢复 durable attachment。 */
+  restoreExecution?: boolean;
   active?: boolean;
 }
 
@@ -173,7 +174,7 @@ export function Chat({
   onPendingFileCommentsRemove,
   showUserInputNavigation = false,
   onReconnectStateChange,
-  restoreDurableExecution = false,
+  restoreExecution = false,
 }: ChatProps) {
   const executionServerId = useExecutionPlatform().serverId;
   const initialHistory = React.useMemo(
@@ -192,13 +193,35 @@ export function Chat({
     sessionSeed.revision,
   );
   const [permissionMode, setPermissionMode] = React.useState<PermissionMode>("fullAccess");
+  const [activePermissionMode, setActivePermissionMode] = React.useState<PermissionMode | null>(
+    null,
+  );
+  const [permissionChangePending, setPermissionChangePending] = React.useState(false);
+  const permissionCapabilities = useQuery({
+    queryKey: ["execution-permissions", executionServerId, target?.type, target?.id],
+    enabled: Boolean(target),
+    queryFn: () =>
+      apiGet("/api/agents/permission-capabilities", {
+        params: { query: { type: target!.type === "agent" ? 0 : 1, id: target!.id } },
+      }),
+  });
+  const supportedPermissionModes = permissionCapabilities.data?.supportedPermissionModes ?? [];
+  const permissionUnavailable = !supportedPermissionModes.includes(permissionMode)
+    ? permissionCapabilities.isPending
+      ? "Loading permissions…"
+      : permissionCapabilities.error
+        ? "Unable to load supported permissions. Retry before sending."
+        : "Select a supported permission mode before sending."
+    : undefined;
   const [agentMode, setAgentMode] = React.useState<AgentMode>(
     () => sessionSeed.agentMode ?? getLatestAgentMode(sessionSeed.messages),
   );
   const [hasOlderMessages, setHasOlderMessages] = React.useState(sessionSeed.hasOlderMessages);
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = React.useState(false);
   const [isJumpingToTop, setIsJumpingToTop] = React.useState(false);
-  const [pendingHumanGate, setPendingHumanGate] = React.useState<PendingHumanGate | null>(null);
+  const [pendingInteraction, setPendingInteraction] = React.useState<PendingInteraction | null>(
+    null,
+  );
   const [checkpointAvailability, setCheckpointAvailability] = React.useState<
     AgentflowCheckpointAvailability[]
   >([]);
@@ -213,7 +236,7 @@ export function Chat({
   const userInputRef = React.useRef<UserInputRef | null>(null);
   const executionClientRef = React.useRef<ManagedExecutionHandle | null>(null);
   const configuredSessionRef = React.useRef<string | null>(null);
-  const durableRestoreAttemptRef = React.useRef<string | null>(null);
+  const [restoredExecutionKey, setRestoredExecutionKey] = React.useState<string | null>(null);
   const executionGenerationRef = React.useRef(0);
   const streamingMessageBatcherRef = React.useRef<StreamingMessageBatcher | null>(null);
   const checkpointResumeBufferRef = React.useRef<AiMessage[] | null>(null);
@@ -299,10 +322,10 @@ export function Chat({
     () =>
       buildConversationRenderModel(messages, {
         collapseToolRuns: true,
-        pendingHumanGate,
+        pendingInteraction,
         checkpointAvailability,
       }),
-    [checkpointAvailability, messages, pendingHumanGate],
+    [checkpointAvailability, messages, pendingInteraction],
   );
   const latestAvailableCheckpoint = React.useMemo(
     () =>
@@ -319,8 +342,26 @@ export function Chat({
     isLoadingConversation ||
     hydratedSessionRevision !== sessionSeed.revision ||
     Boolean(conversationId && !contextId);
+  const executionRestoreKey =
+    restoreExecution && projectId && contextId
+      ? JSON.stringify([executionServerId, projectId, contextId, sessionSeed.revision])
+      : null;
+  const isRestoringExecution =
+    executionRestoreKey !== null && restoredExecutionKey !== executionRestoreKey;
   const checkpointResumeDisabled =
-    isExecuting || isTransitioning || isHydratingSession || reconnectState !== null;
+    isExecuting ||
+    isTransitioning ||
+    isHydratingSession ||
+    isRestoringExecution ||
+    reconnectState !== null;
+
+  React.useEffect(() => {
+    if (!isExecuting || !onConversationChange) return;
+    const timer = window.setInterval(() => {
+      if (window.document.visibilityState === "visible") void onConversationChange();
+    }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [isExecuting, onConversationChange]);
 
   const notifyExecutionError = React.useCallback(
     (error: unknown) => {
@@ -382,7 +423,7 @@ export function Chat({
 
     previousTargetKeyRef.current = targetKey;
     detachExecution();
-    setPendingHumanGate(null);
+    setPendingInteraction(null);
     setCheckpointAvailability([]);
     setClaudeCommands([]);
     confirmedAgentModeRef.current = DEFAULT_AGENT_MODE;
@@ -394,7 +435,7 @@ export function Chat({
     olderMessagesAbortRef.current?.abort();
     olderMessagesAbortRef.current = null;
     detachExecution();
-    setPendingHumanGate(null);
+    setPendingInteraction(null);
     setCheckpointAvailability([]);
     autoScrollStateRef.current = {
       shouldAutoScroll: true,
@@ -464,7 +505,7 @@ export function Chat({
 
   React.useEffect(() => {
     syncConversationScrollPosition();
-  }, [messages, pendingHumanGate?.requestId, syncConversationScrollPosition]);
+  }, [messages, pendingInteraction?.interactionId, syncConversationScrollPosition]);
 
   React.useEffect(() => {
     const conversationContent = conversationContentRef.current;
@@ -498,6 +539,14 @@ export function Chat({
         return;
       }
 
+      const permissionStatus = getPermissionStatus(message);
+      if (permissionStatus) {
+        setActivePermissionMode(permissionStatus.activePermissionMode);
+        if (permissionStatus.nextPermissionMode)
+          setPermissionMode(permissionStatus.nextPermissionMode);
+        setPermissionChangePending(permissionStatus.permissionChangePending);
+        return;
+      }
       if (message.additionalProperties?.type === "mode-change-failed") {
         streamingMessageBatcherRef.current?.flush(generation);
         setAgentMode(confirmedAgentModeRef.current);
@@ -544,17 +593,17 @@ export function Chat({
         return;
       }
 
-      const humanGate = getPendingHumanGate(message);
-      if (humanGate) {
+      const interaction = getPendingInteraction(message);
+      if (interaction) {
         streamingMessageBatcherRef.current?.flush(generation);
-        setPendingHumanGate(
-          humanGate.requestType === "human-interaction"
+        setPendingInteraction(
+          interaction.kind === "user-input"
             ? {
-                ...humanGate,
+                ...interaction,
                 streamingScopeId:
-                  humanGate.streamingScopeId ?? activeStreamingScopeRef.current ?? undefined,
+                  interaction.streamingScopeId ?? activeStreamingScopeRef.current ?? undefined,
               }
-            : humanGate,
+            : interaction,
         );
         return;
       }
@@ -575,7 +624,7 @@ export function Chat({
         streamingMessageBatcherRef.current?.flush(generation);
         activeStreamingScopeRef.current = null;
         setIsExecuting(false);
-        setPendingHumanGate(null);
+        setPendingInteraction(null);
         if (hadActiveTurn) void onConversationChange?.();
         const client = executionClientRef.current;
         if (client) {
@@ -611,7 +660,9 @@ export function Chat({
         return;
       }
 
-      const prepared = prepareChatHistory(snapshot.messages);
+      const prepared = prepareChatHistory(
+        snapshot.messages.filter((message) => !getPermissionStatus(message)),
+      );
       const nextMessages = replaceStreamingScope(
         messagesRef.current,
         prepared.messages,
@@ -624,6 +675,13 @@ export function Chat({
       let nextCommands: string[] | null = null;
       let nextMode: AgentMode | null = null;
       for (const message of snapshot.messages) {
+        const permissionStatus = getPermissionStatus(message);
+        if (permissionStatus) {
+          setActivePermissionMode(permissionStatus.activePermissionMode);
+          if (permissionStatus.nextPermissionMode)
+            setPermissionMode(permissionStatus.nextPermissionMode);
+          setPermissionChangePending(permissionStatus.permissionChangePending);
+        }
         const initCommands = getClaudeInitCommands(message);
         if (initCommands !== null) {
           nextCommands = initCommands;
@@ -675,7 +733,7 @@ export function Chat({
         configuredSessionRef.current = null;
         setReconnectState(null);
         setIsExecuting(false);
-        setPendingHumanGate(null);
+        setPendingInteraction(null);
         if (error) notifyExecutionError(error);
       },
       onReconnecting: (state) => {
@@ -724,6 +782,7 @@ export function Chat({
     refreshAgentflowCheckpoints,
     restoreActiveTurnSnapshot,
     sessionSeed.revision,
+    targetKey,
   ]);
 
   const ensureConfiguredClient = React.useCallback(
@@ -765,7 +824,7 @@ export function Chat({
               activeStreamingScopeRef.current = null;
               setReconnectState(null);
               setIsExecuting(false);
-              setPendingHumanGate(null);
+              setPendingInteraction(null);
               if (error) notifyExecutionError(error);
             },
             onReconnecting: (state) => {
@@ -873,52 +932,36 @@ export function Chat({
   ]);
 
   React.useEffect(() => {
-    if (
-      !restoreDurableExecution ||
-      !projectId ||
-      !contextId ||
-      hydratedSessionRevision !== sessionSeed.revision ||
-      executionClientRef.current ||
-      !hasPersistedDurableExecution({ projectId, contextId })
-    ) {
-      return;
-    }
-
-    const restoreKey = JSON.stringify([
-      executionServerId,
-      projectId,
-      contextId,
-      sessionSeed.revision,
-    ]);
-    if (durableRestoreAttemptRef.current === restoreKey) {
-      return;
-    }
-    durableRestoreAttemptRef.current = restoreKey;
-
+    if (!executionRestoreKey || !projectId || !contextId || isHydratingSession) return;
+    let cancelled = false;
     const generation = executionGenerationRef.current;
     void ensureConfiguredClient(contextId, generation)
       .then((client) => {
         if (
+          cancelled ||
           !client ||
           generation !== executionGenerationRef.current ||
           executionClientRef.current !== client
-        ) {
+        )
           return;
-        }
-
         setIsExecuting(["running", "waiting-approval", "detached"].includes(client.getStatus()));
+        setRestoredExecutionKey(executionRestoreKey);
       })
       .catch(() => {
-        // configure 已通过现有 reconnect 状态展示临时恢复失败和手动 Retry。
+        // configure 保留失败的 reconnect 状态；查询失败不能解除发送阻塞。
+        if (!cancelled && generation === executionGenerationRef.current)
+          setRestoredExecutionKey(executionRestoreKey);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [
-    contextId,
-    ensureConfiguredClient,
-    executionServerId,
-    hydratedSessionRevision,
+    executionRestoreKey,
     projectId,
-    restoreDurableExecution,
-    sessionSeed.revision,
+    contextId,
+    isHydratingSession,
+    ensureConfiguredClient,
+    targetKey,
   ]);
 
   const ensureContextId = React.useCallback(
@@ -951,12 +994,16 @@ export function Chat({
 
   const handleExecute = React.useCallback(
     async (value: string, imageAttachments: readonly ChatImageAttachment[]) => {
-      if (isHydratingSession || reconnectState) return;
+      if (isExecuting || isHydratingSession || isRestoringExecution || reconnectState) return;
       if (isTransitioning) {
         toast.error("Please wait for the previous execution to stop");
         return;
       }
 
+      if (permissionUnavailable) {
+        toast.error(permissionUnavailable);
+        return;
+      }
       const submittedFileComments = [...pendingFileComments];
       const resolvedInput = buildFileCommentPrompt(value, submittedFileComments);
       if (!resolvedInput && imageAttachments.length === 0) {
@@ -993,7 +1040,7 @@ export function Chat({
         messagesRef.current = nextMessages;
         return nextMessages;
       });
-      setPendingHumanGate(null);
+      setPendingInteraction(null);
       setIsExecuting(true);
       const generation = executionGenerationRef.current;
       let didReportExecutionError = false;
@@ -1033,9 +1080,14 @@ export function Chat({
         void onConversationChange?.();
       } catch (error) {
         if (generation === executionGenerationRef.current) {
-          activeStreamingScopeRef.current = null;
-          setIsExecuting(false);
-          setPendingHumanGate(null);
+          const stillActive = ["running", "waiting-approval", "detached"].includes(
+            executionClientRef.current?.getStatus() ?? "idle",
+          );
+          if (!stillActive) {
+            activeStreamingScopeRef.current = null;
+            setPendingInteraction(null);
+          }
+          setIsExecuting(stillActive);
           reportExecutionErrorOnce(error);
         }
       }
@@ -1044,13 +1096,16 @@ export function Chat({
       ensureConfiguredClient,
       ensureConversationId,
       ensureContextId,
+      isExecuting,
       isHydratingSession,
+      isRestoringExecution,
       isTransitioning,
       notifyExecutionError,
       onConversationAccepted,
       onConversationChange,
       onPendingFileCommentsRemove,
       pendingFileComments,
+      permissionUnavailable,
       projectId,
       reconnectState,
       target,
@@ -1059,6 +1114,7 @@ export function Chat({
 
   const handlePermissionModeChange = React.useCallback(
     (nextPermissionMode: PermissionMode) => {
+      if (!supportedPermissionModes.includes(nextPermissionMode)) return;
       const previousPermissionMode = permissionMode;
       setPermissionMode(nextPermissionMode);
       if (!projectId) return;
@@ -1074,14 +1130,6 @@ export function Chat({
         .then(async (client) => {
           if (!client) return;
           await client.setPermissionMode(nextPermissionMode);
-          if (
-            generation === executionGenerationRef.current &&
-            nextPermissionMode === "fullAccess"
-          ) {
-            setPendingHumanGate((current) =>
-              current?.requestType === "tool-approval" ? null : current,
-            );
-          }
         })
         .catch((error) => {
           if (generation !== executionGenerationRef.current) return;
@@ -1092,7 +1140,14 @@ export function Chat({
           if (generation === executionGenerationRef.current) setIsTransitioning(false);
         });
     },
-    [ensureConfiguredClient, ensureContextId, notifyExecutionError, permissionMode, projectId],
+    [
+      ensureConfiguredClient,
+      ensureContextId,
+      notifyExecutionError,
+      permissionMode,
+      projectId,
+      supportedPermissionModes,
+    ],
   );
 
   const handleAgentModeChange = React.useCallback(
@@ -1157,7 +1212,7 @@ export function Chat({
       streamingMessageBatcherRef.current?.flush(generation);
       checkpointResumeBufferRef.current = [];
       activeStreamingScopeRef.current = null;
-      setPendingHumanGate(null);
+      setPendingInteraction(null);
       setIsTransitioning(true);
 
       void ensureConfiguredClient(contextId, generation)
@@ -1200,8 +1255,11 @@ export function Chat({
         .catch((error) => {
           if (generation !== executionGenerationRef.current) return;
           checkpointResumeBufferRef.current = null;
-          activeStreamingScopeRef.current = null;
-          setIsExecuting(false);
+          const stillActive = ["running", "waiting-approval", "detached"].includes(
+            executionClientRef.current?.getStatus() ?? "idle",
+          );
+          if (!stillActive) activeStreamingScopeRef.current = null;
+          setIsExecuting(stillActive);
           notifyExecutionError(error);
         })
         .finally(() => {
@@ -1224,28 +1282,24 @@ export function Chat({
     ],
   );
 
-  const submitHumanGateResponse = React.useCallback(
-    (
-      approved: boolean,
-      responseText?: string,
-      approvalScope: "once" | "always-tool" | "always-arguments" = "once",
-      responseData?: unknown,
-    ) => {
+  const submitInteractionResponse = React.useCallback(
+    (response: InteractionResponse) => {
       const client = executionClientRef.current;
-      if (!pendingHumanGate || !client) {
-        toast.error("No active HumanGate request");
+      if (
+        !pendingInteraction ||
+        !client ||
+        pendingInteraction.interactionId !== response.interactionId ||
+        pendingInteraction.kind !== response.kind
+      ) {
         return;
       }
 
       const generation = executionGenerationRef.current;
-      const requestId = pendingHumanGate.requestId;
+      const interactionId = pendingInteraction.interactionId;
       void client
         .submitHumanResponse({
-          requestId,
-          approved,
-          responseText,
-          approvalScope,
-          responseData,
+          executionId: pendingInteraction.executionId,
+          response,
         })
         .then(() => {
           if (
@@ -1255,7 +1309,9 @@ export function Chat({
             return;
           }
 
-          setPendingHumanGate((current) => (current?.requestId === requestId ? null : current));
+          setPendingInteraction((current) =>
+            current?.interactionId === interactionId ? null : current,
+          );
         })
         .catch((error) => {
           if (
@@ -1266,7 +1322,7 @@ export function Chat({
           }
         });
     },
-    [notifyExecutionError, pendingHumanGate],
+    [notifyExecutionError, pendingInteraction],
   );
 
   const clearInFlightRef = React.useRef(false);
@@ -1278,7 +1334,7 @@ export function Chat({
       olderMessagesAbortRef.current?.abort();
       olderMessagesAbortRef.current = null;
       await interruptAndDispose("Conversation cleared.");
-      setPendingHumanGate(null);
+      setPendingInteraction(null);
       setCheckpointAvailability([]);
       messagesRef.current = [];
       setMessages([]);
@@ -1584,10 +1640,8 @@ export function Chat({
               isLoadingOlderMessages={isLoadingOlderMessages}
               isInitialLoading={isLoadingConversation}
               onLoadOlderMessages={() => void loadOlderMessages()}
-              permissionMode={permissionMode}
-              onHumanResponse={({ approved, responseText, approvalScope = "once", responseData }) =>
-                submitHumanGateResponse(approved, responseText, approvalScope, responseData)
-              }
+              permissionMode={activePermissionMode ?? undefined}
+              onHumanResponse={submitInteractionResponse}
               showCheckpointResume={target?.type === "agentflow"}
               checkpointResumeDisabled={checkpointResumeDisabled}
               onCheckpointResume={handleResumeCheckpoint}
@@ -1607,7 +1661,9 @@ export function Chat({
           {/* 输入框 */}
           <ChatInput
             isExecuting={isExecuting}
-            isTransitioning={isTransitioning || isHydratingSession || isLoadingConversation}
+            isTransitioning={
+              isTransitioning || isHydratingSession || isLoadingConversation || isRestoringExecution
+            }
             isLoadingHistory={isLoadingOlderMessages || isJumpingToTop}
             hasMessages={renderItems.length > 0}
             onExecute={(value, imageAttachments) => {
@@ -1623,6 +1679,11 @@ export function Chat({
             projectId={projectId}
             commandSource={commandSource}
             permissionMode={permissionMode}
+            activePermissionMode={activePermissionMode}
+            permissionChangePending={permissionChangePending && isExecuting}
+            supportedPermissionModes={supportedPermissionModes}
+            permissionReason={permissionCapabilities.data?.reason ?? undefined}
+            permissionUnavailable={permissionUnavailable}
             agentMode={agentMode}
             onPermissionModeChange={handlePermissionModeChange}
             onAgentModeChange={handleAgentModeChange}

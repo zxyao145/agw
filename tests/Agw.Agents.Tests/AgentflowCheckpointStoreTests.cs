@@ -2,10 +2,11 @@ using System.Data.Common;
 using System.Security.Claims;
 using System.Text.Json;
 using Agw.Agents.Application.Persistence;
-using Agw.Agents.Execution.Agentflows;
+using Agw.Agents.Execution.Agentflows.Checkpoints;
+using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
 using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Connections;
-using Agw.Agents.Execution.Durable;
+using Agw.Agents.Execution.Inbound.Connections;
+using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
 using Agw.Shared.Coordination;
@@ -377,7 +378,14 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
             fixture.ContextId,
             fixture.AgentflowId,
             "user-id",
-            cancellationToken
+            cancellationToken,
+            new DurableExecutionSettings
+            {
+                EnvironmentVariables = [],
+                Resume = false,
+                PermissionMode = AgwPermissionMode.AlwaysAsk,
+                PermissionVersion = 2,
+            }
         );
         database.ResetTransactionCount();
         await store.PrepareDistributedResumeAsync(
@@ -401,6 +409,9 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
                 branch.ManifestJson,
                 "resume branch manifest"
             );
+            Assert.Equal(AgwPermissionMode.AlwaysAsk, branchManifest.Settings.PermissionMode);
+            Assert.Equal(2, branchManifest.Settings.PermissionVersion);
+            Assert.Null(branchManifest.Settings.NextPermissionMode);
             Assert.Equal(DurableExecutionStatus.Resuming, branch.Status);
             Assert.Equal(fixture.ProjectId, branch.ProjectId);
             Assert.Equal(fixture.ConversationId, branch.ProjectConversationId);
@@ -779,7 +790,7 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
                     ProjectId = fixture.ProjectId,
                     ContextId = fixture.ContextId,
                 },
-                Settings = DurableExecutionSettings.FromSettings(
+                Settings = DurableExecutionMapper.FromSettings(
                     ExecutionSettings.FromCommand(new SettingCommand(fixture.ProjectId, contextId: fixture.ContextId))
                 ),
             };

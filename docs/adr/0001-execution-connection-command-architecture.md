@@ -24,7 +24,7 @@
 
 `ExecutionConnectionRegistry` 仍是 SignalR adapter，负责把 connection id 映射到 `ExecutionConnection`。
 
-名称直接反映当前不变量：对象随 SignalR connection id 创建、断开并最终释放，不提供重连、持久化执行身份或跨 connection 恢复。MAF 的 `AgentSession` 继续专指模型对话状态；只有未来出现可重连、可持久化且独立于 transport connection 的执行身份时，才引入单独的 `ExecutionSession`。
+对象仍按原 SignalR connection id 创建并最终释放。断线时活动 InProcess turn 可继续收尾，新连接通过 Hub 发现、查询或停止同一用户的原连接，但不会迁移 Runtime 或重放输出。Distributed 的独立持久身份由 executionId 和 `DurableExecutionSession` attachment 管理。MAF 的 `AgentSession` 继续专指模型对话状态。
 
 `ExecutionConnection` 负责：
 
@@ -33,7 +33,7 @@
 - connection 级 DI scope 的释放；
 - 在断线后等待活动 turn 收敛。
 
-`ExecutionConnectionContext` 是深模块，独占 settings、resolved task、workspace、target、runtime 和 HumanGate waiting 状态。它通过原子操作维护状态，不向 handler 暴露 runtime 或可写字段。
+`ExecutionConnectionContext` 是深模块，维护 settings、resolved task、workspace、target、HumanGate waiting 状态与 runtime 失效规则。连接内的 `InProcessExecutionStarter` 持有可复用 runtime；Context 的普通启动经 `IExecutionStarter` 统一接受，Durable 实现委托 Session 登记执行。Context 通过原子操作维护状态，不向 handler 暴露 runtime 或可写字段。启动边界见 [Runtimes README](../../src/server/Agw.Agents.Execution/Runtimes/README.md)。
 
 ### 2. Handler 是薄的命令翻译层
 
@@ -71,7 +71,7 @@ services.AddExecutionCommand<TCommand, THandler>(discriminator);
 
 `ExecutionSettings` 是从可变 transport command 复制出的不可变值。`ExecutionConnectionContext` 可在多个 command/turn 间更新状态。
 
-启动 turn 时，context 生成不可变 `RuntimeTurnContext`，包含：
+启动 turn 时，Context 生成数据请求 `ExecutionStartRequest`。InProcess Starter 结合连接资源生成不可变 `RuntimeTurnContext`，包含：
 
 - `ExecutionSettings`；
 - `TaskProjection`；
@@ -87,7 +87,8 @@ services.AddExecutionCommand<TCommand, THandler>(discriminator);
 - 相同 settings：无操作；
 - project/context/environment/resume 改变：释放 runtime，清空 task、workspace 和 target；
 - target 改变：释放 runtime，保留 task 与 workspace；
-- turn 正常结束：保留 runtime，供同一 target 下一轮复用；
+- turn 正常结束：保留 runtime；下一轮还需验证会话代次与 Agent definition 版本，外部 Agent 的权限版本变化也会触发重建；
+- 权限选择改变：只影响下一轮，当前 turn 与待答交互保持原权限快照；
 - connection dispose：释放 runtime 与 DI scope；
 - 活动 turn 中修改 settings 或再次 exec：返回 busy error。
 
@@ -99,7 +100,7 @@ services.AddExecutionCommand<TCommand, THandler>(discriminator);
 
 ### 中心 switch/mediator
 
-中心 switch 会让每次扩展修改同一个文件。引入通用 mediator 能减少自建代码，但无法自然解决 SignalR discriminator 单一注册、connection 生命周期和 runtime 状态所有权问题。当前四类命令不需要额外框架。拒绝。
+中心 switch 会让每次扩展修改同一个文件。引入通用 mediator 能减少自建代码，但无法自然解决 SignalR discriminator 单一注册、connection 生命周期和 runtime 状态所有权问题。现有命令注册接缝不需要额外框架。拒绝。
 
 ### Runtime plugin/assembly scanning
 

@@ -1,5 +1,5 @@
 using System.Runtime.CompilerServices;
-using Agw.Agents.Execution.Agents.AIContextProviders.AgwWorkspace;
+using Agw.Agents.Execution.Agents.Context.Workspace;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Utils;
@@ -105,10 +105,10 @@ public class AgwWorkspaceProviderTests
     }
 
     [Fact]
-    public void AddAgents_RegistersWorkspaceInstructionsSource()
+    public void AddAgentExecution_RegistersWorkspaceInstructionsSource()
     {
         var services = new ServiceCollection();
-        services.AddAgents(new ConfigurationBuilder().Build());
+        services.AddAgentExecution(new ConfigurationBuilder().Build());
         using var serviceProvider = services.BuildServiceProvider();
 
         var sources = serviceProvider.GetServices<IAgentInstructionsSource>().ToArray();

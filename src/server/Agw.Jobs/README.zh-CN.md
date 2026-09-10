@@ -197,12 +197,13 @@ stateDiagram-v2
 ```csharp
 builder.Services
     .AddAgents(builder.Configuration)
+    .AddAgentExecution(builder.Configuration)
     .AddInfrastructure(builder.Configuration)
     .AddJobs(builder.Configuration)
     .AddProjects(builder.Configuration);
 ```
 
-如果在其他 Host 中复用 `Agw.Jobs`，除了 `AddJobs`，还必须提供 `IJobStore`、`IProjectExecutionLock`、项目执行服务、Agent runtime、`TimeProvider` 和服务器初始化状态。当前标准实现由 `Agw.Infrastructure`、`Agw.Projects` 和 `Agw.Agents` 注册。
+如果在其他 Host 中复用 `Agw.Jobs`，除了 `AddJobs`，还必须提供 `IJobStore`、`IProjectExecutionLock`、项目执行服务、Agent runtime、`TimeProvider` 和服务器初始化状态。当前标准实现由 `Agw.Infrastructure`、`Agw.Projects` 、`Agw.Agents` 和 `Agw.Agents.Execution` 注册。
 
 ### 通过 Web UI 使用
 

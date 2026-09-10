@@ -1,7 +1,7 @@
 using Agw.A2A.Extensions;
-using Agw.Agents;
 using Agw.Agents.Contracts.Catalog;
 using Agw.Agents.Contracts.Execution;
+using Agw.Agents.Execution;
 using Agw.Auth.Contracts;
 using Agw.ControlPlane.Host;
 using Agw.DataPlane.Host;
@@ -59,9 +59,9 @@ public sealed class HostModuleCompositionTests
         var services = new ServiceCollection();
         var configuration = new ConfigurationBuilder().Build();
 
-        services.AddAgents(
+        services.AddAgentExecution(
             configuration,
-            new Agw.Agents.DependencyInjection.RegistrationOptions(
+            new Agw.Agents.Execution.DependencyInjection.RegistrationOptions(
                 AddExecutionTransport: false,
                 AddDistributedWorker: false,
                 AddTraceCollector: false

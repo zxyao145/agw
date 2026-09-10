@@ -1,6 +1,6 @@
 using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Connections;
-using Agw.Agents.Execution.Messaging;
+using Agw.Agents.Execution.Inbound.Connections;
+using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Turns;
 
 namespace Agw.Agents.Tests;

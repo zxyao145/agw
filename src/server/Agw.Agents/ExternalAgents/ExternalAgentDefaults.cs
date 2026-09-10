@@ -1,11 +1,12 @@
 using System.Text.Json;
 using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
 using ClaudeCodeSdk.MAF;
-using ClaudeCodeSdk.Types;
 using OpenAI.CodexSdk.MAF;
 using PiAgentSdk.MAF;
+using PermissionMode = ClaudeCodeSdk.Types.PermissionMode;
 
 namespace Agw.Agents.ExternalAgents;
 
@@ -13,6 +14,31 @@ public static class ExternalAgentDefaults
 {
     public static IReadOnlyList<ExternalAgentKind> SupportedKinds { get; } =
     [ExternalAgentKind.ClaudeCode, ExternalAgentKind.Codex, ExternalAgentKind.Pi];
+
+    public static IReadOnlyList<ProviderType> GetSupportedProviderTypes(ExternalAgentKind kind) =>
+        kind switch
+        {
+            ExternalAgentKind.ClaudeCode => [ProviderType.Anthropic],
+            ExternalAgentKind.Codex => [ProviderType.OpenAIResponses],
+            ExternalAgentKind.Pi =>
+            [
+                ProviderType.OpenAIChatCompletions,
+                ProviderType.OpenAIResponses,
+                ProviderType.Anthropic,
+            ],
+            _ => [],
+        };
+
+    public static void ValidateProviderType(ExternalAgentKind kind, ProviderType providerType)
+    {
+        if (!GetSupportedProviderTypes(kind).Contains(providerType))
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                $"{GetDisplayName(kind)} does not support {providerType} model providers."
+            );
+        }
+    }
 
     public static string GetDisplayName(ExternalAgentKind kind) =>
         kind switch

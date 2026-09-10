@@ -1,6 +1,7 @@
+import type { HumanResponseCommandInput } from "@agw/execution-core";
 import {
   ExecutionSession,
-  getPendingHumanGate,
+  getPendingInteraction,
   getTurnFinishedStatus,
   type ExecutionHubHandlers,
   type ExecutionReconnectState,
@@ -49,7 +50,7 @@ type Entry = {
   client: ExecutionClient;
   handler: ExecutionHubHandlers | null;
   pendingMessages: AiMessage[];
-  pendingHumanGate: { requestId: string; message: AiMessage } | null;
+  pendingInteractions: Map<string, AiMessage>;
   reconnectState: ExecutionReconnectState | null;
   activeTurn: ActiveTurnState | null;
 };
@@ -82,13 +83,7 @@ export type ManagedExecutionHandle = {
   setPermissionMode(permissionMode: PermissionMode): Promise<void>;
   interrupt(reason?: string): Promise<void>;
   interruptAndWait(reason?: string): Promise<void>;
-  submitHumanResponse(args: {
-    requestId: string;
-    approved: boolean;
-    responseText?: string | null;
-    approvalScope?: "once" | "always-tool" | "always-arguments";
-    responseData?: unknown;
-  }): Promise<void>;
+  submitHumanResponse(args: HumanResponseCommandInput): Promise<void>;
   getStatus(): ExecutionStatus;
   getReconnectState(): ExecutionReconnectState | null;
   getActiveTurnSnapshot(): ActiveTurnSnapshot | null;
@@ -123,7 +118,7 @@ export class ExecutionSessionManager {
         client,
         handler,
         pendingMessages: [],
-        pendingHumanGate: null,
+        pendingInteractions: new Map(),
         reconnectState: null,
         activeTurn: null,
       };
@@ -136,30 +131,28 @@ export class ExecutionSessionManager {
     const pendingMessages = entry.pendingMessages.splice(0);
     const replayableActiveTurn = entry.activeTurn?.replayable === true;
     const replayMessages = replayableActiveTurn
-      ? pendingMessages.filter((message) => getPendingHumanGate(message) !== null)
-      : pendingMessages;
-    const pendingHumanGate = entry.pendingHumanGate;
-    if (
-      pendingHumanGate &&
-      !replayMessages.some(
-        (message) => getPendingHumanGate(message)?.requestId === pendingHumanGate.requestId,
-      )
-    ) {
-      replayMessages.push(pendingHumanGate.message);
-    }
+      ? []
+      : pendingMessages.filter((message) => getPendingInteraction(message) === null);
+    replayMessages.push(...entry.pendingInteractions.values());
+    const attachedEntry = entry;
     if (replayMessages.length > 0) {
       queueMicrotask(() => {
-        for (const message of replayMessages) handler.onMessage(message);
+        for (const message of replayMessages) {
+          if (this.entries.get(id) !== attachedEntry || attachedEntry.handler !== handler) return;
+          const interaction = getPendingInteraction(message);
+          if (interaction && !attachedEntry.pendingInteractions.has(interaction.interactionId))
+            continue;
+          handler.onMessage(message);
+        }
       });
     }
 
-    const attachedEntry = entry;
     return {
       matchesKey: (candidate) => getExecutionSessionKey(candidate) === id,
       configure: async (setting) => {
         try {
           const result = await attachedEntry.client.configure(setting);
-          if (result.restoredDurableExecution) {
+          if (result.restoredDurableExecution || attachedEntry.client.hasActiveExecution()) {
             this.activity.turnStarted(key);
           }
           return result;
@@ -179,8 +172,10 @@ export class ExecutionSessionManager {
         try {
           await attachedEntry.client.execute(request);
         } catch (error) {
-          attachedEntry.activeTurn = null;
-          this.activity.turnFinished(key, "failed");
+          if (!attachedEntry.client.hasActiveExecution()) {
+            attachedEntry.activeTurn = null;
+            this.activity.turnFinished(key, "failed");
+          }
           throw error;
         }
       },
@@ -195,7 +190,7 @@ export class ExecutionSessionManager {
         try {
           return await attachedEntry.client.resumeCheckpoint(args);
         } catch (error) {
-          this.activity.turnFinished(key, "failed");
+          if (!attachedEntry.client.hasActiveExecution()) this.activity.turnFinished(key, "failed");
           throw error;
         }
       },
@@ -205,7 +200,15 @@ export class ExecutionSessionManager {
       interruptAndWait: (reason) => attachedEntry.client.interruptAndWait(reason),
       submitHumanResponse: async (args) => {
         await attachedEntry.client.submitHumanResponse(args);
-        this.clearPendingHumanGate(attachedEntry, args.requestId);
+        if (this.entries.get(id) !== attachedEntry) return;
+        this.clearPendingInteraction(attachedEntry, args.response.interactionId);
+        const remaining = Array.from(attachedEntry.pendingInteractions.values()).at(-1);
+        if (remaining) {
+          this.activity.waitingForApproval(key);
+          attachedEntry.handler?.onMessage(remaining);
+        } else if (this.activity.isActive(key)) {
+          this.activity.turnStarted(key);
+        }
       },
       getStatus: () => this.activity.getStatus(key),
       getReconnectState: () => attachedEntry.reconnectState,
@@ -261,18 +264,17 @@ export class ExecutionSessionManager {
 
   private handleMessage(entry: Entry, message: AiMessage): void {
     this.captureActiveTurnMessage(entry, message);
-    const humanGate = getPendingHumanGate(message);
+    const interaction = getPendingInteraction(message);
     if (message.additionalProperties?.type === "turn-start") {
-      this.clearPendingHumanGate(entry);
+      this.clearPendingInteraction(entry);
       this.activity.turnStarted(entry.key);
-    } else if (humanGate) {
-      this.clearPendingHumanGate(entry);
-      entry.pendingHumanGate = { requestId: humanGate.requestId, message };
+    } else if (interaction) {
+      entry.pendingInteractions.set(interaction.interactionId, message);
       this.activity.waitingForApproval(entry.key);
     } else {
       const terminalStatus = getTurnFinishedStatus(message);
       if (terminalStatus) {
-        this.clearPendingHumanGate(entry);
+        this.clearPendingInteraction(entry);
         const wasActive = this.activity.isActive(entry.key);
         this.activity.turnFinished(entry.key, terminalStatus);
         entry.activeTurn = null;
@@ -287,14 +289,14 @@ export class ExecutionSessionManager {
     }
   }
 
-  private clearPendingHumanGate(entry: Entry, requestId?: string): void {
-    if (!requestId || entry.pendingHumanGate?.requestId === requestId) {
-      entry.pendingHumanGate = null;
-    }
+  private clearPendingInteraction(entry: Entry, interactionId?: string): void {
+    if (interactionId === undefined) entry.pendingInteractions.clear();
+    else entry.pendingInteractions.delete(interactionId);
     entry.pendingMessages = entry.pendingMessages.filter((message) => {
-      const pendingHumanGate = getPendingHumanGate(message);
+      const pendingInteraction = getPendingInteraction(message);
       return (
-        !pendingHumanGate || (requestId !== undefined && pendingHumanGate.requestId !== requestId)
+        !pendingInteraction ||
+        (interactionId !== undefined && pendingInteraction.interactionId !== interactionId)
       );
     });
   }
@@ -317,7 +319,7 @@ export class ExecutionSessionManager {
       ],
     };
     entry.pendingMessages = [];
-    entry.pendingHumanGate = null;
+    entry.pendingInteractions.clear();
   }
 
   private captureActiveTurnMessage(entry: Entry, message: AiMessage): void {

@@ -14,7 +14,7 @@ import {
   type AgentflowCheckpointAvailability,
   type AgentflowCheckpointMessage,
   type HumanInteractionQuestionResult,
-  type PendingHumanGate,
+  type PendingInteraction,
 } from "./human-interaction";
 import {
   collapseConsecutiveSystemMessages,
@@ -33,9 +33,7 @@ const HIDDEN_CONTROL_TYPES = new Set([
   "turn-finished",
   "mode-status",
   "mode-change-failed",
-  "human-gate-request",
-  "tool-approval-request",
-  "human-interaction-request",
+  "interaction-request",
 ]);
 
 const supportedImageDataUrl = /^data:image\/(?:jpeg|png|gif|webp);base64,/i;
@@ -147,7 +145,7 @@ export type ConversationRenderItem =
     })
   | (BaseConversationRenderItem & {
       type: "human-interaction";
-      request: PendingHumanGate;
+      request: PendingInteraction;
       embedded: boolean;
     })
   | (BaseConversationRenderItem & {
@@ -161,7 +159,7 @@ export type ConversationRenderItem =
     });
 
 export type BuildConversationRenderModelOptions = {
-  pendingHumanGate?: PendingHumanGate | null;
+  pendingInteraction?: PendingInteraction | null;
   checkpointAvailability?: readonly AgentflowCheckpointAvailability[];
   collapseToolRuns?: boolean;
 };
@@ -472,16 +470,16 @@ export function buildConversationRenderModel(
     }
 
     if (
-      options.pendingHumanGate?.requestType === "human-interaction" &&
-      matchesHumanInteractionCall(message, options.pendingHumanGate)
+      options.pendingInteraction?.kind === "user-input" &&
+      matchesHumanInteractionCall(message, options.pendingInteraction)
     ) {
       embeddedInteraction = true;
       items.push({
         type: "human-interaction",
-        key: uniqueKey(`interaction:${options.pendingHumanGate.requestId}`),
+        key: uniqueKey(`interaction:${options.pendingInteraction.interactionId}`),
         alignment: "left",
         width: "full",
-        request: options.pendingHumanGate,
+        request: options.pendingInteraction,
         embedded: true,
       });
       continue;
@@ -523,13 +521,13 @@ export function buildConversationRenderModel(
     });
   }
 
-  if (options.pendingHumanGate && !embeddedInteraction) {
+  if (options.pendingInteraction && !embeddedInteraction) {
     items.push({
       type: "human-interaction",
-      key: uniqueKey(`interaction:${options.pendingHumanGate.requestId}`),
+      key: uniqueKey(`interaction:${options.pendingInteraction.interactionId}`),
       alignment: "left",
       width: "full",
-      request: options.pendingHumanGate,
+      request: options.pendingInteraction,
       embedded: false,
     });
   }

@@ -1,0 +1,328 @@
+using Agw.Agents.Application.Persistence;
+using Agw.Agents.Execution.Commands.Exec;
+using Agw.Agents.Execution.Commands.Hitl;
+using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
+using Agw.Agents.Execution.Inbound.Connections;
+using Agw.Agents.Execution.Outbound;
+using Agw.Agents.Execution.Runtimes.Durable.Contracts;
+using Agw.Agents.Execution.Turns;
+using Agw.Shared.Data.Entities.Executions;
+using Agw.Shared.Exceptions;
+using static Agw.Agents.Application.Persistence.DurableExecutionQueries;
+
+namespace Agw.Agents.Execution.Runtimes.Durable;
+
+/// <summary>
+/// 一条 SignalR connection 对 durable execution 的临时 attachment。
+/// 断开连接只停止订阅，不拥有也不终止 PostgreSQL 中的 execution。
+/// </summary>
+internal sealed class DurableExecutionSession : IAsyncDisposable
+{
+    private readonly string _userId;
+    private readonly IExecutionMessageSink _messageSink;
+    private readonly CancellationToken _hostToken;
+    private readonly DurableExecutionCoordinator _coordinator;
+    private readonly object _stateLock = new();
+    private Guid? _activeExecutionId;
+    private CancellationTokenSource? _subscriptionCts;
+    private Task _subscriptionTask = Task.CompletedTask;
+
+    /// <summary>
+    /// 创建当前用户和 SignalR connection 对应的 durable attachment。
+    /// </summary>
+    public DurableExecutionSession(
+        string userId,
+        IExecutionMessageSink messageSink,
+        CancellationToken hostToken,
+        DurableExecutionCoordinator coordinator
+    )
+    {
+        _userId = string.IsNullOrWhiteSpace(userId)
+            ? throw new AgwException(ErrorCodes.AuthenticationRequired)
+            : userId.Trim();
+        _messageSink = messageSink;
+        _hostToken = hostToken;
+        _coordinator = coordinator;
+    }
+
+    /// <summary>
+    /// 指示当前 connection 是否附着到未结束的 durable execution。
+    /// </summary>
+    public bool HasActiveExecution => ActiveExecutionId.HasValue;
+
+    /// <summary>
+    /// 获取当前附着的 executionId。
+    /// </summary>
+    public Guid? ActiveExecutionId
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _activeExecutionId;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 使用客户端提供或服务端生成的稳定 executionId 启动并立即附着执行。
+    /// </summary>
+    public async Task StartAsync(
+        ExecCommand command,
+        AgentExecutionTask task,
+        ExecutionSettings settings,
+        CancellationToken cancellationToken
+    )
+    {
+        var executionId =
+            command.ExecutionId is { } requestedExecutionId && requestedExecutionId != Guid.Empty
+                ? requestedExecutionId
+                : Guid.CreateVersion7();
+        command.ExecutionId = executionId;
+        await _coordinator
+            .StartAsync(executionId, _userId, command, task, settings, cancellationToken)
+            .ConfigureAwait(false);
+        await AttachAsync(executionId, cursor: null, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 鉴权并重新附着已有 execution，从指定 event stream cursor 继续订阅。
+    /// </summary>
+    public async Task AttachAsync(Guid executionId, string? cursor, CancellationToken cancellationToken)
+    {
+        if (executionId == Guid.Empty)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "executionId is required.");
+        }
+
+        // 先完成 PostgreSQL 鉴权，再启动由协调器自行创建持久化 scope 的后台 pump。
+        var status = await _coordinator.GetStatusAsync(executionId, _userId, cancellationToken).ConfigureAwait(false);
+        await StopSubscriptionAsync().ConfigureAwait(false);
+        PermissionStatus = status;
+        await SendTurnStateAsync(status, cancellationToken).ConfigureAwait(false);
+        SetActiveExecution(IsTerminal(status.Status) ? null : executionId);
+        if (IsTerminal(status.Status))
+        {
+            return;
+        }
+
+        var subscriptionCts = CancellationTokenSource.CreateLinkedTokenSource(_hostToken);
+        _subscriptionCts = subscriptionCts;
+        _subscriptionTask = PumpAsync(executionId, cursor, subscriptionCts.Token);
+    }
+
+    /// <summary>
+    /// 终止显式指定或当前附着的 execution，并向当前 connection 发布终态。
+    /// </summary>
+    public async Task InterruptAsync(Guid? executionId, string? reason, CancellationToken cancellationToken)
+    {
+        var targetExecutionId = executionId ?? ActiveExecutionId;
+        if (!targetExecutionId.HasValue)
+        {
+            await SendSystemMessageAsync(reason ?? "No active request is currently running.").ConfigureAwait(false);
+            await _messageSink
+                .WriteAsync(TurnMessageFactory.CreateFinished("interrupted"), CancellationToken.None)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        var interrupted = await _coordinator
+            .InterruptAsync(targetExecutionId.Value, _userId, reason, cancellationToken)
+            .ConfigureAwait(false);
+        if (interrupted)
+        {
+            await StopSubscriptionAsync().ConfigureAwait(false);
+            await _messageSink
+                .WriteAsync(
+                    TurnMessageFactory.CreateFinished("interrupted", targetExecutionId.Value),
+                    CancellationToken.None
+                )
+                .ConfigureAwait(false);
+        }
+        else
+        {
+            var status = await _coordinator
+                .GetStatusAsync(targetExecutionId.Value, _userId, cancellationToken)
+                .ConfigureAwait(false);
+            PermissionStatus = status;
+            await SendTurnStateAsync(status, cancellationToken).ConfigureAwait(false);
+        }
+
+        SetActiveExecution(null);
+    }
+
+    internal DurableExecutionStatusResponse? PermissionStatus { get; private set; }
+
+    public Task SetPermissionModeAsync(AgwPermissionMode mode, CancellationToken cancellationToken) =>
+        ActiveExecutionId is { } executionId
+            ? _coordinator.SetPermissionModeAsync(executionId, _userId, mode, cancellationToken)
+            : Task.CompletedTask;
+
+    /// <summary>
+    /// 提交类型化响应；请求发布统一由持久 execution 订阅负责。
+    /// </summary>
+    public async Task RespondAsync(HumanResponseCommand command, CancellationToken cancellationToken)
+    {
+        var executionId = command.ExecutionId ?? ActiveExecutionId;
+        if (!executionId.HasValue)
+        {
+            await SendSystemMessageAsync("No matching durable human interaction is waiting for this response.")
+                .ConfigureAwait(false);
+            return;
+        }
+
+        await _coordinator
+            .SubmitHumanResponseAsync(
+                new SubmitDurableHumanResponseRequest(executionId.Value, command.Response),
+                _userId,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 原子创建 checkpoint 恢复分支，并将当前 connection 附着到新 execution。
+    /// </summary>
+    public async Task ResumeCheckpointAsync(
+        Guid occurrenceId,
+        Guid resumeExecutionId,
+        Guid projectId,
+        string contextId,
+        Guid agentflowId,
+        CancellationToken cancellationToken,
+        DurableExecutionSettings? permissionSettings = null
+    )
+    {
+        await _coordinator
+            .ResumeCheckpointAsync(
+                occurrenceId,
+                resumeExecutionId,
+                projectId,
+                contextId,
+                agentflowId,
+                _userId,
+                cancellationToken,
+                permissionSettings
+            )
+            .ConfigureAwait(false);
+        await AttachAsync(resumeExecutionId, cursor: null, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// 连接断开时只取消消息订阅；执行仍由 distributed worker 持续托管。
+    /// </summary>
+    public void PrepareForDetach() => _subscriptionCts?.Cancel();
+
+    /// <summary>
+    /// 停止当前订阅并释放 connection 本地 attachment 状态。
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        await StopSubscriptionAsync().ConfigureAwait(false);
+        SetActiveExecution(null);
+    }
+
+    /// <summary>
+    /// 把协调器产生的回放和降级消息持续转发到当前 SignalR sink。
+    /// </summary>
+    private async Task PumpAsync(Guid executionId, string? cursor, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await foreach (
+                var entry in _coordinator
+                    .ReadAsync(executionId, _userId, cursor, cancellationToken)
+                    .ConfigureAwait(false)
+            )
+            {
+                await _messageSink.WriteAsync(entry.Message, cancellationToken).ConfigureAwait(false);
+                if (TurnMessageProtocol.IsFinished(entry.Message))
+                {
+                    if (ActiveExecutionId == executionId)
+                    {
+                        SetActiveExecution(null);
+                    }
+                    return;
+                }
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        catch (Exception exception)
+        {
+            await SendErrorAsync(exception.Message).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// 原子替换并等待旧订阅退出，避免同一 connection 同时运行两个 pump。
+    /// </summary>
+    private async Task StopSubscriptionAsync()
+    {
+        var subscriptionCts = Interlocked.Exchange(ref _subscriptionCts, null);
+        var subscriptionTask = _subscriptionTask;
+        _subscriptionTask = Task.CompletedTask;
+        if (subscriptionCts == null)
+        {
+            return;
+        }
+
+        try
+        {
+            await subscriptionCts.CancelAsync().ConfigureAwait(false);
+            await subscriptionTask.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            subscriptionCts.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// 在线程安全边界内更新当前 execution attachment。
+    /// </summary>
+    private void SetActiveExecution(Guid? executionId)
+    {
+        lock (_stateLock)
+        {
+            _activeExecutionId = executionId;
+        }
+    }
+
+    /// <summary>
+    /// 把 durable 状态转换为现有 turn-start/turn-finished 控制协议。
+    /// </summary>
+    private Task SendTurnStateAsync(DurableExecutionStatusResponse status, CancellationToken cancellationToken)
+    {
+        var message = status.Status switch
+        {
+            DurableExecutionStatus.Completed => TurnMessageFactory.CreateFinished("completed", status.ExecutionId),
+            DurableExecutionStatus.Failed => TurnMessageFactory.CreateFinished("failed", status.ExecutionId),
+            DurableExecutionStatus.Interrupted => TurnMessageFactory.CreateFinished("interrupted", status.ExecutionId),
+            _ => TurnMessageFactory.CreateStarted(status.ExecutionId, status.StreamingScopeId),
+        };
+        return _messageSink.WriteAsync(message, cancellationToken).AsTask();
+    }
+
+    /// <summary>
+    /// 向当前 connection 发送错误内容。
+    /// </summary>
+    private Task SendErrorAsync(string message) =>
+        _messageSink
+            .WriteAsync(CreateMessage(new AgwErrorContent { Content = message }), CancellationToken.None)
+            .AsTask();
+
+    /// <summary>
+    /// 向当前 connection 发送普通系统提示。
+    /// </summary>
+    private Task SendSystemMessageAsync(string message) =>
+        _messageSink
+            .WriteAsync(CreateMessage(new AgwTextContent { Content = message }), CancellationToken.None)
+            .AsTask();
+
+    /// <summary>
+    /// 创建不参与 durable 状态判定的系统消息。
+    /// </summary>
+    private static AgwMessage CreateMessage(AgwContent content) =>
+        new(Guid.CreateVersion7().ToString("D"), Constants.DefaultAgentAuthor, AiRole.System, [content]);
+}

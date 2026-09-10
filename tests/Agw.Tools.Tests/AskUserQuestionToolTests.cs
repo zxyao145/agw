@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Agw.Shared.Exceptions;
 using Agw.Tools.HumanInteraction;
-using Agw.Tools.Impl.Basic;
+using Agw.Tools.Impl.Tools.Basic;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -21,25 +21,26 @@ public class AskUserQuestionToolTests
         var request = await channel.RequestReceived.Task.WaitAsync(TestContext.Current.CancellationToken);
 
         Assert.False(pendingResult.IsCompleted);
-        Assert.Equal("questions", request.InteractionKind);
-        Assert.Equal("ask_user_question", request.ToolName);
-        Assert.Null(request.CallId);
+        Assert.Equal("questions", request.InputKind);
+        Assert.Equal("ask_user_question", request.Source.ToolName);
+        Assert.Null(request.Source.CallId);
         Assert.Equal(
             "Which database should we use?",
             request.Payload.GetProperty("questions")[0].GetProperty("question").GetString()
         );
 
         channel.Submit(
-            new HumanInteractionResponse(
-                request.RequestId,
-                Cancelled: false,
-                JsonSerializer.SerializeToElement(
+            new UserInputResponse
+            {
+                InteractionId = "test-interaction",
+                Cancelled = false,
+                ResponseData = JsonSerializer.SerializeToElement(
                     new
                     {
                         answers = new Dictionary<string, string> { ["Which database should we use?"] = "PostgreSQL" },
                     }
-                )
-            )
+                ),
+            }
         );
 
         var result = Assert.IsType<JsonElement>(await pendingResult);
@@ -70,10 +71,17 @@ public class AskUserQuestionToolTests
                 .AsTask();
             var request = await channel.RequestReceived.Task.WaitAsync(TestContext.Current.CancellationToken);
 
-            Assert.Equal("ask_user_question", request.ToolName);
-            Assert.Equal("call-1", request.CallId);
+            Assert.Equal("ask_user_question", request.Source.ToolName);
+            Assert.Equal("call-1", request.Source.CallId);
 
-            channel.Submit(new HumanInteractionResponse(request.RequestId, Cancelled: true, ResponseData: null));
+            channel.Submit(
+                new UserInputResponse
+                {
+                    InteractionId = "test-interaction",
+                    Cancelled = true,
+                    ResponseData = null,
+                }
+            );
             await pendingResult;
         }
         finally
@@ -93,7 +101,14 @@ public class AskUserQuestionToolTests
             .AsTask();
         var request = await channel.RequestReceived.Task.WaitAsync(TestContext.Current.CancellationToken);
 
-        channel.Submit(new HumanInteractionResponse(request.RequestId, Cancelled: true, ResponseData: null));
+        channel.Submit(
+            new UserInputResponse
+            {
+                InteractionId = "test-interaction",
+                Cancelled = true,
+                ResponseData = null,
+            }
+        );
 
         var result = Assert.IsType<AskUserQuestionToolResult>(await pendingResult);
         Assert.True(result.Cancelled);
@@ -148,19 +163,20 @@ public class AskUserQuestionToolTests
         }
 
         public IHumanInteractionChannel? Current { get; }
+        public IInteractionRequestRegistry? Requests => null;
     }
 
     private sealed class TestHumanInteractionChannel : IHumanInteractionChannel
     {
-        private readonly TaskCompletionSource<HumanInteractionResponse> _response = new(
+        private readonly TaskCompletionSource<UserInputResponse> _response = new(
             TaskCreationOptions.RunContinuationsAsynchronously
         );
 
-        public TaskCompletionSource<HumanInteractionRequest> RequestReceived { get; } =
+        public TaskCompletionSource<UserInputRequest> RequestReceived { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public async ValueTask<HumanInteractionResponse> RequestAsync(
-            HumanInteractionRequest request,
+        public async ValueTask<UserInputResponse> RequestAsync(
+            UserInputRequest request,
             CancellationToken cancellationToken
         )
         {
@@ -168,7 +184,7 @@ public class AskUserQuestionToolTests
             return await _response.Task.WaitAsync(cancellationToken);
         }
 
-        public void Submit(HumanInteractionResponse response) => _response.TrySetResult(response);
+        public void Submit(UserInputResponse response) => _response.TrySetResult(response);
     }
 
     private sealed class FunctionInvocationContextBridge : FunctionInvokingChatClient

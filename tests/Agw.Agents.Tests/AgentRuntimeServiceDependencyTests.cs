@@ -1,7 +1,7 @@
 using Agw.Agents.Definitions.Agents;
-using Agw.Agents.Execution.Agents;
-using Agw.Agents.Execution.Agents.Dtos;
-using Agw.Agents.Execution.Agents.Store;
+using Agw.Agents.Execution.Agents.Contracts;
+using Agw.Agents.Execution.Agents.Runtime;
+using Agw.Agents.Execution.Agents.Sessions;
 using Agw.Shared.Data.Repositories;
 
 namespace Agw.Agents.Tests;

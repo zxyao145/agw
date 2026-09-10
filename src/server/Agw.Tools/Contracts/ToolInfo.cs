@@ -21,7 +21,7 @@ public enum ToolScope
 }
 
 /// <summary>
-/// Represents a selectable Tool or Tool Block in the Tools catalog.
+/// Internal Tool catalog metadata. HTTP endpoints expose ToolLiteInfo instead.
 /// </summary>
 public record ToolInfo
 {
@@ -54,6 +54,9 @@ public record ToolInfo
     public ToolScope Scopes { get; init; } = ToolScope.Agent | ToolScope.Project;
 
     public bool RequiresWorkspace { get; init; }
+
+    /// <summary>Gets the declared permission for a standalone Tool; ToolBlocks expose member permissions.</summary>
+    public AgwToolPermission? RequiredPermission { get; init; }
 
     /// <summary>
     /// Gets the parameters of the tool.

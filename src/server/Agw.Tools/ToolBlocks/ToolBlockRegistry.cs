@@ -15,6 +15,7 @@ public sealed class ToolBlockRegistry
         var obsoleteNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var toolBlock in toolBlocks)
         {
+            ValidateDescriptor(toolBlock.Descriptor);
             if (IsObsolete(toolBlock.GetType()))
             {
                 obsoleteNames.Add(toolBlock.Descriptor.Name);
@@ -153,7 +154,77 @@ public sealed class ToolBlockRegistry
                 var contribution = await toolBlock
                     .MaterializeAsync(definition, context, cancellationToken)
                     .ConfigureAwait(false);
-                AddContribution(result, contribution);
+                try
+                {
+                    var memberMetadata = toolBlock.Descriptor.Members.ToDictionary(
+                        static member => member.Name,
+                        member => new AgwToolMetadata(
+                            $"tool-block:{toolBlock.Descriptor.Name}",
+                            member.RequiredPermission,
+                            member.AllowInPlanMode
+                        ),
+                        StringComparer.OrdinalIgnoreCase
+                    );
+                    var staticToolNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    for (var index = 0; index < contribution.Tools.Count; index++)
+                    {
+                        var tool = contribution.Tools[index];
+                        if (!memberMetadata.TryGetValue(tool.Name, out var metadata))
+                        {
+                            throw new AgwException(
+                                ErrorCodes.InvalidParam,
+                                $"ToolBlock '{toolBlock.Descriptor.Name}' produced undeclared member '{tool.Name}'."
+                            );
+                        }
+                        if (!staticToolNames.Add(tool.Name))
+                        {
+                            throw new AgwException(
+                                ErrorCodes.InvalidParam,
+                                $"ToolBlock member '{tool.Name}' was produced more than once."
+                            );
+                        }
+
+                        contribution.Tools[index] = AgwToolMetadataBinding.Bind(tool, metadata);
+                    }
+
+                    foreach (var member in toolBlock.Descriptor.Members)
+                    {
+                        contribution.DynamicToolMetadata.Add(member.Name, memberMetadata[member.Name]);
+                        if (member.AllowInPlanMode)
+                        {
+                            contribution.PlanModeAllowedToolNames.Add(member.Name);
+                        }
+                    }
+
+                    var dynamicMetadata = memberMetadata
+                        .Where(pair => !staticToolNames.Contains(pair.Key))
+                        .ToDictionary(
+                            static pair => pair.Key,
+                            static pair => pair.Value,
+                            StringComparer.OrdinalIgnoreCase
+                        );
+                    if (contribution.ContextProviders.Count > 0)
+                    {
+                        var sourceProviders = contribution.ContextProviders.ToArray();
+                        contribution.ContextProviders.Clear();
+                        contribution.ContextProviders.Add(
+                            new AgwToolMetadataContextProvider(sourceProviders, dynamicMetadata)
+                        );
+                    }
+                    else if (dynamicMetadata.Count > 0)
+                    {
+                        throw new AgwException(
+                            ErrorCodes.InvalidParam,
+                            $"ToolBlock '{toolBlock.Descriptor.Name}' did not provide declared members: {string.Join(", ", dynamicMetadata.Keys.Order(StringComparer.Ordinal))}."
+                        );
+                    }
+                    AddContribution(result, contribution);
+                }
+                catch
+                {
+                    await contribution.DisposeAsync().ConfigureAwait(false);
+                    throw;
+                }
             }
 
             return result;
@@ -173,6 +244,10 @@ public sealed class ToolBlockRegistry
         destination.ContextProviders.AddRange(contribution.ContextProviders);
         destination.LoopEvaluators.AddRange(contribution.LoopEvaluators);
         destination.AutoApprovalRules.AddRange(contribution.AutoApprovalRules);
+        foreach (var metadata in contribution.DynamicToolMetadata)
+        {
+            destination.DynamicToolMetadata.Add(metadata.Key, metadata.Value);
+        }
         destination.Warnings.AddRange(contribution.Warnings);
         foreach (var warning in contribution.InvocationWarnings)
         {
@@ -183,4 +258,24 @@ public sealed class ToolBlockRegistry
     }
 
     private static bool IsObsolete(Type type) => type.IsDefined(typeof(ObsoleteAttribute), inherit: false);
+
+    private static void ValidateDescriptor(ToolBlockDescriptor descriptor)
+    {
+        ArgumentNullException.ThrowIfNull(descriptor);
+        if (string.IsNullOrWhiteSpace(descriptor.Name))
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "ToolBlock name is required.");
+        }
+
+        foreach (var member in descriptor.Members)
+        {
+            if (string.IsNullOrWhiteSpace(member.Name) || !Enum.IsDefined(member.RequiredPermission))
+            {
+                throw new AgwException(
+                    ErrorCodes.InvalidParam,
+                    $"ToolBlock '{descriptor.Name}' has an invalid member declaration."
+                );
+            }
+        }
+    }
 }

@@ -12,10 +12,7 @@ Platform-neutral 执行消息处理核心，供 Web / Desktop（通过 `@agw/cha
 - SignalR command payload、message 级终态与共享重连间隔（`src/protocol.ts`）
 - generation-aware 50ms 流式消息合批（`src/batcher.ts`）
 
-传输层由两个 Adapter 各自实现：
-
-- Web / Desktop：SignalR（`@agw/chat` 的 `execution-hub.ts` / `execution-session-manager.ts`）
-- Mobile：官方 `@microsoft/signalr` React Native adapter（`mobile/src/features/chat/execution-ws.ts`）
+传输与执行状态统一由 `@agw/chat-runtime` 的 `execution-hub.ts`、`execution-session.ts` 和 `execution-session-manager.ts` 管理，使用官方 `@microsoft/signalr`。Web/Desktop 通过 `@agw/chat` 展示；Mobile 通过 `@agw/chat-native` 适配，不在应用内维护第二套执行传输。
 
 ## 核心规则
 
@@ -35,7 +32,7 @@ streamingScopeId + messageId + role + author
 ### 工具配对
 
 - `createMessageFragments`：把一条消息按 content 逐条拆成 `normal / result / function-call / function-result`，支持混合 content。
-- `processMessages`：先按 `streamingScopeId + callId` 建立 call 组；result 优先命中同 scope，回放或恢复导致 scope 不一致时按 `callId` 关联到最近的 call 组。完成配对后只按 call 的原始顺序输出，因此支持并发 call、乱序 result，并保留跨轮复用 callId 的隔离。
+- `processMessages`：先按 `streamingScopeId + callId` 建立 call 组；result 优先命中同 scope，回放或恢复导致 scope 不一致时按 `callId` 关联到前序最后一个匹配的 call 组。完成配对后只按 call 的原始顺序输出，因此支持并发 call、乱序 result，并保留跨轮复用 callId 的隔离。
 
 ## 泛型：无损保留调用方类型
 

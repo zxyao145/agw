@@ -13,9 +13,7 @@ const DISPLAY_NAME_KEYS = ["name", "displayName", "agentDisplayName"];
 const HISTORY_CONTROL_MESSAGE_TYPES = new Set([
   "turn-start",
   "turn-finished",
-  "human-gate-request",
-  "tool-approval-request",
-  "human-interaction-request",
+  "interaction-request",
 ]);
 const STANDALONE_SYSTEM_MESSAGE_TYPES = new Set([
   "tool-todo-snapshot",

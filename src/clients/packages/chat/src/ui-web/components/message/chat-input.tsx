@@ -43,6 +43,11 @@ interface ChatInputProps {
   projectId: string | null;
   commandSource: CommandSource;
   permissionMode: PermissionMode;
+  activePermissionMode?: PermissionMode | null;
+  permissionChangePending?: boolean;
+  supportedPermissionModes?: readonly PermissionMode[];
+  permissionReason?: string;
+  permissionUnavailable?: string;
   agentMode: AgentMode;
   onPermissionModeChange: (mode: PermissionMode) => void;
   onAgentModeChange: (mode: AgentMode) => void;
@@ -68,6 +73,11 @@ export function ChatInput({
   projectId,
   commandSource,
   permissionMode,
+  activePermissionMode,
+  permissionChangePending,
+  supportedPermissionModes,
+  permissionReason,
+  permissionUnavailable,
   agentMode,
   onPermissionModeChange,
   onAgentModeChange,
@@ -150,7 +160,7 @@ export function ChatInput({
     <UserInput
       ref={userInputRef}
       isExecuting={isBusy}
-      isSubmitDisabled={isReadingImages}
+      isSubmitDisabled={isReadingImages || Boolean(permissionUnavailable)}
       hasAdditionalInput={pendingFileCommentCount > 0 || imageAttachments.length > 0}
       onExecute={handleExecute}
       onStop={isTransitioning ? undefined : onInterrupt}
@@ -224,6 +234,11 @@ export function ChatInput({
           isExecuting={isExecuting}
           isTransitioning={isTransitioning}
           permissionMode={permissionMode}
+          activePermissionMode={activePermissionMode}
+          permissionChangePending={permissionChangePending}
+          supportedPermissionModes={supportedPermissionModes}
+          permissionReason={permissionReason}
+          permissionUnavailable={permissionUnavailable}
           agentMode={agentMode}
           onCommandSelect={handleQuickCommand}
           onPermissionModeChange={onPermissionModeChange}

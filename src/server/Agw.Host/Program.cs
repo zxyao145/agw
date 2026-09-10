@@ -3,6 +3,7 @@ using System.Reflection;
 using Agw.A2A.Extensions;
 using Agw.Agents;
 using Agw.Agents.Definitions.Contracts;
+using Agw.Agents.Execution;
 using Agw.Auth.Extensions;
 using Agw.Auth.Security;
 using Agw.Files;
@@ -332,9 +333,10 @@ public static class AgwHostApplication
             }
             moduleServices
                 .AddTools(builder.Configuration)
-                .AddAgents(
+                .AddAgents(builder.Configuration)
+                .AddAgentExecution(
                     builder.Configuration,
-                    new Agw.Agents.DependencyInjection.RegistrationOptions(
+                    new Agw.Agents.Execution.DependencyInjection.RegistrationOptions(
                         AddExecutionTransport: hasDataPlane,
                         AddDistributedWorker: hasDataPlane,
                         AddTraceCollector: hasDataPlane
@@ -366,6 +368,7 @@ public static class AgwHostApplication
             builder.Services.AddHybridCache();
 
             var app = builder.Build();
+            _ = app.Services.GetRequiredService<ToolRegistryService>();
             var databaseSettings = app.Services.GetRequiredService<IOptions<DatabaseSettings>>().Value;
             Log.Information("Database provider: {DatabaseProvider}", databaseSettings.Provider);
             var databaseConnectionString = DatabaseConnectionStringResolver.Resolve(

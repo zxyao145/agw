@@ -101,7 +101,7 @@ dotnet restore Agw.slnx
 dotnet run --project src/server/Agw.Standalone.Host
 ```
 
-The development backend listens on `http://localhost:30816` by default. Configure Database, Execution, and DistributedLock in appsettings or environment variables before startup, then open `/setup` to create the administrator password. SQLite and InProcess are the defaults; split Control/Data deployments require PostgreSQL and Distributed execution. Unattended deployments inject `Setup__AdminPassword`. Successful setup writes authentication/initialization state to `server-state.json` and needs no extra restart. Old state-file deployment values remain a low-priority fallback. All runtime data is stored under the current user's `agw` directory. Setup through a domain also requires the one-time code printed in startup logs. See the [Deployment Guide](docs/4.Deployment.md).
+The development backend listens on `http://localhost:30816` by default. Configure Database, Execution, and DistributedLock in appsettings or environment variables before startup, then open `/setup` to create the administrator password. SQLite and InProcess are the defaults; split Control/Data deployments require PostgreSQL and Distributed execution. Unattended deployments inject `Setup__AdminPassword`. Successful setup writes authentication/initialization state to `server-state.json` and needs no extra restart. Old state-file deployment values remain a low-priority fallback. Server state defaults to the current user's `agw` directory; logs and Project Workspaces have independent locations. Setup through a domain also requires the one-time code printed in startup logs. See the [Deployment Guide](docs/4.Deployment.md).
 
 Start the frontend in another terminal:
 
@@ -128,6 +128,8 @@ A typical local workflow is:
 Chat on Web, Desktop, and Mobile accepts text plus up to five JPEG, PNG, GIF, or WebP images. Each image may be at most 5 MB, with a 10 MB combined limit per message.
 
 Management tables can copy System Agents, complete Agentflow graphs, and non-built-in Projects. External Agents and built-in Projects are intentionally not copyable.
+
+Claude Code, Codex, and Pi may optionally select a Model Provider. Claude Code requires Anthropic, Codex requires OpenAI Responses, and Pi supports all three provider types; clearing the selection uses the external tool's own configuration. Agent definition edits take effect at the next turn while preserving the conversation. Chat offers only the target's supported permission modes: Codex and Pi support Full access only. See the [execution contract](docs/ws-flow.md) for permission capabilities and reconnect behavior.
 
 ### Project workspaces
 
@@ -297,97 +299,88 @@ The following screenshots show the main Agw interfaces:
 
 Agw uses a domain-based modular monolith architecture. `src/server/Agw.Host` is the shared Hosting Module; `Agw.ControlPlane.Host`, `Agw.DataPlane.Host`, and `Agw.Standalone.Host` provide the executable composition roots. The pnpm Workspace at `src/clients` contains the Web, Electron Desktop, and Expo Mobile applications plus shared business and infrastructure packages.
 
-A typical backend flow is:
+Application owns use cases and persistence. When domain rules are needed, it evaluates a Policy and applies its data-only Decision through a manually constructed Behavior; simple CRUD uses the persistence seam directly. A typical backend flow is:
 
 ```text
-Controller -> AppService / RuntimeService -> DomainService -> IRepository / IUnitOfWork -> EF Core
+Controller -> Application -> I<Module>DbContext / persistence adapter -> EF Core
 ```
 
-Module overview (runtime-facing in-repository project references; provider-specific migration projects are omitted, and `A --> B` means A references B):
+Simplified dependency overview for the backend and Pi SDK. Contracts projects and their references are omitted, along with redundant references already represented by other paths. Test projects and NuGet packages are excluded. The diagram runs from top to bottom; `A --> B` means A references B:
 
 ```mermaid
 flowchart TB
-    subgraph Composition["Composition root"]
-        HOST["Agw.Host"]
+    subgraph hosts["Host"]
+        agwStandaloneHost["Agw.Standalone.Host"]
+        agwControlPlaneHost["Agw.ControlPlane.Host"]
+        agwDataPlaneHost["Agw.DataPlane.Host"]
+        agwHost["Agw.Host"]
     end
 
-    subgraph Boundaries["Protocol and bootstrap"]
-        direction LR
-        A2A["Agw.A2A"]
-        AUTH["Agw.Auth"]
-        SETUP["Agw.Setup"]
+    subgraph persistence["Infrastructure and initialization"]
+        agwInfrastructure["Agw.Infrastructure"]
+        agwMigrationsPostgres["Agw.Migrations.Postgres"]
+        agwMigrationsSqlite["Agw.Migrations.Sqlite"]
+        agwSetup["Agw.Setup"]
     end
 
-    subgraph Adapters["Technical adapters"]
-        INFRA["Agw.Infrastructure"]
+    subgraph modules["Functional modules"]
+        subgraph entryLayer["Layer 1: Entry points and business flows"]
+            agwA2A["Agw.A2A"]
+            agwAgentsExecution["Agw.Agents.Execution"]
+            agwProjects["Agw.Projects"]
+            agwJobs["Agw.Jobs"]
+        end
+
+        subgraph definitionLayer["Layer 2: Agent definitions"]
+            agwAgents["Agw.Agents"]
+        end
+
+        subgraph capabilityLayer["Layer 3: Supporting capabilities"]
+            agwIntegrations["Agw.Integrations"]
+            agwProviders["Agw.Providers"]
+            agwTools["Agw.Tools"]
+            agwSkills["Agw.Skills"]
+        end
+
+        subgraph serviceLayer["Layer 4: Foundation services"]
+            agwAuth["Agw.Auth"]
+            agwFiles["Agw.Files"]
+        end
     end
 
-    subgraph Core["Business modules"]
-        direction LR
-        AGENTS["Agw.Agents"]
-        JOBS["Agw.Jobs"]
-        PROJECTS["Agw.Projects"]
-        PROVIDERS["Agw.Providers"]
-        INTEGRATIONS["Agw.Integrations"]
-        SKILLS["Agw.Skills"]
-        TOOLS["Agw.Tools"]
-        FILES["Agw.Files"]
+    subgraph foundation["Data and shared"]
+        agwData["Agw.Data"]
+        agwShared["Agw.Shared"]
     end
 
-    subgraph Foundation["Foundation"]
-        direction LR
-        SHARED["Agw.Shared"]
-        DATA["Agw.Data"]
+    subgraph sdk["Pi SDK"]
+        piAgentSdkMAF["PiAgentSdk.MAF"]
+        piAgentSdk["PiAgentSdk"]
     end
 
-    HOST --> A2A
-    HOST --> AUTH
-    HOST --> INFRA
-    HOST --> SETUP
-
-    SETUP --> AUTH
-    SETUP --> INFRA
-    SETUP --> SHARED
-    SETUP --> SKILLS
-
-    A2A --> AGENTS
-    A2A --> PROJECTS
-
-    INFRA --> AGENTS
-    INFRA --> AUTH
-    INFRA --> INTEGRATIONS
-    INFRA --> PROVIDERS
-    INFRA --> PROJECTS
-    INFRA --> SKILLS
-    INFRA --> JOBS
-
-    SKILLS --> SHARED
-    JOBS --> AGENTS
-    JOBS --> PROJECTS
-    JOBS --> SHARED
-    JOBS --> SKILLS
-
-    AGENTS --> AUTH
-    AGENTS --> FILES
-    AGENTS --> INTEGRATIONS
-    AGENTS --> PROVIDERS
-    AGENTS --> TOOLS
-    AGENTS --> SHARED
-    AGENTS --> SKILLS
-
-    PROJECTS --> FILES
-    PROJECTS --> SHARED
-    TOOLS --> AUTH
-    TOOLS --> FILES
-    TOOLS --> SHARED
-
-    AUTH --> SHARED
-    INTEGRATIONS --> SHARED
-    PROVIDERS --> SHARED
-
-    %% Layout only: keep the foundation below the business modules.
-    FILES ~~~ SHARED
-    SHARED --> DATA
+    agwStandaloneHost --> agwControlPlaneHost & agwDataPlaneHost
+    agwControlPlaneHost --> agwHost
+    agwDataPlaneHost --> agwHost
+    agwHost --> agwMigrationsPostgres & agwMigrationsSqlite & agwSetup & agwAgentsExecution
+    agwHost --> agwA2A
+    agwInfrastructure --> agwAgents & agwProjects & agwJobs
+    agwMigrationsPostgres --> agwInfrastructure
+    agwMigrationsSqlite --> agwInfrastructure
+    agwSetup --> agwInfrastructure
+    agwAgentsExecution --> agwAgents
+    agwAgents --> agwIntegrations & agwProviders & agwTools & agwSkills
+    agwAgents --> piAgentSdkMAF
+    agwA2A --> agwAuth
+    agwProjects --> agwIntegrations & agwSkills & agwFiles
+    agwJobs --> agwSkills & agwAuth
+    agwIntegrations --> agwAuth
+    agwProviders --> agwData
+    agwTools --> agwFiles & agwAuth
+    agwSkills --> agwData
+    agwFiles --> agwShared
+    agwAuth --> agwData
+    agwData --> agwShared
+    piAgentSdkMAF --> piAgentSdk
 ```
 
 - Agw.Providers
@@ -436,13 +429,13 @@ Detailed project documentation is available under [`docs/`](docs/):
 - [Chat Suggestions Design](docs/5.Chat%20Suggestions.md): Agent-aware slash commands, Claude init commands, file suggestions, and failure fallback behavior.
 - [Agentflow Guide](docs/6.Agentflow.md): Graph routing and cycle rules, checkpoint branching, editor Undo and dirty state, and Chat message attribution.
 - [Agent Execution Flow](docs/ws-flow.md): SignalR commands, execution providers, turn messages, and disconnection behavior.
-- [Execution Subsystem](src/server/Agw.Agents/Execution/README.md): In-process and distributed execution, directory responsibilities, data flow, Definition Agent compaction, and command extension methods.
+- [Execution Subsystem](src/server/Agw.Agents.Execution/README.md): In-process and distributed execution, directory responsibilities, data flow, Definition Agent compaction, and command extension methods.
 - [Files Module](src/server/Agw.Files/README.zh-CN.md): Project workspace resolution, path boundaries, Git behavior, and mount requirements.
 - [Mobile Client](src/clients/mobile/README.md): Expo development, Server profiles and Tokens, image input, and React Native-safe package boundaries.
 
 ## Configuration
 
-Primary backend settings are located in [`src/server/Agw.Host/appsettings.json`](src/server/Agw.Host/appsettings.json):
+Primary backend settings are located in [`src/server/Agw.Host/appsettings.json`](src/server/Agw.Host/appsettings.json). This example expands the effective deployment defaults; the base file omits Database/Execution/lock defaults to preserve legacy-state fallback. Its blank OTLP endpoint falls back to the value below:
 
 ```json
 {
@@ -471,6 +464,7 @@ Primary backend settings are located in [`src/server/Agw.Host/appsettings.json`]
 ```
 
 - Supported database providers are `sqlite` and `postgres`.
+- The Host template flushes conversation history every 10 seconds; omitting the interval uses a 5-second code fallback. See [conversation persistence](docs/operations/conversation-persistence.md).
 - Supported distributed execution lock providers are `inmemory` and `postgres`. When `DistributedLock:Provider` is `null` or absent, SQLite uses an in-process lock, while PostgreSQL uses an advisory lock. If the PostgreSQL lock connection string is empty, it reuses `Database:ConnectionString`.
 - `Execution:Provider` supports `InProcess` and `Distributed`. Distributed execution requires PostgreSQL for the database and lock; message replay uses PostgreSQL by default and can explicitly use Redis.
 - Do not store secrets in static configuration files; prefer environment variable overrides.

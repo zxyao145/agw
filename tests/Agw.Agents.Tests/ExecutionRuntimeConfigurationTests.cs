@@ -1,6 +1,8 @@
-using Agw.Agents.Execution.Agentflows;
-using Agw.Agents.Execution.Agents.Store;
-using Agw.Agents.Execution.Durable;
+using Agw.Agents.Execution.Agentflows.Checkpoints;
+using Agw.Agents.Execution.Agents.Sessions;
+using Agw.Agents.Execution.Configuration;
+using Agw.Agents.Execution.Messaging.Durable;
+using Agw.Agents.Execution.Runtimes.Durable;
 using Agw.Shared.Exceptions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,13 +13,13 @@ namespace Agw.Agents.Tests;
 public sealed class ExecutionRuntimeConfigurationTests
 {
     [Fact]
-    public void AddAgents_RegistersCheckpointAndSessionStoresWithExpectedLifetimes()
+    public void AddAgentExecution_RegistersCheckpointAndSessionStoresWithExpectedLifetimes()
     {
         // Arrange
         var services = new ServiceCollection();
 
         // Act
-        services.AddAgents(new ConfigurationBuilder().Build());
+        services.AddAgentExecution(new ConfigurationBuilder().Build());
 
         // Assert
         Assert.Contains(
@@ -35,12 +37,12 @@ public sealed class ExecutionRuntimeConfigurationTests
     }
 
     [Fact]
-    public void AddAgents_DefaultConfiguration_UsesInProcessProvider()
+    public void AddAgentExecution_DefaultConfiguration_UsesInProcessProvider()
     {
         var configuration = new ConfigurationBuilder().Build();
         var services = new ServiceCollection();
 
-        services.AddAgents(configuration);
+        services.AddAgentExecution(configuration);
         using var provider = services.BuildServiceProvider();
 
         Assert.Equal(
@@ -51,7 +53,7 @@ public sealed class ExecutionRuntimeConfigurationTests
     }
 
     [Fact]
-    public void AddAgents_DistributedWithSqlite_FailsFast()
+    public void AddAgentExecution_DistributedWithSqlite_FailsFast()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
@@ -63,14 +65,14 @@ public sealed class ExecutionRuntimeConfigurationTests
             )
             .Build();
 
-        var exception = Assert.Throws<AgwException>(() => new ServiceCollection().AddAgents(configuration));
+        var exception = Assert.Throws<AgwException>(() => new ServiceCollection().AddAgentExecution(configuration));
 
         Assert.Equal(ErrorCodes.DurableExecutionUnavailable.Code, exception.Code);
         Assert.Contains("Database:Provider=postgres", exception.Message);
     }
 
     [Fact]
-    public void AddAgents_DistributedWithPostgresEventStream_DoesNotRequireRedis()
+    public void AddAgentExecution_DistributedWithPostgresEventStream_DoesNotRequireRedis()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
@@ -83,7 +85,7 @@ public sealed class ExecutionRuntimeConfigurationTests
             .Build();
         var services = new ServiceCollection();
 
-        services.AddAgents(configuration);
+        services.AddAgentExecution(configuration);
 
         Assert.Contains(
             services,
@@ -98,7 +100,7 @@ public sealed class ExecutionRuntimeConfigurationTests
     }
 
     [Fact]
-    public void AddAgents_RedisEventStreamWithoutConnectionString_FailsFast()
+    public void AddAgentExecution_RedisEventStreamWithoutConnectionString_FailsFast()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
@@ -111,14 +113,14 @@ public sealed class ExecutionRuntimeConfigurationTests
             )
             .Build();
 
-        var exception = Assert.Throws<AgwException>(() => new ServiceCollection().AddAgents(configuration));
+        var exception = Assert.Throws<AgwException>(() => new ServiceCollection().AddAgentExecution(configuration));
 
         Assert.Equal(ErrorCodes.DurableExecutionUnavailable.Code, exception.Code);
         Assert.Contains("EventStream:Redis:ConnectionString", exception.Message);
     }
 
     [Fact]
-    public void AddAgents_DistributedWithInMemoryLock_FailsFast()
+    public void AddAgentExecution_DistributedWithInMemoryLock_FailsFast()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
@@ -131,14 +133,14 @@ public sealed class ExecutionRuntimeConfigurationTests
             )
             .Build();
 
-        var exception = Assert.Throws<AgwException>(() => new ServiceCollection().AddAgents(configuration));
+        var exception = Assert.Throws<AgwException>(() => new ServiceCollection().AddAgentExecution(configuration));
 
         Assert.Equal(ErrorCodes.DurableExecutionUnavailable.Code, exception.Code);
         Assert.Contains("DistributedLock:Provider=postgres", exception.Message);
     }
 
     [Fact]
-    public void AddAgents_DistributedWithInvalidWorkerSettings_FailsFast()
+    public void AddAgentExecution_DistributedWithInvalidWorkerSettings_FailsFast()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
@@ -151,14 +153,14 @@ public sealed class ExecutionRuntimeConfigurationTests
             )
             .Build();
 
-        var exception = Assert.Throws<AgwException>(() => new ServiceCollection().AddAgents(configuration));
+        var exception = Assert.Throws<AgwException>(() => new ServiceCollection().AddAgentExecution(configuration));
 
         Assert.Equal(ErrorCodes.DurableExecutionUnavailable.Code, exception.Code);
         Assert.Contains("must be positive", exception.Message);
     }
 
     [Fact]
-    public void AddAgents_DistributedWithRedisEventStream_RegistersRedisAndWorker()
+    public void AddAgentExecution_DistributedWithRedisEventStream_RegistersRedisAndWorker()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
@@ -173,7 +175,7 @@ public sealed class ExecutionRuntimeConfigurationTests
             .Build();
         var services = new ServiceCollection();
 
-        services.AddAgents(configuration);
+        services.AddAgentExecution(configuration);
 
         Assert.Contains(services, descriptor => descriptor.ImplementationType == typeof(DistributedExecutionWorker));
         Assert.Contains(services, descriptor => descriptor.ServiceType == typeof(DurableExecutionCoordinator));

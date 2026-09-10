@@ -1,6 +1,6 @@
+using Agw.Agents.Contracts.Catalog;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Contracts;
-using Agw.Agents.Execution.Agentflows;
 using Agw.Shared.Contracts.Pagination;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Exceptions;
@@ -16,15 +16,12 @@ namespace Agw.Agents.Definitions.Controllers;
 public class AgentflowsController : ControllerBase
 {
     private readonly AgentflowAppService _agentflowAppService;
-    private readonly IAgentflowRuntimeService _agentflowRuntimeService;
+    private readonly IAgentflowMermaidProvider _mermaidProvider;
 
-    public AgentflowsController(
-        AgentflowAppService agentflowAppService,
-        IAgentflowRuntimeService agentflowRuntimeService
-    )
+    public AgentflowsController(AgentflowAppService agentflowAppService, IAgentflowMermaidProvider mermaidProvider)
     {
         _agentflowAppService = agentflowAppService;
-        _agentflowRuntimeService = agentflowRuntimeService;
+        _mermaidProvider = mermaidProvider;
     }
 
     [HttpGet]
@@ -59,7 +56,7 @@ public class AgentflowsController : ControllerBase
     [ProducesApiResult(typeof(string))]
     public async Task<IActionResult> GetMermaidAsync(Guid id)
     {
-        var text = await _agentflowRuntimeService.GetMermaidAsync(id);
+        var text = await _mermaidProvider.GetMermaidAsync(id);
         return text == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(text);
     }
 

@@ -1,3 +1,4 @@
+import type { HumanResponseCommandInput } from "@agw/execution-core";
 import {
   HubConnection,
   HubConnectionBuilder,
@@ -35,17 +36,17 @@ import {
 } from "@agw/execution-core";
 import {
   getAgentflowCheckpointMessage,
-  getPendingHumanGate,
+  getPendingInteraction,
   type AgentflowCheckpointAvailability,
-  type PendingHumanGate,
+  type PendingInteraction,
 } from "@agw/chat-core";
 
-export { getAgentflowCheckpointMessage, getPendingHumanGate } from "@agw/chat-core";
+export { getAgentflowCheckpointMessage, getPendingInteraction } from "@agw/chat-core";
 export type {
   AgentflowCheckpointAvailability,
   AgentflowCheckpointMarkerInfo,
   AgentflowCheckpointMessage,
-  PendingHumanGate,
+  PendingInteraction,
 } from "@agw/chat-core";
 
 export type ExecutionRuntimeConfig = {
@@ -281,6 +282,11 @@ export class ExecutionSession {
   private handlers: ExecutionHubHandlers;
   private disposed = false;
   private hasActiveTurn = false;
+  /** 原始进程内执行所属连接；连续重连不能覆盖它。 */
+  private executionConnectionId: string | null = null;
+  private recoveringInProcess = false;
+  private recoveryTimer: ReturnType<typeof setTimeout> | null = null;
+  private recoveryRevision = 0;
   /** 当前用户轮次的稳定渲染作用域，确保实时 Tool Call/Result 可跨 UI 重附着配对。 */
   private activeStreamingScopeId: string | null = null;
   private readonly turnFinishedWaiters = new Set<() => void>();
@@ -377,8 +383,10 @@ export class ExecutionSession {
         return;
       }
 
-      if (this.durableConfirmed) this.hasActiveTurn = false;
-      else this.finishActiveTurn();
+      if (!this.disposed && this.hasActiveExecution()) {
+        this.failReconnect(error ?? new Error("Execution connection closed."));
+        return;
+      }
       this.reconnectState = null;
       this.finishReconnect(error ?? new Error("Execution connection closed."));
       if (!this.disposed) this.handlers.onClose?.(error);
@@ -417,9 +425,10 @@ export class ExecutionSession {
           return { restoredDurableExecution };
         }
       }
+      if (this.executionProvider === "in-process") await this.discoverInProcessExecution();
     } catch (error) {
       const normalized = error instanceof Error ? error : new Error(String(error));
-      if (persisted) this.failReconnect(normalized);
+      this.failReconnect(normalized);
       throw normalized;
     }
 
@@ -431,6 +440,7 @@ export class ExecutionSession {
   }
 
   public async execute(request: ExecutionRequest): Promise<void> {
+    if (this.hasActiveExecution()) throw new Error("This conversation already has a running task.");
     const executionId = request.executionId ?? globalThis.crypto.randomUUID();
     this.activeExecutionId = executionId;
     this.activeStreamingScopeId = request.input.messageId;
@@ -448,10 +458,12 @@ export class ExecutionSession {
       );
     }
     try {
+      await this.ensureConnected();
+      this.executionConnectionId = this.connection.connectionId;
       await this.dispatch(buildExecCommand({ ...request, executionId }));
     } catch (error) {
       if (!this.durableConfirmed) {
-        this.finishActiveTurn();
+        await this.reconcileInProcessStartFailure(error);
       } else if (this.connection.state === HubConnectionState.Connected) {
         try {
           if (await this.restoreDurableSubscription(executionId, null)) return;
@@ -484,6 +496,7 @@ export class ExecutionSession {
     agentflowId: string;
     resumeExecutionId?: string;
   }): Promise<string> {
+    if (this.hasActiveExecution()) throw new Error("This conversation already has a running task.");
     const resumeExecutionId = args.resumeExecutionId ?? globalThis.crypto.randomUUID();
     this.activeExecutionId = resumeExecutionId;
     this.streamCursor = null;
@@ -501,6 +514,8 @@ export class ExecutionSession {
     }
 
     try {
+      await this.ensureConnected();
+      this.executionConnectionId = this.connection.connectionId;
       await this.dispatch(
         buildResumeCheckpointCommand({
           checkpointOccurrenceId: args.checkpointOccurrenceId,
@@ -511,7 +526,7 @@ export class ExecutionSession {
       return resumeExecutionId;
     } catch (error) {
       if (!this.durableConfirmed) {
-        this.finishActiveTurn();
+        await this.reconcileInProcessStartFailure(error);
       } else if (this.connection.state === HubConnectionState.Connected) {
         try {
           if (await this.restoreDurableSubscription(resumeExecutionId, null)) {
@@ -541,6 +556,11 @@ export class ExecutionSession {
   }
 
   public async interrupt(reason?: string): Promise<void> {
+    if (this.recoveringInProcess) {
+      await this.ensureConnected();
+      await this.recoverInProcessExecution(true);
+      return;
+    }
     await this.dispatch(buildInterruptCommand(this.activeExecutionId ?? undefined, reason));
   }
 
@@ -563,17 +583,11 @@ export class ExecutionSession {
     }
   }
 
-  public async submitHumanResponse(args: {
-    requestId: string;
-    approved: boolean;
-    responseText?: string | null;
-    approvalScope?: "once" | "always-tool" | "always-arguments";
-    responseData?: unknown;
-  }): Promise<void> {
+  public async submitHumanResponse(args: HumanResponseCommandInput): Promise<void> {
     await this.dispatch(
       buildHumanResponseCommand({
-        ...(this.activeExecutionId ? { executionId: this.activeExecutionId } : {}),
-        ...args,
+        executionId: args.executionId ?? this.activeExecutionId ?? undefined,
+        response: args.response,
       }),
     );
   }
@@ -614,6 +628,8 @@ export class ExecutionSession {
   public async dispose(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
+    this.recoveryRevision++;
+    this.clearRecoveryTimer();
     this.automaticReconnectDeadlineMs = null;
     this.resumeReconnectDelay?.();
     this.finishReconnect(new Error("Execution connection is disposed"));
@@ -776,11 +792,7 @@ export class ExecutionSession {
       this.finishReconnectSuccessfully();
     } catch (error) {
       const normalized = error instanceof Error ? error : new Error(String(error));
-      this.reconnecting = false;
-      this.reconnectState = null;
-      this.finishReconnect(normalized);
-      if (!this.disposed) this.handlers.onError?.(normalized);
-      await this.connection.stop();
+      if (!this.disposed) this.failReconnect(normalized);
     }
   }
 
@@ -797,8 +809,7 @@ export class ExecutionSession {
   private failReconnect(error: Error): void {
     this.reconnecting = false;
     this.automaticReconnectDeadlineMs = null;
-    if (this.durableConfirmed) this.hasActiveTurn = false;
-    else this.finishActiveTurn();
+    this.clearRecoveryTimer();
     const failedState: ExecutionReconnectState = {
       status: "failed",
       retryAttempt: executionReconnectDelaysMs.length,
@@ -814,11 +825,107 @@ export class ExecutionSession {
     if (this.disposed || !this.setting) return;
     await this.refreshExecutionProvider();
     await this.connection.invoke("DispatchCommand", buildSettingCommand(this.setting));
-    if (this.executionProvider === "in-process") {
-      this.finishActiveTurn();
+    if (!this.durableConfirmed && this.hasActiveExecution()) {
+      this.recoveringInProcess = true;
+      await this.recoverInProcessExecution();
     } else if (this.durableConfirmed && this.activeExecutionId) {
       await this.restoreDurableSubscription(this.activeExecutionId, this.streamCursor);
+    } else if (this.executionProvider === "in-process") {
+      await this.discoverInProcessExecution();
     }
+  }
+
+  /** 重新加载页面后不再有旧连接 ID，必须从服务端发现原执行。 */
+  private async discoverInProcessExecution(): Promise<void> {
+    if (!this.setting?.projectId || !this.setting.contextId) return;
+    const connectionId = await this.connection.invoke<string | null>(
+      "FindInProcessExecution",
+      this.setting.projectId,
+      this.setting.contextId,
+    );
+    if (this.disposed) return;
+    if (connectionId === null) return;
+    if (typeof connectionId !== "string" || !connectionId)
+      throw new Error("Cannot confirm the previous execution's state.");
+    this.executionConnectionId = connectionId;
+    this.hasActiveTurn = true;
+    this.recoveringInProcess = true;
+    await this.recoverInProcessExecution();
+  }
+
+  /** 发送失败不代表启动失败：只有明确拒绝或服务端确认空闲才能清理执行。 */
+  private async reconcileInProcessStartFailure(error: unknown): Promise<void> {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!this.executionConnectionId || message.includes("HubException:")) {
+      this.finishActiveTurn();
+      return;
+    }
+    this.recoveringInProcess = true;
+    if (this.connection.state === HubConnectionState.Connected) {
+      try {
+        await this.recoverInProcessExecution();
+      } catch (recoveryError) {
+        this.failReconnect(
+          recoveryError instanceof Error ? recoveryError : new Error(String(recoveryError)),
+        );
+      }
+    }
+  }
+
+  /** 旧连接仍可继续执行；确认其空闲前保留 busy，并把停止操作路由给原连接。 */
+  private async recoverInProcessExecution(interrupt = false): Promise<void> {
+    const connectionId = this.executionConnectionId;
+    const executionId = this.activeExecutionId;
+    if (!connectionId) throw new Error("Cannot confirm the previous execution's state.");
+    this.clearRecoveryTimer();
+    const revision = ++this.recoveryRevision;
+    let active: boolean;
+    try {
+      active = await this.connection.invoke<boolean>(
+        "RecoverInProcessExecution",
+        connectionId,
+        interrupt,
+      );
+    } catch (error) {
+      if (
+        this.disposed ||
+        revision !== this.recoveryRevision ||
+        this.activeExecutionId !== executionId
+      )
+        return;
+      throw error;
+    }
+    if (
+      this.disposed ||
+      revision !== this.recoveryRevision ||
+      this.activeExecutionId !== executionId
+    )
+      return;
+    if (typeof active !== "boolean")
+      throw new Error("Cannot confirm the previous execution's state.");
+    if (!active) {
+      this.finishActiveTurn();
+      if (!this.reconnecting) this.handlers.onReconnected?.();
+      return;
+    }
+    this.recoveryTimer = setTimeout(() => {
+      this.recoveryTimer = null;
+      if (
+        this.disposed ||
+        this.connection.state !== HubConnectionState.Connected ||
+        this.reconnecting
+      )
+        return;
+      void this.recoverInProcessExecution().catch((error: unknown) => {
+        if (!this.disposed)
+          this.failReconnect(error instanceof Error ? error : new Error(String(error)));
+      });
+    }, 1000);
+  }
+
+  private clearRecoveryTimer(): void {
+    if (this.recoveryTimer !== null) clearTimeout(this.recoveryTimer);
+    this.recoveryTimer = null;
   }
 
   /** 尝试重新订阅指定执行；只有明确不存在时才清理本地 attachment。 */
@@ -886,6 +993,10 @@ export class ExecutionSession {
   }
 
   private finishActiveTurn(): void {
+    this.recoveryRevision++;
+    this.clearRecoveryTimer();
+    this.executionConnectionId = null;
+    this.recoveringInProcess = false;
     this.hasActiveTurn = false;
     this.activeExecutionId = null;
     this.activeStreamingScopeId = null;
@@ -900,3 +1011,9 @@ export class ExecutionSession {
 }
 
 export { ExecutionSession as ExecutionHubClient };
+
+export type {
+  InteractionResponse,
+  ApprovalScope,
+  HumanResponseCommandInput,
+} from "@agw/execution-core";

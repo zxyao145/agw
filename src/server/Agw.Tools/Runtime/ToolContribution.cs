@@ -49,6 +49,11 @@ public sealed class ToolContribution : IAsyncDisposable
     public List<Func<ToolAutoApprovalRuleContext, ValueTask<bool>>> AutoApprovalRules { get; } = [];
 
     /// <summary>
+    /// Gets metadata for tools produced dynamically by context providers.
+    /// </summary>
+    public Dictionary<string, AgwToolMetadata> DynamicToolMetadata { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Gets non-fatal materialization warnings that should be surfaced to the caller.
     /// </summary>
     public List<string> Warnings { get; } = [];

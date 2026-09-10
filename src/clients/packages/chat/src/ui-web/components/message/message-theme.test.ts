@@ -17,7 +17,7 @@ test("light surfaces use a white background", () => {
 });
 
 test("user messages use the neutral chat card", () => {
-  assert.match(messageSource, /bg-\[#f3f3f4\][^"\n]*text-\[#17191d\]/);
+  assert.match(tokensCss, /\.agw-msg-user \{[\s\S]*bg-\[#f3f3f4\][\s\S]*text-\[#17191d\][\s\S]*\}/);
 });
 
 test("historical user messages keep full-width right alignment when metadata is present", () => {
@@ -26,11 +26,11 @@ test("historical user messages keep full-width right alignment when metadata is 
 });
 
 test("user message content is capped at eighty percent width", () => {
-  assert.match(messageSource, /msg-pos-right max-w-\[80%\]/);
+  assert.match(tokensCss, /\.agw-msg-user \{[\s\S]*max-w-\[80%\]/);
 });
 
 test("user image attachments align to the right edge of the message", () => {
-  assert.match(messageSource, /cn\("msg-content-container", isUser \? "items-end" : ""\)/);
+  assert.match(messageSource, /cn\("agw-msg-body", isUser \? "items-end" : ""\)/);
 });
 
 test("image attachments fit within a three-hundred-pixel height", () => {

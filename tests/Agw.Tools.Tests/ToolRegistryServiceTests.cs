@@ -1,11 +1,12 @@
 using System.Text.Json;
+using Agw.Files.Abstracts;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
-using Agw.Tools.ContextualTools;
-using Agw.Tools.ContextualTools.Shell;
-using Agw.Tools.ContextualTools.WebSearch;
-using Agw.Tools.ToolBlocks.Blocks.Todo;
+using Agw.Tools.Contracts.Abstractions;
+using Agw.Tools.Impl.ContextualTools.Shell;
+using Agw.Tools.Impl.ContextualTools.WebSearch;
+using Agw.Tools.Impl.ToolBlocks.Todo;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,6 +17,33 @@ namespace Agw.Tools.Tests;
 public class ToolRegistryServiceTests
 {
     [Fact]
+    public void StartupDiscovery_AllBuiltInToolKinds_AreRegistered()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<IAgwFileSystemResolver, MissingFileSystemResolver>();
+        using var serviceProvider = services.BuildServiceProvider(
+            new ServiceProviderOptions { ValidateScopes = true, ValidateOnBuild = true }
+        );
+
+        // Act
+        var registry = new ToolRegistryService(
+            NullLogger<ToolRegistryService>.Instance,
+            serviceProvider,
+            discoverAllToolKinds: true
+        );
+        registry.ValidateDefinitionCoverage();
+
+        // Assert
+        Assert.True(registry.ToolExists("diff"));
+        Assert.True(registry.ToolExists("web_search"));
+        Assert.NotNull(registry.GetTool(ToolBlockNames.Todo));
+    }
+
+    [Fact]
     public void CreateAIFunction_ForRegisteredParameterObjectTool_ExposesFlattenedParameterSchema()
     {
         var tool = CreateDiffFunction();
@@ -24,6 +52,54 @@ public class ToolRegistryServiceTests
         Assert.Contains("before", schemaText);
         Assert.Contains("after", schemaText);
         Assert.DoesNotContain("toolParams", schemaText);
+    }
+
+    [Fact]
+    public void Catalog_DeclaredPermissions_DerivesConfirmationMetadata()
+    {
+        // Arrange
+        using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, serviceProvider);
+
+        // Act
+        var diff = registry.GetTool("diff");
+        var gitClone = registry.GetTool("git_clone");
+
+        // Assert
+        Assert.Equal(AgwToolPermission.None, diff?.RequiredPermission);
+        Assert.False(diff?.RequiresConfirmation);
+        Assert.Equal(AgwToolPermission.Write, gitClone?.RequiredPermission);
+        Assert.True(gitClone?.RequiresConfirmation);
+    }
+
+    [Fact]
+    public void RegisterTool_MutableInstanceState_IsRejected()
+    {
+        // Arrange
+        using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, serviceProvider);
+
+        // Act
+        var exception = Assert.Throws<AgwException>(() => registry.RegisterTool(new MutableTool()));
+
+        // Assert
+        Assert.Contains("must be stateless", exception.Message);
+        Assert.Contains("_invocationCount", exception.Message);
+    }
+
+    [Fact]
+    public void CreateAIFunction_AttributeWriteTool_RequiresApprovalAtRuntime()
+    {
+        // Arrange
+        using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, serviceProvider);
+
+        // Act
+        var function = Assert.IsAssignableFrom<AIFunction>(registry.CreateAIFunction("git_clone"));
+
+        // Assert
+        Assert.NotNull(function.GetService<ApprovalRequiredAIFunction>());
+        Assert.Equal(AgwToolPermission.Write, function.GetService<AgwToolMetadata>()?.RequiredPermission);
     }
 
     [Fact]
@@ -69,6 +145,12 @@ public class ToolRegistryServiceTests
     [InlineData(true)]
     public async Task WebSearchMaterialization_LocalOrHosted_MarksToolAllowedInPlan(bool hosted)
     {
+        await using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        var registry = new ToolRegistryService(
+            NullLogger<ToolRegistryService>.Instance,
+            serviceProvider,
+            [new WebSearchContextualTool()]
+        );
         var context = CreateMaterializationContext();
         context = new ToolMaterializationContext
         {
@@ -79,13 +161,19 @@ public class ToolRegistryServiceTests
             SupportsHostedWebSearch = hosted,
         };
 
-        await using var contribution = await new WebSearchContextualTool().MaterializeAsync(
-            new WebSearchToolDefinition(),
+        await using var contribution = await registry.MaterializeAsync(
+            [new WebSearchToolDefinition()],
             context,
             TestContext.Current.CancellationToken
         );
 
         Assert.Equal(["web_search"], contribution.PlanModeAllowedToolNames);
+        var tool = Assert.Single(contribution.Tools);
+        Assert.Equal(AgwToolPermission.ReadOnly, AgwToolMetadataBinding.GetMetadata(tool)?.RequiredPermission);
+        if (hosted)
+        {
+            Assert.IsType<HostedWebSearchTool>(tool);
+        }
     }
 
     [Fact]
@@ -295,6 +383,52 @@ public class ToolRegistryServiceTests
         public override string GetDefinitionName() => _name;
     }
 
+    private sealed class MissingFileSystemResolver : IAgwFileSystemResolver
+    {
+        public Task<IAgwFileSystem?> ResolveAsync(Guid projectId, CancellationToken ct) =>
+            Task.FromResult<IAgwFileSystem?>(null);
+    }
+
+    [Fact]
+    public async Task MaterializeAsync_ContextualExecuteTool_RequiresApprovalAtRuntime()
+    {
+        // Arrange
+        await using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        var registry = new ToolRegistryService(
+            NullLogger<ToolRegistryService>.Instance,
+            serviceProvider,
+            [new ShellContextualTool(new ConfigurationBuilder().Build())]
+        );
+        var context = CreateMaterializationContext();
+
+        // Act
+        await using var contribution = await registry.MaterializeAsync(
+            [new RunShellToolDefinition()],
+            context,
+            TestContext.Current.CancellationToken
+        );
+
+        // Assert
+        var function = Assert.IsAssignableFrom<AIFunction>(Assert.Single(contribution.Tools));
+        Assert.NotNull(function.GetService<ApprovalRequiredAIFunction>());
+        Assert.Equal(AgwToolPermission.Execute, function.GetService<AgwToolMetadata>()?.RequiredPermission);
+    }
+
+    private sealed class MutableTool : IAgwTool
+    {
+        private int _invocationCount;
+
+        public string Name => "mutable_test";
+
+        public AgwToolPermission RequiredPermission => AgwToolPermission.None;
+
+        public AITool ToAITool() =>
+            AIFunctionFactory.Create(
+                (Func<int>)(() => ++_invocationCount),
+                new AIFunctionFactoryOptions { Name = Name }
+            );
+    }
+
     private sealed class DefinitionCoverageToolBlock : IToolBlock
     {
         public DefinitionCoverageToolBlock(string name)
@@ -314,16 +448,11 @@ public class ToolRegistryServiceTests
     [Obsolete("Test obsolete Contextual Tool")]
     private sealed class ObsoleteWebSearchContextualTool : IContextualTool
     {
-        public ToolInfo Descriptor { get; } =
-            new()
-            {
-                Name = ToolDefinitionNames.WebSearch,
-                DisplayName = "Obsolete Web Search",
-                Description = "Test obsolete Contextual Tool.",
-                Category = "Test",
-                TypeName = typeof(ObsoleteWebSearchContextualTool).FullName!,
-                Parameters = [],
-            };
+        public string Name => ToolDefinitionNames.WebSearch;
+
+        public string Category => "Test";
+
+        public AgwToolPermission RequiredPermission => AgwToolPermission.ReadOnly;
 
         public ValueTask<ToolContribution> MaterializeAsync(
             ToolDefinition definition,
@@ -341,7 +470,7 @@ public class ToolRegistryServiceTests
                 "Obsolete Todo",
                 "Test obsolete Tool Block.",
                 ToolBlockScope.Agent | ToolBlockScope.Project,
-                ["obsolete_todo"]
+                [new("obsolete_todo", AgwToolPermission.None)]
             );
 
         public ValueTask<ToolContribution> MaterializeAsync(

@@ -1,5 +1,5 @@
 using Agw.Shared.Exceptions;
-using Agw.Tools.Impl.Basic;
+using Agw.Tools.Impl.Tools.Basic;
 
 namespace Agw.Tools.Tests;
 

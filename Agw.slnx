@@ -19,7 +19,7 @@
     <Project Path="src/server/Agw.Host/Agw.Host.csproj" />
     <Project Path="src/server/Agw.Standalone.Host/Agw.Standalone.Host.csproj" />
   </Folder>
-  <Folder Name="/2.Api/">
+  <Folder Name="/2.Protocol/">
     <Project Path="src/server/Agw.A2A/Agw.A2A.csproj" Id="82aa4560-620a-47a2-848c-f05093bc7251" />
   </Folder>
   <Folder Name="/3.Infrastructure/">
@@ -30,33 +30,38 @@
     <Project Path="src/server/Agw.Migrations.Sqlite/Agw.Migrations.Sqlite.csproj" />
   </Folder>
   <Folder Name="/4.Modules/">
-    <Project Path="src/server/Agw.Agents/Agw.Agents.csproj" />
-    <Project Path="src/server/Agw.Agents.Contracts/Agw.Agents.Contracts.csproj" />
+    <Project Path="src/server/Agw.Agents.Execution/Agw.Agents.Execution.csproj" />
     <Project Path="src/server/Agw.Files/Agw.Files.csproj" />
-    <Project Path="src/server/Agw.Jobs/Agw.Jobs.csproj" />
-    <Project Path="src/server/Agw.Jobs.Contracts/Agw.Jobs.Contracts.csproj" />
-    <Project Path="src/server/Agw.Providers/Agw.Providers.csproj" />
-    <Project Path="src/server/Agw.Projects/Agw.Projects.csproj" />
-    <Project Path="src/server/Agw.Projects.Contracts/Agw.Projects.Contracts.csproj" />
   </Folder>
   <Folder Name="/4.Modules/Agent.Capability/">
     <Project Path="src/server/Agw.Integrations/Agw.Integrations.csproj" />
+    <Project Path="src/server/Agw.Jobs/Agw.Jobs.csproj" />
     <Project Path="src/server/Agw.Skills/Agw.Skills.csproj" />
     <Project Path="src/server/Agw.Tools/Agw.Tools.csproj" Id="ba592b35-3c77-47d7-b977-396f0fa9acba" />
+  </Folder>
+  <Folder Name="/4.Modules/Definitions/">
+    <Project Path="src/server/Agw.Agents/Agw.Agents.csproj" />
+    <Project Path="src/server/Agw.Projects/Agw.Projects.csproj" />
+    <Project Path="src/server/Agw.Providers/Agw.Providers.csproj" />
   </Folder>
   <Folder Name="/5.Shared/">
     <Project Path="src/server/Agw.Data/Agw.Data.csproj" />
     <Project Path="src/server/Agw.Shared/Agw.Shared.csproj" />
   </Folder>
-  <Folder Name="/6.SDKs/">
-    <Project Path="src/sdks/pi-agent-sdk-csharp/src/PiAgentSdk/PiAgentSdk.csproj" />
-    <Project Path="src/sdks/pi-agent-sdk-csharp/src/PiAgentSdk.MAF/PiAgentSdk.MAF.csproj" />
-    <Project Path="src/sdks/pi-agent-sdk-csharp/tests/PiAgentSdk.Tests/PiAgentSdk.Tests.csproj" />
-    <Project Path="src/sdks/pi-agent-sdk-csharp/tests/PiAgentSdk.MAF.Tests/PiAgentSdk.MAF.Tests.csproj" />
+  <Folder Name="/5.Shared/Contracts/">
+    <Project Path="src/server/Agw.Agents.Contracts/Agw.Agents.Contracts.csproj" />
+    <Project Path="src/server/Agw.Jobs.Contracts/Agw.Jobs.Contracts.csproj" />
+    <Project Path="src/server/Agw.Projects.Contracts/Agw.Projects.Contracts.csproj" />
   </Folder>
-  <Folder Name="/Support/">
+  <Folder Name="/6.Support/">
     <Project Path="src/server/Agw.Auth/Agw.Auth.csproj" />
     <Project Path="src/server/Agw.Setup/Agw.Setup.csproj" />
+  </Folder>
+  <Folder Name="/7.SDKs/">
+    <Project Path="src/sdks/pi-agent-sdk-csharp/src/PiAgentSdk.MAF/PiAgentSdk.MAF.csproj" />
+    <Project Path="src/sdks/pi-agent-sdk-csharp/src/PiAgentSdk/PiAgentSdk.csproj" />
+    <Project Path="src/sdks/pi-agent-sdk-csharp/tests/PiAgentSdk.MAF.Tests/PiAgentSdk.MAF.Tests.csproj" />
+    <Project Path="src/sdks/pi-agent-sdk-csharp/tests/PiAgentSdk.Tests/PiAgentSdk.Tests.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <File Path="tests/Directory.Build.props" />

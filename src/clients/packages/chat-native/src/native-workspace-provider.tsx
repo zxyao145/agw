@@ -1,3 +1,4 @@
+import { getPermissionStatus, type InteractionResponse } from "@agw/execution-core";
 import {
   buildChatTargetOptions,
   createUuidV7,
@@ -12,7 +13,7 @@ import {
   getAgentflowCheckpointMessage,
   getAgentSuggestionQueryParams,
   getClaudeInitCommands,
-  getPendingHumanGate,
+  getPendingInteraction,
   prepareClaudeHistory,
   toCommandSource,
   toExecutionUserInput,
@@ -20,7 +21,7 @@ import {
   type ChatImageAttachment,
   type CommandSource,
   type AgentflowCheckpointAvailability,
-  type PendingHumanGate,
+  type PendingInteraction,
 } from "@agw/chat-core";
 import {
   DEFAULT_AGENT_MODE,
@@ -80,6 +81,11 @@ export type NativeWorkspaceContextValue = {
   selectedProject: Project | null;
   selectedTarget: ChatTargetOption | null;
   permissionMode: PermissionMode;
+  activePermissionMode: PermissionMode | null;
+  permissionChangePending: boolean;
+  supportedPermissionModes: readonly PermissionMode[];
+  permissionReason: string | null;
+  permissionUnavailable: string | null;
   agentMode: AgentMode;
   commandSource: CommandSource;
   agentSuggestions: AgentSuggestion[];
@@ -96,7 +102,7 @@ export type NativeWorkspaceContextValue = {
   isChatLoading: boolean;
   isExecuting: boolean;
   reconnectState: ExecutionReconnectState | null;
-  pendingHumanGate: PendingHumanGate | null;
+  pendingInteraction: PendingInteraction | null;
   checkpointAvailability: AgentflowCheckpointAvailability[];
   error: string | null;
   conversationService: ProjectConversationService | null;
@@ -109,12 +115,7 @@ export type NativeWorkspaceContextValue = {
   newChat(): void;
   sendMessage(text: string, attachments: readonly ChatImageAttachment[]): Promise<void>;
   stopExecution(): void;
-  submitHumanResponse(response: {
-    approved: boolean;
-    responseText?: string;
-    approvalScope?: "once" | "always-tool" | "always-arguments";
-    responseData?: unknown;
-  }): Promise<void>;
+  submitHumanResponse(response: InteractionResponse): Promise<void>;
   resumeCheckpoint(occurrenceId: string): Promise<void>;
   clearCurrentConversation(): Promise<void>;
   renameConversation(conversationId: string, title: string): Promise<void>;
@@ -157,12 +158,24 @@ export function NativeWorkspaceProvider({
   const [selectedConversationId, setSelectedConversationId] = React.useState<string | null>(null);
   const [selectedContextId, setSelectedContextId] = React.useState<string | null>(null);
   const [permissionMode, setPermissionModeState] = React.useState<PermissionMode>("fullAccess");
+  const [activePermissionMode, setActivePermissionMode] = React.useState<PermissionMode | null>(
+    null,
+  );
+  const [permissionChangePending, setPermissionChangePending] = React.useState(false);
   const [agentMode, setAgentModeState] = React.useState<AgentMode>(DEFAULT_AGENT_MODE);
   const [claudeCommands, setClaudeCommands] = React.useState<string[]>([]);
   const [messages, setMessages] = React.useState<AiMessage[]>([]);
   const [isExecuting, setIsExecuting] = React.useState(false);
   const [reconnectState, setReconnectState] = React.useState<ExecutionReconnectState | null>(null);
-  const [pendingHumanGate, setPendingHumanGate] = React.useState<PendingHumanGate | null>(null);
+  const pendingInteractionsRef = React.useRef(new Map<string, PendingInteraction>());
+  const [pendingInteraction, setVisibleInteraction] = React.useState<PendingInteraction | null>(
+    null,
+  );
+  const setPendingInteraction = React.useCallback((interaction: PendingInteraction | null) => {
+    if (interaction) pendingInteractionsRef.current.set(interaction.interactionId, interaction);
+    else pendingInteractionsRef.current.clear();
+    setVisibleInteraction(interaction);
+  }, []);
   const [checkpointAvailability, setCheckpointAvailability] = React.useState<
     AgentflowCheckpointAvailability[]
   >([]);
@@ -345,6 +358,31 @@ export function NativeWorkspaceProvider({
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
   const selectedTarget =
     targets.find((target) => getTargetValue(target) === selectedTargetValue) ?? null;
+  const permissionCapabilities = useQuery({
+    queryKey: [
+      "mobile",
+      profileId,
+      "execution-permissions",
+      selectedTarget?.type,
+      selectedTarget?.id,
+    ],
+    enabled: Boolean(client && selectedTarget),
+    queryFn: () =>
+      client!.apiGet("/api/agents/permission-capabilities", {
+        params: {
+          query: { type: selectedTarget!.type === "agent" ? 0 : 1, id: selectedTarget!.id },
+        },
+      }),
+  });
+  const supportedPermissionModes = permissionCapabilities.data?.supportedPermissionModes ?? [];
+  const permissionReason = permissionCapabilities.data?.reason ?? null;
+  const permissionUnavailable = !supportedPermissionModes.includes(permissionMode)
+    ? permissionCapabilities.isPending
+      ? "Loading permissions…"
+      : permissionCapabilities.error
+        ? "Unable to load supported permissions. Retry before sending."
+        : "Select a supported permission mode before sending."
+    : null;
   const suggestionQueryParams = React.useMemo(
     () => getAgentSuggestionQueryParams(selectedProjectId, selectedTarget),
     [selectedProjectId, selectedTarget],
@@ -380,6 +418,14 @@ export function NativeWorkspaceProvider({
   const applyExecutionMessage = React.useCallback(
     (incoming: AiMessage) => {
       const generation = executionGenerationRef.current;
+      const permissionStatus = getPermissionStatus(incoming);
+      if (permissionStatus) {
+        setActivePermissionMode(permissionStatus.activePermissionMode);
+        if (permissionStatus.nextPermissionMode)
+          setPermissionModeState(permissionStatus.nextPermissionMode);
+        setPermissionChangePending(permissionStatus.permissionChangePending);
+        return;
+      }
       if (incoming.additionalProperties?.type === "mode-change-failed") {
         batcherRef.current?.flush(generation);
         modeChangeGenerationRef.current += 1;
@@ -428,13 +474,13 @@ export function NativeWorkspaceProvider({
         return;
       }
 
-      const humanGate = getPendingHumanGate(incoming);
-      if (humanGate) {
+      const interaction = getPendingInteraction(incoming);
+      if (interaction) {
         batcherRef.current?.flush(generation);
-        setPendingHumanGate({
-          ...humanGate,
+        setPendingInteraction({
+          ...interaction,
           streamingScopeId:
-            humanGate.streamingScopeId ?? activeStreamingScopeRef.current ?? undefined,
+            interaction.streamingScopeId ?? activeStreamingScopeRef.current ?? undefined,
         });
         return;
       }
@@ -454,7 +500,7 @@ export function NativeWorkspaceProvider({
         const hadActiveTurn = activeStreamingScopeRef.current !== null;
         batcherRef.current?.flush(generation);
         activeStreamingScopeRef.current = null;
-        setPendingHumanGate(null);
+        setPendingInteraction(null);
         setIsExecuting(false);
         if (hadActiveTurn) {
           void refreshConversations();
@@ -621,7 +667,7 @@ export function NativeWorkspaceProvider({
       setSelectedContextId(null);
       setMessages([]);
       setClaudeCommands([]);
-      setPendingHumanGate(null);
+      setPendingInteraction(null);
       setCheckpointAvailability([]);
       return;
     }
@@ -635,7 +681,7 @@ export function NativeWorkspaceProvider({
       setAgentModeState(nextAgentMode);
       setMessages(scopeMessagesByUserTurn(claudeHistory.messages));
       setClaudeCommands(claudeHistory.commands);
-      setPendingHumanGate(null);
+      setPendingInteraction(null);
     }
   }, [conversationDetailsQuery.data, selectedConversationId, selectedProjectId]);
 
@@ -676,7 +722,7 @@ export function NativeWorkspaceProvider({
     setClaudeCommands([]);
     setIsExecuting(false);
     setReconnectState(null);
-    setPendingHumanGate(null);
+    setPendingInteraction(null);
     setCheckpointAvailability([]);
     setOperationError(null);
     return () => {
@@ -704,7 +750,7 @@ export function NativeWorkspaceProvider({
     setMessages([]);
     setClaudeCommands([]);
     setAgentModeState(DEFAULT_AGENT_MODE);
-    setPendingHumanGate(null);
+    setPendingInteraction(null);
     setCheckpointAvailability([]);
     setOperationError(null);
   }, [disposeExecutionSession, ensureIdle]);
@@ -725,7 +771,7 @@ export function NativeWorkspaceProvider({
       setMessages([]);
       setClaudeCommands([]);
       setAgentModeState(DEFAULT_AGENT_MODE);
-      setPendingHumanGate(null);
+      setPendingInteraction(null);
       setCheckpointAvailability([]);
       hydratedConversationRef.current = null;
       setOperationError(null);
@@ -749,7 +795,7 @@ export function NativeWorkspaceProvider({
       setMessages([]);
       setClaudeCommands([]);
       setAgentModeState(DEFAULT_AGENT_MODE);
-      setPendingHumanGate(null);
+      setPendingInteraction(null);
       setCheckpointAvailability([]);
       setOperationError(null);
     },
@@ -758,6 +804,7 @@ export function NativeWorkspaceProvider({
 
   const setPermissionMode = React.useCallback(
     (nextPermissionMode: PermissionMode) => {
+      if (!supportedPermissionModes.includes(nextPermissionMode)) return;
       const previousPermissionMode = permissionMode;
       setPermissionModeState(nextPermissionMode);
       setOperationError(null);
@@ -786,7 +833,13 @@ export function NativeWorkspaceProvider({
           setOperationError(getErrorMessage(error));
         });
     },
-    [ensureConfiguredSession, ensureContextId, permissionMode, selectedProjectId],
+    [
+      ensureConfiguredSession,
+      ensureContextId,
+      permissionMode,
+      selectedProjectId,
+      supportedPermissionModes,
+    ],
   );
 
   const setAgentMode = React.useCallback(
@@ -839,6 +892,10 @@ export function NativeWorkspaceProvider({
 
   const sendMessage = React.useCallback(
     async (text: string, attachments: readonly ChatImageAttachment[]) => {
+      if (permissionUnavailable) {
+        setOperationError(permissionUnavailable);
+        return;
+      }
       if (
         !verifiedServer ||
         !selectedProjectId ||
@@ -898,6 +955,7 @@ export function NativeWorkspaceProvider({
       ensureContextId,
       isExecuting,
       permissionMode,
+      permissionUnavailable,
       refreshConversations,
       selectedProjectId,
       selectedTarget,
@@ -928,38 +986,28 @@ export function NativeWorkspaceProvider({
     });
   }, [disposeExecutionSession]);
 
-  const submitHumanResponse = React.useCallback(
-    async ({
-      approved,
-      responseText,
-      approvalScope = "once",
-      responseData,
-    }: {
-      approved: boolean;
-      responseText?: string;
-      approvalScope?: "once" | "always-tool" | "always-arguments";
-      responseData?: unknown;
-    }) => {
-      const request = pendingHumanGate;
-      const session = executionSessionRef.current;
-      if (!request || !session) return;
-      try {
-        await session.submitHumanResponse({
-          requestId: request.requestId,
-          approved,
-          responseText,
-          approvalScope,
-          responseData,
-        });
-        setPendingHumanGate((current) =>
-          current?.requestId === request.requestId ? null : current,
-        );
-      } catch (caught) {
+  const submitHumanResponse = React.useCallback(async (response: InteractionResponse) => {
+    const request = pendingInteractionsRef.current.get(response.interactionId);
+    const session = executionSessionRef.current;
+    if (
+      !request ||
+      !session ||
+      request.interactionId !== response.interactionId ||
+      request.kind !== response.kind
+    )
+      return;
+    const generation = executionGenerationRef.current;
+    try {
+      await session.submitHumanResponse({ executionId: request.executionId, response });
+      if (generation !== executionGenerationRef.current || session !== executionSessionRef.current)
+        return;
+      pendingInteractionsRef.current.delete(response.interactionId);
+      setVisibleInteraction(Array.from(pendingInteractionsRef.current.values()).at(-1) ?? null);
+    } catch (caught) {
+      if (generation === executionGenerationRef.current && session === executionSessionRef.current)
         setOperationError(getErrorMessage(caught));
-      }
-    },
-    [pendingHumanGate],
-  );
+    }
+  }, []);
 
   const resumeCheckpoint = React.useCallback(
     async (occurrenceId: string) => {
@@ -977,7 +1025,7 @@ export function NativeWorkspaceProvider({
       const resumeExecutionId = createUuidV7();
       resumeBufferRef.current = [];
       activeStreamingScopeRef.current = null;
-      setPendingHumanGate(null);
+      setPendingInteraction(null);
       setIsExecuting(true);
       setOperationError(null);
 
@@ -1061,7 +1109,7 @@ export function NativeWorkspaceProvider({
     setMessages([]);
     setClaudeCommands([]);
     setAgentModeState(DEFAULT_AGENT_MODE);
-    setPendingHumanGate(null);
+    setPendingInteraction(null);
     setCheckpointAvailability([]);
     await refreshConversations();
   }, [
@@ -1139,6 +1187,11 @@ export function NativeWorkspaceProvider({
       selectedProject,
       selectedTarget,
       permissionMode,
+      activePermissionMode,
+      permissionChangePending,
+      supportedPermissionModes,
+      permissionReason,
+      permissionUnavailable,
       agentMode,
       commandSource,
       agentSuggestions,
@@ -1162,7 +1215,7 @@ export function NativeWorkspaceProvider({
       isChatLoading: conversationDetailsQuery.isLoading,
       isExecuting,
       reconnectState,
-      pendingHumanGate,
+      pendingInteraction,
       checkpointAvailability,
       error:
         operationError ??
@@ -1210,6 +1263,11 @@ export function NativeWorkspaceProvider({
       selectedProject,
       selectedTarget,
       permissionMode,
+      activePermissionMode,
+      permissionChangePending,
+      supportedPermissionModes,
+      permissionReason,
+      permissionUnavailable,
       agentMode,
       commandSource,
       agentSuggestions,
@@ -1225,7 +1283,7 @@ export function NativeWorkspaceProvider({
       isConversationListEnabled,
       isExecuting,
       reconnectState,
-      pendingHumanGate,
+      pendingInteraction,
       checkpointAvailability,
       operationError,
       dependencyError,

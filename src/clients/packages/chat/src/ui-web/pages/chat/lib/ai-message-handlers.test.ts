@@ -245,7 +245,7 @@ test("history removes init and control messages and restores the latest valid co
       role: "system",
       author: "Agw",
       contents: [{ type: "TextContent", content: "Input needed" }],
-      additionalProperties: { type: "human-interaction-request" },
+      additionalProperties: { type: "interaction-request" },
     },
   ];
 

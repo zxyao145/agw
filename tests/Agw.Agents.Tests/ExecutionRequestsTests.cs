@@ -228,50 +228,29 @@ public class ExecutionRequestsTests
     }
 
     [Fact]
-    public void Deserialize_HumanResponseCommand_ReturnsHumanResponseCommand()
+    public void Deserialize_HumanResponseCommand_ReturnsTypedUserInput()
     {
         const string json = """
-            {
-              "type": "HumanResponseCommand",
-              "requestId": "human-approval-1",
-              "approved": true,
-              "responseText": "Approved for translation.",
-              "responseData": {
-                "answers": {
-                  "Language?": "Chinese"
-                }
-              }
-            }
+            {"type":"HumanResponseCommand","response":{"kind":"user-input","interactionId":"input-1","cancelled":false,"responseData":{"answers":{"Language?":"Chinese"}}}}
             """;
-
-        var request = Deserialize(json);
-
-        var humanResponse = Assert.IsType<HumanResponseCommand>(request);
-        Assert.Equal("human-approval-1", humanResponse.RequestId);
-        Assert.True(humanResponse.Approved);
-        Assert.Equal("Approved for translation.", humanResponse.ResponseText);
+        var command = Assert.IsType<HumanResponseCommand>(Deserialize(json));
+        var response = Assert.IsType<UserInputResponse>(command.Response);
+        Assert.Equal("input-1", response.InteractionId);
+        Assert.False(response.Cancelled);
         Assert.Equal(
             "Chinese",
-            humanResponse.ResponseData!.Value.GetProperty("answers").GetProperty("Language?").GetString()
+            response.ResponseData!.Value.GetProperty("answers").GetProperty("Language?").GetString()
         );
     }
 
     [Fact]
-    public void Deserialize_HumanResponseCommand_WithNullApprovalScope_DefaultsToOnce()
+    public void Deserialize_HumanResponseCommand_AbsentScope_DefaultsToOnce()
     {
         const string json = """
-            {
-              "type": "HumanResponseCommand",
-              "requestId": "human-approval-1",
-              "approved": true,
-              "approvalScope": null
-            }
+            {"type":"HumanResponseCommand","response":{"kind":"tool-approval","interactionId":"tool-1","approved":true}}
             """;
-
-        var request = Deserialize(json);
-
-        var humanResponse = Assert.IsType<HumanResponseCommand>(request);
-        Assert.Equal("once", humanResponse.ApprovalScope);
+        var command = Assert.IsType<HumanResponseCommand>(Deserialize(json));
+        Assert.Equal(ApprovalScope.Once, Assert.IsType<ToolApprovalDecision>(command.Response).Scope);
     }
 
     private static SettingCommand CreateSettingCommand(

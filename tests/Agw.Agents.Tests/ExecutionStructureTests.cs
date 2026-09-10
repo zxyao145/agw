@@ -1,4 +1,4 @@
-using Agw.Agents.Execution.Agents;
+using Agw.Agents.Execution.Agents.Runtime;
 
 namespace Agw.Agents.Tests;
 
@@ -9,18 +9,47 @@ public class ExecutionStructureTests
     {
         var executionTypes = new Dictionary<string, string>
         {
+            ["AgentRuntimeService"] = "Agw.Agents.Execution.Agents.Runtime",
+            ["AgentflowRuntimeService"] = "Agw.Agents.Execution.Agentflows.Runtime",
+            ["DurableAgentSegmentRunner"] = "Agw.Agents.Execution.Agents.Runners.Durable",
+            ["InProcessAgentflowRunner"] = "Agw.Agents.Execution.Agentflows.Runners.InProcess",
+            ["DurableAgentflowSegmentRunner"] = "Agw.Agents.Execution.Agentflows.Runners.Durable",
+            ["AgentflowWorkflowCompiler"] = "Agw.Agents.Execution.Agentflows.Workflows",
+            ["AgentflowCheckpointStore"] = "Agw.Agents.Execution.Agentflows.Checkpoints",
+            ["DurableAgentflowCheckpointStore"] = "Agw.Agents.Execution.Agentflows.Checkpoints.Durable",
+            ["DurableAgentflowCheckpoint"] = "Agw.Agents.Execution.Agentflows.Checkpoints.Durable",
+            ["IInteractionHandler"] = "Agw.Agents.Execution.HumanInteraction.Application",
+            ["InProcessInteractionSession"] = "Agw.Agents.Execution.HumanInteraction.InProcess",
+            ["DurableInteractionHandler"] = "Agw.Agents.Execution.HumanInteraction.Durable",
+            ["InteractionRules"] = "Agw.Agents.Execution.HumanInteraction.Application",
+            ["HumanInteractionContextAccessor"] = "Agw.Agents.Execution.HumanInteraction",
+            ["ResolvedHumanInteractionChannel"] = "Agw.Agents.Execution.HumanInteraction.Durable",
+            ["DurableExecutionCoordinator"] = "Agw.Agents.Execution.Runtimes.Durable",
+            ["DistributedExecutionWorker"] = "Agw.Agents.Execution.Runtimes.Durable",
+            ["IDurableExecutionClient"] = "Agw.Agents.Execution.Runtimes.Durable.Contracts",
+            ["DurableExecutionStore"] = "Agw.Agents.Execution.Persistence.Durable",
+            ["IExecutionMessageSink"] = "Agw.Agents.Execution.Outbound",
+            ["IExecutionHubClient"] = "Agw.Agents.Execution.Outbound.SignalR",
+            ["SignalRExecutionMessageSink"] = "Agw.Agents.Execution.Outbound.SignalR",
+            ["ExecutionStreamMessageSink"] = "Agw.Agents.Execution.Outbound.Durable",
+            ["IExecutionEventStream"] = "Agw.Agents.Execution.Messaging.Durable",
+            ["ExecutionRuntimeOptions"] = "Agw.Agents.Execution.Configuration",
             ["ExecutionCommandDispatcher"] = "Agw.Agents.Execution.Commands",
-            ["ExecutionConnection"] = "Agw.Agents.Execution.Connections",
-            ["ExecutionConnectionContext"] = "Agw.Agents.Execution.Connections",
-            ["RuntimeFactory"] = "Agw.Agents.Execution.Runtimes",
+            ["ExecutionConnection"] = "Agw.Agents.Execution.Inbound.Connections",
+            ["ExecutionConnectionContext"] = "Agw.Agents.Execution.Inbound.Connections",
+            ["ExecutionConnectionContextFactory"] = "Agw.Agents.Execution.Inbound.Connections",
+            ["ExecutionSettings"] = "Agw.Agents.Execution.Inbound.Connections",
+            ["ExecutionTarget"] = "Agw.Agents.Execution.Inbound.Connections",
+            ["AgentExecutionFacade"] = "Agw.Agents.Execution.Inbound.Facades",
+            ["RuntimeFactory"] = "Agw.Agents.Execution.Runtimes.InProcess",
             ["RuntimeBase"] = "Agw.Agents.Execution.Runtimes",
-            ["AgentRuntime"] = "Agw.Agents.Execution.Runtimes",
-            ["AgentflowRuntime"] = "Agw.Agents.Execution.Runtimes",
+            ["AgentRuntime"] = "Agw.Agents.Execution.Agents.Runtime",
+            ["AgentflowRuntime"] = "Agw.Agents.Execution.Agentflows.Runtime",
             ["ActiveTurn"] = "Agw.Agents.Execution.Turns",
             ["TurnPipeline"] = "Agw.Agents.Execution.Turns",
             ["RuntimeTurnContextAccessor"] = "Agw.Agents.Execution.Turns",
-            ["ExecutionConnectionRegistry"] = "Agw.Agents.Execution.Transport.SignalR",
-            ["ExecutionHub"] = "Agw.Agents.Execution.Transport.SignalR",
+            ["ExecutionConnectionRegistry"] = "Agw.Agents.Execution.Inbound.SignalR",
+            ["ExecutionHub"] = "Agw.Agents.Execution.Inbound.SignalR",
         };
         var assembly = typeof(AgentRuntimeService).Assembly;
 
@@ -49,7 +78,8 @@ public class ExecutionStructureTests
     [Fact]
     public void AgentflowsController_ShouldDependOnApplicationBoundary()
     {
-        var assembly = typeof(AgentRuntimeService).Assembly;
+        var assembly = typeof(Agw.Agents.Definitions.Agents.AgentflowAppService).Assembly;
+        Assert.NotEqual(assembly, typeof(AgentRuntimeService).Assembly);
         var controllerType = assembly.GetType("Agw.Agents.Definitions.Controllers.AgentflowsController");
         var appServiceType = assembly.GetType("Agw.Agents.Definitions.Agents.AgentflowAppService");
         var legacyDomainServiceType = assembly.GetType("Agw.Agents.Definitions.Domain.AgentflowDomainService");
@@ -65,5 +95,7 @@ public class ExecutionStructureTests
             .ToArray();
 
         Assert.Contains(appServiceType!, parameterTypes);
+        Assert.Contains(typeof(Agw.Agents.Contracts.Catalog.IAgentflowMermaidProvider), parameterTypes);
+        Assert.DoesNotContain(parameterTypes, type => type.Assembly == typeof(AgentRuntimeService).Assembly);
     }
 }

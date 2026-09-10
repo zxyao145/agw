@@ -1,9 +1,5 @@
 using System.Reflection;
 using Agw.Shared.Exceptions;
-using Agw.Tools.ContextualTools;
-using Agw.Tools.Contracts;
-using Agw.Tools.Contracts.Abstractions;
-using Agw.Tools.HumanInteraction;
 using Agw.Tools.ToolBlocks;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,55 +11,66 @@ namespace Agw.Tools;
 /// Service for discovering, registering, and managing AI tools available to agents.
 /// Supports both attribute-based methods and <see cref="IAgwTool"/> implementations.
 /// </summary>
-public class ToolRegistryService
+public sealed class ToolRegistryService
 {
     private readonly Dictionary<string, MethodInfo> _methods = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ToolInfo> _toolInfos = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, IAgwTool> _toolInstances = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Type> _toolTypes = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _obsoleteToolNames = new(StringComparer.OrdinalIgnoreCase);
     private readonly IReadOnlyDictionary<string, IContextualTool> _contextualTools;
     private readonly ToolBlockRegistry _toolBlockRegistry;
     private readonly AgwToolFactory _toolFactory;
-    private readonly IServiceProvider? _serviceProvider;
+    private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<ToolRegistryService> _logger;
 
     public ToolRegistryService(
         ILogger<ToolRegistryService> logger,
         IServiceProvider serviceProvider,
         IEnumerable<IContextualTool>? contextualTools = null,
-        ToolBlockRegistry? toolBlockRegistry = null
+        ToolBlockRegistry? toolBlockRegistry = null,
+        bool discoverAllToolKinds = false,
+        IEnumerable<Assembly>? toolAssemblies = null
     )
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
         _toolFactory = new AgwToolFactory(serviceProvider);
-        _toolBlockRegistry = toolBlockRegistry ?? new ToolBlockRegistry([]);
-        var resolvedContextualTools = (contextualTools ?? []).ToArray();
+        var assemblies = (toolAssemblies ?? GetToolAssemblies())
+            .DistinctBy(static assembly => assembly.FullName, StringComparer.Ordinal)
+            .ToArray();
+        var resolvedContextualTools = (
+            contextualTools ?? (discoverAllToolKinds ? DiscoverInstances<IContextualTool>(assemblies) : [])
+        ).ToArray();
+        foreach (var tool in resolvedContextualTools)
+        {
+            ValidateToolMeta(tool);
+            ValidateStatelessToolType(tool.GetType());
+        }
         _contextualTools = BuildContextualToolCatalog(
             resolvedContextualTools.Where(static tool => !IsObsolete(tool.GetType()))
         );
         foreach (var tool in resolvedContextualTools.Where(static tool => IsObsolete(tool.GetType())))
         {
-            if (!_contextualTools.ContainsKey(tool.Descriptor.Name))
+            if (!_contextualTools.ContainsKey(tool.Name))
             {
-                _obsoleteToolNames.Add(tool.Descriptor.Name);
+                _obsoleteToolNames.Add(tool.Name);
             }
         }
 
-        DiscoverTools();
+        _toolBlockRegistry =
+            toolBlockRegistry
+            ?? new ToolBlockRegistry(discoverAllToolKinds ? DiscoverInstances<IToolBlock>(assemblies) : []);
+        DiscoverTools(assemblies);
         ValidateCatalog();
     }
+
+    public ToolBlockRegistry ToolBlocks => _toolBlockRegistry;
 
     /// <summary>
     /// Discovers all tools available in the current assembly.
     /// </summary>
-    private void DiscoverTools()
+    private void DiscoverTools(IReadOnlyList<Assembly> assemblies)
     {
-        var assemblies = AppDomain
-            .CurrentDomain.GetAssemblies()
-            .Where(a => a.GetName().Name?.StartsWith("Agw.") ?? false)
-            .ToList();
-
         foreach (var asm in assemblies)
         {
             _logger.LogInformation("Discovering tools in assembly: {AssemblyName}", asm.FullName);
@@ -78,13 +85,13 @@ public class ToolRegistryService
     /// </summary>
     private void DiscoverAttributedMethods(Assembly assembly)
     {
-        foreach (var type in assembly.GetTypes())
+        foreach (var type in GetLoadableTypes(assembly))
         {
             var containerAttr = type.GetCustomAttribute<AiToolContainerAttribute>();
             var defaultCategory = containerAttr?.DefaultCategory ?? "General";
 
             foreach (
-                var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static)
+                var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance)
                     .Where(m => m.GetCustomAttribute<AiToolAttribute>() != null)
             )
             {
@@ -98,24 +105,12 @@ public class ToolRegistryService
     /// </summary>
     private void DiscoverToolImplementations(Assembly assembly)
     {
-        var toolTypes = assembly
-            .GetTypes()
+        var toolTypes = GetLoadableTypes(assembly)
             .Where(t => !t.IsAbstract && !t.IsInterface && typeof(IAgwTool).IsAssignableFrom(t));
 
-        foreach (var type in toolTypes)
+        foreach (var type in toolTypes.Where(static type => !type.ContainsGenericParameters))
         {
-            try
-            {
-                RegisterTool(CreateToolInstance(type));
-            }
-            catch (AgwException)
-            {
-                throw;
-            }
-            catch (Exception)
-            {
-                // Ignore tool types that require unavailable dependencies.
-            }
+            RegisterTool(CreateToolInstance(type));
         }
     }
 
@@ -126,6 +121,21 @@ public class ToolRegistryService
     {
         var toolAttr = method.GetCustomAttribute<AiToolAttribute>()!;
         var methodName = toolAttr.Name ?? method.Name;
+        if (!Enum.IsDefined(toolAttr.RequiredPermission))
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                $"Attributed Tool '{methodName}' declares invalid permission '{toolAttr.RequiredPermission}'."
+            );
+        }
+        if (!method.IsStatic && method.DeclaringType is { } instanceType)
+        {
+            ValidateStatelessToolType(instanceType);
+        }
+        else if (method.DeclaringType is { } staticType)
+        {
+            ValidateStatelessToolType(staticType);
+        }
         if (IsObsolete(method) || method.DeclaringType is { } declaringType && IsObsolete(declaringType))
         {
             RecordObsoleteTool(methodName, method);
@@ -145,6 +155,8 @@ public class ToolRegistryService
     public void RegisterTool(IAgwTool tool)
     {
         ArgumentNullException.ThrowIfNull(tool);
+        ValidateToolMeta(tool);
+        ValidateStatelessToolType(tool.GetType());
         if (IsObsolete(tool.GetType()))
         {
             RecordObsoleteTool(tool.Name, tool.GetType());
@@ -154,7 +166,7 @@ public class ToolRegistryService
         EnsureIndependentToolNameAvailable(tool.Name);
 
         _obsoleteToolNames.Remove(tool.Name);
-        _toolInstances[tool.Name] = tool;
+        _toolTypes[tool.Name] = tool.GetType();
         _toolInfos[tool.Name] = BuildRegisteredToolInfo(tool);
     }
 
@@ -164,7 +176,7 @@ public class ToolRegistryService
     public IReadOnlyList<ToolInfo> GetAllTools()
     {
         return _toolInfos
-            .Values.Concat(_contextualTools.Values.Select(static tool => tool.Descriptor))
+            .Values.Concat(_contextualTools.Values.Select(BuildMetaToolInfo))
             .Concat(_toolBlockRegistry.GetDescriptors().Select(ToToolInfo))
             .OrderBy(t => t.Category)
             .ThenBy(t => t.Name)
@@ -183,7 +195,7 @@ public class ToolRegistryService
 
         if (_contextualTools.TryGetValue(name, out var contextualTool))
         {
-            return contextualTool.Descriptor;
+            return BuildMetaToolInfo(contextualTool);
         }
 
         return _toolBlockRegistry
@@ -206,7 +218,7 @@ public class ToolRegistryService
     /// </summary>
     public IAgwTool? GetToolInstance(string name)
     {
-        return _toolInstances.TryGetValue(name, out var tool) ? tool : null;
+        return _toolTypes.TryGetValue(name, out var type) ? CreateToolInstance(type) : null;
     }
 
     /// <summary>
@@ -214,7 +226,7 @@ public class ToolRegistryService
     /// </summary>
     public bool ToolExists(string name)
     {
-        return _methods.ContainsKey(name) || _toolInstances.ContainsKey(name) || _contextualTools.ContainsKey(name);
+        return _methods.ContainsKey(name) || _toolTypes.ContainsKey(name) || _contextualTools.ContainsKey(name);
     }
 
     /// <summary>
@@ -272,7 +284,16 @@ public class ToolRegistryService
                     var contribution = await contextualTool
                         .MaterializeAsync(definition!, context, cancellationToken)
                         .ConfigureAwait(false);
-                    AddContribution(result, contribution);
+                    try
+                    {
+                        BindContributionTools(contribution, contextualTool, "contextual");
+                        AddContribution(result, contribution);
+                    }
+                    catch
+                    {
+                        await contribution.DisposeAsync().ConfigureAwait(false);
+                        throw;
+                    }
                     continue;
                 }
 
@@ -282,15 +303,10 @@ public class ToolRegistryService
                     throw new AgwException(ErrorCodes.InvalidParam, $"Unknown Tool '{name}'.");
                 }
 
-                // durable Activity 不能在进程内等待用户，因此复用 MAF approval 边界把调用交还 orchestration。
-                var materializedTool =
-                    context.DeferHumanInteractions && tool is HumanInteractionRequiredAIFunction interaction
-                        ? new ApprovalRequiredAIFunction(interaction)
-                        : tool;
-                result.Tools.Add(materializedTool);
+                result.Tools.Add(tool);
                 if (IsAllowedInPlanMode(name))
                 {
-                    result.PlanModeAllowedToolNames.Add(materializedTool.Name);
+                    result.PlanModeAllowedToolNames.Add(tool.Name);
                 }
             }
 
@@ -308,14 +324,15 @@ public class ToolRegistryService
     /// </summary>
     public AITool? CreateAIFunction(string name)
     {
-        if (_toolInstances.TryGetValue(name, out var tool))
+        if (_toolTypes.TryGetValue(name, out var toolType))
         {
-            return tool.ToAITool();
+            var tool = CreateToolInstance(toolType);
+            return BindTool(tool.ToAITool(), tool, "built-in");
         }
 
         if (_methods.TryGetValue(name, out var method))
         {
-            return _toolFactory.CreateFromMethod(method);
+            return BindMethodTool(_toolFactory.CreateFromMethod(method), method);
         }
 
         return null;
@@ -326,19 +343,20 @@ public class ToolRegistryService
     /// </summary>
     public AITool? CreateAIFunction(string name, Guid projectId)
     {
-        if (_toolInstances.TryGetValue(name, out var tool))
+        if (_toolTypes.TryGetValue(name, out var toolType))
         {
+            var tool = CreateToolInstance(toolType);
             if (tool is IProjectScopedAgwTool projectScoped)
             {
-                return projectScoped.ToAITool(projectId);
+                return BindTool(projectScoped.ToAITool(projectId), tool, "built-in");
             }
 
-            return tool.ToAITool();
+            return BindTool(tool.ToAITool(), tool, "built-in");
         }
 
         if (_methods.TryGetValue(name, out var method))
         {
-            return _toolFactory.CreateFromMethod(method);
+            return BindMethodTool(_toolFactory.CreateFromMethod(method), method);
         }
 
         return null;
@@ -394,22 +412,139 @@ public class ToolRegistryService
 
     private IAgwTool CreateToolInstance(Type type)
     {
-        object instance;
-        if (_serviceProvider != null)
+        return (IAgwTool)CreateDefinitionInstance(type);
+    }
+
+    private IEnumerable<TTool> DiscoverInstances<TTool>(IEnumerable<Assembly> assemblies)
+    {
+        foreach (
+            var type in assemblies
+                .SelectMany(GetLoadableTypes)
+                .Where(type =>
+                    !type.IsAbstract
+                    && !type.IsInterface
+                    && !type.ContainsGenericParameters
+                    && typeof(TTool).IsAssignableFrom(type)
+                )
+        )
         {
-            instance = ActivatorUtilities.GetServiceOrCreateInstance(_serviceProvider, type);
+            if (CreateDefinitionInstance(type) is TTool instance)
+            {
+                yield return instance;
+            }
         }
-        else
+    }
+
+    private object CreateDefinitionInstance(Type type)
+    {
+        try
         {
-            instance =
-                Activator.CreateInstance(type)
-                ?? throw new AgwException(
-                    ErrorCodes.CannotCreateInstance,
-                    $"Cannot create instance of {type.FullName}"
-                );
+            return ActivatorUtilities.GetServiceOrCreateInstance(_serviceProvider, type);
+        }
+        catch (AgwException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            throw new AgwException(
+                ErrorCodes.CannotCreateInstance,
+                $"Cannot create Tool definition '{type.FullName}'.",
+                exception
+            );
+        }
+    }
+
+    private static IReadOnlyList<Assembly> GetToolAssemblies()
+    {
+        var assemblies = new Dictionary<string, Assembly>(StringComparer.Ordinal);
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        var pending = new Queue<Assembly>();
+        pending.Enqueue(typeof(ToolRegistryService).Assembly);
+        if (Assembly.GetEntryAssembly() is { } entryAssembly)
+        {
+            pending.Enqueue(entryAssembly);
         }
 
-        return (IAgwTool)instance;
+        while (pending.TryDequeue(out var assembly))
+        {
+            var name = assembly.GetName().Name ?? string.Empty;
+            if (!visited.Add(name))
+            {
+                continue;
+            }
+
+            if (IsApplicationAssemblyName(name))
+            {
+                assemblies.TryAdd(name, assembly);
+            }
+
+            foreach (var reference in assembly.GetReferencedAssemblies())
+            {
+                if (reference.Name is { } referenceName && IsApplicationAssemblyName(referenceName))
+                {
+                    pending.Enqueue(Assembly.Load(reference));
+                }
+            }
+        }
+
+        return assemblies.Values.OrderBy(static assembly => assembly.FullName, StringComparer.Ordinal).ToArray();
+    }
+
+    private static bool IsApplicationAssemblyName(string name) =>
+        !name.EndsWith(".Tests", StringComparison.Ordinal)
+        && (name.StartsWith("Agw.", StringComparison.Ordinal) || name.StartsWith("agw-", StringComparison.Ordinal));
+
+    private static IEnumerable<Type> GetLoadableTypes(Assembly assembly)
+    {
+        try
+        {
+            return assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException exception)
+        {
+            throw new AgwException(
+                ErrorCodes.CannotCreateInstance,
+                $"Unable to inspect Tool assembly '{assembly.FullName}': {exception.Message}"
+            );
+        }
+    }
+
+    private static void ValidateToolMeta(IAgwToolMeta tool)
+    {
+        if (string.IsNullOrWhiteSpace(tool.Name))
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, $"Tool '{tool.GetType().FullName}' has no name.");
+        }
+        if (string.IsNullOrWhiteSpace(tool.Category))
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, $"Tool '{tool.Name}' has no category.");
+        }
+        if (!Enum.IsDefined(tool.RequiredPermission))
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                $"Tool '{tool.Name}' declares invalid permission '{tool.RequiredPermission}'."
+            );
+        }
+    }
+
+    private static void ValidateStatelessToolType(Type type)
+    {
+        var mutableFields = type.GetFields(
+                BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic
+            )
+            .Where(static field => !field.IsInitOnly && !field.IsLiteral)
+            .Select(static field => field.Name)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        if (mutableFields.Length > 0)
+        {
+            throw new AgwException(
+                ErrorCodes.InvalidParam,
+                $"Tool type '{type.FullName}' must be stateless; mutable fields: {string.Join(", ", mutableFields)}."
+            );
+        }
     }
 
     private static ToolInfo BuildMethodToolInfo(MethodInfo method, string defaultCategory)
@@ -423,13 +558,20 @@ public class ToolRegistryService
         return new ToolInfo
         {
             Name = toolAttr.Name ?? method.Name,
-            DisplayName = toolAttr.Name ?? method.Name,
-            Description = method.GetCustomAttribute<DescriptionAttribute>()?.Description ?? string.Empty,
+            DisplayName =
+                method.GetCustomAttribute<DisplayNameAttribute>()?.DisplayName ?? toolAttr.Name ?? method.Name,
+            Description =
+                method.GetCustomAttribute<DescriptionAttribute>()?.Description
+                ?? method.DeclaringType?.GetCustomAttribute<DescriptionAttribute>()?.Description
+                ?? string.Empty,
             Category = category,
             TypeName = method.DeclaringType?.FullName ?? method.DeclaringType?.Name ?? "Unknown",
             Parameters = BuildParameters(method.GetParameters()),
             IsAsync = IsAsyncReturnType(method.ReturnType),
-            RequiresConfirmation = toolAttr.RequiresConfirmation,
+            RequiredPermission = toolAttr.RequiredPermission,
+            RequiresConfirmation = AgwToolMetadataBinding.RequiresApproval(toolAttr.RequiredPermission),
+            RequiresWorkspace =
+                method.DeclaringType?.IsDefined(typeof(AiToolRequiresWorkspaceAttribute), inherit: true) == true,
             TimeoutMs = toolAttr.TimeoutMs,
         };
     }
@@ -438,19 +580,37 @@ public class ToolRegistryService
     {
         var toolType = tool.GetType();
         var executeMethod = ResolveExecuteMethod(toolType);
-        var aiTool = tool.ToAITool();
 
         return new ToolInfo
         {
             Name = tool.Name,
-            DisplayName = tool.Name,
-            Description = ResolveDescription(tool, executeMethod, aiTool),
+            DisplayName = toolType.GetCustomAttribute<DisplayNameAttribute>()?.DisplayName ?? tool.Name,
+            Description = ResolveDescription(tool, executeMethod),
             Category = ResolveCategory(tool),
             TypeName = toolType.FullName ?? toolType.Name,
             Parameters = executeMethod == null ? [] : BuildParameters(executeMethod.GetParameters()),
             IsAsync = executeMethod != null && IsAsyncReturnType(executeMethod.ReturnType),
-            RequiresConfirmation = ResolveRequiresConfirmation(tool, aiTool),
+            RequiredPermission = tool.RequiredPermission,
+            RequiresConfirmation = AgwToolMetadataBinding.RequiresApproval(tool.RequiredPermission),
+            RequiresWorkspace = toolType.IsDefined(typeof(AiToolRequiresWorkspaceAttribute), inherit: true),
             TimeoutMs = ResolveTimeoutMs(tool),
+        };
+    }
+
+    private static ToolInfo BuildMetaToolInfo(IContextualTool tool)
+    {
+        var toolType = tool.GetType();
+        return new ToolInfo
+        {
+            Name = tool.Name,
+            DisplayName = toolType.GetCustomAttribute<DisplayNameAttribute>()?.DisplayName ?? tool.Name,
+            Description = toolType.GetCustomAttribute<DescriptionAttribute>()?.Description ?? string.Empty,
+            Category = tool.Category,
+            TypeName = toolType.FullName ?? toolType.Name,
+            Parameters = [],
+            RequiredPermission = tool.RequiredPermission,
+            RequiresConfirmation = AgwToolMetadataBinding.RequiresApproval(tool.RequiredPermission),
+            RequiresWorkspace = toolType.IsDefined(typeof(AiToolRequiresWorkspaceAttribute), inherit: true),
         };
     }
 
@@ -458,11 +618,11 @@ public class ToolRegistryService
     {
         foreach (var contextualTool in _contextualTools.Values)
         {
-            if (_toolInfos.ContainsKey(contextualTool.Descriptor.Name))
+            if (_toolInfos.ContainsKey(contextualTool.Name))
             {
                 throw new AgwException(
                     ErrorCodes.InvalidParam,
-                    $"Tool '{contextualTool.Descriptor.Name}' is registered more than once."
+                    $"Tool '{contextualTool.Name}' is registered more than once."
                 );
             }
         }
@@ -562,11 +722,11 @@ public class ToolRegistryService
         var result = new Dictionary<string, IContextualTool>(StringComparer.OrdinalIgnoreCase);
         foreach (var tool in tools)
         {
-            if (!result.TryAdd(tool.Descriptor.Name, tool))
+            if (!result.TryAdd(tool.Name, tool))
             {
                 throw new AgwException(
                     ErrorCodes.InvalidParam,
-                    $"Contextual Tool '{tool.Descriptor.Name}' is registered more than once."
+                    $"Contextual Tool '{tool.Name}' is registered more than once."
                 );
             }
         }
@@ -619,6 +779,7 @@ public class ToolRegistryService
             MemberToolNames = descriptor.MemberToolNames,
             Scopes = (ToolScope)(int)descriptor.Scopes,
             RequiresWorkspace = descriptor.RequiresWorkspace,
+            RequiredPermission = null,
             RequiresConfirmation = descriptor.MayRequireApproval,
         };
 
@@ -629,6 +790,10 @@ public class ToolRegistryService
         destination.ContextProviders.AddRange(contribution.ContextProviders);
         destination.LoopEvaluators.AddRange(contribution.LoopEvaluators);
         destination.AutoApprovalRules.AddRange(contribution.AutoApprovalRules);
+        foreach (var metadata in contribution.DynamicToolMetadata)
+        {
+            destination.DynamicToolMetadata.Add(metadata.Key, metadata.Value);
+        }
         destination.Warnings.AddRange(contribution.Warnings);
         foreach (var warning in contribution.InvocationWarnings)
         {
@@ -640,8 +805,9 @@ public class ToolRegistryService
 
     private bool IsAllowedInPlanMode(string name)
     {
-        if (_toolInstances.TryGetValue(name, out var tool))
+        if (_toolTypes.TryGetValue(name, out var toolType))
         {
+            var tool = CreateToolInstance(toolType);
             return tool.AllowInPlanMode;
         }
 
@@ -655,7 +821,7 @@ public class ToolRegistryService
             ?? toolType.GetMethod("ExecuteAsync", BindingFlags.Public | BindingFlags.Instance);
     }
 
-    private static string ResolveDescription(IAgwTool tool, MethodInfo? executeMethod, AITool aiTool)
+    private static string ResolveDescription(IAgwTool tool, MethodInfo? executeMethod)
     {
         var toolType = tool.GetType();
         var descriptionProperty = toolType.GetProperty("Description", BindingFlags.Public | BindingFlags.Instance);
@@ -669,7 +835,7 @@ public class ToolRegistryService
         }
 
         return executeMethod?.GetCustomAttribute<DescriptionAttribute>()?.Description
-            ?? aiTool.Description
+            ?? toolType.GetCustomAttribute<DescriptionAttribute>()?.Description
             ?? string.Empty;
     }
 
@@ -689,27 +855,27 @@ public class ToolRegistryService
         return "General";
     }
 
-    private static bool ResolveRequiresConfirmation(IAgwTool tool, AITool aiTool)
+    private static AITool BindTool(AITool tool, IAgwToolMeta metadata, string source) =>
+        AgwToolMetadataBinding.Bind(
+            tool,
+            new AgwToolMetadata(source, metadata.RequiredPermission, metadata.AllowInPlanMode)
+        );
+
+    private static AITool BindMethodTool(AITool tool, MethodInfo method)
     {
-        if (
-            string.Equals(
-                aiTool.GetType().FullName,
-                "Microsoft.Extensions.AI.ApprovalRequiredAIFunction",
-                StringComparison.Ordinal
-            )
-        )
-        {
-            return true;
-        }
+        var attribute = method.GetCustomAttribute<AiToolAttribute>()!;
+        return AgwToolMetadataBinding.Bind(
+            tool,
+            new AgwToolMetadata("attribute", attribute.RequiredPermission, attribute.AllowInPlanMode)
+        );
+    }
 
-        var toolType = tool.GetType();
-        var approvalProperty = toolType.GetProperty("ApprovalRequired", BindingFlags.Public | BindingFlags.Instance);
-        if (approvalProperty?.PropertyType == typeof(bool) && approvalProperty.GetValue(tool) is bool approvalRequired)
+    private static void BindContributionTools(ToolContribution contribution, IAgwToolMeta metadata, string source)
+    {
+        for (var index = 0; index < contribution.Tools.Count; index++)
         {
-            return approvalRequired;
+            contribution.Tools[index] = BindTool(contribution.Tools[index], metadata, source);
         }
-
-        return false;
     }
 
     private static int ResolveTimeoutMs(IAgwTool tool)

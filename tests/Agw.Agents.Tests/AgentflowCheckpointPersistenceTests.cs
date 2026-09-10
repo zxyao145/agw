@@ -1,6 +1,6 @@
 using System.Security.Claims;
 using Agw.Agents.Application.Persistence;
-using Agw.Agents.Execution.Durable;
+using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Projects;

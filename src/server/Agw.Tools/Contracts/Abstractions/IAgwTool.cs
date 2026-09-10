@@ -2,13 +2,7 @@ using Microsoft.Extensions.AI;
 
 namespace Agw.Tools.Contracts.Abstractions;
 
-public interface IAgwTool
+public interface IAgwTool : IAgwToolMeta
 {
-    string Category => "Default";
-
-    bool AllowInPlanMode => false;
-
-    string Name { get; }
-
     AITool ToAITool();
 }

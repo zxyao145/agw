@@ -1,3 +1,4 @@
+import type { HumanResponseCommandInput } from "@agw/execution-core";
 import type { AiMessage } from "@agw/api";
 import {
   ExecutionSession,
@@ -102,13 +103,7 @@ export class NativeExecutionSession {
     await this.session.interrupt(reason);
   }
 
-  public async submitHumanResponse(args: {
-    requestId: string;
-    approved: boolean;
-    responseText?: string | null;
-    approvalScope?: "once" | "always-tool" | "always-arguments";
-    responseData?: unknown;
-  }): Promise<void> {
+  public async submitHumanResponse(args: HumanResponseCommandInput): Promise<void> {
     await this.session.submitHumanResponse(args);
   }
 

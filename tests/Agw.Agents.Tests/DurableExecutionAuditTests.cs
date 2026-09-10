@@ -1,7 +1,7 @@
 using System.Security.Claims;
 using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Connections;
-using Agw.Agents.Execution.Durable;
+using Agw.Agents.Execution.Inbound.Connections;
+using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Shared;

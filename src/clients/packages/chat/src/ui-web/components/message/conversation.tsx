@@ -1,5 +1,7 @@
 "use client";
 
+import type { InteractionResponse } from "@agw/execution-core";
+
 import * as React from "react";
 import { CheckCircle2, CircleAlert, LoaderCircle } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -40,12 +42,7 @@ import {
 } from "./user-input-navigation";
 import { UserInputNavigator } from "./user-input-navigator";
 
-export type HumanResponseInput = {
-  approved: boolean;
-  responseText?: string;
-  approvalScope?: "once" | "always-tool" | "always-arguments";
-  responseData?: unknown;
-};
+export type HumanResponseInput = InteractionResponse;
 
 export interface ChatSessionProps {
   items: ConversationRenderItem[];
@@ -168,7 +165,7 @@ export function Conversation({
           )
         : null}
       <div
-        className="relative mx-auto w-full max-w-225 pb-40"
+        className="agw-conversation-list"
         style={{ height: totalSize }}
         role="list"
         aria-label="Conversation messages"
@@ -183,7 +180,7 @@ export function Conversation({
               ref={virtualizer.measureElement}
               data-index={virtualRow.index}
               role="listitem"
-              className="absolute top-0 left-0 w-full py-2"
+              className="agw-msg-item"
               style={{ transform: `translateY(${virtualRow.start}px)` }}
             >
               {isLoader ? (
@@ -256,22 +253,34 @@ function ConversationItem({
   }
 
   if (item.type === "human-interaction") {
-    if (item.request.requestType === "human-interaction") {
+    const request = item.request;
+    if (request.kind === "user-input") {
       return (
         <div className="mx-4 max-w-full">
           <div className="mb-2 flex items-center gap-2 px-1">
             <Badge variant="secondary" className="text-xs">
-              {item.request.toolName ?? "Function"}
+              {request.source.toolName ?? "Function"}
             </Badge>
             <span className="text-xs text-muted-foreground">Waiting for your input</span>
           </div>
           <HumanInteractionPanel
-            request={{ ...item.request, requestType: "human-interaction" }}
+            request={request}
             embedded={item.embedded}
             onSubmit={(responseData) =>
-              onHumanResponse?.({ approved: true, approvalScope: "once", responseData })
+              onHumanResponse?.({
+                kind: "user-input",
+                interactionId: request.interactionId,
+                cancelled: false,
+                responseData,
+              })
             }
-            onCancel={() => onHumanResponse?.({ approved: false })}
+            onCancel={() =>
+              onHumanResponse?.({
+                kind: "user-input",
+                interactionId: request.interactionId,
+                cancelled: true,
+              })
+            }
           />
         </div>
       );
@@ -280,17 +289,42 @@ function ConversationItem({
     return (
       <div className="mx-4 max-w-full">
         <HumanGateApproval
-          request={item.request}
+          request={request}
           permissionMode={permissionMode}
-          onApprove={(approvalScope, responseText, responseData) =>
-            onHumanResponse?.({
-              approved: true,
-              approvalScope,
-              responseText,
-              responseData,
-            })
+          onApprove={(scope, responseText) =>
+            onHumanResponse?.(
+              request.kind === "tool-approval"
+                ? {
+                    kind: request.kind,
+                    interactionId: request.interactionId,
+                    approved: true,
+                    scope,
+                  }
+                : {
+                    kind: request.kind,
+                    interactionId: request.interactionId,
+                    approved: true,
+                    responseText,
+                  },
+            )
           }
-          onReject={(responseText) => onHumanResponse?.({ approved: false, responseText })}
+          onReject={(responseText) =>
+            onHumanResponse?.(
+              request.kind === "tool-approval"
+                ? {
+                    kind: request.kind,
+                    interactionId: request.interactionId,
+                    approved: false,
+                    scope: "Once",
+                  }
+                : {
+                    kind: request.kind,
+                    interactionId: request.interactionId,
+                    approved: false,
+                    responseText,
+                  },
+            )
+          }
         />
       </div>
     );

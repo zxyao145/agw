@@ -1,7 +1,7 @@
-using Agw.Agents.Execution.Agentflows;
-using Agw.Agents.Execution.Agents.Store;
-using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Turns;
+using Agw.Agents.Execution.Agentflows.Context;
+using Agw.Agents.Execution.Agentflows.Workflows;
+using Agw.Agents.Execution.Agents.Sessions;
+using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -20,7 +20,7 @@ public class AgentflowExecutionContextFactoryTests
         var projectId = Guid.CreateVersion7();
         var taskId = Guid.CreateVersion7();
         Guid? conversationId = explicitConversation ? Guid.CreateVersion7() : null;
-        var permissionState = new PermissionModeState(PermissionMode.AlwaysAsk);
+        var permissionState = new MafPermissionState(AgwPermissionMode.AlwaysAsk);
 
         var scope = await factory.CreateSessionScopeAsync(
             projectId,
@@ -84,7 +84,8 @@ public class AgentflowExecutionContextFactoryTests
         Assert.DoesNotContain(typeof(AgentSessionStateStore), parameters);
         Assert.DoesNotContain(typeof(IConversationHistoryWriter), parameters);
         Assert.DoesNotContain(typeof(IConversationHandoffProvider), parameters);
-        Assert.Equal(5, parameters.Length);
+        Assert.Contains(typeof(Agw.Agents.Definitions.Agents.ExecutionPermissionService), parameters);
+        Assert.Equal(6, parameters.Length);
     }
 
     private sealed class ProviderState : IProviderSessionState

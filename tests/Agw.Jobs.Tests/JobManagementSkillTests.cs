@@ -2,7 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Connections;
+using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Turns;
 using Agw.Auth.Application;
 using Agw.Auth.Contracts;

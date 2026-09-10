@@ -14,7 +14,7 @@ import { Input } from "@agw/components";
 import { Label } from "@agw/components";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@agw/components";
 import { Textarea } from "@agw/components";
-import { ToolsPanel, type ToolInfo, type ToolValueObject } from "@agw/tools";
+import { ToolsPanel, type ToolLiteInfo, type ToolValueObject } from "@agw/tools";
 
 export interface ProjectFormFieldsProps {
   name: string;
@@ -31,7 +31,7 @@ export interface ProjectFormFieldsProps {
   tools: ToolValueObject[];
   setTools: (value: ToolValueObject[]) => void;
   skillsQuery: UseQueryResult<SkillDto[], Error>;
-  toolsQuery: UseQueryResult<ToolInfo[], Error>;
+  toolsQuery: UseQueryResult<ToolLiteInfo[], Error>;
   mcpToolServersQuery: UseQueryResult<McpToolServerDto[], Error>;
   selectedMcpToolServerIds: string[];
   toggleSkill: (skillId: string) => void;

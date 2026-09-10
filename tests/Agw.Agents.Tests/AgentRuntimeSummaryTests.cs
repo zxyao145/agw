@@ -1,7 +1,8 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using Agw.Agents.Execution.Agentflows;
-using Agw.Agents.Execution.Runtimes;
+using Agw.Agents.Execution.Agents.Runtime;
+using Agw.Agents.Execution.HumanInteraction.Application;
+using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Summaries;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -269,7 +270,7 @@ public class AgentRuntimeSummaryTests
             await runtime.ExecuteAsync(input, approvalHandler, TestContext.Current.CancellationToken);
         }
 
-        Assert.Equal(["approval-1", "approval-2"], approvalHandler.RequestIds);
+        Assert.Equal(["approval-1", "approval-2"], approvalHandler.ProviderRequestIds);
         Assert.Equal(2, agent.ReceivedApprovalResponses);
     }
 
@@ -385,18 +386,18 @@ public class AgentRuntimeSummaryTests
         private sealed class ToolMessageSession : AgentSession;
     }
 
-    private sealed class RecordingApprovalHandler : IHumanGateApprovalHandler
+    private sealed class RecordingApprovalHandler : IInteractionHandler
     {
-        public List<string> RequestIds { get; } = [];
+        public List<string> ProviderRequestIds { get; } = [];
 
-        public ValueTask<HumanGateApprovalDecision> WaitForApprovalAsync(
-            HumanGateApprovalRequest request,
+        public ValueTask<InteractionResolution> ResolveAsync(
+            InteractionRequest request,
             CancellationToken cancellationToken
         )
         {
-            RequestIds.Add(request.RequestId);
-            return ValueTask.FromResult(
-                new HumanGateApprovalDecision(request.RequestId, Approved: true, ResponseText: null)
+            ProviderRequestIds.Add(request.Source.ProviderRequestId!);
+            return ValueTask.FromResult<InteractionResolution>(
+                new InteractionResolution.Resolved(InteractionTestData.Decision(request, approved: true, text: null))
             );
         }
     }

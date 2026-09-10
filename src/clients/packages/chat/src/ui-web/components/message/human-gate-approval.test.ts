@@ -6,10 +6,10 @@ const source = readFileSync(new URL("./human-gate-approval.tsx", import.meta.url
 
 test("tool approval actions follow PermissionMode", () => {
   assert.match(source, /permissionMode === "fullAccess"[\s\S]*?return null/);
-  assert.match(source, /permissionMode === "alwaysAsk"[\s\S]*?onApprove\("once"\)/);
+  assert.match(source, /permissionMode === "alwaysAsk"[\s\S]*?onApprove\("Once"\)/);
   assert.match(
     source,
-    /permissionMode === "allowSameArguments"[\s\S]*?onApprove\("always-arguments"\)/,
+    /permissionMode === "allowSameArguments"[\s\S]*?onApprove\("AlwaysArguments"\)/,
   );
 });
 

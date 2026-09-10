@@ -26,6 +26,21 @@ async function checkConversationSession(kind: string, strictMode = false) {
   const dom = new JSDOM("<div id='root'></div>", {
     url: "http://localhost/desktop/chat/?projectId=project-1&conversationId=conversation-1",
   });
+  const refreshTimers = new Map<number, () => void>();
+  if (kind === "history-refresh") {
+    Object.defineProperty(dom.window.document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+    dom.window.setInterval = ((callback: () => void, delay: number) => {
+      assert.equal(delay, 5_000);
+      refreshTimers.set(1, callback);
+      return 1;
+    }) as typeof dom.window.setInterval;
+    dom.window.clearInterval = (id) => {
+      refreshTimers.delete(id!);
+    };
+  }
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
   Object.defineProperty(globalThis, "window", { configurable: true, value: dom.window });
   const actHost = globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean };
@@ -38,6 +53,10 @@ async function checkConversationSession(kind: string, strictMode = false) {
       removeEventListener() {},
     }) as unknown as MediaQueryList;
 
+  let finishRecovery!: () => void;
+  const recoveryReady = new Promise<void>((resolve) => {
+    finishRecovery = resolve;
+  });
   let detailsRequests = 0;
   let messageRequests = 0;
   const observed: {
@@ -45,11 +64,14 @@ async function checkConversationSession(kind: string, strictMode = false) {
     input?: {
       onClearSession: () => void;
       isTransitioning: boolean;
+      isExecuting: boolean;
       onExecute: (text: string, attachments: []) => void;
     };
     newChat?: () => void;
+    refreshSignal?: number;
     selectAgent?: (selection: { agentType: number; agentId: string }) => void;
   } = {};
+  const attachedContexts = new Set<string>();
   const executions: (ExecutionRequest & { contextId: string })[] = [];
   const configurations: ExecutionSetting[] = [];
   let finishHistory!: () => void;
@@ -97,7 +119,12 @@ async function checkConversationSession(kind: string, strictMode = false) {
   const modules: Record<string, unknown> = {
     "@agw/components": components,
     "@agw/components/query": {
-      useQuery: ({ queryKey }: { queryKey: string[] }) => ({ data: queryData[queryKey[0]] }),
+      useQuery: ({ queryKey }: { queryKey: string[] }) => ({
+        data:
+          queryKey[0] === "execution-permissions"
+            ? { supportedPermissionModes: ["fullAccess", "alwaysAsk", "allowSameArguments"] }
+            : queryData[queryKey[0]],
+      }),
     },
     "next/navigation": { useRouter: () => router, useSearchParams: () => searchParams },
     sonner: { toast: { error: (error: unknown) => errors.push(error) } },
@@ -121,9 +148,11 @@ async function checkConversationSession(kind: string, strictMode = false) {
       // A cached sidebar publishes its summary in the child's effect, before the
       // workspace's route hydration effect. A summary is not a hydrated session.
       ConversationList: (props: {
+        refreshSignal?: number;
         onNewConversation?: () => void;
         onActiveConversationResolved?: (value: unknown) => void;
       }) => {
+        observed.refreshSignal = props.refreshSignal;
         observed.newChat = props.onNewConversation;
         React.useEffect(() => {
           props.onActiveConversationResolved?.(conversation);
@@ -145,24 +174,29 @@ async function checkConversationSession(kind: string, strictMode = false) {
     "./lib/session-routing": sessionRouting,
     "../../../services/execution-session-manager": {
       executionSessionManager: {
-        has: () => false,
-        attach: (key: { contextId: string }) => ({
-          matchesKey: (candidate: typeof key) => candidate.contextId === key.contextId,
-          detach() {},
-          interruptAndWait: async () => {},
-          dispose: async () => {},
-          getStatus: () => "idle",
-          listAgentflowCheckpoints: async () => [],
-          getReconnectState: () => null,
-          getActiveTurnSnapshot: () => null,
-          configure: async (setting: ExecutionSetting) => {
-            configurations.push(setting);
-            return { restoredDurableExecution: false };
-          },
-          execute: async (request: ExecutionRequest) => {
-            executions.push({ ...request, contextId: key.contextId });
-          },
-        }),
+        has: (key: { contextId: string }) =>
+          kind === "restore-active" && attachedContexts.has(key.contextId),
+        attach: (key: { contextId: string }) => {
+          attachedContexts.add(key.contextId);
+          return {
+            matchesKey: (candidate: typeof key) => candidate.contextId === key.contextId,
+            detach() {},
+            interruptAndWait: async () => {},
+            dispose: async () => {},
+            getStatus: () => (kind === "restore-active" ? "running" : "idle"),
+            listAgentflowCheckpoints: async () => [],
+            getReconnectState: () => null,
+            getActiveTurnSnapshot: () => null,
+            configure: async (setting: ExecutionSetting) => {
+              configurations.push(setting);
+              if (kind === "restore-active") await recoveryReady;
+              return { restoredDurableExecution: false };
+            },
+            execute: async (request: ExecutionRequest) => {
+              executions.push({ ...request, contextId: key.contextId });
+            },
+          };
+        },
       },
     },
     "../../execution-platform": { useExecutionPlatform: () => ({ serverId: "local" }) },
@@ -284,6 +318,52 @@ async function checkConversationSession(kind: string, strictMode = false) {
       await React.act(async () => observed.input!.onExecute("too early", []));
       assert.equal(executions.length, 0);
       await React.act(async () => finishHistory());
+      if (kind === "restore-active") {
+        assert.equal(
+          observed.input?.isTransitioning,
+          true,
+          "history alone does not confirm execution is idle",
+        );
+        await React.act(async () => observed.input!.onExecute("too early after reload", []));
+        assert.equal(executions.length, 0);
+        await React.act(async () => finishRecovery());
+        assert.equal(observed.input?.isTransitioning, false);
+        assert.equal(observed.input?.isExecuting, true, "the old turn keeps the composer busy");
+        await React.act(async () => observed.selectAgent!({ agentType: 0, agentId: "agent-2" }));
+        assert.equal(
+          observed.input?.isExecuting,
+          true,
+          "changing Agent cannot discard the conversation's active execution",
+        );
+        await React.act(async () => observed.input!.onExecute("duplicate", []));
+        assert.equal(executions.length, 0);
+        return;
+      }
+      if (kind === "history-refresh") {
+        assert.equal(refreshTimers.size, 0, "idle history does not poll");
+        await React.act(async () => observed.input!.onExecute("long answer", []));
+        assert.equal(refreshTimers.size, 1);
+        const before = observed.refreshSignal!;
+        await React.act(async () => {
+          refreshTimers.get(1)!();
+        });
+        assert.equal(
+          observed.refreshSignal,
+          before + 1,
+          "running history refreshes before turn end",
+        );
+        Object.defineProperty(dom.window.document, "visibilityState", {
+          configurable: true,
+          value: "hidden",
+        });
+        await React.act(async () => {
+          refreshTimers.get(1)!();
+        });
+        assert.equal(observed.refreshSignal, before + 1, "hidden history does not poll");
+        await React.act(async () => observed.input!.onClearSession());
+        assert.equal(refreshTimers.size, 0, "ending execution removes its timer");
+        return;
+      }
       if (kind === "restore" || kind === "restore-failure") {
         assert.equal(detailsRequests, strictMode ? 2 : 1);
         assert.equal(messageRequests, detailsRequests);
@@ -424,6 +504,13 @@ for (const [kind, name] of [
   ["new-chat", "New Chat replaces both conversation and context identities"],
   ["project-switch", "switching projects starts a fresh conversation and context"],
   ["clear-history", "clearing history preserves conversation and context identities"],
+  ["history-refresh", "running conversations refresh persisted history until execution stops"],
 ]) {
   test(name, () => checkConversationSession(kind));
 }
+
+test("page reload checks server execution state before enabling the composer", () =>
+  checkConversationSession("restore-active"));
+
+test("StrictMode reload preserves the active execution while switching Agent", () =>
+  checkConversationSession("restore-active", true));

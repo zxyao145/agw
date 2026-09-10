@@ -8,7 +8,7 @@ using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Tools.Application;
 using Agw.Tools.Application.Persistence;
-using Agw.Tools.ToolBlocks.Blocks.UserMemory;
+using Agw.Tools.Impl.ToolBlocks.UserMemory;
 using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;

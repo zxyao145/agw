@@ -347,6 +347,58 @@ public class AgentAppServiceUpdateTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData(ExternalAgentKind.ClaudeCode, ProviderType.OpenAIResponses)]
+    [InlineData(ExternalAgentKind.Codex, ProviderType.Anthropic)]
+    public async Task UpdateAgentAsync_IncompatibleModelProvider_RejectsBeforeMutation(
+        ExternalAgentKind kind,
+        ProviderType providerType
+    )
+    {
+        var agent = CreateExternalAgent();
+        agent.ExternalAgentKind = kind;
+        var modelProviderId = Guid.CreateVersion7();
+        var service = CreateService(agent, [modelProviderId], providerType: providerType);
+        var request = new AgentUpdateRequest { ModelProviderId = modelProviderId, DisplayName = "Changed" };
+
+        var error = await Assert.ThrowsAsync<AgwException>(() =>
+            service.UpdateAgentAsync(agent.Id, request.ToCommand())
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, error.Code);
+        Assert.Null(agent.ModelProviderId);
+        Assert.Equal("External Agent", agent.DisplayName);
+    }
+
+    [Fact]
+    public async Task CreateAgentAsync_IncompatibleModelProvider_DoesNotPersistAgent()
+    {
+        var existing = CreateExternalAgent();
+        var modelProviderId = Guid.CreateVersion7();
+        var service = CreateService(existing, [modelProviderId], providerType: ProviderType.OpenAIResponses);
+        var agent = CreateExternalAgent();
+        agent.Name = "new-agent";
+        agent.ModelProviderId = modelProviderId;
+
+        var error = await Assert.ThrowsAsync<AgwException>(() => service.CreateAgentAsync(agent, null, null, null));
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, error.Code);
+        Assert.False(
+            await _database.Context.Agents.AnyAsync(item => item.Id == agent.Id, TestContext.Current.CancellationToken)
+        );
+    }
+
+    [Fact]
+    public async Task GetExternalModelRuntimeConfigurationAsync_UnavailableProvider_FailsClosed()
+    {
+        var service = CreateService(CreateExternalAgent());
+        var error = await Assert.ThrowsAsync<AgwException>(() =>
+            service.GetExternalModelRuntimeConfigurationAsync(ExternalAgentKind.Pi, Guid.CreateVersion7())
+        );
+        Assert.Equal(ErrorCodes.ResourceNotFound.Code, error.Code);
+        Assert.Null(await service.GetExternalModelRuntimeConfigurationAsync(ExternalAgentKind.Pi, null));
+    }
+
     private static Agent CreateExternalAgent() =>
         new()
         {
@@ -372,17 +424,36 @@ public class AgentAppServiceUpdateTests : IDisposable
         IEnumerable<Guid>? modelProviderIds = null,
         IEnumerable<AgentMcpServerRelation>? mcpRelations = null,
         IEnumerable<AgentSkillRelation>? skillRelations = null,
-        IEnumerable<AgentConnectionRelation>? connectionRelations = null
+        IEnumerable<AgentConnectionRelation>? connectionRelations = null,
+        ProviderType providerType = ProviderType.Anthropic
     )
     {
         agent.CreateBy ??= "tester";
+        var model = new AgwAiModel
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "test-model",
+            CreateBy = "tester",
+        };
+        var provider = new Provider
+        {
+            Id = Guid.CreateVersion7(),
+            ProviderType = providerType,
+            CreateBy = "tester",
+        };
         var modelProviders = (modelProviderIds ?? [])
-            .Select(id => new ModelProviderRelation { Id = id, CreateBy = "tester" })
+            .Select(id => new ModelProviderRelation
+            {
+                Id = id,
+                ModelId = model.Id,
+                ProviderId = provider.Id,
+                CreateBy = "tester",
+            })
             .ToArray();
         var connectionRepository = new TestRepository<Connection>();
         var modelProviderRepository = new TestRepository<ModelProviderRelation>(modelProviders, item => item.Id);
-        var modelRepository = new TestRepository<AgwAiModel>();
-        var providerRepository = new TestRepository<Provider>();
+        var modelRepository = new TestRepository<AgwAiModel>([model]);
+        var providerRepository = new TestRepository<Provider>([provider]);
         var skillRepository = new TestRepository<Skill>();
         var userInfo = new TestUserInfoService();
         _database.Context.McpToolServers.AddRange(

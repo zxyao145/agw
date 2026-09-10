@@ -21,6 +21,7 @@ export interface ExternalAgentOptionDto {
   kind: ExternalAgentKind;
   displayName: string;
   defaultExtra: string;
+  supportedProviderTypes: string[];
 }
 
 export interface AgentCreateRequest {
@@ -67,5 +68,5 @@ export interface ExternalAgentUpdateRequest {
 export type AgentUpdateRequest = SystemAgentUpdateRequest | ExternalAgentUpdateRequest;
 
 export type { McpToolServerDto, SkillDto } from "@agw/integrations";
-export type { ToolInfo, ToolValueObject } from "@agw/tools";
+export type { ToolLiteInfo, ToolValueObject } from "@agw/tools";
 export type { ModelProviderDto } from "../../../../types/agentflow";

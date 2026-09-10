@@ -1,27 +1,13 @@
 # Project Learning Log
 
-## 2026-08-25 | Bug Root Cause | Initial Chat Measurement Can Mimic an Upward Scroll
+## Chat scroll measurement
 
-The first virtualized chat rows can shrink after their estimated heights are measured, clamping
-`scrollTop` upward while the viewport is still at the bottom. Treating every decrease in
-`scrollTop` as user intent disables follow-bottom during the first streamed conversation.
-**Files:** `src/clients/packages/chat-core/src/auto-scroll.ts`,
-`src/clients/packages/chat-core/src/auto-scroll.test.ts`
-**Resolution:** Preserve auto-scroll whenever the current metrics are within the bottom tolerance;
-only interpret upward movement outside that tolerance as a pause request.
+Virtualized row measurements can reduce `scrollTop` while the viewport remains at the bottom. Preserve follow-bottom within the bottom tolerance; only upward motion outside that tolerance pauses it. See [auto-scroll](../src/clients/packages/chat-core/src/auto-scroll.ts) and its adjacent tests.
 
-## 2026-08-31 | Bug Root Cause | External Agent Memory Needs SDK-Specific Prompt Shaping
+## External Agent request persistence
 
-Claude Code MAF consumes only the first User message, while Codex and Pi consume multiple User messages.
-Also, `AIContextProvider` source attribution alone does not prevent External Agent history adapters from
-persisting injected context.
-**Files:** `src/server/Agw.Agents/Execution/Agents/AgentRequestContextAgent.cs`,
-`src/server/Agw.Agents/Execution/Agents/AgentRequestChatHistoryProvider.cs`
-**Resolution:** Stage the original request once for every Agent type, forward one transient composite request to
-the model, and let response-only history adapters consume the staged request independently of SDK request callbacks.
+Stage the original input before forwarding transient memory-enriched messages. Request lifecycle belongs to Projects' [EfCoreChatHistoryProvider](../src/server/Agw.Projects/Infrastructure/EfCoreChatHistoryProvider.Requests.cs), exposed through `IConversationHistoryRequests`; [AgentRequestContextAgent](../src/server/Agw.Agents.Execution/Agents/Context/AgentRequestContextAgent.cs) must not persist injected context as new user history. Do not restore the removed duplicate request-history provider.
 
+## Workflow checkpoint restore
 
-## 2026-09-05 | Bug Root Cause | A Second TurnToken Restarts a Restored Workflow
-MAF 1.15.0 restores pending messages and requests from checkpoints; sending a new TurnToken after ResumeStreamingAsync restarts the entry executor and can duplicate Agent calls and output. The old path called the restored Agent twice; restricting the token to fresh runs passed 800 parallel restore cases.
-**Files:** `src/server/Agw.Agents/Execution/Agentflows/DurableAgentflowSegmentRunner.cs`, `src/server/Agw.Agents/Execution/Agentflows/InProcessAgentflowRunner.cs`
-**Resolution:** Send the startup token only for a fresh run. Assert restored Agent invocation counts and that upstream nodes/checkpoint occurrences are not replayed; do not infer correctness only from a sometimes-stable output count.
+Send the startup `TurnToken` only for a fresh run. A restored MAF checkpoint already contains pending work; another token can replay entry nodes. Verify Agent invocation counts and checkpoint occurrences, not only output counts. The shared rule is documented in the [Execution README](../src/server/Agw.Agents.Execution/README.md#agentflow-runtime-协作边界).

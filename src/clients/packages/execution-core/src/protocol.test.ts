@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { InteractionResponse } from "./protocol";
 
 import {
   buildHumanResponseCommand,
@@ -18,6 +19,40 @@ import {
   getTurnFinishedStatus,
   isModeControlMessage,
 } from "./protocol";
+
+const interactionResponses: InteractionResponse[] = [
+  ...(["Once", "AlwaysTool", "AlwaysArguments"] as const).map((scope) => ({
+    kind: "tool-approval" as const,
+    interactionId: "tool-1",
+    approved: true,
+    scope,
+  })),
+  { kind: "tool-approval", interactionId: "tool-1", approved: false, scope: "Once" },
+  { kind: "workflow-gate", interactionId: "gate-1", approved: true, responseText: "Continue" },
+  { kind: "workflow-gate", interactionId: "gate-1", approved: false },
+  {
+    kind: "user-input",
+    interactionId: "input-1",
+    cancelled: false,
+    responseData: { confirmed: false },
+  },
+  { kind: "user-input", interactionId: "input-1", cancelled: false, responseData: { value: "" } },
+  { kind: "user-input", interactionId: "input-1", cancelled: true },
+];
+
+for (const [index, response] of interactionResponses.entries()) {
+  test(`human response ${index} preserves its discriminated nested wire shape`, () => {
+    assert.deepEqual(buildHumanResponseCommand({ executionId: "execution-1", response }), {
+      type: "HumanResponseCommand",
+      executionId: "execution-1",
+      response,
+    });
+    assert.deepEqual(buildHumanResponseCommand({ response }), {
+      type: "HumanResponseCommand",
+      response,
+    });
+  });
+}
 
 test("shared execution commands match the server contract", () => {
   const input = { messageId: "message-1", author: "$agw", contents: [] };
@@ -77,18 +112,22 @@ test("shared execution commands match the server contract", () => {
   assert.deepEqual(
     buildHumanResponseCommand({
       executionId: "execution-1",
-      requestId: "request-1",
-      approved: true,
-      approvalScope: "once",
-      responseData: { answers: { Choice: "A" } },
+      response: {
+        kind: "user-input",
+        interactionId: "request-1",
+        cancelled: false,
+        responseData: { answers: { Choice: "A" } },
+      },
     }),
     {
       type: "HumanResponseCommand",
       executionId: "execution-1",
-      requestId: "request-1",
-      approved: true,
-      approvalScope: "once",
-      responseData: { answers: { Choice: "A" } },
+      response: {
+        kind: "user-input",
+        interactionId: "request-1",
+        cancelled: false,
+        responseData: { answers: { Choice: "A" } },
+      },
     },
   );
   assert.deepEqual(

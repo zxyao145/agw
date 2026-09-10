@@ -3,6 +3,26 @@ import test from "node:test";
 import { HubConnectionBuilder, HubConnectionState, type IRetryPolicy } from "@microsoft/signalr";
 import type { AiMessage } from "@agw/api";
 
+test("human response dispatch binds the nested response to the requested or active execution", async () => {
+  const { ExecutionSession } = await import("./execution-session.ts");
+  const commands: unknown[] = [];
+  const session = Object.assign(Object.create(ExecutionSession.prototype), {
+    activeExecutionId: "active-execution",
+    dispatch: async (command: unknown) => {
+      commands.push(command);
+    },
+  }) as InstanceType<typeof ExecutionSession>;
+  const response = { kind: "user-input" as const, interactionId: "input-1", cancelled: true };
+
+  await session.submitHumanResponse({ response, executionId: undefined });
+  await session.submitHumanResponse({ response, executionId: "request-execution" });
+
+  assert.deepEqual(commands, [
+    { type: "HumanResponseCommand", executionId: "active-execution", response },
+    { type: "HumanResponseCommand", executionId: "request-execution", response },
+  ]);
+});
+
 test("buildSettingCommand keeps target data out of settings", async () => {
   const { buildSettingCommand } = await import("./execution-hub" + ".ts");
 
@@ -179,7 +199,11 @@ test("execution session keeps tool rendering scope across handler replacement an
       connection.state = HubConnectionState.Disconnected;
     },
     invoke: async (methodName: string) =>
-      methodName === "GetExecutionProvider" ? "InProcess" : undefined,
+      methodName === "GetExecutionProvider"
+        ? "InProcess"
+        : methodName === "FindInProcessExecution"
+          ? null
+          : undefined,
   };
   HubConnectionBuilder.prototype.build = () => connection as never;
 
@@ -638,47 +662,59 @@ test("getTurnFinishedStatus reads terminal AgwMessage", async () => {
   );
 });
 
-test("getPendingHumanGate parses a structured question interaction", async () => {
-  const { getPendingHumanGate } = await import("./execution-hub" + ".ts");
+test("getPendingInteraction parses a structured question interaction", async () => {
+  const { getPendingInteraction } = await import("./execution-hub" + ".ts");
 
-  const request = getPendingHumanGate({
+  const request = getPendingInteraction({
     messageId: "interaction-message-1",
     role: "system",
     author: "Agw",
     contents: [{ type: "TextContent", content: "Input needed" }],
     additionalProperties: {
-      type: "human-interaction-request",
-      requestId: "interaction-1",
-      interactionKind: "questions",
-      toolName: "ask_user_question",
-      callId: "call-1",
-      streamingScopeId: "user-message-1",
-      prompt: "Choose before continuing.",
-      payload: {
-        questions: [
-          {
-            question: "Which database?",
-            header: "Database",
-            multiSelect: false,
-            options: [
-              { label: "PostgreSQL", description: "Use the production database." },
-              { label: "SQLite", description: "Use a local database." },
-            ],
-          },
-        ],
+      type: "interaction-request",
+      interaction: {
+        kind: "user-input",
+        interactionId: "interaction-1",
+        source: { toolName: "ask_user_question", callId: "call-1" },
+        prompt: "Choose before continuing.",
+        inputKind: "questions",
+        payload: {
+          questions: [
+            {
+              question: "Which database?",
+              header: "Database",
+              multiSelect: false,
+              options: [
+                { label: "PostgreSQL", description: "Use the production database." },
+                { label: "SQLite", description: "Use a local database." },
+              ],
+            },
+          ],
+        },
       },
+      streamingScopeId: "user-message-1",
     },
   });
 
   assert.deepEqual(request, {
-    requestType: "human-interaction",
-    requestId: "interaction-1",
-    mode: "interaction",
-    interactionKind: "questions",
-    toolName: "ask_user_question",
-    callId: "call-1",
-    streamingScopeId: "user-message-1",
+    kind: "user-input",
+    interactionId: "interaction-1",
+    source: { toolName: "ask_user_question", callId: "call-1" },
     prompt: "Choose before continuing.",
+    inputKind: "questions",
+    payload: {
+      questions: [
+        {
+          question: "Which database?",
+          header: "Database",
+          multiSelect: false,
+          options: [
+            { label: "PostgreSQL", description: "Use the production database." },
+            { label: "SQLite", description: "Use a local database." },
+          ],
+        },
+      ],
+    },
     questions: [
       {
         question: "Which database?",
@@ -690,6 +726,7 @@ test("getPendingHumanGate parses a structured question interaction", async () =>
         ],
       },
     ],
+    streamingScopeId: "user-message-1",
   });
 });
 
@@ -712,33 +749,34 @@ test("getMessageStreamingScopeId keeps a restored turn bound to its original use
   );
 });
 
-test("getPendingHumanGate parses a mode change interaction", async () => {
-  const { getPendingHumanGate } = await import("./execution-hub" + ".ts");
+test("getPendingInteraction parses a mode change interaction", async () => {
+  const { getPendingInteraction } = await import("./execution-hub" + ".ts");
 
-  const request = getPendingHumanGate({
+  const request = getPendingInteraction({
     messageId: "mode-interaction-message-1",
     role: "system",
     author: "Agw",
     contents: [{ type: "TextContent", content: "Confirm mode change" }],
     additionalProperties: {
-      type: "human-interaction-request",
-      requestId: "mode-interaction-1",
-      interactionKind: "mode-change",
-      toolName: "mode_set",
-      callId: "mode-call-1",
-      prompt: "The agent wants to switch to Execute mode.",
-      payload: { mode: "execute" },
+      type: "interaction-request",
+      interaction: {
+        kind: "user-input",
+        interactionId: "mode-interaction-1",
+        source: { toolName: "mode_set", callId: "mode-call-1" },
+        prompt: "The agent wants to switch to Execute mode.",
+        inputKind: "mode-change",
+        payload: { mode: "execute" },
+      },
     },
   });
 
   assert.deepEqual(request, {
-    requestType: "human-interaction",
-    requestId: "mode-interaction-1",
-    mode: "interaction",
-    interactionKind: "mode-change",
-    toolName: "mode_set",
-    callId: "mode-call-1",
+    kind: "user-input",
+    interactionId: "mode-interaction-1",
+    source: { toolName: "mode_set", callId: "mode-call-1" },
     prompt: "The agent wants to switch to Execute mode.",
+    inputKind: "mode-change",
+    payload: { mode: "execute" },
     modeChange: { mode: "execute" },
   });
 });
@@ -796,4 +834,218 @@ test("execution reconnect uses the configured retry schedule and then stops", as
     }),
     false,
   );
+});
+
+test("in-process reconnect keeps the old turn busy until the server confirms it has stopped", async (t) => {
+  const { ExecutionSession } = await import("./execution-session.ts");
+  const { ExecutionSessionManager } = await import("./execution-session-manager.ts");
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let receive!: (message: AiMessage) => void;
+  let reconnect!: () => void;
+  let reconnected!: () => void;
+  let close!: (error?: Error) => void;
+  let active = true;
+  let dispatchError: Error | null = null;
+  let recoveryError: Error | null = null;
+  const recoveryCalls: unknown[][] = [];
+  const connection = {
+    connectionId: "old-connection",
+    state: HubConnectionState.Disconnected,
+    on: (_event: string, handler: typeof receive) => {
+      receive = handler;
+    },
+    onreconnecting: (handler: typeof reconnect) => {
+      reconnect = handler;
+    },
+    onreconnected: (handler: typeof reconnected) => {
+      reconnected = handler;
+    },
+    onclose: (handler: typeof close) => {
+      close = handler;
+    },
+    start: async () => {
+      connection.state = HubConnectionState.Connected;
+    },
+    stop: async () => {
+      connection.state = HubConnectionState.Disconnected;
+    },
+    invoke: async (method: string, ...args: unknown[]) => {
+      if (method === "GetExecutionProvider") return "InProcess";
+      if (method === "FindInProcessExecution") return null;
+      if (method === "RecoverInProcessExecution") {
+        recoveryCalls.push(args);
+        if (recoveryError) throw recoveryError;
+        return active;
+      }
+      if (
+        method === "DispatchCommand" &&
+        (args[0] as { type: string }).type === "ExecCommand" &&
+        dispatchError
+      ) {
+        throw dispatchError;
+      }
+    },
+  };
+  t.mock.method(HubConnectionBuilder.prototype, "build", () => connection as never);
+  const manager = new ExecutionSessionManager(
+    (handlers) =>
+      new ExecutionSession(handlers, {
+        baseUrl: "https://agw.test",
+        token: null,
+        attachmentStore: null,
+      }),
+  );
+  const key = { serverId: "server", projectId: "project", contextId: "context" };
+  const handle = manager.attach(key, { onMessage: () => undefined });
+  const request = {
+    conversationId: "conversation",
+    agentId: "agent",
+    agentType: 0 as const,
+    input: { messageId: "input", author: "$agw", contents: [] },
+  };
+  const settle = async () => {
+    for (let i = 0; i < 20; i++) await Promise.resolve();
+  };
+  try {
+    await handle.configure({ projectId: "project", contextId: "context" });
+    await handle.execute(request);
+    receive({
+      messageId: "error",
+      role: "system",
+      contents: [{ type: "ErrorContent", content: "Reconnecting... waiting for network" }],
+    });
+    assert.equal(handle.getStatus(), "running");
+    connection.state = HubConnectionState.Reconnecting;
+    reconnect();
+    connection.connectionId = "new-connection";
+    connection.state = HubConnectionState.Connected;
+    reconnected();
+    await settle();
+    assert.equal(handle.getStatus(), "running");
+    assert.deepEqual(recoveryCalls.at(-1), ["old-connection", false]);
+    await assert.rejects(handle.execute(request), /already has a running task/);
+
+    connection.state = HubConnectionState.Disconnected;
+    close(new Error("network lost again"));
+    assert.equal(handle.getReconnectState()?.status, "failed");
+    connection.connectionId = "third-connection";
+    await manager.retryConnection(key);
+    assert.equal(handle.getStatus(), "running");
+    assert.deepEqual(recoveryCalls.at(-1), ["old-connection", false]);
+    await handle.interrupt();
+    assert.deepEqual(recoveryCalls.at(-1), ["old-connection", true]);
+    assert.equal(handle.getStatus(), "running");
+
+    active = false;
+    t.mock.timers.tick(1000);
+    await settle();
+    assert.equal(handle.getStatus(), "idle");
+    active = true;
+    dispatchError = new Error("Startup response lost");
+    await assert.rejects(
+      handle.execute({ ...request, input: { ...request.input, messageId: "next-input" } }),
+      /Startup response lost/,
+    );
+    assert.equal(handle.getStatus(), "running");
+    assert.deepEqual(recoveryCalls.at(-1), ["third-connection", false]);
+
+    recoveryError = new Error("Recovery unavailable");
+    t.mock.timers.tick(1000);
+    await settle();
+    assert.equal(handle.getStatus(), "running");
+    assert.equal(handle.getReconnectState()?.status, "failed");
+    recoveryError = null;
+    active = false;
+    await manager.retryConnection(key);
+    assert.equal(handle.getStatus(), "idle");
+    dispatchError = new Error("HubException: 4000001: Invalid request");
+    await assert.rejects(handle.execute(request), /Invalid request/);
+    assert.equal(handle.getStatus(), "idle");
+  } finally {
+    await handle.dispose();
+  }
+});
+
+test("a fresh client discovers an in-process turn without local attachment storage", async (t) => {
+  const { ExecutionSession } = await import("./execution-session.ts");
+  const { ExecutionSessionManager } = await import("./execution-session-manager.ts");
+  const calls: { method: string; args: unknown[] }[] = [];
+  let discoveryError = false;
+  let active = true;
+  const connection = {
+    connectionId: "after-reload",
+    state: HubConnectionState.Disconnected,
+    on() {},
+    onclose() {},
+    onreconnecting() {},
+    onreconnected() {},
+    start: async () => {
+      connection.state = HubConnectionState.Connected;
+    },
+    stop: async () => {
+      connection.state = HubConnectionState.Disconnected;
+    },
+    invoke: async (method: string, ...args: unknown[]) => {
+      calls.push({ method, args });
+      if (method === "GetExecutionProvider") return "InProcess";
+      if (method === "FindInProcessExecution") {
+        if (discoveryError) throw new Error("State query unavailable");
+        return active ? "before-reload" : null;
+      }
+      if (method === "RecoverInProcessExecution") return active;
+    },
+  };
+  t.mock.method(HubConnectionBuilder.prototype, "build", () => connection as never);
+  const manager = new ExecutionSessionManager(
+    (handlers) =>
+      new ExecutionSession(handlers, {
+        baseUrl: "https://agw.test",
+        token: null,
+        attachmentStore: null,
+      }),
+  );
+  const key = { serverId: "server", projectId: "project", contextId: "context" };
+  const handle = manager.attach(key, { onMessage() {} });
+  try {
+    await handle.configure({ projectId: key.projectId, contextId: key.contextId });
+    assert.equal(handle.getStatus(), "running");
+    assert.deepEqual(calls.find((call) => call.method === "FindInProcessExecution")?.args, [
+      "project",
+      "context",
+    ]);
+    await assert.rejects(
+      handle.execute({
+        conversationId: "conversation",
+        agentId: "agent",
+        agentType: 0,
+        input: { messageId: "input", author: "$agw", contents: [] },
+      }),
+      /already has a running task/,
+    );
+    await handle.interrupt();
+    assert.deepEqual(calls.at(-1), {
+      method: "RecoverInProcessExecution",
+      args: ["before-reload", true],
+    });
+  } finally {
+    await handle.dispose();
+  }
+
+  const fresh = manager.attach(key, { onMessage() {} });
+  try {
+    discoveryError = true;
+    await assert.rejects(
+      fresh.configure({ projectId: key.projectId, contextId: key.contextId }),
+      /State query unavailable/,
+    );
+    assert.equal(fresh.getReconnectState()?.status, "failed");
+    discoveryError = false;
+    await manager.retryConnection(key);
+    assert.equal(fresh.getStatus(), "running");
+    active = false;
+    await fresh.interrupt();
+    assert.equal(fresh.getStatus(), "idle");
+  } finally {
+    await fresh.dispose();
+  }
 });

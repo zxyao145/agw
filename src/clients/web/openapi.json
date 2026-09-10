@@ -2994,7 +2994,7 @@
           "200": {
             "description": "OK",
             "content": {
-              "text/html": { }
+              "text/html": {}
             }
           }
         }
@@ -4721,17 +4721,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfToolInfo[]"
+                  "$ref": "#/components/schemas/ApiResultOfToolLiteInfo[]"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfToolInfo[]"
+                  "$ref": "#/components/schemas/ApiResultOfToolLiteInfo[]"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfToolInfo[]"
+                  "$ref": "#/components/schemas/ApiResultOfToolLiteInfo[]"
                 }
               }
             }
@@ -4751,17 +4751,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfDictionaryOfstringAndListOfToolInfo"
+                  "$ref": "#/components/schemas/ApiResultOfDictionaryOfstringAndListOfToolLiteInfo"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfDictionaryOfstringAndListOfToolInfo"
+                  "$ref": "#/components/schemas/ApiResultOfDictionaryOfstringAndListOfToolLiteInfo"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfDictionaryOfstringAndListOfToolInfo"
+                  "$ref": "#/components/schemas/ApiResultOfDictionaryOfstringAndListOfToolLiteInfo"
                 }
               }
             }
@@ -4791,17 +4791,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfToolInfo"
+                  "$ref": "#/components/schemas/ApiResultOfToolLiteInfo"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfToolInfo"
+                  "$ref": "#/components/schemas/ApiResultOfToolLiteInfo"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfToolInfo"
+                  "$ref": "#/components/schemas/ApiResultOfToolLiteInfo"
                 }
               }
             }
@@ -5023,6 +5023,52 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/permission-capabilities": {
+      "get": {
+        "tags": [
+          "ExecutionPermissions"
+        ],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/AgentRuntimeType"
+            }
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExecutionPermissionCapabilities"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExecutionPermissionCapabilities"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExecutionPermissionCapabilities"
                 }
               }
             }
@@ -7087,7 +7133,7 @@
           }
         }
       },
-      "ApiResultOfDictionaryOfstringAndListOfToolInfo": {
+      "ApiResultOfDictionaryOfstringAndListOfToolLiteInfo": {
         "required": [
           "code",
           "title",
@@ -7104,7 +7150,7 @@
             "additionalProperties": {
               "type": "array",
               "items": {
-                "$ref": "#/components/schemas/ToolInfo"
+                "$ref": "#/components/schemas/ToolLiteInfo"
               }
             }
           },
@@ -7570,7 +7616,7 @@
         ],
         "type": "object",
         "properties": {
-          "data": { },
+          "data": {},
           "code": {
             "type": "integer",
             "format": "int32"
@@ -8255,7 +8301,7 @@
           }
         }
       },
-      "ApiResultOfToolInfo": {
+      "ApiResultOfToolLiteInfo": {
         "required": [
           "code",
           "title",
@@ -8270,7 +8316,7 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/ToolInfo"
+                "$ref": "#/components/schemas/ToolLiteInfo"
               }
             ]
           },
@@ -8289,7 +8335,7 @@
           }
         }
       },
-      "ApiResultOfToolInfo[]": {
+      "ApiResultOfToolLiteInfo[]": {
         "required": [
           "code",
           "title",
@@ -8304,7 +8350,7 @@
               "array"
             ],
             "items": {
-              "$ref": "#/components/schemas/ToolInfo"
+              "$ref": "#/components/schemas/ToolLiteInfo"
             }
           },
           "code": {
@@ -8852,7 +8898,8 @@
         "required": [
           "kind",
           "displayName",
-          "defaultExtra"
+          "defaultExtra",
+          "supportedProviderTypes"
         ],
         "type": "object",
         "properties": {
@@ -8864,6 +8911,12 @@
           },
           "defaultExtra": {
             "type": "string"
+          },
+          "supportedProviderTypes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProviderType"
+            }
           }
         }
       },
@@ -11750,6 +11803,15 @@
           "toolBlock"
         ]
       },
+      "AgwToolPermission": {
+        "enum": [
+          "none",
+          "readOnly",
+          "write",
+          "execute",
+          null
+        ]
+      },
       "ToolDefinition": {
         "required": [
           "name"
@@ -11952,20 +12014,16 @@
           }
         }
       },
-      "ToolInfo": {
+      "ToolLiteInfo": {
         "required": [
           "name",
           "displayName",
           "description",
           "category",
-          "typeName",
-          "parameters",
           "kind",
           "scopes",
           "requiresWorkspace",
-          "isAsync",
-          "requiresConfirmation",
-          "timeoutMs"
+          "requiresConfirmation"
         ],
         "type": "object",
         "properties": {
@@ -11973,23 +12031,16 @@
             "$ref": "#/components/schemas/ToolCatalogItemKind"
           },
           "name": {
-            "type": "string",
-            "description": "Gets the name of the tool (method name or custom name)."
+            "type": "string"
           },
           "displayName": {
             "type": "string"
           },
           "description": {
-            "type": "string",
-            "description": "Gets the description of the tool."
+            "type": "string"
           },
           "category": {
-            "type": "string",
-            "description": "Gets the category of the tool for grouping purposes."
-          },
-          "typeName": {
-            "type": "string",
-            "description": "Gets the full type name of the class containing the tool."
+            "type": "string"
           },
           "memberToolNames": {
             "type": "array",
@@ -12003,88 +12054,23 @@
           "requiresWorkspace": {
             "type": "boolean"
           },
-          "parameters": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ToolParameterInfo"
-            },
-            "description": "Gets the parameters of the tool."
-          },
-          "isAsync": {
-            "type": "boolean",
-            "description": "Gets whether this is an asynchronous tool."
+          "requiredPermission": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "The standalone Tool's permission; null for a ToolBlock.",
+                "$ref": "#/components/schemas/AgwToolPermission"
+              }
+            ]
           },
           "requiresConfirmation": {
             "type": "boolean",
-            "description": "Gets whether this tool requires user confirmation before execution."
-          },
-          "timeoutMs": {
-            "type": "integer",
-            "description": "Gets the execution timeout in milliseconds.",
-            "format": "int32"
+            "description": "Whether this Tool or any ToolBlock member may require execution approval."
           }
         },
-        "description": "Represents a selectable Tool or Tool Block in the Tools catalog."
-      },
-      "ToolParameterInfo": {
-        "required": [
-          "name",
-          "type",
-          "description",
-          "isOptional",
-          "schemaType",
-          "format"
-        ],
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "Gets the name of the parameter."
-          },
-          "type": {
-            "type": "string",
-            "description": "Gets the type of the parameter."
-          },
-          "description": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "description": "Gets the description of the parameter."
-          },
-          "isOptional": {
-            "type": "boolean",
-            "description": "Gets whether the parameter is optional."
-          },
-          "defaultValue": {
-            "description": "Gets the default value for the parameter if it has one."
-          },
-          "schemaType": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "description": "Gets the JSON schema type hint (e.g., \"string\", \"number\", \"boolean\")."
-          },
-          "format": {
-            "type": [
-              "null",
-              "string"
-            ],
-            "description": "Gets the format hint (e.g., \"date-time\", \"email\", \"uri\")."
-          },
-          "enumValues": {
-            "type": [
-              "null",
-              "array"
-            ],
-            "items": {
-              "type": "string"
-            },
-            "description": "Gets allowed enum values if applicable."
-          }
-        },
-        "description": "Represents information about a parameter of a tool."
+        "description": "Describes a selectable Tool or ToolBlock without execution implementation details."
       },
       "ToolScope": {
         "type": "integer"
@@ -12371,6 +12357,68 @@
             "type": "string"
           }
         }
+      },
+      "ApiResultOfExecutionPermissionCapabilities": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ExecutionPermissionCapabilities"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ExecutionPermissionCapabilities": {
+        "required": [
+          "supportedPermissionModes",
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "supportedPermissionModes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgwPermissionMode"
+            }
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "AgwPermissionMode": {
+        "enum": [
+          "fullAccess",
+          "alwaysAsk",
+          "allowSameArguments"
+        ]
       }
     }
   },

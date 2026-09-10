@@ -1,13 +1,21 @@
 using System.Reflection;
 using Agw.Agents.Application.Persistence;
-using Agw.Agents.Execution.Agentflows;
-using Agw.Agents.Execution.Agents;
-using Agw.Agents.Execution.Messaging;
+using Agw.Agents.Execution.Agentflows.Checkpoints;
+using Agw.Agents.Execution.Agentflows.Context;
+using Agw.Agents.Execution.Agentflows.Runners.Durable;
+using Agw.Agents.Execution.Agentflows.Runners.InProcess;
+using Agw.Agents.Execution.Agentflows.Runtime;
+using Agw.Agents.Execution.Agentflows.Workflows;
+using Agw.Agents.Execution.Agents.Runtime;
+using Agw.Agents.Execution.HumanInteraction.InProcess;
+using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Summaries;
+using Agw.Infrastructure.Data;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Repositories;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -18,7 +26,9 @@ public partial class AgentflowRuntimeServiceTests
     [Theory]
     [InlineData("InProcess")]
     [InlineData("Distributed")]
-    public async Task AddAgents_RuntimeCollaborators_AreScopedAndResolveThroughTheSameFacade(string executionProvider)
+    public async Task AddAgentExecution_RuntimeCollaborators_AreScopedAndResolveThroughTheSameFacade(
+        string executionProvider
+    )
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(
@@ -31,7 +41,14 @@ public partial class AgentflowRuntimeServiceTests
             .Build();
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddAgents(configuration, new DependencyInjection.RegistrationOptions(false, false, false));
+        services.AddScoped<IAgentsDbContext>(_ => new AgwDbContext(
+            new DbContextOptionsBuilder<AgwDbContext>().UseSqlite("Data Source=:memory:").Options
+        ));
+        services.AddAgents(configuration);
+        services.AddAgentExecution(
+            configuration,
+            new Agw.Agents.Execution.DependencyInjection.RegistrationOptions(false, false, false)
+        );
         services.AddSingleton<IApplicationLock, InMemoryApplicationLock>();
         services.AddScoped<IRepository<Agentflow>>(_ => new TestRepository<Agentflow>([], flow => flow.Id));
         services.AddScoped<IRepository<AgentflowNode>>(_ => new TestRepository<AgentflowNode>([], node => node.NodeId));
@@ -69,6 +86,10 @@ public partial class AgentflowRuntimeServiceTests
         var runtime = first.ServiceProvider.GetRequiredService<AgentflowRuntimeService>();
 
         Assert.Same(runtime, first.ServiceProvider.GetRequiredService<IAgentflowRuntimeService>());
+        Assert.Same(
+            runtime,
+            first.ServiceProvider.GetRequiredService<Agw.Agents.Contracts.Catalog.IAgentflowMermaidProvider>()
+        );
         foreach (var type in types)
         {
             Assert.Same(first.ServiceProvider.GetRequiredService(type), first.ServiceProvider.GetRequiredService(type));
@@ -88,7 +109,8 @@ public partial class AgentflowRuntimeServiceTests
             .Select(parameter => parameter.ParameterType)
             .ToHashSet();
 
-        Assert.Equal(6, types.Count);
+        Assert.Equal(7, types.Count);
+        Assert.Contains(typeof(IConversationHistoryPersistence), types);
         Assert.Contains(typeof(AgentflowExecutionContextFactory), types);
         Assert.Contains(typeof(AgentflowWorkflowFactory), types);
         Assert.Contains(typeof(InProcessAgentflowRunner), types);
@@ -150,22 +172,30 @@ public partial class AgentflowRuntimeServiceTests
         );
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
         var messages = new List<AgwMessage>();
+        var sink = new InteractionTestSink
+        {
+            OnWrite = (message, _) =>
+            {
+                messages.Add(message);
+                cancellation.Cancel();
+                return ValueTask.CompletedTask;
+            },
+        };
+        var interactions = new InProcessInteractionSession(sink);
 
         await foreach (
             var message in fixture.Service.ExecuteStreamingAsync(
                 fixture.Flow.Id,
                 "input",
                 cancellation.Token,
-                humanGateApprovalHandler: new CancellingApprovalHandler()
+                interactionHandler: interactions
             )
         )
         {
             messages.Add(message);
-            if (MessageShape(message) == "human-gate-request")
-                cancellation.Cancel();
         }
 
-        Assert.Equal(["input", "human-gate-request"], messages.Select(MessageShape));
+        Assert.Equal(["input", "interaction-request"], messages.Select(MessageShape));
         Assert.Empty(agent.Inputs);
         Assert.Equal(1, agent.DisposeCount);
     }

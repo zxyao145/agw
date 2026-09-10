@@ -1,3 +1,4 @@
+import { parseSimpleUserInput, type SimpleUserInput } from "@agw/chat-core";
 import * as React from "react";
 import { Image as ExpoImage } from "expo-image";
 import {
@@ -37,21 +38,16 @@ import {
   type AgentflowCheckpointAvailability,
   type HumanInteractionQuestion,
   type HumanInteractionQuestionSelections,
-  type PendingHumanGate,
+  type PendingInteraction,
   type PresentedContent,
   type PresentedMessage,
 } from "@agw/chat-core";
-import type { PermissionMode } from "@agw/execution-core";
+import type { PermissionMode, InteractionResponse, ApprovalScope } from "@agw/execution-core";
 
 import { padInlineCode } from "./native-markdown";
 import { defaultNativeChatTheme, type NativeChatTheme } from "./theme";
 
-export type NativeHumanResponse = {
-  approved: boolean;
-  responseText?: string;
-  approvalScope?: "once" | "always-tool" | "always-arguments";
-  responseData?: unknown;
-};
+export type NativeHumanResponse = InteractionResponse;
 
 export type NativeConversationHistoryHandle = {
   scrollToBottom(): void;
@@ -73,7 +69,7 @@ export type NativeConversationHistoryProps = {
 
 export type NativeConversationHistoryHostProps = Omit<NativeConversationHistoryProps, "items"> & {
   messages: import("@agw/api").AiMessage[];
-  pendingHumanGate?: PendingHumanGate | null;
+  pendingInteraction?: PendingInteraction | null;
   checkpointAvailability?: AgentflowCheckpointAvailability[];
 };
 
@@ -81,17 +77,17 @@ export const NativeConversationHistoryHost = React.forwardRef<
   NativeConversationHistoryHandle,
   NativeConversationHistoryHostProps
 >(function NativeConversationHistoryHost(
-  { messages, pendingHumanGate, checkpointAvailability, ...props },
+  { messages, pendingInteraction, checkpointAvailability, ...props },
   ref,
 ) {
   const items = React.useMemo(
     () =>
       buildConversationRenderModel(messages, {
-        pendingHumanGate,
+        pendingInteraction,
         checkpointAvailability,
         collapseToolRuns: false,
       }),
-    [checkpointAvailability, messages, pendingHumanGate],
+    [checkpointAvailability, messages, pendingInteraction],
   );
   return <NativeConversationHistory ref={ref} items={items} {...props} />;
 });
@@ -642,14 +638,14 @@ function NativeHumanInteraction({
   styles,
   theme,
 }: {
-  request: PendingHumanGate;
+  request: PendingInteraction;
   permissionMode?: PermissionMode;
   onResponse?: (response: NativeHumanResponse) => void;
   styles: ReturnType<typeof createStyles>;
   theme: NativeChatTheme;
 }) {
   const [responseText, setResponseText] = React.useState("");
-  if (request.questions) {
+  if (request.kind === "user-input" && request.questions) {
     return (
       <NativeQuestions
         request={request}
@@ -660,7 +656,7 @@ function NativeHumanInteraction({
       />
     );
   }
-  if (request.modeChange) {
+  if (request.kind === "user-input" && request.modeChange) {
     const mode = request.modeChange.mode === "plan" ? "Plan" : "Execute";
     return (
       <View style={styles.interactionCard}>
@@ -671,14 +667,27 @@ function NativeHumanInteraction({
             label="Cancel"
             icon={X}
             secondary
-            onPress={() => onResponse?.({ approved: false })}
+            onPress={() =>
+              onResponse?.({
+                kind: "user-input",
+                interactionId: request.interactionId,
+                cancelled: true,
+              })
+            }
             styles={styles}
             theme={theme}
           />
           <ActionButton
             label={`Switch to ${mode}`}
             icon={Check}
-            onPress={() => onResponse?.({ approved: true, responseData: { confirmed: true } })}
+            onPress={() =>
+              onResponse?.({
+                kind: "user-input",
+                interactionId: request.interactionId,
+                cancelled: false,
+                responseData: { confirmed: true },
+              })
+            }
             styles={styles}
             theme={theme}
           />
@@ -687,21 +696,70 @@ function NativeHumanInteraction({
     );
   }
 
-  const toolApproval = request.requestType === "tool-approval";
+  if (request.kind === "user-input") {
+    const input = parseSimpleUserInput(request.inputKind, request.payload);
+    if (input)
+      return (
+        <NativeSimpleInput
+          key={request.interactionId}
+          request={request}
+          input={input}
+          onResponse={onResponse}
+          styles={styles}
+          theme={theme}
+        />
+      );
+    return (
+      <View style={styles.interactionCard}>
+        <Text style={styles.interactionTitle}>Unsupported interaction</Text>
+        <Text style={styles.interactionPrompt}>{request.prompt}</Text>
+        <ActionButton
+          label="Cancel request"
+          icon={X}
+          secondary
+          onPress={() =>
+            onResponse?.({
+              kind: "user-input",
+              interactionId: request.interactionId,
+              cancelled: true,
+            })
+          }
+          styles={styles}
+          theme={theme}
+        />
+      </View>
+    );
+  }
+  const respond = (approved: boolean, scope: ApprovalScope = "Once") =>
+    onResponse?.(
+      request.kind === "tool-approval"
+        ? { kind: request.kind, interactionId: request.interactionId, approved, scope }
+        : {
+            kind: request.kind,
+            interactionId: request.interactionId,
+            approved,
+            responseText: responseText.trim() || undefined,
+          },
+    );
+  const mode = request.kind === "workflow-gate" ? request.mode.toLowerCase() : "tool-approval";
+  const toolApproval = request.kind === "tool-approval";
   if (toolApproval && permissionMode === "fullAccess") return null;
   return (
     <View style={styles.interactionCard}>
       <View style={styles.specialHeader}>
         <ShieldCheck color={theme.primary} size={18} />
         <Text style={styles.interactionTitle}>
-          {request.toolName || request.nodeName || "Human interaction"}
+          {request.source.toolName || request.source.nodeName || "Human interaction"}
         </Text>
       </View>
       <Text style={styles.interactionPrompt}>{request.prompt}</Text>
-      {request.arguments ? (
-        <NativeMarkdown value={`\`\`\`json\n${request.arguments}\n\`\`\``} theme={theme} />
+      {request.kind === "tool-approval" && request.arguments != null ? (
+        <NativeMarkdown
+          value={`\`\`\`json\n${JSON.stringify(request.arguments, null, 2)}\n\`\`\``}
+          theme={theme}
+        />
       ) : null}
-      {request.mode.toLowerCase() === "input" ? (
+      {mode === "input" ? (
         <TextInput
           value={responseText}
           onChangeText={setResponseText}
@@ -712,12 +770,10 @@ function NativeHumanInteraction({
       ) : null}
       <View style={styles.actions}>
         <ActionButton
-          label={request.mode === "input" ? "Interrupt" : "Reject"}
+          label={mode === "input" ? "Interrupt" : "Reject"}
           icon={X}
           secondary
-          onPress={() =>
-            onResponse?.({ approved: false, responseText: responseText.trim() || undefined })
-          }
+          onPress={() => respond(false)}
           styles={styles}
           theme={theme}
         />
@@ -726,19 +782,88 @@ function NativeHumanInteraction({
             label="Allow same arguments"
             icon={Check}
             secondary
-            onPress={() => onResponse?.({ approved: true, approvalScope: "always-arguments" })}
+            onPress={() => respond(true, "AlwaysArguments")}
             styles={styles}
             theme={theme}
           />
         ) : null}
         <ActionButton
-          label={toolApproval ? "Allow once" : request.mode === "input" ? "Submit" : "Approve"}
+          label={toolApproval ? "Allow once" : mode === "input" ? "Submit" : "Approve"}
           icon={Check}
+          onPress={() => respond(true)}
+          styles={styles}
+          theme={theme}
+        />
+      </View>
+    </View>
+  );
+}
+
+function NativeSimpleInput({
+  request,
+  input,
+  onResponse,
+  styles,
+  theme,
+}: {
+  request: PendingInteraction;
+  input: SimpleUserInput;
+  onResponse?: (response: NativeHumanResponse) => void;
+  styles: ReturnType<typeof createStyles>;
+  theme: NativeChatTheme;
+}) {
+  const [value, setValue] = React.useState(input.prefill ?? "");
+  return (
+    <View style={styles.interactionCard}>
+      <Text style={styles.interactionPrompt}>{request.prompt}</Text>
+      {input.message && input.message !== request.prompt ? (
+        <Text style={styles.interactionPrompt}>{input.message}</Text>
+      ) : null}
+      {input.inputKind === "select" ? (
+        input.options.map((option) => (
+          <Pressable
+            key={option}
+            onPress={() => setValue(option)}
+            style={[styles.option, value === option && styles.optionSelected]}
+          >
+            <View style={[styles.optionDot, value === option && styles.optionDotSelected]} />
+            <Text style={styles.optionTitle}>{option}</Text>
+          </Pressable>
+        ))
+      ) : input.inputKind !== "confirm" ? (
+        <TextInput
+          value={value}
+          onChangeText={setValue}
+          multiline={input.inputKind === "editor"}
+          placeholder={input.placeholder ?? "Response"}
+          style={styles.responseInput}
+        />
+      ) : null}
+      <View style={styles.actions}>
+        <ActionButton
+          label="Cancel"
+          icon={X}
+          secondary
           onPress={() =>
             onResponse?.({
-              approved: true,
-              approvalScope: "once",
-              responseText: responseText.trim() || undefined,
+              kind: "user-input",
+              interactionId: request.interactionId,
+              cancelled: true,
+            })
+          }
+          styles={styles}
+          theme={theme}
+        />
+        <ActionButton
+          label={input.inputKind === "confirm" ? "Confirm" : "Submit"}
+          icon={Check}
+          disabled={input.inputKind === "select" && !input.options.includes(value)}
+          onPress={() =>
+            onResponse?.({
+              kind: "user-input",
+              interactionId: request.interactionId,
+              cancelled: false,
+              responseData: input.inputKind === "confirm" ? { confirmed: true } : { value },
             })
           }
           styles={styles}
@@ -756,7 +881,7 @@ function NativeQuestions({
   styles,
   theme,
 }: {
-  request: PendingHumanGate;
+  request: PendingInteraction;
   questions: HumanInteractionQuestion[];
   onResponse?: (response: NativeHumanResponse) => void;
   styles: ReturnType<typeof createStyles>;
@@ -860,7 +985,13 @@ function NativeQuestions({
           label="Cancel"
           icon={X}
           secondary
-          onPress={() => onResponse?.({ approved: false })}
+          onPress={() =>
+            onResponse?.({
+              kind: "user-input",
+              interactionId: request.interactionId,
+              cancelled: true,
+            })
+          }
           styles={styles}
           theme={theme}
         />
@@ -870,7 +1001,12 @@ function NativeQuestions({
           disabled={!response}
           onPress={() =>
             response &&
-            onResponse?.({ approved: true, approvalScope: "once", responseData: response })
+            onResponse?.({
+              kind: "user-input",
+              interactionId: request.interactionId,
+              cancelled: false,
+              responseData: response,
+            })
           }
           styles={styles}
           theme={theme}

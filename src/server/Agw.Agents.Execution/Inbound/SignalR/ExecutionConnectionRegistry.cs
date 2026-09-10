@@ -1,0 +1,161 @@
+using System.Collections.Concurrent;
+using Agw.Agents.Execution.Agentflows.Checkpoints;
+using Agw.Agents.Execution.Commands;
+using Agw.Agents.Execution.Commands.Abstracts;
+using Agw.Agents.Execution.Inbound.Connections;
+using Agw.Agents.Execution.Outbound.SignalR;
+using Agw.Shared.Exceptions;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+namespace Agw.Agents.Execution.Inbound.SignalR;
+
+public sealed class ExecutionConnectionRegistry : IAsyncDisposable
+{
+    private readonly ConcurrentDictionary<string, ExecutionConnection> _connections = new(StringComparer.Ordinal);
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IHubContext<ExecutionHub, IExecutionHubClient> _hubContext;
+    private readonly CancellationToken _hostToken;
+    private readonly ILoggerFactory _loggerFactory;
+
+    public ExecutionConnectionRegistry(
+        IServiceScopeFactory scopeFactory,
+        IHubContext<ExecutionHub, IExecutionHubClient> hubContext,
+        IHostApplicationLifetime applicationLifetime,
+        ILoggerFactory loggerFactory
+    )
+    {
+        _scopeFactory = scopeFactory;
+        _hubContext = hubContext;
+        _hostToken = applicationLifetime.ApplicationStopping;
+        _loggerFactory = loggerFactory;
+    }
+
+    public void Connect(string connectionId, string userId)
+    {
+        var scope = _scopeFactory.CreateAsyncScope();
+        var logger = _loggerFactory.CreateLogger<ExecutionConnection>();
+        ExecutionConnection? connection = null;
+        var sink = new SignalRExecutionMessageSink(
+            connectionId,
+            _hubContext,
+            () => connection?.IsAttached == true,
+            logger
+        );
+        var context = scope
+            .ServiceProvider.GetRequiredService<ExecutionConnectionContextFactory>()
+            .Create(userId, sink, _hostToken);
+        connection = new ExecutionConnection(
+            connectionId,
+            userId,
+            scope,
+            scope.ServiceProvider.GetRequiredService<ExecutionCommandDispatcher>(),
+            context,
+            logger
+        );
+        if (!_connections.TryAdd(connectionId, connection))
+        {
+            _ = connection.DisposeAsync();
+        }
+    }
+
+    public Task DispatchAsync(
+        string connectionId,
+        string userId,
+        AgentRunCommand command,
+        CancellationToken cancellationToken
+    )
+    {
+        if (
+            !_connections.TryGetValue(connectionId, out var connection)
+            || !string.Equals(connection.UserId, userId, StringComparison.Ordinal)
+        )
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "Execution connection is not available.");
+        }
+
+        return connection.DispatchAsync(command, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<AgentflowCheckpointAvailability>> GetAgentflowCheckpointsAsync(
+        string connectionId,
+        string userId,
+        Guid agentflowId,
+        CancellationToken cancellationToken
+    )
+    {
+        if (
+            !_connections.TryGetValue(connectionId, out var connection)
+            || !string.Equals(connection.UserId, userId, StringComparison.Ordinal)
+        )
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "Execution connection is not available.");
+        }
+
+        return connection.GetAgentflowCheckpointsAsync(agentflowId, cancellationToken);
+    }
+
+    public async Task<string?> FindInProcessExecutionAsync(
+        Guid projectId,
+        string contextId,
+        string userId,
+        CancellationToken cancellationToken
+    )
+    {
+        if (projectId == Guid.Empty || string.IsNullOrWhiteSpace(contextId))
+            throw new AgwException(ErrorCodes.InvalidParam);
+        var normalizedContextId = ContextIdUtil.NormalizeContextId(contextId);
+        foreach (var (connectionId, connection) in _connections)
+        {
+            if (
+                string.Equals(connection.UserId, userId, StringComparison.Ordinal)
+                && await connection.IsActiveConversationAsync(projectId, normalizedContextId, cancellationToken)
+            )
+            {
+                return connectionId;
+            }
+        }
+        return null;
+    }
+
+    public Task<bool> RecoverInProcessExecutionAsync(
+        string connectionId,
+        string userId,
+        bool interrupt,
+        CancellationToken cancellationToken
+    )
+    {
+        // Foreign and missing connections are indistinguishable; neither grants execution access.
+        if (
+            !_connections.TryGetValue(connectionId, out var connection)
+            || !string.Equals(connection.UserId, userId, StringComparison.Ordinal)
+        )
+        {
+            return Task.FromResult(false);
+        }
+
+        return connection.RecoverInProcessExecutionAsync(interrupt, cancellationToken);
+    }
+
+    public Task DisconnectAsync(string connectionId)
+    {
+        if (!_connections.TryGetValue(connectionId, out var connection))
+        {
+            return Task.CompletedTask;
+        }
+
+        return connection.DetachAsync(() => _connections.TryRemove(connectionId, out _));
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        var connections = _connections.Values.ToArray();
+        _connections.Clear();
+        foreach (var connection in connections)
+        {
+            await connection.DisposeAsync();
+        }
+    }
+}

@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using Agw.Agents.Execution.Agentflows;
+using Agw.Agents.Execution.Agentflows.Context;
+using Agw.Agents.Execution.Agentflows.Workflows;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 

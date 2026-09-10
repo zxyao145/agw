@@ -1,5 +1,9 @@
 import { MessageContentType, type AiMessage } from "@agw/api";
-import { getMessageStreamingScopeId } from "@agw/execution-core";
+import {
+  getMessageStreamingScopeId,
+  type InteractionRequest,
+  type InteractionSource,
+} from "@agw/execution-core";
 
 export type HumanInteractionQuestionOption = {
   label: string;
@@ -27,22 +31,35 @@ export type HumanInteractionQuestionResult = {
   items: HumanInteractionQuestionResultItem[];
 };
 
-export type PendingHumanGate = {
-  requestType: "human-gate" | "tool-approval" | "human-interaction";
-  requestId: string;
-  nodeId?: string;
-  nodeName?: string;
-  mode: string;
-  prompt: string;
-  inputPreview?: string;
-  toolName?: string;
-  callId?: string;
+export type PendingInteraction = InteractionRequest & {
+  executionId?: string;
   streamingScopeId?: string;
-  arguments?: string;
-  interactionKind?: string;
   questions?: HumanInteractionQuestion[];
   modeChange?: HumanInteractionModeChange;
 };
+
+export type SimpleUserInput = {
+  inputKind: "confirm" | "select" | "input" | "editor";
+  message?: string;
+  options: string[];
+  placeholder?: string;
+  prefill?: string;
+};
+
+/** Pi's extension UI payload retains its SDK field names. */
+export function parseSimpleUserInput(inputKind: string, payload: unknown): SimpleUserInput | null {
+  if (!isRecord(payload) || !["confirm", "select", "input", "editor"].includes(inputKind))
+    return null;
+  return {
+    inputKind: inputKind as SimpleUserInput["inputKind"],
+    message: readOptionalString(payload.Message),
+    options: Array.isArray(payload.Options)
+      ? payload.Options.filter((value): value is string => typeof value === "string")
+      : [],
+    placeholder: readOptionalString(payload.Placeholder),
+    prefill: typeof payload.Prefill === "string" ? payload.Prefill : undefined,
+  };
+}
 
 export type AgentflowCheckpointMessage = { occurrenceId: string; nodeId: string; name: string };
 export type AgentflowCheckpointMarkerInfo = { nodeId: string; name: string; messageId: string };
@@ -105,59 +122,70 @@ export function parseHumanInteractionModeChange(
     : null;
 }
 
-export function getPendingHumanGate(message: AiMessage): PendingHumanGate | null {
+export function getPendingInteraction(message: AiMessage): PendingInteraction | null {
   const properties = message.additionalProperties;
-  if (!properties) return null;
-  const requestType = properties.type;
-  const requestId = readOptionalString(properties.requestId);
-  if (!requestId) return null;
-
-  if (requestType === "human-interaction-request") {
-    const interactionKind = readOptionalString(properties.interactionKind);
-    if (!interactionKind) return null;
-    const questions =
-      interactionKind === "questions"
-        ? (parseHumanInteractionQuestions(properties.payload) ?? undefined)
-        : undefined;
-    const modeChange =
-      interactionKind === "mode-change"
-        ? (parseHumanInteractionModeChange(properties.payload) ?? undefined)
-        : undefined;
-    const streamingScopeId = getMessageStreamingScopeId(message);
-    return {
-      requestType: "human-interaction",
-      requestId,
-      mode: "interaction",
-      interactionKind,
-      prompt:
-        readOptionalString(properties.prompt) ??
-        readOptionalString(message.contents[0]?.content) ??
-        "The agent needs your input to continue.",
-      toolName: readOptionalString(properties.toolName),
-      callId: readOptionalString(properties.callId),
-      ...(streamingScopeId ? { streamingScopeId } : {}),
-      ...(questions ? { questions } : {}),
-      ...(modeChange ? { modeChange } : {}),
-    };
+  if (properties?.type !== "interaction-request" || !isRecord(properties.interaction)) return null;
+  const interaction = properties.interaction;
+  const interactionId = readRequiredString(interaction.interactionId);
+  if (!interactionId || typeof interaction.prompt !== "string" || !isRecord(interaction.source))
+    return null;
+  const source: InteractionSource = {};
+  for (const key of [
+    "nodeId",
+    "nodeName",
+    "toolName",
+    "callId",
+    "providerRequestId",
+    "providerScopeId",
+  ] as const) {
+    const value = readOptionalString(interaction.source[key]);
+    if (value !== undefined) source[key] = value;
   }
-
-  if (requestType !== "human-gate-request" && requestType !== "tool-approval-request") return null;
-  const nodeId = readOptionalString(properties.nodeId);
-  if (!nodeId) return null;
-  return {
-    requestType: requestType === "tool-approval-request" ? "tool-approval" : "human-gate",
-    requestId,
-    nodeId,
-    nodeName: readOptionalString(properties.nodeName),
-    mode: readOptionalString(properties.mode) ?? "approval",
-    prompt:
-      readOptionalString(properties.prompt) ??
-      readOptionalString(message.contents[0]?.content) ??
-      "Human approval is required to continue.",
-    inputPreview: readOptionalString(properties.inputPreview),
-    toolName: readOptionalString(properties.toolName),
-    arguments: readOptionalString(properties.arguments),
+  const executionId = readOptionalString(properties.executionId);
+  const streamingScopeId = getMessageStreamingScopeId(message);
+  const common = {
+    interactionId,
+    prompt: interaction.prompt,
+    source,
+    ...(executionId ? { executionId } : {}),
+    ...(streamingScopeId ? { streamingScopeId } : {}),
   };
+  switch (interaction.kind) {
+    case "tool-approval":
+      return {
+        ...common,
+        kind: "tool-approval",
+        ...(interaction.arguments === undefined ? {} : { arguments: interaction.arguments }),
+      };
+    case "workflow-gate":
+      if (typeof interaction.mode !== "string") return null;
+      return {
+        ...common,
+        kind: "workflow-gate",
+        mode: interaction.mode,
+        ...(typeof interaction.inputPreview === "string"
+          ? { inputPreview: interaction.inputPreview }
+          : {}),
+      };
+    case "user-input": {
+      const inputKind = readRequiredString(interaction.inputKind);
+      if (!inputKind || !("payload" in interaction)) return null;
+      const questions =
+        inputKind === "questions" ? parseHumanInteractionQuestions(interaction.payload) : null;
+      const modeChange =
+        inputKind === "mode-change" ? parseHumanInteractionModeChange(interaction.payload) : null;
+      return {
+        ...common,
+        kind: "user-input",
+        inputKind,
+        payload: interaction.payload,
+        ...(questions ? { questions } : {}),
+        ...(modeChange ? { modeChange } : {}),
+      };
+    }
+    default:
+      return null;
+  }
 }
 
 export function getAgentflowCheckpointMessage(
@@ -180,20 +208,23 @@ export function getAgentflowCheckpointMessage(
 
 export function matchesHumanInteractionCall(
   message: AiMessage,
-  target: Pick<PendingHumanGate, "callId" | "streamingScopeId">,
+  target: Pick<PendingInteraction, "source" | "streamingScopeId">,
 ): boolean {
-  if (!target.callId) return false;
+  if (!target.source.callId) return false;
   if (target.streamingScopeId && message.streamingScopeId !== target.streamingScopeId) return false;
+  const nodeId = message.additionalProperties?.interactionNodeId;
+  if (target.source.nodeId && typeof nodeId === "string" && nodeId !== target.source.nodeId)
+    return false;
   return message.contents.some(
     (content) =>
       content.type === MessageContentType.FunctionCallContent &&
-      content.additionalProperties?.callId === target.callId,
+      content.additionalProperties?.callId === target.source.callId,
   );
 }
 
 export function hasMatchingHumanInteractionCall(
   messages: readonly AiMessage[],
-  target: Pick<PendingHumanGate, "callId" | "streamingScopeId">,
+  target: Pick<PendingInteraction, "source" | "streamingScopeId">,
 ): boolean {
   return messages.some((message) => matchesHumanInteractionCall(message, target));
 }

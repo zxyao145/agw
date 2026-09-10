@@ -1,10 +1,12 @@
 using System.Text.Json;
-using Agw.Agents.Execution.Agents;
+using Agw.Agents.Execution.Agents.Context;
+using Agw.Agents.Execution.Agents.ExternalAgents;
+using Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode;
+using Agw.Agents.Execution.Agents.ExternalAgents.Pi;
+using Agw.Agents.Execution.Agents.History;
 using Agw.Agents.Execution.Agents.Middleware;
-using Agw.Agents.Execution.Agents.Utils;
+using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.ExternalAgents;
-using Agw.Agents.ExternalAgents.ClaudeCode;
-using Agw.Agents.ExternalAgents.Pi;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
@@ -224,7 +226,7 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void WrapExternalAgent_UsesHistoryAdapterWithoutCreatingSdkAgent()
     {
-        var historyProvider = new InMemoryChatHistoryProvider();
+        var historyProvider = new StubRequestHistoryProvider();
         var service = CreateRuntimeService(historyProvider);
 
         var agent = service.WrapExternalAgent(new StubAIAgent(), isBackground: false);
@@ -240,7 +242,7 @@ public class AgentRuntimeServiceCompositionTests
         // Arrange
         var logger = new CapturingLogger<ObservabilityMiddleware>();
         var innerAgent = new CapturingStubAIAgent();
-        var service = CreateRuntimeService(new InMemoryChatHistoryProvider(), logger);
+        var service = CreateRuntimeService(new StubRequestHistoryProvider(), logger);
         var agent = service.WrapExternalAgent(
             innerAgent,
             isBackground: false,
@@ -270,7 +272,7 @@ public class AgentRuntimeServiceCompositionTests
         // Arrange
         var logger = new CapturingLogger<ObservabilityMiddleware>();
         var innerAgent = new CapturingStubAIAgent();
-        var service = CreateRuntimeService(new InMemoryChatHistoryProvider(), logger);
+        var service = CreateRuntimeService(new StubRequestHistoryProvider(), logger);
         var agent = service.WrapExternalAgent(
             innerAgent,
             isBackground: false,
@@ -325,7 +327,7 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void WrapClaudeCodeAgent_UsesSessionTrackerWithoutExternalHistoryAdapter()
     {
-        var service = CreateRuntimeService(new InMemoryChatHistoryProvider());
+        var service = CreateRuntimeService(new StubRequestHistoryProvider());
 
         var agent = service.WrapClaudeCodeAgent(
             new StubAIAgent(),
@@ -342,7 +344,7 @@ public class AgentRuntimeServiceCompositionTests
     [Fact]
     public void WrapPiAgent_DecoratesWithoutExternalHistoryOrSessionTracker()
     {
-        var service = CreateRuntimeService(new InMemoryChatHistoryProvider());
+        var service = CreateRuntimeService(new StubRequestHistoryProvider());
 
         var agent = service.WrapPiAgent(new StubAIAgent(), isBackground: false);
 
@@ -356,7 +358,7 @@ public class AgentRuntimeServiceCompositionTests
     public async Task WrapPiAgent_ComposedInner_ReleasesSeparatelyOwnedPiAgentOnce()
     {
         // Arrange
-        var service = CreateRuntimeService(new InMemoryChatHistoryProvider());
+        var service = CreateRuntimeService(new StubRequestHistoryProvider());
         var owner = new DisposableStubAIAgent();
         var composed = owner
             .AsBuilder()
@@ -377,6 +379,24 @@ public class AgentRuntimeServiceCompositionTests
 
         // Assert
         Assert.Equal(1, owner.DisposeCount);
+    }
+
+    [Fact]
+    public async Task WrapClaudeCodeAgent_WithOwnedSettings_DisposesSettingsAfterDecoration()
+    {
+        var service = CreateRuntimeService(new StubRequestHistoryProvider());
+        var settings = Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode.ClaudeCodeModelSettings.Create(
+            new ClaudeCodeAIAgentOptions { EnvironmentVariables = new() { ["ANTHROPIC_API_KEY"] = "test-key" } }
+        );
+        var path = settings.Options.Settings!;
+        var ownedAgent = new ResourceOwningAIAgent(new StubAIAgent(), settings);
+        var agent = service.WrapClaudeCodeAgent(ownedAgent, false, static (_, _) => ValueTask.CompletedTask);
+
+        var disposable = Assert.IsAssignableFrom<IAsyncDisposable>(agent);
+        await disposable.DisposeAsync();
+        await disposable.DisposeAsync();
+
+        Assert.False(File.Exists(path));
     }
 
     [Fact]
@@ -836,7 +856,7 @@ public class AgentRuntimeServiceCompositionTests
         };
 
     [Fact]
-    public void FullAccess_ExternalOptions_DisableApprovalAndPreserveSandboxAndWorkspace()
+    public void FullAccess_ExternalOptions_DisableApprovalAndSandboxAndPreserveWorkspace()
     {
         var codex = BuildCodexAIAgentOptions(
             JsonUtil.Serialize(
@@ -852,21 +872,30 @@ public class AgentRuntimeServiceCompositionTests
             "/workspace",
             null,
             false,
-            permissionMode: Agw.Agents.Execution.Commands.Setting.PermissionMode.FullAccess
+            permissionMode: Agw.Agents.Contracts.Execution.AgwPermissionMode.FullAccess
         );
         var claude = BuildClaudeCodeAIAgentOptions(
             "{}",
             "/workspace",
             null,
             false,
-            permissionMode: Agw.Agents.Execution.Commands.Setting.PermissionMode.FullAccess
+            permissionMode: Agw.Agents.Contracts.Execution.AgwPermissionMode.FullAccess
         );
 
         Assert.Equal(OpenAI.CodexSdk.ApprovalMode.Never, codex!.ThreadOptions!.ApprovalPolicy);
-        Assert.Equal(OpenAI.CodexSdk.SandboxMode.WorkspaceWrite, codex.ThreadOptions.SandboxMode);
+        Assert.Equal(OpenAI.CodexSdk.SandboxMode.DangerFullAccess, codex.ThreadOptions.SandboxMode);
         Assert.Equal("/workspace", codex.ThreadOptions.WorkingDirectory);
         Assert.Equal(ClaudeCodeSdk.Types.PermissionMode.bypassPermissions, claude!.PermissionMode);
         Assert.Equal("/workspace", claude.WorkingDirectory);
+    }
+
+    [Theory]
+    [InlineData(AgwPermissionMode.AlwaysAsk)]
+    [InlineData(AgwPermissionMode.AllowSameArguments)]
+    public void ClaudeRestrictedPermission_OverridesBypass(AgwPermissionMode mode)
+    {
+        var options = BuildClaudeCodeAIAgentOptions("{}", "/workspace", null, false, permissionMode: mode);
+        Assert.Equal(ClaudeCodeSdk.Types.PermissionMode.@default, options!.PermissionMode);
     }
 
     private static CodexAIAgentOptions? BuildCodexAIAgentOptions(
@@ -877,7 +906,7 @@ public class AgentRuntimeServiceCompositionTests
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         Func<string, CancellationToken, ValueTask>? onThreadStartedAsync = null,
         string? projectExtra = null,
-        Agw.Agents.Execution.Commands.Setting.PermissionMode? permissionMode = null
+        Agw.Agents.Contracts.Execution.AgwPermissionMode? permissionMode = null
     )
     {
         var method = typeof(AgentRuntimeService).GetMethod(
@@ -910,7 +939,7 @@ public class AgentRuntimeServiceCompositionTests
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         ChatHistoryProvider? chatHistoryProvider = null,
         string? projectExtra = null,
-        Agw.Agents.Execution.Commands.Setting.PermissionMode? permissionMode = null
+        Agw.Agents.Contracts.Execution.AgwPermissionMode? permissionMode = null
     )
     {
         var method = typeof(AgentRuntimeService).GetMethod(

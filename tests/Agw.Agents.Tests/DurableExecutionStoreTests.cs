@@ -1,10 +1,19 @@
 using System.Security.Claims;
 using System.Text.Json;
 using Agw.Agents.Application.Persistence;
+using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Connections;
-using Agw.Agents.Execution.Durable;
+using Agw.Agents.Execution.Configuration;
+using Agw.Agents.Execution.HumanInteraction.Durable;
+using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
+using Agw.Agents.Execution.Inbound.Connections;
+using Agw.Agents.Execution.Messaging.Durable;
+using Agw.Agents.Execution.Outbound;
+using Agw.Agents.Execution.Outbound.Durable;
+using Agw.Agents.Execution.Persistence.Durable;
+using Agw.Agents.Execution.Runtimes.Durable;
+using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Agents.Execution.Turns;
 using Agw.Infrastructure.Data;
 using Agw.Shared;
@@ -119,7 +128,7 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
         var executionId = Guid.CreateVersion7();
         var token = TestContext.Current.CancellationToken;
         var settings = CreateSettings(task.ProjectId, task.ContextId)
-            .WithPermissionMode(PermissionMode.FullAccess)
+            .WithPermissionMode(AgwPermissionMode.FullAccess)
             .WithHumanInteractionPolicy(HumanInteractionPolicy.Reject);
         await database
             .CreateStore()
@@ -136,7 +145,7 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
 
         var restored = await database.CreateStore().GetAsync(executionId, token);
 
-        Assert.Equal(PermissionMode.FullAccess, restored.Manifest.Settings.PermissionMode);
+        Assert.Equal(AgwPermissionMode.FullAccess, restored.Manifest.Settings.PermissionMode);
         Assert.Equal(HumanInteractionPolicy.Reject, restored.Manifest.Settings.HumanInteractionPolicy);
     }
 
@@ -347,9 +356,12 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
         var resuming = await store.SubmitHumanResponseAsync(
             new SubmitDurableHumanResponseRequest(
                 executionId,
-                "request-1",
-                Approved: true,
-                ResponseData: JsonSerializer.SerializeToElement(new { answer = "blue" })
+                new UserInputResponse
+                {
+                    InteractionId = "request-1",
+                    Cancelled = !(true),
+                    ResponseData = JsonSerializer.SerializeToElement(new { answer = "blue" }),
+                }
             ),
             "user-id",
             TestContext.Current.CancellationToken
@@ -368,8 +380,8 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
         Assert.Equal(1, input.SegmentIndex);
         Assert.Equal("checkpoint-1", input.Checkpoint?.CheckpointId);
         var resolved = Assert.Single(input.ResolvedInteractions);
-        Assert.Equal("request-1", resolved.Request.RequestId);
-        Assert.Equal("blue", resolved.Response.ResponseData?.GetProperty("answer").GetString());
+        Assert.Equal("request-1", resolved.Request.InteractionId);
+        Assert.Equal("blue", ((UserInputResponse)resolved.Response).ResponseData?.GetProperty("answer").GetString());
     }
 
     [Fact]
@@ -459,9 +471,12 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
         );
         var request = new SubmitDurableHumanResponseRequest(
             executionId,
-            "request-1",
-            Approved: true,
-            ResponseData: JsonSerializer.SerializeToElement(new { answer = "blue" })
+            new UserInputResponse
+            {
+                InteractionId = "request-1",
+                Cancelled = !(true),
+                ResponseData = JsonSerializer.SerializeToElement(new { answer = "blue" }),
+            }
         );
 
         var first = await store.SubmitHumanResponseAsync(request, "user-id", TestContext.Current.CancellationToken);
@@ -601,47 +616,42 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
         var channel = new ResolvedHumanInteractionChannel([
             new DurableResolvedInteraction(
                 CreateInteraction("request-1"),
-                new DurableHumanResponseEnvelope
+                new UserInputResponse
                 {
-                    ExecutionId = Guid.CreateVersion7(),
-                    RequestId = "request-1",
-                    Approved = approved,
+                    InteractionId = "request-1",
+                    Cancelled = !approved,
                     ResponseData = responseData,
                 }
             ),
         ]);
-        var request = new HumanInteractionRequest(
-            "runtime-request",
-            "ask_user_question",
-            "Choose a color",
-            JsonSerializer.SerializeToElement(new { question = "Color?" })
-        )
+        var original = CreateInteraction("request-1");
+        var request = new UserInputRequest(original.InputKind, original.Prompt, original.Payload)
         {
-            ToolName = "ask_user_question",
-            CallId = "call-request-1",
+            Source = original.Source,
         };
 
         var response = await channel.RequestAsync(request, TestContext.Current.CancellationToken);
 
-        Assert.Equal("runtime-request", response.RequestId);
+        Assert.Equal("request-1", response.InteractionId);
         Assert.Equal(expectedCancelled, response.Cancelled);
         Assert.Equal("blue", response.ResponseData?.GetProperty("answer").GetString());
     }
 
     [Fact]
-    public void DurableHumanInteractionMapper_ToMessage_RecreatesQuestionPresentation()
+    public void InteractionMessageMapper_Create_RecreatesQuestionPresentation()
     {
-        var message = DurableHumanInteractionMapper.ToMessage(
+        var message = InteractionMessageMapper.Create(
             CreateInteraction("request-1"),
+            "control-message",
             Guid.CreateVersion7(),
             "message-1"
         );
 
-        Assert.Equal("human-interaction-request", message.AdditionalProperties?["type"]);
-        Assert.Equal("request-1", message.AdditionalProperties?["requestId"]);
-        Assert.Equal("call-request-1", message.AdditionalProperties?["callId"]);
+        Assert.Equal("interaction-request", message.AdditionalProperties?["type"]);
+        Assert.Equal("request-1", InteractionTestData.Read(message).InteractionId);
+        Assert.Equal("call-request-1", InteractionTestData.Read(message).Source.CallId);
         Assert.Equal("message-1", message.AdditionalProperties?["streamingScopeId"]);
-        var payload = Assert.IsType<JsonElement>(message.AdditionalProperties?["payload"]);
+        var payload = Assert.IsType<UserInputInteraction>(InteractionTestData.Read(message)).Payload;
         Assert.Equal("Color?", payload.GetProperty("questions")[0].GetProperty("question").GetString());
     }
 
@@ -774,29 +784,33 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task ExecutionStreamMessageSink_OnlyTerminalControlMessage_IsPublishedExplicitly()
+    public async Task ExecutionStreamMessageSink_OnlyDeferredControlMessages_DisposalDoesNotAppendEvents()
     {
         var stream = new RecordingExecutionEventStream();
         var executionId = Guid.CreateVersion7();
-        var sink = new ExecutionStreamMessageSink(stream, executionId, segmentIndex: 2, NullLogger.Instance);
-        var interaction = DurableHumanInteractionMapper.ToMessage(CreateInteraction("request-1"));
+        await using var sink = new ExecutionStreamMessageSink(
+            stream,
+            executionId,
+            segmentIndex: 2,
+            NullLogger.Instance
+        );
+        var interaction = InteractionMessageMapper.Create(CreateInteraction("request-1"), "control-message");
 
         await sink.WriteAsync(interaction, TestContext.Current.CancellationToken);
         await sink.WriteAsync(TurnMessageFactory.CreateFinished(), TestContext.Current.CancellationToken);
 
         Assert.Empty(stream.Appends);
 
-        await sink.WriteTerminalAsync("completed", TestContext.Current.CancellationToken);
+        await sink.DisposeAsync();
 
-        var append = Assert.Single(stream.Appends);
-        Assert.Equal(int.MaxValue, append.Sequence);
-        Assert.Equal("turn-finished", append.Message.AdditionalProperties?["type"]);
+        Assert.Empty(stream.Appends);
     }
 
     private static async Task<Guid> RegisterExecutionAsync(
         TestDatabase database,
         DurableExecutionStore store,
-        Guid? executionId = null
+        Guid? executionId = null,
+        AgwPermissionMode? permissionMode = null
     )
     {
         var resolvedExecutionId = executionId ?? Guid.CreateVersion7();
@@ -808,7 +822,7 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
             AgentRuntimeType.Agent,
             CreateInput("hello"),
             task,
-            CreateSettings(task.ProjectId, task.ContextId),
+            CreateSettings(task.ProjectId, task.ContextId).WithPermissionSnapshot(permissionMode, 0),
             TestContext.Current.CancellationToken
         );
         return resolvedExecutionId;
@@ -823,23 +837,12 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
             AgentId = Guid.CreateVersion7(),
             AgentType = AgentRuntimeType.Agent,
             Input = CreateInput("hello"),
-            Task = DurableProjectTaskSnapshot.FromProjection(task),
-            Settings = DurableExecutionSettings.FromSettings(CreateSettings(task.ProjectId, task.ContextId)),
+            Task = DurableExecutionMapper.FromProjection(task),
+            Settings = DurableExecutionMapper.FromSettings(CreateSettings(task.ProjectId, task.ContextId)),
         };
     }
 
-    private static DurableHumanInteractionSnapshot CreateInteraction(string requestId) =>
-        new()
-        {
-            RequestId = requestId,
-            Kind = "questions",
-            NodeId = "standalone",
-            NodeName = "Agent",
-            ToolName = "ask_user_question",
-            CallId = $"call-{requestId}",
-            Prompt = "Choose a color",
-            Payload = JsonSerializer.SerializeToElement(new { questions = new[] { new { question = "Color?" } } }),
-        };
+    private static UserInputInteraction CreateInteraction(string requestId) => InteractionTestData.Input(requestId);
 
     private static AgwUserInput CreateInput(string content) =>
         new() { MessageId = "message-1", Contents = [new AgwTextContent { Content = content }] };
@@ -912,10 +915,14 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
                 TestDurablePersistence.Create(Context)
             );
 
-        public ServiceProvider CreateServiceProvider()
+        public ServiceProvider CreateServiceProvider(
+            params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors
+        )
         {
             var services = new ServiceCollection();
-            services.AddScoped<IAgentsDbContext>(_ => new AgwDbContext(_options));
+            services.AddScoped<IAgentsDbContext>(_ => new AgwDbContext(
+                new DbContextOptionsBuilder<AgwDbContext>(_options).AddInterceptors(interceptors).Options
+            ));
             return services.BuildServiceProvider();
         }
 

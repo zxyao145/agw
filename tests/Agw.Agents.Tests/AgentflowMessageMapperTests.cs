@@ -1,5 +1,7 @@
-using Agw.Agents.Execution.Agentflows;
-using Agw.Agents.Execution.Durable;
+using Agw.Agents.Execution.Agentflows.Messaging;
+using Agw.Agents.Execution.Agentflows.Workflows;
+using Agw.Agents.Execution.Outbound;
+using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -83,7 +85,12 @@ public class AgentflowMessageMapperTests
 
         var result = AgentflowMessageMapper.CreateHumanGateResponseMessages(
             messages,
-            new HumanGateApprovalDecision("request", true, text)
+            new WorkflowGateDecision
+            {
+                InteractionId = "request",
+                Approved = true,
+                ResponseText = text,
+            }
         );
 
         Assert.Single(messages);
@@ -97,14 +104,14 @@ public class AgentflowMessageMapperTests
     [Fact]
     public void CreateHumanGateMessages_PreserveProtocolFieldsAndErrors()
     {
-        var request = new HumanGateApprovalRequest("request", "node", null, "approval", "Approve?", []);
+        var request = InteractionTestData.Gate("request", "node", null, "approval", "Approve?", []);
 
-        var mapped = AgentflowMessageMapper.CreateHumanGateApprovalRequestMessage(request, "request-message");
+        var mapped = InteractionMessageMapper.Create(request, "request-message");
         var rejected = AgentflowMessageMapper.CreateHumanGateRejectedMessage(request, "rejected-message");
         var error = AgentflowMessageMapper.CreateWorkflowErrorMessage(new Exception("failure"), "error-message");
 
-        Assert.Equal("human-gate-request", mapped.AdditionalProperties!["type"]);
-        Assert.Equal("request", mapped.AdditionalProperties["requestId"]);
+        Assert.Equal("interaction-request", mapped.AdditionalProperties!["type"]);
+        Assert.Equal("request", InteractionTestData.Read(mapped).InteractionId);
         Assert.False(mapped.AdditionalProperties.ContainsKey("nodeName"));
         Assert.False(mapped.AdditionalProperties.ContainsKey("inputPreview"));
         Assert.Equal(AiRole.System, rejected.Role);
@@ -120,12 +127,12 @@ public class AgentflowMessageMapperTests
     [Fact]
     public void ControlMessageMapping_ExplicitIds_ProducesDeterministicPayloads()
     {
-        var request = new HumanGateApprovalRequest("request", "node", "Node", "approval", "Approve?", []);
+        var request = InteractionTestData.Gate("request", "node", "Node", "approval", "Approve?", []);
         var node = new AgentflowHumanGateNode("node", "Node", null);
         var tool = new ToolApprovalRequestContent("tool-request", new FunctionCallContent("call", "tool"));
         AgwMessage[] Map() =>
             [
-                AgentflowMessageMapper.CreateHumanGateApprovalRequestMessage(request, "fixed-id"),
+                InteractionMessageMapper.Create(request, "fixed-id"),
                 AgentflowMessageMapper.CreateHumanGateRejectedMessage(request, "fixed-id"),
                 AgentflowMessageMapper.CreateHumanGateUnavailableMessage(node, "fixed-id"),
                 AgentflowMessageMapper.CreateToolApprovalUnavailableMessage(tool, "fixed-id"),

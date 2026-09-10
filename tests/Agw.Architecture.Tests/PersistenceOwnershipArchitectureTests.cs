@@ -52,7 +52,7 @@ public sealed partial class BackendArchitectureTests
                 .ToArray();
 
             // Assert
-            Assert.Equal(owner, GetOwningProject(serverRoot, contextSource));
+            Assert.Equal(owner, GetOwningModule(serverRoot, contextSource));
             Assert.Equal(expectedEntities, actualEntities);
         }
     }
@@ -67,7 +67,7 @@ public sealed partial class BackendArchitectureTests
         var violations = GetSourceFiles(serverRoot)
             .SelectMany(path =>
             {
-                var project = GetOwningProject(serverRoot, path);
+                var project = GetOwningModule(serverRoot, path);
                 return ModuleDbContextReferenceRegex()
                     .Matches(File.ReadAllText(path))
                     .Select(match => match.Groups["context"].Value)
@@ -137,7 +137,7 @@ public sealed partial class BackendArchitectureTests
     {
         // Arrange
         var serverRoot = GetServerRoot();
-        var sources = RawPersistenceModules
+        var sources = RawPersistenceProjects
             .SelectMany(module => GetSourceFiles(Path.Combine(serverRoot, module)))
             .ToDictionary(path => NormalizePath(Path.GetRelativePath(serverRoot, path)), File.ReadAllText);
 
@@ -233,9 +233,9 @@ public sealed partial class BackendArchitectureTests
         var serverRoot = GetServerRoot();
         var allowed = new HashSet<string>(
             [
-                "Agw.Agents/Execution/Durable/DistributedExecutionWorker.cs",
-                "Agw.Agents/Execution/Durable/DurableExecutionSegmentExecutor.cs",
-                "Agw.Agents/Execution/Durable/DurableExecutionStore.cs",
+                "Agw.Agents.Execution/Runtimes/Durable/DistributedExecutionWorker.cs",
+                "Agw.Agents.Execution/Runtimes/Durable/DurableExecutionSegmentExecutor.cs",
+                "Agw.Agents.Execution/Persistence/Durable/DurableExecutionStore.cs",
                 "Agw.Auth/Contracts/UserInfoUtil.cs",
                 "Agw.Infrastructure/Data/DbSeeder.cs",
                 "Agw.Infrastructure/Repositories/JobRepo.cs",
@@ -294,7 +294,7 @@ public sealed partial class BackendArchitectureTests
     public void UserOwnedExecutionCode_DoesNotFallBackToUnscopedOrAdministratorOwner()
     {
         var serverRoot = GetServerRoot();
-        var executionRoot = Path.Combine(serverRoot, "Agw.Agents", "Execution");
+        var executionRoot = Path.Combine(serverRoot, "Agw.Agents.Execution");
         var violations = GetSourceFiles(executionRoot)
             .Where(path => ExecutionOwnerFallbackRegex().IsMatch(File.ReadAllText(path)))
             .Select(path => NormalizePath(Path.GetRelativePath(serverRoot, path)))
@@ -329,9 +329,10 @@ public sealed partial class BackendArchitectureTests
         ["IToolsDbContext"] = "Agw.Tools",
     };
 
-    private static readonly string[] RawPersistenceModules =
+    private static readonly string[] RawPersistenceProjects =
     [
         "Agw.Agents",
+        "Agw.Agents.Execution",
         "Agw.Auth",
         "Agw.Integrations",
         "Agw.Jobs",

@@ -3,14 +3,14 @@
 import { ArrowRight, Brain, X } from "lucide-react";
 
 import { Button, cn } from "@agw/components";
-import type { PendingHumanGate } from "../../../services/execution-hub";
+import type { PendingInteraction } from "../../../services/execution-hub";
 import type {
   HumanInteractionModeChange as ModeChange,
   HumanInteractionModeChangeResponse,
 } from "../../../services/human-interaction";
 
 type HumanInteractionModeChangeProps = {
-  request: PendingHumanGate & { modeChange: ModeChange };
+  request: PendingInteraction & { modeChange: ModeChange };
   embedded?: boolean;
   onSubmit: (response: HumanInteractionModeChangeResponse) => void;
   onCancel: () => void;

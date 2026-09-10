@@ -18,7 +18,7 @@ import {
   type AgentCreateRequest,
   type AgentUpdateRequest,
   type ExternalAgentOptionDto,
-  type ToolInfo,
+  type ToolLiteInfo,
   type ModelProviderDto,
   type McpToolServerDto,
   type SkillDto,
@@ -87,7 +87,7 @@ export default function AgentsPage() {
   const toolsQuery = useQuery({
     queryKey: ["tools"],
     queryFn: async () => {
-      return (await apiGet("/api/tools")) as unknown as ToolInfo[];
+      return (await apiGet("/api/tools")) as unknown as ToolLiteInfo[];
     },
   });
 

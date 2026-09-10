@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using System.Reflection;
 using Agw.Agents.Definitions.Agents;
-using Agw.Agents.Execution.Agents;
-using Agw.Agents.Execution.Agents.AIContextProviders.AgwWorkspace;
+using Agw.Agents.Execution.Agents.Composition;
+using Agw.Agents.Execution.Agents.Context.Workspace;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Mcp;
@@ -13,10 +13,11 @@ using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Tooling;
-using Agw.Tools.ContextualTools.WebSearch;
+using Agw.Tools.Contracts;
+using Agw.Tools.Impl.ContextualTools.WebSearch;
+using Agw.Tools.Impl.ToolBlocks.UserMemory;
 using Agw.Tools.Runtime;
 using Agw.Tools.ToolBlocks;
-using Agw.Tools.ToolBlocks.Blocks.UserMemory;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
@@ -247,7 +248,7 @@ public class AgentCapabilityComposerTests
         );
 
         Assert.Empty(composition.Tools);
-        Assert.IsType<UserMemoryProvider>(Assert.Single(composition.ContextProviders));
+        Assert.NotNull(Assert.Single(composition.ContextProviders).GetService<UserMemoryProvider>());
         Assert.Empty(composition.PlanModeAllowedToolNames);
         Assert.Null(unrelatedBlock.MaterializedDefaultMode);
         Assert.Empty(resolver.Calls);
@@ -292,7 +293,7 @@ public class AgentCapabilityComposerTests
         );
 
         // Assert
-        Assert.IsType<UserMemoryProvider>(Assert.Single(composition.ContextProviders));
+        Assert.NotNull(Assert.Single(composition.ContextProviders).GetService<UserMemoryProvider>());
     }
 
     [Fact]
@@ -597,7 +598,7 @@ public class AgentCapabilityComposerTests
                 "Test Block",
                 "Contributes one test tool.",
                 ToolBlockScope.Agent | ToolBlockScope.Project,
-                ["test_block_tool"]
+                [new("test_block_tool", AgwToolPermission.None)]
             );
 
         public ValueTask<ToolContribution> MaterializeAsync(

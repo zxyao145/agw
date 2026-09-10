@@ -1,7 +1,11 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode;
+using Agw.Agents.Execution.HumanInteraction;
+using Agw.Agents.Execution.HumanInteraction.Application;
+using Agw.Agents.Execution.Inbound.Connections;
+using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Turns;
-using Agw.Agents.ExternalAgents.ClaudeCode;
 using ClaudeCodeSdk.Types;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -15,13 +19,14 @@ public class ClaudeCodeAskUserQuestionBridgeTests
     {
         // Arrange
         var accessor = new HumanInteractionContextAccessor();
-        var channel = new TestHumanInteractionChannel(request => new HumanInteractionResponse(
-            request.RequestId,
-            Cancelled: false,
-            JsonSerializer.SerializeToElement(
+        var channel = new TestHumanInteractionChannel(request => new UserInputResponse
+        {
+            InteractionId = "test-interaction",
+            Cancelled = false,
+            ResponseData = JsonSerializer.SerializeToElement(
                 new { answers = new Dictionary<string, string> { ["Continue?"] = "Yes" } }
-            )
-        ));
+            ),
+        });
         var bridge = new ClaudeCodeAskUserQuestionBridge(accessor, allowInteraction: true);
         PermissionResult? permissionResult = null;
         var innerAgent = new CallbackAgent(async cancellationToken =>
@@ -48,9 +53,9 @@ public class ClaudeCodeAskUserQuestionBridgeTests
 
         // Assert
         var request = Assert.Single(channel.Requests);
-        Assert.Equal("questions", request.InteractionKind);
-        Assert.Equal("AskUserQuestion", request.ToolName);
-        Assert.Equal("call-1", request.CallId);
+        Assert.Equal("questions", request.InputKind);
+        Assert.Equal("AskUserQuestion", request.Source.ToolName);
+        Assert.Equal("call-1", request.Source.CallId);
         Assert.Equal("Continue?", request.Payload.GetProperty("questions")[0].GetProperty("question").GetString());
         var allow = Assert.IsType<PermissionResultAllow>(permissionResult);
         Assert.True(allow.UpdatedInput.HasValue);
@@ -112,11 +117,12 @@ public class ClaudeCodeAskUserQuestionBridgeTests
     {
         // Arrange
         var accessor = new HumanInteractionContextAccessor();
-        var channel = new TestHumanInteractionChannel(request => new HumanInteractionResponse(
-            request.RequestId,
-            Cancelled: true,
-            ResponseData: null
-        ));
+        var channel = new TestHumanInteractionChannel(request => new UserInputResponse
+        {
+            InteractionId = "test-interaction",
+            Cancelled = true,
+            ResponseData = null,
+        });
         var bridge = new ClaudeCodeAskUserQuestionBridge(accessor, allowInteraction: true);
         PermissionResult? permissionResult = null;
         var innerAgent = new CallbackAgent(async cancellationToken =>
@@ -201,13 +207,14 @@ public class ClaudeCodeAskUserQuestionBridgeTests
     }
 
     private static TestHumanInteractionChannel CreateAnsweringChannel(string answer) =>
-        new(request => new HumanInteractionResponse(
-            request.RequestId,
-            Cancelled: false,
-            JsonSerializer.SerializeToElement(
+        new(request => new UserInputResponse
+        {
+            InteractionId = "test-interaction",
+            Cancelled = false,
+            ResponseData = JsonSerializer.SerializeToElement(
                 new { answers = new Dictionary<string, string> { ["Continue?"] = answer } }
-            )
-        ));
+            ),
+        });
 
     private static JsonElement CreateQuestionInput() =>
         JsonSerializer.SerializeToElement(
@@ -230,21 +237,144 @@ public class ClaudeCodeAskUserQuestionBridgeTests
             }
         );
 
+    [Theory]
+    [InlineData(AgwPermissionMode.AlwaysAsk, true, 2)]
+    [InlineData(AgwPermissionMode.AllowSameArguments, true, 1)]
+    [InlineData(AgwPermissionMode.AllowSameArguments, false, 2)]
+    [InlineData(AgwPermissionMode.FullAccess, true, 0)]
+    public async Task ToolApproval_ModeAndDecision_ControlReuse(
+        AgwPermissionMode mode,
+        bool approve,
+        int expectedRequests
+    )
+    {
+        var accessor = new HumanInteractionContextAccessor();
+        var turnAccessor = new RuntimeTurnContextAccessor();
+        var channel = new ToolChannel(approve);
+        var settings = ExecutionSettings.CreateDefault().WithPermissionMode(mode);
+        var task = new AgentExecutionTask
+        {
+            ProjectId = Guid.NewGuid(),
+            ProjectConversationId = Guid.NewGuid(),
+            ContextId = "scope",
+        };
+        var turn = new RuntimeTurnContext(
+            settings,
+            task,
+            new ExecutionTarget(Guid.NewGuid(), AgentRuntimeType.Agent),
+            "/workspace",
+            new NullSink()
+        )
+        {
+            UserId = "owner",
+        };
+        var cache = new Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode.ClaudeToolApprovalCache();
+        var bridge = new ClaudeCodeAskUserQuestionBridge(
+            accessor,
+            true,
+            mode,
+            "/workspace",
+            turn.AgentId,
+            turnAccessor,
+            cache
+        );
+        var results = new List<PermissionResult>();
+        var agent = new CallbackAgent(async token =>
+            results.Add(
+                await bridge.HandleAsync(
+                    "Bash",
+                    JsonSerializer.SerializeToElement(new { command = "test" }),
+                    new("call"),
+                    token
+                )
+            )
+        );
+        using var turnScope = turnAccessor.Push(turn);
+        using var interactionScope = accessor.Push(channel);
+        await bridge.BindRunAsync([], null, null, agent, TestContext.Current.CancellationToken);
+        await bridge.BindRunAsync([], null, null, agent, TestContext.Current.CancellationToken);
+        Assert.Equal(expectedRequests, channel.Count);
+        Assert.All(
+            results,
+            result => Assert.Equal(approve || mode == AgwPermissionMode.FullAccess, result is PermissionResultAllow)
+        );
+    }
+
+    [Fact]
+    public void ToolApprovalCache_ChangedArgumentsScopeOrVersion_RequiresApproval()
+    {
+        var cache = new Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode.ClaudeToolApprovalCache();
+        var args = System.Text.Json.Nodes.JsonNode.Parse("{\"a\":1,\"b\":2}");
+        cache.Add("user/project/conversation/agent/node/workdir", 0, "Bash", args);
+        Assert.True(
+            cache.Contains(
+                "user/project/conversation/agent/node/workdir",
+                0,
+                "Bash",
+                System.Text.Json.Nodes.JsonNode.Parse("{\"b\":2,\"a\":1}")
+            )
+        );
+        Assert.False(cache.Contains("other-scope", 0, "Bash", args));
+        Assert.False(cache.Contains("user/project/conversation/agent/node/workdir", 0, "Write", args));
+        Assert.False(
+            cache.Contains(
+                "user/project/conversation/agent/node/workdir",
+                0,
+                "Bash",
+                System.Text.Json.Nodes.JsonNode.Parse("{\"a\":2,\"b\":2}")
+            )
+        );
+        Assert.False(cache.Contains("user/project/conversation/agent/node/workdir", 2, "Bash", args));
+        Assert.False(cache.Contains("user/project/conversation/agent/node/workdir", 0, "Bash", args));
+    }
+
+    private sealed class NullSink : IExecutionMessageSink
+    {
+        public ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken) => ValueTask.CompletedTask;
+    }
+
+    private sealed class ToolChannel : IHumanInteractionChannel, IInteractionHandler
+    {
+        private readonly bool _approve;
+
+        public ToolChannel(bool approve)
+        {
+            _approve = approve;
+        }
+
+        public int Count { get; private set; }
+
+        public ValueTask<UserInputResponse> RequestAsync(
+            UserInputRequest request,
+            CancellationToken cancellationToken
+        ) => throw new NotSupportedException();
+
+        public ValueTask<InteractionResolution> ResolveAsync(
+            InteractionRequest request,
+            CancellationToken cancellationToken
+        )
+        {
+            Count++;
+            return ValueTask.FromResult<InteractionResolution>(
+                new InteractionResolution.Resolved(
+                    new ToolApprovalDecision { InteractionId = request.InteractionId, Approved = _approve }
+                )
+            );
+        }
+    }
+
     private sealed class TestHumanInteractionChannel : IHumanInteractionChannel
     {
-        private readonly Func<HumanInteractionRequest, HumanInteractionResponse> _respond;
+        private readonly Func<UserInputRequest, UserInputResponse> _respond;
 
-        public TestHumanInteractionChannel(Func<HumanInteractionRequest, HumanInteractionResponse> respond)
+        public TestHumanInteractionChannel(Func<UserInputRequest, UserInputResponse> respond)
         {
             _respond = respond;
         }
 
-        public List<HumanInteractionRequest> Requests { get; } = [];
+        public List<UserInputRequest> Requests { get; } = [];
 
-        public ValueTask<HumanInteractionResponse> RequestAsync(
-            HumanInteractionRequest request,
-            CancellationToken cancellationToken
-        )
+        public ValueTask<UserInputResponse> RequestAsync(UserInputRequest request, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             Requests.Add(request);

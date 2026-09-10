@@ -14,6 +14,11 @@ public sealed class HumanInteractionRequiredAIFunction : DelegatingAIFunction
         _protocol = protocol;
     }
 
+    public override object? GetService(Type serviceType, object? serviceKey = null) =>
+        serviceKey == null && serviceType == typeof(IHumanInteractionProtocol)
+            ? _protocol
+            : base.GetService(serviceType, serviceKey);
+
     protected override async ValueTask<object?> InvokeCoreAsync(
         AIFunctionArguments arguments,
         CancellationToken cancellationToken
@@ -32,19 +37,15 @@ public sealed class HumanInteractionRequiredAIFunction : DelegatingAIFunction
         }
 
         var currentCall = FunctionInvokingChatClient.CurrentContext?.CallContent;
-        var request = _protocol.CreateRequest(Guid.CreateVersion7().ToString("N"), arguments) with
+        var request = _protocol.CreateRequest(arguments) with
         {
-            ToolName = currentCall?.Name ?? Name,
-            CallId = currentCall?.CallId,
+            Source = HumanInteractionToolMetadata.ReadSource(FunctionInvokingChatClient.CurrentContext?.Options) with
+            {
+                ToolName = currentCall?.Name ?? Name,
+                CallId = currentCall?.CallId,
+            },
         };
         var response = await channel.RequestAsync(request, cancellationToken).ConfigureAwait(false);
-        if (!string.Equals(request.RequestId, response.RequestId, StringComparison.Ordinal))
-        {
-            throw new AgwException(
-                ErrorCodes.AgentExecutionFailed,
-                $"Human interaction response '{response.RequestId}' does not match request '{request.RequestId}'."
-            );
-        }
 
         if (response.Cancelled)
         {

@@ -18,6 +18,7 @@ COPY src/server/Directory.Build.props src/server/Directory.Packages.props ./src/
 COPY src/server/Agw.A2A/Agw.A2A.csproj ./src/server/Agw.A2A/
 COPY src/server/Agw.Agents.Contracts/Agw.Agents.Contracts.csproj ./src/server/Agw.Agents.Contracts/
 COPY src/server/Agw.Agents/Agw.Agents.csproj ./src/server/Agw.Agents/
+COPY src/server/Agw.Agents.Execution/Agw.Agents.Execution.csproj ./src/server/Agw.Agents.Execution/
 COPY src/server/Agw.Auth/Agw.Auth.csproj ./src/server/Agw.Auth/
 COPY src/server/Agw.Data/Agw.Data.csproj ./src/server/Agw.Data/
 COPY src/server/Agw.Files/Agw.Files.csproj ./src/server/Agw.Files/

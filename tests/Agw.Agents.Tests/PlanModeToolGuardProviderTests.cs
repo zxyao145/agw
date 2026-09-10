@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using Agw.Agents.Execution.Agents.AIContextProviders.PlanMode;
+using Agw.Agents.Execution.Agents.Context.PlanMode;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 

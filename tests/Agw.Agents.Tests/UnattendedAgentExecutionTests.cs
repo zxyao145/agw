@@ -1,10 +1,10 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using Agw.Agents.Execution.Agents;
+using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Agents.Tools;
-using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Turns;
+using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Shared.Exceptions;
+using Agw.Tools.HumanInteraction;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -87,7 +87,7 @@ public sealed class UnattendedAgentExecutionTests
             session,
             persistence,
             TestContext.Current.CancellationToken,
-            UnattendedApprovalHandler.Create(PermissionMode.FullAccess)
+            new UnattendedInteractionHandler(AgwPermissionMode.FullAccess)
         );
 
         Assert.Equal(approvalRounds, agent.ExecutedTools);
@@ -109,6 +109,7 @@ public sealed class UnattendedAgentExecutionTests
         {
             ToolName = scenario == "question" ? "ask_user_question" : "run_shell",
             FailAfterApproval = scenario == "failure",
+            RequiresInput = scenario == "question",
             ApprovalRounds = scenario == "limit" ? 100 : 1,
         };
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
@@ -124,7 +125,7 @@ public sealed class UnattendedAgentExecutionTests
                 session,
                 persistence,
                 cancellation.Token,
-                UnattendedApprovalHandler.Create(PermissionMode.FullAccess)
+                new UnattendedInteractionHandler(AgwPermissionMode.FullAccess)
             )
         );
 
@@ -155,6 +156,7 @@ public sealed class UnattendedAgentExecutionTests
         public int ApprovalRounds { get; set; } = 1;
         public string ToolName { get; set; } = "run_shell";
         public bool FailAfterApproval { get; set; }
+        public bool RequiresInput { get; set; }
 
         public UnattendedTestAgent(bool includeApproval)
         {
@@ -203,8 +205,8 @@ public sealed class UnattendedAgentExecutionTests
 
             var approved = messages
                 .SelectMany(message => message.Contents)
-                .OfType<AlwaysApproveToolApprovalResponseContent>()
-                .Any();
+                .OfType<ToolApprovalResponseContent>()
+                .Any(response => response.Approved);
             if (approved)
             {
                 ExecutedTools++;
@@ -215,15 +217,16 @@ public sealed class UnattendedAgentExecutionTests
             }
             if (_includeApproval && ExecutedTools < ApprovalRounds)
             {
-                yield return new AgentResponseUpdate(
-                    ChatRole.Assistant,
-                    [
-                        new ToolApprovalRequestContent(
-                            "approval-1",
-                            new FunctionCallContent("call-1", ToolName, new Dictionary<string, object?>())
-                        ),
-                    ]
+                var request = new ToolApprovalRequestContent(
+                    "approval-1",
+                    new FunctionCallContent("call-1", ToolName, new Dictionary<string, object?>())
                 );
+                if (RequiresInput)
+                    HumanInteractionToolMetadata.Write(
+                        request,
+                        new UserInputRequest("questions", "Input required", JsonSerializer.SerializeToElement(new { }))
+                    );
+                yield return new AgentResponseUpdate(ChatRole.Assistant, [request]);
                 yield break;
             }
 

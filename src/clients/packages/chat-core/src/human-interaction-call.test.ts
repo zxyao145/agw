@@ -25,14 +25,14 @@ test("matchesHumanInteractionCall uses call id and streaming scope", () => {
 
   assert.equal(
     matchesHumanInteractionCall(currentCall, {
-      callId: "call-1",
+      source: { callId: "call-1" },
       streamingScopeId: "turn-2",
     }),
     true,
   );
   assert.equal(
     matchesHumanInteractionCall(currentCall, {
-      callId: "call-1",
+      source: { callId: "call-1" },
       streamingScopeId: "turn-1",
     }),
     false,
@@ -44,11 +44,56 @@ test("hasMatchingHumanInteractionCall does not bind a repeated call id to an old
 
   assert.equal(
     hasMatchingHumanInteractionCall(messages, {
-      callId: "call-1",
+      source: { callId: "call-1" },
       streamingScopeId: "turn-2",
     }),
     false,
   );
-  assert.equal(hasMatchingHumanInteractionCall(messages, { callId: "call-1" }), true);
-  assert.equal(hasMatchingHumanInteractionCall(messages, {}), false);
+  assert.equal(hasMatchingHumanInteractionCall(messages, { source: { callId: "call-1" } }), true);
+  assert.equal(hasMatchingHumanInteractionCall(messages, { source: {} }), false);
+});
+
+test("matchesHumanInteractionCall rejects the wrong explicit business node", () => {
+  const rightNodeCall: AiMessage = {
+    ...functionCallMessage("call-1", "turn-1"),
+    additionalProperties: { interactionNodeId: "root/right", nodeName: "Left" },
+  };
+  const target = {
+    source: { callId: "call-1", nodeId: "root/left", providerScopeId: "sdk-request-port" },
+    streamingScopeId: "turn-1",
+  };
+
+  assert.equal(matchesHumanInteractionCall(rightNodeCall, target), false);
+  assert.equal(hasMatchingHumanInteractionCall([rightNodeCall], target), false);
+  assert.equal(
+    matchesHumanInteractionCall(
+      {
+        ...rightNodeCall,
+        additionalProperties: { interactionNodeId: "root/left", nodeName: "Right" },
+      },
+      target,
+    ),
+    true,
+  );
+});
+
+test("matchesHumanInteractionCall preserves matching when node attribution is unavailable", () => {
+  const call = functionCallMessage("call-1", "turn-1");
+  assert.equal(
+    matchesHumanInteractionCall(call, {
+      source: { callId: "call-1", nodeId: "root/left" },
+      streamingScopeId: "turn-1",
+    }),
+    true,
+  );
+  assert.equal(
+    matchesHumanInteractionCall(
+      {
+        ...call,
+        additionalProperties: { interactionNodeId: "root/right" },
+      },
+      { source: { callId: "call-1" }, streamingScopeId: "turn-1" },
+    ),
+    true,
+  );
 });
