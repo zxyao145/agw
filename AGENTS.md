@@ -61,7 +61,7 @@ Agw is a modular-monolith agent gateway for Agents, Jobs, Agentflows, and Chat: 
 
 ## APIs, Tools, and Coding
 
-- Non-WebSocket JSON endpoints return Bens.Results envelopes through `ApiResult.*` or configured boundary mapping. Use `ErrorCode.ToApiResult()` / `AgwException.ToApiResult()` for shared errors; uncaught `AgwException` maps through `AgwApiExceptionMiddleware`. `[ProducesApiResult]` supplies metadata only.
+- Non-WebSocket JSON endpoints return Bens.Results envelopes through `ApiResult.Ok(...)`, other `ApiResult.*` helpers, or configured boundary mapping. Use `ErrorCode.ToApiResult()` / `AgwException.ToApiResult()` for shared errors; uncaught `AgwException` maps through `AgwApiExceptionMiddleware`. `[ProducesApiResult]` supplies metadata only.
 - WebSockets, OAuth redirects, A2A, and static files may retain protocol-specific responses. Follow `docs/rules.md` for query/body identifiers and stable seven-digit error codes.
 - Every `IAgwTool`, `IContextualTool`, attributed Tool, and ToolBlock member explicitly declares `AgwToolPermission`. Standalone Tools and attributed containers stay stateless; ToolBlock state belongs in its Provider, session, or owned storage.
 - Tool implementations live under `Agw.Tools/Impl/Tools`, `Impl/ContextualTools`, and `Impl/ToolBlocks`; keep specialized executors/providers/storage with their implementation group.
