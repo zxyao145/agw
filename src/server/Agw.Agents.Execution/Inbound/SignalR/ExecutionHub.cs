@@ -60,6 +60,18 @@ public sealed class ExecutionHub : Hub<IExecutionHubClient>
             )
         );
 
+    /// <summary>页面重新加载后，按当前用户的项目会话发现仍在运行的进程内执行。</summary>
+    public Task<string?> FindInProcessExecution(Guid projectId, string contextId) =>
+        InvokeResultAsync(() =>
+            _registry.FindInProcessExecutionAsync(projectId, contextId, CurrentUserId, Context.ConnectionAborted)
+        );
+
+    /// <summary>重连后确认旧进程内执行状态；停止请求仍受连接所有权校验。</summary>
+    public Task<bool> RecoverInProcessExecution(string connectionId, bool interrupt) =>
+        InvokeResultAsync(() =>
+            _registry.RecoverInProcessExecutionAsync(connectionId, CurrentUserId, interrupt, Context.ConnectionAborted)
+        );
+
     private string CurrentUserId => Context.User.GetUserId();
 
     private static async Task InvokeAsync(Func<Task> action)

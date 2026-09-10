@@ -53,6 +53,10 @@ async function checkConversationSession(kind: string, strictMode = false) {
       removeEventListener() {},
     }) as unknown as MediaQueryList;
 
+  let finishRecovery!: () => void;
+  const recoveryReady = new Promise<void>((resolve) => {
+    finishRecovery = resolve;
+  });
   let detailsRequests = 0;
   let messageRequests = 0;
   const observed: {
@@ -60,12 +64,14 @@ async function checkConversationSession(kind: string, strictMode = false) {
     input?: {
       onClearSession: () => void;
       isTransitioning: boolean;
+      isExecuting: boolean;
       onExecute: (text: string, attachments: []) => void;
     };
     newChat?: () => void;
     refreshSignal?: number;
     selectAgent?: (selection: { agentType: number; agentId: string }) => void;
   } = {};
+  const attachedContexts = new Set<string>();
   const executions: (ExecutionRequest & { contextId: string })[] = [];
   const configurations: ExecutionSetting[] = [];
   let finishHistory!: () => void;
@@ -163,24 +169,29 @@ async function checkConversationSession(kind: string, strictMode = false) {
     "./lib/session-routing": sessionRouting,
     "../../../services/execution-session-manager": {
       executionSessionManager: {
-        has: () => false,
-        attach: (key: { contextId: string }) => ({
-          matchesKey: (candidate: typeof key) => candidate.contextId === key.contextId,
-          detach() {},
-          interruptAndWait: async () => {},
-          dispose: async () => {},
-          getStatus: () => "idle",
-          listAgentflowCheckpoints: async () => [],
-          getReconnectState: () => null,
-          getActiveTurnSnapshot: () => null,
-          configure: async (setting: ExecutionSetting) => {
-            configurations.push(setting);
-            return { restoredDurableExecution: false };
-          },
-          execute: async (request: ExecutionRequest) => {
-            executions.push({ ...request, contextId: key.contextId });
-          },
-        }),
+        has: (key: { contextId: string }) =>
+          kind === "restore-active" && attachedContexts.has(key.contextId),
+        attach: (key: { contextId: string }) => {
+          attachedContexts.add(key.contextId);
+          return {
+            matchesKey: (candidate: typeof key) => candidate.contextId === key.contextId,
+            detach() {},
+            interruptAndWait: async () => {},
+            dispose: async () => {},
+            getStatus: () => (kind === "restore-active" ? "running" : "idle"),
+            listAgentflowCheckpoints: async () => [],
+            getReconnectState: () => null,
+            getActiveTurnSnapshot: () => null,
+            configure: async (setting: ExecutionSetting) => {
+              configurations.push(setting);
+              if (kind === "restore-active") await recoveryReady;
+              return { restoredDurableExecution: false };
+            },
+            execute: async (request: ExecutionRequest) => {
+              executions.push({ ...request, contextId: key.contextId });
+            },
+          };
+        },
       },
     },
     "../../execution-platform": { useExecutionPlatform: () => ({ serverId: "local" }) },
@@ -302,6 +313,27 @@ async function checkConversationSession(kind: string, strictMode = false) {
       await React.act(async () => observed.input!.onExecute("too early", []));
       assert.equal(executions.length, 0);
       await React.act(async () => finishHistory());
+      if (kind === "restore-active") {
+        assert.equal(
+          observed.input?.isTransitioning,
+          true,
+          "history alone does not confirm execution is idle",
+        );
+        await React.act(async () => observed.input!.onExecute("too early after reload", []));
+        assert.equal(executions.length, 0);
+        await React.act(async () => finishRecovery());
+        assert.equal(observed.input?.isTransitioning, false);
+        assert.equal(observed.input?.isExecuting, true, "the old turn keeps the composer busy");
+        await React.act(async () => observed.selectAgent!({ agentType: 0, agentId: "agent-2" }));
+        assert.equal(
+          observed.input?.isExecuting,
+          true,
+          "changing Agent cannot discard the conversation's active execution",
+        );
+        await React.act(async () => observed.input!.onExecute("duplicate", []));
+        assert.equal(executions.length, 0);
+        return;
+      }
       if (kind === "history-refresh") {
         assert.equal(refreshTimers.size, 0, "idle history does not poll");
         await React.act(async () => observed.input!.onExecute("long answer", []));
@@ -471,3 +503,9 @@ for (const [kind, name] of [
 ]) {
   test(name, () => checkConversationSession(kind));
 }
+
+test("page reload checks server execution state before enabling the composer", () =>
+  checkConversationSession("restore-active"));
+
+test("StrictMode reload preserves the active execution while switching Agent", () =>
+  checkConversationSession("restore-active", true));

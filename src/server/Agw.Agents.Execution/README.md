@@ -70,6 +70,14 @@ Checkpoint 和 Agent Session 的持久化仍经过既有 Application Port / Infr
 
 部署与隔离 PostgreSQL 验证见 [运行时一致性维护说明](../../../docs/operations/backend-runtime-consistency.md)。
 
+## 断线后的客户端执行状态
+
+模型输出的重试、网络错误和诊断消息不代表执行结束；客户端只在 `turn-finished` 或恢复查询确认空闲后解除发送阻塞。SignalR 关闭或启动响应丢失时保留未确认的执行状态。
+
+打开已有会话（包括页面刷新、重新打开窗口和本地 attachment 丢失）时，客户端先调用 `FindInProcessExecution(projectId, contextId)`，按当前用户和规范化后的项目会话查找仍在运行的原连接。历史消息加载完成不代表执行已经结束；状态查询完成前禁止发送，查询失败保留重试入口。返回原连接 ID 后复用下面的状态查询和停止流程。新建空会话不需要等待历史恢复。
+
+InProcess 重连使用 `RecoverInProcessExecution(connectionId, interrupt)` 查询原连接，返回 `true` 表示仍在执行或释放资源。`connectionId` 必须是启动该轮执行时的原连接 ID，连续重连不得替换；服务端校验连接所有者，外来和不存在的连接均返回 `false`，且不会中断外来执行。恢复中的客户端每秒查询一次，原执行退出前保留停止按钮；停止时传入 `interrupt=true`，请求取消后仍等待服务端确认退出。此接口恢复执行状态和停止能力，不重放断线期间的 InProcess 消息。客户端与服务端应一起更新；恢复接口不可用时保留重试入口，不推断执行已结束。
+
 ## 两套执行提供者
 
 实时执行保留两套实现，并通过 `Execution:Provider` 在进程启动时二选一。它不是按请求动态切换；同一套部署中的所有 Host 必须使用相同配置。拆分部署中，Data Plane 映射 SignalR/A2A 并运行 worker，Control Plane 只为 Jobs 注册 durable client，Standalone 同时组合两者。

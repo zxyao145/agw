@@ -1184,7 +1184,7 @@ export function ChatWorkspace({
                       )
                     }
                     showUserInputNavigation={showUserInputNavigation}
-                    restoreDurableExecution={
+                    restoreExecution={
                       Number(chatSessionSeed.revision) > 0 &&
                       queryProjectId === selectedProjectId &&
                       queryConversationId === conversationId &&

@@ -17,6 +17,7 @@ internal sealed class ExecutionConnection : IAsyncDisposable
     private readonly ILogger _logger;
     private volatile bool _attached = true;
     private int _disposed;
+    private readonly TaskCompletionSource _disposeCompletion = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     public ExecutionConnection(
         string connectionId,
@@ -73,6 +74,47 @@ internal sealed class ExecutionConnection : IAsyncDisposable
         }
     }
 
+    internal async Task<bool> IsActiveConversationAsync(
+        Guid projectId,
+        string contextId,
+        CancellationToken cancellationToken
+    )
+    {
+        await _commandGate.WaitAsync(cancellationToken);
+        try
+        {
+            return Volatile.Read(ref _disposed) == 0
+                && _context.ProjectId == projectId
+                && string.Equals(_context.ContextId, contextId, StringComparison.Ordinal)
+                && !_context.WhenIdleAsync().IsCompleted;
+        }
+        finally
+        {
+            _commandGate.Release();
+        }
+    }
+
+    /// <summary>确认旧连接执行是否仍在运行，并允许同一用户在重连后请求停止。</summary>
+    internal async Task<bool> RecoverInProcessExecutionAsync(bool interrupt, CancellationToken cancellationToken)
+    {
+        if (Volatile.Read(ref _disposed) != 0)
+            return !_disposeCompletion.Task.IsCompleted;
+
+        await _commandGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (Volatile.Read(ref _disposed) != 0)
+                return !_disposeCompletion.Task.IsCompleted;
+            if (interrupt && _context.HasActiveTurn)
+                await _context.InterruptTurnAsync(null, cancellationToken);
+            return !_context.WhenIdleAsync().IsCompleted;
+        }
+        finally
+        {
+            _commandGate.Release();
+        }
+    }
+
     public async Task DetachAsync(Action remove)
     {
         await _commandGate.WaitAsync(CancellationToken.None);
@@ -114,8 +156,9 @@ internal sealed class ExecutionConnection : IAsyncDisposable
             _commandGate.Release();
         }
 
-        _commandGate.Dispose();
+        // Recovery calls may already be queued; the managed gate is collected with this connection.
         await _scope.DisposeAsync();
+        _disposeCompletion.TrySetResult();
     }
 
     private async Task DisposeWhenIdleAsync(Action remove)

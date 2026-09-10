@@ -97,6 +97,48 @@ public sealed class ExecutionConnectionRegistry : IAsyncDisposable
         return connection.GetAgentflowCheckpointsAsync(agentflowId, cancellationToken);
     }
 
+    public async Task<string?> FindInProcessExecutionAsync(
+        Guid projectId,
+        string contextId,
+        string userId,
+        CancellationToken cancellationToken
+    )
+    {
+        if (projectId == Guid.Empty || string.IsNullOrWhiteSpace(contextId))
+            throw new AgwException(ErrorCodes.InvalidParam);
+        var normalizedContextId = ContextIdUtil.NormalizeContextId(contextId);
+        foreach (var (connectionId, connection) in _connections)
+        {
+            if (
+                string.Equals(connection.UserId, userId, StringComparison.Ordinal)
+                && await connection.IsActiveConversationAsync(projectId, normalizedContextId, cancellationToken)
+            )
+            {
+                return connectionId;
+            }
+        }
+        return null;
+    }
+
+    public Task<bool> RecoverInProcessExecutionAsync(
+        string connectionId,
+        string userId,
+        bool interrupt,
+        CancellationToken cancellationToken
+    )
+    {
+        // Foreign and missing connections are indistinguishable; neither grants execution access.
+        if (
+            !_connections.TryGetValue(connectionId, out var connection)
+            || !string.Equals(connection.UserId, userId, StringComparison.Ordinal)
+        )
+        {
+            return Task.FromResult(false);
+        }
+
+        return connection.RecoverInProcessExecutionAsync(interrupt, cancellationToken);
+    }
+
     public Task DisconnectAsync(string connectionId)
     {
         if (!_connections.TryGetValue(connectionId, out var connection))

@@ -16,7 +16,6 @@ import {
   DEFAULT_AGENT_MODE,
   getAgentMode,
   getAgentflowCheckpointMessage,
-  hasPersistedDurableExecution,
   getMessageStreamingScopeId,
   getPendingInteraction,
   getTurnFinishedStatus,
@@ -100,8 +99,8 @@ export interface ChatProps {
   showUserInputNavigation?: boolean;
   /** 将 SignalR 重连状态同步给更高层的工作区遮罩。 */
   onReconnectStateChange?: (state: ExecutionReconnectState | null) => void;
-  /** 历史水合完成后，允许仅对已有 durable attachment 自动重订阅。 */
-  restoreDurableExecution?: boolean;
+  /** 历史水合后查询服务端活动执行，并恢复 durable attachment。 */
+  restoreExecution?: boolean;
   active?: boolean;
 }
 
@@ -175,7 +174,7 @@ export function Chat({
   onPendingFileCommentsRemove,
   showUserInputNavigation = false,
   onReconnectStateChange,
-  restoreDurableExecution = false,
+  restoreExecution = false,
 }: ChatProps) {
   const executionServerId = useExecutionPlatform().serverId;
   const initialHistory = React.useMemo(
@@ -217,7 +216,7 @@ export function Chat({
   const userInputRef = React.useRef<UserInputRef | null>(null);
   const executionClientRef = React.useRef<ManagedExecutionHandle | null>(null);
   const configuredSessionRef = React.useRef<string | null>(null);
-  const durableRestoreAttemptRef = React.useRef<string | null>(null);
+  const [restoredExecutionKey, setRestoredExecutionKey] = React.useState<string | null>(null);
   const executionGenerationRef = React.useRef(0);
   const streamingMessageBatcherRef = React.useRef<StreamingMessageBatcher | null>(null);
   const checkpointResumeBufferRef = React.useRef<AiMessage[] | null>(null);
@@ -323,8 +322,18 @@ export function Chat({
     isLoadingConversation ||
     hydratedSessionRevision !== sessionSeed.revision ||
     Boolean(conversationId && !contextId);
+  const executionRestoreKey =
+    restoreExecution && projectId && contextId
+      ? JSON.stringify([executionServerId, projectId, contextId, sessionSeed.revision])
+      : null;
+  const isRestoringExecution =
+    executionRestoreKey !== null && restoredExecutionKey !== executionRestoreKey;
   const checkpointResumeDisabled =
-    isExecuting || isTransitioning || isHydratingSession || reconnectState !== null;
+    isExecuting ||
+    isTransitioning ||
+    isHydratingSession ||
+    isRestoringExecution ||
+    reconnectState !== null;
 
   React.useEffect(() => {
     if (!isExecuting || !onConversationChange) return;
@@ -736,6 +745,7 @@ export function Chat({
     refreshAgentflowCheckpoints,
     restoreActiveTurnSnapshot,
     sessionSeed.revision,
+    targetKey,
   ]);
 
   const ensureConfiguredClient = React.useCallback(
@@ -885,52 +895,36 @@ export function Chat({
   ]);
 
   React.useEffect(() => {
-    if (
-      !restoreDurableExecution ||
-      !projectId ||
-      !contextId ||
-      hydratedSessionRevision !== sessionSeed.revision ||
-      executionClientRef.current ||
-      !hasPersistedDurableExecution({ projectId, contextId })
-    ) {
-      return;
-    }
-
-    const restoreKey = JSON.stringify([
-      executionServerId,
-      projectId,
-      contextId,
-      sessionSeed.revision,
-    ]);
-    if (durableRestoreAttemptRef.current === restoreKey) {
-      return;
-    }
-    durableRestoreAttemptRef.current = restoreKey;
-
+    if (!executionRestoreKey || !projectId || !contextId || isHydratingSession) return;
+    let cancelled = false;
     const generation = executionGenerationRef.current;
     void ensureConfiguredClient(contextId, generation)
       .then((client) => {
         if (
+          cancelled ||
           !client ||
           generation !== executionGenerationRef.current ||
           executionClientRef.current !== client
-        ) {
+        )
           return;
-        }
-
         setIsExecuting(["running", "waiting-approval", "detached"].includes(client.getStatus()));
+        setRestoredExecutionKey(executionRestoreKey);
       })
       .catch(() => {
-        // configure 已通过现有 reconnect 状态展示临时恢复失败和手动 Retry。
+        // configure 保留失败的 reconnect 状态；查询失败不能解除发送阻塞。
+        if (!cancelled && generation === executionGenerationRef.current)
+          setRestoredExecutionKey(executionRestoreKey);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [
-    contextId,
-    ensureConfiguredClient,
-    executionServerId,
-    hydratedSessionRevision,
+    executionRestoreKey,
     projectId,
-    restoreDurableExecution,
-    sessionSeed.revision,
+    contextId,
+    isHydratingSession,
+    ensureConfiguredClient,
+    targetKey,
   ]);
 
   const ensureContextId = React.useCallback(
@@ -963,7 +957,7 @@ export function Chat({
 
   const handleExecute = React.useCallback(
     async (value: string, imageAttachments: readonly ChatImageAttachment[]) => {
-      if (isHydratingSession || reconnectState) return;
+      if (isExecuting || isHydratingSession || isRestoringExecution || reconnectState) return;
       if (isTransitioning) {
         toast.error("Please wait for the previous execution to stop");
         return;
@@ -1045,9 +1039,14 @@ export function Chat({
         void onConversationChange?.();
       } catch (error) {
         if (generation === executionGenerationRef.current) {
-          activeStreamingScopeRef.current = null;
-          setIsExecuting(false);
-          setPendingInteraction(null);
+          const stillActive = ["running", "waiting-approval", "detached"].includes(
+            executionClientRef.current?.getStatus() ?? "idle",
+          );
+          if (!stillActive) {
+            activeStreamingScopeRef.current = null;
+            setPendingInteraction(null);
+          }
+          setIsExecuting(stillActive);
           reportExecutionErrorOnce(error);
         }
       }
@@ -1056,7 +1055,9 @@ export function Chat({
       ensureConfiguredClient,
       ensureConversationId,
       ensureContextId,
+      isExecuting,
       isHydratingSession,
+      isRestoringExecution,
       isTransitioning,
       notifyExecutionError,
       onConversationAccepted,
@@ -1212,8 +1213,11 @@ export function Chat({
         .catch((error) => {
           if (generation !== executionGenerationRef.current) return;
           checkpointResumeBufferRef.current = null;
-          activeStreamingScopeRef.current = null;
-          setIsExecuting(false);
+          const stillActive = ["running", "waiting-approval", "detached"].includes(
+            executionClientRef.current?.getStatus() ?? "idle",
+          );
+          if (!stillActive) activeStreamingScopeRef.current = null;
+          setIsExecuting(stillActive);
           notifyExecutionError(error);
         })
         .finally(() => {
@@ -1615,7 +1619,9 @@ export function Chat({
           {/* 输入框 */}
           <ChatInput
             isExecuting={isExecuting}
-            isTransitioning={isTransitioning || isHydratingSession || isLoadingConversation}
+            isTransitioning={
+              isTransitioning || isHydratingSession || isLoadingConversation || isRestoringExecution
+            }
             isLoadingHistory={isLoadingOlderMessages || isJumpingToTop}
             hasMessages={renderItems.length > 0}
             onExecute={(value, imageAttachments) => {

@@ -246,3 +246,56 @@ test("conversation controller owns raw messages, control state, usage, and rende
   assert.equal(controller.getSnapshot().pendingInteraction?.interactionId, "request-1");
   assert.equal(controller.getSnapshot().items.at(-1)?.type, "human-interaction");
 });
+
+test("command errors retain an active turn and block another send until recovery confirms idle", async () => {
+  let handlers!: ExecutionHubHandlers;
+  let active = true;
+  let sends = 0;
+  const session = {
+    configure: async () => ({ restoredDurableExecution: false }),
+    hasActiveExecution: () => active,
+    execute: async () => {
+      sends++;
+      throw new Error("Startup response lost");
+    },
+    interrupt: async () => {
+      throw new Error("Stop response lost");
+    },
+    dispose: async () => undefined,
+  } as unknown as ExecutionSession;
+  const controller = new ConversationController({
+    adapter: {
+      execution: { baseUrl: "https://agw.test", token: null },
+      createSession: (value) => {
+        handlers = value;
+        return session;
+      },
+    },
+    projectId: "project",
+    target: { id: "agent", type: "agent" },
+    sessionSeed: {
+      revision: 1,
+      conversationId: "conversation",
+      contextId: "context",
+      messages: [],
+    },
+  });
+  try {
+    await controller.send("hello", []);
+    assert.equal(controller.getSnapshot().isExecuting, true);
+    await controller.stop();
+    assert.equal(controller.getSnapshot().isExecuting, true);
+    await controller.send("again", []);
+    assert.equal(sends, 1);
+    handlers.onReconnected?.();
+    assert.equal(controller.getSnapshot().isExecuting, true);
+    active = false;
+    handlers.onReconnected?.();
+    assert.equal(controller.getSnapshot().isExecuting, false);
+    await controller.send("another message", []);
+    assert.equal(sends, 2);
+    assert.equal(controller.getSnapshot().isExecuting, false);
+  } finally {
+    await controller.dispose();
+  }
+});

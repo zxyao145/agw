@@ -152,7 +152,7 @@ export class ExecutionSessionManager {
       configure: async (setting) => {
         try {
           const result = await attachedEntry.client.configure(setting);
-          if (result.restoredDurableExecution) {
+          if (result.restoredDurableExecution || attachedEntry.client.hasActiveExecution()) {
             this.activity.turnStarted(key);
           }
           return result;
@@ -172,8 +172,10 @@ export class ExecutionSessionManager {
         try {
           await attachedEntry.client.execute(request);
         } catch (error) {
-          attachedEntry.activeTurn = null;
-          this.activity.turnFinished(key, "failed");
+          if (!attachedEntry.client.hasActiveExecution()) {
+            attachedEntry.activeTurn = null;
+            this.activity.turnFinished(key, "failed");
+          }
           throw error;
         }
       },
@@ -188,7 +190,7 @@ export class ExecutionSessionManager {
         try {
           return await attachedEntry.client.resumeCheckpoint(args);
         } catch (error) {
-          this.activity.turnFinished(key, "failed");
+          if (!attachedEntry.client.hasActiveExecution()) this.activity.turnFinished(key, "failed");
           throw error;
         }
       },

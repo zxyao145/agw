@@ -154,6 +154,7 @@ export class ConversationController {
   public async send(text: string, attachments: readonly ChatImageAttachment[]): Promise<void> {
     if (
       this.state.isExecuting ||
+      this.state.reconnectState !== null ||
       !this.options.projectId ||
       !this.options.target ||
       (!text.trim() && attachments.length === 0)
@@ -184,7 +185,7 @@ export class ConversationController {
         input: toExecutionUserInput(userMessage),
       });
     } catch (error) {
-      this.activeStreamingScopeId = null;
+      if (!this.session?.hasActiveExecution()) this.activeStreamingScopeId = null;
       this.fail(error);
     }
   }
@@ -319,7 +320,11 @@ export class ConversationController {
         },
         onReconnecting: (state) => this.patch({ reconnectState: state }),
         onReconnectFailed: (state) => this.patch({ reconnectState: state }),
-        onReconnected: () => this.patch({ reconnectState: null }),
+        onReconnected: () =>
+          this.patch({
+            reconnectState: null,
+            isExecuting: this.session?.hasActiveExecution() ?? false,
+          }),
       };
       this.session =
         this.options.adapter.createSession?.(handlers) ??
@@ -442,7 +447,7 @@ export class ConversationController {
 
   private fail(error: unknown): void {
     const message = error instanceof Error ? error.message : String(error);
-    this.patch({ error: message, isExecuting: false });
+    this.patch({ error: message, isExecuting: this.session?.hasActiveExecution() ?? false });
     this.options.adapter.onError?.(error);
   }
 
