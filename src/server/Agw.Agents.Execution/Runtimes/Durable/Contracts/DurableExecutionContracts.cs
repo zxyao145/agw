@@ -76,8 +76,16 @@ internal sealed record DurableExecutionSegmentResult
 /// <param name="ExecutionId">业务执行标识。</param>
 /// <param name="Status">当前执行状态。</param>
 /// <param name="StreamingScopeId">原始用户消息标识，用于把恢复消息绑定到同一轮历史。</param>
+/// <param name="ActivePermissionMode">Permission snapshot for this turn.</param>
+/// <param name="NextPermissionMode">Selected permission for the next turn.</param>
+/// <param name="NextPermissionVersion">Version of the selected permission.</param>
+/// <param name="ActivePermissionVersion">Version of this turn's immutable permission snapshot.</param>
 internal sealed record DurableExecutionStatusResponse(
     Guid ExecutionId,
     DurableExecutionStatus Status,
-    string StreamingScopeId
+    string StreamingScopeId,
+    AgwPermissionMode? ActivePermissionMode = null,
+    AgwPermissionMode? NextPermissionMode = null,
+    long NextPermissionVersion = 0,
+    long ActivePermissionVersion = 0
 );

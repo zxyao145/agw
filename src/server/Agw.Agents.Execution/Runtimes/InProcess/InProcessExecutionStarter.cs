@@ -1,7 +1,9 @@
+using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Runtimes.Contracts;
 using Agw.Agents.Execution.Turns;
+using Agw.Shared.Data.Entities.Agents;
 
 namespace Agw.Agents.Execution.Runtimes.InProcess;
 
@@ -16,6 +18,7 @@ internal sealed class InProcessExecutionStarter : IExecutionStarter
     private readonly CancellationToken _hostToken;
     private readonly Action<int> _pendingInteractionCountChanged;
     private ExecutionTarget? _target;
+    private long _permissionVersion;
 
     public InProcessExecutionStarter(
         IRuntimeFactory runtimeFactory,
@@ -39,11 +42,21 @@ internal sealed class InProcessExecutionStarter : IExecutionStarter
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
-        if (_target.HasValue && _target.Value != request.Target)
+        if (
+            _target.HasValue
+            && (
+                _target.Value != request.Target
+                || (
+                    _permissionVersion != request.Settings.PermissionVersion
+                    && Runtime is AgentRuntime { AgentType: AgentType.External }
+                )
+            )
+        )
         {
             await ReleaseRuntimeAsync();
         }
 
+        _permissionVersion = request.Settings.PermissionVersion;
         var context = new RuntimeTurnContext(
             request.Settings,
             request.Task,

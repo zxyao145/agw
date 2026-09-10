@@ -335,7 +335,13 @@ flowchart TB
 
 `SettingCommandHandler` 只把 transport contract 转换为不可变 `ExecutionSettings`，然后调用 `ExecutionConnectionContext.ApplySettingsAsync`。Context 在活动 turn 期间返回 busy error；空闲且内容变化时释放旧 runtime，并清空 resolved task、workspace 和 target。
 
-权限策略的初始值仍由 `SettingCommand.permissionMode` 保存。运行中切换通过 `SetPermissionModeCommand` 完成，因此不会触发 settings 的 busy 检查或重建 runtime；新的策略会立即应用到当前 turn。切换到 `FullAccess` 时，待处理及后续 Tool 审批均由服务端使用 `always-tool` 自动同意，普通 HumanGate 与用户信息交互不受影响。
+权限策略的初始值由 `SettingCommand.permissionMode` 保存。`SetPermissionModeCommand` 只修改下一 turn 的设置；当前 turn、待处理审批以及同一 Distributed turn 的恢复均使用启动时快照。权限版本随选择变化递增，因此 `A → B → A` 也会在下一轮使旧授权失效。外部 SDK 实例需要变更模式时，在下一轮开始前重建并恢复 provider session，不重放用户输入。Agentflow 所有节点共享本轮快照，权限变更不删除已有 checkpoint。
+
+`GET /api/agents/permission-capabilities?type=0&id=<agentId>` 返回 `supportedPermissionModes` 与 `reason`；`type=1` 查询 Agentflow，包括嵌套图的能力交集。查询及执行前校验遵守目标用户归属。`permission-status` 控制消息携带 `activePermissionMode`、`nextPermissionMode`、`permissionChangePending`，客户端据此分别显示本轮与下轮权限，不能因选择 Full access 隐藏当前审批。
+
+内置 Agent 与 Claude Code 支持三种权限；Codex/Pi 当前 SDK 接入仅开放 Full access，显式选择其他模式会失败。未指定权限的既有调用保留原配置。Claude Code 通过 `CanUseTool` 将原生工具审批接入统一交互，Always ask 每次决定，Allow same arguments 仅复用当前存活会话中相同用户、项目会话、Agent/节点、工作目录和参数的授权。授权不写入永久白名单或数据库，重启后重新询问。普通工具审批与 AskUserQuestion/HumanGate 分开处理。
+
+Codex 保持 `CodexSdk.MAF → CodexSdk → codex exec`，没有 app-server 接入或 SDK 审批响应扩展。Pi 的 ProjectTrust 仍只控制项目配置信任。Full access 的外部执行权限作用于运行 Agw 的主机，仍受操作系统权限约束；Files API 的项目路径和用户归属限制不变。
 
 ### 执行 Agent 或 Agentflow
 
@@ -844,7 +850,7 @@ A2A 和 Jobs 不经过 `ExecutionHub`、connection registry 或 command dispatch
 - A2A 使用 streaming 方法并把统一执行事件映射为 A2A 协议事件；
 - Jobs 使用非 streaming 方法等待执行结果，显式传入 `PermissionMode = FullAccess` 和 `HumanInteractionPolicy = Reject`；
 - 权限通过执行契约传入 InProcess Agent/Agentflow，并随 durable manifest 保存，worker 恢复时继续使用。普通工具审批返回 `always-tool` 响应后继续执行；`ask_user_question` 和 HumanGate 不会被自动批准，无人值守时明确失败；
-- Full access 对 Codex 映射为 `ApprovalPolicy = Never`，对 Claude Code 映射为 `bypassPermissions`；保留工作区、Codex 沙箱及用户资源归属限制。未指定权限的调用方保持原配置；
+- Full access 对 Codex 同时映射为 `SandboxMode = DangerFullAccess` 与 `ApprovalPolicy = Never`，对 Claude Code 映射为 `bypassPermissions`；保留工作目录配置及用户资源归属限制。未指定权限的调用方保持原配置；
 - InProcess / Distributed 的选择以及 Agent / Agentflow runtime 的差异都留在 Agents 模块内部；恢复和中断仅通过独立的 `IDurableAgentExecutionFacade` 暴露。
 
 因此，修改 Agent/Agentflow 构造或 session 持久化时，调用方不需要了解 runtime 实现；修改公开 Contracts 时才需要同时检查 A2A 和 Jobs。只修改 connection command 时，影响范围通常局限在实时执行链路。

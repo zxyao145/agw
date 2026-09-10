@@ -13,13 +13,15 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         IReadOnlyDictionary<string, string> environmentVariables,
         AgwPermissionMode? permissionMode,
         bool resume,
-        HumanInteractionPolicy humanInteractionPolicy = HumanInteractionPolicy.Allow
+        HumanInteractionPolicy humanInteractionPolicy = HumanInteractionPolicy.Allow,
+        long permissionVersion = 0
     )
     {
         ProjectId = projectId;
         ContextId = contextId;
         _environmentVariables = environmentVariables;
         PermissionMode = permissionMode;
+        PermissionVersion = permissionVersion;
         Resume = resume;
         HumanInteractionPolicy = humanInteractionPolicy;
     }
@@ -31,6 +33,8 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
     public IReadOnlyDictionary<string, string> EnvironmentVariables => _environmentVariables;
 
     public AgwPermissionMode? PermissionMode { get; }
+
+    public long PermissionVersion { get; }
 
     public bool Resume { get; }
 
@@ -52,10 +56,21 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
         FromCommand(new SettingCommand(ProjectDefaults.DefaultBuiltInId));
 
     public ExecutionSettings WithPermissionMode(AgwPermissionMode permissionMode) =>
-        new(ProjectId, ContextId, _environmentVariables, permissionMode, Resume, HumanInteractionPolicy);
+        new(
+            ProjectId,
+            ContextId,
+            _environmentVariables,
+            permissionMode,
+            Resume,
+            HumanInteractionPolicy,
+            PermissionMode == permissionMode ? PermissionVersion : checked(PermissionVersion + 1)
+        );
+
+    internal ExecutionSettings WithPermissionSnapshot(AgwPermissionMode? mode, long version) =>
+        new(ProjectId, ContextId, _environmentVariables, mode, Resume, HumanInteractionPolicy, version);
 
     public ExecutionSettings WithHumanInteractionPolicy(HumanInteractionPolicy policy) =>
-        new(ProjectId, ContextId, _environmentVariables, PermissionMode, Resume, policy);
+        new(ProjectId, ContextId, _environmentVariables, PermissionMode, Resume, policy, PermissionVersion);
 
     public bool Equals(ExecutionSettings? other)
     {

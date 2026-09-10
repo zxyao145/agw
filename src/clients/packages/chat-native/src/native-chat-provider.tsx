@@ -19,6 +19,11 @@ export type NativeChatBindings = {
   selectedTarget: ChatTargetOption | null;
   selectedProject: { id: string; name: string } | null;
   permissionMode: PermissionMode;
+  activePermissionMode?: PermissionMode | null;
+  permissionChangePending?: boolean;
+  supportedPermissionModes?: readonly PermissionMode[];
+  permissionReason?: string | null;
+  permissionUnavailable?: string | null;
   agentMode: AgentMode;
   commandSource: CommandSource;
   agentSuggestions: NativeAgentSuggestion[];

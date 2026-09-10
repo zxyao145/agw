@@ -1,6 +1,6 @@
 "use client";
 
-import type { InteractionResponse } from "@agw/execution-core";
+import { getPermissionStatus, type InteractionResponse } from "@agw/execution-core";
 
 import * as React from "react";
 import { useQuery } from "@agw/components/query";
@@ -193,6 +193,26 @@ export function Chat({
     sessionSeed.revision,
   );
   const [permissionMode, setPermissionMode] = React.useState<PermissionMode>("fullAccess");
+  const [activePermissionMode, setActivePermissionMode] = React.useState<PermissionMode | null>(
+    null,
+  );
+  const [permissionChangePending, setPermissionChangePending] = React.useState(false);
+  const permissionCapabilities = useQuery({
+    queryKey: ["execution-permissions", executionServerId, target?.type, target?.id],
+    enabled: Boolean(target),
+    queryFn: () =>
+      apiGet("/api/agents/permission-capabilities", {
+        params: { query: { type: target!.type === "agent" ? 0 : 1, id: target!.id } },
+      }),
+  });
+  const supportedPermissionModes = permissionCapabilities.data?.supportedPermissionModes ?? [];
+  const permissionUnavailable = !supportedPermissionModes.includes(permissionMode)
+    ? permissionCapabilities.isPending
+      ? "Loading permissions…"
+      : permissionCapabilities.error
+        ? "Unable to load supported permissions. Retry before sending."
+        : "Select a supported permission mode before sending."
+    : undefined;
   const [agentMode, setAgentMode] = React.useState<AgentMode>(
     () => sessionSeed.agentMode ?? getLatestAgentMode(sessionSeed.messages),
   );
@@ -519,6 +539,14 @@ export function Chat({
         return;
       }
 
+      const permissionStatus = getPermissionStatus(message);
+      if (permissionStatus) {
+        setActivePermissionMode(permissionStatus.activePermissionMode);
+        if (permissionStatus.nextPermissionMode)
+          setPermissionMode(permissionStatus.nextPermissionMode);
+        setPermissionChangePending(permissionStatus.permissionChangePending);
+        return;
+      }
       if (message.additionalProperties?.type === "mode-change-failed") {
         streamingMessageBatcherRef.current?.flush(generation);
         setAgentMode(confirmedAgentModeRef.current);
@@ -632,7 +660,9 @@ export function Chat({
         return;
       }
 
-      const prepared = prepareChatHistory(snapshot.messages);
+      const prepared = prepareChatHistory(
+        snapshot.messages.filter((message) => !getPermissionStatus(message)),
+      );
       const nextMessages = replaceStreamingScope(
         messagesRef.current,
         prepared.messages,
@@ -645,6 +675,13 @@ export function Chat({
       let nextCommands: string[] | null = null;
       let nextMode: AgentMode | null = null;
       for (const message of snapshot.messages) {
+        const permissionStatus = getPermissionStatus(message);
+        if (permissionStatus) {
+          setActivePermissionMode(permissionStatus.activePermissionMode);
+          if (permissionStatus.nextPermissionMode)
+            setPermissionMode(permissionStatus.nextPermissionMode);
+          setPermissionChangePending(permissionStatus.permissionChangePending);
+        }
         const initCommands = getClaudeInitCommands(message);
         if (initCommands !== null) {
           nextCommands = initCommands;
@@ -963,6 +1000,10 @@ export function Chat({
         return;
       }
 
+      if (permissionUnavailable) {
+        toast.error(permissionUnavailable);
+        return;
+      }
       const submittedFileComments = [...pendingFileComments];
       const resolvedInput = buildFileCommentPrompt(value, submittedFileComments);
       if (!resolvedInput && imageAttachments.length === 0) {
@@ -1064,6 +1105,7 @@ export function Chat({
       onConversationChange,
       onPendingFileCommentsRemove,
       pendingFileComments,
+      permissionUnavailable,
       projectId,
       reconnectState,
       target,
@@ -1072,6 +1114,7 @@ export function Chat({
 
   const handlePermissionModeChange = React.useCallback(
     (nextPermissionMode: PermissionMode) => {
+      if (!supportedPermissionModes.includes(nextPermissionMode)) return;
       const previousPermissionMode = permissionMode;
       setPermissionMode(nextPermissionMode);
       if (!projectId) return;
@@ -1087,14 +1130,6 @@ export function Chat({
         .then(async (client) => {
           if (!client) return;
           await client.setPermissionMode(nextPermissionMode);
-          if (
-            generation === executionGenerationRef.current &&
-            nextPermissionMode === "fullAccess"
-          ) {
-            setPendingInteraction((current) =>
-              current?.kind === "tool-approval" ? null : current,
-            );
-          }
         })
         .catch((error) => {
           if (generation !== executionGenerationRef.current) return;
@@ -1105,7 +1140,14 @@ export function Chat({
           if (generation === executionGenerationRef.current) setIsTransitioning(false);
         });
     },
-    [ensureConfiguredClient, ensureContextId, notifyExecutionError, permissionMode, projectId],
+    [
+      ensureConfiguredClient,
+      ensureContextId,
+      notifyExecutionError,
+      permissionMode,
+      projectId,
+      supportedPermissionModes,
+    ],
   );
 
   const handleAgentModeChange = React.useCallback(
@@ -1598,7 +1640,7 @@ export function Chat({
               isLoadingOlderMessages={isLoadingOlderMessages}
               isInitialLoading={isLoadingConversation}
               onLoadOlderMessages={() => void loadOlderMessages()}
-              permissionMode={permissionMode}
+              permissionMode={activePermissionMode ?? undefined}
               onHumanResponse={submitInteractionResponse}
               showCheckpointResume={target?.type === "agentflow"}
               checkpointResumeDisabled={checkpointResumeDisabled}
@@ -1637,6 +1679,11 @@ export function Chat({
             projectId={projectId}
             commandSource={commandSource}
             permissionMode={permissionMode}
+            activePermissionMode={activePermissionMode}
+            permissionChangePending={permissionChangePending && isExecuting}
+            supportedPermissionModes={supportedPermissionModes}
+            permissionReason={permissionCapabilities.data?.reason ?? undefined}
+            permissionUnavailable={permissionUnavailable}
             agentMode={agentMode}
             onPermissionModeChange={handlePermissionModeChange}
             onAgentModeChange={handleAgentModeChange}

@@ -856,7 +856,7 @@ public class AgentRuntimeServiceCompositionTests
         };
 
     [Fact]
-    public void FullAccess_ExternalOptions_DisableApprovalAndPreserveSandboxAndWorkspace()
+    public void FullAccess_ExternalOptions_DisableApprovalAndSandboxAndPreserveWorkspace()
     {
         var codex = BuildCodexAIAgentOptions(
             JsonUtil.Serialize(
@@ -883,10 +883,19 @@ public class AgentRuntimeServiceCompositionTests
         );
 
         Assert.Equal(OpenAI.CodexSdk.ApprovalMode.Never, codex!.ThreadOptions!.ApprovalPolicy);
-        Assert.Equal(OpenAI.CodexSdk.SandboxMode.WorkspaceWrite, codex.ThreadOptions.SandboxMode);
+        Assert.Equal(OpenAI.CodexSdk.SandboxMode.DangerFullAccess, codex.ThreadOptions.SandboxMode);
         Assert.Equal("/workspace", codex.ThreadOptions.WorkingDirectory);
         Assert.Equal(ClaudeCodeSdk.Types.PermissionMode.bypassPermissions, claude!.PermissionMode);
         Assert.Equal("/workspace", claude.WorkingDirectory);
+    }
+
+    [Theory]
+    [InlineData(AgwPermissionMode.AlwaysAsk)]
+    [InlineData(AgwPermissionMode.AllowSameArguments)]
+    public void ClaudeRestrictedPermission_OverridesBypass(AgwPermissionMode mode)
+    {
+        var options = BuildClaudeCodeAIAgentOptions("{}", "/workspace", null, false, permissionMode: mode);
+        Assert.Equal(ClaudeCodeSdk.Types.PermissionMode.@default, options!.PermissionMode);
     }
 
     private static CodexAIAgentOptions? BuildCodexAIAgentOptions(

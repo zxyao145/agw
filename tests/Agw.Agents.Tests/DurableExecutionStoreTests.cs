@@ -809,7 +809,8 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
     private static async Task<Guid> RegisterExecutionAsync(
         TestDatabase database,
         DurableExecutionStore store,
-        Guid? executionId = null
+        Guid? executionId = null,
+        AgwPermissionMode? permissionMode = null
     )
     {
         var resolvedExecutionId = executionId ?? Guid.CreateVersion7();
@@ -821,7 +822,7 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
             AgentRuntimeType.Agent,
             CreateInput("hello"),
             task,
-            CreateSettings(task.ProjectId, task.ContextId),
+            CreateSettings(task.ProjectId, task.ContextId).WithPermissionSnapshot(permissionMode, 0),
             TestContext.Current.CancellationToken
         );
         return resolvedExecutionId;

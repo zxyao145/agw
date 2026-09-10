@@ -27,6 +27,11 @@ type ChatInputToolbarProps = {
   isExecuting: boolean;
   isTransitioning: boolean;
   permissionMode: PermissionMode;
+  activePermissionMode?: PermissionMode | null;
+  permissionChangePending?: boolean;
+  supportedPermissionModes?: readonly PermissionMode[];
+  permissionReason?: string;
+  permissionUnavailable?: string;
   agentMode: AgentMode;
   onCommandSelect: (command: string) => void;
   onPermissionModeChange: (mode: PermissionMode) => void;
@@ -44,6 +49,11 @@ export function ChatInputToolbar({
   isExecuting,
   isTransitioning,
   permissionMode,
+  activePermissionMode,
+  permissionChangePending = false,
+  supportedPermissionModes = ["fullAccess", "alwaysAsk", "allowSameArguments"],
+  permissionReason,
+  permissionUnavailable,
   agentMode,
   onCommandSelect,
   onPermissionModeChange,
@@ -124,7 +134,10 @@ export function ChatInputToolbar({
 
       <Select
         value={permissionMode}
-        onValueChange={(value) => onPermissionModeChange(value as PermissionMode)}
+        onValueChange={(value) => {
+          if (supportedPermissionModes.includes(value as PermissionMode))
+            onPermissionModeChange(value as PermissionMode);
+        }}
         disabled={isTransitioning}
       >
         <SelectTrigger
@@ -139,14 +152,42 @@ export function ChatInputToolbar({
           <ShieldAlert className="size-4 shrink-0" />
           <SelectValue>{permissionLabels[permissionMode]}</SelectValue>
         </SelectTrigger>
-        <SelectContent position="popper" align="start">
+        <SelectContent position="popper" align="start" className="max-w-80">
+          <p className="px-2 py-1.5 text-xs text-muted-foreground">
+            Changes apply to the next turn. External agents ask at their native approval boundaries.
+          </p>
           {(Object.keys(permissionLabels) as PermissionMode[]).map((mode) => (
-            <SelectItem key={mode} value={mode} className="px-2">
+            <SelectItem
+              key={mode}
+              value={mode}
+              disabled={!supportedPermissionModes.includes(mode)}
+              className="px-2"
+            >
               {permissionLabels[mode]}
             </SelectItem>
           ))}
+          {permissionReason && (
+            <p className="px-2 py-1.5 text-xs text-muted-foreground">{permissionReason}</p>
+          )}
+          <p className="px-2 py-1.5 text-xs text-muted-foreground">
+            Full access applies to the machine running the Agw server.
+          </p>
         </SelectContent>
       </Select>
+      {permissionChangePending && activePermissionMode && (
+        <span role="status" className="max-w-64 text-xs text-muted-foreground">
+          Current: {permissionLabels[activePermissionMode]} · Next turn:{" "}
+          {permissionLabels[permissionMode]}
+        </span>
+      )}
+      {permissionUnavailable && (
+        <span
+          role="status"
+          className="shrink-0 whitespace-nowrap text-xs text-amber-700 dark:text-amber-400"
+        >
+          {permissionUnavailable}
+        </span>
+      )}
 
       {supportsMode && agentMode === "plan" ? (
         <>

@@ -119,7 +119,12 @@ async function checkConversationSession(kind: string, strictMode = false) {
   const modules: Record<string, unknown> = {
     "@agw/components": components,
     "@agw/components/query": {
-      useQuery: ({ queryKey }: { queryKey: string[] }) => ({ data: queryData[queryKey[0]] }),
+      useQuery: ({ queryKey }: { queryKey: string[] }) => ({
+        data:
+          queryKey[0] === "execution-permissions"
+            ? { supportedPermissionModes: ["fullAccess", "alwaysAsk", "allowSameArguments"] }
+            : queryData[queryKey[0]],
+      }),
     },
     "next/navigation": { useRouter: () => router, useSearchParams: () => searchParams },
     sonner: { toast: { error: (error: unknown) => errors.push(error) } },

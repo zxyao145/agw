@@ -44,6 +44,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
 
     private readonly ILoggerFactory _loggerFactory;
     private readonly IServiceProvider _services;
+    private readonly ExternalAgents.ClaudeCode.ClaudeToolApprovalCache _claudeApprovals = new();
 
     public AgentRuntimeService(
         AgentAppService agentAppService,

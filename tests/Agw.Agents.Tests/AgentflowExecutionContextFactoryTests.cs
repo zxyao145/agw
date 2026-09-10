@@ -84,7 +84,8 @@ public class AgentflowExecutionContextFactoryTests
         Assert.DoesNotContain(typeof(AgentSessionStateStore), parameters);
         Assert.DoesNotContain(typeof(IConversationHistoryWriter), parameters);
         Assert.DoesNotContain(typeof(IConversationHandoffProvider), parameters);
-        Assert.Equal(5, parameters.Length);
+        Assert.Contains(typeof(Agw.Agents.Definitions.Agents.ExecutionPermissionService), parameters);
+        Assert.Equal(6, parameters.Length);
     }
 
     private sealed class ProviderState : IProviderSessionState

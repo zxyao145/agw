@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using Agw.Agents.Application.Persistence;
+using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Domain.Topology;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agentflows.Runtime;
@@ -23,6 +24,7 @@ public sealed class AgentflowWorkflowFactory
 {
     private readonly ILogger<AgentflowRuntimeService> _logger;
     private readonly IAgentflowDefinitionReader _definitions;
+    private readonly ExecutionPermissionService? _permissions;
     private readonly IAgentRuntimeService _agentRuntimeService;
     private readonly IAgentTurnSummaryService _summaryService;
     private readonly IRuntimeTurnContextAccessor _turnContextAccessor;
@@ -33,9 +35,11 @@ public sealed class AgentflowWorkflowFactory
         IAgentflowDefinitionReader definitions,
         IAgentRuntimeService agentRuntimeService,
         IAgentTurnSummaryService summaryService,
-        IRuntimeTurnContextAccessor turnContextAccessor
+        IRuntimeTurnContextAccessor turnContextAccessor,
+        ExecutionPermissionService? permissions = null
     )
     {
+        _permissions = permissions;
         _logger = logger;
         _definitions = definitions;
         _agentRuntimeService = agentRuntimeService;
@@ -115,6 +119,11 @@ public sealed class AgentflowWorkflowFactory
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (_permissions != null)
+            ExecutionPermissionService.Validate(
+                await _permissions.GetAsync(AgentRuntimeType.Agentflow, agentflow.Id, cancellationToken),
+                sessionScope?.PermissionState.Current
+            );
         if (ancestors?.Contains(agentflow.Id) == true)
         {
             throw new AgwException(ErrorCodes.InvalidParam, $"Nested Agentflow cycle at '{agentflow.Id}'.");

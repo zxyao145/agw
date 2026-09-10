@@ -254,11 +254,7 @@ export function NativeChatComposer({
                     accessibilityLabel={`Remove ${attachment.name}`}
                     disabled={workspace.isExecuting}
                     onPress={() => composer.removeAttachment(attachment.id)}
-                    style={({ pressed }) => [
-                      styles.removeAttachment,
-                      workspace.isExecuting && styles.disabled,
-                      pressed && styles.pressed,
-                    ]}
+                    style={({ pressed }) => [styles.removeAttachment, pressed && styles.pressed]}
                   >
                     <X color={colors.black} size={18} strokeWidth={2.5} />
                   </Pressable>
@@ -288,24 +284,15 @@ export function NativeChatComposer({
                 accessibilityRole="button"
                 disabled={workspace.isExecuting}
                 onPress={() => setAddPanelOpen(true)}
-                style={({ pressed }) => [
-                  styles.addButton,
-                  workspace.isExecuting && styles.disabled,
-                  pressed && styles.utilityPressed,
-                ]}
+                style={({ pressed }) => [styles.addButton, pressed && styles.utilityPressed]}
               >
                 <Plus color={colors.ink} size={25} strokeWidth={2} />
               </Pressable>
               <Pressable
                 accessibilityLabel="Tool permission mode"
                 accessibilityRole="button"
-                disabled={workspace.isExecuting}
                 onPress={() => setPermissionPickerOpen(true)}
-                style={({ pressed }) => [
-                  styles.permissionButton,
-                  workspace.isExecuting && styles.disabled,
-                  pressed && styles.utilityPressed,
-                ]}
+                style={({ pressed }) => [styles.permissionButton, pressed && styles.utilityPressed]}
               >
                 <ShieldAlert color={colors.subtle} size={18} />
                 <Text
@@ -315,7 +302,11 @@ export function NativeChatComposer({
                     workspace.permissionMode === "fullAccess" && styles.fullAccessText,
                   ]}
                 >
-                  {permissionLabels[workspace.permissionMode]}
+                  {workspace.isExecuting &&
+                  workspace.permissionChangePending &&
+                  workspace.activePermissionMode
+                    ? `Current: ${permissionLabels[workspace.activePermissionMode]} · Next turn: ${permissionLabels[workspace.permissionMode]}`
+                    : permissionLabels[workspace.permissionMode]}
                 </Text>
                 <ChevronDown color={colors.subtle} size={15} />
               </Pressable>
@@ -324,7 +315,9 @@ export function NativeChatComposer({
             <Pressable
               accessibilityLabel={workspace.isExecuting ? "Stop generating" : "Send message"}
               accessibilityRole="button"
-              disabled={workspace.isExecuting ? false : !canSend}
+              disabled={
+                workspace.isExecuting ? false : !canSend || Boolean(workspace.permissionUnavailable)
+              }
               onPress={
                 workspace.isExecuting ? workspace.stopExecution : () => void composer.submit()
               }
@@ -646,14 +639,37 @@ function PermissionPicker({
       <Pressable style={styles.modalBackdrop} onPress={onClose}>
         <View style={styles.sheet}>
           <Text style={styles.sheetTitle}>Tool permission</Text>
+          <Text style={styles.optionTitle}>
+            Changes apply to the next turn. Full access applies to the Agw server.
+          </Text>
+          {workspace.permissionReason && (
+            <Text style={styles.optionTitle}>{workspace.permissionReason}</Text>
+          )}
+          {workspace.permissionUnavailable && (
+            <Text style={styles.optionTitle}>{workspace.permissionUnavailable}</Text>
+          )}
           {(Object.keys(permissionLabels) as PermissionMode[]).map((mode) => (
             <Pressable
               key={mode}
+              disabled={
+                workspace.supportedPermissionModes !== undefined &&
+                !workspace.supportedPermissionModes.includes(mode)
+              }
+              accessibilityState={{
+                disabled:
+                  workspace.supportedPermissionModes !== undefined &&
+                  !workspace.supportedPermissionModes.includes(mode),
+              }}
               onPress={() => {
                 workspace.setPermissionMode(mode);
                 onClose();
               }}
-              style={styles.option}
+              style={[
+                styles.option,
+                workspace.supportedPermissionModes !== undefined &&
+                  !workspace.supportedPermissionModes.includes(mode) &&
+                  styles.disabled,
+              ]}
             >
               <View style={styles.permissionOptionCopy}>
                 <ShieldAlert color={mode === "fullAccess" ? "#E45100" : colors.muted} size={18} />

@@ -13,6 +13,6 @@
 
 工具被拒绝时范围统一为 `Once`，不产生授权。`HumanInteractionPolicy.Reject` 用于 Jobs 等无人值守执行：先检查普通工具能否自动批准，其余人工请求明确失败。
 
-`InteractionPermissionState` 只保存模式、版本和执行作用域，不持有 SDK session。权限版本递增，因此 `A → B → A` 也会使旧授权失效。InProcess 控制命令直接更新该状态；Durable 命令先更新持久 manifest，Worker 的授权检查再读取最新版本。MAF Adapter 在 session 自身的执行路径上清理和使用授权。
+`InteractionPermissionState` 只保存模式、版本和执行作用域，不持有 SDK session。权限版本递增，因此 `A → B → A` 也会使旧授权失效。每个 turn 持有独立快照；InProcess 控制命令仅更新连接的下轮设置，Durable 命令仅更新 manifest 的 NextPermissionMode/NextPermissionVersion。Worker 恢复及授权检查始终读取本轮 PermissionMode/PermissionVersion。MAF Adapter 在 session 自身的执行路径上清理和使用授权。
 
 `InteractionRequestRegistry` 保留输入协议描述。MAF 可能一次生成多个审批，却分次返回，并在内部队列持久化时丢弃自定义描述。目录以 SDK 请求作用域和请求 ID 为键保存每次逻辑输入；恢复不会重新生成交互 ID。不同节点使用相同工具和 call ID 仍是不同交互，重复使用关联键描述不同输入会失败。

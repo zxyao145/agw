@@ -4150,6 +4150,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/agents/permission-capabilities": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          type?: components["schemas"]["AgentRuntimeType"];
+          id?: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfExecutionPermissionCapabilities"];
+            "application/json": components["schemas"]["ApiResultOfExecutionPermissionCapabilities"];
+            "text/json": components["schemas"]["ApiResultOfExecutionPermissionCapabilities"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -5929,6 +5969,19 @@ export interface components {
       description: null | string;
       content: string;
     };
+    ApiResultOfExecutionPermissionCapabilities: {
+      data?: null | components["schemas"]["ExecutionPermissionCapabilities"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
+    ExecutionPermissionCapabilities: {
+      supportedPermissionModes: components["schemas"]["AgwPermissionMode"][];
+      reason: null | string;
+    };
+    /** @enum {unknown} */
+    AgwPermissionMode: "fullAccess" | "alwaysAsk" | "allowSameArguments";
   };
   responses: never;
   parameters: never;

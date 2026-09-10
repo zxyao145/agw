@@ -33,6 +33,7 @@ internal static class DurableExecutionMapper
                 .EnvironmentVariables.OrderBy(pair => pair.Key, StringComparer.Ordinal)
                 .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal),
             PermissionMode = settings.PermissionMode,
+            PermissionVersion = settings.PermissionVersion,
             HumanInteractionPolicy = settings.HumanInteractionPolicy,
             Resume = settings.Resume,
         };

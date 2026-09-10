@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agents.Runtime;
@@ -7,6 +8,7 @@ using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Outbound;
+using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.Contracts;
 using Agw.Agents.Execution.Runtimes.Durable;
@@ -44,6 +46,8 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     private PendingModeChange? _pendingModeChange;
     private Guid? _lastResumeExecutionId;
     private volatile bool _waitingForHuman;
+    private readonly ExecutionPermissionService? _permissions;
+    private ExecutionSettings? _turnSettings;
 
     internal ExecutionConnectionContext(
         string userId,
@@ -54,9 +58,11 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         IProjectRuntimeFacade projects,
         DurableExecutionSession? durableSession = null,
         AgentflowCheckpointStore? checkpointStore = null,
-        IProjectDefaultResolver? projectDefaults = null
+        IProjectDefaultResolver? projectDefaults = null,
+        ExecutionPermissionService? permissions = null
     )
     {
+        _permissions = permissions;
         _userId = string.IsNullOrWhiteSpace(userId)
             ? throw new AgwException(ErrorCodes.AuthenticationRequired)
             : userId.Trim();
@@ -133,7 +139,12 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         }
 
         await ReleaseRuntimeAsync();
-        Settings = settings;
+        Settings = settings.WithPermissionSnapshot(
+            settings.PermissionMode,
+            Settings == null
+                ? 0
+                : Settings.PermissionVersion + (Settings.PermissionMode == settings.PermissionMode ? 0 : 1)
+        );
         _resolvedTask = null;
         _workspace = null;
         _target = null;
@@ -199,6 +210,14 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
         {
             await ReleaseRuntimeAsync();
         }
+
+        if (_permissions != null)
+            ExecutionPermissionService.Validate(
+                await _permissions.GetAsync(target.AgentType, target.AgentId, cancellationToken),
+                Settings.PermissionMode
+            );
+        _turnSettings = Settings;
+        await SendPermissionStatusAsync(starting: true);
 
         var requestedMode =
             command.AgentType == AgentRuntimeType.Agent
@@ -267,17 +286,15 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     public async Task SetPermissionModeAsync(AgwPermissionMode permissionMode, CancellationToken cancellationToken)
     {
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal());
+        if (_permissions != null && HasActiveTurn && _target is { } target)
+            ExecutionPermissionService.Validate(
+                await _permissions.GetAsync(target.AgentType, target.AgentId, cancellationToken),
+                permissionMode
+            );
         if (_durableSession != null)
             await _durableSession.SetPermissionModeAsync(permissionMode, cancellationToken);
         Settings = (Settings ?? ExecutionSettings.CreateDefault()).WithPermissionMode(permissionMode);
-        var runtime = Runtime;
-        if (runtime == null)
-        {
-            return;
-        }
-
-        await runtime.TrySetActivePermissionModeAsync(permissionMode, cancellationToken);
-        await _runtimeFactory.SetPermissionModeAsync(runtime, permissionMode, cancellationToken);
+        await SendPermissionStatusAsync();
     }
 
     /// <summary>
@@ -415,6 +432,11 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 ErrorCodes.InvalidParam,
                 "Execution settings must be configured before resuming a checkpoint."
             );
+        if (_permissions != null)
+            ExecutionPermissionService.Validate(
+                await _permissions.GetAsync(AgentRuntimeType.Agentflow, command.AgentflowId, cancellationToken),
+                settings.PermissionMode
+            );
         var projectId = await ResolveProjectIdAsync(settings, cancellationToken).ConfigureAwait(false);
         var contextId = ContextIdUtil.ResolveContextId(settings.ContextId);
 
@@ -427,9 +449,12 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                     projectId,
                     contextId,
                     command.AgentflowId,
-                    cancellationToken
+                    cancellationToken,
+                    DurableExecutionMapper.FromSettings(settings)
                 )
                 .ConfigureAwait(false);
+            _turnSettings = settings;
+            await SendPermissionStatusAsync(starting: true);
             _target = new ExecutionTarget(command.AgentflowId, AgentRuntimeType.Agentflow);
             _lastResumeExecutionId = command.ResumeExecutionId;
             return;
@@ -531,6 +556,16 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 "Durable execution services are not configured."
             );
         await session.AttachAsync(executionId, cursor, cancellationToken);
+        if (session.PermissionStatus is { } status)
+        {
+            var settings = Settings ?? ExecutionSettings.CreateDefault();
+            _turnSettings = settings.WithPermissionSnapshot(
+                status.ActivePermissionMode,
+                status.ActivePermissionVersion
+            );
+            Settings = settings.WithPermissionSnapshot(status.NextPermissionMode, status.NextPermissionVersion);
+            await SendPermissionStatusAsync();
+        }
     }
 
     private async Task ResolveExecutionContextAsync(ExecCommand command, CancellationToken cancellationToken)
@@ -665,6 +700,28 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             await SendModeFailureAsync(change.AgentId, change.Mode, exception.Message);
         }
     }
+
+    private Task SendPermissionStatusAsync(bool starting = false) =>
+        _messageSink
+            .WriteAsync(
+                CreateMessage(
+                    new AgwTextContent { Content = "Permission settings updated." },
+                    new AdditionalPropertiesDictionary
+                    {
+                        ["type"] = "permission-status",
+                        ["activePermissionMode"] = (
+                            starting || HasActiveTurn ? _turnSettings : Settings
+                        )?.PermissionMode,
+                        ["nextPermissionMode"] = Settings?.PermissionMode,
+                        ["permissionChangePending"] =
+                            !starting
+                            && HasActiveTurn
+                            && _turnSettings?.PermissionVersion != Settings?.PermissionVersion,
+                    }
+                ),
+                CancellationToken.None
+            )
+            .AsTask();
 
     private Task SendModeStatusAsync(Guid agentId, string mode) =>
         _messageSink

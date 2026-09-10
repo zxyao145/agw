@@ -378,7 +378,14 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
             fixture.ContextId,
             fixture.AgentflowId,
             "user-id",
-            cancellationToken
+            cancellationToken,
+            new DurableExecutionSettings
+            {
+                EnvironmentVariables = [],
+                Resume = false,
+                PermissionMode = AgwPermissionMode.AlwaysAsk,
+                PermissionVersion = 2,
+            }
         );
         database.ResetTransactionCount();
         await store.PrepareDistributedResumeAsync(
@@ -402,6 +409,9 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
                 branch.ManifestJson,
                 "resume branch manifest"
             );
+            Assert.Equal(AgwPermissionMode.AlwaysAsk, branchManifest.Settings.PermissionMode);
+            Assert.Equal(2, branchManifest.Settings.PermissionVersion);
+            Assert.Null(branchManifest.Settings.NextPermissionMode);
             Assert.Equal(DurableExecutionStatus.Resuming, branch.Status);
             Assert.Equal(fixture.ProjectId, branch.ProjectId);
             Assert.Equal(fixture.ConversationId, branch.ProjectConversationId);

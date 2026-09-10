@@ -1,4 +1,4 @@
-import type { InteractionResponse } from "@agw/execution-core";
+import { getPermissionStatus, type InteractionResponse } from "@agw/execution-core";
 import {
   addTokenUsage,
   createUuidV7,
@@ -78,6 +78,8 @@ export type ConversationControllerState = {
   pendingInteraction: PendingInteraction | null;
   checkpointAvailability: AgentflowCheckpointAvailability[];
   permissionMode: PermissionMode;
+  activePermissionMode: PermissionMode | null;
+  permissionChangePending: boolean;
   agentMode: AgentMode;
   error: string | null;
 };
@@ -110,6 +112,8 @@ export class ConversationController {
       pendingInteraction: null,
       checkpointAvailability: [],
       permissionMode: options.permissionMode ?? "fullAccess",
+      activePermissionMode: null,
+      permissionChangePending: false,
       agentMode: getLatestAgentMode(options.sessionSeed.messages),
       error: null,
     };
@@ -224,14 +228,6 @@ export class ConversationController {
     this.patch({ permissionMode: mode, isTransitioning: true });
     try {
       await (await this.ensureSession(this.ensureContextId())).setPermissionMode(mode);
-      if (mode === "fullAccess") {
-        for (const [id, interaction] of this.pendingInteractions) {
-          if (interaction.kind === "tool-approval") this.pendingInteractions.delete(id);
-        }
-        this.patch({
-          pendingInteraction: Array.from(this.pendingInteractions.values()).at(-1) ?? null,
-        });
-      }
     } catch (error) {
       this.patch({ permissionMode: previous });
       this.fail(error);
@@ -343,6 +339,14 @@ export class ConversationController {
   }
 
   private receive(message: AiMessage): void {
+    const permissionStatus = getPermissionStatus(message);
+    if (permissionStatus) {
+      this.patch({
+        ...permissionStatus,
+        permissionMode: permissionStatus.nextPermissionMode ?? this.state.permissionMode,
+      });
+      return;
+    }
     const mode = getAgentMode(message);
     if (mode) {
       this.patch({ agentMode: mode });

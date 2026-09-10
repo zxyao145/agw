@@ -18,7 +18,7 @@ export const ChatScreen = React.forwardRef<NativeConversationHistoryHandle>(
         loading={workspace.isChatLoading}
         reconnecting={workspace.reconnectState !== null}
         error={workspace.error}
-        permissionMode={workspace.permissionMode}
+        permissionMode={workspace.activePermissionMode ?? undefined}
         showCheckpointResume={workspace.selectedTarget?.type === "agentflow"}
         checkpointResumeDisabled={workspace.isExecuting || workspace.reconnectState !== null}
         onCheckpointResume={(occurrenceId) => void workspace.resumeCheckpoint(occurrenceId)}

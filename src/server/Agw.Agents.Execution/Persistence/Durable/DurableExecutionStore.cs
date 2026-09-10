@@ -471,7 +471,7 @@ internal sealed class DurableExecutionStore
             var snapshot = ToSnapshot(record);
             await EnsureSessionCurrentAsync(snapshot, cancellationToken).ConfigureAwait(false);
             if (
-                snapshot.Manifest.Settings.PermissionMode == mode
+                (snapshot.Manifest.Settings.NextPermissionMode ?? snapshot.Manifest.Settings.PermissionMode) == mode
                 || record.Status
                     is DurableExecutionStatus.Completed
                         or DurableExecutionStatus.Failed
@@ -483,21 +483,16 @@ internal sealed class DurableExecutionStore
                 {
                     Settings = snapshot.Manifest.Settings with
                     {
-                        PermissionMode = mode,
-                        PermissionVersion = checked(snapshot.Manifest.Settings.PermissionVersion + 1),
+                        NextPermissionMode = mode,
+                        NextPermissionVersion = checked(
+                            Math.Max(
+                                snapshot.Manifest.Settings.NextPermissionVersion,
+                                snapshot.Manifest.Settings.PermissionVersion
+                            ) + 1
+                        ),
                     },
                 }
             );
-            if (record.Status == DurableExecutionStatus.WaitingForHuman)
-            {
-                var responses = snapshot.Responses.ToDictionary(item => item.InteractionId, StringComparer.Ordinal);
-                foreach (var request in snapshot.GetUnansweredInteractions())
-                    if (InteractionRules.AutomaticallyApprove(request, mode) is { } response)
-                        responses.Add(response.InteractionId, response);
-                record.ResponsesJson = DurableExecutionJson.Serialize(responses.Values.ToArray());
-                if (responses.Count == snapshot.PendingInteractions.Count)
-                    record.Status = DurableExecutionStatus.Resuming;
-            }
             try
             {
                 await SaveStateAsync(

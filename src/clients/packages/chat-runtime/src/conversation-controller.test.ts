@@ -299,3 +299,62 @@ test("command errors retain an active turn and block another send until recovery
     await controller.dispose();
   }
 });
+
+test("selecting Full access preserves the current tool approval and consumes server status", async () => {
+  let handlers!: ExecutionHubHandlers;
+  const session = {
+    configure: async () => ({ restoredDurableExecution: false }),
+    execute: async () => undefined,
+    setPermissionMode: async () =>
+      handlers.onMessage({
+        messageId: "status",
+        contents: [],
+        additionalProperties: {
+          type: "permission-status",
+          activePermissionMode: "alwaysAsk",
+          nextPermissionMode: "fullAccess",
+          permissionChangePending: true,
+        },
+      }),
+    dispose: async () => undefined,
+  } as unknown as ExecutionSession;
+  const controller = new ConversationController({
+    adapter: {
+      execution: { baseUrl: "https://agw.test", token: null },
+      createSession: (value) => {
+        handlers = value;
+        return session;
+      },
+    },
+    projectId: "project",
+    target: { id: "agent", type: "agent" },
+    permissionMode: "alwaysAsk",
+    sessionSeed: {
+      revision: 1,
+      conversationId: "conversation",
+      contextId: "context",
+      messages: [],
+    },
+  });
+  await controller.send("Hello", []);
+  handlers.onMessage({
+    messageId: "pending",
+    contents: [],
+    additionalProperties: {
+      type: "interaction-request",
+      interaction: {
+        kind: "tool-approval",
+        interactionId: "tool",
+        prompt: "Allow?",
+        source: { toolName: "Bash" },
+        arguments: { command: "test" },
+      },
+    },
+  });
+  await controller.setPermissionMode("fullAccess");
+  assert.equal(controller.getSnapshot().pendingInteraction?.interactionId, "tool");
+  assert.equal(controller.getSnapshot().activePermissionMode, "alwaysAsk");
+  assert.equal(controller.getSnapshot().permissionMode, "fullAccess");
+  assert.equal(controller.getSnapshot().permissionChangePending, true);
+  await controller.dispose();
+});

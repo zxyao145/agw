@@ -219,7 +219,8 @@ internal sealed class DurableExecutionCoordinator
         string contextId,
         Guid agentflowId,
         string userId,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        DurableExecutionSettings? permissionSettings = null
     )
     {
         var checkpointStore =
@@ -245,7 +246,8 @@ internal sealed class DurableExecutionCoordinator
                 contextId,
                 agentflowId,
                 userId,
-                cancellationToken
+                cancellationToken,
+                permissionSettings
             )
             .ConfigureAwait(false);
     }
@@ -376,7 +378,15 @@ internal sealed class DurableExecutionCoordinator
     /// 将 PostgreSQL 快照映射为连接层使用的最小状态响应。
     /// </summary>
     internal static DurableExecutionStatusResponse ToStatus(DurableExecutionSnapshot snapshot) =>
-        new(snapshot.Manifest.ExecutionId, snapshot.Status, ResolveStreamingScopeId(snapshot.Manifest));
+        new(
+            snapshot.Manifest.ExecutionId,
+            snapshot.Status,
+            ResolveStreamingScopeId(snapshot.Manifest),
+            snapshot.Manifest.Settings.PermissionMode,
+            snapshot.Manifest.Settings.NextPermissionMode ?? snapshot.Manifest.Settings.PermissionMode,
+            Math.Max(snapshot.Manifest.Settings.NextPermissionVersion, snapshot.Manifest.Settings.PermissionVersion),
+            snapshot.Manifest.Settings.PermissionVersion
+        );
 
     /// <summary>
     /// 获取跨 Server 稳定的前端消息作用域；旧客户端未提供消息标识时退回 executionId。

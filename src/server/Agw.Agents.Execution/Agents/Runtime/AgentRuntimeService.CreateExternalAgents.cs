@@ -107,6 +107,7 @@ public partial class AgentRuntimeService
         AgentModelRuntimeConfiguration? modelConfiguration
     )
     {
+        ExecutionPermissionService.Validate(request.Agent, request.PermissionMode);
         var kind = ExternalAgentKindResolver.Resolve(request.Agent);
         aiAgent = kind switch
         {
@@ -304,7 +305,12 @@ public partial class AgentRuntimeService
 
         var interactionBridge = new ClaudeCodeAskUserQuestionBridge(
             _humanInteractionContextAccessor,
-            allowInteraction: !isBackground
+            allowInteraction: !isBackground,
+            permissionMode: permissionMode,
+            workingDirectory: options.WorkingDirectory,
+            agentId: agent.Id,
+            turnContext: _turnContextAccessor,
+            cache: _claudeApprovals
         );
         options = ExternalAgentModelOptions.ApplyClaudeCode(options, modelConfiguration);
         options = options with { CanUseTool = interactionBridge.HandleAsync };
@@ -349,9 +355,9 @@ public partial class AgentRuntimeService
         options = options with
         {
             PermissionMode =
-                permissionMode == AgwPermissionMode.FullAccess
-                    ? ClaudeCodeSdk.Types.PermissionMode.bypassPermissions
-                    : options.PermissionMode,
+                permissionMode == AgwPermissionMode.FullAccess ? ClaudeCodeSdk.Types.PermissionMode.bypassPermissions
+                : permissionMode.HasValue ? ClaudeCodeSdk.Types.PermissionMode.@default
+                : options.PermissionMode,
             WorkingDirectory = PathUtil.ExpandTilde(project.Workspace),
             IncludePartialMessages = true,
             ContinueConversation = false,
@@ -556,6 +562,7 @@ public partial class AgentRuntimeService
             extra = ExternalAgentDefaults.GetDefaultExtra(ExternalAgentKind.Codex);
         }
 
+        ExecutionPermissionService.Validate(agent, permissionMode);
         var options = JsonUtil.Deserialize<CodexAIAgentOptions>(extra);
         if (options == null)
         {
@@ -635,7 +642,8 @@ public partial class AgentRuntimeService
         return new ThreadOptions
         {
             Model = options.Model,
-            SandboxMode = options.SandboxMode,
+            SandboxMode =
+                permissionMode == AgwPermissionMode.FullAccess ? SandboxMode.DangerFullAccess : options.SandboxMode,
             WorkingDirectory = string.IsNullOrWhiteSpace(workspace) ? options.WorkingDirectory : workspace,
             SkipGitRepoCheck = options.SkipGitRepoCheck,
             ModelReasoningEffort = options.ModelReasoningEffort,

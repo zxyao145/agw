@@ -86,6 +86,8 @@ test.each([false, true])(
           return [{ id: "agent-1", name: "ClaudeCode", displayName: "Claude Code" }];
         case "/api/agentflows":
           return [];
+        case "/api/agents/permission-capabilities":
+          return { supportedPermissionModes: ["fullAccess", "alwaysAsk", "allowSameArguments"] };
         case "/api/agents/suggestions":
           return { mode: "unsupported", suggestions: [] };
         case "/api/projects/{projectId}/conversations":

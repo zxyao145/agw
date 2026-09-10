@@ -1,3 +1,4 @@
+using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.Outbound;
@@ -23,6 +24,7 @@ internal sealed class ExecutionConnectionContextFactory
     private readonly DurableExecutionCoordinator? _durableCoordinator;
     private readonly AgentflowCheckpointStore _checkpointStore;
     private readonly IProjectDefaultResolver _projectDefaults;
+    private readonly ExecutionPermissionService _permissions;
 
     /// <summary>
     /// 初始化连接上下文工厂，并只在启用 Distributed 时解析其协调器。
@@ -36,6 +38,7 @@ internal sealed class ExecutionConnectionContextFactory
         IServiceProvider serviceProvider
     )
     {
+        _permissions = serviceProvider.GetRequiredService<ExecutionPermissionService>();
         _runtimeFactory = runtimeFactory;
         _projectTasks = projectTasks;
         _projects = projects;
@@ -76,7 +79,8 @@ internal sealed class ExecutionConnectionContextFactory
             _projects,
             durableSession,
             _checkpointStore,
-            _projectDefaults
+            _projectDefaults,
+            _permissions
         );
     }
 }

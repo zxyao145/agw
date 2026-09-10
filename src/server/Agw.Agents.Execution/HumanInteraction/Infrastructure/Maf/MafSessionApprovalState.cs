@@ -23,7 +23,7 @@ internal static class MafSessionApprovalState
     {
         var snapshot = permissions.Snapshot;
         var state = GetOrCreateState(session, snapshot.Mode);
-        if (state.PermissionScopeId == permissions.ScopeId && state.PermissionVersion != snapshot.Version)
+        if (state.PermissionVersion != snapshot.Version)
             state.Grants.Clear();
         state.PermissionScopeId = permissions.ScopeId;
         state.PermissionVersion = snapshot.Version;

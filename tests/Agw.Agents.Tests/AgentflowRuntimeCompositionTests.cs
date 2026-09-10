@@ -10,10 +10,12 @@ using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.HumanInteraction.InProcess;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Summaries;
+using Agw.Infrastructure.Data;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Repositories;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -39,6 +41,9 @@ public partial class AgentflowRuntimeServiceTests
             .Build();
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddScoped<IAgentsDbContext>(_ => new AgwDbContext(
+            new DbContextOptionsBuilder<AgwDbContext>().UseSqlite("Data Source=:memory:").Options
+        ));
         services.AddAgents(configuration);
         services.AddAgentExecution(
             configuration,

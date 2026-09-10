@@ -259,7 +259,8 @@ public sealed class AgentflowCheckpointStore
         string contextId,
         Guid agentflowId,
         string userId,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        DurableExecutionSettings? permissionSettings = null
     ) =>
         await PrepareResumeAsync(
                 occurrenceId,
@@ -268,7 +269,8 @@ public sealed class AgentflowCheckpointStore
                 agentflowId,
                 userId,
                 resumeExecutionId,
-                cancellationToken
+                cancellationToken,
+                permissionSettings
             )
             .ConfigureAwait(false);
 
@@ -295,7 +297,8 @@ public sealed class AgentflowCheckpointStore
         Guid agentflowId,
         string userId,
         Guid? resumeExecutionId,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        DurableExecutionSettings? permissionSettings = null
     )
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
@@ -439,7 +442,8 @@ public sealed class AgentflowCheckpointStore
                                 record,
                                 resumeExecutionId.Value,
                                 userId,
-                                token
+                                token,
+                                permissionSettings
                             )
                             .ConfigureAwait(false);
                     }
@@ -548,7 +552,8 @@ public sealed class AgentflowCheckpointStore
         AgentflowCheckpointRecord checkpointRecord,
         Guid resumeExecutionId,
         string userId,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        DurableExecutionSettings? permissionSettings = null
     )
     {
         if (!checkpointRecord.IsDurable || !checkpointRecord.SourceExecutionId.HasValue)
@@ -611,6 +616,17 @@ public sealed class AgentflowCheckpointStore
                 .Select(item => item.NodeId)
                 .Distinct(StringComparer.Ordinal)
                 .ToArray(),
+        };
+        var selected = permissionSettings ?? manifest.Settings;
+        manifest = manifest with
+        {
+            Settings = manifest.Settings with
+            {
+                PermissionMode = selected.NextPermissionMode ?? selected.PermissionMode,
+                PermissionVersion = Math.Max(selected.PermissionVersion, selected.NextPermissionVersion),
+                NextPermissionMode = null,
+                NextPermissionVersion = 0,
+            },
         };
         var now = _timeProvider.GetUtcNow();
         dbContext.DurableExecutions.Add(

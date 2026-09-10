@@ -95,7 +95,13 @@ public partial class ExecutionCommandHandlerTests
         // Assert
         Assert.False(context.HasActiveTurn);
         Assert.Null(context.Target);
-        var error = Assert.IsType<AgwErrorContent>(Assert.Single(Assert.Single(sink.Messages).Contents));
+        var error = Assert.IsType<AgwErrorContent>(
+            Assert.Single(
+                Assert
+                    .Single(sink.Messages, message => message.Contents.Any(content => content is AgwErrorContent))
+                    .Contents
+            )
+        );
         Assert.Equal("Agent execution could not be started.", error.Content);
     }
 

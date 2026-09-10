@@ -2,6 +2,7 @@ using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.HumanInteraction;
+using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.HumanInteraction.InProcess;
 using Agw.Agents.Execution.Inbound.Connections;
@@ -176,7 +177,13 @@ public sealed class RuntimeFactory : IRuntimeFactory
                     await _agentRuntimeService.SetModeAsync(session, request.RequestedMode, cancellationToken);
                 }
 
-                var permissionState = new MafPermissionState(request.TurnContext.Settings.PermissionMode);
+                var permissionState = new MafPermissionState(
+                    new InteractionPermissionState(
+                        request.TurnContext.Settings.PermissionMode,
+                        request.Task.ProjectConversationId,
+                        request.TurnContext.Settings.PermissionVersion
+                    )
+                );
                 permissionState.Register(session.Session);
                 var interactions = new InProcessInteractionSession(
                     request.TurnContext.MessageSink,
@@ -217,7 +224,13 @@ public sealed class RuntimeFactory : IRuntimeFactory
                     );
                 }
 
-                var permissionState = new MafPermissionState(request.TurnContext.Settings.PermissionMode);
+                var permissionState = new MafPermissionState(
+                    new InteractionPermissionState(
+                        request.TurnContext.Settings.PermissionMode,
+                        request.Task.ProjectConversationId,
+                        request.TurnContext.Settings.PermissionVersion
+                    )
+                );
                 var interactions = new InProcessInteractionSession(
                     request.TurnContext.MessageSink,
                     permissionState.Permissions,

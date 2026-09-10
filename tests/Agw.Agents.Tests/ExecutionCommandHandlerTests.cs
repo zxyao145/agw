@@ -73,7 +73,9 @@ public partial class ExecutionCommandHandlerTests
         );
 
         Assert.Equal("current", context.Settings!.ContextId);
-        Assert.IsType<AgwErrorContent>(Assert.Single(sink.Messages).Contents[0]);
+        Assert.IsType<AgwErrorContent>(
+            Assert.Single(sink.Messages, message => message.Contents[0] is AgwErrorContent).Contents[0]
+        );
 
         runtimeFactory.CompleteHeldTurn();
         await runtimeFactory.CreatedRuntimes[0].WhenIdleAsync();
@@ -101,7 +103,7 @@ public partial class ExecutionCommandHandlerTests
             TestContext.Current.CancellationToken
         );
 
-        Assert.Empty(sink.Messages);
+        Assert.DoesNotContain(sink.Messages, message => message.Contents.Any(content => content is AgwErrorContent));
 
         runtimeFactory.CompleteHeldTurn();
         await runtimeFactory.CreatedRuntimes[0].WhenIdleAsync();
@@ -207,7 +209,10 @@ public partial class ExecutionCommandHandlerTests
         await context.StartTurnAsync(CreateExecCommand(agentId), TestContext.Current.CancellationToken);
 
         Assert.Equal("execute", Assert.Single(runtimeFactory.StartRequests).RequestedMode);
-        var status = Assert.Single(sink.Messages);
+        var status = Assert.Single(
+            sink.Messages,
+            message => message.AdditionalProperties?["type"]?.ToString() == "mode-status"
+        );
         Assert.Equal("mode-status", status.AdditionalProperties?["type"]?.ToString());
         Assert.Equal("execute", status.AdditionalProperties?["mode"]?.ToString());
     }
@@ -238,7 +243,10 @@ public partial class ExecutionCommandHandlerTests
         await runtimeFactory.Runtime.WhenIdleAsync();
 
         Assert.Equal(["execute"], runtimeFactory.ModeChanges);
-        var status = Assert.Single(sink.Messages);
+        var status = Assert.Single(
+            sink.Messages,
+            message => message.AdditionalProperties?["type"]?.ToString() == "mode-status"
+        );
         Assert.Equal("mode-status", status.AdditionalProperties?["type"]?.ToString());
         Assert.Equal("execute", status.AdditionalProperties?["mode"]?.ToString());
     }
@@ -276,7 +284,7 @@ public partial class ExecutionCommandHandlerTests
     }
 
     [Fact]
-    public async Task SetPermissionModeCommand_DuringActiveTurn_AppliesImmediately()
+    public async Task SetPermissionModeCommand_DuringActiveTurn_OnlyUpdatesNextTurn()
     {
         var runtimeFactory = new PermissionTestRuntimeFactory();
         await using var context = CreateContext(runtimeFactory, CreateTask("permission-context"));
@@ -289,11 +297,40 @@ public partial class ExecutionCommandHandlerTests
         );
 
         Assert.Equal(AgwPermissionMode.FullAccess, context.Settings!.PermissionMode);
-        Assert.Equal([AgwPermissionMode.FullAccess], runtimeFactory.ActiveChanges);
-        Assert.Equal([AgwPermissionMode.FullAccess], runtimeFactory.RuntimeChanges);
+        Assert.Empty(runtimeFactory.ActiveChanges);
+        Assert.Empty(runtimeFactory.RuntimeChanges);
 
         runtimeFactory.CompleteHeldTurn();
         await runtimeFactory.Runtime.WhenIdleAsync();
+    }
+
+    [Fact]
+    public async Task PermissionChanges_ApplyOnNextTurnAndRevokeOnReturnToOriginalMode()
+    {
+        var sink = new CapturingSink();
+        var factory = new PermissionTestRuntimeFactory();
+        var task = CreateTask("permission-snapshot");
+        await using var context = CreateContext(factory, task, sink: sink);
+        await context.ApplySettingsAsync(
+            ExecutionSettings.CreateDefault().WithPermissionMode(AgwPermissionMode.AlwaysAsk),
+            TestContext.Current.CancellationToken
+        );
+        var command = CreateExecCommand(Guid.NewGuid());
+        await context.StartTurnAsync(command, TestContext.Current.CancellationToken);
+        var original = Assert.Single(factory.TurnSettings);
+        await context.SetPermissionModeAsync(AgwPermissionMode.FullAccess, TestContext.Current.CancellationToken);
+        await context.SetPermissionModeAsync(AgwPermissionMode.AlwaysAsk, TestContext.Current.CancellationToken);
+        factory.CompleteHeldTurn();
+        await factory.Runtime.WhenIdleAsync();
+        Assert.Equal(AgwPermissionMode.AlwaysAsk, original.PermissionMode);
+        Assert.Empty(factory.ActiveChanges);
+        Assert.Equal(original.PermissionVersion + 2, context.Settings!.PermissionVersion);
+        var status = sink.Messages.Last(message =>
+            message.AdditionalProperties?["type"]?.ToString() == "permission-status"
+        );
+        Assert.Equal(true, status.AdditionalProperties!["permissionChangePending"]);
+        await context.StartTurnAsync(command, TestContext.Current.CancellationToken);
+        Assert.Equal(context.Settings.PermissionVersion, factory.TurnSettings[1].PermissionVersion);
     }
 
     [Fact]
@@ -589,12 +626,15 @@ public partial class ExecutionCommandHandlerTests
 
         public TestRuntime Runtime { get; } = new();
 
+        public List<ExecutionSettings> TurnSettings { get; } = [];
+
         public List<AgwPermissionMode> ActiveChanges { get; } = [];
 
         public List<AgwPermissionMode> RuntimeChanges { get; } = [];
 
         public Task<RuntimeStartResult> StartAsync(RuntimeStartRequest request, CancellationToken cancellationToken)
         {
+            TurnSettings.Add(request.TurnContext.Settings);
             var activeTurn = new ActiveTurn(
                 _turnCompletion.Task,
                 new CancellationTokenSource(),

@@ -22,8 +22,7 @@ public sealed partial class DurableExecutionStoreTests
     {
         await using var database = await TestDatabase.CreateAsync();
         var store = database.CreateStore();
-        var id = await RegisterExecutionAsync(database, store);
-        await store.SetPermissionModeAsync(id, "user-id", mode, TestContext.Current.CancellationToken);
+        var id = await RegisterExecutionAsync(database, store, permissionMode: mode);
         await WaitForInteractionsAsync(store, id, [InteractionTestData.Tool("tool")]);
         var saved = await store.SubmitHumanResponseAsync(
             new(
@@ -42,7 +41,7 @@ public sealed partial class DurableExecutionStoreTests
     }
 
     [Fact]
-    public async Task SetPermissionModeAsync_MixedPending_OnlyApprovesOrdinaryTools()
+    public async Task SetPermissionModeAsync_MixedPending_DoesNotResolveCurrentTurnInteractions()
     {
         await using var database = await TestDatabase.CreateAsync();
         var store = database.CreateStore();
@@ -59,9 +58,10 @@ public sealed partial class DurableExecutionStoreTests
             TestContext.Current.CancellationToken
         );
         Assert.Equal(DurableExecutionStatus.WaitingForHuman, result.Status);
-        Assert.Equal(2, result.GetUnansweredInteractions().Count);
-        Assert.Equal("tool", Assert.Single(result.Responses).InteractionId);
-        Assert.IsType<ToolApprovalDecision>(result.Responses[0]);
+        Assert.Equal(3, result.GetUnansweredInteractions().Count);
+        Assert.Empty(result.Responses);
+        Assert.Null(result.Manifest.Settings.PermissionMode);
+        Assert.Equal(AgwPermissionMode.FullAccess, result.Manifest.Settings.NextPermissionMode);
         await Assert.ThrowsAsync<AgwException>(() =>
             store.SetPermissionModeAsync(
                 id,
@@ -73,7 +73,7 @@ public sealed partial class DurableExecutionStoreTests
     }
 
     [Fact]
-    public async Task SetPermissionModeAsync_Running_PreservesWorkerAndAppliesToNewBoundary()
+    public async Task SetPermissionModeAsync_Running_PreservesCurrentTurnIncludingNewBoundaries()
     {
         var token = TestContext.Current.CancellationToken;
         await using var database = await TestDatabase.CreateAsync();
@@ -82,9 +82,21 @@ public sealed partial class DurableExecutionStoreTests
         var running = Assert.IsType<DurableExecutionSnapshot>(
             await store.TryBeginSegmentAsync(id, DateTimeOffset.MaxValue, token)
         );
+        var reconnect = Agw.Agents.Execution.Runtimes.Durable.DurableExecutionCoordinator.ToStatus(
+            running with
+            {
+                Manifest = running.Manifest with
+                {
+                    Settings = running.Manifest.Settings with { PermissionVersion = 5 },
+                },
+            }
+        );
+        Assert.Equal(5, reconnect.ActivePermissionVersion);
+        Assert.Equal(5, reconnect.NextPermissionVersion);
         var updated = await store.SetPermissionModeAsync(id, "user-id", AgwPermissionMode.FullAccess, token);
         Assert.Equal(running.StateVersion, updated.StateVersion);
-        Assert.Equal(1, updated.Manifest.Settings.PermissionVersion);
+        Assert.Equal(0, updated.Manifest.Settings.PermissionVersion);
+        Assert.Equal(1, updated.Manifest.Settings.NextPermissionVersion);
         var saved = await store.SaveSegmentResultAsync(
             new()
             {
@@ -96,11 +108,10 @@ public sealed partial class DurableExecutionStoreTests
             running.StateVersion,
             token
         );
-        Assert.Equal(DurableExecutionStatus.Resuming, saved.Status);
-        Assert.Equal(
-            ApprovalScope.AlwaysTool,
-            Assert.IsType<ToolApprovalDecision>(Assert.Single(saved.Responses)).Scope
-        );
+        Assert.Equal(DurableExecutionStatus.WaitingForHuman, saved.Status);
+        Assert.Empty(saved.Responses);
+        Assert.Null(saved.Manifest.Settings.PermissionMode);
+        Assert.Equal(AgwPermissionMode.FullAccess, saved.Manifest.Settings.NextPermissionMode);
     }
 
     [Fact]

@@ -109,6 +109,10 @@ public sealed record DurableExecutionSettings
 
     public long PermissionVersion { get; init; }
 
+    public AgwPermissionMode? NextPermissionMode { get; init; }
+
+    public long NextPermissionVersion { get; init; }
+
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public HumanInteractionPolicy HumanInteractionPolicy { get; init; } = HumanInteractionPolicy.Allow;
 

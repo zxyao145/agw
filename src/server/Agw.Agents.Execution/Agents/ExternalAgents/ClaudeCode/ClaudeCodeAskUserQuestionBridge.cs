@@ -1,8 +1,12 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Agw.Agents.Execution.HumanInteraction;
+using Agw.Agents.Execution.HumanInteraction.Application;
+using Agw.Agents.Execution.Turns;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Utils;
+using Agw.Tools.HumanInteraction;
 using Agw.Tools.Impl.Tools.Basic;
 using ClaudeCodeSdk.Types;
 using Microsoft.Agents.AI;
@@ -19,11 +23,32 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
     private readonly bool _allowInteraction;
     private IHumanInteractionChannel? _activeChannel;
     private int _isBound;
+    private readonly AgwPermissionMode? _permissionMode;
+    private readonly string? _workingDirectory;
+    private readonly Guid _agentId;
+    private readonly IRuntimeTurnContextAccessor? _turnContext;
+    private readonly ClaudeToolApprovalCache _cache;
+    private string? _scope;
+    private long _version;
+    private InteractionSource _source = new();
 
-    public ClaudeCodeAskUserQuestionBridge(HumanInteractionContextAccessor? contextAccessor, bool allowInteraction)
+    public ClaudeCodeAskUserQuestionBridge(
+        HumanInteractionContextAccessor? contextAccessor,
+        bool allowInteraction,
+        AgwPermissionMode? permissionMode = null,
+        string? workingDirectory = null,
+        Guid agentId = default,
+        IRuntimeTurnContextAccessor? turnContext = null,
+        ClaudeToolApprovalCache? cache = null
+    )
     {
         _contextAccessor = contextAccessor;
         _allowInteraction = allowInteraction;
+        _permissionMode = permissionMode;
+        _workingDirectory = workingDirectory;
+        _agentId = agentId;
+        _turnContext = turnContext;
+        _cache = cache ?? new ClaudeToolApprovalCache();
     }
 
     public async Task<AgentResponse> BindRunAsync(
@@ -34,7 +59,7 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
         CancellationToken cancellationToken
     )
     {
-        using var binding = BindCurrentChannel();
+        using var binding = BindCurrentChannel(options);
         return await innerAgent.RunAsync(messages, session, options, cancellationToken).ConfigureAwait(false);
     }
 
@@ -46,7 +71,7 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
         [EnumeratorCancellation] CancellationToken cancellationToken
     )
     {
-        using var binding = BindCurrentChannel();
+        using var binding = BindCurrentChannel(options);
         await foreach (
             var update in innerAgent
                 .RunStreamingAsync(messages, session, options, cancellationToken)
@@ -66,7 +91,7 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
     {
         if (!string.Equals(toolName, ToolName, StringComparison.Ordinal))
         {
-            return Deny($"Agw does not handle Claude Code permission request '{toolName}'.");
+            return await HandleToolApprovalAsync(toolName, input, context, cancellationToken).ConfigureAwait(false);
         }
 
         var channel = Volatile.Read(ref _activeChannel);
@@ -126,7 +151,43 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
         }
     }
 
-    private IDisposable BindCurrentChannel()
+    private async ValueTask<PermissionResult> HandleToolApprovalAsync(
+        string toolName,
+        JsonElement input,
+        ToolPermissionContext context,
+        CancellationToken cancellationToken
+    )
+    {
+        if (Volatile.Read(ref _isBound) == 0)
+            return Deny("Tool approval requires an active run.");
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_permissionMode == AgwPermissionMode.FullAccess)
+            return new PermissionResultAllow();
+        var arguments = JsonNode.Parse(input.GetRawText());
+        if (
+            _permissionMode == AgwPermissionMode.AllowSameArguments
+            && _scope != null
+            && _cache.Contains(_scope, _version, toolName, arguments)
+        )
+            return new PermissionResultAllow();
+        if (Volatile.Read(ref _activeChannel) is not IInteractionHandler handler)
+            return Deny("Tool approval requires an active interactive channel.");
+        var request = new ToolApprovalInteraction
+        {
+            InteractionId = Guid.CreateVersion7().ToString("N"),
+            Prompt = $"Allow Claude Code to use {toolName}?",
+            Arguments = input.Clone(),
+            Source = _source with { ToolName = toolName, CallId = context.ToolUseId },
+        };
+        var result = await handler.ResolveAsync(request, cancellationToken).ConfigureAwait(false);
+        if (result is not InteractionResolution.Resolved { Response: ToolApprovalDecision { Approved: true } })
+            return Deny("Tool execution was denied.");
+        if (_permissionMode == AgwPermissionMode.AllowSameArguments && _scope != null)
+            _cache.Add(_scope, _version, toolName, arguments);
+        return new PermissionResultAllow();
+    }
+
+    private IDisposable BindCurrentChannel(AgentRunOptions? options)
     {
         if (Interlocked.CompareExchange(ref _isBound, 1, 0) != 0)
         {
@@ -136,6 +197,28 @@ internal sealed class ClaudeCodeAskUserQuestionBridge
             );
         }
 
+        _source =
+            options?.AdditionalProperties?.TryGetValue(HumanInteractionToolMetadata.SourceKey, out var source) == true
+            && source is InteractionSource attribution
+                ? attribution
+                : new();
+        var turn = _turnContext?.Current;
+        _scope =
+            turn == null
+                ? null
+                : JsonSerializer.Serialize(
+                    new
+                    {
+                        turn.UserId,
+                        turn.ProjectId,
+                        turn.ProjectConversationId,
+                        turn.Task.Generation,
+                        AgentId = _agentId,
+                        _source.NodeId,
+                        Workspace = _workingDirectory,
+                    }
+                );
+        _version = turn?.Settings.PermissionVersion ?? 0;
         Volatile.Write(ref _activeChannel, _allowInteraction ? _contextAccessor?.Current : null);
         return new Binding(this);
     }

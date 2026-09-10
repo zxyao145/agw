@@ -1,3 +1,4 @@
+using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Commands.Exec;
 using Agw.Agents.Execution.Commands.Hitl;
 using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
@@ -97,6 +98,7 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
         // 先完成 PostgreSQL 鉴权，再启动由协调器自行创建持久化 scope 的后台 pump。
         var status = await _coordinator.GetStatusAsync(executionId, _userId, cancellationToken).ConfigureAwait(false);
         await StopSubscriptionAsync().ConfigureAwait(false);
+        PermissionStatus = status;
         await SendTurnStateAsync(status, cancellationToken).ConfigureAwait(false);
         SetActiveExecution(IsTerminal(status.Status) ? null : executionId);
         if (IsTerminal(status.Status))
@@ -142,11 +144,14 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
             var status = await _coordinator
                 .GetStatusAsync(targetExecutionId.Value, _userId, cancellationToken)
                 .ConfigureAwait(false);
+            PermissionStatus = status;
             await SendTurnStateAsync(status, cancellationToken).ConfigureAwait(false);
         }
 
         SetActiveExecution(null);
     }
+
+    internal DurableExecutionStatusResponse? PermissionStatus { get; private set; }
 
     public Task SetPermissionModeAsync(AgwPermissionMode mode, CancellationToken cancellationToken) =>
         ActiveExecutionId is { } executionId
@@ -184,7 +189,8 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
         Guid projectId,
         string contextId,
         Guid agentflowId,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        DurableExecutionSettings? permissionSettings = null
     )
     {
         await _coordinator
@@ -195,7 +201,8 @@ internal sealed class DurableExecutionSession : IAsyncDisposable
                 contextId,
                 agentflowId,
                 _userId,
-                cancellationToken
+                cancellationToken,
+                permissionSettings
             )
             .ConfigureAwait(false);
         await AttachAsync(resumeExecutionId, cursor: null, cancellationToken).ConfigureAwait(false);

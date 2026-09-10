@@ -2,6 +2,10 @@ using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode;
 using Agw.Agents.Execution.HumanInteraction;
+using Agw.Agents.Execution.HumanInteraction.Application;
+using Agw.Agents.Execution.Inbound.Connections;
+using Agw.Agents.Execution.Outbound;
+using Agw.Agents.Execution.Turns;
 using ClaudeCodeSdk.Types;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -232,6 +236,132 @@ public class ClaudeCodeAskUserQuestionBridgeTests
                 },
             }
         );
+
+    [Theory]
+    [InlineData(AgwPermissionMode.AlwaysAsk, true, 2)]
+    [InlineData(AgwPermissionMode.AllowSameArguments, true, 1)]
+    [InlineData(AgwPermissionMode.AllowSameArguments, false, 2)]
+    [InlineData(AgwPermissionMode.FullAccess, true, 0)]
+    public async Task ToolApproval_ModeAndDecision_ControlReuse(
+        AgwPermissionMode mode,
+        bool approve,
+        int expectedRequests
+    )
+    {
+        var accessor = new HumanInteractionContextAccessor();
+        var turnAccessor = new RuntimeTurnContextAccessor();
+        var channel = new ToolChannel(approve);
+        var settings = ExecutionSettings.CreateDefault().WithPermissionMode(mode);
+        var task = new AgentExecutionTask
+        {
+            ProjectId = Guid.NewGuid(),
+            ProjectConversationId = Guid.NewGuid(),
+            ContextId = "scope",
+        };
+        var turn = new RuntimeTurnContext(
+            settings,
+            task,
+            new ExecutionTarget(Guid.NewGuid(), AgentRuntimeType.Agent),
+            "/workspace",
+            new NullSink()
+        )
+        {
+            UserId = "owner",
+        };
+        var cache = new Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode.ClaudeToolApprovalCache();
+        var bridge = new ClaudeCodeAskUserQuestionBridge(
+            accessor,
+            true,
+            mode,
+            "/workspace",
+            turn.AgentId,
+            turnAccessor,
+            cache
+        );
+        var results = new List<PermissionResult>();
+        var agent = new CallbackAgent(async token =>
+            results.Add(
+                await bridge.HandleAsync(
+                    "Bash",
+                    JsonSerializer.SerializeToElement(new { command = "test" }),
+                    new("call"),
+                    token
+                )
+            )
+        );
+        using var turnScope = turnAccessor.Push(turn);
+        using var interactionScope = accessor.Push(channel);
+        await bridge.BindRunAsync([], null, null, agent, TestContext.Current.CancellationToken);
+        await bridge.BindRunAsync([], null, null, agent, TestContext.Current.CancellationToken);
+        Assert.Equal(expectedRequests, channel.Count);
+        Assert.All(
+            results,
+            result => Assert.Equal(approve || mode == AgwPermissionMode.FullAccess, result is PermissionResultAllow)
+        );
+    }
+
+    [Fact]
+    public void ToolApprovalCache_ChangedArgumentsScopeOrVersion_RequiresApproval()
+    {
+        var cache = new Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode.ClaudeToolApprovalCache();
+        var args = System.Text.Json.Nodes.JsonNode.Parse("{\"a\":1,\"b\":2}");
+        cache.Add("user/project/conversation/agent/node/workdir", 0, "Bash", args);
+        Assert.True(
+            cache.Contains(
+                "user/project/conversation/agent/node/workdir",
+                0,
+                "Bash",
+                System.Text.Json.Nodes.JsonNode.Parse("{\"b\":2,\"a\":1}")
+            )
+        );
+        Assert.False(cache.Contains("other-scope", 0, "Bash", args));
+        Assert.False(cache.Contains("user/project/conversation/agent/node/workdir", 0, "Write", args));
+        Assert.False(
+            cache.Contains(
+                "user/project/conversation/agent/node/workdir",
+                0,
+                "Bash",
+                System.Text.Json.Nodes.JsonNode.Parse("{\"a\":2,\"b\":2}")
+            )
+        );
+        Assert.False(cache.Contains("user/project/conversation/agent/node/workdir", 2, "Bash", args));
+        Assert.False(cache.Contains("user/project/conversation/agent/node/workdir", 0, "Bash", args));
+    }
+
+    private sealed class NullSink : IExecutionMessageSink
+    {
+        public ValueTask WriteAsync(AgwMessage message, CancellationToken cancellationToken) => ValueTask.CompletedTask;
+    }
+
+    private sealed class ToolChannel : IHumanInteractionChannel, IInteractionHandler
+    {
+        private readonly bool _approve;
+
+        public ToolChannel(bool approve)
+        {
+            _approve = approve;
+        }
+
+        public int Count { get; private set; }
+
+        public ValueTask<UserInputResponse> RequestAsync(
+            UserInputRequest request,
+            CancellationToken cancellationToken
+        ) => throw new NotSupportedException();
+
+        public ValueTask<InteractionResolution> ResolveAsync(
+            InteractionRequest request,
+            CancellationToken cancellationToken
+        )
+        {
+            Count++;
+            return ValueTask.FromResult<InteractionResolution>(
+                new InteractionResolution.Resolved(
+                    new ToolApprovalDecision { InteractionId = request.InteractionId, Approved = _approve }
+                )
+            );
+        }
+    }
 
     private sealed class TestHumanInteractionChannel : IHumanInteractionChannel
     {
