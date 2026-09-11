@@ -38,6 +38,13 @@ const HIDDEN_CONTROL_TYPES = new Set([
 
 const supportedImageDataUrl = /^data:image\/(?:jpeg|png|gif|webp);base64,/i;
 const HIDDEN_SYSTEM_TOOL_NAMES = new Set(["Skill", "load_skill", "read_skill_resource"]);
+const TODO_TOOL_NAMES = new Set([
+  "todos_add",
+  "todos_complete",
+  "todos_remove",
+  "todos_get_remaining",
+  "todos_get_all",
+]);
 const QUESTION_INTERACTION_TOOL_NAMES = new Set(["ask_user_question", "AskUserQuestion"]);
 const CLAUDE_CODE_AGENT_NAME = "claude-code";
 const CLAUDE_SESSION_START_EVENT = "SessionStart";
@@ -47,6 +54,34 @@ function getToolGroupKey(message: AiMessage, content: AiMessageContent): string 
   return typeof callId === "string" && callId.length > 0
     ? JSON.stringify([message.streamingScopeId ?? null, callId])
     : null;
+}
+
+function getToolStateGroupKey(message: AiMessage): string | null {
+  const callId = message.additionalProperties?.callId;
+  return typeof callId === "string" && callId.length > 0
+    ? JSON.stringify([message.streamingScopeId ?? null, callId])
+    : null;
+}
+
+function getTodoItemIdentity(item: unknown): string | null {
+  if (typeof item !== "object" || item === null || !("id" in item)) return null;
+  const id = item.id;
+  return typeof id === "string" || typeof id === "number" ? String(id) : null;
+}
+
+function readTodoItems(value: unknown): TodoPresentationItem[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (item): item is TodoPresentationItem =>
+      typeof item === "object" &&
+      item !== null &&
+      "id" in item &&
+      (typeof item.id === "string" || typeof item.id === "number") &&
+      "title" in item &&
+      typeof item.title === "string" &&
+      "isComplete" in item &&
+      typeof item.isComplete === "boolean",
+  );
 }
 
 function getHiddenSystemToolKeys(messages: readonly AiMessage[]): Set<string> {
@@ -95,6 +130,12 @@ export type ConversationAlignment = "left" | "right";
 export type ConversationWidth = "normal" | "full";
 export type ToolStatePresentationType = "todo" | "mode" | "background" | "warning";
 export type ToolCallStatus = "running" | "complete" | "failed";
+export type TodoPresentationItem = {
+  id: string | number;
+  title: string;
+  description?: string | null;
+  isComplete: boolean;
+};
 
 export type PresentedContent =
   | { type: "markdown"; markdown: string; sourceType: string }
@@ -385,6 +426,63 @@ export function presentMessage(message: AiMessage): PresentedMessage | null {
   };
 }
 
+function projectTurnScopedTodoSnapshots(messages: readonly AiMessage[]) {
+  const byGroupKey = new Map<string, AiMessage>();
+  const byIdentity = new Map<string, AiMessage>();
+  const latestItemsByScope = new Map<string, TodoPresentationItem[]>();
+  const baselineIdsByScope = new Map<string, ReadonlySet<string>>();
+  const seenTodoIds = new Set<string>();
+
+  for (const message of messages) {
+    if (getToolStatePresentationType(message) !== "todo") continue;
+    const snapshotItems = readTodoItems(message.additionalProperties?.items);
+    const scopeId = message.streamingScopeId ?? null;
+    let visibleItems = snapshotItems;
+    if (scopeId !== null) {
+      let baselineIds = baselineIdsByScope.get(scopeId);
+      if (!baselineIds) {
+        baselineIds = new Set(seenTodoIds);
+        baselineIdsByScope.set(scopeId, baselineIds);
+      }
+      visibleItems = snapshotItems.filter((item) => {
+        const id = getTodoItemIdentity(item);
+        return id === null || !baselineIds.has(id);
+      });
+      for (const item of snapshotItems) {
+        const id = getTodoItemIdentity(item);
+        if (id !== null) seenTodoIds.add(id);
+      }
+      latestItemsByScope.set(scopeId, visibleItems);
+    }
+    const scopedSnapshot: AiMessage = {
+      ...message,
+      additionalProperties: {
+        ...message.additionalProperties,
+        items: visibleItems,
+      },
+    };
+    const groupKey = getToolStateGroupKey(message);
+    if (groupKey) byGroupKey.set(groupKey, scopedSnapshot);
+    byIdentity.set(getStreamingIdentity(message), scopedSnapshot);
+  }
+
+  return { byGroupKey, byIdentity, latestItemsByScope };
+}
+
+export function getCurrentTurnTodoItems(messages: readonly AiMessage[]): TodoPresentationItem[] {
+  const currentScopeId = messages.findLast(
+    (message) =>
+      typeof message.streamingScopeId === "string" && message.streamingScopeId.length > 0,
+  )?.streamingScopeId;
+  if (!currentScopeId) return [];
+
+  return (
+    projectTurnScopedTodoSnapshots(prepareVisibleMessages(messages)).latestItemsByScope.get(
+      currentScopeId,
+    ) ?? []
+  );
+}
+
 export function buildConversationRenderModel(
   messages: readonly AiMessage[],
   options: BuildConversationRenderModelOptions = {},
@@ -392,6 +490,9 @@ export function buildConversationRenderModel(
   const visibleMessages = prepareVisibleMessages(messages);
   const hiddenSystemToolKeys = getHiddenSystemToolKeys(visibleMessages);
   const processed = processMessages(visibleMessages);
+  const { byGroupKey: todoSnapshotsByGroupKey, byIdentity: todoSnapshotsByIdentity } =
+    projectTurnScopedTodoSnapshots(visibleMessages);
+  const consumedTodoSnapshotKeys = new Set<string>();
   const availability = new Map(
     (options.checkpointAvailability ?? []).map((item) => [item.occurrenceId, item]),
   );
@@ -409,12 +510,30 @@ export function buildConversationRenderModel(
     if (item.type === "accordion") {
       if (HIDDEN_SYSTEM_TOOL_NAMES.has(item.toolName)) continue;
 
-      const interactionResult = QUESTION_INTERACTION_TOOL_NAMES.has(item.toolName)
-        ? getHumanInteractionQuestionResult(item.messages)
-        : null;
       const first = item.messages.find((message) => getToolCallContent([message]));
       const call = first ? getToolCallContent([first]) : undefined;
       const base = first && call ? getToolPresentationBase(first, call) : `tool:${item.toolName}`;
+      const toolGroupKey = first && call ? getToolGroupKey(first, call) : null;
+      const todoSnapshot =
+        TODO_TOOL_NAMES.has(item.toolName) && toolGroupKey
+          ? todoSnapshotsByGroupKey.get(toolGroupKey)
+          : undefined;
+      if (todoSnapshot) {
+        consumedTodoSnapshotKeys.add(getStreamingIdentity(todoSnapshot));
+        items.push({
+          type: "tool-state",
+          key: uniqueKey(`tool-state:${base}`),
+          alignment: "left",
+          width: "normal",
+          stateType: "todo",
+          message: todoSnapshot,
+        });
+        continue;
+      }
+
+      const interactionResult = QUESTION_INTERACTION_TOOL_NAMES.has(item.toolName)
+        ? getHumanInteractionQuestionResult(item.messages)
+        : null;
       if (interactionResult) {
         items.push({
           type: "human-interaction-result",
@@ -446,13 +565,20 @@ export function buildConversationRenderModel(
 
     const toolState = getToolStatePresentationType(message);
     if (toolState) {
+      if (toolState === "todo" && consumedTodoSnapshotKeys.has(getStreamingIdentity(message))) {
+        continue;
+      }
+      const toolStateMessage =
+        toolState === "todo"
+          ? (todoSnapshotsByIdentity.get(getStreamingIdentity(message)) ?? message)
+          : message;
       items.push({
         type: "tool-state",
         key: uniqueKey(`tool-state:${getStreamingIdentity(message)}`),
         alignment: "left",
         width: "normal",
         stateType: toolState,
-        message,
+        message: toolStateMessage,
       });
       continue;
     }

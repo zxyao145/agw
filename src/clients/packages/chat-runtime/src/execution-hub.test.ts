@@ -3,6 +3,140 @@ import test from "node:test";
 import { HubConnectionBuilder, HubConnectionState, type IRetryPolicy } from "@microsoft/signalr";
 import type { AiMessage } from "@agw/api";
 
+test("concurrent Agentflow initialization and checkpoint queries share the connecting hub", async (t) => {
+  const { ExecutionSession } = await import("./execution-session.ts");
+  const connected = Promise.withResolvers<void>();
+  let starts = 0;
+  const failures: unknown[] = [];
+  const connection = {
+    state: HubConnectionState.Disconnected,
+    on() {},
+    onclose() {},
+    onreconnecting() {},
+    onreconnected() {},
+    async start() {
+      starts++;
+      connection.state = HubConnectionState.Connecting;
+      await connected.promise;
+      connection.state = HubConnectionState.Connected;
+    },
+    async stop() {
+      connection.state = HubConnectionState.Disconnected;
+    },
+    async invoke(method: string) {
+      if (method === "GetExecutionProvider") return "InProcess";
+      if (method === "FindInProcessExecution") return null;
+      if (method === "GetAgentflowCheckpoints") return [];
+    },
+  };
+  t.mock.method(HubConnectionBuilder.prototype, "build", () => connection as never);
+  const session = new ExecutionSession(
+    { onMessage() {}, onReconnectFailed: (state) => failures.push(state) },
+    { baseUrl: "https://agw.test", token: null, attachmentStore: null },
+  );
+  try {
+    const setting = { projectId: "project", contextId: "context" };
+    const results = Promise.allSettled([
+      session.configure(setting),
+      session.configure(setting),
+      session.listAgentflowCheckpoints("flow"),
+    ]);
+    connected.resolve();
+    assert.deepEqual(
+      (await results).map((result) => result.status),
+      ["fulfilled", "fulfilled", "fulfilled"],
+    );
+    assert.equal(starts, 1);
+    assert.deepEqual(failures, []);
+  } finally {
+    await session.dispose();
+  }
+});
+
+test("Retry recovers a WebSocket-only Agentflow turn when SignalR has no connectionId", async (t) => {
+  const { ExecutionSession } = await import("./execution-session.ts");
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  let close!: (error: Error) => void;
+  let active = false;
+  let restored = 0;
+  let stops = 0;
+  const recoveryCalls: unknown[][] = [];
+  const connection = {
+    connectionId: null,
+    state: HubConnectionState.Disconnected,
+    on() {},
+    onreconnecting() {},
+    onreconnected() {},
+    onclose(handler: typeof close) {
+      close = handler;
+    },
+    async start() {
+      connection.state = HubConnectionState.Connected;
+    },
+    async stop() {
+      stops++;
+      connection.state = HubConnectionState.Disconnected;
+    },
+    async invoke(method: string, ...args: unknown[]) {
+      if (method === "GetExecutionProvider") return "InProcess";
+      if (method === "FindInProcessExecution") return active ? "original-connection" : null;
+      if (method === "RecoverInProcessExecution") {
+        recoveryCalls.push(args);
+        return active;
+      }
+    },
+  };
+  t.mock.method(HubConnectionBuilder.prototype, "build", () => connection as never);
+  const session = new ExecutionSession(
+    {
+      onMessage() {},
+      onReconnected() {
+        restored++;
+      },
+    },
+    { baseUrl: "https://agw.test", token: null, attachmentStore: null },
+  );
+  try {
+    await session.configure({ projectId: "project", contextId: "context" });
+    await session.execute({
+      conversationId: "conversation",
+      agentId: "flow",
+      agentType: 1,
+      input: { messageId: "input", author: "$agw", contents: [] },
+    });
+    active = true;
+    connection.state = HubConnectionState.Disconnected;
+    close(new Error("Connection lost"));
+    void session.retryConnection();
+    for (let i = 0; i < 40; i++) await Promise.resolve();
+    assert.equal(restored, 1);
+    assert.equal(stops, 0);
+    assert.deepEqual(recoveryCalls, [["original-connection", false]]);
+    assert.equal(session.hasActiveExecution(), true);
+    await session.interrupt();
+    assert.deepEqual(recoveryCalls.at(-1), ["original-connection", true]);
+
+    // A later turn also has no negotiated ID; it may finish while disconnected.
+    active = false;
+    await session.interrupt();
+    const restoredBeforeNextTurn = restored;
+    await session.execute({
+      conversationId: "conversation",
+      agentId: "flow",
+      agentType: 1,
+      input: { messageId: "next-input", author: "$agw", contents: [] },
+    });
+    connection.state = HubConnectionState.Disconnected;
+    close(new Error("Connection lost after completion"));
+    await session.retryConnection();
+    assert.equal(restored, restoredBeforeNextTurn + 1);
+    assert.equal(session.hasActiveExecution(), false);
+    assert.equal(stops, 0);
+  } finally {
+    await session.dispose();
+  }
+});
+
 test("human response dispatch binds the nested response to the requested or active execution", async () => {
   const { ExecutionSession } = await import("./execution-session.ts");
   const commands: unknown[] = [];

@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using Agw.Agents.Execution.Agents.Tools;
+using Agw.Tools.Impl.ToolBlocks.Todo;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -7,14 +8,14 @@ namespace Agw.Agents.Execution.Agents.Middleware;
 
 internal sealed class TodoStateSnapshotMiddleware
 {
-    private static readonly IReadOnlySet<string> MutationToolNames = new HashSet<string>(
-        ["todos_add", "todos_complete", "todos_remove"],
+    private static readonly IReadOnlySet<string> TodoToolNames = new HashSet<string>(
+        ["todos_add", "todos_complete", "todos_remove", "todos_get_remaining", "todos_get_all"],
         StringComparer.OrdinalIgnoreCase
     );
 
-    private readonly TodoProvider _provider;
+    private readonly AgwTodoProvider _provider;
 
-    public TodoStateSnapshotMiddleware(TodoProvider provider)
+    public TodoStateSnapshotMiddleware(AgwTodoProvider provider)
     {
         _provider = provider;
     }
@@ -52,7 +53,7 @@ internal sealed class TodoStateSnapshotMiddleware
                     result.Exception != null
                     || ToolInvocationExceptionHandler.IsErrorResult(result.Result)
                     || !callNames.TryGetValue(result.CallId, out var toolName)
-                    || !MutationToolNames.Contains(toolName)
+                    || !TodoToolNames.Contains(toolName)
                     || !snapshottedCallIds.Add(result.CallId)
                 )
                 {

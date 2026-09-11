@@ -23,6 +23,7 @@ using Agw.Shared;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Exceptions;
+using Agw.Tools.Impl.ToolBlocks.Todo;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -1435,7 +1436,7 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
 
     private sealed class TrackingAIAgent : DelegatingAIAgent, IAsyncDisposable
     {
-        private readonly TodoProvider? _todoProvider;
+        private readonly AgwTodoProvider? _todoProvider;
 
         public TrackingAIAgent(bool enableTodo = false)
             : base(
@@ -1445,7 +1446,7 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
                 )
             )
         {
-            _todoProvider = enableTodo ? new TodoProvider() : null;
+            _todoProvider = enableTodo ? new AgwTodoProvider() : null;
         }
 
         public bool Disposed { get; private set; }

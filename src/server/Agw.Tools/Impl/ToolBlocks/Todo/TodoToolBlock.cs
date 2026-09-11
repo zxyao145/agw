@@ -1,5 +1,4 @@
 using Agw.Tools.ToolBlocks;
-using Microsoft.Agents.AI;
 
 namespace Agw.Tools.Impl.ToolBlocks.Todo;
 
@@ -30,7 +29,7 @@ public sealed class TodoToolBlock : IToolBlock
         contribution.PlanModeAllowedToolNames.UnionWith(
             Descriptor.Members.Where(static member => member.AllowInPlanMode).Select(static member => member.Name)
         );
-        contribution.ContextProviders.Add(new TodoProvider());
+        contribution.ContextProviders.Add(new AgwTodoProvider());
         var evaluatorOptions = context.EnabledToolBlockNames.Contains(ToolBlockNames.Mode)
             ? new TodoCompletionLoopEvaluatorOptions { Modes = ["execute"] }
             : null;

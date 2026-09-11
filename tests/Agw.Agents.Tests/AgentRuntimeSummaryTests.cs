@@ -4,6 +4,7 @@ using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.Messaging;
 using Agw.Agents.Execution.Summaries;
+using Agw.Tools.Impl.ToolBlocks.Todo;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -330,13 +331,13 @@ public class AgentRuntimeSummaryTests
 
     private sealed class TodoAgent : DelegatingAIAgent
     {
-        private readonly TodoProvider _todoProvider = new();
+        private readonly AgwTodoProvider _agwTodoProvider = new();
 
         public TodoAgent(AIAgent innerAgent)
             : base(innerAgent) { }
 
         public override object? GetService(Type serviceType, object? serviceKey = null) =>
-            base.GetService(serviceType, serviceKey) ?? _todoProvider.GetService(serviceType, serviceKey);
+            base.GetService(serviceType, serviceKey) ?? _agwTodoProvider.GetService(serviceType, serviceKey);
     }
 
     private sealed class ToolMessageAgent : AIAgent
