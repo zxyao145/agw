@@ -64,7 +64,7 @@ public class AgwExceptionTests
     {
         var repoRoot = FindRepositoryRoot();
         var backendRoot = Path.Combine(repoRoot, "src", "server");
-        var throwPattern = new Regex(@"throw\s+new\s+(?<type>[A-Za-z0-9_.]+)", RegexOptions.Compiled);
+        var throwPattern = new Regex(@"throw\s+new\s+(?<type>[A-Za-z0-9_.:]+)", RegexOptions.Compiled);
         var violations = Directory
             .EnumerateFiles(backendRoot, "*.cs", SearchOption.AllDirectories)
             .SelectMany(file =>
@@ -76,18 +76,40 @@ public class AgwExceptionTests
                         Type = match.Groups["type"].Value,
                     })
             )
-            .Where(match =>
-                match.Type != "AgwException"
-                && !(
-                    match.File.StartsWith("src/server/Agw.Files/", StringComparison.Ordinal)
-                    && match.Type == "AgwFilesException"
-                )
-            )
+            .Where(match => !IsApprovedBackendException(match.File, match.Type))
             .Select(match => $"{match.File}: {match.Type}")
             .Order()
             .ToList();
 
         Assert.Empty(violations);
+    }
+
+    private static bool IsApprovedBackendException(string file, string type)
+    {
+        if (type == "AgwException")
+        {
+            return true;
+        }
+
+        if (file.StartsWith("src/server/Agw.Files/", StringComparison.Ordinal) && type == "AgwFilesException")
+        {
+            return true;
+        }
+
+        // Source generators are compiler components and may emit framework exceptions into
+        // projects that intentionally have no dependency on Agw.Shared.
+        if (
+            file == "src/server/Agw.Tools.Generators/AgwToolGenerator.cs"
+            && type == "global::System.InvalidOperationException"
+        )
+        {
+            return true;
+        }
+
+        // This evaluator mirrors Microsoft.Agents.AI.Harness behavior. Its configuration and
+        // composition failures are library contract exceptions, not backend application failures.
+        return file == "src/server/Agw.Tools/Impl/ToolBlocks/Todo/TodoCompletionLoopEvaluator.cs"
+            && type is "ArgumentException" or "InvalidOperationException";
     }
 
     private static string FindRepositoryRoot()

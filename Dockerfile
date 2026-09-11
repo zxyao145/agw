@@ -39,6 +39,8 @@ COPY src/server/Agw.Shared/Agw.Shared.csproj ./src/server/Agw.Shared/
 COPY src/server/Agw.Skills/Agw.Skills.csproj ./src/server/Agw.Skills/
 COPY src/server/Agw.Standalone.Host/Agw.Standalone.Host.csproj ./src/server/Agw.Standalone.Host/
 COPY src/server/Agw.Tools/Agw.Tools.csproj ./src/server/Agw.Tools/
+COPY src/server/Agw.Tools.Abstractions/Agw.Tools.Abstractions.csproj ./src/server/Agw.Tools.Abstractions/
+COPY src/server/Agw.Tools.Generators/Agw.Tools.Generators.csproj ./src/server/Agw.Tools.Generators/
 COPY src/sdks/pi-agent-sdk-csharp/Directory.Build.props src/sdks/pi-agent-sdk-csharp/Directory.Packages.props ./src/sdks/pi-agent-sdk-csharp/
 COPY src/sdks/pi-agent-sdk-csharp/src/PiAgentSdk/PiAgentSdk.csproj ./src/sdks/pi-agent-sdk-csharp/src/PiAgentSdk/
 COPY src/sdks/pi-agent-sdk-csharp/src/PiAgentSdk.MAF/PiAgentSdk.MAF.csproj ./src/sdks/pi-agent-sdk-csharp/src/PiAgentSdk.MAF/
