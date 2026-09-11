@@ -90,6 +90,7 @@ export function Conversation({
     estimateSize: () => 72,
     getItemKey,
     overscan: 6,
+    useFlushSync: false,
   });
   const virtualRows = virtualizer.getVirtualItems();
   const viewportHeight = virtualizer.scrollRect?.height ?? 0;
