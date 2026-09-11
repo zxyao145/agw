@@ -28,6 +28,7 @@ test("conversation virtualizes dynamically measured message rows", async () => {
   assert.match(source, /getItemKey/);
   assert.match(source, /estimateSize: \(\) => 72/);
   assert.match(source, /overscan: 6/);
+  assert.match(source, /useFlushSync: false/);
   assert.match(source, /Loading earlier messages/);
 });
 

@@ -356,7 +356,7 @@ export function ConversationList({
                 key={conversation.conversationId}
                 onClick={() => onConversationSelect(conversation)}
                 className={cn(
-                  "group p-2 rounded-md cursor-pointer transition-colors",
+                  "group relative p-2 rounded-md cursor-pointer transition-colors",
                   isActive ? "bg-accent" : "bg-card hover:bg-accent/50",
                 )}
               >
@@ -383,7 +383,7 @@ export function ConversationList({
                       </span>
                     </div>
                   </div>
-                  <div className="hidden group-hover:flex opacity-0 group-hover:opacity-100">
+                  <div className="absolute inset-y-1 right-1 hidden group-hover:flex items-center rounded-md bg-inherit pl-1">
                     <Button
                       size="icon"
                       variant="ghost"
