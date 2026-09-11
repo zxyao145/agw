@@ -49,6 +49,8 @@
     <Project Path="src/server/Agw.Shared/Agw.Shared.csproj" />
   </Folder>
   <Folder Name="/5.Shared/Contracts/">
+    <Project Path="src/server/Agw.Tools.Generators/Agw.Tools.Generators.csproj" />
+    <Project Path="src/server/Agw.Tools.Abstractions/Agw.Tools.Abstractions.csproj" />
     <Project Path="src/server/Agw.Agents.Contracts/Agw.Agents.Contracts.csproj" />
     <Project Path="src/server/Agw.Jobs.Contracts/Agw.Jobs.Contracts.csproj" />
     <Project Path="src/server/Agw.Projects.Contracts/Agw.Projects.Contracts.csproj" />

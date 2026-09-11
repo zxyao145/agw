@@ -1,7 +1,10 @@
 global using Agw.Agents.Contracts.Execution;
 global using Agw.Auth.Contracts;
 global using Agw.Shared.Tooling;
+global using Agw.Tools.Abstractions;
+global using Agw.Tools.Abstractions.ToolBlocks;
 global using Agw.Tools.Contracts;
+global using Agw.Tools.Contracts.Abstractions;
 global using Agw.Tools.Runtime;
 global using Agw.Tools.ToolBlocks;
 global using Xunit;

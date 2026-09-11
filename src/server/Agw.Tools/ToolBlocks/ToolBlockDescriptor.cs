@@ -1,13 +1,5 @@
 namespace Agw.Tools.ToolBlocks;
 
-[Flags]
-public enum ToolBlockScope
-{
-    None = 0,
-    Agent = 1,
-    Project = 2,
-}
-
 public sealed record ToolBlockDescriptor
 {
     public ToolBlockDescriptor(
@@ -16,7 +8,8 @@ public sealed record ToolBlockDescriptor
         string description,
         ToolBlockScope scopes,
         IReadOnlyList<ToolBlockMemberDescriptor> members,
-        bool requiresWorkspace = false
+        bool requiresWorkspace = false,
+        bool excludeFromList = false
     )
     {
         Name = name;
@@ -25,6 +18,7 @@ public sealed record ToolBlockDescriptor
         Scopes = scopes;
         Members = members.ToArray();
         RequiresWorkspace = requiresWorkspace;
+        ExcludeFromList = excludeFromList;
     }
 
     public string Name { get; }
@@ -40,6 +34,8 @@ public sealed record ToolBlockDescriptor
     public IReadOnlyList<string> MemberToolNames => Members.Select(static member => member.Name).ToArray();
 
     public bool RequiresWorkspace { get; }
+
+    public bool ExcludeFromList { get; }
 
     public bool MayRequireApproval =>
         Members.Any(static member => AgwToolMetadataBinding.RequiresApproval(member.RequiredPermission));

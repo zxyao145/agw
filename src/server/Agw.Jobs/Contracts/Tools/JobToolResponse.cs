@@ -1,8 +1,8 @@
 using Agw.Shared.Data.Entities.Jobs;
 
-namespace Agw.Jobs.Application.Skills;
+namespace Agw.Jobs.Contracts.Tools;
 
-public sealed record JobSkillResponse(
+public sealed record JobToolResponse(
     Guid Id,
     Guid ProjectId,
     AgentRuntimeType? AgentType,

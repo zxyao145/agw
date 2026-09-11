@@ -44,7 +44,7 @@ public sealed class WebSearchContextualToolTests
 
         Assert.Equal("web_search", tool.Name);
         Assert.Equal("Web", tool.Category);
-        Assert.Equal(Agw.Tools.Contracts.AgwToolPermission.ReadOnly, tool.RequiredPermission);
+        Assert.Equal(Agw.Tools.Abstractions.AgwToolPermission.ReadOnly, tool.RequiredPermission);
     }
 
     private static ToolMaterializationContext CreateContext(bool supportsHosted) =>

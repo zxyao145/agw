@@ -37,4 +37,7 @@
     <ProjectReference Include="..\Agw.Skills\Agw.Skills.csproj" />
     <ProjectReference Include="..\Agw.Tools\Agw.Tools.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Agw.Tools.Abstractions\Agw.Tools.Abstractions.csproj" />
+  </ItemGroup>
 </Project>

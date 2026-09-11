@@ -1,3 +1,4 @@
+using Agw.Agents.Execution.Agents.Composition;
 using Agw.Integrations.Contracts.Capabilities;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
@@ -27,6 +28,7 @@ public partial class AgentRuntimeService
         - Never use bash, glob, ls, or project file tools to locate skill files.
         - Use `read_skill_resource` to read a skill resource.
         - Use `run_skill_script` to execute a skill script.
+        - Some built-in skills provide named tools instead of scripts; follow their instructions and call those tools directly.
         - Pass the exact skill and script names advertised by the skill provider.
         - If a skill or script is not found, report the error. Do not search the project workspace.
         """;
@@ -34,7 +36,8 @@ public partial class AgentRuntimeService
     private async Task<AgentSkillsProvider?> CreateSkillsProviderAsync(
         Agent agent,
         Project project,
-        IReadOnlyList<PluginSkillReference> pluginSkills
+        IReadOnlyList<PluginSkillReference> pluginSkills,
+        AgentCapabilityComposition capabilities
     )
     {
         var skillIds = agent
@@ -45,6 +48,7 @@ public partial class AgentRuntimeService
             .Select(skill => _skillRegistrations.GetValueOrDefault(skill.Id))
             .Where(registration => registration != null)
             .Cast<IAgentSkillRegistration>()
+            .DistinctBy(registration => registration.Id)
             .ToArray();
         var userSkillPaths = skills
             .Where(skill => skill.Kind == SkillKind.Local && !_skillRegistrations.ContainsKey(skill.Id))
@@ -128,6 +132,7 @@ public partial class AgentRuntimeService
         foreach (var registration in classSkillRegistrations)
         {
             builder.UseSkill(registration.Create(project.Id));
+            capabilities.AddSkillTools(registration, project.Id, _generatedToolCatalog);
         }
 
         if (userSkillPaths.Length > 0)

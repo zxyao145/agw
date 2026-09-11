@@ -23,7 +23,7 @@ public class ToolsController : ControllerBase
     [ProducesApiResult(typeof(ToolLiteInfo[]))]
     public IActionResult GetAllTools()
     {
-        var tools = _toolRegistry.GetAllTools().Select(ToLiteInfo).ToArray();
+        var tools = _toolRegistry.GetListedTools().Select(ToLiteInfo).ToArray();
         return ApiResult.Ok(tools);
     }
 

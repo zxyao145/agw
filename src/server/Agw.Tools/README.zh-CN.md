@@ -101,6 +101,8 @@ Catalog 同时返回两种 item，以下展示部分字段：
 
 `kind` 为 `tool` 或 `toolBlock`。`/api/tools/by-category` 和
 `/api/tools/{name}` 使用相同结构，不再存在单独的 ToolBlock endpoint。
+`ExcludeToolFromListAttribute` 会从 `GET /api/tools` 和
+`/api/tools/by-category` 排除标记的 Tool 或 ToolBlock；按名称查询和运行时调用保持可用。
 
 ## 运行时架构
 
@@ -256,7 +258,7 @@ Tool 审批用于决定一次具体调用是否可以执行。`Agw.Tools` 声明
 ```mermaid
 flowchart TB
     subgraph tools["Agw.Tools：声明与物化"]
-        definitions["IAgwToolMeta / AiToolAttribute / ToolBlock 成员"] --> registry["ToolRegistryService / ToolBlockRegistry"]
+        definitions["IAgwToolMeta / AgwToolAttribute / ToolBlock 成员"] --> registry["ToolRegistryService / ToolBlockRegistry"]
         registry --> binding["AgwToolMetadataBinding"]
         registry --> dynamic["AgwToolMetadataContextProvider：动态成员"]
         dynamic --> binding
@@ -272,7 +274,7 @@ flowchart TB
     end
 ```
 
-1. **统一声明。** `IAgwTool` 和 `IContextualTool` 通过 `IAgwToolMeta` 强制声明 `RequiredPermission`；Attribute Tool 在 `AiToolAttribute` 中声明；ToolBlock 在 `ToolBlockDescriptor.Members` 中逐个声明成员。`AllowInPlanMode` 独立声明，默认是 `false`。
+1. **统一声明。** `IAgwTool` 和 `IContextualTool` 通过 `IAgwToolMeta` 强制声明 `RequiredPermission`；Attribute Tool 在 `AgwToolAttribute` 中声明；ToolBlock 在 `ToolBlockDescriptor.Members` 中逐个声明成员。`AllowInPlanMode` 独立声明，默认是 `false`。
 2. **物化时绑定。** [`AgwToolMetadataBinding`](Runtime/AgwToolMetadata.cs) 绑定 `AgwToolMetadata(Source, RequiredPermission, AllowInPlanMode)`，来源包括 `built-in`、`attribute`、`contextual` 和 `tool-block:<name>`。对 `AIFunction`，先添加委派式元数据包装，再为 `Write`、`Execute` 添加 `ApprovalRequiredAIFunction`。相同元数据允许重复绑定；元数据冲突或权限值无效时明确失败。
 3. **覆盖动态成员。** [`AgwToolMetadataContextProvider`](Runtime/AgwToolMetadataContextProvider.cs) 包装 ToolBlock 的 Provider，每次调用都校验其新生成的成员集并绑定声明；静态成员直接绑定。动态成员缺失、重名或未声明时，在暴露给模型前失败。包装后仍可通过 `GetService<T>()` 访问原 Provider 提供的服务。
 4. **在 Agent 管线执行。** [`AsAgwAgent`](../Agw.Agents.Execution/Agents/Tools/AgwAgentExtensions.Tools.cs) 配置 `UseApprovalResponseBinding`，把批准绑定到原始调用；配置 `UseApprovalNotRequiredFunctionBypassing`，避免同一批调用中本来无需审批的普通函数被连带要求审批；由 `UseFunctionInvocation` 执行函数或产生审批请求。`MafApprovalGrantAgent` 刷新权限并记录可复用授权，`UseToolApproval` 检查授权及能力规则，未解决的请求再交给执行层 handler。
@@ -434,7 +436,7 @@ public bool AllowInPlanMode => false;
 Attribute Tool 在方法特性中显式传入权限，例如 `git_clone`：
 
 ```csharp
-[AiTool("git_clone", AgwToolPermission.Write)]
+[AgwTool("git_clone", AgwToolPermission.Write)]
 ```
 
 ToolBlock 按成员分别声明，例如 `file-access`：
@@ -460,6 +462,22 @@ new ToolBlockMemberDescriptor("file_access_write", AgwToolPermission.Write),
 | 交互架构与 Durable 生命周期 | [HumanInteraction](../Agw.Agents.Execution/HumanInteraction/README.md)、[MAF Adapter](../Agw.Agents.Execution/HumanInteraction/Infrastructure/Maf/README.md) |
 
 
+## 公共声明与 Skill 携带的工具
+
+[`Agw.Tools.Abstractions`](../Agw.Tools.Abstractions/README.md) 提供 `IAgwToolMeta`、`IAgwTool`、`IProjectScopedAgwTool`、`AgwToolPermission`、生成工具契约和声明特性，仅依赖 `Microsoft.Extensions.AI.Abstractions`；其公开命名空间统一使用 `Agw.Tools.Abstractions.*`。`IProjectScopedAgwTool` 直接继承元数据接口，提供 `ToAITool(Guid projectId)`；普通工具使用 `IAgwTool.ToAITool()`。
+
+`Agw.Tools.Generators` 在编译期将 Attribute 方法生成成 `IAgwGeneratedToolModule`，其中包含元数据、输入／返回 Schema 和直接调用委托。partial Skill 或 ToolBlock 通过 `IAgwToolSet<T>` 声明 Tool 容器，生成器补齐 `ToolTypes` 和固定 ToolBlock Descriptor 工厂。运行时启动不再扫描 Attribute 方法、读取 XMLDoc、为这些方法调用 `AIFunctionFactory`，也不通过反射执行。生成器用 `AGWTOOL001` 报告不支持的签名，用 `AGWTOOL002` 报告无效声明。
+
+全局 Registry 默认消费 `Agw.Tools` 的生成模块。额外的全局生成容器使用 `AddToolCatalogTypes(typeof(MyTools))` 显式选择，仍需满足持久化 Definition 完整性校验。仅引用抽象项目或登记业务模块的生成清单，不会自动把业务 Tool 加入全局目录。
+
+业务模块可通过 `IAgentSkillRegistration.Tools` 提供手写 Tool；partial Skill 使用 `IAgwToolSet<T>` 获得生成的 `ToolTypes`。只有 Skill 绑定到 Agent 或 Project 后才贡献能力。
+
+`AgwToolContainerAttribute` 会暴露类直接声明的 public 普通方法。public 辅助方法使用 `AgwToolIgnoreAttribute` 排除。默认名称保留大小写，并移除末尾一个 `Async`；显式名称原样保留。实例容器使用构造函数注入；方法参数可用 `AgwToolServiceAttribute` 或兼容的 MVC `FromServicesAttribute` 标记为服务。服务参数和 `CancellationToken` 不进入模型 Schema，每次调用使用独立的异步 DI scope。
+
+业务工具位于所属模块的 `Application/Tools`，DTO 位于 `Contracts/Tools`。内置 Skill 通过 `IAgentSkillRegistration.Tools` 提供无状态项目工具声明，默认集合为空。Execution 仅为已绑定 Skill 装配这些工具，对 Agent/Project 重复绑定去重，绑定可信项目 ID，检查跨来源重名，并用来源 `skill:<name>` 接入统一权限管线。绑定后即提供具名工具；`load_skill` 提供使用指导，不承担执行授权。
+
+声明不能保留每个 Agent 的状态或 scoped 服务。项目上下文属于返回的运行时函数，每次调用独立解析和释放业务 scope。直接调用 `ToAITool` 不会自动获得审批和 Plan 限制。`IContextualTool`、`IToolBlock`、`ToolMaterializationContext` 和 `ToolContribution` 继续位于 `Agw.Tools`。
+
 ## 扩展方式
 
 ### 新增普通 Tool
@@ -473,7 +491,7 @@ new ToolBlockMemberDescriptor("file_access_write", AgwToolPermission.Write),
 3. 声明 `Name`、`Category`、Plan 模式支持和 `AgwToolPermission`。
 4. 返回 `ToolContribution`，并将 Executor、Provider、Client 等生命周期移交给它。
 
-`ToolRegistryService` 在 Host 启动时自动发现这些实现并生成 `ToolInfo`，实现类无需构造 catalog DTO。
+`ToolRegistryService` 在 Host 启动时从明确指定的目录程序集发现这些实现并生成 `ToolInfo`，实现类无需构造 catalog DTO。
 
 ### 新增 ToolBlock
 

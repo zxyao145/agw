@@ -86,7 +86,12 @@ public partial class AgentRuntimeService
         AIAgent? aiAgent = null;
         try
         {
-            var skillsProvider = await CreateSkillsProviderAsync(agentDefinition, project, capabilities.PluginSkills)
+            var skillsProvider = await CreateSkillsProviderAsync(
+                    agentDefinition,
+                    project,
+                    capabilities.PluginSkills,
+                    capabilities
+                )
                 .ConfigureAwait(false);
             if (skillsProvider != null)
             {

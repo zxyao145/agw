@@ -7,4 +7,7 @@
     <ProjectReference Include="..\Agw.Data\Agw.Data.csproj" />
     <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Agw.Tools.Abstractions\Agw.Tools.Abstractions.csproj" />
+  </ItemGroup>
 </Project>

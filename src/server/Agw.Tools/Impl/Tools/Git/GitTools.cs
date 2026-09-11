@@ -26,18 +26,18 @@ public class CloneResult
 /// <summary>
 /// Provides basic utility tools for agents.
 /// </summary>
-[AiToolContainer(DefaultCategory = "Git")]
+[AgwToolContainer(AgwToolPermission.Write, DefaultCategory = "Git")]
 public static class GitTools
 {
-    [AiTool("git_clone", AgwToolPermission.Write)]
+    [AgwTool("git_clone", AgwToolPermission.Write)]
     [Description("clone a git repository")]
     public static async Task<CloneResult> Clone(
         [NotNull, Description("remote git repository address")] string gitAddress,
         [NotNull, Description("local workspace path")] string workspace,
+        [AgwToolService] IGitCommandService gitCommand,
         CancellationToken cancellationToken = default
     )
     {
-        var gitCommand = IocUtil.GetSingletonRequiredService<IGitCommandService>();
         var result = await gitCommand.CloneRepositoryAsync(gitAddress, workspace, cancellationToken);
 
         return new CloneResult(

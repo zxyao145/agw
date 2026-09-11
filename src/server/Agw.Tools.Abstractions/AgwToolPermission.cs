@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Agw.Tools.Contracts;
+namespace Agw.Tools.Abstractions;
 
 [JsonConverter(typeof(JsonStringEnumConverter<AgwToolPermission>))]
 public enum AgwToolPermission

@@ -2,6 +2,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -18,5 +19,10 @@
     <ProjectReference Include="../../src/server/Agw.Files/Agw.Files.csproj" />
     <ProjectReference Include="../../src/server/Agw.Infrastructure/Agw.Infrastructure.csproj" />
     <ProjectReference Include="../../src/server/Agw.Tools/Agw.Tools.csproj" />
+    <ProjectReference
+      Include="../../src/server/Agw.Tools.Generators/Agw.Tools.Generators.csproj"
+      OutputItemType="Analyzer"
+      ReferenceOutputAssembly="true"
+    />
   </ItemGroup>
 </Project>

@@ -22,8 +22,7 @@ using Agw.Shared.Runtime;
 using Agw.Shared.Tooling;
 using Agw.Skills.Contracts.Registration;
 using Agw.Skills.Execution;
-using Agw.Tools.Contracts;
-using Agw.Tools.Contracts.Abstractions;
+using Agw.Tools.Abstractions;
 using Agw.Tools.Impl.ToolBlocks.UserMemory;
 using Agw.Tools.ToolBlocks;
 using Microsoft.Agents.AI;
@@ -312,7 +311,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             Assert.Equal(16_000, chatOptions.MaxOutputTokens);
             Assert.NotNull(chatOptions.Tools);
             Assert.Equal(
-                new[] { "agent_mcp", "diff", "git_clone", "project_mcp", "web_fetch" }
+                new[] { "agent_mcp", "agw_job_list", "diff", "git_clone", "project_mcp", "web_fetch" }
                     .OrderBy(name => name, StringComparer.Ordinal)
                     .ToArray(),
                 chatOptions.Tools.Select(tool => tool.Name).OrderBy(name => name, StringComparer.Ordinal).ToArray()
@@ -497,14 +496,31 @@ public class AgentRuntimeServiceSystemCompositionTests
         var method = typeof(AgentRuntimeService).GetMethod(
             "CreateSkillsProviderAsync",
             BindingFlags.Instance | BindingFlags.NonPublic,
-            [typeof(Agent), typeof(Project), typeof(IReadOnlyList<PluginSkillReference>)]
+            [
+                typeof(Agent),
+                typeof(Project),
+                typeof(IReadOnlyList<PluginSkillReference>),
+                typeof(AgentCapabilityComposition),
+            ]
         );
 
+        await using var capabilities = new AgentCapabilityComposition(
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            new HashSet<string>(),
+            [],
+            new Dictionary<string, string>(),
+            new AgentResourceLease()
+        );
         try
         {
             Assert.NotNull(method);
             var providerTask = Assert.IsType<Task<AgentSkillsProvider?>>(
-                method.Invoke(runtimeService, [agent, project, Array.Empty<PluginSkillReference>()])
+                method.Invoke(runtimeService, [agent, project, Array.Empty<PluginSkillReference>(), capabilities])
             );
             var provider = await providerTask;
 
@@ -512,11 +528,17 @@ public class AgentRuntimeServiceSystemCompositionTests
             {
                 Assert.Null(provider);
                 Assert.Equal(0, registration.CreateCount);
+                Assert.Empty(capabilities.Tools);
                 return;
             }
 
             var skillsProvider = Assert.IsType<AgentSkillsProvider>(provider);
             Assert.Equal(1, registration.CreateCount);
+            var tool = Assert.IsAssignableFrom<AIFunction>(Assert.Single(capabilities.Tools));
+            Assert.Equal("agw_job_list", tool.Name);
+            Assert.Contains(tool.Name, capabilities.PlanModeAllowedToolNames);
+            var result = await tool.InvokeAsync(new AIFunctionArguments(), cancellationToken);
+            Assert.Equal(project.Id.ToString(), result?.ToString());
             Assert.Single(TraverseObjectGraph(skillsProvider).OfType<TestClassSkill>());
         }
         finally
@@ -763,11 +785,22 @@ public class AgentRuntimeServiceSystemCompositionTests
 
         public int CreateCount { get; private set; }
 
+        public IReadOnlyList<IProjectScopedAgwTool> Tools => [new TestSkillTool()];
+
         public AgentSkill Create(Guid projectId)
         {
             CreateCount++;
             return new TestClassSkill();
         }
+    }
+
+    private sealed class TestSkillTool : IProjectScopedAgwTool
+    {
+        public string Name => "agw_job_list";
+        public AgwToolPermission RequiredPermission => AgwToolPermission.ReadOnly;
+        public bool AllowInPlanMode => true;
+
+        public AITool ToAITool(Guid projectId) => AIFunctionFactory.Create(() => projectId.ToString(), Name);
     }
 
     private sealed class TestClassSkill : AgentClassSkill<TestClassSkill>

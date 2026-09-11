@@ -15,4 +15,12 @@
     <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
     <ProjectReference Include="..\Agw.Files\Agw.Files.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Agw.Tools.Abstractions\Agw.Tools.Abstractions.csproj" />
+    <ProjectReference
+      Include="..\Agw.Tools.Generators\Agw.Tools.Generators.csproj"
+      OutputItemType="Analyzer"
+      ReferenceOutputAssembly="false"
+    />
+  </ItemGroup>
 </Project>
