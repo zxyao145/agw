@@ -304,6 +304,8 @@ export class ExecutionSession {
   private executionProvider: ExecutionProviderCapability = null;
   /** 当前自动重连状态，用于通知 UI 每一次重试计划。 */
   private reconnectState: ExecutionReconnectState | null = null;
+  /** 初始化和 checkpoint 查询共享同一次连接建立。 */
+  private connectionStart: Promise<void> | null = null;
   /** 标记 SignalR 已进入自动重连生命周期。 */
   private reconnecting = false;
   /** 当前自动重连等待的截止时间，用于避免重复执行已经开始的尝试。 */
@@ -656,6 +658,10 @@ export class ExecutionSession {
       return;
     }
     if (this.connection.state === HubConnectionState.Connected) return;
+    if (this.connectionStart) {
+      await this.connectionStart;
+      return;
+    }
     if (this.connection.state === HubConnectionState.Reconnecting) {
       this.beginReconnect();
       await this.waitForReconnect();
@@ -664,7 +670,13 @@ export class ExecutionSession {
     if (this.connection.state !== HubConnectionState.Disconnected) {
       throw new Error(`Execution connection is ${this.connection.state}`);
     }
-    await this.connection.start();
+    const start = this.connection.start();
+    this.connectionStart = start;
+    try {
+      await start;
+    } finally {
+      if (this.connectionStart === start) this.connectionStart = null;
+    }
   }
 
   /** 创建一个可被业务命令等待的重连完成信号。 */
@@ -827,7 +839,9 @@ export class ExecutionSession {
     await this.connection.invoke("DispatchCommand", buildSettingCommand(this.setting));
     if (!this.durableConfirmed && this.hasActiveExecution()) {
       this.recoveringInProcess = true;
-      await this.recoverInProcessExecution();
+      // skipNegotiation 的 WebSocket 连接没有客户端 connectionId，按会话发现原执行。
+      if (this.executionConnectionId) await this.recoverInProcessExecution();
+      else await this.discoverInProcessExecution();
     } else if (this.durableConfirmed && this.activeExecutionId) {
       await this.restoreDurableSubscription(this.activeExecutionId, this.streamCursor);
     } else if (this.executionProvider === "in-process") {
@@ -844,7 +858,10 @@ export class ExecutionSession {
       this.setting.contextId,
     );
     if (this.disposed) return;
-    if (connectionId === null) return;
+    if (connectionId === null) {
+      if (this.recoveringInProcess) this.finishActiveTurn();
+      return;
+    }
     if (typeof connectionId !== "string" || !connectionId)
       throw new Error("Cannot confirm the previous execution's state.");
     this.executionConnectionId = connectionId;

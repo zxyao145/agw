@@ -114,11 +114,59 @@ public sealed class ToolsControllerTests
         Assert.Equal(ErrorCodes.ResourceNotFound.Code, Assert.IsAssignableFrom<IApiResult>(result).Code);
     }
 
+    [Fact]
+    public void Catalog_ExcludedToolBlock_HidesFromListsButRemainsAddressable()
+    {
+        // Arrange
+        using var services = new ServiceCollection().BuildServiceProvider();
+        var registry = new ToolRegistryService(
+            NullLogger<ToolRegistryService>.Instance,
+            services,
+            toolBlockRegistry: new ToolBlockRegistry([new HiddenToolBlock()])
+        );
+        var controller = new ToolsController(registry);
+
+        // Act
+        JsonElement all = ReadData(controller.GetAllTools());
+        JsonElement byCategory = ReadData(controller.GetToolsByCategory());
+        JsonElement detail = ReadData(controller.GetTool("hidden-block"));
+
+        // Assert
+        Assert.DoesNotContain(
+            all.EnumerateArray(),
+            static item => item.GetProperty("name").GetString() == "hidden-block"
+        );
+        Assert.DoesNotContain(
+            byCategory.EnumerateObject().SelectMany(static category => category.Value.EnumerateArray()),
+            static item => item.GetProperty("name").GetString() == "hidden-block"
+        );
+        Assert.Equal("hidden-block", detail.GetProperty("name").GetString());
+    }
+
     private static JsonElement ReadData(IActionResult result)
     {
         Assert.IsAssignableFrom<IApiResult>(result);
         var data = result.GetType().GetProperty("Data")?.GetValue(result);
         Assert.NotNull(data);
         return JsonSerializer.SerializeToElement(data, data.GetType(), JsonSerializerOptions.Web);
+    }
+
+    private sealed class HiddenToolBlock : IToolBlock
+    {
+        public ToolBlockDescriptor Descriptor { get; } =
+            new(
+                "hidden-block",
+                "Hidden block",
+                "Hidden from catalog lists.",
+                ToolBlockScope.Agent | ToolBlockScope.Project,
+                [new ToolBlockMemberDescriptor("hidden_member", AgwToolPermission.ReadOnly)],
+                excludeFromList: true
+            );
+
+        public ValueTask<ToolContribution> MaterializeAsync(
+            ToolBlockDefinition definition,
+            ToolMaterializationContext context,
+            CancellationToken cancellationToken
+        ) => ValueTask.FromResult(new ToolContribution());
     }
 }

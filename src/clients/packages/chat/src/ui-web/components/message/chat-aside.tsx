@@ -1,16 +1,28 @@
-import { ArrowDownToLine, ArrowUpFromLine, Brain, CircleGauge, Database } from "lucide-react";
+import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Brain,
+  CheckCircle2,
+  Circle,
+  CircleGauge,
+  Database,
+  ListChecks,
+} from "lucide-react";
 
 import { formatTokenCount, type TokenUsage } from "@agw/api";
+import type { TodoPresentationItem } from "@agw/chat-core";
+import { Badge, cn } from "@agw/components";
 
 export interface ChatAsideProps {
   usage: TokenUsage;
+  todos: readonly TodoPresentationItem[];
 }
 
-export function ChatAside({ usage }: ChatAsideProps) {
+export function ChatAside({ usage, todos }: ChatAsideProps) {
   return (
     <aside
       className="sticky top-0 hidden w-75 shrink-0 self-start border-border/60 bg-background py-10 @min-[64rem]:block"
-      aria-label="Current conversation token usage"
+      aria-label="Current conversation details"
     >
       <div className="space-y-2 rounded-2xl border border-border bg-background/50 px-3 py-3 shadow-xs">
         <h2 className="mb-2 text-base font-medium text-muted-foreground">Token usage</h2>
@@ -52,6 +64,52 @@ export function ChatAside({ usage }: ChatAsideProps) {
           </div>
         </dl>
       </div>
+      {todos.length > 0 ? (
+        <section
+          className="mt-4 rounded-2xl border border-border bg-background/50 px-3 py-3 shadow-xs"
+          aria-label="Current turn todos"
+        >
+          <div className="mb-2 flex items-center gap-2">
+            <ListChecks className="size-4 text-primary" aria-hidden="true" />
+            <h2 className="text-base font-medium text-muted-foreground">Todo</h2>
+            <Badge variant="secondary" className="ml-auto">
+              {todos.filter((todo) => todo.isComplete).length}/{todos.length}
+            </Badge>
+          </div>
+          <ul className="space-y-2">
+            {todos.map((todo) => (
+              <li key={todo.id} className="flex items-start gap-2 rounded-lg px-1 py-1">
+                {todo.isComplete ? (
+                  <CheckCircle2
+                    className="mt-0.5 size-4 shrink-0 text-emerald-600"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <Circle
+                    className="mt-0.5 size-4 shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                )}
+                <div className="min-w-0">
+                  <div
+                    className={cn(
+                      "wrap-break-word text-sm",
+                      todo.isComplete && "text-muted-foreground line-through",
+                    )}
+                  >
+                    {todo.title}
+                  </div>
+                  {todo.description ? (
+                    <p className="wrap-break-word mt-0.5 text-xs text-muted-foreground">
+                      {todo.description}
+                    </p>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
     </aside>
   );
 }

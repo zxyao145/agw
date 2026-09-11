@@ -3,6 +3,8 @@ name: Server Build
 on:
   pull_request:
     paths:
+      - "Dockerfile"
+      - ".dockerignore"
       - "src/server/**"
       - "src/sdks/**"
   push:

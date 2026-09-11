@@ -11,6 +11,7 @@ using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Runtime;
 using Agw.Skills.Contracts.Registration;
 using Agw.Skills.Contracts.Remote;
+using Agw.Tools.Generated;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -41,6 +42,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
     private readonly IRuntimeTurnContextAccessor? _turnContextAccessor;
     private readonly IProjectDefaultResolver? _projectDefaults;
     private readonly TimeProvider _timeProvider;
+    private readonly AgwGeneratedToolCatalog? _generatedToolCatalog;
 
     private readonly ILoggerFactory _loggerFactory;
     private readonly IServiceProvider _services;
@@ -69,7 +71,8 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         IConversationHandoffProvider? conversationHandoffProvider = null,
         IRuntimeTurnContextAccessor? turnContextAccessor = null,
         TimeProvider? timeProvider = null,
-        IProjectDefaultResolver? projectDefaults = null
+        IProjectDefaultResolver? projectDefaults = null,
+        AgwGeneratedToolCatalog? generatedToolCatalog = null
     )
     {
         _agentAppService = agentAppService;
@@ -95,6 +98,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         _conversationHandoffProvider = conversationHandoffProvider;
         _turnContextAccessor = turnContextAccessor;
         _projectDefaults = projectDefaults;
+        _generatedToolCatalog = generatedToolCatalog;
         _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
         _services = services ?? new ServiceCollection().BuildServiceProvider();
     }

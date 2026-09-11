@@ -6,6 +6,7 @@ using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.HumanInteraction;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Tools.HumanInteraction;
+using Agw.Tools.Impl.ToolBlocks.Todo;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
@@ -265,9 +266,9 @@ public static class AgwAgentExtensions
         AgentModeProvider? modeProvider
     )
     {
-        // 用 GetService 查找 TodoProvider，即使它被其他 Provider 包装也能找到。
+        // 用 GetService 查找 AgwTodoProvider，即使它被其他 Provider 包装也能找到。
         var todoProvider = capabilities
-            .ContextProviders.Select(static provider => provider.GetService<TodoProvider>())
+            .ContextProviders.Select(static provider => provider.GetService<AgwTodoProvider>())
             .FirstOrDefault(static provider => provider != null);
         if (todoProvider != null)
         {

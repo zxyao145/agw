@@ -13,6 +13,24 @@
 - **记录重试和历史**：每次尝试都会更新 `Job` 状态，并写入 `JobLog`。
 - **保持时间语义一致**：调度计算基于 `TimeProvider` 和 UTC，API 时间值使用带时区的 RFC 3339 字符串。
 
+## agw-job 内置 Skill
+
+绑定 `agw-job` 后，System Agent 获得五个独立工具。Skill ID、名称和已有绑定保持不变；`load_skill` 读取使用说明，`read_skill_resource` 读取 `job-trigger-reference`，具体操作直接调用下列工具。
+
+| 工具 | 权限 | Plan 模式 |
+| --- | --- | --- |
+| `agw_job_list` | ReadOnly | 允许 |
+| `agw_job_get` | ReadOnly | 允许 |
+| `agw_job_create` | Write | 禁止 |
+| `agw_job_update` | Write | 禁止 |
+| `agw_job_delete` | Write | 禁止 |
+
+工具声明及运行时执行适配位于 `Application/Tools`，响应为 `Contracts/Tools/JobToolResponse`。声明通过 `Agw.Tools.Abstractions` 复用公共契约；Jobs 不引用 `Agw.Tools` 实现。它们通过 Skill 注册显式提供，不进入全局 `/api/tools` 目录，也不新增持久化 Tool Definition。
+
+项目在装配时绑定，模型不能提供 `projectId` 或 `userId` 切换作用域。查询受当前用户隔离；写操作要求匹配项目的交互用户上下文。更新保持 patch 语义，省略字段保持原值，`clearPrompt` 用于清空提示词。删除前先展示任务并取得用户确认，`confirmation` 必须与 `jobId` 相同。执行权限由现有审批管线处理，FullAccess 不绕过业务身份与删除确认校验。
+
+旧 `list-jobs`、`get-job`、`create-job`、`update-job`、`delete-job` 脚本入口已退役；不要再通过 `run_skill_script` 调用它们。发布前需结束仍使用旧入口的活跃或待审批回合。已有历史记录保留，无数据库迁移。其他 Skill 的脚本执行规则保持原样。
+
 ## 模块边界
 
 | 职责 | 所在位置 |

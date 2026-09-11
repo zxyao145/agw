@@ -86,7 +86,8 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Providers",
                 "Agw.Shared",
                 "Agw.Skills",
-                "Agw.Tools"
+                "Agw.Tools",
+                "Agw.Tools.Abstractions"
             ),
             ["Agw.Agents.Contracts"] = Set("Agw.Projects.Contracts", "Agw.Shared"),
             ["Agw.Files"] = Set("Agw.Shared"),
@@ -99,7 +100,9 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Jobs.Contracts",
                 "Agw.Projects.Contracts",
                 "Agw.Shared",
-                "Agw.Skills"
+                "Agw.Skills",
+                "Agw.Tools.Abstractions",
+                "Agw.Tools.Generators"
             ),
             ["Agw.Jobs.Contracts"] = Set(),
             ["Agw.Projects"] = Set(
@@ -114,8 +117,10 @@ public sealed partial class BackendArchitectureTests
             ),
             ["Agw.Projects.Contracts"] = Set("Agw.Shared"),
             ["Agw.Providers"] = Set("Agw.Agents.Contracts", "Agw.Data", "Agw.Shared"),
-            ["Agw.Skills"] = Set("Agw.Agents.Contracts", "Agw.Data", "Agw.Shared"),
-            ["Agw.Tools"] = Set("Agw.Auth", "Agw.Files"),
+            ["Agw.Skills"] = Set("Agw.Agents.Contracts", "Agw.Data", "Agw.Shared", "Agw.Tools.Abstractions"),
+            ["Agw.Tools"] = Set("Agw.Auth", "Agw.Files", "Agw.Tools.Abstractions", "Agw.Tools.Generators"),
+            ["Agw.Tools.Abstractions"] = Set(),
+            ["Agw.Tools.Generators"] = Set(),
 
             ["Agw.Auth"] = Set("Agw.Data", "Agw.Shared"),
             ["Agw.Shared"] = Set(),
@@ -125,6 +130,26 @@ public sealed partial class BackendArchitectureTests
             ["Agw.Migrations.Postgres"] = Set("Agw.Infrastructure"),
             ["Agw.Migrations.Sqlite"] = Set("Agw.Infrastructure"),
         };
+
+    [Fact]
+    public void ToolsAbstractions_Dependencies_ContainOnlyAiAbstractions()
+    {
+        // Arrange
+        var project = XDocument.Load(
+            Path.Combine(GetServerRoot(), "Agw.Tools.Abstractions", "Agw.Tools.Abstractions.csproj")
+        );
+
+        // Act
+        var packages = project
+            .Descendants("PackageReference")
+            .Select(element => element.Attribute("Include")!.Value)
+            .ToArray();
+
+        // Assert
+        Assert.Equal(["Microsoft.Extensions.AI.Abstractions"], packages);
+        Assert.Empty(project.Descendants("ProjectReference"));
+        Assert.Empty(project.Descendants("FrameworkReference"));
+    }
 
     [Fact]
     public void ProjectReferences_CurrentGraph_MatchesAllowedDependencyMatrix()

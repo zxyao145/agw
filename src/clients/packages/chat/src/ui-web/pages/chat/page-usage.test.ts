@@ -48,7 +48,7 @@ test("shared chat hides usage messages and renders compact token usage metrics",
   assert.match(chatSource, /buildConversationRenderModel\(messages,/);
   assert.match(chatSource, /<Conversation\s+items=\{renderItems\}/);
   assert.match(chatSource, /import \{ ChatAside \} from "\.\/chat-aside"/);
-  assert.match(chatSource, /<ChatAside usage=\{conversationUsage\} \/>/);
+  assert.match(chatSource, /<ChatAside usage=\{conversationUsage\} todos=\{currentTurnTodos\} \/>/);
   assert.match(chatAsideSource, /<aside[\s\S]*?>[\s\S]*?Token usage/);
   assert.match(chatAsideSource, /formatTokenCount\(\s*usage\.totalTokenCount,?\s*\)/);
   assert.match(chatAsideSource, /formatTokenCount\(\s*usage\.inputTokenCount,?\s*\)/);
@@ -57,6 +57,8 @@ test("shared chat hides usage messages and renders compact token usage metrics",
   assert.match(chatAsideSource, /formatTokenCount\(\s*usage\.reasoningTokenCount,?\s*\)/);
   assert.match(chatAsideSource, />\s*Cached input\s*</);
   assert.match(chatAsideSource, />\s*Reasoning\s*</);
+  assert.match(chatAsideSource, /todos\.length > 0/);
+  assert.match(chatAsideSource, /aria-label="Current turn todos"/);
 });
 
 test("shared chat shows the usage panel only when its container reaches the lg width", async () => {
@@ -70,7 +72,7 @@ test("shared chat shows the usage panel only when its container reaches the lg w
   assert.match(chatSource, /<div className="relative flex min-h-full min-w-0 max-w-5xl flex-1">/);
   assert.match(chatSource, /<Conversation[\s\S]*?scrollElementRef=\{conversationScrollRef\}/);
   const usageAside = chatAsideSource.match(
-    /<aside\s+className="([^"]+)"\s+aria-label="Current conversation token usage"/,
+    /<aside\s+className="([^"]+)"\s+aria-label="Current conversation details"/,
   );
   assert.ok(usageAside);
   const usageAsideClasses = usageAside[1].split(" ");
@@ -98,6 +100,6 @@ test("shared chat does not render the usage panel without visible messages", asy
 
   assert.match(
     chatSource,
-    /\{renderItems\.length > 0 \? \(?\s*<ChatAside usage=\{conversationUsage\} \/>\s*\)? : null\}/,
+    /\{renderItems\.length > 0 \? \(?\s*<ChatAside usage=\{conversationUsage\} todos=\{currentTurnTodos\} \/>\s*\)? : null\}/,
   );
 });

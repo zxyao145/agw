@@ -8,6 +8,7 @@ using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Tooling;
 using Agw.Tools;
+using Agw.Tools.Abstractions.ToolBlocks;
 using Agw.Tools.HumanInteraction;
 using Agw.Tools.Runtime;
 using Agw.Tools.ToolBlocks;
@@ -264,7 +265,10 @@ public sealed class AgentCapabilityComposer
                 planModeAllowedToolNames,
                 toolWarnings,
                 toolInvocationWarnings,
-                lease
+                lease,
+                toolContribution
+                    .DynamicToolMetadata.Keys.Concat(contribution.DynamicToolMetadata.Keys)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase)
             );
         }
         catch

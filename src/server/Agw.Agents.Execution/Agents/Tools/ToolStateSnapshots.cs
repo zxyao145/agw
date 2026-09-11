@@ -1,3 +1,4 @@
+using Agw.Tools.Impl.ToolBlocks.Todo;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -76,14 +77,20 @@ internal static class ToolStateSnapshots
     }
 
     public static async ValueTask<ChatMessage> CreateTodoAsync(
-        TodoProvider provider,
+        AgwTodoProvider provider,
         AgentSession session,
         string toolName,
         string callId,
         CancellationToken cancellationToken
     )
     {
-        var items = await provider.GetAllTodosAsync(session, cancellationToken).ConfigureAwait(false);
+        IReadOnlyList<AgwTodoItem> items = string.Equals(
+            toolName,
+            "todos_get_remaining",
+            StringComparison.OrdinalIgnoreCase
+        )
+            ? await provider.GetRemainingTodosAsync(session, cancellationToken).ConfigureAwait(false)
+            : await provider.GetAllTodosAsync(session, cancellationToken).ConfigureAwait(false);
         return CreateMessage(
             ToolMessageTypes.TodoSnapshot,
             new AdditionalPropertiesDictionary

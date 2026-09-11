@@ -7,6 +7,7 @@ using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Attempts;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Skills.Contracts.Registration;
+using Agw.Tools.Abstractions.Generated;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -37,6 +38,8 @@ public static class DependencyInjection
             services.AddSingleton<JobScheduleCalculator>();
         }
         services.AddSingleton<IAgentSkillRegistration, JobManagementSkillRegistration>();
+        services.AddSingleton<IAgwGeneratedToolModule>(Agw.Generated.Agw.Jobs.AgwToolModule.Instance);
+        services.AddScoped<Application.Tools.JobManagementToolExecutor>();
         services.AddScoped<JobAppService>();
         services.AddScoped<IJobMetricsFacade, JobMetricsFacade>();
         return services;

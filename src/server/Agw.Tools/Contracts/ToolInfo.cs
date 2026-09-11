@@ -77,6 +77,8 @@ public record ToolInfo
     /// Gets the execution timeout in milliseconds.
     /// </summary>
     public int TimeoutMs { get; init; } = 30000;
+
+    public bool ExcludeFromList { get; init; }
 }
 
 /// <summary>

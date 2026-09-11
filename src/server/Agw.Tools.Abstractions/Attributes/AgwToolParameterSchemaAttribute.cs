@@ -1,10 +1,10 @@
-namespace Agw.Tools.Contracts.Attributes;
+namespace Agw.Tools.Abstractions.Attributes;
 
 /// <summary>
 /// Provides JSON schema information for a parameter.
 /// </summary>
 [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false)]
-public sealed class AiToolParameterSchemaAttribute : Attribute
+public sealed class AgwToolParameterSchemaAttribute : Attribute
 {
     /// <summary>
     /// Gets or sets the JSON schema type (e.g., "string", "number", "boolean", "array", "object").
@@ -24,22 +24,22 @@ public sealed class AiToolParameterSchemaAttribute : Attribute
     /// <summary>
     /// Gets or sets the minimum value for numeric parameters.
     /// </summary>
-    public double? Minimum { get; set; }
+    public double Minimum { get; set; }
 
     /// <summary>
     /// Gets or sets the maximum value for numeric parameters.
     /// </summary>
-    public double? Maximum { get; set; }
+    public double Maximum { get; set; }
 
     /// <summary>
     /// Gets or sets the minimum length for string parameters.
     /// </summary>
-    public int? MinLength { get; set; }
+    public int MinLength { get; set; }
 
     /// <summary>
     /// Gets or sets the maximum length for string parameters.
     /// </summary>
-    public int? MaxLength { get; set; }
+    public int MaxLength { get; set; }
 
     /// <summary>
     /// Gets or sets the regex pattern for string validation.

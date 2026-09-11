@@ -584,7 +584,7 @@ public partial class EfCoreChatHistoryProviderTests : IDisposable
         var currentToolResult = new ChatMessage(ChatRole.Tool, [new FunctionResultContent("call-1", "todo added")]);
         var contextMessage = new ChatMessage(ChatRole.User, "current todo context").WithAgentRequestMessageSource(
             AgentRequestMessageSourceType.AIContextProvider,
-            "TodoProvider"
+            "AgwTodoProvider"
         );
 
         var messages = await InvokeProvideChatHistoryAsync(

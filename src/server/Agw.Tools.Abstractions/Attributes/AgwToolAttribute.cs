@@ -1,4 +1,4 @@
-namespace Agw.Tools.Contracts.Attributes;
+namespace Agw.Tools.Abstractions.Attributes;
 
 /// <summary>
 /// Marks a method as an AI tool that can be used by agents.
@@ -6,22 +6,24 @@ namespace Agw.Tools.Contracts.Attributes;
 /// Use System.ComponentModel.DescriptionAttribute for detailed tool/parameter descriptions.
 /// </summary>
 [AttributeUsage(AttributeTargets.Method, AllowMultiple = false, Inherited = true)]
-public sealed class AiToolAttribute : Attribute
+public sealed class AgwToolAttribute : Attribute
 {
+    public AgwToolAttribute() { }
+
     /// <summary>
-    /// Initializes a new instance of the <see cref="AiToolAttribute"/> class.
+    /// Initializes a new instance of the <see cref="AgwToolAttribute"/> class.
     /// </summary>
-    public AiToolAttribute(AgwToolPermission requiredPermission)
+    public AgwToolAttribute(AgwToolPermission requiredPermission)
     {
         RequiredPermission = requiredPermission;
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="AiToolAttribute"/> class with a name.
+    /// Initializes a new instance of the <see cref="AgwToolAttribute"/> class with a name.
     /// </summary>
     /// <param name="name">The name of the tool. If not specified, the method name is used.</param>
     /// <param name="requiredPermission">The permission required to invoke the tool.</param>
-    public AiToolAttribute(string name, AgwToolPermission requiredPermission)
+    public AgwToolAttribute(string name, AgwToolPermission requiredPermission)
     {
         Name = name;
         RequiredPermission = requiredPermission;
@@ -47,9 +49,9 @@ public sealed class AiToolAttribute : Attribute
 
     /// <summary>
     /// Gets or sets the execution timeout in milliseconds.
-    /// Default is 30000 (30 seconds). Set to 0 for no timeout.
+    /// Default is 5000 (5 seconds). Set to 0 for no timeout.
     /// </summary>
-    public int TimeoutMs { get; set; } = 30000;
+    public int TimeoutMs { get; set; } = 5000;
 
     /// <summary>
     /// Gets or sets the legacy exception-result preference.

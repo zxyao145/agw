@@ -121,6 +121,8 @@ The catalog returns both kinds (selected fields shown below):
 
 `kind` is either `tool` or `toolBlock`. `/api/tools/by-category` and
 `/api/tools/{name}` use the same shape. There is no separate ToolBlock endpoint.
+`ExcludeToolFromListAttribute` removes an attributed Tool or ToolBlock from
+`GET /api/tools` and `/api/tools/by-category`; direct lookup and runtime use remain available.
 
 ## Runtime architecture
 
@@ -330,7 +332,7 @@ becomes `Once` and creates no grant. For example, submitting `AlwaysTool` in
 ```mermaid
 flowchart TB
     subgraph tools["Agw.Tools: declarations and materialization"]
-        definitions["IAgwToolMeta / AiToolAttribute / ToolBlock members"] --> registry["ToolRegistryService / ToolBlockRegistry"]
+        definitions["IAgwToolMeta / AgwToolAttribute / ToolBlock members"] --> registry["ToolRegistryService / ToolBlockRegistry"]
         registry --> binding["AgwToolMetadataBinding"]
         registry --> dynamic["AgwToolMetadataContextProvider: dynamic members"]
         dynamic --> binding
@@ -348,7 +350,7 @@ flowchart TB
 
 1. **Declare once.** `IAgwTool` and `IContextualTool` inherit the required
    `RequiredPermission` member from `IAgwToolMeta`. Attributed methods declare
-   it in `AiToolAttribute`; ToolBlocks declare it for each member in
+   it in `AgwToolAttribute`; ToolBlocks declare it for each member in
    `ToolBlockDescriptor.Members`. `AllowInPlanMode` is independently declared
    and defaults to `false`.
 2. **Bind during materialization.**
@@ -625,7 +627,7 @@ public bool AllowInPlanMode => false;
 For an attributed method, supply the permission explicitly, as on `git_clone`:
 
 ```csharp
-[AiTool("git_clone", AgwToolPermission.Write)]
+[AgwTool("git_clone", AgwToolPermission.Write)]
 ```
 
 For a ToolBlock, declare each member independently, as in `file-access`:
@@ -660,6 +662,20 @@ Relevant implementation and regression references:
 | Interaction architecture and Durable lifecycle | [HumanInteraction](../Agw.Agents.Execution/HumanInteraction/README.md), [MAF adapter](../Agw.Agents.Execution/HumanInteraction/Infrastructure/Maf/README.md) |
 
 
+## Shared declarations and Skill-owned Tools
+
+[`Agw.Tools.Abstractions`](../Agw.Tools.Abstractions/README.md) owns `IAgwToolMeta`, `IAgwTool`, `IProjectScopedAgwTool`, `AgwToolPermission`, generated-tool contracts, and declaration attributes. It depends only on `Microsoft.Extensions.AI.Abstractions`; its public namespaces use `Agw.Tools.Abstractions.*`. `IProjectScopedAgwTool` inherits metadata directly and requires `ToAITool(Guid projectId)`; ordinary `IAgwTool` uses `ToAITool()`.
+
+`Agw.Tools.Generators` compiles attributed methods into an `IAgwGeneratedToolModule`: metadata, input/result schemas, and direct invocation delegates are generated at build time. A partial Skill or ToolBlock declares its Tool containers through `IAgwToolSet<T>`; the generator supplies `ToolTypes` and the fixed ToolBlock descriptor factory. Runtime startup does not scan attributed methods, read XML documentation, call `AIFunctionFactory` for those methods, or invoke them through reflection. Unsupported signatures report `AGWTOOL001`; invalid declarations report `AGWTOOL002`.
+
+The global Registry consumes the generated `Agw.Tools` module by default. Additional global generated containers use `AddToolCatalogTypes(typeof(MyTools))` and must still satisfy persisted-definition coverage. Referencing the abstractions or registering a generated module does not place that module's business Tools in the global catalog.
+
+Business modules keep their Tools in `Application/Tools` and DTOs in `Contracts/Tools`. A built-in Skill registration can provide manual `Tools`; a partial registration uses `IAgwToolSet<T>` to receive generated `ToolTypes`. Execution contributes these only when the Skill is bound to the Agent or Project, deduplicates Skill bindings, binds the trusted project ID, rejects name conflicts, and applies `AgwToolMetadataBinding` with source `skill:<name>`. The functions are available from Agent creation; `load_skill` provides usage instructions, not an execution authorization gate.
+
+`AgwToolContainerAttribute` exposes the public ordinary methods declared directly by a class. Use `AgwToolIgnoreAttribute` for public helpers that must not become Tools. Default names retain their casing and remove one terminal `Async`; explicit names are unchanged. Instance containers use constructor injection. A method may mark a parameter with `AgwToolServiceAttribute` or the compatible MVC `FromServicesAttribute`; service and `CancellationToken` parameters are excluded from model-facing schemas. Each invocation gets an independent async DI scope.
+
+Declarations retain no per-Agent state or scoped services. Bind project context inside the returned function and resolve scoped services at invocation. Raw `ToAITool` calls do not enforce approvals; runtime composition owns permission binding and Plan enforcement. `IContextualTool`, `IToolBlock`, `ToolMaterializationContext`, and `ToolContribution` remain in `Agw.Tools`.
+
 ## Extending the module
 
 ### Add a standalone Tool
@@ -678,7 +694,7 @@ containers are stateless and must declare `AgwToolPermission` explicitly.
 4. Materialize a `ToolContribution` and transfer every executor, provider, or
    client lifetime to it.
 
-`ToolRegistryService` discovers these implementations during Host startup and
+`ToolRegistryService` discovers these implementations in the selected catalog assemblies during Host startup and
 generates their `ToolInfo`; implementations do not construct catalog DTOs.
 
 ### Add a ToolBlock

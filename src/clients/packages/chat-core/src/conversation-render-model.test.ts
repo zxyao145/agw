@@ -7,6 +7,7 @@ import {
   buildConversationRenderModel,
   formatToolContent,
   formatToolResultContent,
+  getCurrentTurnTodoItems,
   isSupportedImageDataUrl,
   prepareVisibleMessages,
 } from "./conversation-render-model";
@@ -783,5 +784,144 @@ test("tool state snapshots remain dedicated render items even without visible co
   assert.deepEqual(
     items.map((item) => item.type),
     ["tool-state"],
+  );
+});
+
+test("all Todo tools render their matching snapshots at the Tool call position", () => {
+  const toolNames = [
+    "todos_add",
+    "todos_complete",
+    "todos_remove",
+    "todos_get_remaining",
+    "todos_get_all",
+  ];
+  const toolMessages: AiMessage[] = toolNames.flatMap((toolName, index) => {
+    const callId = `todo-call-${index}`;
+    return [
+      {
+        messageId: `call-${index}`,
+        role: "assistant",
+        streamingScopeId: "user-1",
+        contents: [
+          {
+            type: "FunctionCallContent",
+            content: {},
+            additionalProperties: { callId, toolName },
+          },
+        ],
+      },
+      {
+        messageId: `result-${index}`,
+        role: "tool",
+        streamingScopeId: "user-1",
+        contents: [
+          {
+            type: "FunctionResultContent",
+            content: index,
+            additionalProperties: { callId },
+          },
+        ],
+      },
+    ];
+  });
+  const snapshots: AiMessage[] = toolNames.map((toolName, index) => ({
+    messageId: `snapshot-${index}`,
+    role: "system",
+    streamingScopeId: "user-1",
+    contents: [{ type: "TextContent", content: "" }],
+    additionalProperties: {
+      type: "tool-todo-snapshot",
+      callId: `todo-call-${index}`,
+      toolName,
+      items: [{ id: index + 1, title: toolName, isComplete: false }],
+    },
+  }));
+
+  const items = buildConversationRenderModel([
+    ...toolMessages,
+    message("final", "assistant", "Finished"),
+    ...snapshots,
+  ]);
+
+  assert.deepEqual(
+    items.map((item) => item.type),
+    ["tool-state", "tool-state", "tool-state", "tool-state", "tool-state", "message"],
+  );
+  assert.deepEqual(
+    items
+      .filter((item) => item.type === "tool-state")
+      .map((item) => item.message.additionalProperties?.toolName),
+    toolNames,
+  );
+});
+
+test("Todo cards exclude items created in earlier turns", () => {
+  const todoToolTurn = (
+    scopeId: string,
+    callId: string,
+    items: Array<{ id: number; title: string; isComplete: boolean }>,
+  ): AiMessage[] => [
+    {
+      messageId: `${callId}-call`,
+      role: "assistant",
+      streamingScopeId: scopeId,
+      contents: [
+        {
+          type: "FunctionCallContent",
+          content: {},
+          additionalProperties: { callId, toolName: "todos_add" },
+        },
+      ],
+    },
+    {
+      messageId: `${callId}-result`,
+      role: "tool",
+      streamingScopeId: scopeId,
+      contents: [
+        {
+          type: "FunctionResultContent",
+          content: items.at(-1),
+          additionalProperties: { callId },
+        },
+      ],
+    },
+    {
+      messageId: `${callId}-snapshot`,
+      role: "system",
+      streamingScopeId: scopeId,
+      contents: [{ type: "TextContent", content: "" }],
+      additionalProperties: {
+        type: "tool-todo-snapshot",
+        callId,
+        toolName: "todos_add",
+        items,
+      },
+    },
+  ];
+  const firstTodo = { id: 1, title: "First turn", isComplete: true };
+  const secondTodo = { id: 2, title: "Second turn", isComplete: false };
+
+  const messages = [
+    ...todoToolTurn("turn-1", "call-1", [firstTodo]),
+    ...todoToolTurn("turn-2", "call-2", [firstTodo, secondTodo]),
+  ];
+  const rendered = buildConversationRenderModel(messages);
+  const cards = rendered.filter((item) => item.type === "tool-state");
+
+  assert.equal(cards.length, 2);
+  assert.deepEqual(cards[0]?.message.additionalProperties?.items, [firstTodo]);
+  assert.deepEqual(cards[1]?.message.additionalProperties?.items, [secondTodo]);
+  assert.deepEqual(getCurrentTurnTodoItems(messages), [secondTodo]);
+  assert.deepEqual(
+    getCurrentTurnTodoItems([
+      ...messages,
+      {
+        messageId: "turn-3-user",
+        role: "user",
+        streamingScopeId: "turn-3",
+        contents: [{ type: "TextContent", content: "New turn" }],
+      },
+    ]),
+    [],
   );
 });

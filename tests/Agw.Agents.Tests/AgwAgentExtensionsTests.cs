@@ -11,6 +11,7 @@ using Agw.Projects.Application.Persistence;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Tooling;
+using Agw.Tools.Abstractions.ToolBlocks;
 using Agw.Tools.Impl.ToolBlocks.Mode;
 using Agw.Tools.Impl.ToolBlocks.Todo;
 using Agw.Tools.Runtime;
@@ -441,7 +442,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
                 contextProviders:
                 [
                     new StaticTextContextProvider("mode context"),
-                    new TodoProvider(),
+                    new AgwTodoProvider(),
                     new StaticTextContextProvider("memory context"),
                 ],
                 autoApprovalRules: [ToolApprovalAgent.AllToolsAutoApprovalRule]
@@ -564,7 +565,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
     public void AsAgwAgent_WithLoopEvaluator_KeepsLoopAgentOutermost()
     {
         var capabilities = CreateCapabilities(
-            contextProviders: [new TodoProvider()],
+            contextProviders: [new AgwTodoProvider()],
             loopEvaluators: [new StopLoopEvaluator()],
             toolWarnings: ["Hosted web search fell back to local search."]
         );
@@ -895,7 +896,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
             CreateDefinition(historyProvider),
             CreateCapabilities(
                 tools: [new ApprovalRequiredAIFunction(function)],
-                contextProviders: [new TodoProvider()]
+                contextProviders: [new AgwTodoProvider()]
             ),
             NullLoggerFactory.Instance,
             serviceProvider
@@ -994,7 +995,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         using var client = new FunctionResultOrderingChatClient(innerClient);
         var contextMessage = new ChatMessage(ChatRole.User, "current todo context").WithAgentRequestMessageSource(
             AgentRequestMessageSourceType.AIContextProvider,
-            "TodoProvider"
+            "AgwTodoProvider"
         );
 
         await foreach (
@@ -1148,7 +1149,7 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         new TodoFunctionCallingStubChatClient().AsAgwAgent(
             CreateDefinition(),
             CreateCapabilities(
-                contextProviders: providers ?? [new TodoProvider()],
+                contextProviders: providers ?? [new AgwTodoProvider()],
                 loopEvaluators: [new StopLoopEvaluator()]
             ),
             NullLoggerFactory.Instance,
@@ -1179,9 +1180,9 @@ public sealed class AgwAgentExtensionsTests : IDisposable
             .Where(item => IsMessageType(item.Update.AdditionalProperties, ToolMessageTypes.TodoSnapshot))
             .ToList();
 
-        Assert.Equal(3, snapshots.Count);
+        Assert.Equal(5, snapshots.Count);
         Assert.Equal(
-            ["todos_add", "todos_complete", "todos_remove"],
+            ["todos_add", "todos_complete", "todos_remove", "todos_get_remaining", "todos_get_all"],
             snapshots.Select(item => item.Update.AdditionalProperties!["toolName"]?.ToString())
         );
 
@@ -1210,10 +1211,12 @@ public sealed class AgwAgentExtensionsTests : IDisposable
         Assert.Equal("First", remainingItems[0].GetProperty("title").GetString());
         Assert.True(remainingItems[0].GetProperty("isComplete").GetBoolean());
 
-        Assert.Contains(
-            updates.SelectMany(update => update.Contents).OfType<FunctionResultContent>(),
-            result => string.Equals(result.CallId, "todo-get-all-call", StringComparison.Ordinal)
-        );
+        Assert.Equal(0, GetTodoSnapshotItems(snapshots[3].Update).GetArrayLength());
+
+        var allItems = GetTodoSnapshotItems(snapshots[4].Update);
+        Assert.Equal(1, allItems.GetArrayLength());
+        Assert.Equal("First", allItems[0].GetProperty("title").GetString());
+        Assert.True(allItems[0].GetProperty("isComplete").GetBoolean());
     }
 
     private static JsonElement GetTodoSnapshotItems(AgentResponseUpdate update) =>
@@ -1639,6 +1642,11 @@ public sealed class AgwAgentExtensionsTests : IDisposable
                     new Dictionary<string, object?> { ["ids"] = JsonSerializer.SerializeToElement(new[] { 2 }) }
                 ),
                 "todo-remove-call" => CreateFunctionCall(
+                    "todo-get-remaining-call",
+                    "todos_get_remaining",
+                    new Dictionary<string, object?>()
+                ),
+                "todo-get-remaining-call" => CreateFunctionCall(
                     "todo-get-all-call",
                     "todos_get_all",
                     new Dictionary<string, object?>()

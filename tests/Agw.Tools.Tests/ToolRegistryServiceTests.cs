@@ -3,7 +3,6 @@ using Agw.Files.Abstracts;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
-using Agw.Tools.Contracts.Abstractions;
 using Agw.Tools.Impl.ContextualTools.Shell;
 using Agw.Tools.Impl.ContextualTools.WebSearch;
 using Agw.Tools.Impl.ToolBlocks.Todo;
@@ -41,6 +40,34 @@ public class ToolRegistryServiceTests
         Assert.True(registry.ToolExists("diff"));
         Assert.True(registry.ToolExists("web_search"));
         Assert.NotNull(registry.GetTool(ToolBlockNames.Todo));
+    }
+
+    [Fact]
+    public async Task CreateAIFunction_ProjectScopedDeclaration_RequiresAndBindsProject()
+    {
+        // Arrange
+        using var services = new ServiceCollection().BuildServiceProvider();
+        var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, services);
+        registry.RegisterTool(new ProjectScopedTestTool());
+        var projectId = Guid.CreateVersion7();
+
+        // Act
+        var tool = Assert.IsAssignableFrom<AIFunction>(registry.CreateAIFunction("web_search", projectId));
+        var result = await tool.InvokeAsync(new AIFunctionArguments(), TestContext.Current.CancellationToken);
+        var error = Assert.Throws<AgwException>(() => registry.CreateAIFunction("web_search"));
+
+        // Assert
+        Assert.Equal(projectId.ToString(), result?.ToString());
+        Assert.Equal(ErrorCodes.InvalidParam.Code, error.Code);
+        Assert.Equal(AgwToolPermission.ReadOnly, AgwToolMetadataBinding.GetMetadata(tool)?.RequiredPermission);
+    }
+
+    private sealed class ProjectScopedTestTool : IProjectScopedAgwTool
+    {
+        public string Name => "web_search";
+        public AgwToolPermission RequiredPermission => AgwToolPermission.ReadOnly;
+
+        public AITool ToAITool(Guid projectId) => AIFunctionFactory.Create(() => projectId.ToString(), Name);
     }
 
     [Fact]
@@ -204,7 +231,6 @@ public class ToolRegistryServiceTests
 
         Assert.All(removedToolNames, name => Assert.False(registry.ToolExists(name)));
         Assert.All(removedToolNames, name => Assert.Null(registry.GetTool(name)));
-        Assert.Null(registry.GetToolMethod("generate_guid"));
         Assert.Null(registry.GetToolInstance("bash"));
         Assert.Null(registry.GetToolInstance("powershell"));
         Assert.DoesNotContain(registry.GetAllTools(), tool => removedToolNames.Contains(tool.Name));

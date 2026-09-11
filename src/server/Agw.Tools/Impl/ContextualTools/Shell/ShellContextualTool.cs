@@ -6,7 +6,7 @@ namespace Agw.Tools.Impl.ContextualTools.Shell;
 
 [Description("Runs approved shell commands in the project workspace.")]
 [DisplayName("Shell")]
-[AiToolRequiresWorkspace]
+[AgwToolRequiresWorkspace]
 public sealed class ShellContextualTool : IContextualTool
 {
     private readonly IConfiguration _configuration;

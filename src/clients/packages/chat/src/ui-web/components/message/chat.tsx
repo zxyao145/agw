@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { apiGet } from "@agw/api";
 import {
   buildConversationRenderModel,
+  getCurrentTurnTodoItems,
   updateAutoScrollState,
   type AutoScrollState,
 } from "@agw/chat-core";
@@ -327,6 +328,7 @@ export function Chat({
       }),
     [checkpointAvailability, messages, pendingInteraction],
   );
+  const currentTurnTodos = React.useMemo(() => getCurrentTurnTodoItems(messages), [messages]);
   const latestAvailableCheckpoint = React.useMemo(
     () =>
       checkpointAvailability
@@ -1648,7 +1650,9 @@ export function Chat({
             />
           </div>
 
-          {renderItems.length > 0 ? <ChatAside usage={conversationUsage} /> : null}
+          {renderItems.length > 0 ? (
+            <ChatAside usage={conversationUsage} todos={currentTurnTodos} />
+          ) : null}
         </div>
       </div>
 

@@ -10,6 +10,7 @@ using Agw.Agents.Execution.HumanInteraction.InProcess;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Tooling;
+using Agw.Tools.Abstractions.ToolBlocks;
 using Agw.Tools.HumanInteraction;
 using Agw.Tools.Impl.ToolBlocks.Mode;
 using Agw.Tools.Impl.Tools.Basic;
