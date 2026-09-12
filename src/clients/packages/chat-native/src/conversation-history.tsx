@@ -44,6 +44,11 @@ import {
 } from "@agw/chat-core";
 import type { PermissionMode, InteractionResponse, ApprovalScope } from "@agw/execution-core";
 
+import {
+  getExecutionReconnectProgress,
+  type ExecutionReconnectState,
+} from "./native-execution-session";
+
 import { padInlineCode } from "./native-markdown";
 import { defaultNativeChatTheme, type NativeChatTheme } from "./theme";
 
@@ -57,7 +62,7 @@ export type NativeConversationHistoryHandle = {
 export type NativeConversationHistoryProps = {
   items: ConversationRenderItem[];
   loading?: boolean;
-  reconnecting?: boolean;
+  reconnectState?: ExecutionReconnectState | null;
   error?: string | null;
   permissionMode?: PermissionMode;
   showCheckpointResume?: boolean;
@@ -99,7 +104,7 @@ export const NativeConversationHistory = React.forwardRef<
   {
     items,
     loading = false,
-    reconnecting = false,
+    reconnectState = null,
     error = null,
     permissionMode,
     showCheckpointResume = false,
@@ -110,6 +115,7 @@ export const NativeConversationHistory = React.forwardRef<
   },
   ref,
 ) {
+  const reconnectProgress = getExecutionReconnectProgress(reconnectState);
   const listRef = React.useRef<FlatList<ConversationRenderItem>>(null);
   const autoScrollRef = React.useRef(createAutoScrollState());
   const metricsRef = React.useRef({ clientHeight: 0, scrollHeight: 0, scrollTop: 0 });
@@ -200,7 +206,14 @@ export const NativeConversationHistory = React.forwardRef<
           )}
         />
       )}
-      {reconnecting ? <Text style={styles.status}>Reconnecting to the execution…</Text> : null}
+      {reconnectProgress ? (
+        <Text style={styles.status}>
+          {reconnectState?.status === "failed"
+            ? "Execution connection failed."
+            : "Reconnecting to the execution…"}{" "}
+          {reconnectProgress.attempt}/{reconnectProgress.total}
+        </Text>
+      ) : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </>
   );

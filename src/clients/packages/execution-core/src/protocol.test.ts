@@ -200,11 +200,21 @@ test("turn-finished is message-level and accepts only server statuses", () => {
   );
 });
 
-test("shared reconnect delays stop after the configured attempts", () => {
+test("shared reconnect delays stop after ten attempts and add independent jitter", (t) => {
+  const random = t.mock.method(Math, "random", () => 0);
   assert.deepEqual(
     [...executionReconnectDelaysMs],
-    [0, 2_000, 5_000, 7_000, 10_000, 20_000, 30_000],
+    [1_000, 2_000, 3_000, 5_000, 8_000, 13_000, 21_000, 34_000, 55_000, 60_000],
   );
-  assert.equal(getExecutionReconnectDelay(0), 0);
+  for (const [index, baseMs] of executionReconnectDelaysMs.entries()) {
+    random.mock.mockImplementation(() => 0);
+    assert.equal(getExecutionReconnectDelay(index), baseMs);
+    random.mock.mockImplementation(() => 0.5);
+    assert.equal(getExecutionReconnectDelay(index), Math.round(baseMs * 1.1));
+    random.mock.mockImplementation(() => 1 - Number.EPSILON);
+    assert.equal(getExecutionReconnectDelay(index), Math.round(baseMs * 1.2));
+  }
+  assert.equal(random.mock.callCount(), 30);
   assert.equal(getExecutionReconnectDelay(executionReconnectDelaysMs.length), null);
+  assert.equal(random.mock.callCount(), 30, "exhaustion does not sample jitter");
 });

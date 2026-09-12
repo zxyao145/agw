@@ -65,11 +65,17 @@ export type ResumeCheckpointCommandInput = {
   agentflowId: string;
 };
 
-/** SignalR 断线后的共享重试间隔；数组耗尽后结束自动重试。 */
-export const executionReconnectDelaysMs = [0, 2_000, 5_000, 7_000, 10_000, 20_000, 30_000] as const;
+/** SignalR 断线后的基础重试间隔；数组耗尽后结束自动重试。 */
+export const executionReconnectDelaysMs = [
+  1_000, 2_000, 3_000, 5_000, 8_000, 13_000, 21_000, 34_000, 55_000, 60_000,
+] as const;
 
+export const executionSilentReconnectAttempts = 5;
+
+/** 每次调度独立增加 0–20% Jitter；调用方复用返回值进行等待和进度展示。 */
 export function getExecutionReconnectDelay(previousRetryCount: number): number | null {
-  return executionReconnectDelaysMs[previousRetryCount] ?? null;
+  const baseMs = executionReconnectDelaysMs[previousRetryCount];
+  return baseMs === undefined ? null : Math.round(baseMs * (1 + Math.random() * 0.2));
 }
 
 export function buildSettingCommand(setting: ExecutionSettingCommandInput) {

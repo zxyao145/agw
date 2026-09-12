@@ -462,7 +462,8 @@ test("execution session keeps tool rendering scope across handler replacement an
   }
 });
 
-test("manual reconnect consumes the current attempt and waits on the next after failure", async () => {
+test("manual reconnect consumes the current attempt and waits on the next after failure", async (t) => {
+  const random = t.mock.method(Math, "random", () => 0.5);
   const { ExecutionHubClient } = await import("./execution-hub" + ".ts");
   const originalBuild = HubConnectionBuilder.prototype.build;
   let reconnectPolicy: IRetryPolicy | undefined;
@@ -527,19 +528,26 @@ test("manual reconnect consumes the current attempt and waits on the next after 
 
   try {
     assert.ok(reconnectPolicy);
-    reconnectPolicy.nextRetryDelayInMilliseconds({
+    const scheduledDelayMs = reconnectPolicy.nextRetryDelayInMilliseconds({
       previousRetryCount: 2,
       elapsedMilliseconds: 7_000,
       retryReason: new Error("offline"),
     });
+    assert.equal(scheduledDelayMs, 3_300);
+    assert.equal(random.mock.callCount(), 1, "schedule samples jitter once");
     connection.state = HubConnectionState.Reconnecting;
     reconnectingCallback?.();
     assert.deepEqual(reconnectStates.at(-1), {
       status: "reconnecting",
       retryAttempt: 3,
-      retryDelayMs: 5_000,
+      retryDelayMs: 3_300,
     });
 
+    assert.equal(
+      reconnectStates.at(-1)?.retryDelayMs,
+      scheduledDelayMs,
+      "UI uses the actual scheduled delay",
+    );
     const reconnectCycle = client.retryConnection();
     for (let index = 0; index < 20; index += 1) {
       if (reconnectStates.at(-1)?.retryAttempt === 4) break;
@@ -549,7 +557,7 @@ test("manual reconnect consumes the current attempt and waits on the next after 
     assert.equal(startCount, 1);
     assert.deepEqual(reconnectStates.slice(-2), [
       { status: "reconnecting", retryAttempt: 3, retryDelayMs: 0 },
-      { status: "reconnecting", retryAttempt: 4, retryDelayMs: 7_000 },
+      { status: "reconnecting", retryAttempt: 4, retryDelayMs: 5_500 },
     ]);
 
     const continuedCycle = client.retryConnection();
@@ -564,7 +572,7 @@ test("manual reconnect consumes the current attempt and waits on the next after 
     assert.equal(reconnectedCount, 1);
 
     reconnectPolicy.nextRetryDelayInMilliseconds({
-      previousRetryCount: 6,
+      previousRetryCount: 9,
       elapsedMilliseconds: 44_000,
       retryReason: new Error("offline again"),
     });
@@ -576,7 +584,7 @@ test("manual reconnect consumes the current attempt and waits on the next after 
     assert.equal(startCount, 3);
     assert.deepEqual(reconnectStates.at(-1), {
       status: "failed",
-      retryAttempt: 7,
+      retryAttempt: 10,
       retryDelayMs: 0,
     });
 
@@ -589,7 +597,7 @@ test("manual reconnect consumes the current attempt and waits on the next after 
     assert.equal(startCount, 4);
     assert.deepEqual(reconnectStates.slice(-2), [
       { status: "reconnecting", retryAttempt: 1, retryDelayMs: 0 },
-      { status: "reconnecting", retryAttempt: 2, retryDelayMs: 2_000 },
+      { status: "reconnecting", retryAttempt: 2, retryDelayMs: 2_200 },
     ]);
 
     const restartedAndContinuedCycle = client.retryConnection();
@@ -938,19 +946,20 @@ test("buildExecutionHubOptions uses the selected desktop Server and token", asyn
   assert.equal(result.options.withCredentials, false);
 });
 
-test("execution reconnect uses the configured retry schedule and then stops", async () => {
+test("execution reconnect uses the configured retry schedule and then stops", async (t) => {
+  t.mock.method(Math, "random", () => 0);
   const { executionReconnectDelaysMs, getExecutionReconnectDelay, isExecutionReconnectExhausted } =
     await import("./execution-hub" + ".ts");
 
   assert.deepEqual(
     [...executionReconnectDelaysMs],
-    [0, 2_000, 5_000, 7_000, 10_000, 20_000, 30_000],
+    [1_000, 2_000, 3_000, 5_000, 8_000, 13_000, 21_000, 34_000, 55_000, 60_000],
   );
   assert.deepEqual(
     Array.from({ length: executionReconnectDelaysMs.length + 1 }, (_, retryCount) =>
       getExecutionReconnectDelay(retryCount),
     ),
-    [0, 2_000, 5_000, 7_000, 10_000, 20_000, 30_000, null],
+    [1_000, 2_000, 3_000, 5_000, 8_000, 13_000, 21_000, 34_000, 55_000, 60_000, null],
   );
   assert.equal(
     isExecutionReconnectExhausted({

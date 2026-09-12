@@ -5,7 +5,7 @@ import { RefreshCw } from "lucide-react";
 
 import { Button, cn } from "@agw/components";
 import {
-  executionReconnectDelaysMs,
+  getExecutionReconnectProgress,
   type ExecutionReconnectState,
 } from "../../../services/execution-hub";
 
@@ -35,8 +35,11 @@ type ExecutionReconnectingDialogProps = {
 
 /** 在 SignalR 自动重连期间阻塞 Chat 工作区，并保留 Desktop 顶栏逃生入口。 */
 export function ExecutionReconnectingDialog({ state, onRetry }: ExecutionReconnectingDialogProps) {
+  const progress = getExecutionReconnectProgress(state);
   const isFailed = state.status === "failed";
   const remainingMs = useReconnectCountdown(state);
+  if (!progress) return null;
+
   const remainingSeconds = Math.ceil(remainingMs / 1_000);
   const isRetryingNow = !isFailed && remainingMs === 0;
   const retryMessage = isFailed
@@ -107,18 +110,18 @@ export function ExecutionReconnectingDialog({ state, onRetry }: ExecutionReconne
               {retryMessage}
             </span>
             <span className="text-xs tabular-nums text-muted-foreground">
-              {state.retryAttempt}/{executionReconnectDelaysMs.length}
+              {progress.attempt}/{progress.total}
             </span>
           </div>
           {!isFailed ? (
             <div className="mt-3 flex gap-1" aria-hidden="true">
-              {executionReconnectDelaysMs.map((_, index) => (
+              {Array.from({ length: progress.total }, (_, index) => (
                 <span
                   key={index}
                   className={cn(
                     "h-1 flex-1 rounded-full bg-border transition-colors",
-                    index < state.retryAttempt && "bg-primary/70",
-                    index + 1 === state.retryAttempt && "animate-pulse bg-primary",
+                    index < progress.attempt && "bg-primary/70",
+                    index + 1 === progress.attempt && "animate-pulse bg-primary",
                   )}
                 />
               ))}

@@ -176,3 +176,5 @@ export type {
   NativeExecutionSetting as MobileExecutionSetting,
 };
 export type { ExecutionReconnectState };
+
+export { getExecutionReconnectProgress } from "@agw/chat-runtime/execution-session";
