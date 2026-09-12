@@ -15,6 +15,7 @@ import {
 } from "@agw/chat-core";
 import {
   DEFAULT_AGENT_MODE,
+  getExecutionReconnectProgress,
   getAgentMode,
   getAgentflowCheckpointMessage,
   getMessageStreamingScopeId,
@@ -350,12 +351,9 @@ export function Chat({
       : null;
   const isRestoringExecution =
     executionRestoreKey !== null && restoredExecutionKey !== executionRestoreKey;
+  const showReconnect = getExecutionReconnectProgress(reconnectState) !== null;
   const checkpointResumeDisabled =
-    isExecuting ||
-    isTransitioning ||
-    isHydratingSession ||
-    isRestoringExecution ||
-    reconnectState !== null;
+    isExecuting || isTransitioning || isHydratingSession || isRestoringExecution || showReconnect;
 
   React.useEffect(() => {
     if (!isExecuting || !onConversationChange) return;
@@ -996,7 +994,7 @@ export function Chat({
 
   const handleExecute = React.useCallback(
     async (value: string, imageAttachments: readonly ChatImageAttachment[]) => {
-      if (isExecuting || isHydratingSession || isRestoringExecution || reconnectState) return;
+      if (isExecuting || isHydratingSession || isRestoringExecution || showReconnect) return;
       if (isTransitioning) {
         toast.error("Please wait for the previous execution to stop");
         return;
@@ -1109,7 +1107,7 @@ export function Chat({
       pendingFileComments,
       permissionUnavailable,
       projectId,
-      reconnectState,
+      showReconnect,
       target,
     ],
   );
@@ -1619,8 +1617,8 @@ export function Chat({
     <div className={cn("@container relative h-full min-h-0 w-full overflow-hidden", className)}>
       <div
         ref={conversationScrollRef}
-        inert={reconnectState !== null}
-        aria-hidden={reconnectState !== null}
+        inert={showReconnect}
+        aria-hidden={showReconnect}
         className="h-full w-full overflow-y-auto agw-scrollbar"
         onScroll={handleConversationScroll}
       >
@@ -1657,8 +1655,8 @@ export function Chat({
       </div>
 
       <div
-        inert={reconnectState !== null}
-        aria-hidden={reconnectState !== null}
+        inert={showReconnect}
+        aria-hidden={showReconnect}
         className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center"
       >
         <div className="relative min-h-30 min-w-0 max-w-5xl flex-1 bg-linear-to-t from-background from-50% via-background/80 via-70% to-transparent px-6">

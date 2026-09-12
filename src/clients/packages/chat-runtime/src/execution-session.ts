@@ -21,6 +21,7 @@ import {
   buildSubscribeExecutionCommand as buildCoreSubscribeExecutionCommand,
   DEFAULT_AGENT_MODE,
   executionReconnectDelaysMs,
+  executionSilentReconnectAttempts,
   getAgentMode,
   getExecutionReconnectDelay,
   getLatestAgentMode,
@@ -76,6 +77,24 @@ export type ExecutionReconnectState = {
   /** 距离本次重连尝试的等待时间。 */
   retryDelayMs: number;
 };
+
+/** 前五次重连静默；对用户仅呈现后五次的进度，内部计数保持不变。 */
+export function getExecutionReconnectProgress(
+  state: ExecutionReconnectState | null,
+): { attempt: number; total: number } | null {
+  if (
+    !state ||
+    (state.status === "reconnecting" && state.retryAttempt <= executionSilentReconnectAttempts)
+  ) {
+    return null;
+  }
+  const total = executionReconnectDelaysMs.length - executionSilentReconnectAttempts;
+  return {
+    attempt:
+      state.status === "failed" ? total : state.retryAttempt - executionSilentReconnectAttempts,
+    total,
+  };
+}
 
 /** 判断 SignalR 是否已经完成最后一次自动重连尝试。 */
 export function isExecutionReconnectExhausted(state: ExecutionReconnectState | null): boolean {

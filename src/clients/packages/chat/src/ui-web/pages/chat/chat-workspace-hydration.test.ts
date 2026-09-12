@@ -12,7 +12,12 @@ import { buildChatHref } from "../../../lib/chat-route";
 import * as sessionRouting from "./lib/session-routing";
 import type { ChatProps } from "../../components/message/chat";
 import type { ChatWorkspaceProps } from "./chat-workspace";
-import type { ExecutionRequest, ExecutionSetting } from "@agw/chat-runtime/execution-session";
+import { ExecutionReconnectingDialog } from "../../components/message/execution-reconnecting-dialog";
+import type {
+  ExecutionHubHandlers,
+  ExecutionRequest,
+  ExecutionSetting,
+} from "@agw/chat-runtime/execution-session";
 
 async function checkConversationSession(kind: string, strictMode = false) {
   const failHistory = kind === "restore-failure";
@@ -57,6 +62,10 @@ async function checkConversationSession(kind: string, strictMode = false) {
   const recoveryReady = new Promise<void>((resolve) => {
     finishRecovery = resolve;
   });
+  let reconnectHandlers: ExecutionHubHandlers | undefined;
+  let currentReconnectState:
+    | import("@agw/chat-runtime/execution-session").ExecutionReconnectState
+    | null = null;
   let detailsRequests = 0;
   let messageRequests = 0;
   const observed: {
@@ -113,7 +122,16 @@ async function checkConversationSession(kind: string, strictMode = false) {
   }
   const splitLayout = Object.assign(Container, { Left: Container, Right: Container });
   const components = new Proxy(
-    { cn: () => "", Drawer: () => null },
+    {
+      cn: () => "",
+      Drawer: () => null,
+      Tabs: ({
+        children,
+        inert,
+        "aria-hidden": ariaHidden,
+      }: React.HTMLAttributes<HTMLDivElement>) =>
+        React.createElement("div", { inert, "aria-hidden": ariaHidden }, children),
+    },
     { get: (target, key) => Reflect.get(target, key) ?? Container },
   );
   const modules: Record<string, unknown> = {
@@ -166,7 +184,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
         return null;
       },
     },
-    "../../components/message/execution-reconnecting-dialog": {},
+    "../../components/message/execution-reconnecting-dialog": { ExecutionReconnectingDialog },
     "../../../lib/chat-route": { buildChatHref },
     "./settings-storage": { chatSettingsStorage: { get: () => ({}), set() {} } },
     "./components/split-layout": { default: splitLayout, __esModule: true },
@@ -176,7 +194,8 @@ async function checkConversationSession(kind: string, strictMode = false) {
       executionSessionManager: {
         has: (key: { contextId: string }) =>
           kind === "restore-active" && attachedContexts.has(key.contextId),
-        attach: (key: { contextId: string }) => {
+        attach: (key: { contextId: string }, handlers: ExecutionHubHandlers) => {
+          reconnectHandlers = handlers;
           attachedContexts.add(key.contextId);
           return {
             matchesKey: (candidate: typeof key) => candidate.contextId === key.contextId,
@@ -185,7 +204,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
             dispose: async () => {},
             getStatus: () => (kind === "restore-active" ? "running" : "idle"),
             listAgentflowCheckpoints: async () => [],
-            getReconnectState: () => null,
+            getReconnectState: () => currentReconnectState,
             getActiveTurnSnapshot: () => null,
             configure: async (setting: ExecutionSetting) => {
               configurations.push(setting);
@@ -318,6 +337,38 @@ async function checkConversationSession(kind: string, strictMode = false) {
       await React.act(async () => observed.input!.onExecute("too early", []));
       assert.equal(executions.length, 0);
       await React.act(async () => finishHistory());
+      if (kind === "reconnect" || kind === "reconnect-send") {
+        assert.ok(reconnectHandlers);
+        for (let retryAttempt = 1; retryAttempt <= 10; retryAttempt += 1) {
+          await React.act(async () => {
+            currentReconnectState = { status: "reconnecting", retryAttempt, retryDelayMs: 1_000 };
+            reconnectHandlers!.onReconnecting?.(currentReconnectState);
+          });
+          assert.equal(
+            dom.window.document.querySelectorAll("[inert]").length,
+            retryAttempt <= 5 ? 0 : 3,
+          );
+          const dialog = dom.window.document.querySelector('[role="dialog"]');
+          assert.equal(dialog !== null, retryAttempt > 5);
+          if (dialog) assert.ok(dialog.textContent?.includes(`${retryAttempt - 5}/5`));
+          assert.deepEqual(errors, []);
+          if (retryAttempt === 5 && kind === "reconnect-send") {
+            await React.act(async () =>
+              observed.input!.onExecute("send while silently reconnecting", []),
+            );
+            assert.equal(executions.length, 1, "silent reconnection does not discard user input");
+            return;
+          }
+          if (retryAttempt === 5) {
+            await React.act(async () => reconnectHandlers!.onReconnected?.());
+            assert.equal(dom.window.document.querySelector('[role="dialog"]'), null);
+          }
+        }
+        await React.act(async () => reconnectHandlers!.onReconnected?.());
+        assert.equal(dom.window.document.querySelector('[role="dialog"]'), null);
+        assert.equal(dom.window.document.querySelector("[inert]"), null);
+        return;
+      }
       if (kind === "restore-active") {
         assert.equal(
           observed.input?.isTransitioning,
@@ -514,3 +565,8 @@ test("page reload checks server execution state before enabling the composer", (
 
 test("StrictMode reload preserves the active execution while switching Agent", () =>
   checkConversationSession("restore-active", true));
+
+test("Chat stays interactive during silent retries and blocks only for the visible five", () =>
+  checkConversationSession("reconnect"));
+
+test("Chat accepts input during silent retries", () => checkConversationSession("reconnect-send"));

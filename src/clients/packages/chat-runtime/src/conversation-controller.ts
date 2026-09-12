@@ -33,6 +33,7 @@ import { createUserMessage, toExecutionUserInput, type ChatImageAttachment } fro
 
 import {
   ExecutionSession,
+  getExecutionReconnectProgress,
   type ExecutionHubHandlers,
   type ExecutionReconnectState,
   type ExecutionRuntimeConfig,
@@ -158,7 +159,7 @@ export class ConversationController {
   public async send(text: string, attachments: readonly ChatImageAttachment[]): Promise<void> {
     if (
       this.state.isExecuting ||
-      this.state.reconnectState !== null ||
+      getExecutionReconnectProgress(this.state.reconnectState) !== null ||
       !this.options.projectId ||
       !this.options.target ||
       (!text.trim() && attachments.length === 0)

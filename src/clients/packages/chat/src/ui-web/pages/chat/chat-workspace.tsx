@@ -61,7 +61,10 @@ import {
 } from "./lib/target-options";
 import type { ChatProjectSettingsStorageValues, ChatTargetOption, EnvVar } from "./types";
 import { getApiErrorMessage } from "@agw/api";
-import type { ExecutionReconnectState } from "../../../services/execution-hub";
+import {
+  getExecutionReconnectProgress,
+  type ExecutionReconnectState,
+} from "../../../services/execution-hub";
 import { executionSessionManager } from "../../../services/execution-session-manager";
 import { useExecutionPlatform } from "../../execution-platform";
 
@@ -1049,6 +1052,8 @@ export function ChatWorkspace({
         ? `Hide ${activeSidebarTitle}`
         : `Show ${activeSidebarTitle}`;
 
+  const showReconnect = getExecutionReconnectProgress(executionReconnectState) !== null;
+
   /** 立即执行当前 Server 的本次重连，并继续恢复对应的 execution 会话。 */
   const handleReconnectRetry = React.useCallback(() => {
     if (!selectedProjectId || !contextId) return;
@@ -1075,8 +1080,8 @@ export function ChatWorkspace({
       <Tabs
         value={currentTab}
         onValueChange={handleTabChange}
-        inert={executionReconnectState !== null}
-        aria-hidden={executionReconnectState !== null}
+        inert={showReconnect}
+        aria-hidden={showReconnect}
         className="flex min-h-0 flex-1 flex-col"
       >
         <div className="flex flex-wrap items-center gap-2">
@@ -1277,7 +1282,7 @@ export function ChatWorkspace({
         </DrawerContent>
       </Drawer>
 
-      {executionReconnectState ? (
+      {showReconnect && executionReconnectState ? (
         <ExecutionReconnectingDialog
           state={executionReconnectState}
           onRetry={handleReconnectRetry}
