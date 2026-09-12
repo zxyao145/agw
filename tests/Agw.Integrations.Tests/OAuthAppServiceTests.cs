@@ -1,6 +1,7 @@
 using System.Net;
 using System.Security.Claims;
 using System.Text;
+using System.Threading.Channels;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Integrations.Application.Credentials;
@@ -8,8 +9,11 @@ using Agw.Integrations.Application.Management;
 using Agw.Integrations.Application.OAuth;
 using Agw.Integrations.Application.Persistence;
 using Agw.Integrations.Application.Plugins;
+using Agw.Integrations.Contracts.Management;
 using Agw.Integrations.Contracts.OAuth;
 using Agw.Integrations.Domain.Plugins;
+using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Exceptions;
 using Agw.Testing;
@@ -444,6 +448,302 @@ public sealed class OAuthAppServiceTests
         Assert.Equal("integration.oauth_token_exchange_failed", connection.LastValidationErrorCode);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Callback_ConsumedState_DoesNotChangeReadyConnection(bool providerError)
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = UserInfoUtil.Push(CreatePrincipal("tester"));
+        await using var scope = await OAuthTestScope.CreateAsync(
+            OAuth2ClientAuthenticationMethod.Body,
+            OAuthSubjectSource.TokenResponse,
+            cancellationToken
+        );
+        var state = await StartAndReadStateAsync(scope, cancellationToken);
+        scope.Handler.EnqueueJson(HttpStatusCode.OK, """{"access_token":"new-token","account":{"name":"account"}}""");
+        Assert.True((await scope.Authorization.HandleCallbackAsync(state, "code", null, cancellationToken)).Success);
+
+        var peer = scope.CreatePeer();
+        await using var peerLifetime = peer.DbContext;
+        var replay = await peer.Authorization.HandleCallbackAsync(
+            state,
+            providerError ? null : "code",
+            providerError ? "access_denied" : null,
+            cancellationToken
+        );
+
+        Assert.False(replay.Success);
+        scope.DbContext.ChangeTracker.Clear();
+        Assert.Equal(ConnectionStatus.Ready, (await scope.DbContext.Connections.SingleAsync(cancellationToken)).Status);
+        Assert.Single(scope.Handler.Requests);
+    }
+
+    [Fact]
+    public async Task Callback_SupersededState_DoesNotConsumeNewAuthorization()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var userScope = UserInfoUtil.Push(CreatePrincipal("tester"));
+        await using var scope = await OAuthTestScope.CreateAsync(
+            OAuth2ClientAuthenticationMethod.Body,
+            OAuthSubjectSource.TokenResponse,
+            cancellationToken
+        );
+        var oldState = await StartAndReadStateAsync(scope, cancellationToken);
+        var newState = await StartAndReadStateAsync(scope, cancellationToken);
+
+        var oldResult = await scope.Authorization.HandleCallbackAsync(
+            oldState,
+            null,
+            "access_denied",
+            cancellationToken
+        );
+        scope.Handler.EnqueueJson(HttpStatusCode.OK, """{"access_token":"new-token","account":{"name":"account"}}""");
+        var newResult = await scope.Authorization.HandleCallbackAsync(newState, "new-code", null, cancellationToken);
+
+        Assert.Contains("invalid_state", oldResult.RedirectPath);
+        Assert.True(newResult.Success);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Refresh_ProviderFailure_OnlyRejectedCredentialsBecomeInvalid(bool rejected)
+    {
+        var token = TestContext.Current.CancellationToken;
+        using var owner = UserInfoUtil.Push(CreatePrincipal("tester"));
+        await using var scope = await OAuthTestScope.CreateAsync(
+            OAuth2ClientAuthenticationMethod.Body,
+            OAuthSubjectSource.TokenResponse,
+            token,
+            supportsRefresh: true
+        );
+        await scope.SeedConnectionCredentialAsync(
+            IntegrationCredentialSlots.OAuthRefreshToken,
+            "old-refresh",
+            null,
+            token
+        );
+        var connection = await scope.DbContext.Connections.SingleAsync(token);
+        connection.Status = ConnectionStatus.Ready;
+        await scope.DbContext.SaveChangesAsync(token);
+        scope.Handler.EnqueueJson(
+            rejected ? HttpStatusCode.BadRequest : HttpStatusCode.ServiceUnavailable,
+            rejected ? """{"error":"invalid_grant"}""" : """{"error":"temporarily_unavailable"}"""
+        );
+
+        await Assert.ThrowsAsync<AgwException>(() => scope.Refresh.RefreshAsync(scope.ConnectionId, "tester", token));
+
+        scope.DbContext.ChangeTracker.Clear();
+        Assert.Equal(
+            rejected ? ConnectionStatus.Invalid : ConnectionStatus.Ready,
+            (await scope.DbContext.Connections.SingleAsync(token)).Status
+        );
+    }
+
+    [Fact]
+    public async Task Refresh_ConcurrentScopes_SecondRequestUsesRotatedToken()
+    {
+        var token = TestContext.Current.CancellationToken;
+        using var owner = UserInfoUtil.Push(CreatePrincipal("tester"));
+        using var locks = new ObservableLock();
+        await using var scope = await OAuthTestScope.CreateAsync(
+            OAuth2ClientAuthenticationMethod.Body,
+            OAuthSubjectSource.TokenResponse,
+            token,
+            supportsRefresh: true,
+            applicationLock: locks
+        );
+        await scope.SeedConnectionCredentialAsync(
+            IntegrationCredentialSlots.OAuthRefreshToken,
+            "old-refresh",
+            null,
+            token
+        );
+        var peer = scope.CreatePeer();
+        await using var peerLifetime = peer.DbContext;
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        scope.Handler.Responder = async (request, cancellation) =>
+        {
+            if (request.Body!.Contains("old-refresh", StringComparison.Ordinal))
+            {
+                entered.TrySetResult();
+                await release.Task.WaitAsync(cancellation);
+                return TokenResponse("first-refresh");
+            }
+            Assert.Contains("first-refresh", request.Body);
+            return TokenResponse("second-refresh");
+        };
+        var first = scope.Refresh.RefreshAsync(scope.ConnectionId, "tester", token);
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(2), token);
+            await locks.Requests.Reader.ReadAsync(token);
+            var second = peer.Refresh.RefreshAsync(scope.ConnectionId, "tester", token);
+            await locks.Requests.Reader.ReadAsync(token).AsTask().WaitAsync(TimeSpan.FromSeconds(2), token);
+            Assert.Single(scope.Handler.Requests);
+            release.TrySetResult();
+            await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(3), token);
+        }
+        finally
+        {
+            release.TrySetResult();
+            await first;
+        }
+        scope.DbContext.ChangeTracker.Clear();
+        Assert.Equal(
+            "second-refresh",
+            (
+                await scope.Reader.ReadConnectionAsync(
+                    scope.ConnectionId,
+                    "tester",
+                    IntegrationCredentialSlots.OAuthRefreshToken,
+                    token
+                )
+            )!.Value
+        );
+        Assert.Equal(ConnectionStatus.Ready, (await scope.DbContext.Connections.SingleAsync(token)).Status);
+    }
+
+    [Fact]
+    public async Task Refresh_LeaseLost_DoesNotPersistProviderResponse()
+    {
+        var token = TestContext.Current.CancellationToken;
+        using var owner = UserInfoUtil.Push(CreatePrincipal("tester"));
+        using var locks = new ObservableLock();
+        await using var scope = await OAuthTestScope.CreateAsync(
+            OAuth2ClientAuthenticationMethod.Body,
+            OAuthSubjectSource.TokenResponse,
+            token,
+            supportsRefresh: true,
+            applicationLock: locks
+        );
+        await scope.SeedConnectionCredentialAsync(
+            IntegrationCredentialSlots.OAuthRefreshToken,
+            "old-refresh",
+            null,
+            token
+        );
+        scope.Handler.Responder = (_, _) =>
+        {
+            locks.Lost.Cancel();
+            return Task.FromResult(TokenResponse("must-not-commit"));
+        };
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            scope.Refresh.RefreshAsync(scope.ConnectionId, "tester", token)
+        );
+
+        scope.DbContext.ChangeTracker.Clear();
+        Assert.Equal(
+            "old-refresh",
+            (
+                await scope.Reader.ReadConnectionAsync(
+                    scope.ConnectionId,
+                    "tester",
+                    IntegrationCredentialSlots.OAuthRefreshToken,
+                    token
+                )
+            )!.Value
+        );
+    }
+
+    [Fact]
+    public async Task Callback_InstallationChanges_InvalidatesPendingAuthorization()
+    {
+        var token = TestContext.Current.CancellationToken;
+        using var owner = UserInfoUtil.Push(CreatePrincipal("tester"));
+        var locks = new InMemoryApplicationLock();
+        await using var scope = await OAuthTestScope.CreateAsync(
+            OAuth2ClientAuthenticationMethod.Body,
+            OAuthSubjectSource.TokenResponse,
+            token,
+            applicationLock: locks
+        );
+        var state = await StartAndReadStateAsync(scope, token);
+        var peer = scope.CreatePeer();
+        await using var peerLifetime = peer.DbContext;
+        var user = new TestUserInfoService { UserId = "tester" };
+        var clock = new TestTimeProvider(scope.Now);
+        var installations = new PluginInstallationAppService(
+            peer.DbContext,
+            new OAuthTestCatalog(OAuth2ClientAuthenticationMethod.Body, OAuthSubjectSource.TokenResponse, false),
+            new CredentialMutationService(peer.DbContext, clock, user),
+            clock,
+            user,
+            new IntegrationMutationCoordinator(peer.DbContext, locks, user)
+        );
+
+        await installations.UpsertAsync(
+            new PluginInstallationUpsertRequest
+            {
+                PluginId = OAuthTestCatalog.PluginId,
+                ConnectorId = OAuthTestCatalog.ConnectorId,
+                AuthSchemeId = OAuthTestCatalog.AuthSchemeId,
+                Enabled = false,
+            },
+            token
+        );
+        var result = await scope.Authorization.HandleCallbackAsync(state, "stale-code", null, token);
+
+        Assert.Contains("invalid_state", result.RedirectPath);
+        Assert.False(
+            await peer.DbContext.ConnectionCredentials.AnyAsync(
+                item => item.Slot == IntegrationCredentialSlots.OAuthAuthorizationAttempt,
+                token
+            )
+        );
+        Assert.Empty(scope.Handler.Requests);
+    }
+
+    private static HttpResponseMessage TokenResponse(string refreshToken) =>
+        new(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                System.Text.Json.JsonSerializer.Serialize(
+                    new
+                    {
+                        access_token = "access",
+                        refresh_token = refreshToken,
+                        account = new { name = "test" },
+                    }
+                ),
+                Encoding.UTF8,
+                "application/json"
+            ),
+        };
+
+    private sealed class ObservableLock : IApplicationLock, IDisposable
+    {
+        private readonly InMemoryApplicationLock _inner = new();
+        public Channel<string> Requests { get; } = Channel.CreateUnbounded<string>();
+        public CancellationTokenSource Lost { get; } = new();
+
+        public async Task<IApplicationLockLease> AcquireAsync(string resourceName, CancellationToken cancellationToken)
+        {
+            Requests.Writer.TryWrite(resourceName);
+            return new Lease(await _inner.AcquireAsync(resourceName, cancellationToken), Lost.Token);
+        }
+
+        public void Dispose() => Lost.Dispose();
+
+        private sealed class Lease : IApplicationLockLease
+        {
+            private readonly IApplicationLockLease _inner;
+
+            public Lease(IApplicationLockLease inner, CancellationToken lost)
+            {
+                _inner = inner;
+                HandleLostToken = lost;
+            }
+
+            public CancellationToken HandleLostToken { get; }
+
+            public ValueTask DisposeAsync() => _inner.DisposeAsync();
+        }
+    }
+
     private static async Task<string> StartAndReadStateAsync(OAuthTestScope scope, CancellationToken cancellationToken)
     {
         var started = await scope.Authorization.StartAsync(
@@ -497,6 +797,11 @@ public sealed class OAuthAppServiceTests
         public TestOAuthRefreshClient Refresh { get; }
         public QueueHttpMessageHandler Handler { get; }
         public ListLogger<OAuthAuthorizationAppService> Logger { get; }
+        public Func<(
+            AgwDbContext DbContext,
+            TestOAuthAuthorizationClient Authorization,
+            TestOAuthRefreshClient Refresh
+        )> CreatePeer { get; private set; } = null!;
 
         public static async Task<OAuthTestScope> CreateAsync(
             OAuth2ClientAuthenticationMethod clientAuthenticationMethod,
@@ -505,7 +810,8 @@ public sealed class OAuthAppServiceTests
             bool supportsRefresh = false,
             bool failCallbackPersistence = false,
             string clientId = "oauth-client",
-            string clientSecret = "oauth-secret"
+            string clientSecret = "oauth-secret",
+            IApplicationLock? applicationLock = null
         )
         {
             var connection = new SqliteConnection("Data Source=:memory:;Foreign Keys=False");
@@ -530,6 +836,7 @@ public sealed class OAuthAppServiceTests
                 ? new FailCallbackPersistenceUnitOfWork(dbContext)
                 : dbContext;
             var userInfo = new TestUserInfoService();
+            applicationLock ??= new InMemoryApplicationLock();
             var reader = new ConnectionCredentialReader(persistence, userInfo);
             var stateProtector = new OAuthStateProtector(new EphemeralDataProtectionProvider(), timeProvider);
             var authorization = new OAuthAuthorizationAppService(
@@ -540,7 +847,8 @@ public sealed class OAuthAppServiceTests
                 stateProtector,
                 timeProvider,
                 logger,
-                userInfo
+                userInfo,
+                new IntegrationMutationCoordinator(persistence, applicationLock, userInfo)
             );
             var refresh = new OAuthRefreshAppService(authorization);
             var credentialReader = new TestCredentialReader(reader, userInfo);
@@ -610,7 +918,7 @@ public sealed class OAuthAppServiceTests
             await dbContext.SaveChangesAsync(cancellationToken);
             dbContext.ChangeTracker.Clear();
 
-            return new OAuthTestScope(
+            var scope = new OAuthTestScope(
                 connection,
                 dbContext,
                 connectionId,
@@ -621,6 +929,28 @@ public sealed class OAuthAppServiceTests
                 handler,
                 logger
             );
+            scope.CreatePeer = () =>
+            {
+                var peerDb = new AgwDbContext(options, encryptedDataProtector);
+                var peerUser = new TestUserInfoService();
+                var peerService = new OAuthAuthorizationAppService(
+                    peerDb,
+                    catalog,
+                    new ConnectionCredentialReader(peerDb, peerUser),
+                    httpClientFactory,
+                    stateProtector,
+                    timeProvider,
+                    logger,
+                    peerUser,
+                    new IntegrationMutationCoordinator(peerDb, applicationLock, peerUser)
+                );
+                return (
+                    peerDb,
+                    new TestOAuthAuthorizationClient(peerService, peerUser),
+                    new TestOAuthRefreshClient(new OAuthRefreshAppService(peerService), peerUser)
+                );
+            };
+            return scope;
         }
 
         public async Task SeedConnectionCredentialAsync(
@@ -910,6 +1240,7 @@ public sealed class OAuthAppServiceTests
         private readonly Queue<HttpResponseMessage> _responses = new();
 
         public List<CapturedRequest> Requests { get; } = [];
+        public Func<CapturedRequest, CancellationToken, Task<HttpResponseMessage>>? Responder { get; set; }
 
         public void EnqueueJson(HttpStatusCode statusCode, string content)
         {
@@ -939,7 +1270,7 @@ public sealed class OAuthAppServiceTests
                             : await request.Content.ReadAsStringAsync(cancellationToken),
                 }
             );
-            return _responses.Dequeue();
+            return Responder == null ? _responses.Dequeue() : await Responder(Requests[^1], cancellationToken);
         }
     }
 

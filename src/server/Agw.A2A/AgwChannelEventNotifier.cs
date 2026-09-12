@@ -1,137 +1,86 @@
-using System.Collections.Concurrent;
 using System.Threading.Channels;
 using A2A;
+using Agw.Shared.Coordination;
 using Agw.Shared.Exceptions;
 
 namespace Agw.A2A;
 
-/// <summary>
-/// copy from A2A ChannelEventNotifier
-/// </summary>
 public sealed class AgwChannelEventNotifier
 {
-    private readonly ConcurrentDictionary<string, SubscriberSet> _subscribers = new();
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _taskLocks = new();
+    private const int SubscriberCapacity = 128;
+    private const int MaximumSubscribers = 64;
+    private readonly Dictionary<string, HashSet<Channel<StreamResponse>>> _subscribers = new(StringComparer.Ordinal);
+    private readonly object _subscriberLock = new();
+    private readonly InMemoryApplicationLock _taskLocks = new();
+    private int _subscriberCount;
 
-    /// <summary>
-    /// Push an event to all registered subscriber channels for the given task.
-    /// On terminal events, completes all channels to end live tailing.
-    /// Callers must hold the per-task lock when calling this method.
-    /// </summary>
-    /// <param name="taskId">The task to notify subscribers for.</param>
-    /// <param name="streamEvent">The stream response event.</param>
+    /// <summary>Callers hold the task lease so snapshots and live events cannot interleave.</summary>
     public void Notify(string taskId, StreamResponse streamEvent)
     {
-        if (!_subscribers.TryGetValue(taskId, out var set))
-            return;
-
-        List<Channel<StreamResponse>> channels;
-        lock (set)
+        lock (_subscriberLock)
         {
-            channels = [.. set.Channels];
-        }
+            if (!_subscribers.TryGetValue(taskId, out var channels))
+                return;
 
-        foreach (var ch in channels)
-            ch.Writer.TryWrite(streamEvent);
-
-        if (IsTerminalEvent(streamEvent))
-        {
-            lock (set)
+            foreach (var channel in channels)
             {
-                channels = [.. set.Channels];
+                if (!channel.Writer.TryWrite(streamEvent))
+                {
+                    channel.Writer.TryComplete(new AgwException(ErrorCodes.A2ASubscriptionLimitExceeded));
+                }
+                else if (IsTerminalEvent(streamEvent))
+                {
+                    channel.Writer.TryComplete();
+                }
             }
-            foreach (var ch in channels)
-                ch.Writer.TryComplete();
         }
     }
 
-    /// <summary>Creates and registers a subscriber channel for the given task.</summary>
-    /// <param name="taskId">The task to create a subscriber channel for.</param>
     internal Channel<StreamResponse> CreateChannel(string taskId)
     {
-        var channel = Channel.CreateUnbounded<StreamResponse>(
-            new UnboundedChannelOptions { SingleWriter = false, SingleReader = true }
-        );
-
-        var set = _subscribers.GetOrAdd(taskId, _ => new SubscriberSet());
-        lock (set)
+        lock (_subscriberLock)
         {
-            set.Channels.Add(channel);
+            if (_subscriberCount >= MaximumSubscribers)
+                throw new AgwException(ErrorCodes.A2ASubscriptionLimitExceeded);
+
+            var channel = Channel.CreateBounded<StreamResponse>(
+                new BoundedChannelOptions(SubscriberCapacity)
+                {
+                    SingleReader = true,
+                    SingleWriter = false,
+                    FullMode = BoundedChannelFullMode.Wait,
+                }
+            );
+            if (!_subscribers.TryGetValue(taskId, out var channels))
+                _subscribers[taskId] = channels = [];
+            channels.Add(channel);
+            _subscriberCount++;
+            return channel;
         }
-        return channel;
     }
 
-    /// <summary>Unregisters a channel when subscription ends.</summary>
-    /// <param name="taskId">The task to remove the channel from.</param>
-    /// <param name="channel">The channel to remove.</param>
     internal void RemoveChannel(string taskId, Channel<StreamResponse> channel)
     {
-        if (!_subscribers.TryGetValue(taskId, out var set))
+        lock (_subscriberLock)
         {
-            throw new AgwException(
-                ErrorCodes.A2ANoSubscriberSet,
-                $"No subscriber set found for task '{taskId}'. "
-                    + "This indicates a bug: RemoveChannel was called without a matching CreateChannel, "
-                    + "or the subscriber set was evicted by a concurrent call."
-            );
-        }
-
-        lock (set)
-        {
-            set.Channels.Remove(channel);
-            if (set.Channels.Count == 0)
+            channel.Writer.TryComplete();
+            if (_subscribers.TryGetValue(taskId, out var channels) && channels.Remove(channel))
             {
-                _subscribers.TryRemove(taskId, out _);
-                _taskLocks.TryRemove(taskId, out _);
+                _subscriberCount--;
+                if (channels.Count == 0)
+                    _subscribers.Remove(taskId);
             }
         }
     }
 
-    /// <summary>
-    /// Acquire the per-task lock used to atomically read task state and register
-    /// a subscriber channel, preventing race conditions with concurrent mutations.
-    /// </summary>
-    /// <param name="taskId">The task to acquire the lock for.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    public async Task<IDisposable> AcquireTaskLockAsync(string taskId, CancellationToken cancellationToken = default)
-    {
-        // Retry loop handles the race where RemoveChannel evicts the
-        // semaphore between GetOrAdd and WaitAsync completion.
-        while (true)
-        {
-            var sem = _taskLocks.GetOrAdd(taskId, _ => new SemaphoreSlim(1, 1));
-            await sem.WaitAsync(cancellationToken).ConfigureAwait(false);
-
-            // Verify this semaphore is still the live entry.
-            if (_taskLocks.TryGetValue(taskId, out var current) && ReferenceEquals(current, sem))
-            {
-                return new TaskLockRelease(sem);
-            }
-
-            // Evicted while waiting — release the orphaned semaphore and retry.
-            sem.Release();
-        }
-    }
+    public async Task<IAsyncDisposable> AcquireTaskLockAsync(
+        string taskId,
+        CancellationToken cancellationToken = default
+    ) => await _taskLocks.AcquireAsync(taskId, cancellationToken).ConfigureAwait(false);
 
     private static bool IsTerminalEvent(StreamResponse streamEvent)
     {
         var state = streamEvent.StatusUpdate?.Status.State ?? streamEvent.Task?.Status.State;
         return state?.IsTerminal() == true;
-    }
-
-    private sealed class TaskLockRelease(SemaphoreSlim semaphore) : IDisposable
-    {
-        private int _disposed;
-
-        public void Dispose()
-        {
-            if (Interlocked.Exchange(ref _disposed, 1) == 0)
-                semaphore.Release();
-        }
-    }
-
-    private sealed class SubscriberSet
-    {
-        public List<Channel<StreamResponse>> Channels { get; } = [];
     }
 }

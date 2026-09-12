@@ -2,6 +2,7 @@ namespace Agw.Integrations.Application.Management;
 
 public static class IntegrationCredentialSlots
 {
+    public const string OAuthAuthorizationAttempt = "oauth.authorization-attempt";
     public const string OAuthAccessToken = "oauth.access-token";
     public const string OAuthRefreshToken = "oauth.refresh-token";
     public const string OAuthIdToken = "oauth.id-token";

@@ -500,7 +500,7 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         // Atomic: read task state + register subscriber channel under per-task lock.
         // Concurrent ApplyEventAsync calls block until the channel is registered,
         // guaranteeing no events are lost between snapshot and live stream.
-        using (await _notifier.AcquireTaskLockAsync(request.Id, cancellationToken).ConfigureAwait(false))
+        await using (await _notifier.AcquireTaskLockAsync(request.Id, cancellationToken).ConfigureAwait(false))
         {
             currentTask =
                 await _taskStore.GetTaskAsync(request.Id, cancellationToken).ConfigureAwait(false)
@@ -517,12 +517,11 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
             channel = _notifier.CreateChannel(request.Id);
         }
 
-        // First event MUST be current Task object (spec §3.1.6)
-        yield return new StreamResponse { Task = currentTask };
-
-        // Live events via channel (no catch-up needed — lock guarantees no gap)
         try
         {
+            // The initial snapshot is part of the subscription lifetime too.
+            yield return new StreamResponse { Task = currentTask };
+
             await foreach (var streamEvent in channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
                 yield return streamEvent;
@@ -629,7 +628,7 @@ public class AgwA2ARequestHandler : IAgwA2ARequestHandler, IAsyncDisposable
         CancellationToken cancellationToken
     )
     {
-        using (await _notifier.AcquireTaskLockAsync(context.TaskId, cancellationToken).ConfigureAwait(false))
+        await using (await _notifier.AcquireTaskLockAsync(context.TaskId, cancellationToken).ConfigureAwait(false))
         {
             var currentTask = await _taskStore.GetTaskAsync(context.TaskId, cancellationToken).ConfigureAwait(false);
 

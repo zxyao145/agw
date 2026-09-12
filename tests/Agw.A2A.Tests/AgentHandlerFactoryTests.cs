@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.Json;
+using System.Threading.Channels;
 using A2A;
 using Agw.Agents.Contracts.Catalog;
 using Agw.Shared.Data.Entities.Agents;
@@ -441,7 +442,7 @@ public class AgentHandlerFactoryTests
                 },
             },
         };
-        using (await notifier.AcquireTaskLockAsync(taskId, TestContext.Current.CancellationToken))
+        await using (await notifier.AcquireTaskLockAsync(taskId, TestContext.Current.CancellationToken))
         {
             notifier.Notify(taskId, terminalEvent);
         }
@@ -546,6 +547,136 @@ public class AgentHandlerFactoryTests
     private static A2AAgentService CreateA2AAgentService(InMemoryRepository<Agent> repository)
     {
         return new A2AAgentService(new RepositoryAgentCatalog(repository));
+    }
+
+    [Fact]
+    public async Task SubscribeToTaskAsync_DisposedAfterSnapshot_ReleasesSubscription()
+    {
+        var notifier = new AgwChannelEventNotifier();
+        using var services = new ServiceCollection().BuildServiceProvider();
+        await using var handler = new AgwA2ARequestHandler(
+            new FakeTaskStore(
+                new AgentTask
+                {
+                    Id = "early-exit",
+                    ContextId = "ctx",
+                    Status = new global::A2A.TaskStatus { State = TaskState.Working },
+                }
+            ),
+            notifier,
+            NullLogger<A2AServer>.Instance,
+            services.GetRequiredService<IServiceScopeFactory>()
+        );
+        var iterator = handler
+            .SubscribeToTaskAsync(
+                new SubscribeToTaskRequest { Id = "early-exit" },
+                TestContext.Current.CancellationToken
+            )
+            .GetAsyncEnumerator(TestContext.Current.CancellationToken);
+
+        Assert.True(await iterator.MoveNextAsync());
+        await iterator.DisposeAsync();
+
+        var subscribers = typeof(AgwChannelEventNotifier)
+            .GetField("_subscribers", BindingFlags.NonPublic | BindingFlags.Instance)!
+            .GetValue(notifier)!;
+        Assert.Equal(0, (int)subscribers.GetType().GetProperty("Count")!.GetValue(subscribers)!);
+    }
+
+    [Fact]
+    public async Task AcquireTaskLockAsync_LastSubscriberRemoved_PreservesExistingLease()
+    {
+        var notifier = new AgwChannelEventNotifier();
+        var create = typeof(AgwChannelEventNotifier).GetMethod(
+            "CreateChannel",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        )!;
+        var remove = typeof(AgwChannelEventNotifier).GetMethod(
+            "RemoveChannel",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        )!;
+        var channel = create.Invoke(notifier, ["same-task"]);
+        var first = await notifier.AcquireTaskLockAsync("same-task", TestContext.Current.CancellationToken);
+        try
+        {
+            remove.Invoke(notifier, ["same-task", channel]);
+            var second = notifier.AcquireTaskLockAsync("same-task", TestContext.Current.CancellationToken);
+            Assert.False(second.IsCompleted);
+            await first.DisposeAsync();
+            await using var next = await second.WaitAsync(
+                TimeSpan.FromSeconds(2),
+                TestContext.Current.CancellationToken
+            );
+        }
+        finally
+        {
+            await first.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task Notify_SlowSubscriber_StaysBoundedAndFastSubscriberReceivesTerminal()
+    {
+        var notifier = new AgwChannelEventNotifier();
+        var create = typeof(AgwChannelEventNotifier).GetMethod(
+            "CreateChannel",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        )!;
+        var slow = (Channel<StreamResponse>)create.Invoke(notifier, ["bounded-task"])!;
+        var fast = (Channel<StreamResponse>)create.Invoke(notifier, ["bounded-task"])!;
+        await using (await notifier.AcquireTaskLockAsync("bounded-task", TestContext.Current.CancellationToken))
+        {
+            for (var index = 0; index < 1000; index++)
+            {
+                var item = new StreamResponse();
+                notifier.Notify("bounded-task", item);
+                Assert.True(fast.Reader.TryRead(out var received));
+                Assert.Same(item, received);
+            }
+            var terminal = new StreamResponse
+            {
+                StatusUpdate = new TaskStatusUpdateEvent
+                {
+                    TaskId = "bounded-task",
+                    ContextId = "ctx",
+                    Status = new global::A2A.TaskStatus { State = TaskState.Completed },
+                },
+            };
+            notifier.Notify("bounded-task", terminal);
+            Assert.True(fast.Reader.TryRead(out var last));
+            Assert.Same(terminal, last);
+        }
+        Assert.InRange(slow.Reader.Count, 1, 128);
+        var failure = await Assert.ThrowsAsync<AgwException>(async () =>
+        {
+            await foreach (var _ in slow.Reader.ReadAllAsync(TestContext.Current.CancellationToken)) { }
+        });
+        Assert.Equal(ErrorCodes.A2ASubscriptionLimitExceeded.Code, failure.Code);
+        Assert.False(await fast.Reader.WaitToReadAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public void CreateChannel_AtSubscriberLimit_RejectsUntilSubscriptionDisposes()
+    {
+        var notifier = new AgwChannelEventNotifier();
+        var create = typeof(AgwChannelEventNotifier).GetMethod(
+            "CreateChannel",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        )!;
+        var remove = typeof(AgwChannelEventNotifier).GetMethod(
+            "RemoveChannel",
+            BindingFlags.NonPublic | BindingFlags.Instance
+        )!;
+        var channels = Enumerable.Range(0, 64).Select(_ => create.Invoke(notifier, ["bounded-task"])).ToArray();
+
+        var error = Assert.Throws<TargetInvocationException>(() => create.Invoke(notifier, ["another-task"]));
+        Assert.Equal(
+            ErrorCodes.A2ASubscriptionLimitExceeded.Code,
+            Assert.IsType<AgwException>(error.InnerException).Code
+        );
+        remove.Invoke(notifier, ["bounded-task", channels[0]]);
+
+        Assert.NotNull(create.Invoke(notifier, ["another-task"]));
     }
 
     private static AgwA2ARequestHandler CreateRequestHandler(AgentHandlerFactory agentHandlerFactory)

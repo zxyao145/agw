@@ -206,6 +206,68 @@ public sealed partial class DurableExecutionStoreTests
         Assert.DoesNotContain("secret", raw);
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(6)]
+    public async Task PostgresBatch_WrappedTransientFailure_RetriesWithFixedBudget(int failures)
+    {
+        var token = TestContext.Current.CancellationToken;
+        await using var database = await TestDatabase.CreateAsync();
+        var id = await RegisterExecutionAsync(database, database.CreateStore());
+        var interceptor = new TransientSaveFailure(failures);
+        using var services = database.CreateServiceProvider(interceptor);
+        var stream = new PostgresExecutionEventStream(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            Options.Create(new ExecutionRuntimeOptions())
+        );
+
+        if (failures == 1)
+        {
+            await stream.AppendAsync(id, 0, 0, BatchText("retry once"), token);
+            Assert.Single(await stream.ReadAsync(id, null, token));
+            Assert.Equal(2, interceptor.Attempts);
+        }
+        else
+        {
+            var error = await Assert.ThrowsAsync<AgwException>(() =>
+                stream.AppendAsync(id, 0, 0, BatchText("unavailable"), token).AsTask()
+            );
+            Assert.Equal(ErrorCodes.DurableExecutionUnavailable.Code, error.Code);
+            Assert.Equal(6, interceptor.Attempts);
+            Assert.Empty(await stream.ReadAsync(id, null, token));
+        }
+    }
+
+    private sealed class TransientSaveFailure : SaveChangesInterceptor
+    {
+        private readonly int _failures;
+        public int Attempts { get; private set; }
+
+        public TransientSaveFailure(int failures)
+        {
+            _failures = failures;
+        }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default
+        )
+        {
+            if (++Attempts <= _failures)
+                throw new InvalidOperationException(
+                    "Provider wrapper",
+                    new DbUpdateException("Batch rolled back", new TransientDatabaseFailure())
+                );
+            return ValueTask.FromResult(result);
+        }
+
+        private sealed class TransientDatabaseFailure : DbException
+        {
+            public override bool IsTransient => true;
+        }
+    }
+
     [Fact]
     public async Task Coordinator_TerminalRacesFirstRead_DrainsCommittedTailBeforeFinished()
     {

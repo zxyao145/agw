@@ -9,7 +9,7 @@ namespace Agw.Integrations.Application.OAuth;
 public sealed class OAuthStateProtector
 {
     private static readonly TimeSpan StateLifetime = TimeSpan.FromMinutes(10);
-    private const string Purpose = "Agw.Integrations.OAuthState.v3";
+    private const string Purpose = "Agw.Integrations.OAuthState.v4";
 
     private readonly ITimeLimitedDataProtector _protector;
     private readonly TimeProvider _timeProvider;
@@ -26,7 +26,8 @@ public sealed class OAuthStateProtector
         string? pkceVerifier,
         string returnPath,
         string callbackUri,
-        OAuthCompletionTarget completionTarget
+        OAuthCompletionTarget completionTarget,
+        Guid? authorizationAttemptId = null
     )
     {
         ValidateReturnPath(returnPath);
@@ -43,6 +44,7 @@ public sealed class OAuthStateProtector
         var state = new OAuthCallbackState
         {
             ConnectionId = connectionId,
+            AuthorizationAttemptId = authorizationAttemptId ?? Guid.CreateVersion7(),
             UserId = userId.Trim(),
             PkceVerifier = pkceVerifier,
             ReturnPath = returnPath,
@@ -68,6 +70,7 @@ public sealed class OAuthStateProtector
             var candidate = JsonSerializer.Deserialize<OAuthCallbackState>(payload);
             if (
                 candidate == null
+                || candidate.AuthorizationAttemptId == Guid.Empty
                 || candidate.ConnectionId == Guid.Empty
                 || string.IsNullOrWhiteSpace(candidate.UserId)
                 || candidate.ExpiresAtUtc <= _timeProvider.GetUtcNow()
@@ -141,6 +144,7 @@ public sealed class OAuthStateProtector
 
 public sealed class OAuthCallbackState
 {
+    public Guid AuthorizationAttemptId { get; set; }
     public Guid ConnectionId { get; set; }
     public string UserId { get; set; } = string.Empty;
     public string? PkceVerifier { get; set; }
