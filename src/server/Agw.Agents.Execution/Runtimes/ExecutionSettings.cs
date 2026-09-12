@@ -1,25 +1,26 @@
 using System.Collections.ObjectModel;
-using Agw.Agents.Execution.Commands.Setting;
 
-namespace Agw.Agents.Execution.Inbound.Connections;
+namespace Agw.Agents.Execution.Runtimes;
 
 public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
 {
     private readonly IReadOnlyDictionary<string, string> _environmentVariables;
 
-    private ExecutionSettings(
+    public ExecutionSettings(
         Guid projectId,
-        string? contextId,
-        IReadOnlyDictionary<string, string> environmentVariables,
-        AgwPermissionMode? permissionMode,
-        bool resume,
+        string? contextId = null,
+        IReadOnlyDictionary<string, string>? environmentVariables = null,
+        AgwPermissionMode? permissionMode = null,
+        bool resume = false,
         HumanInteractionPolicy humanInteractionPolicy = HumanInteractionPolicy.Allow,
         long permissionVersion = 0
     )
     {
         ProjectId = projectId;
         ContextId = contextId;
-        _environmentVariables = environmentVariables;
+        _environmentVariables = new ReadOnlyDictionary<string, string>(
+            new Dictionary<string, string>(environmentVariables ?? new Dictionary<string, string>())
+        );
         PermissionMode = permissionMode;
         PermissionVersion = permissionVersion;
         Resume = resume;
@@ -40,20 +41,7 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
 
     public HumanInteractionPolicy HumanInteractionPolicy { get; }
 
-    public static ExecutionSettings FromCommand(SettingCommand command)
-    {
-        ArgumentNullException.ThrowIfNull(command);
-        return new ExecutionSettings(
-            command.ProjectId,
-            command.ContextId,
-            new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(command.EnvironmentVariables)),
-            command.PermissionMode,
-            command.Resume
-        );
-    }
-
-    public static ExecutionSettings CreateDefault() =>
-        FromCommand(new SettingCommand(ProjectDefaults.DefaultBuiltInId));
+    public static ExecutionSettings CreateDefault() => new(ProjectDefaults.DefaultBuiltInId);
 
     public ExecutionSettings WithPermissionMode(AgwPermissionMode permissionMode) =>
         new(
@@ -106,12 +94,6 @@ public sealed class ExecutionSettings : IEquatable<ExecutionSettings>
 
         return hash.ToHashCode();
     }
-
-    internal SettingCommand ToCommand() =>
-        new(ProjectId, new Dictionary<string, string>(_environmentVariables), ContextId, PermissionMode)
-        {
-            Resume = Resume,
-        };
 
     private static bool EnvironmentVariablesEqual(
         IReadOnlyDictionary<string, string> left,

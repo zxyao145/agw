@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Agw.Auth.Contracts;
+using Agw.Projects.Application.History;
 using Agw.Projects.Application.Persistence;
-using Agw.Projects.Domain.Services;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.Agents.AI;

@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Agw.Shared.Data.Entities.Providers;
+using Agw.Providers.Contracts;
 
 namespace Agw.Shared.Tests;
 

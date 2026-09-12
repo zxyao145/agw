@@ -127,19 +127,6 @@ public class AgentAppService
         return agent;
     }
 
-    public Task<DateTimeOffset?> GetRuntimeDefinitionVersionAsync(
-        Guid id,
-        CancellationToken cancellationToken = default
-    )
-    {
-        var user = _userInfoService.RequiredUserId;
-        return _dbContext
-            .Agents.AsNoTracking()
-            .Where(agent => agent.Id == id && agent.CreateBy == user)
-            .Select(agent => (DateTimeOffset?)(agent.UpdateTime ?? agent.CreateTime))
-            .FirstOrDefaultAsync(cancellationToken);
-    }
-
     public async Task<AgentModelRuntimeConfiguration?> GetModelRuntimeConfigurationAsync(Guid modelProviderId)
     {
         var snapshot = await _modelProviderReferences.GetRuntimeSnapshotAsync(modelProviderId).ConfigureAwait(false);
@@ -238,6 +225,8 @@ public class AgentAppService
         {
             await GetExternalModelRuntimeConfigurationAsync(agent.ExternalAgentKind, agent.ModelProviderId);
         }
+        if (agent.Type == AgentType.External)
+            agent.Extra = AgentExtraSettings.Normalize(agent.Extra);
         new AgentBehavior(agent).PrepareForCreate();
         if (await _dbContext.Agents.AnyAsync(existing => existing.CreateBy == user && existing.Name == agent.Name))
         {
@@ -280,7 +269,14 @@ public class AgentAppService
                 return null;
             }
             await GetExternalModelRuntimeConfigurationAsync(existing.ExternalAgentKind, modelProviderId);
-            new AgentBehavior(existing).ApplyUpdate(agent => ApplyExternalAgentUpdate(agent, command));
+            var extra = AgentExtraSettings.Normalize(
+                command.IsSpecified(AgentUpdateField.Extra) ? command.Extra : existing.Extra
+            );
+            new AgentBehavior(existing).ApplyUpdate(agent =>
+            {
+                ApplyExternalAgentUpdate(agent, command);
+                agent.Extra = extra;
+            });
         }
         else
         {

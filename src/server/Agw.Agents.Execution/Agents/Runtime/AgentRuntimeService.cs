@@ -6,14 +6,12 @@ using Agw.Agents.Execution.HumanInteraction;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
 using Agw.Files.Abstracts;
-using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Runtime;
 using Agw.Skills.Contracts.Registration;
 using Agw.Skills.Contracts.Remote;
 using Agw.Tools.Generated;
 using Microsoft.Agents.AI;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -27,7 +25,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
     private readonly AgentCapabilityComposer _capabilityComposer;
     private readonly ChatHistoryProvider _chatHistoryProvider;
     private readonly IProviderSessionState _providerSessionState;
-    private readonly IProjectProviderSessionFacade _providerSessions;
+    private readonly ExternalProviderSessionBindings _providerBindings;
     private readonly AgwDataPaths _dataPaths;
     private readonly IAgwFileSystemResolver _fileSystemResolver;
     private readonly AgentSessionStateStore _sessionStateStore;
@@ -38,9 +36,10 @@ public partial class AgentRuntimeService : IAgentRuntimeService
     private readonly IReadOnlyDictionary<Guid, IAgentSkillRegistration> _skillRegistrations;
     private readonly IRemoteSkillContentResolver? _remoteSkillContentResolver;
     private readonly HumanInteractionContextAccessor? _humanInteractionContextAccessor;
-    private readonly IConversationHandoffProvider? _conversationHandoffProvider;
+    private readonly AgentTurnExecutor _turnExecutor;
+    private readonly AgentRuntimeConfiguration _configuration;
     private readonly IRuntimeTurnContextAccessor? _turnContextAccessor;
-    private readonly IProjectDefaultResolver? _projectDefaults;
+    private readonly IProjectDefaultResolver _projectDefaults;
     private readonly TimeProvider _timeProvider;
     private readonly AgwGeneratedToolCatalog? _generatedToolCatalog;
 
@@ -54,7 +53,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         AgentCapabilityComposer capabilityComposer,
         ChatHistoryProvider chatHistoryProvider,
         IProviderSessionState providerSessionState,
-        IProjectProviderSessionFacade providerSessions,
+        ExternalProviderSessionBindings providerBindings,
         AgwDataPaths dataPaths,
         IAgwFileSystemResolver fileSystemResolver,
         AgentSessionStateStore sessionStateStore,
@@ -62,16 +61,17 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         ObservabilityMiddleware observabilityMiddleware,
         UsageTrackingMiddleware usageTrackingMiddleware,
         IAgentTurnSummaryService summaryService,
+        IServiceProvider services,
+        IProjectDefaultResolver projectDefaults,
+        AgentTurnExecutor turnExecutor,
+        AgentRuntimeConfiguration configuration,
         IEnumerable<IAgentSkillRegistration>? skillRegistrations = null,
         IRemoteSkillContentResolver? remoteSkillContentResolver = null,
         ILoggerFactory? loggerFactory = null,
-        IServiceProvider? services = null,
         IConversationHistoryWriter? conversationHistoryWriter = null,
         HumanInteractionContextAccessor? humanInteractionContextAccessor = null,
-        IConversationHandoffProvider? conversationHandoffProvider = null,
         IRuntimeTurnContextAccessor? turnContextAccessor = null,
         TimeProvider? timeProvider = null,
-        IProjectDefaultResolver? projectDefaults = null,
         AgwGeneratedToolCatalog? generatedToolCatalog = null
     )
     {
@@ -80,7 +80,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         _capabilityComposer = capabilityComposer;
         _chatHistoryProvider = chatHistoryProvider;
         _providerSessionState = providerSessionState;
-        _providerSessions = providerSessions;
+        _providerBindings = providerBindings;
         _dataPaths = dataPaths;
         _fileSystemResolver = fileSystemResolver;
         _sessionStateStore = sessionStateStore;
@@ -95,12 +95,15 @@ public partial class AgentRuntimeService : IAgentRuntimeService
             .ToDictionary(group => group.Key, group => group.First());
         _remoteSkillContentResolver = remoteSkillContentResolver;
         _humanInteractionContextAccessor = humanInteractionContextAccessor;
-        _conversationHandoffProvider = conversationHandoffProvider;
+        _turnExecutor = turnExecutor;
+        _configuration = configuration;
         _turnContextAccessor = turnContextAccessor;
         _projectDefaults = projectDefaults;
         _generatedToolCatalog = generatedToolCatalog;
         _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
-        _services = services ?? new ServiceCollection().BuildServiceProvider();
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(projectDefaults);
+        _services = services;
     }
 
     private async Task<Guid?> ResolveProjectIdAsync(Guid? projectId, CancellationToken cancellationToken)
@@ -113,11 +116,6 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         )
         {
             return projectId.Value;
-        }
-
-        if (_projectDefaults == null)
-        {
-            return ProjectDefaults.DefaultBuiltInId;
         }
 
         return projectId == ProjectDefaults.A2AId

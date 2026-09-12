@@ -12,10 +12,10 @@ using Agw.Agents.Execution.Agents.Contracts;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Agents.Sessions;
 using Agw.Agents.Execution.Commands.Exec;
-using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.HumanInteraction;
 using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.Messaging;
+using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Summaries;
 using Agw.Agents.Execution.Turns;
 using Agw.Projects.Contracts.Runtime;
@@ -560,10 +560,10 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
             ContextId = "environment-context",
             TaskId = Guid.CreateVersion7(),
         };
-        var settings = new SettingCommand(
+        var settings = new ExecutionSettings(
             projectId,
-            new Dictionary<string, string> { ["SESSION_ONLY"] = "session" },
-            task.ContextId
+            task.ContextId,
+            new Dictionary<string, string> { ["SESSION_ONLY"] = "session" }
         );
         var runtime = new AgentflowRuntime(agentflow.Id, task, settings, runtimeService);
         var command = new ExecCommand(
@@ -1412,7 +1412,7 @@ public partial class AgentflowRuntimeServiceTests : IDisposable
         public Task<AgentRuntime?> CreateRuntimeAsync(
             Guid agentId,
             AgentExecutionTask task,
-            SettingCommand settings,
+            ExecutionSettings settings,
             CancellationToken cancellationToken = default
         ) => throw new NotImplementedException();
 

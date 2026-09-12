@@ -2,7 +2,6 @@ using System.Data.Common;
 using System.Security.Claims;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
@@ -702,7 +701,7 @@ public sealed class DurableExecutionScopeMaintenanceTests : IDisposable
                             ContextId = "context",
                         },
                         Settings = DurableExecutionMapper.FromSettings(
-                            ExecutionSettings.FromCommand(new SettingCommand(projectId, contextId: "context"))
+                            SettingCommandMapper.FromCommand(new SettingCommand(projectId, contextId: "context"))
                         ),
                     }
                 ),

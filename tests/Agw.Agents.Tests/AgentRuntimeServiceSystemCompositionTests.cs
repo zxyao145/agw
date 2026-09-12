@@ -12,6 +12,7 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
 using Agw.Integrations.Mcp;
 using Agw.Projects.Contracts.Runtime;
+using Agw.Providers.Contracts;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
@@ -20,6 +21,7 @@ using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
 using Agw.Shared.Runtime;
 using Agw.Shared.Tooling;
+using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.Registration;
 using Agw.Skills.Execution;
 using Agw.Tools.Abstractions;
@@ -599,7 +601,7 @@ public class AgentRuntimeServiceSystemCompositionTests
             ),
             chatHistoryProvider: new StubRequestHistoryProvider(),
             providerSessionState: null!,
-            providerSessions: null!,
+            providerBindings: null!,
             dataPaths,
             fileSystemResolver: null!,
             sessionStateStore: null!,
@@ -611,6 +613,10 @@ public class AgentRuntimeServiceSystemCompositionTests
                 NullLogger<UsageTrackingMiddleware>.Instance
             ),
             summaryService: null!,
+            services: new ServiceCollection().BuildServiceProvider(),
+            projectDefaults: new TestProjectDefaultResolver(),
+            turnExecutor: null!,
+            configuration: new AgentRuntimeConfiguration(appService, projectRuntimeFacade),
             skillRegistrations: skillRegistrations,
             remoteSkillContentResolver: remoteSkillContentResolver
         );

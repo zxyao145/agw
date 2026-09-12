@@ -1,11 +1,13 @@
 using Agw.Infrastructure.Data;
 using Agw.Integrations.Application.Facades;
 using Agw.Providers.Application.Facades;
+using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.References;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Skills.Application.Facades;
+using Agw.Skills.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 

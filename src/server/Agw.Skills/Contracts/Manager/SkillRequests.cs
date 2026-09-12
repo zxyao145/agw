@@ -1,4 +1,3 @@
-using Agw.Shared.Data.Entities.Skills;
 using Microsoft.AspNetCore.Http;
 
 namespace Agw.Skills.Contracts.Manager;

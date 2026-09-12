@@ -58,6 +58,7 @@ public partial class AgentflowRuntimeServiceTests
             provider.GetRequiredService<IRepository<AgentflowNode>>(),
             provider.GetRequiredService<IRepository<AgentflowEdge>>()
         ));
+        services.AddScoped<Agw.Auth.Contracts.IUserInfoService>(_ => new TestUserInfoService());
         services.AddScoped<IAgentRuntimeService>(_ => new StubAgentRuntimeService(Guid.CreateVersion7()));
         services.AddScoped<IProviderSessionState>(_ => new StubProviderSessionState());
         services.AddScoped<IAgentTurnSummaryService>(_ => new RecordingSummaryService());
@@ -86,8 +87,7 @@ public partial class AgentflowRuntimeServiceTests
         var runtime = first.ServiceProvider.GetRequiredService<AgentflowRuntimeService>();
 
         Assert.Same(runtime, first.ServiceProvider.GetRequiredService<IAgentflowRuntimeService>());
-        Assert.Same(
-            runtime,
+        Assert.IsType<AgentflowMermaidProvider>(
             first.ServiceProvider.GetRequiredService<Agw.Agents.Contracts.Catalog.IAgentflowMermaidProvider>()
         );
         foreach (var type in types)

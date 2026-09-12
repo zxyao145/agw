@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Agw.Shared.Data.Entities.Providers;
+namespace Agw.Providers.Contracts;
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum ProviderType

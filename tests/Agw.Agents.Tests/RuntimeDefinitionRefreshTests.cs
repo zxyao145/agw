@@ -4,16 +4,20 @@ using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents.Contracts;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Agents.Sessions;
-using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.HumanInteraction;
+using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Outbound;
+using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.Contracts;
 using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Turns;
 using Agw.Files.Abstracts;
 using Agw.Files.Application.Storage.Local;
 using Agw.Infrastructure.Data;
+using Agw.Projects.Contracts.Runtime;
+using Agw.Providers.Contracts;
+using Agw.Providers.Contracts.References;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
@@ -42,6 +46,39 @@ public sealed class RuntimeDefinitionRefreshTests
         Assert.Same(first, second);
         Assert.False(first.IsDisposed);
         Assert.Single(fixture.Service.CreatedAgents);
+    }
+
+    [Theory]
+    [InlineData("endpoint")]
+    [InlineData("credential")]
+    [InlineData("workspace")]
+    [InlineData("capabilities")]
+    public async Task StartAsync_DependencyChangesWithoutAgentEdit_RebuildsRuntime(string change)
+    {
+        await using var fixture = new Fixture();
+        await fixture.InitializeAsync();
+        var first = await fixture.RunTurnAsync();
+        var originalVersion = fixture.Definition.UpdateTime;
+        switch (change)
+        {
+            case "endpoint":
+                fixture.Providers.Endpoint = "https://changed.example.com";
+                break;
+            case "credential":
+                fixture.Providers.Key = "rotated-key";
+                break;
+            case "workspace":
+                fixture.Projects.Workspace = "/changed";
+                break;
+            case "capabilities":
+                fixture.Projects.Connections = [Guid.CreateVersion7()];
+                break;
+        }
+        var second = await fixture.RunTurnAsync();
+        Assert.NotSame(first, second);
+        Assert.True(first.IsDisposed);
+        Assert.Equal(originalVersion, fixture.Definition.UpdateTime);
+        Assert.DoesNotContain("rotated-key", second.ConfigurationVersion ?? "");
     }
 
     [Theory]
@@ -153,11 +190,53 @@ public sealed class RuntimeDefinitionRefreshTests
         Assert.False(current);
     }
 
+    private sealed class TestProviders : IModelProviderReferenceFacade
+    {
+        public string Endpoint { get; set; } = "https://example.com";
+        public string Key { get; set; } = "first-key";
+
+        public Task<IReadOnlySet<Guid>> FilterVisibleModelProviderIdsAsync(
+            IReadOnlyCollection<Guid> ids,
+            CancellationToken cancellationToken = default
+        ) => Task.FromResult<IReadOnlySet<Guid>>(ids.ToHashSet());
+
+        public Task<ModelProviderRuntimeSnapshot?> GetRuntimeSnapshotAsync(
+            Guid id,
+            CancellationToken cancellationToken = default
+        ) =>
+            Task.FromResult<ModelProviderRuntimeSnapshot?>(
+                new(
+                    id,
+                    new(Guid.Empty, "model", 1000, 100),
+                    new(Guid.Empty, "provider", ProviderType.Anthropic, Endpoint, [new(true, Key)])
+                )
+            );
+    }
+
+    private sealed class TestProjects : IProjectRuntimeFacade
+    {
+        public string Workspace { get; set; } = "/original";
+        public IReadOnlyList<Guid> Connections { get; set; } = [];
+
+        public Task<ProjectRuntimeSnapshot?> GetForCurrentUserAsync(
+            Guid id,
+            CancellationToken cancellationToken = default
+        ) =>
+            Task.FromResult<ProjectRuntimeSnapshot?>(
+                new(id, "project", Workspace, null, [], new Dictionary<string, string>(), [], [], Connections)
+            );
+
+        public Task<string?> GetWorkspaceAsync(Guid id, CancellationToken cancellationToken = default) =>
+            Task.FromResult<string?>(null);
+    }
+
     private sealed class Fixture : IAsyncDisposable, IAgwFileSystemResolver, IExecutionMessageSink
     {
         private readonly SqliteConnection _connection = new("Data Source=:memory:");
         private readonly ServiceProvider _services = new ServiceCollection().BuildServiceProvider();
         public TestUserInfoService User { get; } = new();
+        public TestProviders Providers { get; } = new();
+        public TestProjects Projects { get; } = new();
         public AgwDbContext Db { get; }
         public Agent Definition { get; }
         public RecordingRuntimeService Service { get; }
@@ -178,7 +257,8 @@ public sealed class RuntimeDefinitionRefreshTests
                 ExternalAgentKind = kind,
                 ModelProviderId = Guid.CreateVersion7(),
             };
-            var app = new AgentAppService(Db, null!, null!, null!, User, null!);
+            var app = new AgentAppService(Db, null!, Providers, null!, User, null!);
+            var configuration = new AgentRuntimeConfiguration(app, Projects);
             var checker = new AgentRuntimeService(
                 app,
                 null!,
@@ -193,9 +273,12 @@ public sealed class RuntimeDefinitionRefreshTests
                 null!,
                 null!,
                 null!,
-                services: _services
+                services: _services,
+                projectDefaults: new TestProjectDefaultResolver(),
+                turnExecutor: null!,
+                configuration: configuration
             );
-            Service = new RecordingRuntimeService(Db, checker);
+            Service = new RecordingRuntimeService(Db, checker, configuration);
             var factory = new RuntimeFactory(
                 Service,
                 null!,
@@ -277,14 +360,20 @@ public sealed class RuntimeDefinitionRefreshTests
     {
         private readonly AgwDbContext _db;
         private readonly AgentRuntimeService _checker;
+        private readonly AgentRuntimeConfiguration _configuration;
         public List<RecordingAgent> CreatedAgents { get; } = [];
         public bool FailCreation { get; set; }
         public TaskCompletionSource? HoldTurn { get; set; }
 
-        public RecordingRuntimeService(AgwDbContext db, AgentRuntimeService checker)
+        public RecordingRuntimeService(
+            AgwDbContext db,
+            AgentRuntimeService checker,
+            AgentRuntimeConfiguration configuration
+        )
         {
             _db = db;
             _checker = checker;
+            _configuration = configuration;
         }
 
         public Task<bool> IsRuntimeCurrentAsync(AgentRuntime runtime, CancellationToken cancellationToken = default) =>
@@ -293,7 +382,7 @@ public sealed class RuntimeDefinitionRefreshTests
         public async Task<AgentRuntime?> CreateRuntimeAsync(
             Guid agentId,
             AgentExecutionTask task,
-            SettingCommand settings,
+            ExecutionSettings settings,
             CancellationToken cancellationToken = default
         )
         {
@@ -320,9 +409,16 @@ public sealed class RuntimeDefinitionRefreshTests
                 definition.Type
             )
             {
-                DefinitionVersion = definition.UpdateTime ?? definition.CreateTime,
+                ConfigurationVersion = await _configuration.ReadAsync(agentId, task.ProjectId, cancellationToken),
             };
         }
+
+        public Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
+            AgentRuntime session,
+            AgwUserInput input,
+            IInteractionHandler? approvalHandler,
+            CancellationToken cancellationToken = default
+        ) => ExecuteAsync(session, input, cancellationToken);
 
         public async Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
             AgentRuntime session,

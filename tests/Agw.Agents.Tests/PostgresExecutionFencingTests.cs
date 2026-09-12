@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Infrastructure.Configuration;
@@ -87,7 +86,7 @@ public sealed class PostgresExecutionFencingTests
                 AgentRuntimeType.Agent,
                 new AgwUserInput { Contents = [] },
                 task,
-                ExecutionSettings.FromCommand(new SettingCommand(task.ProjectId, contextId: task.ContextId)),
+                SettingCommandMapper.FromCommand(new SettingCommand(task.ProjectId, contextId: task.ContextId)),
                 token
             );
 

@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Agw.Agents.Definitions.Domain.Decisions;
 using Agw.Agents.Definitions.Domain.Topology;
 using Agw.Shared.Data.Entities.Agentflows;
@@ -8,6 +7,12 @@ namespace Agw.Agents.Definitions.Domain.Policies;
 public sealed class AgentflowDefinitionPolicy
 {
     private const string InputNodeId = "input";
+    private readonly AgentflowConfigurationFacts _configuration;
+
+    public AgentflowDefinitionPolicy(AgentflowConfigurationFacts configuration)
+    {
+        _configuration = configuration;
+    }
 
     public AgentflowDefinitionDecision Evaluate(
         IReadOnlyList<AgentflowNode>? nodes,
@@ -114,7 +119,7 @@ public sealed class AgentflowDefinitionPolicy
         var summaryEnabled = false;
         foreach (var outputNode in outputNodes)
         {
-            if (!AgentflowTopology.TryReadOutputSummaryEnabled(outputNode.ConfigJson, out var nodeSummaryEnabled))
+            if (_configuration.OutputSummary[outputNode.ConfigJson ?? ""] is not { } nodeSummaryEnabled)
             {
                 return (null, null);
             }
@@ -151,7 +156,7 @@ public sealed class AgentflowDefinitionPolicy
                 return (null, null);
             }
 
-            if (!IsValidConditionJson(edge.ConditionJson))
+            if (!_configuration.Conditions[edge.ConditionJson ?? ""])
             {
                 return (null, null);
             }
@@ -218,7 +223,7 @@ public sealed class AgentflowDefinitionPolicy
         return existingAgentNames.TryGetValue(node.RelateId.Value, out var agentName) ? agentName : node.Name;
     }
 
-    private static bool IsValidInputRootedGraph(IReadOnlyList<AgentflowNode> nodes, IReadOnlyList<AgentflowEdge> edges)
+    private bool IsValidInputRootedGraph(IReadOnlyList<AgentflowNode> nodes, IReadOnlyList<AgentflowEdge> edges)
     {
         var inputNodes = nodes
             .Where(node => node.NodeId == InputNodeId || node.Kind == AgentflowNodeKind.Input)
@@ -244,7 +249,7 @@ public sealed class AgentflowDefinitionPolicy
         return visibleNodeIds.Where(nodeId => nodeId != InputNodeId).All(reachableNodeIds.Contains);
     }
 
-    private static HashSet<string> GetRuntimeVisibleNodeIds(
+    private HashSet<string> GetRuntimeVisibleNodeIds(
         IReadOnlyList<AgentflowNode> nodes,
         IReadOnlyList<AgentflowEdge> edges
     )
@@ -290,7 +295,7 @@ public sealed class AgentflowDefinitionPolicy
         return reachableNodeIds;
     }
 
-    private static HashSet<string> GetHiddenBlockParticipantIds(
+    private HashSet<string> GetHiddenBlockParticipantIds(
         IReadOnlyList<AgentflowNode> nodes,
         IReadOnlyList<AgentflowEdge> edges
     )
@@ -303,7 +308,7 @@ public sealed class AgentflowDefinitionPolicy
 
         foreach (var blockNode in nodes.Where(node => IsBlockNode(node.Kind)))
         {
-            foreach (var participantNodeId in ReadBlockParticipantNodeIds(blockNode))
+            foreach (var participantNodeId in _configuration.Participants[blockNode.ConfigJson ?? ""])
             {
                 if (!participantOwnersByNodeId.TryGetValue(participantNodeId, out var owners))
                 {
@@ -332,39 +337,6 @@ public sealed class AgentflowDefinitionPolicy
         return hiddenParticipantIds;
     }
 
-    private static IReadOnlyList<string> ReadBlockParticipantNodeIds(AgentflowNode node)
-    {
-        if (string.IsNullOrWhiteSpace(node.ConfigJson))
-        {
-            return [];
-        }
-
-        try
-        {
-            using var doc = JsonDocument.Parse(node.ConfigJson);
-            if (
-                !doc.RootElement.TryGetProperty("participantNodeIds", out var participants)
-                || participants.ValueKind != JsonValueKind.Array
-            )
-            {
-                return [];
-            }
-
-            return participants
-                .EnumerateArray()
-                .Where(element => element.ValueKind == JsonValueKind.String)
-                .Select(element => element.GetString())
-                .Where(value => !string.IsNullOrWhiteSpace(value))
-                .Select(value => value!)
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-        }
-        catch (JsonException)
-        {
-            return [];
-        }
-    }
-
     private static bool IsAgentParticipantKind(AgentflowNodeKind kind)
     {
         return kind is AgentflowNodeKind.Agent or AgentflowNodeKind.WorkflowAsAgent;
@@ -377,39 +349,6 @@ public sealed class AgentflowDefinitionPolicy
                 or AgentflowNodeKind.HandoffBlock
                 or AgentflowNodeKind.GroupChatBlock
                 or AgentflowNodeKind.MagenticBlock;
-    }
-
-    private static bool IsValidConditionJson(string? conditionJson)
-    {
-        if (string.IsNullOrWhiteSpace(conditionJson))
-        {
-            return true;
-        }
-
-        try
-        {
-            using var doc = JsonDocument.Parse(conditionJson);
-            if (doc.RootElement.ValueKind != JsonValueKind.Object)
-            {
-                return false;
-            }
-
-            var hasKnownCondition = false;
-            foreach (var property in doc.RootElement.EnumerateObject())
-            {
-                hasKnownCondition = true;
-                if (!IsValidConditionProperty(property))
-                {
-                    return false;
-                }
-            }
-
-            return hasKnownCondition;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
     }
 
     private bool HasValidRoutingStrategies(IReadOnlyList<AgentflowEdge> edges)
@@ -461,7 +400,7 @@ public sealed class AgentflowDefinitionPolicy
             {
                 if (
                     string.IsNullOrWhiteSpace(edge.ConditionJson)
-                    || !AgentflowTopology.TryReadSwitchCaseOrder(edge.ConfigJson, out var order)
+                    || _configuration.SwitchOrder[edge.ConfigJson ?? ""] is not { } order
                     || !orders.Add(order)
                 )
                 {
@@ -471,18 +410,6 @@ public sealed class AgentflowDefinitionPolicy
         }
 
         return true;
-    }
-
-    private static bool IsValidConditionProperty(JsonProperty property)
-    {
-        return property.Name switch
-        {
-            "always" => property.Value.ValueKind is JsonValueKind.True or JsonValueKind.False,
-            "contains" or "notContains" or "equals" or "author" or "role" => property.Value.ValueKind
-                == JsonValueKind.String,
-            "minMessages" => property.Value.ValueKind == JsonValueKind.Number,
-            _ => false,
-        };
     }
 
     private bool HasValidCycleSemantics(IReadOnlyList<AgentflowNode> nodes, IReadOnlyList<AgentflowEdge> edges)

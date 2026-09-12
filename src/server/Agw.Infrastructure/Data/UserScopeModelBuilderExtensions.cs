@@ -9,6 +9,7 @@ using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Settings;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Entities.Tools;
+using Agw.Skills.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Infrastructure.Data;

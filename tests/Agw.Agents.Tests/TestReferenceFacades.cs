@@ -5,6 +5,7 @@ using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Repositories;
+using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.References;
 
 namespace Agw.Agents.Tests;

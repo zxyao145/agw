@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Agw.Shared.Data.Entities.Agentflows;
 
 namespace Agw.Agents.Definitions.Domain.Topology;
@@ -53,72 +52,6 @@ public static class AgentflowTopology
         }
 
         return sorted.Count == nodes.Count ? sorted : nodes;
-    }
-
-    public static bool TryReadSwitchCaseOrder(string? configJson, out int order)
-    {
-        order = 0;
-        if (string.IsNullOrWhiteSpace(configJson))
-        {
-            return false;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(configJson);
-            if (
-                document.RootElement.ValueKind != JsonValueKind.Object
-                || !document.RootElement.TryGetProperty("switchCaseOrder", out var property)
-                || property.ValueKind != JsonValueKind.Number
-                || !property.TryGetInt32(out order)
-                || order < 0
-            )
-            {
-                order = 0;
-                return false;
-            }
-
-            return true;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
-    }
-
-    public static bool TryReadOutputSummaryEnabled(string? configJson, out bool enabled)
-    {
-        enabled = false;
-        if (string.IsNullOrWhiteSpace(configJson))
-        {
-            return true;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(configJson);
-            if (document.RootElement.ValueKind != JsonValueKind.Object)
-            {
-                return false;
-            }
-
-            if (!document.RootElement.TryGetProperty("enableSummary", out var property))
-            {
-                return true;
-            }
-
-            if (property.ValueKind is not JsonValueKind.True and not JsonValueKind.False)
-            {
-                return false;
-            }
-
-            enabled = property.GetBoolean();
-            return true;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
     }
 
     public static IReadOnlyList<HashSet<string>> FindCyclicComponents(

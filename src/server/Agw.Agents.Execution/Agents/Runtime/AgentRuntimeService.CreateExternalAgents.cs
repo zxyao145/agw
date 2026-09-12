@@ -699,9 +699,6 @@ public partial class AgentRuntimeService
 
     #endregion
 
-    internal static bool UsesProviderSessionBinding(Agent agent) =>
-        ExternalAgentKindResolver.Resolve(agent) is not ExternalAgentKind.None;
-
     private static bool IsEmptyJsonObject(string value)
     {
         var hasOpen = false;

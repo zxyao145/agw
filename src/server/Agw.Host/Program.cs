@@ -322,7 +322,8 @@ public static class AgwHostApplication
                     new Agw.Agents.Execution.DependencyInjection.RegistrationOptions(
                         AddExecutionTransport: hasDataPlane,
                         AddDistributedWorker: hasDataPlane,
-                        AddTraceCollector: hasDataPlane
+                        AddTraceCollector: hasDataPlane,
+                        AddRuntime: hasDataPlane
                     )
                 )
                 .AddFiles(builder.Configuration)

@@ -5,7 +5,6 @@ using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
 using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
@@ -791,7 +790,9 @@ public sealed class AgentflowCheckpointStoreTests : IDisposable
                     ContextId = fixture.ContextId,
                 },
                 Settings = DurableExecutionMapper.FromSettings(
-                    ExecutionSettings.FromCommand(new SettingCommand(fixture.ProjectId, contextId: fixture.ContextId))
+                    SettingCommandMapper.FromCommand(
+                        new SettingCommand(fixture.ProjectId, contextId: fixture.ContextId)
+                    )
                 ),
             };
             await using var context = CreateContext();

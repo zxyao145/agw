@@ -27,6 +27,42 @@ namespace Agw.Host.Tests;
 public sealed class HostModuleCompositionTests
 {
     [Fact]
+    public void ControlPlaneExecution_RegistersSubmissionAndDiagramWithoutRuntime()
+    {
+        var services = new ServiceCollection();
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["Execution:Provider"] = "Distributed",
+                    ["Database:Provider"] = "postgres",
+                }
+            )
+            .Build();
+        services.AddAgentExecution(
+            configuration,
+            new Agw.Agents.Execution.DependencyInjection.RegistrationOptions(
+                AddExecutionTransport: false,
+                AddDistributedWorker: false,
+                AddTraceCollector: false,
+                AddRuntime: false
+            )
+        );
+        Assert.Contains(services, d => d.ServiceType == typeof(IAgentExecutionFacade));
+        Assert.Contains(services, d => d.ServiceType == typeof(IAgentflowMermaidProvider));
+        Assert.DoesNotContain(
+            services,
+            d =>
+                d.ServiceType.Name
+                    is "AgentRuntimeService"
+                        or "AgentflowRuntimeService"
+                        or "DurableExecutionSegmentExecutor"
+                        or "RuntimeFactory"
+                        or "AgentTurnExecutor"
+        );
+    }
+
+    [Fact]
     public void ControlPlaneModule_AddApplicationParts_AddsManagementControllers()
     {
         var parts = new ApplicationPartManager();

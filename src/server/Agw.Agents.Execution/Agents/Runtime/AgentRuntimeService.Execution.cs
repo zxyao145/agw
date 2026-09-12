@@ -1,12 +1,9 @@
-using System.Runtime.CompilerServices;
 using System.Runtime.ExceptionServices;
 using Agw.Agents.Execution.Agents.Contracts;
 using Agw.Agents.Execution.Agents.Sessions;
 using Agw.Agents.Execution.Agents.Tools;
 using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
-using Agw.Agents.Execution.Messaging;
-using Agw.Agents.Execution.Turns;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
@@ -19,89 +16,32 @@ namespace Agw.Agents.Execution.Agents.Runtime;
 
 public partial class AgentRuntimeService
 {
-    public async IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
+    public IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         AgentRuntime session,
         AgwUserInput input,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default
-    )
-    {
-        await foreach (var message in ExecuteStreamingAsync(session, input, approvalHandler: null, cancellationToken))
-        {
-            yield return message;
-        }
-    }
+        CancellationToken cancellationToken = default
+    ) => _turnExecutor.ExecuteStreamingAsync(session, input, cancellationToken);
 
     public IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         AgentRuntime session,
         AgwUserInput input,
         IInteractionHandler? approvalHandler,
         CancellationToken cancellationToken = default
-    ) =>
-        ConversationHistoryPersistenceContext.RunStreaming(
-            ExecuteStreamingWithHistoryAsync(session, input, approvalHandler, cancellationToken),
-            _chatHistoryProvider as IConversationHistoryPersistence,
-            session._projectId,
-            session._contextId,
-            session.SessionStateScope?.Generation
-                ?? ConversationSessionContext.GetGeneration(session._projectId, session._contextId),
-            allowCreateConversation: session.SessionStateScope?.ProjectConversationId == Guid.Empty
-        );
+    ) => _turnExecutor.ExecuteStreamingAsync(session, input, approvalHandler, cancellationToken);
 
-    private async IAsyncEnumerable<AgwMessage> ExecuteStreamingWithHistoryAsync(
-        AgentRuntime session,
-        AgwUserInput input,
-        IInteractionHandler? approvalHandler,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default
-    )
-    {
-        ArgumentNullException.ThrowIfNull(session);
-        ArgumentNullException.ThrowIfNull(input);
-
-        try
-        {
-            var requestMessages = await CreateExecutionInputMessagesAsync(session, input, cancellationToken)
-                .ConfigureAwait(false);
-            await foreach (
-                var message in ConversationHistoryPersistenceContext
-                    .ObserveAsync(
-                        session.ExecuteStreamingAsync(requestMessages, input, approvalHandler, cancellationToken),
-                        cancellationToken
-                    )
-                    .ConfigureAwait(false)
-            )
-            {
-                yield return AgwMessageUtil.PostAgwMessage(session, message);
-            }
-        }
-        finally
-        {
-            if (session.SessionStateScope != null)
-            {
-                await _sessionStateStore.SaveAsync(
-                    session.AgentType,
-                    session.SessionStateScope,
-                    session.Agent,
-                    session.Session,
-                    CancellationToken.None
-                );
-            }
-        }
-        await ConversationHistoryPersistenceContext.FlushAsync(CancellationToken.None).ConfigureAwait(false);
-        yield return TurnMessageFactory.CreateFinished();
-    }
-
-    public async Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
+    public Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
         AgentRuntime session,
         AgwUserInput input,
         CancellationToken cancellationToken = default
-    )
-    {
-        return await ExecuteAsync(session, input, approvalHandler: null, cancellationToken);
-    }
+    ) => _turnExecutor.ExecuteAsync(session, input, cancellationToken);
 
-    /// <summary>
-    /// 使用恢复后的 MAF session 执行 approval 响应分段，并在结束时保存 Agent session。
-    /// </summary>
+    public Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
+        AgentRuntime session,
+        AgwUserInput input,
+        IInteractionHandler? approvalHandler,
+        CancellationToken cancellationToken = default
+    ) => _turnExecutor.ExecuteAsync(session, input, approvalHandler, cancellationToken);
+
     internal IAsyncEnumerable<AgwMessage> ExecuteDurableSegmentStreamingAsync(
         AgentRuntime session,
         ChatMessage message,
@@ -109,121 +49,13 @@ public partial class AgentRuntimeService
         IInteractionHandler approvalHandler,
         CancellationToken cancellationToken = default
     ) =>
-        ConversationHistoryPersistenceContext.RunStreaming(
-            ExecuteDurableSegmentWithHistoryAsync(session, message, summaryInput, approvalHandler, cancellationToken),
-            _chatHistoryProvider as IConversationHistoryPersistence,
-            session._projectId,
-            session._contextId,
-            session.SessionStateScope?.Generation
-                ?? ConversationSessionContext.GetGeneration(session._projectId, session._contextId)
+        _turnExecutor.ExecuteDurableSegmentStreamingAsync(
+            session,
+            message,
+            summaryInput,
+            approvalHandler,
+            cancellationToken
         );
-
-    private async IAsyncEnumerable<AgwMessage> ExecuteDurableSegmentWithHistoryAsync(
-        AgentRuntime session,
-        ChatMessage message,
-        AgwUserInput summaryInput,
-        IInteractionHandler approvalHandler,
-        [EnumeratorCancellation] CancellationToken cancellationToken = default
-    )
-    {
-        ArgumentNullException.ThrowIfNull(session);
-        ArgumentNullException.ThrowIfNull(message);
-        ArgumentNullException.ThrowIfNull(summaryInput);
-        ArgumentNullException.ThrowIfNull(approvalHandler);
-
-        try
-        {
-            await foreach (
-                var output in ConversationHistoryPersistenceContext
-                    .ObserveAsync(
-                        session.ExecuteStreamingSegmentAsync(message, summaryInput, approvalHandler, cancellationToken),
-                        cancellationToken
-                    )
-                    .ConfigureAwait(false)
-            )
-            {
-                yield return AgwMessageUtil.PostAgwMessage(session, output);
-            }
-        }
-        finally
-        {
-            if (session.SessionStateScope != null)
-            {
-                await _sessionStateStore.SaveAsync(
-                    session.AgentType,
-                    session.SessionStateScope,
-                    session.Agent,
-                    session.Session,
-                    CancellationToken.None
-                );
-            }
-        }
-    }
-
-    public async Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
-        AgentRuntime session,
-        AgwUserInput input,
-        IInteractionHandler? approvalHandler,
-        CancellationToken cancellationToken = default
-    )
-    {
-        ArgumentNullException.ThrowIfNull(session);
-        ArgumentNullException.ThrowIfNull(input);
-
-        try
-        {
-            var requestMessages = await CreateExecutionInputMessagesAsync(session, input, cancellationToken)
-                .ConfigureAwait(false);
-            var messages = await ConversationHistoryPersistenceContext
-                .ObserveAsync(session.ExecuteAsync(requestMessages, input, approvalHandler, cancellationToken))
-                .ConfigureAwait(false);
-            return messages.Select(message => AgwMessageUtil.PostAgwMessage(session, message)).ToArray();
-        }
-        finally
-        {
-            if (session.SessionStateScope != null)
-            {
-                await _sessionStateStore.SaveAsync(
-                    session.AgentType,
-                    session.SessionStateScope,
-                    session.Agent,
-                    session.Session,
-                    CancellationToken.None
-                );
-            }
-        }
-    }
-
-    private async Task<List<ChatMessage>> CreateExecutionInputMessagesAsync(
-        AgentRuntime session,
-        AgwUserInput input,
-        CancellationToken cancellationToken
-    )
-    {
-        var sessionScope = session.SessionStateScope;
-        if (sessionScope == null)
-        {
-            return [AgwMessageUtil.CreateUserChatMessage(input)];
-        }
-
-        var handoff =
-            _conversationHandoffProvider == null
-                ? ConversationHandoff.Empty
-                : await _conversationHandoffProvider
-                    .CreateAsync(
-                        sessionScope.ProjectConversationId,
-                        AgentRuntimeType.Agent,
-                        sessionScope.AgentId,
-                        cancellationToken
-                    )
-                    .ConfigureAwait(false);
-        return AgwMessageUtil.CreateExecutionInputMessages(
-            input,
-            AgentRuntimeType.Agent,
-            sessionScope.AgentId,
-            handoff
-        );
-    }
 
     public async Task<RuntimeAgentExecutionResult?> ExecuteByIdAsync(
         AgentExecuteByIdRequest request,

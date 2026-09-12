@@ -112,7 +112,7 @@ public partial class AgentflowRuntimeServiceTests
         var task = CreateManifest(fixture.Flow.Id).Task.ToProjection();
         using var turn = accessor.Push(
             new RuntimeTurnContext(
-                ExecutionSettings.FromCommand(new SettingCommand(task.ProjectId)),
+                SettingCommandMapper.FromCommand(new SettingCommand(task.ProjectId)),
                 task,
                 new ExecutionTarget(fixture.Flow.Id, AgentRuntimeType.Agentflow),
                 "",

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
+using Agw.Providers.Contracts;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Providers;
 using Microsoft.Data.Sqlite;

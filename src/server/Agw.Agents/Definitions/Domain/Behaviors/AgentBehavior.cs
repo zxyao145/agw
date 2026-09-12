@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
@@ -24,10 +23,6 @@ public sealed class AgentBehavior
         NormalizeEnvironmentVariables(agent);
         agent.Id = agent.Id == Guid.Empty ? Guid.CreateVersion7() : agent.Id;
         agent.Name = string.IsNullOrWhiteSpace(agent.Name) ? agent.Id.Normalize() : agent.Name;
-        if (agent.Type == AgentType.External)
-        {
-            agent.Extra = NormalizeExtraSettings(agent.Extra);
-        }
     }
 
     public void ApplyUpdate(Action<Agent> updateAction)
@@ -54,7 +49,6 @@ public sealed class AgentBehavior
             existing.Tools = originalTools;
             existing.Type = originalType;
             existing.ExternalAgentKind = originalExternalAgentKind;
-            existing.Extra = NormalizeExtraSettings(existing.Extra);
         }
         else
         {
@@ -109,27 +103,6 @@ public sealed class AgentBehavior
                 "External agent Summary requires a SummaryModelProviderId."
             );
         }
-    }
-
-    private static string? NormalizeExtraSettings(string? extra)
-    {
-        var normalized = extra?.Trim();
-        if (string.IsNullOrEmpty(normalized))
-        {
-            return null;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(normalized);
-            if (document.RootElement.ValueKind == JsonValueKind.Object)
-            {
-                return normalized;
-            }
-        }
-        catch (JsonException) { }
-
-        throw new AgwException(ErrorCodes.InvalidAgentExtraSettings);
     }
 
     private static void NormalizeEnvironmentVariables(Agent agent)

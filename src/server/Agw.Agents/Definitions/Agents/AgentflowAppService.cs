@@ -1,6 +1,5 @@
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Definitions.Domain.Behaviors;
-using Agw.Agents.Definitions.Domain.Policies;
 using Agw.Auth.Contracts;
 using Agw.Providers.Contracts.References;
 using Agw.Shared.Contracts.Coordination;
@@ -117,7 +116,7 @@ public class AgentflowAppService
             agentflow.SummaryModelProviderId,
             cancellationToken
         );
-        var definitionPolicy = new AgentflowDefinitionPolicy();
+        var definitionPolicy = new AgentflowDefinitionValidator();
         var decision = definitionPolicy.Evaluate(
             nodes,
             edges,
@@ -206,7 +205,7 @@ public class AgentflowAppService
                 existing.SummaryModelProviderId,
                 cancellationToken
             );
-            var definitionPolicy = new AgentflowDefinitionPolicy();
+            var definitionPolicy = new AgentflowDefinitionValidator();
             var decision = definitionPolicy.Evaluate(
                 nodes,
                 edges,

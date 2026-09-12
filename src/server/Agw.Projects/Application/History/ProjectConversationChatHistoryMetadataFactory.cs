@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.AI;
 
-namespace Agw.Projects.Domain.Services;
+namespace Agw.Projects.Application.History;
 
 public static class ProjectConversationChatHistoryMetadataFactory
 {

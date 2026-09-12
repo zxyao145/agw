@@ -16,6 +16,7 @@ using Agw.Shared.Utils;
 using ClaudeCodeSdk.MAF;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OpenAI.CodexSdk.MAF;
@@ -613,12 +614,12 @@ public class AgentRuntimeServiceCompositionTests
             Name = "custom-claude",
         };
 
-        var created = AgentRuntimeService.ResolveExternalProviderSession(
+        var created = ExternalProviderSessionBindings.ResolveExternalProviderSession(
             agent,
             persistedProviderSessionId: null,
             requestedResume: true
         );
-        var resumed = AgentRuntimeService.ResolveExternalProviderSession(
+        var resumed = ExternalProviderSessionBindings.ResolveExternalProviderSession(
             agent,
             created.ProviderSessionId,
             requestedResume: false
@@ -641,12 +642,12 @@ public class AgentRuntimeServiceCompositionTests
         };
         var providerSessionId = Guid.Parse("22222222-3333-4444-5555-666666666666");
 
-        var created = AgentRuntimeService.ResolveExternalProviderSession(
+        var created = ExternalProviderSessionBindings.ResolveExternalProviderSession(
             agent,
             persistedProviderSessionId: null,
             requestedResume: true
         );
-        var resumed = AgentRuntimeService.ResolveExternalProviderSession(
+        var resumed = ExternalProviderSessionBindings.ResolveExternalProviderSession(
             agent,
             providerSessionId,
             requestedResume: false
@@ -669,12 +670,12 @@ public class AgentRuntimeServiceCompositionTests
         };
         var providerSessionId = Guid.Parse("33333333-4444-5555-6666-777777777777");
 
-        var created = AgentRuntimeService.ResolveExternalProviderSession(
+        var created = ExternalProviderSessionBindings.ResolveExternalProviderSession(
             agent,
             persistedProviderSessionId: null,
             requestedResume: true
         );
-        var resumed = AgentRuntimeService.ResolveExternalProviderSession(
+        var resumed = ExternalProviderSessionBindings.ResolveExternalProviderSession(
             agent,
             providerSessionId,
             requestedResume: false
@@ -690,7 +691,7 @@ public class AgentRuntimeServiceCompositionTests
     public void UsesProviderSessionBinding_SupportsClaudeCodeCodexAndPiExternalAgents()
     {
         Assert.True(
-            AgentRuntimeService.UsesProviderSessionBinding(
+            ExternalProviderSessionBindings.UsesProviderSessionBinding(
                 new Agent
                 {
                     Type = AgentType.External,
@@ -700,7 +701,7 @@ public class AgentRuntimeServiceCompositionTests
             )
         );
         Assert.True(
-            AgentRuntimeService.UsesProviderSessionBinding(
+            ExternalProviderSessionBindings.UsesProviderSessionBinding(
                 new Agent
                 {
                     Type = AgentType.External,
@@ -710,7 +711,7 @@ public class AgentRuntimeServiceCompositionTests
             )
         );
         Assert.True(
-            AgentRuntimeService.UsesProviderSessionBinding(
+            ExternalProviderSessionBindings.UsesProviderSessionBinding(
                 new Agent
                 {
                     Type = AgentType.External,
@@ -720,12 +721,12 @@ public class AgentRuntimeServiceCompositionTests
             )
         );
         Assert.False(
-            AgentRuntimeService.UsesProviderSessionBinding(
+            ExternalProviderSessionBindings.UsesProviderSessionBinding(
                 new Agent { Type = AgentType.External, ExternalAgentKind = ExternalAgentKind.None }
             )
         );
         Assert.False(
-            AgentRuntimeService.UsesProviderSessionBinding(
+            ExternalProviderSessionBindings.UsesProviderSessionBinding(
                 new Agent { Type = AgentType.System, ExternalAgentKind = ExternalAgentKind.ClaudeCode }
             )
         );
@@ -974,7 +975,7 @@ public class AgentRuntimeServiceCompositionTests
             capabilityComposer: null!,
             historyProvider,
             providerSessionState: null!,
-            providerSessions: null!,
+            providerBindings: null!,
             dataPaths: null!,
             fileSystemResolver: null!,
             sessionStateStore: null!,
@@ -986,6 +987,10 @@ public class AgentRuntimeServiceCompositionTests
                 NullLogger<UsageTrackingMiddleware>.Instance
             ),
             summaryService: null!,
+            services: new Microsoft.Extensions.DependencyInjection.ServiceCollection().BuildServiceProvider(),
+            projectDefaults: new TestProjectDefaultResolver(),
+            turnExecutor: null!,
+            configuration: null!,
             timeProvider: TimeProvider.System
         );
 

@@ -1,5 +1,4 @@
 using System.Text.Json.Serialization;
-using Agw.Shared.Data.Entities.Providers;
 
 namespace Agw.Providers.Contracts.References;
 

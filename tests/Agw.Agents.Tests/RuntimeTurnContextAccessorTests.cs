@@ -56,7 +56,7 @@ public class RuntimeTurnContextAccessorTests
     {
         var projectId = Guid.CreateVersion7();
         return new RuntimeTurnContext(
-            ExecutionSettings.FromCommand(new SettingCommand(projectId)),
+            SettingCommandMapper.FromCommand(new SettingCommand(projectId)),
             new AgentExecutionTask
             {
                 TaskId = Guid.CreateVersion7(),

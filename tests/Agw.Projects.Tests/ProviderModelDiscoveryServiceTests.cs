@@ -2,8 +2,8 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using Agw.Providers.Application;
+using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.Manager;
-using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Projects.Tests;

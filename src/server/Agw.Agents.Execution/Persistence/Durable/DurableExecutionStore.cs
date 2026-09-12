@@ -3,7 +3,7 @@ using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
 using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
-using Agw.Agents.Execution.Inbound.Connections;
+using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Auth.Contracts;
 using Agw.Shared.Contracts.Coordination;

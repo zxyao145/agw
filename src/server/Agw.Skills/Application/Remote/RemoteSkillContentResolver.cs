@@ -1,6 +1,7 @@
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
 using Agw.Skills.Application.Persistence;
+using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.Remote;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

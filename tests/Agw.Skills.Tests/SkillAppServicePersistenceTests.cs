@@ -11,6 +11,7 @@ using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Skills.Application;
 using Agw.Skills.Application.Remote;
+using Agw.Skills.Contracts;
 using Agw.Testing;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;

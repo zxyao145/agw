@@ -1,6 +1,5 @@
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Commands.Exec;
-using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.Runtimes;
@@ -11,14 +10,14 @@ public sealed class AgentflowRuntime : RuntimeBase
 {
     private readonly Guid _agentflowId;
     private readonly AgentExecutionTask _task;
-    private readonly SettingCommand _settings;
+    private ExecutionSettings _settings;
     private readonly AgentflowRuntimeService _runtimeService;
     private readonly AgentflowCheckpointRuntimeState _checkpointState = new();
 
     internal AgentflowRuntime(
         Guid agentflowId,
         AgentExecutionTask task,
-        SettingCommand settings,
+        ExecutionSettings settings,
         AgentflowRuntimeService runtimeService
     )
     {
@@ -71,7 +70,7 @@ public sealed class AgentflowRuntime : RuntimeBase
 
     internal void SetPermissionMode(AgwPermissionMode permissionMode)
     {
-        _settings.PermissionMode = permissionMode;
+        _settings = _settings.WithPermissionMode(permissionMode);
     }
 
     public override async ValueTask DisposeAsync()

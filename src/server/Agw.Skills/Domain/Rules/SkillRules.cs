@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
-using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
+using Agw.Skills.Contracts;
 
 namespace Agw.Skills.Domain.Rules;
 

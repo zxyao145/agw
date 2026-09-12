@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Microsoft.Agents.AI" />
@@ -9,5 +9,8 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Agw.Tools.Abstractions\Agw.Tools.Abstractions.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Agw.Skills.Contracts/Agw.Skills.Contracts.csproj" />
   </ItemGroup>
 </Project>

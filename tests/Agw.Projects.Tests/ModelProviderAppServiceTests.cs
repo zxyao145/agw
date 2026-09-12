@@ -2,6 +2,7 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Repositories;
 using Agw.Providers.Application;
+using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.Manager;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;

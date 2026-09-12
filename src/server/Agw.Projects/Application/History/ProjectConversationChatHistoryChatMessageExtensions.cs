@@ -2,7 +2,7 @@ using System.Text.Json;
 using Agw.Shared.Data.Entities.Projects;
 using Microsoft.Extensions.AI;
 
-namespace Agw.Projects.Domain.Services;
+namespace Agw.Projects.Application.History;
 
 public static class ProjectConversationChatHistoryChatMessageExtensions
 {

@@ -1,8 +1,8 @@
 using System.Text.Json;
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.ExternalAgents;
+using Agw.Providers.Contracts;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Exceptions;
 using ClaudeCodeSdk.MAF;
 using OpenAI.CodexSdk;

@@ -1,8 +1,8 @@
 using System.Text.Json;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Persistence.Durable;
+using Agw.Agents.Execution.Runtimes;
 
 namespace Agw.Agents.Tests;
 
@@ -19,8 +19,14 @@ public class ExecutionSettingsTests
 
         var restored = JsonSerializer.Deserialize<DurableExecutionSettings>(JsonSerializer.Serialize(snapshot))!;
 
-        Assert.Equal(AgwPermissionMode.FullAccess, restored.ToCommand(Guid.CreateVersion7(), "context").PermissionMode);
-        Assert.Equal(HumanInteractionPolicy.Reject, restored.HumanInteractionPolicy);
+        Assert.Equal(
+            AgwPermissionMode.FullAccess,
+            restored.ToRuntimeSettings(Guid.CreateVersion7(), "context").PermissionMode
+        );
+        var runtimeSettings = restored.ToRuntimeSettings(Guid.CreateVersion7(), "context");
+        Assert.Equal(HumanInteractionPolicy.Reject, runtimeSettings.HumanInteractionPolicy);
+        Assert.Equal(settings.PermissionVersion, runtimeSettings.PermissionVersion);
+        Assert.Equal(settings.Resume, runtimeSettings.Resume);
         Assert.Equal(
             HumanInteractionPolicy.Reject,
             settings.WithPermissionMode(AgwPermissionMode.AlwaysAsk).HumanInteractionPolicy
@@ -47,7 +53,7 @@ public class ExecutionSettingsTests
             new Dictionary<string, string> { ["TOKEN"] = "original" }
         );
 
-        var settings = ExecutionSettings.FromCommand(command);
+        var settings = SettingCommandMapper.FromCommand(command);
         command.EnvironmentVariables["TOKEN"] = "changed";
 
         Assert.Equal("original", settings.EnvironmentVariables["TOKEN"]);
@@ -57,26 +63,24 @@ public class ExecutionSettingsTests
     public void Equals_WhenResumeDiffers_ReturnsFalse()
     {
         var projectId = Guid.CreateVersion7();
-        var left = ExecutionSettings.FromCommand(new SettingCommand(projectId) { Resume = false });
-        var right = ExecutionSettings.FromCommand(new SettingCommand(projectId) { Resume = true });
+        var left = SettingCommandMapper.FromCommand(new SettingCommand(projectId) { Resume = false });
+        var right = SettingCommandMapper.FromCommand(new SettingCommand(projectId) { Resume = true });
 
         Assert.NotEqual(left, right);
     }
 
     [Fact]
-    public void PermissionMode_RoundTripsAndParticipatesInEquality()
+    public void PermissionMode_IsPreservedAndParticipatesInEquality()
     {
         var projectId = Guid.CreateVersion7();
         var command = new SettingCommand(projectId, contextId: "context", permissionMode: AgwPermissionMode.FullAccess);
 
-        var settings = ExecutionSettings.FromCommand(command);
-        var roundTripped = settings.ToCommand();
+        var settings = SettingCommandMapper.FromCommand(command);
 
         Assert.Equal(AgwPermissionMode.FullAccess, settings.PermissionMode);
-        Assert.Equal(AgwPermissionMode.FullAccess, roundTripped.PermissionMode);
         Assert.NotEqual(
             settings,
-            ExecutionSettings.FromCommand(
+            SettingCommandMapper.FromCommand(
                 new SettingCommand(projectId, contextId: "context", permissionMode: AgwPermissionMode.AlwaysAsk)
             )
         );

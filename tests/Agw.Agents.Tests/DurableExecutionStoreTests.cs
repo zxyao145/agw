@@ -7,11 +7,11 @@ using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.HumanInteraction.Durable;
 using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
-using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Messaging.Durable;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Outbound.Durable;
 using Agw.Agents.Execution.Persistence.Durable;
+using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.Durable;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Agents.Execution.Turns;
@@ -876,7 +876,7 @@ public sealed partial class DurableExecutionStoreTests : IDisposable
     }
 
     private static ExecutionSettings CreateSettings(Guid projectId, string contextId) =>
-        ExecutionSettings.FromCommand(new SettingCommand(projectId, contextId: contextId));
+        SettingCommandMapper.FromCommand(new SettingCommand(projectId, contextId: contextId));
 
     private sealed class TestDatabase : IAsyncDisposable
     {
