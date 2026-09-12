@@ -1,4 +1,6 @@
+using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
+using Bens.Results;
 using Microsoft.AspNetCore.Http;
 
 namespace Agw.Auth.Middleware;
@@ -8,6 +10,8 @@ public sealed class AgwAuthorizationGuardMiddleware
     private static readonly string[] AnonymousApiPaths =
     [
         "/api/server-info",
+        "/api/health/live",
+        "/api/health/ready",
         "/api/auth/session",
         "/api/auth/antiforgery",
         "/api/auth/login",
@@ -28,12 +32,14 @@ public sealed class AgwAuthorizationGuardMiddleware
         var isProtectedProtocol = path.StartsWithSegments("/api") || path.StartsWithSegments("/a2a");
         var isAnonymousPath = AnonymousApiPaths.Any(value => path.StartsWithSegments(value));
 
-        if (
-            !isProtectedProtocol
-            || isAnonymousPath
-            || !initializationState.IsInitialized
-            || context.User.Identity?.IsAuthenticated == true
-        )
+        if (isProtectedProtocol && !isAnonymousPath && !initializationState.IsInitialized)
+        {
+            var error = ErrorCodes.ServerNotInitialized;
+            await ApiResult.Fail(error.Code, error.Message, (int)error.StatusCode).ExecuteAsync(context);
+            return;
+        }
+
+        if (!isProtectedProtocol || isAnonymousPath || context.User.Identity?.IsAuthenticated == true)
         {
             await _next(context);
             return;

@@ -5,7 +5,6 @@ using Agw.Agents;
 using Agw.Agents.Definitions.Contracts;
 using Agw.Agents.Execution;
 using Agw.Auth.Extensions;
-using Agw.Auth.Security;
 using Agw.Files;
 using Agw.Files.Api;
 using Agw.Host.Data;
@@ -80,11 +79,6 @@ public static class AgwHostApplication
         var dataPaths = AgwDataPaths.ResolveFromConfiguration(builder.Configuration);
         dataPaths.EnsureCreated();
 
-        if (profile != AgwHostProfile.DataPlane && await ServerCommand.TryRunAsync(args, dataPaths))
-        {
-            return;
-        }
-
         // Configure Serilog early in the pipeline
         Log.Logger = new LoggerConfiguration()
             .ReadFrom.Configuration(
@@ -118,14 +112,8 @@ public static class AgwHostApplication
         {
             Log.Information("Starting Agw {HostProfile} Host", profile);
 
-            var stateStore = new JsonInitializationStateStore(dataPaths);
-            ServerDeploymentConfiguration.Apply(builder.Configuration, stateStore.GetLegacyDeploymentConfiguration());
-            var configuredSetup =
-                hasControlPlane && !stateStore.IsInitialized
-                    ? ConfiguredSetupBootstrap.FromConfiguration(builder.Configuration)
-                    : ConfiguredSetupBootstrap.None;
-            ServerDeploymentConfiguration.Validate(profile, builder.Configuration, stateStore.IsInitialized);
-            builder.Services.AddSingleton(stateStore);
+            ServerDeploymentConfiguration.Apply(builder.Configuration);
+            ServerDeploymentConfiguration.Validate(profile, builder.Configuration);
             builder.Services.AddSingleton(dataPaths);
             builder.Services.AddSingleton(TimeProvider.System);
             builder
@@ -287,19 +275,14 @@ public static class AgwHostApplication
             builder.Services.AddApiResult();
             builder.Services.AddHttpClient();
             builder.Services.AddSingleton<IocUtil>();
+            var allowedOrigins = builder.Configuration.GetSection("Auth:AllowedOrigins").Get<string[]>() ?? [];
             builder.Services.AddCors(options =>
             {
                 options.AddPolicy(
                     "AgwDesktop",
                     policy =>
                     {
-                        policy
-                            .SetIsOriginAllowed(origin =>
-                                LocalTrustedRequest.IsDesktopOrigin(origin, builder.Environment.IsDevelopment())
-                            )
-                            .AllowAnyHeader()
-                            .AllowAnyMethod()
-                            .AllowCredentials();
+                        policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
                     }
                 );
             });
@@ -359,7 +342,7 @@ public static class AgwHostApplication
                 .AddSkills(builder.Configuration)
                 .AddProjects(builder.Configuration)
                 .AddAuth()
-                .AddSetup(builder.Configuration, configuredSetup, readOnly: profile == AgwHostProfile.DataPlane)
+                .AddSetup(builder.Configuration, readOnly: profile == AgwHostProfile.DataPlane)
                 .AddIntegrations(builder.Configuration);
 
             // 数据库 AuditUserId 提供者
@@ -368,6 +351,10 @@ public static class AgwHostApplication
             builder.Services.AddHybridCache();
 
             var app = builder.Build();
+            var stateStore = app.Services.GetRequiredService<DatabaseInitializationStateStore>();
+            await stateStore.RefreshAsync();
+            if (hasControlPlane && await ServerCommand.TryRunAsync(args, stateStore))
+                return;
             _ = app.Services.GetRequiredService<ToolRegistryService>();
             var databaseSettings = app.Services.GetRequiredService<IOptions<DatabaseSettings>>().Value;
             Log.Information("Database provider: {DatabaseProvider}", databaseSettings.Provider);
@@ -403,9 +390,6 @@ public static class AgwHostApplication
                     // Also runs after configured first-run setup, which intentionally skips a second seed pass.
                     // A bounded pass must not block startup on a busy execution; the mode-independent recovery service continues.
                     await DbSeeder.RecoverDurableExecutionScopesAsync(scope.ServiceProvider, CancellationToken.None);
-
-                    var legacyApiTokenMigrator = scope.ServiceProvider.GetRequiredService<LegacyApiTokenMigrator>();
-                    await legacyApiTokenMigrator.MigrateAsync();
                 }
             }
 

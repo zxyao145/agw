@@ -4,16 +4,16 @@ These instructions supplement the repository-root `AGENTS.md` for work under `Ag
 
 ## Module Boundary
 
-`Agw.Setup` owns first-run setup, initialization guards, setup-code validation, the `server-state.json` persistence adapter, and legacy Token import. `Agw.Auth` owns login, Cookie and Bearer authentication, `LocalTrusted`, CSRF, token management, and authorization.
+`Agw.Setup` owns first-run setup, initialization guards, setup-code validation, and database-backed initialization snapshots. `Agw.Auth` owns login, Cookie and Bearer authentication, LocalTrusted, CSRF, token management, and authorization.
 
-`JsonInitializationStateStore` implements the setup state contract and the password/session portion of the `Agw.Auth` state seam so the document continues to use one lock and atomic replacement. API Token hashes and audit metadata live in the database. Do not introduce a second state-file writer or move authentication state into static configuration.
+`DatabaseInitializationStateStore` implements setup and authentication state contracts. `IServerAuthStatePersistence` is the Auth contract; its Infrastructure adapter stores the deployment-wide administrator record in the global `auth` group of `setting`. API Tokens remain in `api_token`. Never write an authentication state file or move mutable authentication state into static configuration.
 
 ## API and Security
 
 - Setup JSON endpoints return Bens.Results envelopes and use shared `AgwException` error codes.
 - Direct loopback setup may be trusted; forwarded or domain setup requires the one-time Setup Code.
 - Never persist administrator password or API Token plaintext. Never return stored password/token hashes or protected credential payloads.
-- New initialization writes schema v3 with only initialization and password/session state. Preserve schema v1/v2 deployment fields during authentication writes; they are a low-priority startup fallback beneath standard configuration. Do not promote authentication values into IConfiguration. Legacy Token removal must happen only after its database import succeeds.
+- Persist initialization only after database migration and seeding succeed. Concurrent setup must not overwrite an existing administrator. Increment SessionVersion when updating a password. All Hosts read the shared database; refresh failure discards cached credentials. No legacy JSON Token import or deployment configuration fallback remains.
 
 ## Verification
 

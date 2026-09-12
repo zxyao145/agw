@@ -12,7 +12,6 @@ public sealed class AgwDataPaths
     private AgwDataPaths(string root, string logsDirectory)
     {
         Root = root;
-        StateFile = Path.Combine(root, "server-state.json");
         DatabaseFile = Path.Combine(root, "database", "agw.db");
         SkillsDirectory = Path.Combine(root, "skills");
         LogsDirectory = logsDirectory;
@@ -30,8 +29,6 @@ public sealed class AgwDataPaths
     /// <summary>
     /// Gets the path to the persisted Server setup and initialization state.
     /// </summary>
-    public string StateFile { get; }
-
     /// <summary>
     /// Gets the path to the default SQLite database file.
     /// </summary>

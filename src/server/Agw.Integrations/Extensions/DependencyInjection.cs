@@ -18,7 +18,6 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddIntegrations(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDataProtection();
         services
             .AddOptions<OAuthRedirectOptions>()
             .Bind(configuration.GetSection(OAuthRedirectOptions.SectionName))

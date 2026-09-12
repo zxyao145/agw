@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agw-control-plane
+  labels:
+    app: agw-control-plane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agw-control-plane
+  template:
+    metadata:
+      labels:
+        app: agw-control-plane
+    spec:
+      containers:
+        - name: agw-control-plane
+          image: localhost/agw-control-plane:local
+          imagePullPolicy: Never
+          env:
+            - name: AgwLogDir
+              value: /data/logs
+            - name: AGW_DATA_DIR
+              value: /data
+            - name: ASPNETCORE_ENVIRONMENT
+              value: Production
+            - name: ASPNETCORE_URLS
+              value: http://0.0.0.0:8080
+            - name: Setup__AdminPassword
+              valueFrom:
+                secretKeyRef:
+                  name: agw-admin
+                  key: password
+            - name: DistributedLock__Provider
+              value: postgres
+            - name: Execution__Provider
+              value: Distributed
+            - name: Database__Provider
+              value: postgres
+            - name: Database__ConnectionString
+              valueFrom:
+                secretKeyRef:
+                  name: agw-database
+                  key: connection-string
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          securityContext:
+            # The local hostPath is owned by the host user with mode 0700; preserve the
+            # current local Podman setup's root access so the server can write /data.
+            runAsUser: 0
+            runAsGroup: 0
+            runAsNonRoot: false
+          volumeMounts:
+            - name: agw-data
+              mountPath: /data
+      volumes:
+        - name: agw-data
+          persistentVolumeClaim:
+            claimName: agw-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agw-control-plane
+  labels:
+    app: agw-control-plane
+spec:
+  type: NodePort
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+  selector:
+    app: agw-control-plane
+  ports:
+    - name: http
+      protocol: TCP
+      port: 30816
+      targetPort: http
+      nodePort: 30816

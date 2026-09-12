@@ -1,5 +1,6 @@
 using Agw.Auth.Contracts;
 using Agw.Shared.Data.Abstractions;
+using Agw.Shared.Data.Entities.Settings;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -53,6 +54,15 @@ public sealed class EntityModifierInterceptor : SaveChangesInterceptor
 
     private static void EnsureCreateByUnchanged(EntityEntry entry)
     {
+        if (entry.Entity is Setting)
+        {
+            foreach (var name in new[] { nameof(Setting.CreateTime), nameof(Setting.UserId), nameof(Setting.Key) })
+            {
+                var field = entry.Property(name);
+                if (field.IsModified && !Equals(field.OriginalValue, field.CurrentValue))
+                    throw new AgwException(ErrorCodes.InvalidParam, $"{name} is immutable.");
+            }
+        }
         var property = entry.Metadata.FindProperty(nameof(IEntityCreator.CreateBy));
         if (
             property != null
@@ -70,6 +80,8 @@ public sealed class EntityModifierInterceptor : SaveChangesInterceptor
 
     private static void EnsureOwnerMatchesCurrentUser(EntityEntry entry)
     {
+        if (entry.Entity is Setting { UserId: null })
+            return;
         if (!UserInfoUtil.IsContextActive || UserInfoUtil.IsSystemScopeActive)
         {
             return;

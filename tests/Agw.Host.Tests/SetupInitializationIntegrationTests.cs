@@ -42,7 +42,7 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
         builder.Configuration.AddInMemoryCollection(
             new Dictionary<string, string?> { ["Database:ConnectionString"] = "Data Source=selected.db" }
         );
-        ServerDeploymentConfiguration.Apply(builder.Configuration, new Dictionary<string, string?>());
+        ServerDeploymentConfiguration.Apply(builder.Configuration);
         ConfigureServices(builder.Services, builder.Configuration);
         builder.Services.AddControllersWithViews().AddApplicationPart(typeof(SetupController).Assembly);
         await using var app = builder.Build();
@@ -66,7 +66,7 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
             TestContext.Current.CancellationToken
         );
         Assert.Equal(HttpStatusCode.BadRequest, unprotected.StatusCode);
-        Assert.False(File.Exists(_paths.StateFile));
+        Assert.False(File.Exists(Path.Combine(_paths.Root, "server-state.json")));
         client.DefaultRequestHeaders.Add(
             "Cookie",
             string.Join("; ", page.Headers.GetValues("Set-Cookie").Select(value => value.Split(';')[0]))
@@ -92,9 +92,9 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
         Assert.True(await context.Database.CanConnectAsync(TestContext.Current.CancellationToken));
         Assert.NotEmpty(await context.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken));
         Assert.False(File.Exists(_paths.DatabaseFile));
-        var state = new JsonInitializationStateStore(_paths);
+        var state = new DatabaseInitializationStateStore(app.Services.GetRequiredService<IServiceScopeFactory>());
+        await state.RefreshAsync(TestContext.Current.CancellationToken);
         Assert.True(state.IsInitialized);
-        Assert.Empty(state.GetLegacyDeploymentConfiguration());
         Assert.Equal(
             PasswordVerificationResult.Success,
             new PasswordHasher<object>().VerifyHashedPassword(
@@ -116,7 +116,7 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
                 ["Setup:AdminPassword"] = "administrator-password",
             }
         );
-        ServerDeploymentConfiguration.Apply(configuration, new Dictionary<string, string?>());
+        ServerDeploymentConfiguration.Apply(configuration);
         var services = new ServiceCollection();
         ConfigureServices(services, configuration, ConfiguredSetupBootstrap.FromConfiguration(configuration));
         await using var provider = services.BuildServiceProvider();
@@ -124,11 +124,13 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
         var initializer = scope.ServiceProvider.GetRequiredService<ConfiguredSetupInitializer>();
 
         Assert.True(await initializer.InitializeIfConfiguredAsync(TestContext.Current.CancellationToken));
-        var state = provider.GetRequiredService<JsonInitializationStateStore>();
+        var state = provider.GetRequiredService<DatabaseInitializationStateStore>();
         await state.UpdatePasswordAsync("changed-hash", TestContext.Current.CancellationToken);
         Assert.False(await initializer.InitializeIfConfiguredAsync(TestContext.Current.CancellationToken));
 
-        Assert.Equal("changed-hash", new JsonInitializationStateStore(_paths).GetAuthenticationSnapshot().PasswordHash);
+        var reloaded = new DatabaseInitializationStateStore(provider.GetRequiredService<IServiceScopeFactory>());
+        await reloaded.RefreshAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("changed-hash", reloaded.GetAuthenticationSnapshot().PasswordHash);
         Assert.Equal(2, state.GetAuthenticationSnapshot().SessionVersion);
         var context = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
         Assert.NotEmpty(await context.Database.GetAppliedMigrationsAsync(TestContext.Current.CancellationToken));
@@ -150,7 +152,7 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
                 ["Database:ConnectionString"] = connectionString,
             }
         );
-        ServerDeploymentConfiguration.Apply(configuration, new Dictionary<string, string?>());
+        ServerDeploymentConfiguration.Apply(configuration);
         var services = new ServiceCollection();
         ConfigureServices(services, configuration);
         var bootstrapper = new FailingDatabaseBootstrapper();
@@ -173,7 +175,7 @@ public sealed class SetupInitializationIntegrationTests : IDisposable
         var context = scope.ServiceProvider.GetRequiredService<AgwDbContext>();
         Assert.Equal(context.Database.GetConnectionString(), bootstrapper.ConnectionString);
         Assert.False(provider.GetRequiredService<IServerInitializationState>().IsInitialized);
-        Assert.False(File.Exists(_paths.StateFile));
+        Assert.False(File.Exists(Path.Combine(_paths.Root, "server-state.json")));
     }
 
     private void ConfigureServices(

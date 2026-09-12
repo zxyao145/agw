@@ -1,13 +1,12 @@
 using Agw.Auth.Contracts;
 using Agw.Setup.Services;
-using Agw.Shared.Runtime;
 using Microsoft.AspNetCore.Identity;
 
 namespace Agw.Host;
 
 public static class ServerCommand
 {
-    public static async Task<bool> TryRunAsync(string[] args, AgwDataPaths paths)
+    public static async Task<bool> TryRunAsync(string[] args, DatabaseInitializationStateStore stateStore)
     {
         if (
             args.Length != 2
@@ -18,9 +17,9 @@ public static class ServerCommand
             return false;
         }
 
-        if (!File.Exists(paths.StateFile))
+        if (!stateStore.IsInitialized)
         {
-            Console.Error.WriteLine($"Server state was not found at {paths.StateFile}.");
+            Console.Error.WriteLine("The configured database has no initialized administrator.");
             Environment.ExitCode = 2;
             return true;
         }
@@ -35,7 +34,7 @@ public static class ServerCommand
         }
 
         var hasher = new PasswordHasher<object>();
-        IAuthenticationStateStore authenticationStateStore = new JsonInitializationStateStore(paths);
+        IAuthenticationStateStore authenticationStateStore = stateStore;
         await authenticationStateStore.UpdatePasswordAsync(hasher.HashPassword(new object(), password));
         Console.WriteLine("Administrator password reset. Existing web sessions were invalidated.");
         return true;

@@ -6,6 +6,7 @@ using Agw.Integrations.Application.Persistence;
 using Agw.Jobs.Application.Persistence;
 using Agw.Projects.Application.Persistence;
 using Agw.Providers.Application.Persistence;
+using Agw.Settings.Application.Persistence;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
@@ -15,6 +16,7 @@ using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
+using Agw.Shared.Data.Entities.Settings;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Entities.Tools;
 using Agw.Skills.Application.Persistence;
@@ -31,6 +33,7 @@ public partial class AgwDbContext
         IProjectsDbContext,
         IJobsDbContext,
         IAuthDbContext,
+        ISettingsDbContext,
         IIntegrationsDbContext,
         IProvidersDbContext,
         ISkillsDbContext,
@@ -71,6 +74,7 @@ public partial class AgwDbContext
     public DbSet<Provider> Providers => Set<Provider>();
     public DbSet<ProviderAuthConfig> ProviderAuthConfigs => Set<ProviderAuthConfig>();
     public DbSet<ApiToken> ApiTokens => Set<ApiToken>();
+    public DbSet<Setting> Settings => Set<Setting>();
 
     public DbSet<AgwAiModel> Models => Set<AgwAiModel>();
     public DbSet<ModelProviderRelation> ModelProviders => Set<ModelProviderRelation>();

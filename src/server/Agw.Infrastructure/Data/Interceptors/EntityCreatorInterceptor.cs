@@ -1,6 +1,7 @@
 using Agw.Auth.Contracts;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Data.Entities.Jobs;
+using Agw.Shared.Data.Entities.Settings;
 using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -53,6 +54,8 @@ public sealed class EntityCreatorInterceptor : SaveChangesInterceptor
 
     private static void EnsureOwnerMatchesCurrentUser(EntityEntry entry)
     {
+        if (entry.Entity is Setting { UserId: null })
+            return;
         if (!UserInfoUtil.IsContextActive || UserInfoUtil.IsSystemScopeActive || entry.Entity is JobLog)
         {
             return;

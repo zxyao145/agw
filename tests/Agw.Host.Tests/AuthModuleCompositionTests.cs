@@ -20,6 +20,19 @@ namespace Agw.Host.Tests;
 
 public sealed class AuthModuleCompositionTests
 {
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(3)]
+    public async Task AuthPipeline_ConfiguredOriginCount_Starts(int originCount)
+    {
+        await using var app = await CreateAppAsync(originCount: originCount);
+
+        var response = await app.GetTestClient().GetAsync("/api/auth/session", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     [Fact]
     public async Task AuthApplicationPart_MapsSessionRoute()
     {
@@ -70,14 +83,51 @@ public sealed class AuthModuleCompositionTests
     }
 
     /// <summary>
+    /// 验证 WebSocket Origin 保护会拒绝不在配置列表中的 Origin。
+    /// </summary>
+    [Fact]
+    public async Task AuthPipeline_KestrelUntrustedWebSocketOrigin_RejectsUpgrade()
+    {
+        await using var app = await CreateAppAsync(useTestServer: false, environmentName: Environments.Development);
+        var server = app.Services.GetRequiredService<IServer>();
+        var address = Assert.Single(server.Features.Get<IServerAddressesFeature>()!.Addresses);
+        var uri = new UriBuilder(address)
+        {
+            Scheme = "ws",
+            Path = "/api/hubs/exec",
+            Query = "access_token=agw_valid",
+        }.Uri;
+        using var socket = new ClientWebSocket();
+        socket.Options.SetRequestHeader("Origin", "https://evil.example.com");
+
+        await Assert.ThrowsAsync<WebSocketException>(() =>
+            socket.ConnectAsync(uri, TestContext.Current.CancellationToken)
+        );
+    }
+
+    /// <summary>
     /// 创建并启动用于认证管道测试的 Web 应用。
     /// </summary>
     /// <param name="useTestServer">是否使用内存 TestServer；否则启动真实 Kestrel。</param>
     /// <param name="environmentName">可选的宿主环境名称。</param>
+    /// <param name="originCount">配置的可信 Origin 数量。</param>
     /// <returns>已启动的测试 Web 应用。</returns>
-    private static async Task<WebApplication> CreateAppAsync(bool useTestServer = true, string? environmentName = null)
+    private static async Task<WebApplication> CreateAppAsync(
+        bool useTestServer = true,
+        string? environmentName = null,
+        int originCount = 3
+    )
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = environmentName });
+        foreach (var child in builder.Configuration.GetSection("Auth:AllowedOrigins").GetChildren())
+        {
+            builder.Configuration[child.Path] = null;
+        }
+        string[] origins = ["agw://app", "http://localhost:3000", "http://127.0.0.1:3000"];
+        for (var i = 0; i < originCount; i++)
+        {
+            builder.Configuration[$"Auth:AllowedOrigins:{i}"] = origins[i];
+        }
         if (useTestServer)
         {
             builder.WebHost.UseTestServer();

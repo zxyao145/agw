@@ -12,7 +12,7 @@ Apply the selected database provider's pending migrations through the deployment
 | `ConversationSessionGeneration` | Adds `project_conversation.generation`, initially `0`. |
 | `RenameTaskSessionBindingToProjectConversationBinding` | Moves external SDK session bindings to the `project_conversation_binding` table. |
 
-Back up the database, `server-state.json`, and Data Protection keys together. Upgrade Server and clients together for the typed interaction and recovery Hub contracts. Old pending interaction payloads have no compatibility migration; complete or interrupt those executions before upgrading. For split deployments, initialize Control Plane before starting Data Plane with the same database, keys, and host-visible Workspace paths.
+Back up the database (including `setting`) and Data Protection keys together. Upgrade Server and clients together for the typed interaction and recovery Hub contracts. Old pending interaction payloads have no compatibility migration; complete or interrupt those executions before upgrading. For split deployments, initialize Control Plane before starting Data Plane with the same database, keys, and host-visible Workspace paths.
 
 ## Execution ownership
 

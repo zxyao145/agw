@@ -28,7 +28,7 @@ Agw is a modular-monolith agent gateway for Agents, Jobs, Agentflows, and Chat: 
 
 - Use `Api → Application → Domain ← Infrastructure`; create only needed layers. Domain stays framework-free; Application owns use cases, authorization, external queries, transactions, persistence, and error mapping.
 - Every persisted entity/table has one logical owner. Shared CLR/EF types in `Agw.Data` and a shared database/schema grant no cross-module query/write ownership.
-- Modules use their own `Application/Persistence/I<Module>DbContext`. One scoped `AgwDbContext` implements eight seams. Cross-module access uses Contracts or approved Infrastructure adapters; cross-module transactions stay in Infrastructure.
+- Modules use their own `Application/Persistence/I<Module>DbContext`. One scoped `AgwDbContext` implements nine seams. Cross-module access uses Contracts or approved Infrastructure adapters; cross-module transactions stay in Infrastructure.
 - `Agw.Agents.Execution → Agw.Agents` is one-way. Both assemblies form the same Agents module. Host composes `AddAgents` and `AddAgentExecution`; topology, persistence seams, and data-only durable manifests stay in Agents. Management Mermaid uses `IAgentflowMermaidProvider` from Contracts.
 - SQLite/PostgreSQL migrations use `NoForeignKeyModelDiffer`: never generate or manually add database foreign keys/foreign-key operations. EF relationships may remain; Application/Infrastructure validate references and clean up relations.
 - Register services in the owning module's DI seam and compose them through the relevant Host Module.
@@ -125,11 +125,11 @@ pnpm gen:api
 
 ## Configuration and Workspaces
 
-- `src/server/Agw.Host/appsettings.json` follows standard ASP.NET precedence above legacy state and built-in defaults. Its five deployment defaults stay omitted. Override database provider/connection string together; restart for deployment changes.
+- `src/server/Agw.Host/appsettings.json` follows standard ASP.NET precedence above built-in defaults. Its five deployment defaults stay omitted. Override database provider/connection string together; restart for deployment changes.
 - Defaults: SQLite (`Data Source=agw.db`) and InProcess. Split Hosts require PostgreSQL database/locks and Distributed execution; initialize Control Plane before Data Plane. Replay defaults to PostgreSQL; Redis is optional.
 - `DistributedLock:Provider` supports `inmemory`/`postgres`; absent/null follows `Database:Provider`. An empty PostgreSQL lock connection string reuses `Database:ConnectionString`.
-- First run: `/setup` at port `30816` or injected `Setup:AdminPassword`; successful setup initializes the database and schema-v3 auth state without restart. Existing auth wins; old Setup deployment fields are rejected before initialization.
-- Keep `server-state.json` for auth/initialization and preserve v1/v2 deployment fallback fields during auth writes. Token hashes/audit live in `api_token`; never restore `SystemInitialization` or `X-API-Key`. Remote Web uses admin cookies; Desktop/Mobile/automation use named `Authorization: Bearer agw_...` Tokens.
+- First run: `/setup` at port `30816` or injected `Setup:AdminPassword`; successful setup initializes the database and the global auth configuration group without restart. Existing auth wins; old Setup deployment fields are rejected before initialization.
+- Initialization and administrator password hashes/session versions live in the global `auth` group in the Settings-owned `setting` table; all Hosts read the same database. API Token hashes/audit live in `api_token`. Never read or write `server-state.json`, import legacy JSON Tokens, or restore legacy deployment fallback, `SystemInitialization`, or `X-API-Key`. Remote Web uses admin cookies; Desktop/Mobile/automation use named `Authorization: Bearer agw_...` Tokens.
 - `AgwDataDir` defaults to `~/agw`; legacy `AGW_DATA_DIR` retains environment priority, losing ties to `AgwDataDir`. Independent `AgwLogDir` defaults to `./logs`. Both use standard precedence, expand `~`, resolve other relative paths from the working directory, and require restart.
 - History uses `ConversationHistory:Mode=Interval`: the Host template sets `FlushIntervalSeconds=10`, with a 5-second code fallback when omitted. Blank/missing `OpenTelemetry:OtlpEndpoint` falls back to `http://localhost:4317`. Inject secrets through environment/Secrets, never appsettings or frontend env files.
 - Web proxies `/api/*` and `/openapi/*` unless `NEXT_OUTPUT_MODE=export`. Target precedence is `BACKEND_API_BASE_URL`, `NEXT_PUBLIC_API_BASE_URL`, then `http://localhost:30816`.

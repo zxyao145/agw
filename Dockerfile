@@ -35,6 +35,7 @@ COPY src/server/Agw.Projects.Contracts/Agw.Projects.Contracts.csproj ./src/serve
 COPY src/server/Agw.Projects/Agw.Projects.csproj ./src/server/Agw.Projects/
 COPY src/server/Agw.Providers/Agw.Providers.csproj ./src/server/Agw.Providers/
 COPY src/server/Agw.Setup/Agw.Setup.csproj ./src/server/Agw.Setup/
+COPY src/server/Agw.Settings/Agw.Settings.csproj ./src/server/Agw.Settings/
 COPY src/server/Agw.Shared/Agw.Shared.csproj ./src/server/Agw.Shared/
 COPY src/server/Agw.Skills/Agw.Skills.csproj ./src/server/Agw.Skills/
 COPY src/server/Agw.Standalone.Host/Agw.Standalone.Host.csproj ./src/server/Agw.Standalone.Host/

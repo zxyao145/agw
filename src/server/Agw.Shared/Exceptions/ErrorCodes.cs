@@ -696,4 +696,9 @@ public static class ErrorCodes
         "Durable execution is unavailable.",
         HttpStatusCode.ServiceUnavailable
     );
+    public static readonly ErrorCode ServerNotInitialized = new(
+        503_0002,
+        "Server initialization is incomplete or authentication state is unavailable.",
+        HttpStatusCode.ServiceUnavailable
+    );
 }

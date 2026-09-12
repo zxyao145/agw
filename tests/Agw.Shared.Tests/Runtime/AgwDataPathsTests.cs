@@ -15,7 +15,6 @@ public class AgwDataPathsTests
         var paths = AgwDataPaths.Resolve(null, userHome);
 
         Assert.Equal(Path.GetFullPath(Path.Combine(userHome, "agw")), paths.Root);
-        Assert.Equal(Path.Combine(paths.Root, "server-state.json"), paths.StateFile);
         Assert.Equal(Path.Combine(paths.Root, "database", "agw.db"), paths.DatabaseFile);
         Assert.Equal(Path.Combine(paths.Root, "skills"), paths.SkillsDirectory);
         Assert.Equal(Path.GetFullPath("./logs"), paths.LogsDirectory);
@@ -92,7 +91,6 @@ public class AgwDataPathsTests
         var paths = AgwDataPaths.Resolve(configuredRoot, home);
 
         Assert.Equal(Path.GetFullPath(Path.Combine(home, suffix)), paths.Root);
-        Assert.Equal(Path.Combine(paths.Root, "server-state.json"), paths.StateFile);
     }
 
     [Theory]
@@ -165,11 +163,12 @@ public class AgwDataPathsTests
         try
         {
             paths.EnsureCreated();
-            File.WriteAllText(paths.StateFile, "existing");
+            var existingFile = Path.Combine(paths.Root, "existing.txt");
+            File.WriteAllText(existingFile, "existing");
 
             paths.EnsureCreated();
 
-            Assert.Equal("existing", File.ReadAllText(paths.StateFile));
+            Assert.Equal("existing", File.ReadAllText(existingFile));
             Assert.True(Directory.Exists(Path.GetDirectoryName(paths.DatabaseFile)));
             Assert.True(Directory.Exists(paths.SkillsDirectory));
             Assert.True(Directory.Exists(paths.LogsDirectory));

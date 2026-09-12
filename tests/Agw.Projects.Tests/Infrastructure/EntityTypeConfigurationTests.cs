@@ -9,6 +9,7 @@ using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
+using Agw.Shared.Data.Entities.Settings;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Entities.Tools;
 using Microsoft.EntityFrameworkCore;
@@ -45,7 +46,7 @@ public class EntityTypeConfigurationTests
     [Fact]
     public void AuthEntities_DeclareMatchingConfigurations()
     {
-        AssertConfigured(typeof(ApiToken));
+        AssertConfigured(typeof(ApiToken), typeof(Setting));
     }
 
     [Fact]
@@ -182,7 +183,7 @@ public class EntityTypeConfigurationTests
             .OrderBy(type => type.FullName)
             .ToArray();
 
-        Assert.Equal(36, entityTypes.Length);
+        Assert.Equal(37, entityTypes.Length);
         AssertConfigured(entityTypes);
     }
 
