@@ -13,6 +13,7 @@ const webRoot = dirname(require.resolve("./package.json"));
 const clientsRoot = resolve(webRoot, "..");
 
 const nextConfig: NextConfig = {
+  distDir: process.env.AGW_E2E === "1" ? ".next-e2e" : ".next",
   allowedDevOrigins: ["agw.local", "127.0.0.1"],
   transpilePackages: [
     "@agw/agents",

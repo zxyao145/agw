@@ -8,10 +8,11 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "lint": "oxlint ./src",
-    "test": "tsx --test \"src/**/*.test.ts\"",
-    "format": "oxfmt ./src *.json",
-    "format:check": "oxfmt --check ./src *.json",
+    "lint": "oxlint ./src ./type-tests",
+    "test": "pnpm test:types && tsx --test \"src/**/*.test.ts\"",
+    "test:types": "tsc -p tsconfig.type-tests.json",
+    "format": "oxfmt ./src ./type-tests *.json",
+    "format:check": "oxfmt --check ./src ./type-tests *.json",
     "gen:api": "openapi-typescript ../../web/openapi.json -o src/openapi.d.ts"
   },
   "dependencies": {

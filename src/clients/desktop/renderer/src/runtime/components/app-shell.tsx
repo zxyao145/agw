@@ -191,9 +191,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
     (nextTabs: string[]) => {
       if (desktop.isDesktop && desktop.runtimeState) {
         void desktop.saveSettings({
-          ...desktop.runtimeState.settings,
           projectTabsByServer: {
-            ...desktop.runtimeState.settings.projectTabsByServer,
             [serverId]: nextTabs,
           },
         });
@@ -271,7 +269,7 @@ function ChatShell({ children }: { children: React.ReactNode }) {
     router.replace(
       buildChatHref("/desktop/chat", { projectId: DEFAULT_PROJECT_ID, conversationId: null }),
     );
-    void desktop.saveSettings({ ...runtimeSettings, activeServerId: nextServerId });
+    void desktop.saveSettings({ activeServerId: nextServerId });
   };
 
   const platform = desktop.runtimeState?.platform ?? "browser";

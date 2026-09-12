@@ -40,24 +40,18 @@ export default function JobLogsPage() {
     queryKey: ["job", jobId],
     enabled: Boolean(jobId),
     queryFn: async () =>
-      (await apiGet(
-        "/api/jobs/{id}" as never,
-        {
-          params: { path: { id: jobId } },
-        } as never,
-      )) as JobDto,
+      (await apiGet("/api/jobs/{id}", {
+        params: { path: { id: jobId } },
+      })) as JobDto,
   });
 
   const logsQuery = useQuery({
     queryKey: ["job-logs", jobId],
     enabled: Boolean(jobId),
     queryFn: async () =>
-      (await apiGet(
-        "/api/jobs/{id}/logs" as never,
-        {
-          params: { path: { id: jobId } },
-        } as never,
-      )) as JobLogDto[],
+      (await apiGet("/api/jobs/{id}/logs", {
+        params: { path: { id: jobId } },
+      })) as JobLogDto[],
   });
 
   const job = jobQuery.data;

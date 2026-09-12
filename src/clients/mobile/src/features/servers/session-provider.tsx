@@ -42,21 +42,38 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
   const [isMutating, setIsMutating] = React.useState(false);
   const [migratedProfileId, setMigratedProfileId] = React.useState<string | null>(null);
 
+  const activeServerRef = React.useRef<VerifiedServer | null>(null);
+  const setActiveServer = React.useCallback((server: VerifiedServer | null) => {
+    activeServerRef.current = server;
+    setVerifiedServer(server);
+  }, []);
+
   const markUnauthorized = React.useCallback(() => {
-    setVerifiedServer(null);
+    setActiveServer(null);
     setStatus("error");
     setError("The API token is invalid or has been revoked.");
-  }, []);
+  }, [setActiveServer]);
+
+  const verifyCandidate = React.useCallback(
+    async (profile: ServerProfile, token: string) => {
+      let candidate: VerifiedServer | undefined;
+      candidate = await verifyServerProfile(profile, token, () => {
+        if (candidate && activeServerRef.current === candidate) markUnauthorized();
+      });
+      return candidate;
+    },
+    [markUnauthorized],
+  );
 
   const verifyAndUse = React.useCallback(
     async (profile: ServerProfile, token: string) => {
-      const verified = await verifyServerProfile(profile, token, markUnauthorized);
-      setVerifiedServer(verified);
+      const verified = await verifyCandidate(profile, token);
+      setActiveServer(verified);
       setStatus("authenticated");
       setError(null);
       return verified;
     },
-    [markUnauthorized],
+    [setActiveServer, verifyCandidate],
   );
 
   const bootstrap = React.useCallback(async () => {
@@ -70,7 +87,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
         (profile) => profile.id === loaded.state.activeProfileId,
       );
       if (!active) {
-        setVerifiedServer(null);
+        setActiveServer(null);
         setStatus("unauthenticated");
         return;
       }
@@ -79,11 +96,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
       setStatus("verifying");
       await verifyAndUse(active, token);
     } catch (caught) {
-      setVerifiedServer(null);
+      setActiveServer(null);
       setStatus("error");
       setError(getErrorMessage(caught));
     }
-  }, [verifyAndUse]);
+  }, [setActiveServer, verifyAndUse]);
 
   React.useEffect(() => {
     void bootstrap();
@@ -112,7 +129,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
         };
 
         setStatus("verifying");
-        const verified = await verifyServerProfile(profile, token, markUnauthorized);
+        const verified = await verifyCandidate(profile, token);
         const nextProfiles = existing
           ? state.profiles.map((item) => (item.id === id ? profile : item))
           : [...state.profiles, profile];
@@ -132,13 +149,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
         }
 
         setState(nextState);
-        setVerifiedServer(verified);
+        setActiveServer(verified);
         setStatus("authenticated");
         setError(null);
         setMigratedProfileId((current) => (current === id ? null : current));
         return profile;
       } catch (caught) {
-        if (verifiedServer) setStatus("authenticated");
+        if (activeServerRef.current) setStatus("authenticated");
         else setStatus("error");
         setError(getErrorMessage(caught));
         throw caught;
@@ -146,7 +163,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
         setIsMutating(false);
       }
     },
-    [markUnauthorized, state, verifiedServer],
+    [setActiveServer, state, verifyCandidate],
   );
 
   const activateProfile = React.useCallback(
@@ -158,11 +175,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
 
       setIsMutating(true);
       try {
-        const verified = await verifyServerProfile(profile, token, markUnauthorized);
+        const verified = await verifyCandidate(profile, token);
         const nextState = { ...state, activeProfileId: profileId };
         await persistProfilesState(nextState);
         setState(nextState);
-        setVerifiedServer(verified);
+        setActiveServer(verified);
         setStatus("authenticated");
         setError(null);
       } catch (caught) {
@@ -172,7 +189,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
         setIsMutating(false);
       }
     },
-    [markUnauthorized, state],
+    [setActiveServer, state, verifyCandidate],
   );
 
   const confirmInsecureHttp = React.useCallback(
@@ -185,7 +202,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
 
       setIsMutating(true);
       try {
-        const verified = await verifyServerProfile(confirmed, token, markUnauthorized);
+        const verified = await verifyCandidate(confirmed, token);
         const nextState: ServerProfilesStateV1 = {
           ...state,
           activeProfileId: profileId,
@@ -193,7 +210,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
         };
         await persistProfilesState(nextState);
         setState(nextState);
-        setVerifiedServer(verified);
+        setActiveServer(verified);
         setStatus("authenticated");
         setError(null);
         setMigratedProfileId((current) => (current === profileId ? null : current));
@@ -204,7 +221,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
         setIsMutating(false);
       }
     },
-    [markUnauthorized, state],
+    [setActiveServer, state, verifyCandidate],
   );
 
   const deleteProfile = React.useCallback(
@@ -220,7 +237,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
         await deleteProfileToken(profileId);
         setState(nextState);
         if (state.activeProfileId === profileId) {
-          setVerifiedServer(null);
+          setActiveServer(null);
           setStatus("unauthenticated");
         }
         setError(null);
@@ -229,7 +246,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }): Re
         setIsMutating(false);
       }
     },
-    [state],
+    [setActiveServer, state],
   );
 
   const activeProfile =

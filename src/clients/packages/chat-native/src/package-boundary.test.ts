@@ -51,7 +51,9 @@ test("native markdown uses the borderless Web code style", async () => {
     readFile(THEME_URL, "utf8"),
   ]);
   const inlineCodeStyle = /code:\s*\{([^}]*)\}/.exec(historySource)?.[1];
-  const codeBlockStyle = /codeBlock:\s*\{([\s\S]*?)\n\s*\},\n\s*table:/.exec(historySource)?.[1];
+  const codeBlockStyle = /codeBlock:\s*\{([\s\S]*?)\r?\n\s*\},\r?\n\s*table:/.exec(
+    historySource,
+  )?.[1];
   assert.ok(inlineCodeStyle);
   assert.ok(codeBlockStyle);
   assert.match(inlineCodeStyle, /borderColor: "transparent"/);

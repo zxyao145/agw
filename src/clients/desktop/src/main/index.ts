@@ -25,6 +25,7 @@ import started from "electron-squirrel-startup";
 import type {
   DesktopRuntimeState,
   DesktopSettings,
+  DesktopSettingsUpdate,
   UninstallRequest,
   UninstallResult,
 } from "../shared/contracts";
@@ -582,7 +583,7 @@ function registerIpc(): void {
       windowsDistribution: windowsDistribution(),
     });
   });
-  ipcMain.handle("agw:save-settings", async (event, settings: DesktopSettings) => {
+  ipcMain.handle("agw:save-settings", async (event, settings: DesktopSettingsUpdate) => {
     assertTrustedSender(senderUrl(event));
     await settingsStore.save(settings);
     currentSettings = await settingsStore.load();

@@ -24,48 +24,45 @@ export type BearerApiClientConfig = {
   onUnauthorized?: () => void;
 };
 
-const browserApiRuntime: ApiRuntimeConfig = { baseUrl: "", token: null };
-let apiRuntime = browserApiRuntime;
-
-let antiforgeryToken: string | null = null;
+type ApiRuntimeState = ApiRuntimeConfig & { antiforgeryToken: string | null };
+let apiRuntime: ApiRuntimeState = { baseUrl: "", token: null, antiforgeryToken: null };
 
 export function clearAntiforgeryToken(): void {
-  antiforgeryToken = null;
+  apiRuntime = { ...apiRuntime, antiforgeryToken: null };
 }
 
 export function configureApiRuntime(config: ApiRuntimeConfig): void {
   apiRuntime = {
     baseUrl: config.baseUrl.trim().replace(/\/+$/u, ""),
     token: config.token,
+    antiforgeryToken: null,
   };
-  clearAntiforgeryToken();
 }
 
 export function resetApiRuntime(): void {
-  apiRuntime = browserApiRuntime;
-  clearAntiforgeryToken();
+  apiRuntime = { baseUrl: "", token: null, antiforgeryToken: null };
 }
 
 export function getApiRuntime(): ApiRuntimeConfig {
-  return apiRuntime;
+  return { baseUrl: apiRuntime.baseUrl, token: apiRuntime.token };
 }
 
-function resolveApiUrl(path: string): string {
-  return apiRuntime.baseUrl ? `${apiRuntime.baseUrl}${path}` : path;
+function resolveApiUrl(runtime: ApiRuntimeConfig, path: string): string {
+  return runtime.baseUrl ? `${runtime.baseUrl}${path}` : path;
 }
 
-async function getAntiforgeryToken(): Promise<string> {
-  if (antiforgeryToken) return antiforgeryToken;
-  const url = resolveApiUrl("/api/auth/antiforgery");
+async function getAntiforgeryToken(
+  runtime: ApiRuntimeState,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (runtime.antiforgeryToken) return runtime.antiforgeryToken;
+  const url = resolveApiUrl(runtime, "/api/auth/antiforgery");
   let response: Response;
   try {
     response = await fetch(url, {
+      ...(signal ? { signal } : {}),
       credentials:
-        apiRuntime.baseUrl && apiRuntime.token
-          ? "omit"
-          : apiRuntime.baseUrl
-            ? "include"
-            : "same-origin",
+        runtime.baseUrl && runtime.token ? "omit" : runtime.baseUrl ? "include" : "same-origin",
     });
   } catch (caught) {
     throw new ApiTransportError({ url, cause: caught });
@@ -75,8 +72,8 @@ async function getAntiforgeryToken(): Promise<string> {
   if (!response.ok || typeof value?.requestToken !== "string") {
     throw new Error("Unable to obtain antiforgery token.");
   }
-  antiforgeryToken = value.requestToken;
-  return antiforgeryToken;
+  runtime.antiforgeryToken = value.requestToken;
+  return runtime.antiforgeryToken;
 }
 
 function isAntiforgeryValidationFailure(response: Response, body: unknown): boolean {
@@ -90,19 +87,17 @@ function isAntiforgeryValidationFailure(response: Response, body: unknown): bool
 }
 
 export type PathsWith<M extends ApiMethod> = {
-  [P in keyof paths]-?: M extends keyof paths[P] ? P : never;
+  [P in keyof paths]-?: M extends keyof paths[P]
+    ? NonNullable<paths[P][M]> extends never
+      ? never
+      : P
+    : never;
 }[keyof paths];
 
 type Operation<P extends keyof paths, M extends keyof paths[P]> = paths[P][M];
 
 type OperationParams<P extends keyof paths, M extends keyof paths[P]> =
   Operation<P, M> extends { parameters: infer T } ? T : never;
-
-type PathParams<P extends keyof paths, M extends keyof paths[P]> =
-  OperationParams<P, M> extends { path?: infer T } ? T : never;
-
-type QueryParams<P extends keyof paths, M extends keyof paths[P]> =
-  OperationParams<P, M> extends { query?: infer T } ? T : never;
 
 type RequestContent<P extends keyof paths, M extends keyof paths[P]> =
   Operation<P, M> extends { requestBody: { content: infer C } } ? C : never;
@@ -118,16 +113,15 @@ type RequestBody<P extends keyof paths, M extends keyof paths[P]> =
 type HasRequestBody<P extends keyof paths, M extends keyof paths[P]> =
   Operation<P, M> extends { requestBody: unknown } ? true : false;
 
-type ParamsOption<P extends keyof paths, M extends keyof paths[P]> = [
+type RequestParameters<P extends keyof paths, M extends keyof paths[P]> = Pick<
   OperationParams<P, M>,
-] extends [never]
-  ? Record<never, never>
-  : {
-      params?: {
-        path?: PathParams<P, M>;
-        query?: QueryParams<P, M>;
-      };
-    };
+  Extract<keyof OperationParams<P, M>, "path" | "query">
+>;
+
+type ParamsOption<P extends keyof paths, M extends keyof paths[P]> =
+  {} extends RequestParameters<P, M>
+    ? { params?: RequestParameters<P, M> }
+    : { params: RequestParameters<P, M> };
 
 type BodyOption<P extends keyof paths, M extends keyof paths[P]> =
   HasRequestBody<P, M> extends true ? { body: RequestBody<P, M> } : Record<never, never>;
@@ -140,6 +134,11 @@ export type ApiRequestOptions<P extends keyof paths, M extends keyof paths[P]> =
     headers?: HeadersInit;
     signal?: AbortSignal;
   };
+
+type RequestArguments<P extends keyof paths, M extends keyof paths[P]> =
+  {} extends ApiRequestOptions<P, M>
+    ? [options?: ApiRequestOptions<P, M>]
+    : [options: ApiRequestOptions<P, M>];
 
 type OperationResponses<P extends keyof paths, M extends keyof paths[P]> =
   Operation<P, M> extends { responses: infer R } ? R : never;
@@ -158,22 +157,22 @@ export type ApiResponse<P extends keyof paths, M extends keyof paths[P]> =
 export function apiRequest<P extends PathsWith<"get">>(
   path: P,
   method: "get",
-  options?: ApiRequestOptions<P, "get">,
+  ...args: RequestArguments<P, "get">
 ): Promise<ApiResponse<P, "get">>;
 export function apiRequest<P extends PathsWith<"post">>(
   path: P,
   method: "post",
-  options?: ApiRequestOptions<P, "post">,
+  ...args: RequestArguments<P, "post">
 ): Promise<ApiResponse<P, "post">>;
 export function apiRequest<P extends PathsWith<"put">>(
   path: P,
   method: "put",
-  options?: ApiRequestOptions<P, "put">,
+  ...args: RequestArguments<P, "put">
 ): Promise<ApiResponse<P, "put">>;
 export function apiRequest<P extends PathsWith<"delete">>(
   path: P,
   method: "delete",
-  options?: ApiRequestOptions<P, "delete">,
+  ...args: RequestArguments<P, "delete">
 ): Promise<ApiResponse<P, "delete">>;
 export async function apiRequest(
   path: keyof paths,
@@ -189,20 +188,25 @@ export async function apiRequest(
   },
 ): Promise<unknown> {
   const opts = options ?? {};
+  // In-flight requests and retries retain the identity that started them.
+  const runtime = apiRuntime;
 
   const urlWithPath = compilePath(String(path), opts.params?.path);
-  const url = resolveApiUrl(appendQuery(urlWithPath, opts.params?.query));
+  const url = resolveApiUrl(runtime, appendQuery(urlWithPath, opts.params?.query));
   let retriedAntiforgery = false;
 
   while (true) {
     const headers: HeadersInit = { ...opts.headers };
 
-    if (apiRuntime.token) {
-      (headers as Record<string, string>).Authorization = `Bearer ${apiRuntime.token}`;
+    if (runtime.token) {
+      (headers as Record<string, string>).Authorization = `Bearer ${runtime.token}`;
     }
 
     if (method !== "get") {
-      (headers as Record<string, string>)["X-CSRF-TOKEN"] = await getAntiforgeryToken();
+      (headers as Record<string, string>)["X-CSRF-TOKEN"] = await getAntiforgeryToken(
+        runtime,
+        opts.signal,
+      );
     }
 
     const init: RequestInit = {
@@ -210,11 +214,7 @@ export async function apiRequest(
       headers,
       signal: opts.signal,
       credentials:
-        apiRuntime.baseUrl && apiRuntime.token
-          ? "omit"
-          : apiRuntime.baseUrl
-            ? "include"
-            : "same-origin",
+        runtime.baseUrl && runtime.token ? "omit" : runtime.baseUrl ? "include" : "same-origin",
     };
 
     if (opts.body !== undefined) {
@@ -242,15 +242,16 @@ export async function apiRequest(
         !retriedAntiforgery &&
         isAntiforgeryValidationFailure(response, errBody)
       ) {
-        clearAntiforgeryToken();
+        runtime.antiforgeryToken = null;
         retriedAntiforgery = true;
         continue;
       }
       if (
         response.status === 401 &&
+        runtime === apiRuntime &&
         typeof window !== "undefined" &&
         !String(path).startsWith("/api/auth/") &&
-        !apiRuntime.baseUrl
+        !runtime.baseUrl
       ) {
         const returnUrl = `${window.location.pathname}${window.location.search}`;
         window.location.assign(`/login/?returnUrl=${encodeURIComponent(returnUrl)}`);
@@ -270,30 +271,30 @@ export async function apiRequest(
 
 export function apiGet<P extends PathsWith<"get">>(
   path: P,
-  options?: ApiRequestOptions<P, "get">,
+  ...args: RequestArguments<P, "get">
 ): Promise<ApiResponse<P, "get">> {
-  return apiRequest(path, "get", options) as Promise<ApiResponse<P, "get">>;
+  return apiRequest(path, "get", ...args) as Promise<ApiResponse<P, "get">>;
 }
 
 export function apiPost<P extends PathsWith<"post">>(
   path: P,
-  options?: ApiRequestOptions<P, "post">,
+  ...args: RequestArguments<P, "post">
 ): Promise<ApiResponse<P, "post">> {
-  return apiRequest(path, "post", options) as Promise<ApiResponse<P, "post">>;
+  return apiRequest(path, "post", ...args) as Promise<ApiResponse<P, "post">>;
 }
 
 export function apiPut<P extends PathsWith<"put">>(
   path: P,
-  options?: ApiRequestOptions<P, "put">,
+  ...args: RequestArguments<P, "put">
 ): Promise<ApiResponse<P, "put">> {
-  return apiRequest(path, "put", options) as Promise<ApiResponse<P, "put">>;
+  return apiRequest(path, "put", ...args) as Promise<ApiResponse<P, "put">>;
 }
 
 export function apiDelete<P extends PathsWith<"delete">>(
   path: P,
-  options?: ApiRequestOptions<P, "delete">,
+  ...args: RequestArguments<P, "delete">
 ): Promise<ApiResponse<P, "delete">> {
-  return apiRequest(path, "delete", options) as Promise<ApiResponse<P, "delete">>;
+  return apiRequest(path, "delete", ...args) as Promise<ApiResponse<P, "delete">>;
 }
 
 export type AgwApiClient = {

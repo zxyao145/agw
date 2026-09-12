@@ -112,10 +112,10 @@ type JobDialogProps = {
   isSubmitting: boolean;
 };
 
-const jobsPath = "/api/jobs" as never;
+const jobsPath = "/api/jobs";
 const jobEnabledPath = "/api/jobs/enabled";
-const jobItemPath = "/api/jobs/{id}" as never;
-const jobLogsPath = "/api/jobs/{id}/logs" as never;
+const jobItemPath = "/api/jobs/{id}";
+const jobLogsPath = "/api/jobs/{id}/logs";
 const TRIGGER_TYPE_ONCE = 1;
 const TRIGGER_TYPE_INTERVAL = 2;
 const TRIGGER_TYPE_CRON = 3;
@@ -358,7 +358,7 @@ export default function JobsPage() {
     queryFn: async () =>
       (await apiGet(jobItemPath, {
         params: { path: { id: viewingJobId as string } },
-      } as never)) as JobDto,
+      })) as JobDto,
   });
 
   const jobLogsQuery = useQuery({
@@ -367,12 +367,12 @@ export default function JobsPage() {
     queryFn: async () =>
       (await apiGet(jobLogsPath, {
         params: { path: { id: viewingJobId as string } },
-      } as never)) as JobExecutionLogDto[],
+      })) as JobExecutionLogDto[],
   });
 
   const createMutation = useMutation({
     mutationFn: async (body: JobRequest) => {
-      return await apiPost(jobsPath, { body } as never);
+      return await apiPost(jobsPath, { body });
     },
     onSuccess: async () => {
       toast.success("Job created");
@@ -386,11 +386,11 @@ export default function JobsPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, body }: { id: string; body: JobRequest }) => {
+    mutationFn: async ({ id, body }: { id: string; body: JobRequest & { status: number } }) => {
       return await apiPut(jobItemPath, {
         params: { path: { id } },
         body,
-      } as never);
+      });
     },
     onSuccess: async (_, variables) => {
       toast.success("Job updated");
@@ -430,7 +430,7 @@ export default function JobsPage() {
     mutationFn: async (id: string) => {
       return await apiDelete(jobItemPath, {
         params: { path: { id } },
-      } as never);
+      });
     },
     onSuccess: async (_, deletedId) => {
       toast.success("Job deleted");
@@ -515,7 +515,10 @@ export default function JobsPage() {
     try {
       updateMutation.mutate({
         id: editingJob.id,
-        body: buildJobRequest(editForm, "edit"),
+        body: {
+          ...buildJobRequest(editForm, "edit"),
+          status: editForm.status ?? editingJob.status,
+        },
       });
     } catch (error) {
       toast.error(getApiErrorMessage(error));

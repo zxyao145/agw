@@ -43,11 +43,11 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:boundaries
-      # - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm --filter @agw/web exec playwright install --with-deps chromium
       - run: pnpm exec turbo run format:check --filter=@agw/web...
       - run: pnpm exec turbo run lint --filter=@agw/web...
       - run: pnpm exec turbo run test --filter=@agw/web...
-      # - run: pnpm test:e2e
+      - run: pnpm --filter @agw/web test:e2e
       - run: pnpm exec turbo run build --filter=@agw/web...
 
       # - uses: actions/upload-artifact@v4

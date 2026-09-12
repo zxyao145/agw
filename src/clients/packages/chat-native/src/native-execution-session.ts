@@ -64,7 +64,17 @@ export class NativeExecutionSession {
         },
         onReconnecting: (state) => this.options.onReconnecting?.(state),
         onReconnectFailed: (state) => this.options.onReconnecting?.(state),
-        onReconnected: () => this.options.onReconnecting?.(null),
+        onReconnected: () => {
+          if (!this.session.hasActiveExecution()) {
+            this.finishTerminal(
+              null,
+              new Error(
+                "Execution stopped while disconnected; its outcome is unknown. Reload conversation history.",
+              ),
+            );
+          }
+          this.options.onReconnecting?.(null);
+        },
       },
       {
         baseUrl: options.serverUrl,
@@ -81,10 +91,18 @@ export class NativeExecutionSession {
   }
 
   public async execute(request: NativeExecutionRequest): Promise<void> {
+    if (this.session.hasActiveExecution()) {
+      throw new Error("This conversation already has a running task.");
+    }
     const terminal = this.beginTerminal(request.executionId);
     try {
-      await this.session.execute({ ...request, stream: true });
-      await terminal.promise;
+      await Promise.all([
+        this.session.execute({ ...request, stream: true }).catch((error: unknown) => {
+          // ACK 丢失时核心会保留本轮执行；继续等终态或恢复查询确认结束。
+          if (!this.session.hasActiveExecution()) throw error;
+        }),
+        terminal.promise,
+      ]);
     } catch (error) {
       this.finishTerminal(request.executionId, toError(error));
       throw error;

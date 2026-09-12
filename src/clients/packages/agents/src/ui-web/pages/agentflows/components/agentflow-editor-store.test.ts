@@ -58,6 +58,34 @@ function rename(document: AgentflowEditorDocument, name: string): AgentflowEdito
   return { ...document, name };
 }
 
+test("saving freezes document edits and history until the write finishes", () => {
+  const store = createAgentflowEditorStore(createDocument());
+  store.getState().updateDocument((document) => rename(document, "Submitted"));
+  store.getState().setSaving(true);
+  const submitted = store.getState().document;
+  for (const mode of ["atomic", "ephemeral", { group: "name" }] as const) {
+    store.getState().updateDocument((document) => rename(document, "Unsent"), mode);
+  }
+  store.getState().undo();
+  store.getState().redo();
+  assert.equal(store.getState().document, submitted);
+  store.getState().markSaved();
+  store.getState().setSaving(false);
+  assert.equal(store.getState().isDirty, false);
+  store.getState().updateDocument((document) => rename(document, "Next edit"));
+  assert.equal(store.getState().isDirty, true);
+});
+
+test("a failed save releases the editor without clearing unsaved changes", () => {
+  const store = createAgentflowEditorStore(createDocument());
+  store.getState().updateDocument((document) => rename(document, "Unsaved"));
+  store.getState().setSaving(true);
+  store.getState().setSaving(false);
+  assert.equal(store.getState().isDirty, true);
+  store.getState().undo();
+  assert.equal(store.getState().document.name, "Initial");
+});
+
 test("editor store tracks dirty state and supports undo and redo", () => {
   const store = createAgentflowEditorStore(createDocument());
   assert.equal(store.getState().isDirty, false);

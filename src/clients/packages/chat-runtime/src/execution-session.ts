@@ -892,14 +892,15 @@ export class ExecutionSession {
   /** 发送失败不代表启动失败：只有明确拒绝或服务端确认空闲才能清理执行。 */
   private async reconcileInProcessStartFailure(error: unknown): Promise<void> {
     const message = error instanceof Error ? error.message : String(error);
-    if (!this.executionConnectionId || message.includes("HubException:")) {
+    if (message.includes("HubException:")) {
       this.finishActiveTurn();
       return;
     }
     this.recoveringInProcess = true;
     if (this.connection.state === HubConnectionState.Connected) {
       try {
-        await this.recoverInProcessExecution();
+        if (this.executionConnectionId) await this.recoverInProcessExecution();
+        else await this.discoverInProcessExecution();
       } catch (recoveryError) {
         this.failReconnect(
           recoveryError instanceof Error ? recoveryError : new Error(String(recoveryError)),

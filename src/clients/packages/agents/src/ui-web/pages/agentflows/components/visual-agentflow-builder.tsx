@@ -1064,6 +1064,7 @@ export function VisualAgentflowBuilder({
   );
 
   const handleBuild = React.useCallback(async () => {
+    if (isSaving) return;
     commitHistoryGroup();
     if (!agentflowName.trim()) {
       toast.error("Please enter an agentflow name");
@@ -1134,6 +1135,7 @@ export function VisualAgentflowBuilder({
     editingAgentflow,
     edges,
     graphValidation,
+    isSaving,
     markSaved,
     nodes,
     onAgentflowCreated,
@@ -1164,6 +1166,8 @@ export function VisualAgentflowBuilder({
   return (
     <div
       className="grid h-full min-h-0 grid-cols-[320px_minmax(0,1fr)_340px]"
+      inert={isSaving}
+      aria-busy={isSaving}
       onBlurCapture={commitHistoryGroup}
     >
       <aside className="min-h-0 overflow-auto agw-scrollbar border-r bg-muted/20 p-3">

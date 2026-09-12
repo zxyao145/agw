@@ -133,17 +133,40 @@ export type NativeVerifiedServer = {
   token: string;
 };
 
-export function NativeWorkspaceProvider({
-  verifiedServer,
-  onTurnFinished,
-  children,
-}: {
+let nextWorkspaceScope = 0;
+
+type NativeWorkspaceProviderProps = {
   verifiedServer: NativeVerifiedServer | null;
   onTurnFinished?: (status: TurnFinishedStatus) => void;
   children: React.ReactNode;
-}): React.JSX.Element {
+};
+
+export function NativeWorkspaceProvider(props: NativeWorkspaceProviderProps): React.JSX.Element {
   const queryClient = useQueryClient();
-  const profileId = verifiedServer?.profile.id ?? null;
+  const { verifiedServer } = props;
+  // A profile can keep its ID while its endpoint or authenticated identity changes.
+  // Use an opaque lifetime key; credentials must never enter query keys or caches.
+  const workspaceScope = React.useMemo(
+    () => `session-${++nextWorkspaceScope}`,
+    [verifiedServer?.profile.id, verifiedServer?.profile.serverUrl, verifiedServer?.token],
+  );
+  React.useEffect(
+    () => () => {
+      const filter = { queryKey: ["mobile", workspaceScope] };
+      void queryClient.cancelQueries(filter).then(() => queryClient.removeQueries(filter));
+    },
+    [queryClient, workspaceScope],
+  );
+  return <NativeWorkspaceSession key={workspaceScope} {...props} workspaceScope={workspaceScope} />;
+}
+
+function NativeWorkspaceSession({
+  verifiedServer,
+  onTurnFinished,
+  children,
+  workspaceScope,
+}: NativeWorkspaceProviderProps & { workspaceScope: string }): React.JSX.Element {
+  const queryClient = useQueryClient();
   const client = verifiedServer?.client ?? null;
   const conversationService = React.useMemo(
     () => (client ? createProjectConversationService(client) : null),
@@ -220,23 +243,23 @@ export function NativeWorkspaceProvider({
   }
 
   const projectsQuery = useQuery({
-    queryKey: ["mobile", profileId, "projects"],
+    queryKey: ["mobile", workspaceScope, "projects"],
     enabled: Boolean(client),
     queryFn: async () => (await client!.apiGet("/api/projects")) as unknown as Project[],
   });
   const agentsQuery = useQuery({
-    queryKey: ["mobile", profileId, "agents"],
+    queryKey: ["mobile", workspaceScope, "agents"],
     enabled: Boolean(client),
     queryFn: async () => (await client!.apiGet("/api/agents")) as unknown as Agent[],
   });
   const agentflowsQuery = useQuery({
-    queryKey: ["mobile", profileId, "agentflows"],
+    queryKey: ["mobile", workspaceScope, "agentflows"],
     enabled: Boolean(client),
     queryFn: async () => (await client!.apiGet("/api/agentflows")) as unknown as Agentflow[],
   });
   const conversationsQueryKey = React.useMemo(
-    () => ["mobile", profileId, "conversations", selectedProjectId] as const,
-    [profileId, selectedProjectId],
+    () => ["mobile", workspaceScope, "conversations", selectedProjectId] as const,
+    [workspaceScope, selectedProjectId],
   );
   const isConversationListEnabled = Boolean(conversationService && selectedProjectId);
   const conversationsQuery = useInfiniteQuery({
@@ -255,7 +278,7 @@ export function NativeWorkspaceProvider({
     gcTime: 30 * 60_000,
   });
   const conversationDetailsQuery = useQuery({
-    queryKey: ["mobile", profileId, "conversation", selectedProjectId, selectedConversationId],
+    queryKey: ["mobile", workspaceScope, "conversation", selectedProjectId, selectedConversationId],
     enabled: Boolean(
       conversationService && selectedProjectId && selectedConversationId && !isExecuting,
     ),
@@ -361,7 +384,7 @@ export function NativeWorkspaceProvider({
   const permissionCapabilities = useQuery({
     queryKey: [
       "mobile",
-      profileId,
+      workspaceScope,
       "execution-permissions",
       selectedTarget?.type,
       selectedTarget?.id,
@@ -390,7 +413,7 @@ export function NativeWorkspaceProvider({
   const suggestionsQuery = useQuery({
     queryKey: [
       "mobile",
-      profileId,
+      workspaceScope,
       "agent-suggestions",
       suggestionQueryParams?.projectId,
       suggestionQueryParams?.agentId,
@@ -564,7 +587,7 @@ export function NativeWorkspaceProvider({
         throw new Error("Please select a project.");
       }
 
-      const sessionKey = JSON.stringify([profileId, selectedProjectId, contextId]);
+      const sessionKey = JSON.stringify([workspaceScope, selectedProjectId, contextId]);
       let session = executionSessionRef.current;
       if (!session || executionSessionKeyRef.current !== sessionKey) {
         disposeExecutionSession();
@@ -626,7 +649,13 @@ export function NativeWorkspaceProvider({
         ? { session, configuredWithRequestedPermission: false }
         : null;
     },
-    [applyExecutionMessage, disposeExecutionSession, profileId, selectedProjectId, verifiedServer],
+    [
+      applyExecutionMessage,
+      disposeExecutionSession,
+      workspaceScope,
+      selectedProjectId,
+      verifiedServer,
+    ],
   );
 
   React.useEffect(() => {
@@ -654,7 +683,7 @@ export function NativeWorkspaceProvider({
     confirmedAgentModeRef.current = DEFAULT_AGENT_MODE;
     setAgentModeState(DEFAULT_AGENT_MODE);
     setClaudeCommands([]);
-  }, [profileId, selectedTargetValue]);
+  }, [workspaceScope, selectedTargetValue]);
 
   React.useEffect(() => {
     const key =
@@ -729,7 +758,7 @@ export function NativeWorkspaceProvider({
       disposeExecutionSession(false);
       batcherRef.current?.discard();
     };
-  }, [disposeExecutionSession, profileId]);
+  }, [disposeExecutionSession, workspaceScope]);
 
   const ensureIdle = React.useCallback(() => {
     if (isExecuting) throw new Error("Stop the current execution before switching context.");
@@ -1084,7 +1113,7 @@ export function NativeWorkspaceProvider({
     if (!cleared) throw new Error("Conversation not found.");
     const detailsQueryKey = [
       "mobile",
-      profileId,
+      workspaceScope,
       "conversation",
       selectedProjectId,
       conversationToClear,
@@ -1116,7 +1145,7 @@ export function NativeWorkspaceProvider({
     conversationService,
     disposeExecutionSession,
     ensureIdle,
-    profileId,
+    workspaceScope,
     queryClient,
     refreshConversations,
     selectedConversationId,
@@ -1137,7 +1166,7 @@ export function NativeWorkspaceProvider({
       if (!updated)
         throw new Error(normalizedTitle ? "Conversation not found." : "Title is required.");
       queryClient.setQueryData<ConversationHistory>(
-        ["mobile", profileId, "conversation", selectedProjectId, conversationId],
+        ["mobile", workspaceScope, "conversation", selectedProjectId, conversationId],
         (current) => (current ? { ...current, title: normalizedTitle } : current),
       );
       await refreshConversations();
@@ -1145,7 +1174,7 @@ export function NativeWorkspaceProvider({
     [
       conversationService,
       ensureIdle,
-      profileId,
+      workspaceScope,
       queryClient,
       refreshConversations,
       selectedProjectId,
