@@ -11,6 +11,7 @@ using Agw.Infrastructure.Data.Interceptors;
 using Agw.Infrastructure.Jobs;
 using Agw.Infrastructure.Projects;
 using Agw.Infrastructure.Repositories;
+using Agw.Infrastructure.Settings;
 using Agw.Infrastructure.Skills;
 using Agw.Infrastructure.Tools;
 using Agw.Integrations.Application.Persistence;
@@ -19,6 +20,8 @@ using Agw.Jobs.Scheduling;
 using Agw.Jobs.Scheduling.Coordination;
 using Agw.Projects.Application.Persistence;
 using Agw.Providers.Application.Persistence;
+using Agw.Settings;
+using Agw.Settings.Application.Persistence;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Contracts.Persistence;
 using Agw.Shared.Coordination;
@@ -43,7 +46,6 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddDataProtection();
         services.AddSingleton<IEncryptedDataProtector, DataProtectionEncryptedDataProtector>();
 
         var configuredDatabaseProvider = configuration[$"{DatabaseSettings.SectionName}:Provider"];
@@ -108,9 +110,10 @@ public static class DependencyInjection
         services.AddScoped<IDatabaseBootstrapper, DatabaseBootstrapper>();
         services.AddScoped<EfApiTokenStore>();
         services.AddScoped<IApiTokenStore>(serviceProvider => serviceProvider.GetRequiredService<EfApiTokenStore>());
-        services.AddScoped<ILegacyApiTokenImporter>(serviceProvider =>
-            serviceProvider.GetRequiredService<EfApiTokenStore>()
-        );
+        services.AddScoped<IServerAuthStatePersistence, SettingsServerAuthStatePersistence>();
+        services.AddSettings();
+        services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
+        services.AddScoped<ISettingsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
 
         services.AddScoped<DbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());
         services.AddScoped<IAgentsDbContext>(serviceProvider => serviceProvider.GetRequiredService<AgwDbContext>());

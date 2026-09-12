@@ -206,6 +206,7 @@ public sealed partial class BackendArchitectureTests
         var allowed = new HashSet<string>(
             [
                 "Agw.Infrastructure/Auth/EfApiTokenStore.cs",
+                "Agw.Infrastructure/Settings/EfSettingsPersistence.cs",
                 "Agw.Infrastructure/Repositories/JobRepo.cs",
                 "Agw.Infrastructure/Projects/ProjectDeletionCoordinator.cs",
                 "Agw.Infrastructure/Agents/AgentDeletionCoordinator.cs",
@@ -241,7 +242,7 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Infrastructure/Repositories/JobRepo.cs",
                 "Agw.Jobs/Scheduling/Attempts/JobAttemptOutcomeRecorder.cs",
                 "Agw.Jobs/Scheduling/Coordination/DurableJobRecoveryHostedService.cs",
-                "Agw.Setup/Services/LegacyApiTokenMigrator.cs",
+                "Agw.Infrastructure/Auth/SettingsServerAuthStatePersistence.cs",
             ],
             StringComparer.Ordinal
         );
@@ -321,6 +322,7 @@ public sealed partial class BackendArchitectureTests
     {
         ["IAgentsDbContext"] = "Agw.Agents",
         ["IAuthDbContext"] = "Agw.Auth",
+        ["ISettingsDbContext"] = "Agw.Settings",
         ["IIntegrationsDbContext"] = "Agw.Integrations",
         ["IJobsDbContext"] = "Agw.Jobs",
         ["IProjectsDbContext"] = "Agw.Projects",
@@ -339,6 +341,7 @@ public sealed partial class BackendArchitectureTests
         "Agw.Projects",
         "Agw.Providers",
         "Agw.Setup",
+        "Agw.Settings",
         "Agw.Skills",
         "Agw.Tools",
     ];
@@ -354,14 +357,16 @@ public sealed partial class BackendArchitectureTests
     [GeneratedRegex(@"\bDbSet\s*<\s*(?<entity>[A-Za-z_][A-Za-z0-9_]*)\s*>")]
     private static partial Regex ModuleDbSetRegex();
 
-    [GeneratedRegex(@"\b(?<context>I(?:Agents|Auth|Integrations|Jobs|Projects|Providers|Skills|Tools)DbContext)\b")]
+    [GeneratedRegex(
+        @"\b(?<context>I(?:Agents|Auth|Integrations|Jobs|Projects|Providers|Settings|Skills|Tools)DbContext)\b"
+    )]
     private static partial Regex ModuleDbContextReferenceRegex();
 
     [GeneratedRegex(@"\bclass\s+[A-Za-z_][A-Za-z0-9_]*\s*:\s*(?<bases>[^\{]+)\{")]
     private static partial Regex ClassBaseListRegex();
 
     [GeneratedRegex(
-        @"\b(?:Microsoft\.EntityFrameworkCore|Agw\.Shared\.Data|IModuleDbContext|I(?:Agents|Auth|Integrations|Jobs|Projects|Providers|Skills|Tools)DbContext)\b"
+        @"\b(?:Microsoft\.EntityFrameworkCore|Agw\.Shared\.Data|IModuleDbContext|I(?:Agents|Auth|Integrations|Jobs|Projects|Providers|Settings|Skills|Tools)DbContext)\b"
     )]
     private static partial Regex ForbiddenContractsPersistenceRegex();
 

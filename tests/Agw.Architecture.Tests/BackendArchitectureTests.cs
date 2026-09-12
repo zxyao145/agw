@@ -15,6 +15,7 @@ public sealed partial class BackendArchitectureTests
         "Agw.Projects",
         "Agw.Providers",
         "Agw.Setup",
+        "Agw.Settings",
         "Agw.Skills",
         "Agw.Tools"
     );
@@ -25,6 +26,7 @@ public sealed partial class BackendArchitectureTests
         "Agw.Jobs/DependencyInjection.cs",
         "Agw.Projects/DependencyInjection.cs",
         "Agw.Providers/DependencyInjection.cs",
+        "Agw.Settings/DependencyInjection.cs",
         "Agw.Skills/DependencyInjection.cs",
         "Agw.Tools/Extensions/DependencyInjection.cs",
         "Agw.Tools/ToolRegistryService.cs",
@@ -60,6 +62,7 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Jobs",
                 "Agw.Projects",
                 "Agw.Providers",
+                "Agw.Settings",
                 "Agw.Skills",
                 "Agw.Tools"
             ),
@@ -123,6 +126,7 @@ public sealed partial class BackendArchitectureTests
             ["Agw.Tools.Generators"] = Set(),
 
             ["Agw.Auth"] = Set("Agw.Data", "Agw.Shared"),
+            ["Agw.Settings"] = Set("Agw.Data", "Agw.Shared"),
             ["Agw.Shared"] = Set(),
             ["Agw.Data"] = Set("Agw.Agents.Contracts", "Agw.Shared"),
 
@@ -625,6 +629,7 @@ public sealed partial class BackendArchitectureTests
         ["McpServer"] = "Agw.Agents",
         ["AgentSkillRelation"] = "Agw.Agents",
         ["ApiToken"] = "Agw.Auth",
+        ["Setting"] = "Agw.Settings",
         ["Connection"] = "Agw.Integrations",
         ["ConnectionCredential"] = "Agw.Integrations",
         ["PluginInstallation"] = "Agw.Integrations",

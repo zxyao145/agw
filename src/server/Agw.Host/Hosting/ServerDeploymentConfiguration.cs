@@ -9,10 +9,7 @@ namespace Agw.Host.Hosting;
 
 public static class ServerDeploymentConfiguration
 {
-    public static void Apply(
-        ConfigurationManager configuration,
-        IReadOnlyDictionary<string, string?> legacyConfiguration
-    )
+    public static void Apply(ConfigurationManager configuration)
     {
         configuration.Sources.Insert(
             0,
@@ -28,19 +25,10 @@ public static class ServerDeploymentConfiguration
                 },
             }
         );
-        configuration.Sources.Insert(1, new MemoryConfigurationSource { InitialData = legacyConfiguration });
     }
 
-    public static void Validate(AgwHostProfile profile, IConfiguration configuration, bool isInitialized)
+    public static void Validate(AgwHostProfile profile, IConfiguration configuration)
     {
-        if (profile == AgwHostProfile.DataPlane && !isInitialized)
-        {
-            throw new AgwException(
-                ErrorCodes.InvalidSetupConfiguration,
-                "The Data Plane requires initialized shared authentication state. Complete Control Plane setup first."
-            );
-        }
-
         var lockProvider = configuration["DistributedLock:Provider"];
         if (
             profile != AgwHostProfile.Standalone

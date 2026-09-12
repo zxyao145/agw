@@ -86,7 +86,8 @@ public sealed class ConfiguredSetupBootstrapTests
             new StubInitializationStateStore(isInitialized),
             setupService,
             bootstrap,
-            NullLogger<ConfiguredSetupInitializer>.Instance
+            NullLogger<ConfiguredSetupInitializer>.Instance,
+            new ConfigurationBuilder().Build()
         );
 
         var initialized = await initializer.InitializeIfConfiguredAsync(TestContext.Current.CancellationToken);

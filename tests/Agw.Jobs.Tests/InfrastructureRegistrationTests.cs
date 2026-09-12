@@ -18,6 +18,7 @@ using Agw.Shared.Runtime;
 using Agw.Skills.Application.Persistence;
 using Agw.Tools.Application.Persistence;
 using Medallion.Threading;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -140,6 +141,7 @@ public class InfrastructureRegistrationTests
             .Build();
         var services = new ServiceCollection();
 
+        services.AddSingleton<IDataProtectionProvider>(new EphemeralDataProtectionProvider());
         services.AddInfrastructure(configuration);
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton(AgwDataPaths.Resolve("registration-test", "/tmp"));

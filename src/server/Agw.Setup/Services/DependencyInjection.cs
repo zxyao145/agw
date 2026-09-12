@@ -16,29 +16,28 @@ public static class DependencyInjection
     )
     {
         services.TryAddSingleton(TimeProvider.System);
-        services.TryAddSingleton<JsonInitializationStateStore>();
+        services.TryAddSingleton<DatabaseInitializationStateStore>();
         services
             .AddSingleton(configuredSetup ?? ConfiguredSetupBootstrap.None)
             .AddSingleton<IAuthenticationStateReader>(provider =>
-                provider.GetRequiredService<JsonInitializationStateStore>()
+                provider.GetRequiredService<DatabaseInitializationStateStore>()
             )
             .AddSingleton<IServerInitializationState>(provider =>
-                provider.GetRequiredService<JsonInitializationStateStore>()
+                provider.GetRequiredService<DatabaseInitializationStateStore>()
             )
-            .AddHostedService<JsonInitializationStateRefreshHostedService>();
+            .AddHostedService<DatabaseInitializationStateRefreshHostedService>();
 
         if (!readOnly)
         {
             services
                 .AddSingleton<IInitializationStateStore>(provider =>
-                    provider.GetRequiredService<JsonInitializationStateStore>()
+                    provider.GetRequiredService<DatabaseInitializationStateStore>()
                 )
                 .AddSingleton<IAuthenticationStateStore>(provider =>
-                    provider.GetRequiredService<JsonInitializationStateStore>()
+                    provider.GetRequiredService<DatabaseInitializationStateStore>()
                 )
                 .AddSingleton<SetupCodeService>()
                 .AddScoped<ConfiguredSetupInitializer>()
-                .AddScoped<LegacyApiTokenMigrator>()
                 .AddScoped<ISetupInitializationService, SetupInitializationService>();
         }
 

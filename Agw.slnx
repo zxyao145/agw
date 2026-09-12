@@ -58,6 +58,7 @@
   <Folder Name="/6.Support/">
     <Project Path="src/server/Agw.Auth/Agw.Auth.csproj" />
     <Project Path="src/server/Agw.Setup/Agw.Setup.csproj" />
+    <Project Path="src/server/Agw.Settings/Agw.Settings.csproj" />
   </Folder>
   <Folder Name="/7.SDKs/">
     <Project Path="src/sdks/pi-agent-sdk-csharp/src/PiAgentSdk.MAF/PiAgentSdk.MAF.csproj" />
@@ -78,6 +79,7 @@
     <Project Path="tests/Agw.Jobs.Tests/Agw.Jobs.Tests.csproj" />
     <Project Path="tests/Agw.Shared.Tests/Agw.Shared.Tests.csproj" />
     <Project Path="tests/Agw.Setup.Tests/Agw.Setup.Tests.csproj" />
+    <Project Path="tests/Agw.Settings.Tests/Agw.Settings.Tests.csproj" />
     <Project Path="tests/Agw.Skills.Tests/Agw.Skills.Tests.csproj" />
     <Project Path="tests/Agw.Projects.Tests/Agw.Projects.Tests.csproj" />
     <Project Path="tests/Agw.Tools.Tests/Agw.Tools.Tests.csproj" />

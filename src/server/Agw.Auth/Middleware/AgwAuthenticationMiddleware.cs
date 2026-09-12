@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Http;
 namespace Agw.Auth.Middleware;
 
 /// <summary>
-/// 为 HTTP 请求和受支持的 WebSocket 握手建立 Agw 用户身份，并校验 WebSocket 来源。
+/// 为 HTTP 请求和受支持的 WebSocket 握手建立 Agw 用户身份。
 /// </summary>
 public sealed class AgwAuthenticationMiddleware
 {
@@ -17,17 +17,14 @@ public sealed class AgwAuthenticationMiddleware
     private const string SignalRAccessTokenQueryParameter = "access_token";
 
     private readonly RequestDelegate _next;
-    private readonly bool _allowDevelopmentDesktopOrigin;
 
     /// <summary>
     /// 初始化 Agw 身份认证中间件。
     /// </summary>
     /// <param name="next">管道中的下一个请求委托。</param>
-    /// <param name="allowDevelopmentDesktopOrigin">是否允许仅供开发环境使用的 Desktop Origin。</param>
-    public AgwAuthenticationMiddleware(RequestDelegate next, bool allowDevelopmentDesktopOrigin)
+    public AgwAuthenticationMiddleware(RequestDelegate next)
     {
         _next = next;
-        _allowDevelopmentDesktopOrigin = allowDevelopmentDesktopOrigin;
     }
 
     /// <summary>
@@ -64,21 +61,6 @@ public sealed class AgwAuthenticationMiddleware
         }
 
         EnsureDefaultIdentityClaims(context.User);
-
-        var origin = context.Request.Headers.Origin.ToString();
-        var isAuthenticatedDesktop =
-            context.User.Identity?.AuthenticationType == AgwAuthDefaults.BearerScheme
-            && LocalTrustedRequest.IsDesktopOrigin(origin, _allowDevelopmentDesktopOrigin);
-        if (
-            context.WebSockets.IsWebSocketRequest
-            && context.Request.Headers.ContainsKey("Origin")
-            && !LocalTrustedRequest.IsSameOrigin(context)
-            && !isAuthenticatedDesktop
-        )
-        {
-            context.Response.StatusCode = StatusCodes.Status403Forbidden;
-            return;
-        }
 
         await _next(context);
     }

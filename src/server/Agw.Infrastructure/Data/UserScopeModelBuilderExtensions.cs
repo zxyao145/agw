@@ -6,6 +6,7 @@ using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Jobs;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
+using Agw.Shared.Data.Entities.Settings;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Entities.Tools;
 using Microsoft.EntityFrameworkCore;
@@ -27,6 +28,17 @@ internal static class UserScopeModelBuilderExtensions
 {
     public static void ApplyUserScopeQueryFilters(this ModelBuilder modelBuilder, AgwDbContext context)
     {
+        // Global groups are available only through the explicit Infrastructure global-settings path.
+        modelBuilder
+            .Entity<Setting>()
+            .HasQueryFilter(
+                UserScopeQueryFilterNames.UserScope,
+                setting =>
+                    context.UserScopeBypass
+                    || context.UserScopeIsActive
+                        && context.CurrentUserId != null
+                        && setting.UserId == context.CurrentUserId
+            );
         modelBuilder
             .Entity<Provider>()
             .HasQueryFilter(

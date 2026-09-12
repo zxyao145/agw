@@ -3,18 +3,18 @@ using Microsoft.Extensions.Logging;
 
 namespace Agw.Setup.Services;
 
-internal sealed class JsonInitializationStateRefreshHostedService : BackgroundService
+internal sealed class DatabaseInitializationStateRefreshHostedService : BackgroundService
 {
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(1);
 
-    private readonly JsonInitializationStateStore _stateStore;
+    private readonly DatabaseInitializationStateStore _stateStore;
     private readonly TimeProvider _timeProvider;
-    private readonly ILogger<JsonInitializationStateRefreshHostedService> _logger;
+    private readonly ILogger<DatabaseInitializationStateRefreshHostedService> _logger;
 
-    public JsonInitializationStateRefreshHostedService(
-        JsonInitializationStateStore stateStore,
+    public DatabaseInitializationStateRefreshHostedService(
+        DatabaseInitializationStateStore stateStore,
         TimeProvider timeProvider,
-        ILogger<JsonInitializationStateRefreshHostedService> logger
+        ILogger<DatabaseInitializationStateRefreshHostedService> logger
     )
     {
         _stateStore = stateStore;
@@ -37,7 +37,7 @@ internal sealed class JsonInitializationStateRefreshHostedService : BackgroundSe
             }
             catch (Exception exception)
             {
-                _logger.LogWarning(exception, "Failed to refresh server initialization state from disk.");
+                _logger.LogWarning(exception, "Failed to refresh server authentication state from the database.");
             }
         }
     }

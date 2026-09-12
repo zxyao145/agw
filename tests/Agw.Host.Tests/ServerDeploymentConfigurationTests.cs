@@ -1,7 +1,5 @@
 using Agw.Host.Hosting;
-using Agw.Setup.Services;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Runtime;
 using Microsoft.Extensions.Configuration;
 using Xunit;
 
@@ -13,13 +11,9 @@ public sealed class ServerDeploymentConfigurationTests
     public void Apply_WithoutStateOrExplicitSettings_UsesDefaults()
     {
         using var configuration = new ConfigurationManager();
-        var paths = AgwDataPaths.Resolve(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString()), "/unused");
-        var state = new JsonInitializationStateStore(paths);
 
-        ServerDeploymentConfiguration.Apply(configuration, state.GetLegacyDeploymentConfiguration());
+        ServerDeploymentConfiguration.Apply(configuration);
 
-        Assert.False(state.IsInitialized);
-        Assert.False(File.Exists(paths.StateFile));
         Assert.Equal("sqlite", configuration["Database:Provider"]);
         Assert.Equal("Data Source=agw.db", configuration["Database:ConnectionString"]);
         Assert.Equal("InProcess", configuration["Execution:Provider"]);
@@ -28,21 +22,7 @@ public sealed class ServerDeploymentConfigurationTests
     }
 
     [Fact]
-    public void Apply_PackagedDefaults_DoNotOverrideLegacyClusterConfiguration()
-    {
-        using var configuration = new ConfigurationManager();
-        configuration.AddJsonFile(Path.Combine(AppContext.BaseDirectory, "appsettings.json"));
-        var legacy = LegacyClusterConfiguration();
-
-        ServerDeploymentConfiguration.Apply(configuration, legacy);
-
-        foreach (var entry in legacy)
-            Assert.Equal(entry.Value, configuration[entry.Key]);
-        ServerDeploymentConfiguration.Validate(AgwHostProfile.DataPlane, configuration, isInitialized: true);
-    }
-
-    [Fact]
-    public void Apply_StandardSources_OverrideLegacyValuesInTheirOriginalOrder()
+    public void Apply_StandardSources_OverrideDefaultsInTheirOriginalOrder()
     {
         var prefix = $"AGW_CONFIG_TEST_{Guid.NewGuid():N}_";
         var variable = prefix + "Database__ConnectionString";
@@ -63,7 +43,7 @@ public sealed class ServerDeploymentConfigurationTests
                 """{"Database":{"Provider":"postgres","ConnectionString":"Host=environment-json"}}"""
             );
             configuration.AddJsonFile(baseJson);
-            ServerDeploymentConfiguration.Apply(configuration, LegacyClusterConfiguration());
+            ServerDeploymentConfiguration.Apply(configuration);
             Assert.Equal("sqlite", configuration["Database:Provider"]);
             Assert.Equal("Data Source=explicit.db", configuration["Database:ConnectionString"]);
 
@@ -75,7 +55,7 @@ public sealed class ServerDeploymentConfigurationTests
             configuration.AddCommandLine(["--Database:ConnectionString=Host=command-line"]);
 
             Assert.Equal("Host=command-line", configuration["Database:ConnectionString"]);
-            Assert.Equal("Distributed", configuration["Execution:Provider"]);
+            Assert.Equal("InProcess", configuration["Execution:Provider"]);
         }
         finally
         {
@@ -85,21 +65,15 @@ public sealed class ServerDeploymentConfigurationTests
     }
 
     [Theory]
-    [InlineData(AgwHostProfile.ControlPlane, false)]
-    [InlineData(AgwHostProfile.ControlPlane, true)]
-    [InlineData(AgwHostProfile.DataPlane, true)]
-    public void Validate_ClusterConfiguration_AcceptsInitializedAndFirstRunControlPlane(
-        AgwHostProfile profile,
-        bool initialized
-    )
+    [InlineData(AgwHostProfile.ControlPlane)]
+    [InlineData(AgwHostProfile.DataPlane)]
+    public void Validate_ClusterConfiguration_AcceptsSplitHostsWithoutInitializationState(AgwHostProfile profile)
     {
         using var configuration = new ConfigurationManager();
-        configuration.AddInMemoryCollection(LegacyClusterConfiguration());
-        ServerDeploymentConfiguration.Apply(configuration, new Dictionary<string, string?>());
+        configuration.AddInMemoryCollection(ClusterConfiguration());
+        ServerDeploymentConfiguration.Apply(configuration);
 
-        var exception = Record.Exception(() =>
-            ServerDeploymentConfiguration.Validate(profile, configuration, initialized)
-        );
+        var exception = Record.Exception(() => ServerDeploymentConfiguration.Validate(profile, configuration));
 
         Assert.Null(exception);
     }
@@ -111,38 +85,21 @@ public sealed class ServerDeploymentConfigurationTests
     public void Validate_UninitializedControlPlane_StillRejectsInvalidDeployment(string key, string value)
     {
         using var configuration = new ConfigurationManager();
-        configuration.AddInMemoryCollection(LegacyClusterConfiguration());
+        configuration.AddInMemoryCollection(ClusterConfiguration());
         configuration[key] = value;
 
         var exception = Assert.Throws<AgwException>(() =>
-            ServerDeploymentConfiguration.Validate(AgwHostProfile.ControlPlane, configuration, isInitialized: false)
+            ServerDeploymentConfiguration.Validate(AgwHostProfile.ControlPlane, configuration)
         );
 
         Assert.Equal(ErrorCodes.InvalidSetupConfiguration.Code, exception.Code);
-    }
-
-    [Fact]
-    public void Validate_DataPlaneWithoutInitializedAuthenticationState_RejectsStartup()
-    {
-        using var configuration = new ConfigurationManager();
-        configuration.AddInMemoryCollection(LegacyClusterConfiguration());
-
-        var exception = Assert.Throws<AgwException>(() =>
-            ServerDeploymentConfiguration.Validate(AgwHostProfile.DataPlane, configuration, isInitialized: false)
-        );
-
-        Assert.Equal(ErrorCodes.InvalidSetupConfiguration.Code, exception.Code);
-        Assert.Contains("Complete Control Plane setup first", exception.Message);
     }
 
     [Theory]
-    [InlineData(AgwHostProfile.Standalone, false)]
-    [InlineData(AgwHostProfile.ControlPlane, false)]
-    [InlineData(AgwHostProfile.DataPlane, true)]
-    public void Validate_PostgresWithInheritedSqliteConnectionString_RejectsBeforeStartup(
-        AgwHostProfile profile,
-        bool initialized
-    )
+    [InlineData(AgwHostProfile.Standalone)]
+    [InlineData(AgwHostProfile.ControlPlane)]
+    [InlineData(AgwHostProfile.DataPlane)]
+    public void Validate_PostgresWithInheritedSqliteConnectionString_RejectsBeforeStartup(AgwHostProfile profile)
     {
         using var configuration = new ConfigurationManager();
         configuration.AddInMemoryCollection(
@@ -152,10 +109,10 @@ public sealed class ServerDeploymentConfigurationTests
                 ["Execution:Provider"] = "Distributed",
             }
         );
-        ServerDeploymentConfiguration.Apply(configuration, new Dictionary<string, string?>());
+        ServerDeploymentConfiguration.Apply(configuration);
 
         var exception = Assert.Throws<AgwException>(() =>
-            ServerDeploymentConfiguration.Validate(profile, configuration, initialized)
+            ServerDeploymentConfiguration.Validate(profile, configuration)
         );
 
         Assert.Equal(ErrorCodes.InvalidSetupConfiguration.Code, exception.Code);
@@ -191,7 +148,7 @@ public sealed class ServerDeploymentConfigurationTests
         );
 
         var exception = Assert.Throws<AgwException>(() =>
-            ServerDeploymentConfiguration.Validate(AgwHostProfile.Standalone, configuration, isInitialized: false)
+            ServerDeploymentConfiguration.Validate(AgwHostProfile.Standalone, configuration)
         );
 
         Assert.Equal(ErrorCodes.InvalidSetupConfiguration.Code, exception.Code);
@@ -226,58 +183,20 @@ public sealed class ServerDeploymentConfigurationTests
         );
 
         var exception = Record.Exception(() =>
-            ServerDeploymentConfiguration.Validate(AgwHostProfile.Standalone, configuration, isInitialized: false)
+            ServerDeploymentConfiguration.Validate(AgwHostProfile.Standalone, configuration)
         );
 
         Assert.Null(exception);
         Assert.Equal(connectionString, configuration["Database:ConnectionString"]);
     }
 
-    private static Dictionary<string, string?> LegacyClusterConfiguration() =>
+    private static Dictionary<string, string?> ClusterConfiguration() =>
         new()
         {
             ["Database:Provider"] = "postgres",
-            ["Database:ConnectionString"] = "Host=legacy",
+            ["Database:ConnectionString"] = "Host=configured",
             ["Execution:Provider"] = "Distributed",
             ["DistributedLock:Provider"] = "postgres",
-            ["DistributedLock:ConnectionString"] = "Host=legacy-locks",
+            ["DistributedLock:ConnectionString"] = "Host=configured-locks",
         };
-
-    [Fact]
-    public async Task StateRefresh_UpdatesAuthenticationWithoutChangingStartupDeployment()
-    {
-        var paths = AgwDataPaths.Resolve(Path.Combine(Path.GetTempPath(), $"agw-legacy-{Guid.NewGuid():N}"), "/unused");
-        paths.EnsureCreated();
-        try
-        {
-            const string original = """
-                {"schemaVersion":2,"isInitialized":true,"database":{"provider":"postgres","connectionString":"Host=original"},"passwordHash":"old-hash","sessionVersion":1}
-                """;
-            await File.WriteAllTextAsync(paths.StateFile, original, TestContext.Current.CancellationToken);
-            var state = new JsonInitializationStateStore(paths);
-            using var configuration = new ConfigurationManager();
-            ServerDeploymentConfiguration.Apply(configuration, state.GetLegacyDeploymentConfiguration());
-
-            await File.WriteAllTextAsync(
-                paths.StateFile,
-                original.Replace("Host=original", "Host=changed").Replace("old-hash", "new-hash"),
-                TestContext.Current.CancellationToken
-            );
-            await state.RefreshAsync(TestContext.Current.CancellationToken);
-
-            Assert.Equal("new-hash", state.GetAuthenticationSnapshot().PasswordHash);
-            Assert.Equal("Host=original", configuration["Database:ConnectionString"]);
-            Assert.Null(configuration["PasswordHash"]);
-            Assert.Null(configuration["SessionVersion"]);
-            Assert.Null(configuration["IsInitialized"]);
-            Assert.Equal(
-                "Host=changed",
-                new JsonInitializationStateStore(paths).GetLegacyDeploymentConfiguration()["Database:ConnectionString"]
-            );
-        }
-        finally
-        {
-            Directory.Delete(paths.Root, recursive: true);
-        }
-    }
 }

@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using Agw.Auth.Middleware;
 using Agw.Shared.Runtime;
+using Bens.Results;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace Agw.Auth.Tests;
@@ -10,6 +12,8 @@ public sealed class AgwAuthorizationGuardMiddlewareTests
 {
     [Theory]
     [InlineData("/api/server-info")]
+    [InlineData("/api/health/live")]
+    [InlineData("/api/health/ready")]
     [InlineData("/api/auth/session")]
     [InlineData("/api/auth/antiforgery")]
     [InlineData("/api/auth/login")]
@@ -70,9 +74,16 @@ public sealed class AgwAuthorizationGuardMiddlewareTests
         Assert.True(nextCalled);
     }
 
-    [Fact]
-    public async Task InvokeAsync_UninitializedServer_CallsNext()
+    [Theory]
+    [InlineData("/api/projects")]
+    [InlineData("/api/hubs/exec")]
+    [InlineData("/a2a/agents")]
+    public async Task InvokeAsync_UninitializedServer_RejectsProtectedRequest(string path)
     {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddApiResult();
+        using var provider = services.BuildServiceProvider();
         var nextCalled = false;
         var middleware = new AgwAuthorizationGuardMiddleware(_ =>
         {
@@ -80,11 +91,14 @@ public sealed class AgwAuthorizationGuardMiddlewareTests
             return Task.CompletedTask;
         });
         var context = new DefaultHttpContext();
-        context.Request.Path = "/api/projects";
+        context.Request.Path = path;
+        context.Response.Body = new MemoryStream();
+        context.RequestServices = provider;
 
         await middleware.InvokeAsync(context, new InitializationStateStub(false));
 
-        Assert.True(nextCalled);
+        Assert.False(nextCalled);
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, context.Response.StatusCode);
     }
 
     private sealed class InitializationStateStub : IServerInitializationState

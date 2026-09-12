@@ -1,8 +1,11 @@
 using Agw.Integrations.Application.OAuth;
 using Agw.Integrations.Contracts.OAuth;
+using Agw.Integrations.Extensions;
 using Agw.Shared.Exceptions;
 using Agw.Testing;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Agw.Integrations.Tests;
 
@@ -11,10 +14,15 @@ public sealed class OAuthStateProtectorTests
     private const string CallbackUri = "https://agw.test/api/integrations/oauth/callback";
 
     [Fact]
-    public void Protect_ValidState_IsOpaqueAndRoundTrips()
+    public void AddIntegrations_ExplicitDataProtectionProvider_ProtectsStateThatRoundTrips()
     {
         var now = new DateTimeOffset(2026, 7, 15, 8, 0, 0, TimeSpan.Zero);
-        var service = CreateService(new TestTimeProvider(now));
+        var services = new ServiceCollection();
+        services.AddSingleton<IDataProtectionProvider>(new EphemeralDataProtectionProvider());
+        services.AddSingleton<TimeProvider>(new TestTimeProvider(now));
+        services.AddIntegrations(new ConfigurationBuilder().Build());
+        using var provider = services.BuildServiceProvider();
+        var service = provider.GetRequiredService<OAuthStateProtector>();
         var connectionId = Guid.CreateVersion7();
 
         var protectedState = service.Protect(
