@@ -122,36 +122,6 @@ public class AgentBehaviorTests
     }
 
     [Fact]
-    public void PrepareForCreate_ExternalAgentWithValidExtra_NormalizesExtra()
-    {
-        var agent = new Agent
-        {
-            Type = AgentType.External,
-            ExternalAgentKind = ExternalAgentKind.Pi,
-            Extra = "  {\"model\":\"test\"}  ",
-        };
-
-        new AgentBehavior(agent).PrepareForCreate();
-
-        Assert.Equal("{\"model\":\"test\"}", agent.Extra);
-    }
-
-    [Fact]
-    public void PrepareForCreate_ExternalAgentWithInvalidExtra_ThrowsAgwException()
-    {
-        var agent = new Agent
-        {
-            Type = AgentType.External,
-            ExternalAgentKind = ExternalAgentKind.Pi,
-            Extra = "[]",
-        };
-
-        var exception = Assert.Throws<AgwException>(() => new AgentBehavior(agent).PrepareForCreate());
-
-        Assert.Equal(ErrorCodes.InvalidAgentExtraSettings.Code, exception.Code);
-    }
-
-    [Fact]
     public void PrepareForCreate_ExternalAgentWithSummaryEnabledAndSummaryModelProvider_PreservesSummary()
     {
         var summaryModelProviderId = Guid.CreateVersion7();
@@ -275,7 +245,7 @@ public class AgentBehaviorTests
     }
 
     [Fact]
-    public void ApplyUpdate_ExternalAgentWithValidExtra_UpdatesNormalizedExtra()
+    public void ApplyUpdate_ExternalAgent_AppliesValidatedOpaqueExtra()
     {
         var agent = new Agent
         {
@@ -286,50 +256,9 @@ public class AgentBehaviorTests
             Extra = "{\"before\":true}",
         };
 
-        new AgentBehavior(agent).ApplyUpdate(current => current.Extra = "  {\"sandbox\":false}  ");
+        new AgentBehavior(agent).ApplyUpdate(current => current.Extra = "{\"sandbox\":false}");
 
         Assert.Equal("{\"sandbox\":false}", agent.Extra);
-    }
-
-    [Fact]
-    public void ApplyUpdate_ExternalAgentWithBlankExtra_ClearsExtra()
-    {
-        var agent = new Agent
-        {
-            Id = Guid.CreateVersion7(),
-            Name = "external-agent",
-            Type = AgentType.External,
-            ExternalAgentKind = ExternalAgentKind.ClaudeCode,
-            Extra = "{\"before\":true}",
-        };
-
-        new AgentBehavior(agent).ApplyUpdate(current => current.Extra = "   ");
-
-        Assert.Null(agent.Extra);
-    }
-
-    [Theory]
-    [InlineData("not-json")]
-    [InlineData("[]")]
-    [InlineData("\"text\"")]
-    [InlineData("42")]
-    [InlineData("true")]
-    [InlineData("null")]
-    public void ApplyUpdate_ExternalAgentWithInvalidExtra_ThrowsAgwException(string extra)
-    {
-        var agent = new Agent
-        {
-            Id = Guid.CreateVersion7(),
-            Name = "external-agent",
-            Type = AgentType.External,
-            ExternalAgentKind = ExternalAgentKind.ClaudeCode,
-        };
-
-        var exception = Assert.Throws<AgwException>(() =>
-            new AgentBehavior(agent).ApplyUpdate(current => current.Extra = extra)
-        );
-
-        Assert.Equal(ErrorCodes.InvalidAgentExtraSettings.Code, exception.Code);
     }
 
     [Fact]

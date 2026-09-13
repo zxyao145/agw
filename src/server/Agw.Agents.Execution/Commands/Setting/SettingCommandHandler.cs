@@ -9,5 +9,5 @@ public sealed class SettingCommandHandler : IExecutionCommandHandler<SettingComm
         SettingCommand command,
         ExecutionConnectionContext context,
         CancellationToken cancellationToken
-    ) => context.ApplySettingsAsync(ExecutionSettings.FromCommand(command), cancellationToken);
+    ) => context.ApplySettingsAsync(SettingCommandMapper.FromCommand(command), cancellationToken);
 }

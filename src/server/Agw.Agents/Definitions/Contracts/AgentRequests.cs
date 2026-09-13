@@ -1,6 +1,6 @@
 using Agw.Agents.Definitions.Agents;
+using Agw.Providers.Contracts;
 using Agw.Shared.Data.Entities.Agents;
-using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Tooling;
 
 namespace Agw.Agents.Definitions.Contracts;

@@ -58,6 +58,7 @@ public sealed class OAuthAuthorizationAppService
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<OAuthAuthorizationAppService> _logger;
     private readonly IUserInfoService _userInfoService;
+    private readonly IntegrationMutationCoordinator _mutations;
 
     public OAuthAuthorizationAppService(
         IIntegrationsDbContext dbContext,
@@ -67,7 +68,8 @@ public sealed class OAuthAuthorizationAppService
         OAuthStateProtector stateProtector,
         TimeProvider timeProvider,
         ILogger<OAuthAuthorizationAppService> logger,
-        IUserInfoService userInfoService
+        IUserInfoService userInfoService,
+        IntegrationMutationCoordinator mutations
     )
     {
         _dbContext = dbContext;
@@ -78,6 +80,7 @@ public sealed class OAuthAuthorizationAppService
         _timeProvider = timeProvider;
         _logger = logger;
         _userInfoService = userInfoService;
+        _mutations = mutations;
     }
 
     public async Task<OAuthAuthorizeStartResponse> StartAsync(
@@ -91,9 +94,30 @@ public sealed class OAuthAuthorizationAppService
         var user = _userInfoService.RequiredUserId;
         OAuthStateProtector.ValidateReturnPath(returnPath);
         ValidateCallbackUri(callbackUri);
+        await using var mutation = await _mutations.AcquireConnectionAsync(connectionId, cancellationToken);
+        cancellationToken = mutation.Token;
         var context = await ResolveContextAsync(connectionId, user, cancellationToken);
         var verifier = context.Settings.UsePkce ? CreatePkceVerifier() : null;
-        var state = _stateProtector.Protect(connectionId, user, verifier, returnPath, callbackUri, completionTarget);
+        var attemptId = Guid.CreateVersion7();
+        var state = _stateProtector.Protect(
+            connectionId,
+            user,
+            verifier,
+            returnPath,
+            callbackUri,
+            completionTarget,
+            attemptId
+        );
+        await UpsertCredentialAsync(
+            context.Connection,
+            IntegrationCredentialSlots.OAuthAuthorizationAttempt,
+            verifier ?? attemptId.ToString("N"),
+            _timeProvider.GetUtcNow().AddMinutes(10),
+            user
+        );
+        context
+            .Connection.Credentials.Single(item => item.Slot == IntegrationCredentialSlots.OAuthAuthorizationAttempt)
+            .MetadataJson = JsonSerializer.Serialize(attemptId);
         var parameters = new Dictionary<string, string?>(
             context.Settings.AdditionalAuthorizeParameters.ToDictionary(item => item.Key, item => (string?)item.Value),
             StringComparer.Ordinal
@@ -149,6 +173,17 @@ public sealed class OAuthAuthorizationAppService
             new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, state.UserId)], "OAuthState"))
         );
 
+        IntegrationMutationCoordinator.MutationScope mutation;
+        try
+        {
+            mutation = await _mutations.AcquireConnectionAsync(state.ConnectionId, cancellationToken);
+        }
+        catch (AgwException)
+        {
+            return FailedRedirect(state.ReturnPath, InvalidStateRedirectCode, state.CompletionTarget);
+        }
+        await using var mutationLifetime = mutation;
+        cancellationToken = mutation.Token;
         OAuthConnectionContext context;
         try
         {
@@ -158,6 +193,28 @@ public sealed class OAuthAuthorizationAppService
         {
             return FailedRedirect(state.ReturnPath, InvalidStateRedirectCode, state.CompletionTarget);
         }
+
+        var attemptMetadata = JsonSerializer.Serialize(state.AuthorizationAttemptId);
+        var attempt = context.Connection.Credentials.FirstOrDefault(item =>
+            item.Slot == IntegrationCredentialSlots.OAuthAuthorizationAttempt && item.MetadataJson == attemptMetadata
+        );
+        if (attempt == null)
+            return FailedRedirect(state.ReturnPath, InvalidStateRedirectCode, state.CompletionTarget);
+
+        // Commit consumption before contacting the provider. A replay must never exchange the code again,
+        // including after a crash. The metadata comparison prevents deleting a newer authorization attempt.
+        var consumed = await _dbContext
+            .ConnectionCredentials.Where(item =>
+                item.Id == attempt.Id
+                && item.ConnectionId == state.ConnectionId
+                && item.MetadataJson == attemptMetadata
+                && item.Connection.CreateBy == state.UserId
+            )
+            .ExecuteDeleteAsync(cancellationToken);
+        if (consumed != 1)
+            return FailedRedirect(state.ReturnPath, InvalidStateRedirectCode, state.CompletionTarget);
+        _dbContext.ConnectionCredentials.Entry(attempt).State = EntityState.Detached;
+        context.Connection.Credentials.Remove(attempt);
 
         if (!string.IsNullOrWhiteSpace(providerError) || string.IsNullOrWhiteSpace(authorizationCode))
         {
@@ -201,6 +258,7 @@ public sealed class OAuthAuthorizationAppService
             return FailedRedirect(state.ReturnPath, TokenExchangeFailedRedirectCode, state.CompletionTarget);
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         await SaveTokensAsync(context.Connection, token, preserveMissingRefreshToken: false, state.UserId);
         context.Connection.Subject = subject;
         MarkReady(context.Connection, state.UserId);
@@ -231,8 +289,15 @@ public sealed class OAuthAuthorizationAppService
     internal async Task<OAuthRefreshResponse> RefreshAsync(Guid connectionId, CancellationToken cancellationToken)
     {
         var user = _userInfoService.RequiredUserId;
+        await using var mutation = await _mutations.AcquireConnectionAsync(connectionId, cancellationToken);
+        cancellationToken = mutation.Token;
         var context = await ResolveContextAsync(connectionId, user, cancellationToken);
-        if (!context.Settings.SupportsRefresh)
+        if (
+            !context.Settings.SupportsRefresh
+            || context.Connection.Credentials.Any(item =>
+                item.Slot == IntegrationCredentialSlots.OAuthAuthorizationAttempt
+            )
+        )
         {
             throw new AgwException(ErrorCodes.IntegrationConfigurationInvalid);
         }
@@ -254,6 +319,7 @@ public sealed class OAuthAuthorizationAppService
             form["refresh_token"] = refreshCredential.Value;
             var token = await RequestTokenAsync(context, form, cancellationToken);
             var subject = await ResolveSubjectAsync(context, token, required: false, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             await SaveTokensAsync(context.Connection, token, preserveMissingRefreshToken: true, user);
             if (!string.IsNullOrWhiteSpace(subject))
             {
@@ -266,13 +332,20 @@ public sealed class OAuthAuthorizationAppService
         catch (Exception exception) when (IsProviderFailure(exception, cancellationToken))
         {
             _logger.LogWarning("OAuth refresh failed for connection {ConnectionId}.", connectionId);
-            await SetFailureAsync(
-                context.Connection,
-                ConnectionStatus.Invalid,
-                RefreshFailedCode,
-                user,
-                cancellationToken
-            );
+            // Network/temporary provider failures do not invalidate an otherwise usable credential.
+            if (
+                exception is AgwException { Code: var code }
+                && code == ErrorCodes.IntegrationCredentialUnavailable.Code
+            )
+            {
+                await SetFailureAsync(
+                    context.Connection,
+                    ConnectionStatus.Invalid,
+                    RefreshFailedCode,
+                    user,
+                    cancellationToken
+                );
+            }
             throw new AgwException(ErrorCodes.OAuthProviderRequestFailed);
         }
     }
@@ -435,6 +508,21 @@ public sealed class OAuthAuthorizationAppService
         using var response = await _httpClientFactory.CreateClient().SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
+            // Only the stable OAuth error identifier is used; never expose or log response bodies.
+            if (response.StatusCode == HttpStatusCode.BadRequest)
+            {
+                try
+                {
+                    await using var errorStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+                    using var errorDocument = await JsonDocument.ParseAsync(
+                        errorStream,
+                        cancellationToken: cancellationToken
+                    );
+                    if (ReadOptionalString(errorDocument.RootElement, "error") == "invalid_grant")
+                        throw new AgwException(ErrorCodes.IntegrationCredentialUnavailable);
+                }
+                catch (JsonException) { }
+            }
             throw OAuthProtocolFailure();
         }
 
@@ -725,7 +813,11 @@ public sealed class OAuthAuthorizationAppService
 
     private static bool IsProviderFailure(Exception exception, CancellationToken cancellationToken)
     {
-        return exception is AgwException agwException && agwException.Code == ErrorCodes.OAuthProviderRequestFailed.Code
+        return exception is AgwException agwException
+                && (
+                    agwException.Code == ErrorCodes.OAuthProviderRequestFailed.Code
+                    || agwException.Code == ErrorCodes.IntegrationCredentialUnavailable.Code
+                )
             || exception is HttpRequestException or JsonException
             || exception is TaskCanceledException && !cancellationToken.IsCancellationRequested;
     }

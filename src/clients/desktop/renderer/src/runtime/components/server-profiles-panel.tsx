@@ -99,7 +99,7 @@ export function ServerProfilesPanel() {
       if (profile.kind === "remote" && draft.token.trim()) {
         await window.agwDesktop?.saveToken(profileId, draft.token.trim());
       }
-      await desktop.saveSettings({ ...settings, profiles });
+      await desktop.saveSettings({ profiles });
 
       setDialogOpen(false);
       setDraft({ ...NEW_REMOTE_DRAFT });
@@ -117,13 +117,8 @@ export function ServerProfilesPanel() {
 
     setBusy(true);
     try {
-      const projectTabsByServer = { ...settings.projectTabsByServer };
-      delete projectTabsByServer[profile.id];
       await desktop.saveSettings({
-        ...settings,
         profiles: settings.profiles.filter((item) => item.id !== profile.id),
-        activeServerId: settings.activeServerId === profile.id ? "local" : settings.activeServerId,
-        projectTabsByServer,
       });
       await window.agwDesktop?.deleteToken(profile.id);
       toast.success("Server profile deleted");

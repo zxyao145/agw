@@ -12,6 +12,7 @@ using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Runtime;
 using Agw.Skills.Application;
 using Agw.Skills.Application.Remote;
+using Agw.Skills.Contracts;
 using Agw.Skills.Controllers;
 using Agw.Testing;
 using Microsoft.AspNetCore.Mvc;

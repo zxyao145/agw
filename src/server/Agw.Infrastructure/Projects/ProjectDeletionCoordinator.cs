@@ -14,16 +14,19 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
     private readonly AgwDbContext _dbContext;
     private readonly IApplicationLock _applicationLock;
     private readonly IDurableExecutionScopeMaintenance _scopeMaintenance;
+    private readonly TimeProvider _timeProvider;
 
     public ProjectDeletionCoordinator(
         AgwDbContext dbContext,
         IApplicationLock applicationLock,
-        IDurableExecutionScopeMaintenance scopeMaintenance
+        IDurableExecutionScopeMaintenance scopeMaintenance,
+        TimeProvider timeProvider
     )
     {
         _dbContext = dbContext;
         _applicationLock = applicationLock;
         _scopeMaintenance = scopeMaintenance;
+        _timeProvider = timeProvider;
     }
 
     public async Task<bool> ClearConversationRecordsAsync(
@@ -40,7 +43,7 @@ public sealed class ProjectDeletionCoordinator : IProjectDeletionCoordinator
             .SingleOrDefaultAsync(cancellationToken);
         if (generation == null)
             return false;
-        var gate = new ConversationExecutionGate(_dbContext, _applicationLock, TimeProvider.System);
+        var gate = new ConversationExecutionGate(_dbContext, _applicationLock, _timeProvider);
         await using var resetLease = await gate.AcquireAsync(
             target.ConversationId,
             generation.Value,

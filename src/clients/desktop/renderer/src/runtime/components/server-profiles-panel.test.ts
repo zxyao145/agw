@@ -23,10 +23,13 @@ test("Adding a remote Server uses a modal and a unique profile ID", async () => 
   assert.match(source, /saveToken\(profileId, draft\.token\.trim\(\)\)/);
 });
 
-test("Deleting the active remote Server falls back to local", async () => {
+test("Deleting a Server delegates profile cleanup without overwriting other settings", async () => {
   const source = await readFile(PANEL_URL, "utf8");
 
-  assert.match(source, /settings\.activeServerId === profile\.id \? "local"/);
-  assert.match(source, /delete projectTabsByServer\[profile\.id\]/);
+  assert.match(
+    source,
+    /profiles: settings\.profiles\.filter\(\(item\) => item\.id !== profile\.id\)/,
+  );
+  assert.doesNotMatch(source, /activeServerId:|projectTabsByServer:/);
   assert.match(source, /deleteToken\(profile\.id\)/);
 });

@@ -1,4 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <Compile Include="../ManualTimeProvider.cs" Link="ManualTimeProvider.cs" />
+  </ItemGroup>
   <PropertyGroup>
     <NoWarn>$(NoWarn);MAAI001</NoWarn>
   </PropertyGroup>

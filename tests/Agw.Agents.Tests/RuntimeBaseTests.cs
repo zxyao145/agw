@@ -114,7 +114,7 @@ public class RuntimeBaseTests
         var accessor = new RuntimeTurnContextAccessor();
         var projectId = Guid.CreateVersion7();
         var context = new RuntimeTurnContext(
-            ExecutionSettings.FromCommand(new SettingCommand(projectId)),
+            SettingCommandMapper.FromCommand(new SettingCommand(projectId)),
             new AgentExecutionTask
             {
                 TaskId = Guid.CreateVersion7(),

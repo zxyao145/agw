@@ -53,6 +53,7 @@ internal sealed class PostgresExecutionEventStream : IExecutionEventStream
         var pending = messages.DistinctBy(entry => entry.Sequence).ToList();
         if (pending.Count == 0)
             return;
+        var transientRetries = 0;
         try
         {
             while (pending.Count > 0)
@@ -61,6 +62,13 @@ internal sealed class PostgresExecutionEventStream : IExecutionEventStream
                 {
                     await InsertBatchAsync(executionId, segmentIndex, pending, cancellationToken).ConfigureAwait(false);
                     return;
+                }
+                catch (Exception exception) when (IsTransientDatabaseFailure(exception) && transientRetries < 5)
+                {
+                    // Npgsql may wrap a deadlock/serialization failure in InvalidOperationException.
+                    // InsertBatchAsync owns a fresh scope, so retry the rolled-back batch with bounded backoff.
+                    await Task.Delay(TimeSpan.FromMilliseconds(50 * (1 << transientRetries++)), cancellationToken)
+                        .ConfigureAwait(false);
                 }
                 catch (DbUpdateException)
                 {
@@ -82,7 +90,7 @@ internal sealed class PostgresExecutionEventStream : IExecutionEventStream
                         throw;
                     pending.RemoveAll(entry => existing.Contains(entry.Sequence));
                 }
-                // Each retry removes at least one now-committed position, bounding retries by batch size.
+                // Conflict retries remove committed positions; transient retries have a separate fixed budget.
             }
         }
         catch (Exception exception) when (IsDatabaseFailure(exception))
@@ -208,7 +216,12 @@ internal sealed class PostgresExecutionEventStream : IExecutionEventStream
     /// 判断异常是否来自数据库连接、命令或 EF Core 写入边界。
     /// </summary>
     private static bool IsDatabaseFailure(Exception exception) =>
-        exception is DbException or DbUpdateException or TimeoutException;
+        exception is DbException or DbUpdateException or TimeoutException
+        || exception.InnerException is { } inner && IsDatabaseFailure(inner);
+
+    private static bool IsTransientDatabaseFailure(Exception exception) =>
+        exception is DbException { IsTransient: true }
+        || exception.InnerException is { } inner && IsTransientDatabaseFailure(inner);
 
     /// <summary>
     /// 将数据库消息流故障映射为统一的可降级错误。

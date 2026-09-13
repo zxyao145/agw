@@ -3,7 +3,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   AgwDesktopBridge,
   DesktopRuntimeState,
-  DesktopSettings,
+  DesktopSettingsUpdate,
   DesktopUpdateCheckResult,
   TurnNotificationRequest,
   UninstallRequest,
@@ -15,7 +15,7 @@ const bridge: AgwDesktopBridge = {
     ipcRenderer.invoke("agw:get-runtime-state") as Promise<DesktopRuntimeState>,
   checkForUpdates: () =>
     ipcRenderer.invoke("agw:check-for-updates") as Promise<DesktopUpdateCheckResult>,
-  saveSettings: (settings: DesktopSettings) =>
+  saveSettings: (settings: DesktopSettingsUpdate) =>
     ipcRenderer.invoke("agw:save-settings", settings) as Promise<DesktopRuntimeState>,
   saveToken: (profileId: string, token: string) =>
     ipcRenderer.invoke("agw:save-token", profileId, token) as Promise<void>,

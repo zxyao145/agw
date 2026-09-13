@@ -55,7 +55,14 @@ public sealed class JobHostedService : BackgroundService
 
         var prefetchTask = RunPrefetchLoopAsync(stoppingToken);
         var executeTask = RunExecuteLoopAsync(stoppingToken);
-        await Task.WhenAll(prefetchTask, executeTask);
+        try
+        {
+            await Task.WhenAll(prefetchTask, executeTask);
+        }
+        finally
+        {
+            await Task.WhenAll(_runningExecutions.Values);
+        }
     }
 
     private async Task RunPrefetchLoopAsync(CancellationToken cancellationToken)
@@ -77,6 +84,10 @@ public sealed class JobHostedService : BackgroundService
                 {
                     UpsertScheduledJob(job);
                 }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                break;
             }
             catch (Exception ex)
             {
@@ -118,9 +129,17 @@ public sealed class JobHostedService : BackgroundService
             if (nextJob.NextRunTime > now)
             {
                 var delay = nextJob.NextRunTime - now;
-                var delayTask = Task.Delay(delay, _timeProvider, cancellationToken);
-                var signalTask = _wakeSignal.WaitAsync(cancellationToken);
-                await Task.WhenAny(delayTask, signalTask);
+                using var waitCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                var delayTask = Task.Delay(delay, _timeProvider, waitCancellation.Token);
+                var signalTask = _wakeSignal.WaitAsync(waitCancellation.Token);
+                var completed = await Task.WhenAny(delayTask, signalTask);
+                await waitCancellation.CancelAsync();
+                try
+                {
+                    await Task.WhenAll(delayTask, signalTask);
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) { }
+                await completed;
                 continue;
             }
 
@@ -165,13 +184,14 @@ public sealed class JobHostedService : BackgroundService
 
     private void StartProjectExecution(ScheduledJob scheduledJob, CancellationToken cancellationToken)
     {
+        var trackingId = Guid.NewGuid();
         var executionTask = ExecuteProjectQueueAsync(scheduledJob, cancellationToken);
-        _runningExecutions[scheduledJob.JobId] = executionTask;
+        _runningExecutions[trackingId] = executionTask;
 
         _ = executionTask.ContinueWith(
             task =>
             {
-                _runningExecutions.TryRemove(scheduledJob.JobId, out _);
+                _runningExecutions.TryRemove(trackingId, out _);
                 if (task.IsFaulted)
                 {
                     _logger.LogError(
@@ -188,39 +208,78 @@ public sealed class JobHostedService : BackgroundService
     private async Task ExecuteProjectQueueAsync(ScheduledJob scheduledJob, CancellationToken cancellationToken)
     {
         var current = scheduledJob;
-        while (!cancellationToken.IsCancellationRequested)
+        var released = false;
+        try
         {
-            await ExecuteOneAsync(current, cancellationToken);
-
-            ScheduledJob? next = null;
-            lock (_queueLock)
+            while (!cancellationToken.IsCancellationRequested)
             {
-                if (_projectBacklog.TryGetValue(current.ProjectId, out var backlogQueue))
+                try
                 {
-                    while (backlogQueue.Count > 0)
-                    {
-                        var candidate = backlogQueue.Dequeue();
-                        if (_jobMap.TryGetValue(candidate.JobId, out var latest) && latest.Version == candidate.Version)
-                        {
-                            next = candidate;
-                            break;
-                        }
-                    }
-
-                    if (backlogQueue.Count == 0)
-                    {
-                        _projectBacklog.Remove(current.ProjectId);
-                    }
+                    await ExecuteOneAsync(current, cancellationToken);
                 }
-
-                if (next == null)
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
-                    _runningProjects.TryRemove(current.ProjectId, out _);
                     return;
                 }
-            }
+                catch (Exception exception)
+                {
+                    _logger.LogError(
+                        exception,
+                        "Job {JobId} infrastructure failed; retrying after backoff.",
+                        current.JobId
+                    );
+                    lock (_queueLock)
+                    {
+                        var latest = _jobMap.GetValueOrDefault(current.JobId) ?? current;
+                        UpsertScheduledJob(
+                            latest with
+                            {
+                                NextRunTime = _timeProvider.GetUtcNow().Add(JobSchedulingDefaults.RetryDelay),
+                            }
+                        );
+                    }
+                }
 
-            current = next;
+                ScheduledJob? next = null;
+                lock (_queueLock)
+                {
+                    if (_projectBacklog.TryGetValue(current.ProjectId, out var backlogQueue))
+                    {
+                        while (backlogQueue.Count > 0)
+                        {
+                            var candidate = backlogQueue.Dequeue();
+                            if (
+                                _jobMap.TryGetValue(candidate.JobId, out var latest)
+                                && latest.Version == candidate.Version
+                            )
+                            {
+                                next = candidate;
+                                break;
+                            }
+                        }
+                        if (backlogQueue.Count == 0)
+                            _projectBacklog.Remove(current.ProjectId);
+                    }
+                    if (next == null)
+                    {
+                        _runningProjects.TryRemove(current.ProjectId, out _);
+                        released = true;
+                        return;
+                    }
+                }
+                current = next;
+            }
+        }
+        finally
+        {
+            if (!released)
+            {
+                lock (_queueLock)
+                {
+                    _runningProjects.TryRemove(current.ProjectId, out _);
+                    _projectBacklog.Remove(current.ProjectId);
+                }
+            }
         }
     }
 

@@ -144,7 +144,8 @@ test.each([false, true])(
         finishHistory();
         if (failHistory)
           await queryClient.invalidateQueries({
-            queryKey: ["mobile", "profile-1", "conversation"],
+            predicate: (query) =>
+              query.queryKey[0] === "mobile" && query.queryKey[2] === "conversation",
           });
       });
       await waitFor(() => expect(result.current.selectedContextId).toBe(context.contextId));

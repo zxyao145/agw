@@ -17,6 +17,7 @@ internal static class TestProjectPersistence
                 InMemoryApplicationLock.Shared,
                 TimeProvider.System,
                 NullLogger<DurableExecutionScopeMaintenance>.Instance
-            )
+            ),
+            TimeProvider.System
         );
 }

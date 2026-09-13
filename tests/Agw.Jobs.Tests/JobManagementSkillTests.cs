@@ -464,7 +464,7 @@ public class JobManagementSkillTests : IDisposable
             var userScope = UserInfoUtil.Push(CreatePrincipal(userId));
             var turnScope = TurnContextAccessor.Push(
                 new RuntimeTurnContext(
-                    ExecutionSettings.FromCommand(new SettingCommand(projectId)),
+                    SettingCommandMapper.FromCommand(new SettingCommand(projectId)),
                     new AgentExecutionTask
                     {
                         TaskId = Guid.CreateVersion7(),

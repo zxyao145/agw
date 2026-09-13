@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <RootNamespace>Agw.Shared.Data</RootNamespace>
   </PropertyGroup>
@@ -9,5 +9,9 @@
   <ItemGroup>
     <ProjectReference Include="..\Agw.Agents.Contracts\Agw.Agents.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Agw.Providers.Contracts/Agw.Providers.Contracts.csproj" />
+    <ProjectReference Include="../Agw.Skills.Contracts/Agw.Skills.Contracts.csproj" />
   </ItemGroup>
 </Project>

@@ -4,8 +4,8 @@ using System.Security.Claims;
 using System.Threading.Channels;
 using Agw.Agents.Execution.Agents.Tools;
 using Agw.Infrastructure.Data;
+using Agw.Projects.Application.History;
 using Agw.Projects.Application.Persistence;
-using Agw.Projects.Domain.Services;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Testing;
@@ -61,7 +61,7 @@ public sealed partial class AgentRequestContextAgentTests
         var first = enumerator.MoveNextAsync().AsTask();
         await model.Started.Task.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
         Assert.Single(model.Input, message => message.Role == ChatRole.User);
-        fixture.Clock.Advance(TimeSpan.FromSeconds(5));
+        await fixture.AdvanceFlushTimerAsync();
         await fixture.WaitForCommitAsync();
         Assert.Equal("question", Assert.Single(await fixture.ReadAsync()).GetText());
         Assert.False(first.IsCompleted);
@@ -69,7 +69,7 @@ public sealed partial class AgentRequestContextAgentTests
         model.Emit("first ");
         Assert.True(await first);
         var second = enumerator.MoveNextAsync().AsTask();
-        fixture.Clock.Advance(TimeSpan.FromSeconds(5));
+        await fixture.AdvanceFlushTimerAsync();
         await fixture.WaitForCommitAsync();
         var partial = await fixture.ReadAsync();
         Assert.Equal(["question", "first "], partial.Select(row => row.GetText()));
@@ -79,7 +79,7 @@ public sealed partial class AgentRequestContextAgentTests
         model.Emit("second");
         Assert.True(await second);
         var end = enumerator.MoveNextAsync().AsTask();
-        fixture.Clock.Advance(TimeSpan.FromSeconds(5));
+        await fixture.AdvanceFlushTimerAsync();
         await fixture.WaitForCommitAsync();
         var later = await fixture.ReadAsync();
         Assert.Equal(partial[1].Id, later[1].Id);
@@ -195,7 +195,7 @@ public sealed partial class AgentRequestContextAgentTests
         Assert.Equal([ChatRole.User, ChatRole.Assistant, ChatRole.Tool], model.Input.Select(message => message.Role));
         Assert.Single(model.Input.SelectMany(message => message.Contents).OfType<FunctionCallContent>());
         Assert.Single(model.Input.SelectMany(message => message.Contents).OfType<FunctionResultContent>());
-        fixture.Clock.Advance(TimeSpan.FromSeconds(5));
+        await fixture.AdvanceFlushTimerAsync();
         await fixture.WaitForCommitAsync();
         Assert.Equal(
             [ChatRole.User, ChatRole.Assistant, ChatRole.Tool],
@@ -459,6 +459,16 @@ public sealed partial class AgentRequestContextAgentTests
         {
             _commits.Writer.TryWrite(true);
             return Task.CompletedTask;
+        }
+
+        public async Task AdvanceFlushTimerAsync()
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(10));
+            // Arm the delay before advancing virtual time; advancing between delay calculation and
+            // timer registration otherwise shifts its deadline without another clock advance.
+            await Clock.WaitForTimerAsync(TimeSpan.FromSeconds(5), timeout.Token);
+            Clock.Advance(TimeSpan.FromSeconds(5));
         }
 
         public Task<bool> WaitForCommitAsync() =>

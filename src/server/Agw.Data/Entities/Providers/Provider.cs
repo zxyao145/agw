@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using Agw.Providers.Contracts;
 using Agw.Shared.Data.Abstractions;
 using Microsoft.EntityFrameworkCore;
 

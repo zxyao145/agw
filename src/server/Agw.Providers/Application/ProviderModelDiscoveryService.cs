@@ -1,7 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.Manager;
-using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Exceptions;
 
 namespace Agw.Providers.Application;

@@ -1,6 +1,5 @@
 using Agw.Agents.Application.Persistence;
-using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Inbound.Connections;
+using Agw.Agents.Execution.Runtimes;
 
 namespace Agw.Agents.Execution.Persistence.Durable;
 
@@ -38,14 +37,18 @@ internal static class DurableExecutionMapper
             Resume = settings.Resume,
         };
 
-    public static SettingCommand ToCommand(this DurableExecutionSettings settings, Guid projectId, string contextId) =>
+    public static ExecutionSettings ToRuntimeSettings(
+        this DurableExecutionSettings settings,
+        Guid projectId,
+        string contextId
+    ) =>
         new(
             projectId,
-            new Dictionary<string, string>(settings.EnvironmentVariables),
             contextId,
-            settings.PermissionMode
-        )
-        {
-            Resume = settings.Resume,
-        };
+            settings.EnvironmentVariables,
+            settings.PermissionMode,
+            settings.Resume,
+            settings.HumanInteractionPolicy,
+            settings.PermissionVersion
+        );
 }

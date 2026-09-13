@@ -7,6 +7,10 @@ on:
       - ".dockerignore"
       - "src/server/**"
       - "src/sdks/**"
+      - "tests/**"
+      - "Agw.slnx"
+      - ".github/workflows/build-server.yml"
+      - ".github/scripts/**"
   push:
     branches: [ "main" ]
 
@@ -28,10 +32,44 @@ jobs:
       with:
         dotnet-version: '10.0.x'
 
+    - name: Audit dependencies
+      run: dotnet restore Agw.slnx -p:NuGetAudit=true -p:NuGetAuditMode=all -p:WarningsAsErrors=NU1900%3BNU1903%3BNU1904
+
     - name: build
       run: |
-        dotnet test ./Agw.slnx -c Release
+        dotnet test ./Agw.slnx -c Release --no-restore
 
     - name: Build Docker image
       run: docker build --tag agw:ci .
 
+  postgres:
+    name: PostgreSQL correctness
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: agw_test
+          POSTGRES_PASSWORD: agw_test
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agw_test -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      AGW_TEST_POSTGRES_CONNECTION_STRING: "Host=localhost;Port=5432;Username=agw_test;Password=agw_test;Database=postgres;Pooling=false"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+      - name: Test PostgreSQL fencing and concurrent event writes
+        run: >-
+          dotnet test tests/Agw.Agents.Tests -c Release
+          --filter "FullyQualifiedName~PostgresExecutionFencingTests|FullyQualifiedName~PostgresBatch_ConcurrentOverlappingBatches"
+          --logger trx --results-directory TestResults/Postgres
+      - name: Require actual PostgreSQL test execution
+        run: python3 .github/scripts/verify-postgres-tests.py TestResults/Postgres

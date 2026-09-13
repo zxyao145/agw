@@ -26,6 +26,7 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
 {
     private const string SchedulerUser = "scheduler";
 
+    private readonly IJobOutcomeTransaction _transaction;
     private readonly IJobsDbContext _dbContext;
     private readonly IProjectTaskFacade _projectTasks;
     private readonly JobScheduleCalculator _scheduleCalculator;
@@ -33,18 +34,33 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
 
     public JobAttemptOutcomeRecorder(
         IJobsDbContext dbContext,
+        IJobOutcomeTransaction transaction,
         IProjectTaskFacade projectTasks,
         JobScheduleCalculator scheduleCalculator,
         TimeProvider timeProvider
     )
     {
         _dbContext = dbContext;
+        _transaction = transaction;
         _projectTasks = projectTasks;
         _scheduleCalculator = scheduleCalculator;
         _timeProvider = timeProvider;
     }
 
-    public async Task<JobAttemptResult> RecordAsync(
+    public Task<JobAttemptResult> RecordAsync(
+        Guid jobId,
+        Guid executionId,
+        bool success,
+        string? errorMessage,
+        CancellationToken cancellationToken
+    ) =>
+        _transaction.ExecuteAsync(
+            jobId,
+            token => RecordCoreAsync(jobId, executionId, success, errorMessage, token),
+            cancellationToken
+        );
+
+    private async Task<JobAttemptResult> RecordCoreAsync(
         Guid jobId,
         Guid executionId,
         bool success,
@@ -55,6 +71,10 @@ public sealed class JobAttemptOutcomeRecorder : IJobAttemptOutcomeRecorder
         Job? job;
         using (UserInfoUtil.PushSystemScope())
         {
+            // Reload the identity-map entry under the outcome gate before checking idempotency.
+            var tracked = _dbContext.Jobs.Local.FirstOrDefault(item => item.Id == jobId);
+            if (tracked != null)
+                await _dbContext.Jobs.Entry(tracked).ReloadAsync(cancellationToken);
             job = await _dbContext
                 .Jobs.SingleOrDefaultAsync(item => item.Id == jobId, cancellationToken)
                 .ConfigureAwait(false);

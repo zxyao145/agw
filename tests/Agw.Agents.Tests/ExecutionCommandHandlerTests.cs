@@ -63,7 +63,10 @@ public partial class ExecutionCommandHandlerTests
         var runtimeFactory = new FakeRuntimeFactory { HoldTurnOpen = true };
         var context = CreateContext(runtimeFactory, task, sink: sink);
         var current = new SettingCommand(task.ProjectId, contextId: "current");
-        await context.ApplySettingsAsync(ExecutionSettings.FromCommand(current), TestContext.Current.CancellationToken);
+        await context.ApplySettingsAsync(
+            SettingCommandMapper.FromCommand(current),
+            TestContext.Current.CancellationToken
+        );
         await context.StartTurnAsync(CreateExecCommand(Guid.CreateVersion7()), TestContext.Current.CancellationToken);
 
         await new SettingCommandHandler().HandleAsync(

@@ -34,6 +34,7 @@ public static class DependencyInjection
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<IConnectionCredentialReader, ConnectionCredentialReader>();
         services.AddScoped<CredentialMutationService>();
+        services.AddScoped<IntegrationMutationCoordinator>();
         services.AddScoped<PluginCatalogAppService>();
         services.AddScoped<PluginInstallationAppService>();
         services.AddScoped<ConnectionAppService>();

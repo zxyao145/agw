@@ -1,5 +1,5 @@
-using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
+using Agw.Skills.Contracts;
 using Agw.Skills.Domain.Rules;
 
 namespace Agw.Skills.Tests;

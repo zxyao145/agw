@@ -1192,3 +1192,77 @@ test("a fresh client discovers an in-process turn without local attachment stora
     await fresh.dispose();
   }
 });
+
+for (const disconnected of [false, true]) {
+  test(`an unacknowledged WebSocket-only start stays busy until recovery confirms idle (disconnected: ${disconnected})`, async (t) => {
+    const { ExecutionSession } = await import("./execution-session.ts");
+    let serverActive = false;
+    let reconnected!: () => void;
+    const recoveryCalls: unknown[][] = [];
+    const connection = {
+      connectionId: null,
+      state: HubConnectionState.Disconnected,
+      on() {},
+      onclose() {},
+      onreconnecting() {},
+      onreconnected(handler: typeof reconnected) {
+        reconnected = handler;
+      },
+      async start() {
+        connection.state = HubConnectionState.Connected;
+      },
+      async stop() {
+        connection.state = HubConnectionState.Disconnected;
+      },
+      async invoke(method: string, ...args: unknown[]) {
+        if (method === "GetExecutionProvider") return "InProcess";
+        if (method === "FindInProcessExecution") return serverActive ? "original-connection" : null;
+        if (method === "RecoverInProcessExecution") {
+          recoveryCalls.push(args);
+          if (args[1] === true) serverActive = false;
+          return serverActive;
+        }
+        if (method === "DispatchCommand" && (args[0] as { type: string }).type === "ExecCommand") {
+          serverActive = true;
+          if (disconnected) connection.state = HubConnectionState.Disconnected;
+          throw new Error("Connection lost before the execution acknowledgement.");
+        }
+      },
+    };
+    t.mock.method(HubConnectionBuilder.prototype, "build", () => connection as never);
+    const session = new ExecutionSession(
+      { onMessage() {} },
+      {
+        baseUrl: "https://agw.test",
+        token: null,
+        attachmentStore: null,
+      },
+    );
+    try {
+      await session.configure({ projectId: "project", contextId: "context" });
+      await assert.rejects(
+        session.execute({
+          conversationId: "conversation",
+          agentId: "agent",
+          agentType: 0,
+          input: { messageId: "input", author: "$agw", contents: [] },
+        }),
+        /acknowledgement/,
+      );
+      assert.equal(serverActive, true);
+      assert.equal(session.hasActiveExecution(), true);
+      if (disconnected) {
+        connection.state = HubConnectionState.Connected;
+        reconnected();
+        for (let i = 0; i < 40; i++) await Promise.resolve();
+      }
+      assert.deepEqual(recoveryCalls, [["original-connection", false]]);
+      await session.interrupt();
+      assert.deepEqual(recoveryCalls.at(-1), ["original-connection", true]);
+      assert.equal(serverActive, false);
+      assert.equal(session.hasActiveExecution(), false);
+    } finally {
+      await session.dispose();
+    }
+  });
+}

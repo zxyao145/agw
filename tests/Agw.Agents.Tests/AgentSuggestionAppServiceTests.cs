@@ -323,10 +323,14 @@ public class AgentSuggestionAppServiceTests : IDisposable
             skill.CreateBy ??= "tester";
         }
 
+        using var serviceProvider = new ServiceCollection().AddHttpClient().BuildServiceProvider();
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
-            new ServiceCollection().BuildServiceProvider(),
-            [new WebSearchContextualTool(), new ShellContextualTool(new ConfigurationBuilder().Build())],
+            serviceProvider,
+            [
+                new WebSearchContextualTool(serviceProvider.GetRequiredService<IHttpClientFactory>()),
+                new ShellContextualTool(new ConfigurationBuilder().Build()),
+            ],
             new ToolBlockRegistry([new TodoToolBlock(), new ModeToolBlock()])
         );
         var skillRepository = new TestRepository<Skill>(ownedSkills);

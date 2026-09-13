@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <NoWarn>$(NoWarn);MAAI001</NoWarn>
   </PropertyGroup>
@@ -18,14 +18,16 @@
     <ProjectReference Include="..\Agw.Agents.Contracts\Agw.Agents.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Auth\Agw.Auth.csproj" />
     <ProjectReference Include="..\Agw.Data\Agw.Data.csproj" />
-    <ProjectReference Include="..\Agw.Integrations\Agw.Integrations.csproj" />
-    <ProjectReference Include="..\Agw.Providers\Agw.Providers.csproj" />
+    <ProjectReference Include="..\Agw.Integrations.Contracts\Agw.Integrations.Contracts.csproj" />
+    <ProjectReference Include="..\Agw.Providers.Contracts\Agw.Providers.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Projects.Contracts\Agw.Projects.Contracts.csproj" />
     <ProjectReference Include="..\Agw.Shared\Agw.Shared.csproj" />
-    <ProjectReference Include="..\Agw.Skills\Agw.Skills.csproj" />
-    <ProjectReference Include="..\Agw.Tools\Agw.Tools.csproj" />
+    <ProjectReference Include="..\Agw.Skills.Contracts\Agw.Skills.Contracts.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Definitions\" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Agw.Tools/Agw.Tools.csproj" />
   </ItemGroup>
 </Project>

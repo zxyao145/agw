@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Agw.Shared.Data.Entities.Skills;
+namespace Agw.Skills.Contracts;
 
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum SkillKind

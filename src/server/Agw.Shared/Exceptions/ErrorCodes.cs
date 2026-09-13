@@ -508,6 +508,12 @@ public static class ErrorCodes
         HttpStatusCode.TooManyRequests
     );
 
+    public static readonly ErrorCode A2ASubscriptionLimitExceeded = new(
+        429_0002,
+        "A2A subscription capacity exceeded. Read the current task and subscribe again.",
+        HttpStatusCode.TooManyRequests
+    );
+
     public static readonly ErrorCode CannotCreateInstance = new(
         500_0001,
         "Cannot create instance.",

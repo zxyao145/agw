@@ -38,7 +38,7 @@ public class ExecutionStructureTests
             ["ExecutionConnection"] = "Agw.Agents.Execution.Inbound.Connections",
             ["ExecutionConnectionContext"] = "Agw.Agents.Execution.Inbound.Connections",
             ["ExecutionConnectionContextFactory"] = "Agw.Agents.Execution.Inbound.Connections",
-            ["ExecutionSettings"] = "Agw.Agents.Execution.Inbound.Connections",
+            ["ExecutionSettings"] = "Agw.Agents.Execution.Runtimes",
             ["ExecutionTarget"] = "Agw.Agents.Execution.Inbound.Connections",
             ["AgentExecutionFacade"] = "Agw.Agents.Execution.Inbound.Facades",
             ["RuntimeFactory"] = "Agw.Agents.Execution.Runtimes.InProcess",

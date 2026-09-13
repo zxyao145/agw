@@ -5,7 +5,6 @@ using Agw.Agents.Execution.HumanInteraction;
 using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.HumanInteraction.InProcess;
-using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Turns;
 using Agw.Files.Abstracts;
@@ -162,7 +161,7 @@ public sealed class RuntimeFactory : IRuntimeFactory
                     session = await _agentRuntimeService.CreateRuntimeAsync(
                         request.AgentId,
                         request.Task,
-                        request.TurnContext.Settings.ToCommand(),
+                        request.TurnContext.Settings,
                         cancellationToken
                     );
                 }
@@ -219,7 +218,7 @@ public sealed class RuntimeFactory : IRuntimeFactory
                     session = new AgentflowRuntime(
                         request.AgentId,
                         request.Task,
-                        request.TurnContext.Settings.ToCommand(),
+                        request.TurnContext.Settings,
                         _agentflowRuntimeService
                     );
                 }

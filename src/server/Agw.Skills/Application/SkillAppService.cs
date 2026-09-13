@@ -9,6 +9,7 @@ using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Skills.Application.Persistence;
 using Agw.Skills.Application.Remote;
+using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.Registration;
 using Agw.Skills.Contracts.Remote;
 using Agw.Skills.Domain.Rules;

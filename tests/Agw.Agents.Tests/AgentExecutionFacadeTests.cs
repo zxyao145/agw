@@ -4,10 +4,9 @@ using Agw.Agents.Contracts.Catalog;
 using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.Agents.Runtime;
-using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.HumanInteraction.Application;
 using Agw.Agents.Execution.Inbound.Facades;
+using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Data.Entities.Executions;
@@ -15,13 +14,33 @@ using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using AgentsDtos = Agw.Agents.Execution.Agents.Contracts;
 
 namespace Agw.Agents.Tests;
 
 public sealed class AgentExecutionFacadeTests
 {
+    [Fact]
+    public async Task RuntimeWithoutPermissionSupport_FailsInsteadOfSilentlyAccepting()
+    {
+        IAgentRuntimeService runtime = new RecordingAgentRuntimeService();
+        var token = TestContext.Current.CancellationToken;
+        await Assert.ThrowsAsync<AgwException>(() =>
+            runtime.SetPermissionModeAsync(null!, AgwPermissionMode.FullAccess, token)
+        );
+        await Assert.ThrowsAsync<AgwException>(() =>
+            runtime.CreateAgentflowNodeAgentAsync(Guid.CreateVersion7(), null, Guid.Empty, null, true, token)
+        );
+        Assert.Throws<AgwException>(() =>
+            runtime.ExecuteStreamingAsync(
+                null!,
+                new AgwUserInput { Contents = [] },
+                new UnattendedInteractionHandler(null),
+                token
+            )
+        );
+    }
+
     [Fact]
     public async Task ExecuteAsync_Distributed_WaitsForOutcomeWithoutReadingEventStream()
     {
@@ -31,11 +50,9 @@ public sealed class AgentExecutionFacadeTests
             .AddSingleton<IDurableExecutionClient>(client)
             .BuildServiceProvider();
         var facade = new AgentExecutionFacade(
-            agentRuntimeService: null!,
-            agentflowRuntimeService: null!,
-            catalog: new AlwaysOwnedAgentCatalog(),
-            services,
-            Options.Create(new ExecutionRuntimeOptions { Provider = ExecutionProvider.Distributed })
+            new DurableAgentExecutionRunner(client),
+            new AlwaysOwnedAgentCatalog(),
+            client
         );
         var executionId = Guid.CreateVersion7();
         var request = new AgentExecutionRequest(
@@ -84,11 +101,8 @@ public sealed class AgentExecutionFacadeTests
         var runtime = new RecordingAgentRuntimeService();
         await using var services = new ServiceCollection().BuildServiceProvider();
         var facade = new AgentExecutionFacade(
-            runtime,
-            agentflowRuntimeService: null!,
-            catalog: new AlwaysOwnedAgentCatalog(),
-            services,
-            Options.Create(new ExecutionRuntimeOptions { Provider = ExecutionProvider.InProcess })
+            new InProcessAgentExecutionRunner(runtime, null!),
+            new AlwaysOwnedAgentCatalog()
         );
         var executionId = Guid.CreateVersion7();
         var previousUser = new ClaimsPrincipal(
@@ -130,11 +144,8 @@ public sealed class AgentExecutionFacadeTests
         var agentflowRuntime = new RejectingAgentflowRuntimeService();
         await using var services = new ServiceCollection().BuildServiceProvider();
         var facade = new AgentExecutionFacade(
-            agentRuntimeService: null!,
-            agentflowRuntime,
-            catalog: new AlwaysOwnedAgentCatalog(),
-            services,
-            Options.Create(new ExecutionRuntimeOptions { Provider = ExecutionProvider.InProcess })
+            new InProcessAgentExecutionRunner(null!, agentflowRuntime),
+            new AlwaysOwnedAgentCatalog()
         );
         var executionId = Guid.CreateVersion7();
         var request = new AgentExecutionRequest(
@@ -201,7 +212,7 @@ public sealed class AgentExecutionFacadeTests
         public Task<AgentRuntime?> CreateRuntimeAsync(
             Guid agentId,
             AgentExecutionTask task,
-            SettingCommand settings,
+            ExecutionSettings settings,
             CancellationToken cancellationToken = default
         ) => Task.FromResult<AgentRuntime?>(null);
 

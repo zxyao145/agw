@@ -189,6 +189,7 @@ export function createAgentflowEditorStore(
     pendingFocusNodeId: null,
     updateDocument: (update, historyMode = "atomic") => {
       set((currentState) => {
+        if (currentState.isSaving) return currentState;
         if (historyMode === "ephemeral") {
           const nextDocument = update(currentState.document);
           return reconcileUiState({
@@ -234,6 +235,7 @@ export function createAgentflowEditorStore(
     commitHistoryGroup: () => set((state) => finalizeHistoryGroup(state)),
     undo: () => {
       set((currentState) => {
+        if (currentState.isSaving) return currentState;
         const state = finalizeHistoryGroup(currentState);
         const previous = state.past.at(-1);
         if (!previous) return state;
@@ -250,6 +252,7 @@ export function createAgentflowEditorStore(
     },
     redo: () => {
       set((currentState) => {
+        if (currentState.isSaving) return currentState;
         const state = finalizeHistoryGroup(currentState);
         const next = state.future[0];
         if (!next) return state;

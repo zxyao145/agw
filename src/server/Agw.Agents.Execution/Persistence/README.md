@@ -56,7 +56,7 @@ Persistence/
 | --- | --- |
 | [`DurableExecutionStore`](Durable/DurableExecutionStore.cs) | 通过 `IAgentsDbContext` 读写状态；处理登记幂等、分段领取与提交、用户归属校验、人工回答和中断 |
 | 同文件中的 `DurableExecutionSnapshot` | 将数据库记录还原为运行时可消费的快照；提取未回答请求，校验 pending / response 对应关系并构造分段输入 |
-| [`DurableExecutionMapper`](Durable/DurableExecutionMapper.cs) | 在 `AgentExecutionTask`、`ExecutionSettings` 与持久化快照之间转换；恢复时还原任务投影和设置命令 |
+| [`DurableExecutionMapper`](Durable/DurableExecutionMapper.cs) | 在 `AgentExecutionTask`、`ExecutionSettings` 与持久化快照之间转换；恢复时还原任务投影和运行时中立的 `ExecutionSettings`（包含权限版本、交互策略与 Resume），不依赖入站设置命令 |
 | [`DurableExecutionJson`](Durable/DurableExecutionJson.cs) | 复用 `JsonUtil` 的序列化约定；必需 payload 反序列化为空时抛出 `DurableExecutionConflict` |
 
 `DurableExecutionJson` 不负责加密，也不把所有 JSON 解析异常统一转换成同一种错误。加密由 EF 持久化机制完成；清单版本、execution ID 和 owner 一致性由 Store 的快照物化逻辑校验。

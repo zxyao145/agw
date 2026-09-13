@@ -1,5 +1,6 @@
 using Agw.Auth.Contracts;
 using Agw.Infrastructure.Data;
+using Agw.Providers.Contracts;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
@@ -7,6 +8,7 @@ using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Runtime;
 using Agw.Shared.Tooling;
+using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.Registration;
 using Microsoft.Agents.AI;
 using Microsoft.EntityFrameworkCore;

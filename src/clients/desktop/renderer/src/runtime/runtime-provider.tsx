@@ -5,7 +5,7 @@ import * as React from "react";
 import type {
   AgwDesktopBridge,
   DesktopRuntimeState,
-  DesktopSettings,
+  DesktopSettingsUpdate,
   ServerProfile,
 } from "@desktop/shared/contracts";
 import { configureApiRuntime, resetApiRuntime } from "@agw/api";
@@ -41,7 +41,7 @@ type DesktopRuntimeContextValue = {
   serverInfo: ServerInfo | null;
   error: string | null;
   refresh(): Promise<void>;
-  saveSettings(settings: DesktopSettings): Promise<void>;
+  saveSettings(settings: DesktopSettingsUpdate): Promise<void>;
   saveToken(profileId: string, token: string): Promise<void>;
 };
 
@@ -277,7 +277,7 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
   );
 
   const saveSettings = React.useCallback(
-    async (settings: DesktopSettings) => {
+    async (settings: DesktopSettingsUpdate) => {
       const bridge = window.agwDesktop;
       if (!bridge) return;
       const saved = await bridge.saveSettings(settings);

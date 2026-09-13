@@ -3,7 +3,7 @@ using System.Text.Json;
 using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Context;
 using Agw.Agents.Execution.Agents.Tools;
-using Agw.Projects.Domain.Services;
+using Agw.Projects.Application.History;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;

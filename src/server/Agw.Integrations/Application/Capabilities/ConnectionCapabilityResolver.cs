@@ -599,7 +599,7 @@ public sealed class ConnectionCapabilityResolver : IConnectionCapabilityResolver
                 binding.Target == CredentialBindingTarget.EnvironmentVariable
                     ? credentialEnvironment
                     : credentialHeaders;
-            targetValues[binding.TargetName] = string.Concat(binding.ValuePrefix, value);
+            targetValues[binding.TargetName] = $"{binding.ValuePrefix}{value}";
         }
 
         return CreateMcpDescriptor(

@@ -44,9 +44,9 @@ public class AgentRuntimeServiceDependencyTests
     }
 
     [Fact]
-    public void Constructor_UsesConversationHandoffProviderForCrossTargetContext()
+    public void TurnExecutor_UsesConversationHandoffProviderForCrossTargetContext()
     {
-        var constructor = Assert.Single(typeof(AgentRuntimeService).GetConstructors());
+        var constructor = Assert.Single(typeof(AgentTurnExecutor).GetConstructors());
 
         Assert.Contains(
             constructor.GetParameters(),

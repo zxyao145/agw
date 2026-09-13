@@ -18,6 +18,13 @@ internal sealed class LocalWebSearchExecutor
     private const string BrowserUserAgent =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
+    private readonly IHttpClientFactory _httpClientFactory;
+
+    public LocalWebSearchExecutor(IHttpClientFactory httpClientFactory)
+    {
+        _httpClientFactory = httpClientFactory;
+    }
+
     private static readonly Regex GoogleHeadingRegex = new(
         @"<a\b[^>]*href=[""']([^""']*(?:/url\?(?:[^""']*?[?&])?(?:q|url)=[^""']+|https?://[^""']+))[""'][^>]*>[\s\S]*?<h3\b[^>]*>([\s\S]*?)</h3>",
         RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.CultureInvariant
@@ -50,7 +57,7 @@ internal sealed class LocalWebSearchExecutor
             Allows searching the web for current information. Provides search results and/or text commentary.
             """
     )]
-    public WebSearchResult Execute(WebSearchToolParams toolParams)
+    public async Task<WebSearchResult> ExecuteAsync(WebSearchToolParams toolParams, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(toolParams);
 
@@ -71,12 +78,14 @@ internal sealed class LocalWebSearchExecutor
 
         // Try providers in priority order and use the first parseable result set.
         var maxResults = NormalizeMaxResults(toolParams.MaxResults);
-        var searchResponse = PerformSearch(
-            toolParams.Query,
-            maxResults,
-            toolParams.AllowedDomains,
-            toolParams.BlockedDomains
-        );
+        var searchResponse = await PerformSearchAsync(
+                toolParams.Query,
+                maxResults,
+                toolParams.AllowedDomains,
+                toolParams.BlockedDomains,
+                cancellationToken
+            )
+            .ConfigureAwait(false);
 
         stopwatch.Stop();
         var durationSeconds = stopwatch.ElapsedMilliseconds / 1000.0;
@@ -94,15 +103,15 @@ internal sealed class LocalWebSearchExecutor
         };
     }
 
-    private static SearchProviderResponse PerformSearch(
+    private async Task<SearchProviderResponse> PerformSearchAsync(
         string query,
         int maxResults,
         List<string>? allowedDomains,
-        List<string>? blockedDomains
+        List<string>? blockedDomains,
+        CancellationToken cancellationToken
     )
     {
-        var httpClientFactory = IocUtil.GetSingletonRequiredService<IHttpClientFactory>();
-        using var client = httpClientFactory.CreateClient();
+        using var client = _httpClientFactory.CreateClient();
         var failures = new List<string>();
 
         foreach (var provider in new[] { SearchProvider.Bing, SearchProvider.Google, SearchProvider.Baidu })
@@ -111,13 +120,41 @@ internal sealed class LocalWebSearchExecutor
             {
                 var results = provider switch
                 {
-                    SearchProvider.Google => SearchGoogle(client, query, maxResults, allowedDomains, blockedDomains),
-                    SearchProvider.Bing => SearchBing(client, query, maxResults, allowedDomains, blockedDomains),
-                    SearchProvider.Baidu => SearchBaidu(client, query, maxResults, allowedDomains, blockedDomains),
+                    SearchProvider.Google => await SearchGoogleAsync(
+                            client,
+                            query,
+                            maxResults,
+                            allowedDomains,
+                            blockedDomains,
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false),
+                    SearchProvider.Bing => await SearchBingAsync(
+                            client,
+                            query,
+                            maxResults,
+                            allowedDomains,
+                            blockedDomains,
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false),
+                    SearchProvider.Baidu => await SearchBaiduAsync(
+                            client,
+                            query,
+                            maxResults,
+                            allowedDomains,
+                            blockedDomains,
+                            cancellationToken
+                        )
+                        .ConfigureAwait(false),
                     _ => [],
                 };
 
                 return new SearchProviderResponse(provider.ToString().ToLowerInvariant(), results);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -131,16 +168,18 @@ internal sealed class LocalWebSearchExecutor
         );
     }
 
-    private static List<SearchHit> SearchGoogle(
+    private static async Task<List<SearchHit>> SearchGoogleAsync(
         HttpClient client,
         string query,
         int maxResults,
         List<string>? allowedDomains,
-        List<string>? blockedDomains
+        List<string>? blockedDomains,
+        CancellationToken cancellationToken
     )
     {
         var searchUrl = $"https://www.google.com/search?hl=en&num={maxResults}&gbv=1&q={WebUtility.UrlEncode(query)}";
-        var html = SendSearchRequest(client, "Google", searchUrl, "en-US,en;q=0.9");
+        var html = await SendSearchRequestAsync(client, "Google", searchUrl, "en-US,en;q=0.9", cancellationToken)
+            .ConfigureAwait(false);
 
         if (
             Regex.IsMatch(
@@ -162,30 +201,40 @@ internal sealed class LocalWebSearchExecutor
         );
     }
 
-    private static List<SearchHit> SearchBing(
+    private static async Task<List<SearchHit>> SearchBingAsync(
         HttpClient client,
         string query,
         int maxResults,
         List<string>? allowedDomains,
-        List<string>? blockedDomains
+        List<string>? blockedDomains,
+        CancellationToken cancellationToken
     )
     {
         var searchUrl = $"https://www.bing.com/search?q={WebUtility.UrlEncode(query)}&count={maxResults}";
-        var html = SendSearchRequest(client, "Bing", searchUrl, "en-US,en;q=0.9");
+        var html = await SendSearchRequestAsync(client, "Bing", searchUrl, "en-US,en;q=0.9", cancellationToken)
+            .ConfigureAwait(false);
 
         return EnsureResults("Bing", ExtractBingResults(html, maxResults), maxResults, allowedDomains, blockedDomains);
     }
 
-    private static List<SearchHit> SearchBaidu(
+    private static async Task<List<SearchHit>> SearchBaiduAsync(
         HttpClient client,
         string query,
         int maxResults,
         List<string>? allowedDomains,
-        List<string>? blockedDomains
+        List<string>? blockedDomains,
+        CancellationToken cancellationToken
     )
     {
         var searchUrl = $"https://www.baidu.com/s?wd={WebUtility.UrlEncode(query)}&rn={maxResults}";
-        var html = SendSearchRequest(client, "Baidu", searchUrl, "zh-CN,zh;q=0.9,en;q=0.8");
+        var html = await SendSearchRequestAsync(
+                client,
+                "Baidu",
+                searchUrl,
+                "zh-CN,zh;q=0.9,en;q=0.8",
+                cancellationToken
+            )
+            .ConfigureAwait(false);
 
         if (
             Regex.IsMatch(
@@ -207,7 +256,13 @@ internal sealed class LocalWebSearchExecutor
         );
     }
 
-    private static string SendSearchRequest(HttpClient client, string provider, string searchUrl, string acceptLanguage)
+    private static async Task<string> SendSearchRequestAsync(
+        HttpClient client,
+        string provider,
+        string searchUrl,
+        string acceptLanguage,
+        CancellationToken cancellationToken
+    )
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, searchUrl);
         request.Headers.TryAddWithoutValidation("User-Agent", BrowserUserAgent);
@@ -219,14 +274,15 @@ internal sealed class LocalWebSearchExecutor
         request.Headers.TryAddWithoutValidation("Cache-Control", "no-cache");
         request.Headers.TryAddWithoutValidation("Pragma", "no-cache");
 
-        using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(RequestTimeoutMs));
-        using var response = client.SendAsync(request, timeout.Token).GetAwaiter().GetResult();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMilliseconds(RequestTimeoutMs));
+        using var response = await client.SendAsync(request, timeout.Token).ConfigureAwait(false);
         if (response.StatusCode != HttpStatusCode.OK)
         {
             throw new AgwException(ErrorCodes.FetchFailed, $"{provider} search error: {(int)response.StatusCode}");
         }
 
-        return response.Content.ReadAsStringAsync(timeout.Token).GetAwaiter().GetResult();
+        return await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
     }
 
     private static List<SearchHit> ExtractGoogleResults(string html, int maxResults)

@@ -165,7 +165,7 @@ function SummaryCards({
 export default function Page() {
   const statsQuery = useQuery({
     queryKey: ["dashboard-stats"],
-    queryFn: async () => (await apiGet("/api/dashboard/stats" as never)) as DashboardStatsResponse,
+    queryFn: async () => (await apiGet("/api/dashboard/stats")) as DashboardStatsResponse,
     refetchInterval: 10000,
   });
 

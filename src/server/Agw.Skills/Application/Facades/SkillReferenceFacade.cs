@@ -1,6 +1,6 @@
 using Agw.Shared.Contracts;
-using Agw.Shared.Data.Entities.Skills;
 using Agw.Skills.Application.Persistence;
+using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.References;
 using Microsoft.EntityFrameworkCore;
 

@@ -34,11 +34,11 @@ public class AgentCapabilityComposerTests
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var database = await TestDatabase.CreateAsync(cancellationToken);
-        using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        using var serviceProvider = new ServiceCollection().AddHttpClient().BuildServiceProvider();
         var toolRegistry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             serviceProvider,
-            [new WebSearchContextualTool()],
+            [new WebSearchContextualTool(serviceProvider.GetRequiredService<IHttpClientFactory>())],
             new ToolBlockRegistry([])
         );
         var composer = CreateComposer(
@@ -455,10 +455,10 @@ public class AgentCapabilityComposerTests
 
     private static ToolRegistryService CreateToolRegistry()
     {
-        return new ToolRegistryService(
-            NullLogger<ToolRegistryService>.Instance,
-            new ServiceCollection().BuildServiceProvider()
-        );
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHttpClient();
+        return new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, services.BuildServiceProvider());
     }
 
     private static AITool CreateTool(string name)

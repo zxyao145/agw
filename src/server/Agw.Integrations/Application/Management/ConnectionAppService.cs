@@ -24,6 +24,7 @@ public sealed class ConnectionAppService
     private readonly IConnectionCredentialReader _credentialReader;
     private readonly TimeProvider _timeProvider;
     private readonly IUserInfoService _userInfoService;
+    private readonly IntegrationMutationCoordinator _mutations;
 
     public ConnectionAppService(
         IIntegrationsDbContext dbContext,
@@ -31,7 +32,8 @@ public sealed class ConnectionAppService
         CredentialMutationService credentialMutations,
         IConnectionCredentialReader credentialReader,
         TimeProvider timeProvider,
-        IUserInfoService userInfoService
+        IUserInfoService userInfoService,
+        IntegrationMutationCoordinator mutations
     )
     {
         _dbContext = dbContext;
@@ -40,6 +42,7 @@ public sealed class ConnectionAppService
         _credentialReader = credentialReader;
         _timeProvider = timeProvider;
         _userInfoService = userInfoService;
+        _mutations = mutations;
     }
 
     public async Task<IReadOnlyList<ConnectionResponse>> ListAsync(Guid? id, CancellationToken cancellationToken)
@@ -70,6 +73,8 @@ public sealed class ConnectionAppService
             request.ConnectorId,
             request.AuthSchemeId
         );
+        await using var mutation = await _mutations.AcquirePluginAsync(definition.Plugin.Id, cancellationToken);
+        cancellationToken = mutation.Token;
         var alias = IntegrationInputValidator.NormalizeAlias(request.Alias);
         if (
             await _dbContext.Connections.AnyAsync(
@@ -120,6 +125,8 @@ public sealed class ConnectionAppService
     )
     {
         var user = _userInfoService.RequiredUserId;
+        await using var mutation = await _mutations.AcquireConnectionAsync(request.Id, cancellationToken);
+        cancellationToken = mutation.Token;
         var connection = await GetTrackedAsync(request.Id, cancellationToken);
         var alias = IntegrationInputValidator.NormalizeAlias(request.Alias);
         if (!string.Equals(alias, connection.Alias, StringComparison.Ordinal))
@@ -160,6 +167,7 @@ public sealed class ConnectionAppService
         connection.Enabled = request.Enabled;
         connection.UpdateBy = user;
         connection.UpdateTime = _timeProvider.GetUtcNow();
+        _mutations.InvalidateAuthorization(connection);
         await _credentialMutations.ApplyConnectionAsync(connection, input.SecretUpdates);
         await SetInitialStatusAsync(connection, definition, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -169,6 +177,8 @@ public sealed class ConnectionAppService
     public async Task<ConnectionResponse> ValidateAsync(Guid id, CancellationToken cancellationToken)
     {
         var user = _userInfoService.RequiredUserId;
+        await using var mutation = await _mutations.AcquireConnectionAsync(id, cancellationToken);
+        cancellationToken = mutation.Token;
         var connection = await GetTrackedAsync(id, cancellationToken);
         var now = _timeProvider.GetUtcNow();
         connection.LastValidatedAtUtc = now;
@@ -227,6 +237,15 @@ public sealed class ConnectionAppService
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
         var user = _userInfoService.RequiredUserId;
+        var pluginId = await _dbContext
+            .Connections.AsNoTracking()
+            .Where(item => item.Id == id && item.CreateBy == user)
+            .Select(item => item.PluginId)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (pluginId == null)
+            return false;
+        await using var mutation = await _mutations.AcquirePluginAsync(pluginId, cancellationToken);
+        cancellationToken = mutation.Token;
         var connection = await _dbContext.Connections.FirstOrDefaultAsync(
             item => item.Id == id && item.CreateBy == user,
             cancellationToken

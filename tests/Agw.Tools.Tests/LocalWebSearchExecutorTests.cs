@@ -2,13 +2,10 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Utils;
 using Agw.Tools.Contracts.WebSearch;
 using Agw.Tools.Impl.ContextualTools.WebSearch;
 using Agw.Tools.Infrastructure;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Tools.Tests;
 
@@ -123,12 +120,8 @@ public class LocalWebSearchExecutorTests
 
     private static AIFunction CreateWebSearchFunction(Func<HttpRequestMessage, HttpResponseMessage> handler)
     {
-        var services = new ServiceCollection()
-            .AddSingleton<IHttpClientFactory>(new StubHttpClientFactory(new StubHttpMessageHandler(handler)))
-            .BuildServiceProvider();
-        _ = new IocUtil(services, NullLoggerFactory.Instance);
-
-        Func<WebSearchToolParams, WebSearchResult> execute = new LocalWebSearchExecutor().Execute;
+        var executor = new LocalWebSearchExecutor(new StubHttpClientFactory(new StubHttpMessageHandler(handler)));
+        Func<WebSearchToolParams, CancellationToken, Task<WebSearchResult>> execute = executor.ExecuteAsync;
         return Assert.IsAssignableFrom<AIFunction>(
             AgwAIFunctionFactory.CreateParameterObjectFunction(execute, ToolDefinitionNames.WebSearch)
         );

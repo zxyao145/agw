@@ -1,7 +1,7 @@
 using System.ClientModel;
 using Agw.Agents.Definitions.Agents;
+using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.References;
-using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Exceptions;
 using Anthropic;
 using Anthropic.Core;

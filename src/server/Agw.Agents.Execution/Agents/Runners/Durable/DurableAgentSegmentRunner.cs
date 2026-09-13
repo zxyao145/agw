@@ -51,7 +51,7 @@ internal sealed class DurableAgentSegmentRunner
             .CreateDurableRuntimeAsync(
                 manifest.AgentId,
                 manifest.Task.ToProjection(),
-                manifest.Settings.ToCommand(manifest.Task.ProjectId, manifest.Task.ContextId),
+                manifest.Settings.ToRuntimeSettings(manifest.Task.ProjectId, manifest.Task.ContextId),
                 cancellationToken
             )
             .ConfigureAwait(false);

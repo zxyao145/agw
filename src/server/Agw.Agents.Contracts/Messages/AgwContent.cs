@@ -132,7 +132,7 @@ internal class AgwDataUriParser
         ThrowUtil.IfNullOrWhitespace(mediaType, parameterName);
         if (!IsValidMediaType(mediaType))
         {
-            ThrowUtil.ArgumentException(parameterName, "An invalid media type was specified: '" + mediaType + "'");
+            ThrowUtil.ArgumentException(parameterName, $"An invalid media type was specified: '{mediaType}'");
         }
 
         return mediaType;

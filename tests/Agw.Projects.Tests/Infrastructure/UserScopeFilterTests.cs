@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
+using Agw.Providers.Contracts;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
@@ -12,6 +13,7 @@ using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Data.Entities.Tools;
+using Agw.Skills.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -710,7 +712,7 @@ public sealed class UserScopeFilterTests
         {
             Id = Guid.CreateVersion7(),
             Name = name,
-            NormalizedName = ApiToken.NormalizeName(name),
+            NormalizedName = ApiTokenNameRules.NormalizeName(name),
             Prefix = "agw_test",
             SecretHash = new string('a', 64),
             CreateBy = owner,

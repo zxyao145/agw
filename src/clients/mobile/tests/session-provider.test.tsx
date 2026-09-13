@@ -1,4 +1,5 @@
-import { act, fireEvent, render } from "@testing-library/react-native";
+jest.mock("uuid", () => ({ v7: () => "01900000-0000-7000-8000-000000000001" }));
+import { act, fireEvent, render, renderHook, waitFor } from "@testing-library/react-native";
 import React from "react";
 import { Pressable, Text } from "react-native";
 
@@ -107,4 +108,61 @@ describe("SessionProvider", () => {
       "Could not connect to the Agw Server. Check the Server URL and network, then try again.",
     );
   });
+});
+
+test("an old server unauthorized callback cannot clear the current session", async () => {
+  const second = { ...profile, id: "profile-2" };
+  mockLoadProfiles.mockResolvedValue({
+    state: { version: 1, activeProfileId: profile.id, profiles: [profile, second] },
+    migratedProfileId: null,
+  });
+  mockReadProfileToken.mockResolvedValue("agw_existing");
+  mockPersistProfilesState.mockResolvedValue(undefined);
+  mockVerifyServerProfile.mockImplementation(async (candidate, token) => ({
+    profile: candidate,
+    token,
+    client: {} as never,
+  }));
+  const { result } = await renderHook(() => useSession(), { wrapper: SessionProvider });
+  await waitFor(() => expect(result.current.status).toBe("authenticated"));
+  const oldUnauthorized = mockVerifyServerProfile.mock.calls.at(-1)![2]!;
+  await act(async () => result.current.activateProfile(second.id));
+  await act(() => oldUnauthorized());
+  expect(result.current.verifiedServer?.profile.id).toBe(second.id);
+  expect(result.current.status).toBe("authenticated");
+  const currentUnauthorized = mockVerifyServerProfile.mock.calls.at(-1)![2]!;
+  await act(() => currentUnauthorized());
+  expect(result.current.verifiedServer).toBeNull();
+  expect(result.current.status).toBe("error");
+});
+
+test("unauthorized candidate verification preserves the active session", async () => {
+  mockLoadProfiles.mockResolvedValue({
+    state: { version: 1, activeProfileId: profile.id, profiles: [profile] },
+    migratedProfileId: null,
+  });
+  mockReadProfileToken.mockResolvedValue("agw_existing");
+  mockVerifyServerProfile.mockImplementation(async (candidate, token) => ({
+    profile: candidate,
+    token,
+    client: {} as never,
+  }));
+  const { result } = await renderHook(() => useSession(), { wrapper: SessionProvider });
+  await waitFor(() => expect(result.current.status).toBe("authenticated"));
+  mockVerifyServerProfile.mockImplementationOnce(async (_profile, _token, onUnauthorized) => {
+    onUnauthorized?.();
+    throw new Error("Invalid candidate token");
+  });
+  await act(async () => {
+    await expect(
+      result.current.saveProfile({
+        name: "Candidate",
+        serverUrl: "https://other.example",
+        token: "agw_bad",
+        allowInsecureHttp: false,
+      }),
+    ).rejects.toThrow("Invalid candidate token");
+  });
+  expect(result.current.verifiedServer?.profile.id).toBe(profile.id);
+  expect(result.current.status).toBe("authenticated");
 });

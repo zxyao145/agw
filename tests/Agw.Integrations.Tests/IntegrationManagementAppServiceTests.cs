@@ -7,6 +7,7 @@ using Agw.Integrations.Application.Plugins;
 using Agw.Integrations.Contracts.Management;
 using Agw.Integrations.Domain.Plugins;
 using Agw.Integrations.Infrastructure.Plugins;
+using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Integrations;
 using Agw.Shared.Data.Entities.Projects;
@@ -923,7 +924,8 @@ public class IntegrationManagementAppServiceTests
                 catalog,
                 credentialMutations,
                 timeProvider,
-                userInfo
+                userInfo,
+                new IntegrationMutationCoordinator(dbContext, InMemoryApplicationLock.Shared, userInfo)
             );
             var plugins = new PluginCatalogAppService(
                 catalog,
@@ -937,7 +939,8 @@ public class IntegrationManagementAppServiceTests
                 credentialMutations,
                 reader,
                 timeProvider,
-                userInfo
+                userInfo,
+                new IntegrationMutationCoordinator(dbContext, InMemoryApplicationLock.Shared, userInfo)
             );
             var installationClient = new TestPluginInstallationClient(installations, userInfo);
             var connectionClient = new TestConnectionClient(connections, userInfo);

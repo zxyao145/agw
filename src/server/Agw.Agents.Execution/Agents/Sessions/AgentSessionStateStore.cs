@@ -168,7 +168,7 @@ public sealed class AgentSessionStateStore
         var agentflowNodeId = sessionScope.AgentflowNodeId ?? string.Empty;
         await using var mutationLease = await _applicationLock!
             .AcquireAsync(
-                $"agent-session:{projectConversationId.Value:D}:{sessionScope.AgentId:D}:" + agentflowNodeId,
+                $"agent-session:{projectConversationId.Value:D}:{sessionScope.AgentId:D}:{agentflowNodeId}",
                 cancellationToken
             )
             .ConfigureAwait(false);

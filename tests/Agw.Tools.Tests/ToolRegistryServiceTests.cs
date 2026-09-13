@@ -15,11 +15,19 @@ namespace Agw.Tools.Tests;
 
 public class ToolRegistryServiceTests
 {
+    private static ServiceCollection CreateToolServices()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHttpClient();
+        return services;
+    }
+
     [Fact]
     public void StartupDiscovery_AllBuiltInToolKinds_AreRegistered()
     {
         // Arrange
-        var services = new ServiceCollection();
+        var services = CreateToolServices();
         services.AddLogging();
         services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
         services.AddSingleton(TimeProvider.System);
@@ -46,7 +54,7 @@ public class ToolRegistryServiceTests
     public async Task CreateAIFunction_ProjectScopedDeclaration_RequiresAndBindsProject()
     {
         // Arrange
-        using var services = new ServiceCollection().BuildServiceProvider();
+        using var services = CreateToolServices().BuildServiceProvider();
         var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, services);
         registry.RegisterTool(new ProjectScopedTestTool());
         var projectId = Guid.CreateVersion7();
@@ -85,7 +93,7 @@ public class ToolRegistryServiceTests
     public void Catalog_DeclaredPermissions_DerivesConfirmationMetadata()
     {
         // Arrange
-        using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        using var serviceProvider = CreateToolServices().BuildServiceProvider();
         var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, serviceProvider);
 
         // Act
@@ -103,7 +111,7 @@ public class ToolRegistryServiceTests
     public void RegisterTool_MutableInstanceState_IsRejected()
     {
         // Arrange
-        using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        using var serviceProvider = CreateToolServices().BuildServiceProvider();
         var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, serviceProvider);
 
         // Act
@@ -118,7 +126,7 @@ public class ToolRegistryServiceTests
     public void CreateAIFunction_AttributeWriteTool_RequiresApprovalAtRuntime()
     {
         // Arrange
-        using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        using var serviceProvider = CreateToolServices().BuildServiceProvider();
         var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, serviceProvider);
 
         // Act
@@ -147,7 +155,7 @@ public class ToolRegistryServiceTests
     [Fact]
     public async Task MaterializeAsync_IndependentTools_MarksOnlyTrustedPlanToolsAllowed()
     {
-        await using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        await using var serviceProvider = CreateToolServices().BuildServiceProvider();
         var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, serviceProvider);
 
         await using var contribution = await registry.MaterializeAsync(
@@ -172,11 +180,11 @@ public class ToolRegistryServiceTests
     [InlineData(true)]
     public async Task WebSearchMaterialization_LocalOrHosted_MarksToolAllowedInPlan(bool hosted)
     {
-        await using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        await using var serviceProvider = CreateToolServices().BuildServiceProvider();
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             serviceProvider,
-            [new WebSearchContextualTool()]
+            [new WebSearchContextualTool(serviceProvider.GetRequiredService<IHttpClientFactory>())]
         );
         var context = CreateMaterializationContext();
         context = new ToolMaterializationContext
@@ -206,7 +214,7 @@ public class ToolRegistryServiceTests
     [Fact]
     public void RemovedAndObsoleteTools_AreNotRegistered()
     {
-        var services = new ServiceCollection();
+        var services = CreateToolServices();
         using var sp = services.BuildServiceProvider();
         var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, sp);
 
@@ -242,7 +250,7 @@ public class ToolRegistryServiceTests
     [InlineData(ToolDefinitionNames.PowerShell)]
     public async Task MaterializeAsync_ObsoleteToolDefinition_ThrowsClearError(string toolName)
     {
-        await using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        await using var serviceProvider = CreateToolServices().BuildServiceProvider();
         var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, serviceProvider);
         ToolDefinition definition = toolName switch
         {
@@ -267,7 +275,7 @@ public class ToolRegistryServiceTests
     [Fact]
     public async Task ObsoleteContextualToolAndToolBlock_AreFilteredAndUnavailable()
     {
-        await using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        await using var serviceProvider = CreateToolServices().BuildServiceProvider();
 #pragma warning disable CS0618
         var toolBlockRegistry = new ToolBlockRegistry([new ObsoleteTodoToolBlock()]);
         var registry = new ToolRegistryService(
@@ -312,13 +320,13 @@ public class ToolRegistryServiceTests
     [Fact]
     public void GetAllTools_ReturnsToolsAndToolBlocksInOneCatalog()
     {
-        var services = new ServiceCollection();
+        var services = CreateToolServices();
         using var serviceProvider = services.BuildServiceProvider();
         var toolBlockRegistry = new ToolBlockRegistry([new TodoToolBlock()]);
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             serviceProvider,
-            [new WebSearchContextualTool()],
+            [new WebSearchContextualTool(serviceProvider.GetRequiredService<IHttpClientFactory>())],
             toolBlockRegistry
         );
 
@@ -333,7 +341,7 @@ public class ToolRegistryServiceTests
     [Fact]
     public async Task MaterializeAsync_ToolBlockMemberSelectedDirectly_ThrowsClearError()
     {
-        var services = new ServiceCollection();
+        var services = CreateToolServices();
         using var serviceProvider = services.BuildServiceProvider();
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
@@ -356,11 +364,11 @@ public class ToolRegistryServiceTests
     [Fact]
     public void ValidateDefinitionCoverage_AllDeclaredDefinitionsHaveExecutableImplementations()
     {
-        var services = new ServiceCollection();
+        var services = CreateToolServices();
         using var serviceProvider = services.BuildServiceProvider();
         var contextualTools = new IContextualTool[]
         {
-            new WebSearchContextualTool(),
+            new WebSearchContextualTool(serviceProvider.GetRequiredService<IHttpClientFactory>()),
             new ShellContextualTool(new ConfigurationBuilder().Build()),
         };
         var toolBlocks = ToolBlockDefinitionNames
@@ -378,7 +386,7 @@ public class ToolRegistryServiceTests
 
     private static AIFunction CreateDiffFunction()
     {
-        var services = new ServiceCollection();
+        var services = CreateToolServices();
         using var sp = services.BuildServiceProvider();
 
         var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, sp);
@@ -419,7 +427,7 @@ public class ToolRegistryServiceTests
     public async Task MaterializeAsync_ContextualExecuteTool_RequiresApprovalAtRuntime()
     {
         // Arrange
-        await using var serviceProvider = new ServiceCollection().BuildServiceProvider();
+        await using var serviceProvider = CreateToolServices().BuildServiceProvider();
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             serviceProvider,

@@ -1,6 +1,50 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+test("a delayed antiforgery retry keeps the originating runtime and credentials", async (t) => {
+  const { apiPost, configureApiRuntime, resetApiRuntime } = await import("./client.ts");
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ url: string; authorization: string | null }> = [];
+  let release!: (response: Response) => void;
+  let started!: () => void;
+  const pendingResponse = new Promise<Response>((resolve) => {
+    release = resolve;
+  });
+  const requestStarted = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  let writes = 0;
+  globalThis.fetch = async (input, init) => {
+    const url = String(input);
+    calls.push({ url, authorization: new Headers(init?.headers).get("Authorization") });
+    if (url.endsWith("/antiforgery")) {
+      return Response.json({ code: 0, title: "OK", data: { requestToken: url } });
+    }
+    if (++writes === 1) {
+      started();
+      return pendingResponse;
+    }
+    return Response.json({ code: 0, title: "OK" });
+  };
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    resetApiRuntime();
+  });
+
+  configureApiRuntime({ baseUrl: "https://a.example", token: "agw_a" });
+  const pending = apiPost("/api/auth/login", { body: { password: "test" } });
+  await requestStarted;
+  configureApiRuntime({ baseUrl: "https://b.example", token: "agw_b" });
+  release(Response.json({ code: 4030003, title: "CSRF" }, { status: 403 }));
+  await pending;
+  assert.equal(calls.length, 4);
+  assert.ok(calls.every((call) => call.url.startsWith("https://a.example/")));
+  assert.equal(calls[3]?.authorization, "Bearer agw_a");
+  await apiPost("/api/auth/login", { body: { password: "test" } });
+  assert.equal(calls[4]?.url, "https://b.example/api/auth/antiforgery");
+  assert.equal(calls[5]?.authorization, "Bearer agw_b");
+});
+
 test("apiGet unwraps Bens.Results data envelopes", async (t) => {
   const { apiGet } = await import("./client" + ".ts");
   const originalFetch = globalThis.fetch;

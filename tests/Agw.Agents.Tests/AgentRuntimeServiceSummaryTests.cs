@@ -3,6 +3,7 @@ using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Summaries;
 using Agw.Shared.Data.Entities.Agents;
 using Microsoft.Extensions.AI;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Agents.Tests;
@@ -109,14 +110,18 @@ public class AgentRuntimeServiceSummaryTests
             capabilityComposer: null!,
             chatHistoryProvider: null!,
             providerSessionState: null!,
-            providerSessions: null!,
+            providerBindings: null!,
             dataPaths: null!,
             fileSystemResolver: null!,
             sessionStateStore: null!,
             logger: NullLogger<AgentRuntimeService>.Instance,
             observabilityMiddleware: new ObservabilityMiddleware(NullLogger<ObservabilityMiddleware>.Instance),
             usageTrackingMiddleware: null!,
-            summaryService
+            summaryService,
+            services: new Microsoft.Extensions.DependencyInjection.ServiceCollection().BuildServiceProvider(),
+            projectDefaults: new TestProjectDefaultResolver(),
+            turnExecutor: null!,
+            configuration: null!
         );
 
     private sealed class RecordingSummaryService : IAgentTurnSummaryService

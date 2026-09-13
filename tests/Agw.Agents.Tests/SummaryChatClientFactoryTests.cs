@@ -2,6 +2,7 @@ using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Summaries;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Repositories;
+using Agw.Providers.Contracts;
 using Agw.Shared.Data.Entities.Providers;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;

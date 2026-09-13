@@ -281,7 +281,12 @@ public sealed partial class ProjectDeletionCoordinatorTests
         {
             Assert.False(await maintenance.ValidateLockedExecutionAsync(executionId, token));
         }
-        var coordinator = new ProjectDeletionCoordinator(context, InMemoryApplicationLock.Shared, maintenance);
+        var coordinator = new ProjectDeletionCoordinator(
+            context,
+            InMemoryApplicationLock.Shared,
+            maintenance,
+            TimeProvider.System
+        );
 
         // Act
         var deleted = await coordinator.DeleteProjectAsync(new ProjectDeletionTarget(wrongProjectId, "tester"), token);
@@ -399,7 +404,8 @@ public sealed partial class ProjectDeletionCoordinatorTests
                 InMemoryApplicationLock.Shared,
                 TimeProvider.System,
                 logger
-            )
+            ),
+            timeProvider: TimeProvider.System
         );
 
         // Act

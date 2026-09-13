@@ -28,13 +28,4 @@ public class Project : BaseEntity, IAggregateRoot
         new List<ProjectMcpServerRelation>();
     public ICollection<ProjectConnectionRelation> ProjectConnectionRelations { get; set; } =
         new List<ProjectConnectionRelation>();
-
-    public string GetMustWorkspace()
-    {
-        if (string.IsNullOrEmpty(Workspace))
-        {
-            return $"~/.agw/projects/{Id:N}";
-        }
-        return Workspace;
-    }
 }

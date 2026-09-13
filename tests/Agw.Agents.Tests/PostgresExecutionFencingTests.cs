@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using Agw.Agents.Execution.Commands.Setting;
-using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Infrastructure.Configuration;
@@ -33,7 +32,7 @@ public sealed class PostgresExecutionFencingTests
         using var user = UserInfoUtil.Push(
             new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "owner")], "test"))
         );
-        var databaseName = "agw_fencing_" + Guid.NewGuid().ToString("N");
+        var databaseName = $"agw_fencing_{Guid.NewGuid():N}";
         var settings = new NpgsqlConnectionStringBuilder(
             Environment.GetEnvironmentVariable("AGW_TEST_POSTGRES_CONNECTION_STRING")
         )
@@ -87,7 +86,7 @@ public sealed class PostgresExecutionFencingTests
                 AgentRuntimeType.Agent,
                 new AgwUserInput { Contents = [] },
                 task,
-                ExecutionSettings.FromCommand(new SettingCommand(task.ProjectId, contextId: task.ContextId)),
+                SettingCommandMapper.FromCommand(new SettingCommand(task.ProjectId, contextId: task.ContextId)),
                 token
             );
 
@@ -204,7 +203,8 @@ public sealed class PostgresExecutionFencingTests
                         .Abstractions
                         .NullLogger<Agw.Infrastructure.Agents.DurableExecutionScopeMaintenance>
                         .Instance
-                )
+                ),
+                TimeProvider.System
             );
             var target = new Agw.Projects.Application.Persistence.ProjectConversationDeletionTarget(
                 task.ProjectId,

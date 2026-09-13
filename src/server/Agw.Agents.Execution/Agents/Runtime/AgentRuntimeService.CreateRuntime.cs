@@ -1,12 +1,8 @@
 using Agw.Agents.Execution.Agents.Contracts;
-using Agw.Agents.Execution.Agents.ExternalAgents;
 using Agw.Agents.Execution.Agents.Sessions;
-using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
+using Agw.Agents.Execution.Runtimes;
 using Agw.Auth.Contracts;
-using Agw.Projects.Contracts.Execution;
-using Agw.Shared.Data.Entities.Agents;
-using Microsoft.Extensions.Logging;
 
 namespace Agw.Agents.Execution.Agents.Runtime;
 
@@ -14,16 +10,17 @@ public partial class AgentRuntimeService
 {
     public async Task<bool> IsRuntimeCurrentAsync(AgentRuntime runtime, CancellationToken cancellationToken = default)
     {
-        if (runtime.IsDisposed || runtime.DefinitionVersion == null || runtime.SessionStateScope == null)
+        if (runtime.IsDisposed || runtime.ConfigurationVersion == null || runtime.SessionStateScope == null)
         {
             return false;
         }
 
-        var version = await _agentAppService.GetRuntimeDefinitionVersionAsync(
+        var version = await _configuration.ReadAsync(
             runtime.SessionStateScope.AgentId,
+            runtime._projectId,
             cancellationToken
         );
-        return version.HasValue && version == runtime.DefinitionVersion;
+        return version != null && version == runtime.ConfigurationVersion;
     }
 
     /// <summary>
@@ -32,7 +29,7 @@ public partial class AgentRuntimeService
     public Task<AgentRuntime?> CreateRuntimeAsync(
         Guid agentId,
         AgentExecutionTask task,
-        SettingCommand settings,
+        ExecutionSettings settings,
         CancellationToken cancellationToken = default
     ) => CreateRuntimeCoreAsync(agentId, task, settings, deferHumanInteractions: false, cancellationToken);
 
@@ -42,7 +39,7 @@ public partial class AgentRuntimeService
     internal Task<AgentRuntime?> CreateDurableRuntimeAsync(
         Guid agentId,
         AgentExecutionTask task,
-        SettingCommand settings,
+        ExecutionSettings settings,
         CancellationToken cancellationToken = default
     ) => CreateRuntimeCoreAsync(agentId, task, settings, deferHumanInteractions: true, cancellationToken);
 
@@ -52,7 +49,7 @@ public partial class AgentRuntimeService
     private async Task<AgentRuntime?> CreateRuntimeCoreAsync(
         Guid agentId,
         AgentExecutionTask task,
-        SettingCommand settings,
+        ExecutionSettings settings,
         bool deferHumanInteractions,
         CancellationToken cancellationToken
     )
@@ -64,6 +61,7 @@ public partial class AgentRuntimeService
             return null;
         }
 
+        var configurationVersion = await _configuration.ReadAsync(agentId, task.ProjectId, cancellationToken);
         Guid projectId = task.ProjectId;
         var resolvedContextId = ContextIdUtil.ResolveContextId(task.ContextId);
         var conversationId =
@@ -74,13 +72,13 @@ public partial class AgentRuntimeService
                     .ConfigureAwait(false)
                     ?? Guid.Empty;
         var sessionScope = new AgentSessionStateScope(conversationId, projectId, resolvedContextId, agent.Id);
-        var persistedProviderSessionId = await GetExternalProviderSessionIdAsync(
+        var persistedProviderSessionId = await _providerBindings.GetExternalProviderSessionIdAsync(
             agent,
             projectId,
             resolvedContextId,
             cancellationToken
         );
-        var (providerSessionId, isResume) = ResolveExternalProviderSession(
+        var (providerSessionId, isResume) = ExternalProviderSessionBindings.ResolveExternalProviderSession(
             agent,
             persistedProviderSessionId,
             settings.Resume
@@ -108,7 +106,12 @@ public partial class AgentRuntimeService
                 ConversationId = conversationId,
                 IsResume = isResume,
                 DeferHumanInteractions = deferHumanInteractions,
-                OnExternalSessionStartedAsync = CreateExternalSessionStartedCallback(agent, task, resolvedContextId),
+                OnExternalSessionStartedAsync = _providerBindings.CreateExternalSessionStartedCallback(
+                    agent,
+                    task,
+                    resolvedContextId,
+                    ResolveExecutionUserId()
+                ),
             },
             cancellationToken
         );
@@ -143,7 +146,10 @@ public partial class AgentRuntimeService
                 conversationHistoryWriter: _conversationHistoryWriter
             )
             {
-                DefinitionVersion = agent.UpdateTime ?? agent.CreateTime,
+                ConfigurationVersion =
+                    configurationVersion == await _configuration.ReadAsync(agentId, task.ProjectId, cancellationToken)
+                        ? configurationVersion
+                        : null,
             };
         }
         catch
@@ -151,110 +157,6 @@ public partial class AgentRuntimeService
             await DisposeAgentWithoutThrowingAsync(aiAgent).ConfigureAwait(false);
             throw;
         }
-    }
-
-    private async Task<Guid?> GetExternalProviderSessionIdAsync(
-        Agent agent,
-        Guid projectId,
-        string contextId,
-        CancellationToken cancellationToken
-    )
-    {
-        if (!UsesProviderSessionBinding(agent))
-        {
-            return null;
-        }
-
-        var providerSessionId = await _providerSessions.GetProviderSessionIdAsync(
-            new ProjectProviderSessionReference(
-                projectId,
-                contextId,
-                agent.Id,
-                agent.Name,
-                ConversationSessionContext.GetGeneration(projectId, contextId)
-            ),
-            cancellationToken
-        );
-        if (providerSessionId == null)
-        {
-            return null;
-        }
-
-        // Pi 0.84.4 emits UUIDv7 Session IDs, although the persisted provider binding is a string. If Pi adopts a
-        // non-Guid format, preserve the raw value through the runtime instead of treating the binding as invalid.
-        if (Guid.TryParse(providerSessionId, out var parsedProviderSessionId))
-        {
-            return parsedProviderSessionId;
-        }
-
-        _logger.LogWarning(
-            "Ignoring an invalid provider session binding for external Agent {AgentName}/{AgentId} in context {ContextId}.",
-            agent.Name,
-            agent.Id,
-            contextId
-        );
-        return null;
-    }
-
-    internal static (Guid? ProviderSessionId, bool IsResume) ResolveExternalProviderSession(
-        Agent agent,
-        Guid? persistedProviderSessionId,
-        bool requestedResume
-    )
-    {
-        var kind = ExternalAgentKindResolver.Resolve(agent);
-        if (kind == ExternalAgentKind.ClaudeCode)
-        {
-            return (persistedProviderSessionId ?? Guid.NewGuid(), persistedProviderSessionId.HasValue);
-        }
-
-        if (kind is ExternalAgentKind.Codex or ExternalAgentKind.Pi)
-        {
-            return (persistedProviderSessionId, persistedProviderSessionId.HasValue);
-        }
-
-        return (null, requestedResume);
-    }
-
-    private Func<string, CancellationToken, ValueTask>? CreateExternalSessionStartedCallback(
-        Agent agent,
-        AgentExecutionTask task,
-        string contextId
-    )
-    {
-        if (!UsesProviderSessionBinding(agent))
-        {
-            return null;
-        }
-
-        var executionUserId = ResolveExecutionUserId();
-        return async (providerSessionId, callbackCancellationToken) =>
-        {
-            try
-            {
-                await _providerSessions.SaveProviderSessionIdAsync(
-                    new ProjectProviderSessionReference(
-                        task.ProjectId,
-                        contextId,
-                        agent.Id,
-                        agent.Name,
-                        task.Generation
-                    ),
-                    providerSessionId,
-                    executionUserId,
-                    callbackCancellationToken
-                );
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(
-                    ex,
-                    "Failed to save provider session binding for context {ContextId}, agent {AgentId}.",
-                    contextId,
-                    agent.Id
-                );
-            }
-        };
     }
 
     private string ResolveExecutionUserId()

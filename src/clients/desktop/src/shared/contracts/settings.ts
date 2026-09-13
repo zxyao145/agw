@@ -11,3 +11,8 @@ export type DesktopSettings = {
   activeServerId: string;
   projectTabsByServer: Record<string, string[]>;
 };
+
+/** Only fields changed by the caller; tab entries merge per Server. */
+export type DesktopSettingsUpdate = Partial<
+  Pick<DesktopSettings, "closeBehavior" | "profiles" | "activeServerId" | "projectTabsByServer">
+>;

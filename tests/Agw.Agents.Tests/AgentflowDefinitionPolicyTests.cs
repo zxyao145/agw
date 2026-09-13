@@ -1,4 +1,4 @@
-using Agw.Agents.Definitions.Domain.Policies;
+using Agw.Agents.Definitions.Agents;
 using Agw.Shared.Data.Entities.Agentflows;
 
 namespace Agw.Agents.Tests;
@@ -6,7 +6,7 @@ namespace Agw.Agents.Tests;
 /// <summary>Characterization tests for the pure Agentflow definition policy.</summary>
 public class AgentflowDefinitionPolicyTests
 {
-    private readonly AgentflowDefinitionPolicy _service = new();
+    private readonly AgentflowDefinitionValidator _service = new();
 
     [Fact]
     public void Evaluate_ValidGraph_ReturnsDataOnlyDecision()

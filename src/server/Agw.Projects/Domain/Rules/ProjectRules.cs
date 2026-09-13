@@ -29,7 +29,7 @@ public static class ProjectRules
         "LPT9",
     ];
 
-    public static string GetDefaultWorkspace(Guid projectId) => $"~/.agw/projects/{projectId:N}";
+    public static string GetDefaultWorkspace(Guid projectId) => ProjectDefaults.GetDefaultWorkspace(projectId);
 
     public static bool TryFormatFolderName(string? value, out string folderName)
     {

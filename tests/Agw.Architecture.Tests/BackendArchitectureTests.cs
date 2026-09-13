@@ -71,11 +71,11 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Agents.Contracts",
                 "Agw.Auth",
                 "Agw.Data",
-                "Agw.Integrations",
+                "Agw.Integrations.Contracts",
                 "Agw.Projects.Contracts",
-                "Agw.Providers",
+                "Agw.Providers.Contracts",
                 "Agw.Shared",
-                "Agw.Skills",
+                "Agw.Skills.Contracts",
                 "Agw.Tools"
             ),
             ["Agw.Agents.Execution"] = Set(
@@ -94,8 +94,17 @@ public sealed partial class BackendArchitectureTests
             ),
             ["Agw.Agents.Contracts"] = Set("Agw.Projects.Contracts", "Agw.Shared"),
             ["Agw.Files"] = Set("Agw.Shared"),
+            ["Agw.Providers.Contracts"] = Set(),
+            ["Agw.Integrations.Contracts"] = Set(),
+            ["Agw.Skills.Contracts"] = Set(),
 
-            ["Agw.Integrations"] = Set("Agw.Auth", "Agw.Data", "Agw.Projects.Contracts", "Agw.Shared"),
+            ["Agw.Integrations"] = Set(
+                "Agw.Auth",
+                "Agw.Data",
+                "Agw.Projects.Contracts",
+                "Agw.Shared",
+                "Agw.Integrations.Contracts"
+            ),
             ["Agw.Jobs"] = Set(
                 "Agw.Agents.Contracts",
                 "Agw.Auth",
@@ -119,8 +128,14 @@ public sealed partial class BackendArchitectureTests
                 "Agw.Shared"
             ),
             ["Agw.Projects.Contracts"] = Set("Agw.Shared"),
-            ["Agw.Providers"] = Set("Agw.Agents.Contracts", "Agw.Data", "Agw.Shared"),
-            ["Agw.Skills"] = Set("Agw.Agents.Contracts", "Agw.Data", "Agw.Shared", "Agw.Tools.Abstractions"),
+            ["Agw.Providers"] = Set("Agw.Agents.Contracts", "Agw.Data", "Agw.Shared", "Agw.Providers.Contracts"),
+            ["Agw.Skills"] = Set(
+                "Agw.Agents.Contracts",
+                "Agw.Data",
+                "Agw.Shared",
+                "Agw.Tools.Abstractions",
+                "Agw.Skills.Contracts"
+            ),
             ["Agw.Tools"] = Set("Agw.Auth", "Agw.Files", "Agw.Tools.Abstractions", "Agw.Tools.Generators"),
             ["Agw.Tools.Abstractions"] = Set(),
             ["Agw.Tools.Generators"] = Set(),
@@ -128,7 +143,7 @@ public sealed partial class BackendArchitectureTests
             ["Agw.Auth"] = Set("Agw.Data", "Agw.Shared"),
             ["Agw.Settings"] = Set("Agw.Data", "Agw.Shared"),
             ["Agw.Shared"] = Set(),
-            ["Agw.Data"] = Set("Agw.Agents.Contracts", "Agw.Shared"),
+            ["Agw.Data"] = Set("Agw.Agents.Contracts", "Agw.Shared", "Agw.Providers.Contracts", "Agw.Skills.Contracts"),
 
             ["Agw.Setup"] = Set("Agw.Auth", "Agw.Infrastructure", "Agw.Shared", "Agw.Skills"),
             ["Agw.Migrations.Postgres"] = Set("Agw.Infrastructure"),

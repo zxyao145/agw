@@ -1,6 +1,6 @@
 using Agw.Agents.Execution.Agents.Contracts;
-using Agw.Agents.Execution.Commands.Setting;
 using Agw.Agents.Execution.HumanInteraction.Application;
+using Agw.Agents.Execution.Runtimes;
 using Agw.Shared.Exceptions;
 using Microsoft.Agents.AI;
 using RuntimeAgentExecutionResult = Agw.Agents.Execution.Agents.Contracts.AgentExecutionResult;
@@ -56,12 +56,26 @@ public interface IAgentRuntimeService
         bool deferHumanInteractions,
         CancellationToken cancellationToken = default,
         AgwPermissionMode? permissionMode = null
-    ) => CreateAgentflowNodeAgentAsync(agentId, projectId, conversationId, environmentVariables, cancellationToken);
+    ) =>
+        deferHumanInteractions || permissionMode.HasValue
+            ? Task.FromException<AIAgent?>(
+                new AgwException(
+                    ErrorCodes.InvalidParam,
+                    "The Agent runtime service does not support permission snapshots or deferred interactions."
+                )
+            )
+            : CreateAgentflowNodeAgentAsync(
+                agentId,
+                projectId,
+                conversationId,
+                environmentVariables,
+                cancellationToken
+            );
 
     Task<AgentRuntime?> CreateRuntimeAsync(
         Guid agentId,
         AgentExecutionTask task,
-        SettingCommand settings,
+        ExecutionSettings settings,
         CancellationToken cancellationToken = default
     );
 
@@ -74,7 +88,10 @@ public interface IAgentRuntimeService
         AgentRuntime runtime,
         AgwPermissionMode permissionMode,
         CancellationToken cancellationToken = default
-    ) => Task.CompletedTask;
+    ) =>
+        Task.FromException(
+            new AgwException(ErrorCodes.InvalidParam, "The Agent runtime service does not support permission changes.")
+        );
 
     IAsyncEnumerable<AgwMessage> ExecuteStreamingAsync(
         AgentRuntime session,
@@ -87,7 +104,13 @@ public interface IAgentRuntimeService
         AgwUserInput input,
         IInteractionHandler? approvalHandler,
         CancellationToken cancellationToken = default
-    ) => ExecuteStreamingAsync(session, input, cancellationToken);
+    ) =>
+        approvalHandler == null
+            ? ExecuteStreamingAsync(session, input, cancellationToken)
+            : throw new AgwException(
+                ErrorCodes.InvalidParam,
+                "The Agent runtime service does not support approval handlers."
+            );
 
     Task<IReadOnlyList<AgwMessage>> ExecuteAsync(
         AgentRuntime session,
@@ -100,7 +123,15 @@ public interface IAgentRuntimeService
         AgwUserInput input,
         IInteractionHandler? approvalHandler,
         CancellationToken cancellationToken = default
-    ) => ExecuteAsync(session, input, cancellationToken);
+    ) =>
+        approvalHandler == null
+            ? ExecuteAsync(session, input, cancellationToken)
+            : Task.FromException<IReadOnlyList<AgwMessage>>(
+                new AgwException(
+                    ErrorCodes.InvalidParam,
+                    "The Agent runtime service does not support approval handlers."
+                )
+            );
 
     Task<RuntimeAgentExecutionResult?> ExecuteByIdAsync(
         AgentExecuteByIdRequest request,

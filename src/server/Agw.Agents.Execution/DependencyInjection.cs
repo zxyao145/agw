@@ -41,7 +41,8 @@ public static class DependencyInjection
     public sealed record RegistrationOptions(
         bool AddExecutionTransport = true,
         bool AddDistributedWorker = true,
-        bool AddTraceCollector = true
+        bool AddTraceCollector = true,
+        bool AddRuntime = true
     );
 
     /// <summary>
@@ -58,75 +59,97 @@ public static class DependencyInjection
             configuration.GetSection(ExecutionRuntimeOptions.SectionName).Get<ExecutionRuntimeOptions>()
             ?? new ExecutionRuntimeOptions();
         services.Configure<ExecutionRuntimeOptions>(configuration.GetSection(ExecutionRuntimeOptions.SectionName));
-        services.AddSingleton<IAgentInstructionsSource, ProjectInstructionsSource>();
-        services.AddScoped<AgentflowWorkflowFactory>();
-        services.AddScoped<AgentflowExecutionContextFactory>();
-        services.AddScoped<AgentflowCheckpointSupport>();
-        services.AddScoped<DurableAgentflowSegmentRunner>();
-        services.AddScoped<InProcessAgentflowRunner>();
-        services.AddScoped<AgentflowRuntimeService>();
-        services.AddScoped<IAgentflowRuntimeService>(provider =>
-            provider.GetRequiredService<AgentflowRuntimeService>()
-        );
-        services.AddScoped<IAgentflowMermaidProvider>(provider =>
-            provider.GetRequiredService<AgentflowRuntimeService>()
-        );
         services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<IAgentflowMermaidProvider, AgentflowMermaidProvider>();
         services.AddSingleton<AgentflowCheckpointStore>();
-        services.AddScoped<AgentSessionStateStore>();
-        services.AddScoped<AgentCapabilityComposer>();
-        services.AddScoped<AgentRuntimeService>();
-        services.AddScoped<IAgentRuntimeService>(serviceProvider =>
-            serviceProvider.GetRequiredService<AgentRuntimeService>()
-        );
+        if (!registrationOptions.AddRuntime && executionOptions.Provider != ExecutionProvider.Distributed)
+            throw new AgwException(
+                ErrorCodes.DurableExecutionUnavailable,
+                "A submission-only Host requires Distributed execution."
+            );
+        if (registrationOptions.AddRuntime)
+        {
+            services.AddSingleton<IAgentInstructionsSource, ProjectInstructionsSource>();
+            services.AddScoped<AgentflowWorkflowFactory>();
+            services.AddScoped<AgentflowExecutionContextFactory>();
+            services.AddScoped<AgentflowCheckpointSupport>();
+            services.AddScoped<DurableAgentflowSegmentRunner>();
+            services.AddScoped<InProcessAgentflowRunner>();
+            services.AddScoped<AgentflowRuntimeService>();
+            services.AddScoped<IAgentflowRuntimeService>(provider =>
+                provider.GetRequiredService<AgentflowRuntimeService>()
+            );
+            services.TryAddSingleton(TimeProvider.System);
+            services.AddScoped<AgentSessionStateStore>();
+            services.AddScoped<AgentCapabilityComposer>();
+            services.AddScoped<AgentTurnExecutor>();
+            services.AddScoped<ExternalProviderSessionBindings>();
+            services.AddScoped<AgentRuntimeConfiguration>();
+            services.AddScoped<AgentRuntimeService>();
+            services.AddScoped<IAgentRuntimeService>(serviceProvider =>
+                serviceProvider.GetRequiredService<AgentRuntimeService>()
+            );
+        }
+        if (executionOptions.Provider == ExecutionProvider.Distributed)
+            services.AddScoped<IAgentExecutionRunner, DurableAgentExecutionRunner>();
+        else
+            services.AddScoped<IAgentExecutionRunner, InProcessAgentExecutionRunner>();
         services.AddScoped<AgentExecutionFacade>();
         services.AddScoped<IAgentExecutionFacade>(provider => provider.GetRequiredService<AgentExecutionFacade>());
         services.AddScoped<IDurableAgentExecutionFacade>(provider =>
             provider.GetRequiredService<AgentExecutionFacade>()
         );
-        services.AddScoped<ISummaryChatClientFactory, SummaryChatClientFactory>();
-        services.AddScoped<IAgentTurnSummaryService, AgentTurnSummaryService>();
-        services.AddScoped<IRuntimeFactory, RuntimeFactory>();
-        if (registrationOptions.AddExecutionTransport)
+        if (registrationOptions.AddRuntime)
         {
-            services.AddExecutionCommands();
-            services.AddScoped<ExecutionCommandDispatcher>();
-            services.AddScoped<ExecutionConnectionContextFactory>();
-            services.AddSingleton<ExecutionConnectionRegistry>();
-        }
-        services.AddSingleton<RuntimeTurnContextAccessor>();
-        services.AddSingleton<IRuntimeTurnContextAccessor>(provider =>
-            provider.GetRequiredService<RuntimeTurnContextAccessor>()
-        );
-        services.AddSingleton<ICurrentAgentTurn>(provider => provider.GetRequiredService<RuntimeTurnContextAccessor>());
-        services.AddSingleton<HumanInteractionContextAccessor>();
-        services.AddSingleton<IHumanInteractionContextAccessor>(serviceProvider =>
-            serviceProvider.GetRequiredService<HumanInteractionContextAccessor>()
-        );
-        services.AddSingleton<ObservabilityMiddleware>();
-        services.AddSingleton<UsageTrackingMiddleware>();
-        services.AddSingleton<IAgentflowNodeExecutionTraceStore, AgentflowNodeExecutionTraceStore>();
-        if (registrationOptions.AddTraceCollector)
-        {
-            services.AddSingleton<AgentflowNodeExecutionTraceCollector>();
-            services.AddHostedService(serviceProvider =>
-                serviceProvider.GetRequiredService<AgentflowNodeExecutionTraceCollector>()
+            services.AddScoped<ISummaryChatClientFactory, SummaryChatClientFactory>();
+            services.AddScoped<IAgentTurnSummaryService, AgentTurnSummaryService>();
+            services.AddScoped<IRuntimeFactory, RuntimeFactory>();
+            if (registrationOptions.AddExecutionTransport)
+            {
+                services.AddExecutionCommands();
+                services.AddScoped<ExecutionCommandDispatcher>();
+                services.AddScoped<ExecutionConnectionContextFactory>();
+                services.AddSingleton<ExecutionConnectionRegistry>();
+            }
+            services.AddSingleton<RuntimeTurnContextAccessor>();
+            services.AddSingleton<IRuntimeTurnContextAccessor>(provider =>
+                provider.GetRequiredService<RuntimeTurnContextAccessor>()
             );
+            services.AddSingleton<ICurrentAgentTurn>(provider =>
+                provider.GetRequiredService<RuntimeTurnContextAccessor>()
+            );
+            services.AddSingleton<HumanInteractionContextAccessor>();
+            services.AddSingleton<IHumanInteractionContextAccessor>(serviceProvider =>
+                serviceProvider.GetRequiredService<HumanInteractionContextAccessor>()
+            );
+            services.AddSingleton<ObservabilityMiddleware>();
+            services.AddSingleton<UsageTrackingMiddleware>();
+            services.AddSingleton<IAgentflowNodeExecutionTraceStore, AgentflowNodeExecutionTraceStore>();
+            if (registrationOptions.AddTraceCollector)
+            {
+                services.AddSingleton<AgentflowNodeExecutionTraceCollector>();
+                services.AddHostedService(serviceProvider =>
+                    serviceProvider.GetRequiredService<AgentflowNodeExecutionTraceCollector>()
+                );
+            }
         }
 
         if (executionOptions.Provider == ExecutionProvider.Distributed)
         {
             ValidateDistributedConfiguration(configuration, executionOptions);
             services.AddScoped<DurableExecutionStore>();
-            services.AddScoped<DurableAgentSegmentRunner>();
-            services.AddScoped<DurableExecutionSegmentExecutor>();
-            services.AddScoped<IDurableExecutionSegmentExecutor>(sp =>
-                sp.GetRequiredService<DurableExecutionSegmentExecutor>()
-            );
+            if (registrationOptions.AddRuntime)
+            {
+                services.AddScoped<DurableAgentSegmentRunner>();
+                services.AddScoped<DurableExecutionSegmentExecutor>();
+                services.AddScoped<IDurableExecutionSegmentExecutor>(sp =>
+                    sp.GetRequiredService<DurableExecutionSegmentExecutor>()
+                );
+            }
             AddExecutionEventStream(services, executionOptions);
             services.AddSingleton<DurableExecutionCoordinator>();
             services.AddSingleton<IDurableExecutionClient, DurableExecutionClient>();
-            if (registrationOptions.AddDistributedWorker)
+            if (registrationOptions.AddRuntime && registrationOptions.AddDistributedWorker)
             {
                 services.AddHostedService<DistributedExecutionWorker>();
             }

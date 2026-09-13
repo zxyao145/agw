@@ -11,6 +11,14 @@ namespace Agw.Tools.Tests;
 
 public sealed class ToolsControllerTests
 {
+    private static ServiceCollection CreateToolServices()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHttpClient();
+        return services;
+    }
+
     [Theory]
     [InlineData("all", "diff", "File")]
     [InlineData("by-category", "diff", "File")]
@@ -21,7 +29,7 @@ public sealed class ToolsControllerTests
     public void Catalog_ReturnsOnlyLiteFields_PreservingSelectionMetadata(string endpoint, string name, string category)
     {
         // Arrange
-        using var services = new ServiceCollection().BuildServiceProvider();
+        using var services = CreateToolServices().BuildServiceProvider();
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             services,
@@ -87,7 +95,7 @@ public sealed class ToolsControllerTests
     public void GetTool_WriteTool_PreservesApprovalMetadata()
     {
         // Arrange
-        using var services = new ServiceCollection().BuildServiceProvider();
+        using var services = CreateToolServices().BuildServiceProvider();
         var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, services);
         var controller = new ToolsController(registry);
 
@@ -103,7 +111,7 @@ public sealed class ToolsControllerTests
     public void GetTool_UnknownName_ReturnsExistingNotFoundEnvelope()
     {
         // Arrange
-        using var services = new ServiceCollection().BuildServiceProvider();
+        using var services = CreateToolServices().BuildServiceProvider();
         var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, services);
         var controller = new ToolsController(registry);
 
@@ -118,7 +126,7 @@ public sealed class ToolsControllerTests
     public void Catalog_ExcludedToolBlock_HidesFromListsButRemainsAddressable()
     {
         // Arrange
-        using var services = new ServiceCollection().BuildServiceProvider();
+        using var services = CreateToolServices().BuildServiceProvider();
         var registry = new ToolRegistryService(
             NullLogger<ToolRegistryService>.Instance,
             services,

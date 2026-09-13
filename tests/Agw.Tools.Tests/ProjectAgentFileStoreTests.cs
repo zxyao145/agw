@@ -221,7 +221,7 @@ public sealed class ProjectAgentFileStoreTests
         {
             await File.WriteAllTextAsync(
                 Path.Combine(workspace, "minified.js"),
-                "needle" + new string('x', 10_000),
+                $"needle{new string('x', 10_000)}",
                 cancellationToken
             );
             var store = CreateStore(workspace);
@@ -253,7 +253,7 @@ public sealed class ProjectAgentFileStoreTests
         {
             await File.WriteAllLinesAsync(
                 Path.Combine(workspace, "matches.txt"),
-                Enumerable.Repeat("needle" + new string('x', 5_000), 200),
+                Enumerable.Repeat($"needle{new string('x', 5_000)}", 200),
                 cancellationToken
             );
             var store = CreateStore(workspace);

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Definitions.Domain.Topology;
 using Agw.Agents.Execution.Agentflows.Context;
 using Agw.Agents.Execution.Agentflows.Messaging;
@@ -364,7 +365,7 @@ public sealed class AgentflowWorkflowCompiler
     {
         if (
             summaryContext == null
-            || !AgentflowTopology.TryReadOutputSummaryEnabled(node.ConfigJson, out var summaryEnabled)
+            || !AgentflowConfigurationParser.TryReadOutputSummaryEnabled(node.ConfigJson, out var summaryEnabled)
             || !summaryEnabled
         )
         {
@@ -671,7 +672,9 @@ public sealed class AgentflowWorkflowCompiler
 
     private static int GetSwitchCaseOrder(AgentflowEdge edge)
     {
-        return AgentflowTopology.TryReadSwitchCaseOrder(edge.ConfigJson, out var order) ? order : int.MaxValue;
+        return AgentflowConfigurationParser.TryReadSwitchCaseOrder(edge.ConfigJson, out var order)
+            ? order
+            : int.MaxValue;
     }
 
     private static void AddWorkflowOutputs(

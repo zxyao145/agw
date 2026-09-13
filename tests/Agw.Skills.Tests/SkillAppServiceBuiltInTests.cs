@@ -8,6 +8,7 @@ using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
 using Agw.Skills.Application;
 using Agw.Skills.Application.Remote;
+using Agw.Skills.Contracts;
 using Agw.Skills.Contracts.Registration;
 using Microsoft.Agents.AI;
 using Microsoft.Data.Sqlite;

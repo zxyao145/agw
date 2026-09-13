@@ -1,5 +1,3 @@
-using Agw.Shared.Data.Entities.Skills;
-
 namespace Agw.Skills.Contracts.References;
 
 public sealed record SkillReferenceSnapshot(

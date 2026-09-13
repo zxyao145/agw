@@ -58,7 +58,6 @@ function DesktopSettingsPanel() {
     setBusy(true);
     try {
       await desktop.saveSettings({
-        ...settings,
         closeBehavior: closeBehavior as "minimize-to-tray" | "quit-desktop",
       });
       toast.success("App settings saved");

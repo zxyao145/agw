@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { DesktopSettings, PackageFlavor } from "../../shared/contracts";
+import type { DesktopSettings, DesktopSettingsUpdate, PackageFlavor } from "../../shared/contracts";
 import { DEFAULT_LOCAL_PROFILE, validateServerProfiles } from "./server-profiles";
 
 export type SecretCodec = {
@@ -17,6 +17,7 @@ type SecretFile = {
 export class DesktopSettingsStore {
   private readonly settingsFile: string;
   private readonly secretsFile: string;
+  private pendingWrite: Promise<void> = Promise.resolve();
 
   public constructor(
     private readonly directory: string,
@@ -53,23 +54,40 @@ export class DesktopSettingsStore {
     }
   }
 
-  public async save(settings: DesktopSettings): Promise<void> {
-    validateServerProfiles(settings.profiles);
-    if (!settings.profiles.some((profile) => profile.id === settings.activeServerId)) {
-      throw new Error("The active Server profile does not exist.");
-    }
-    await this.writeJson(this.settingsFile, {
-      ...settings,
-      schemaVersion: 1,
-      packageFlavor: this.packageFlavor,
+  public async save(update: DesktopSettingsUpdate): Promise<void> {
+    await this.enqueueWrite(async () => {
+      const current = await this.load();
+      const profiles = update.profiles ?? current.profiles;
+      validateServerProfiles(profiles);
+      const profileIds = new Set(profiles.map((profile) => profile.id));
+      const activeServerId =
+        update.activeServerId ??
+        (profileIds.has(current.activeServerId) ? current.activeServerId : "local");
+      if (!profileIds.has(activeServerId)) {
+        throw new Error("The active Server profile does not exist.");
+      }
+      const projectTabsByServer = Object.fromEntries(
+        Object.entries({ ...current.projectTabsByServer, ...update.projectTabsByServer }).filter(
+          ([profileId]) => profileIds.has(profileId),
+        ),
+      );
+      await this.writeJson(this.settingsFile, {
+        ...current,
+        closeBehavior: update.closeBehavior ?? current.closeBehavior,
+        profiles,
+        activeServerId,
+        projectTabsByServer,
+      });
     });
   }
 
   public async saveToken(profileId: string, token: string): Promise<void> {
     if (!token.startsWith("agw_")) throw new Error("Agw API tokens must start with agw_.");
-    const secrets = await this.loadSecretFile();
-    secrets.tokens[profileId] = this.secretCodec.encrypt(token).toString("base64");
-    await this.writeJson(this.secretsFile, secrets);
+    await this.enqueueWrite(async () => {
+      const secrets = await this.loadSecretFile();
+      secrets.tokens[profileId] = this.secretCodec.encrypt(token).toString("base64");
+      await this.writeJson(this.secretsFile, secrets);
+    });
   }
 
   public async loadToken(profileId: string): Promise<string | null> {
@@ -79,9 +97,11 @@ export class DesktopSettingsStore {
   }
 
   public async deleteToken(profileId: string): Promise<void> {
-    const secrets = await this.loadSecretFile();
-    delete secrets.tokens[profileId];
-    await this.writeJson(this.secretsFile, secrets);
+    await this.enqueueWrite(async () => {
+      const secrets = await this.loadSecretFile();
+      delete secrets.tokens[profileId];
+      await this.writeJson(this.secretsFile, secrets);
+    });
   }
 
   private createDefaults(): DesktopSettings {
@@ -103,6 +123,12 @@ export class DesktopSettingsStore {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       return { schemaVersion: 1, tokens: {} };
     }
+  }
+
+  private enqueueWrite(write: () => Promise<void>): Promise<void> {
+    const pending = this.pendingWrite.then(write);
+    this.pendingWrite = pending.catch(() => undefined);
+    return pending;
   }
 
   private async writeJson(file: string, value: unknown): Promise<void> {

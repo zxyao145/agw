@@ -18,13 +18,15 @@ public sealed class PluginInstallationAppService
     private readonly CredentialMutationService _credentialMutations;
     private readonly TimeProvider _timeProvider;
     private readonly IUserInfoService _userInfoService;
+    private readonly IntegrationMutationCoordinator _mutations;
 
     public PluginInstallationAppService(
         IIntegrationsDbContext dbContext,
         IPluginCatalog pluginCatalog,
         CredentialMutationService credentialMutations,
         TimeProvider timeProvider,
-        IUserInfoService userInfoService
+        IUserInfoService userInfoService,
+        IntegrationMutationCoordinator mutations
     )
     {
         _dbContext = dbContext;
@@ -32,6 +34,7 @@ public sealed class PluginInstallationAppService
         _credentialMutations = credentialMutations;
         _timeProvider = timeProvider;
         _userInfoService = userInfoService;
+        _mutations = mutations;
     }
 
     public async Task<PluginInstallationResponse> UpsertAsync(
@@ -48,6 +51,8 @@ public sealed class PluginInstallationAppService
             request.AuthSchemeId
         );
         var pluginId = definition.Plugin.Id;
+        await using var mutation = await _mutations.AcquirePluginAsync(pluginId, cancellationToken);
+        cancellationToken = mutation.Token;
         var connectorId = definition.Connector.Id;
         var authSchemeId = definition.AuthScheme.Id;
         var installation = await _dbContext
@@ -133,6 +138,7 @@ public sealed class PluginInstallationAppService
         var now = _timeProvider.GetUtcNow();
         foreach (var connection in connections)
         {
+            _mutations.InvalidateAuthorization(connection);
             connection.LastValidatedAtUtc = null;
             connection.ValidationMetadataJson = null;
             connection.UpdateBy = user;
