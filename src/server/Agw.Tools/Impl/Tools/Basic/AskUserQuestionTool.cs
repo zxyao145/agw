@@ -235,9 +235,7 @@ internal class AskUserQuestionTool : IAgwTool
             parts.Add(sb.ToString());
         }
 
-        return "User has answered your questions: "
-            + string.Join(", ", parts)
-            + ". You can now continue with the user's answers in mind.";
+        return $"User has answered your questions: {string.Join(", ", parts)}. You can now continue with the user's answers in mind.";
     }
 
     internal static void ValidateQuestions(IReadOnlyList<AskUserQuestionQuestion>? questions)

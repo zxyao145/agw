@@ -44,7 +44,7 @@ public static class A2ARoutesBuilderExtensions
         );
 
         routeGroup.MapGet(
-            agentRoute + "/.well-known/agent-card.json",
+            $"{agentRoute}/.well-known/agent-card.json",
             async delegate(HttpRequest request, string agentName, CancellationToken cancellationToken)
             {
                 var agentHandler = await agentHandlerFactory.CreateAsync(agentName);
@@ -91,6 +91,6 @@ public static class A2ARoutesBuilderExtensions
         }
 
         route = route.TrimEnd('/');
-        return route.Contains(PathPlaceholder, StringComparison.Ordinal) ? route : route + "/" + PathPlaceholder;
+        return route.Contains(PathPlaceholder, StringComparison.Ordinal) ? route : $"{route}/{PathPlaceholder}";
     }
 }

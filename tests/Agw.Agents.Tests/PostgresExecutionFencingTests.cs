@@ -32,7 +32,7 @@ public sealed class PostgresExecutionFencingTests
         using var user = UserInfoUtil.Push(
             new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "owner")], "test"))
         );
-        var databaseName = "agw_fencing_" + Guid.NewGuid().ToString("N");
+        var databaseName = $"agw_fencing_{Guid.NewGuid():N}";
         var settings = new NpgsqlConnectionStringBuilder(
             Environment.GetEnvironmentVariable("AGW_TEST_POSTGRES_CONNECTION_STRING")
         )

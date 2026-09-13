@@ -24,7 +24,7 @@ public sealed partial class DurableExecutionStoreTests
     public async Task PostgresBatch_ConcurrentOverlappingBatches_KeepEveryPositionExactlyOnce()
     {
         var token = TestContext.Current.CancellationToken;
-        var name = "agw_event_batch_" + Guid.NewGuid().ToString("N");
+        var name = $"agw_event_batch_{Guid.NewGuid():N}";
         var settings = new NpgsqlConnectionStringBuilder(
             Environment.GetEnvironmentVariable("AGW_TEST_POSTGRES_CONNECTION_STRING")
         )

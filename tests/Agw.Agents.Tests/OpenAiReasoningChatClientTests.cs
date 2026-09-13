@@ -247,7 +247,7 @@ public sealed class OpenAiReasoningChatClientTests
             return new(HttpStatusCode.OK)
             {
                 Content = new StringContent(
-                    streaming ? "data: " + json.Replace("\n", "").Replace("\r", "") + "\n\ndata: [DONE]\n\n" : json,
+                    streaming ? $"data: {json.Replace("\n", "").Replace("\r", "")}\n\ndata: [DONE]\n\n" : json,
                     Encoding.UTF8,
                     streaming ? "text/event-stream" : "application/json"
                 ),

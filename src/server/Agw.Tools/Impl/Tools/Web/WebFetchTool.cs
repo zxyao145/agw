@@ -152,7 +152,7 @@ internal class WebFetchTool : IAgwTool
 
         if (content.Length > maxLength)
         {
-            content = content[..maxLength] + "\n\n[Content truncated due to length]";
+            content = $"{content[..maxLength]}\n\n[Content truncated due to length]";
         }
 
         if (!string.IsNullOrWhiteSpace(prompt))

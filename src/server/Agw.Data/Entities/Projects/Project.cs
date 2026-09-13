@@ -1,7 +1,5 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
-
-using Agw.Projects.Contracts;
 using Agw.Shared.Data.Abstractions;
 using Agw.Shared.Tooling;
 using Microsoft.EntityFrameworkCore;
@@ -30,13 +28,4 @@ public class Project : BaseEntity, IAggregateRoot
         new List<ProjectMcpServerRelation>();
     public ICollection<ProjectConnectionRelation> ProjectConnectionRelations { get; set; } =
         new List<ProjectConnectionRelation>();
-    
-    public string GetMustWorkspace()
-    {
-        if (string.IsNullOrEmpty(Workspace))
-        {
-            return ProjectDefaults.GetDefaultWorkspace(Id);
-        }
-        return Workspace;
-    }
 }

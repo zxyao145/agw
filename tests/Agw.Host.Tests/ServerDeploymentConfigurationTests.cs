@@ -25,7 +25,7 @@ public sealed class ServerDeploymentConfigurationTests
     public void Apply_StandardSources_OverrideDefaultsInTheirOriginalOrder()
     {
         var prefix = $"AGW_CONFIG_TEST_{Guid.NewGuid():N}_";
-        var variable = prefix + "Database__ConnectionString";
+        var variable = $"{prefix}Database__ConnectionString";
         var directory = Path.Combine(Path.GetTempPath(), prefix);
         Directory.CreateDirectory(directory);
         Environment.SetEnvironmentVariable(variable, "Host=environment-variable");

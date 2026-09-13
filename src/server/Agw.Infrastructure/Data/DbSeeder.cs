@@ -160,7 +160,7 @@ public class DbSeeder
     {
         var now = _timeProvider.GetUtcNow();
         var workspace = string.IsNullOrWhiteSpace(definition.Workspace)
-            ? "~/.agw/" + definition.Name
+            ? $"~/.agw/{definition.Name}"
             : definition.Workspace;
         return new Project
         {
