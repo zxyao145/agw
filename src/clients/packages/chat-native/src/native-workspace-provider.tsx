@@ -75,6 +75,8 @@ export type NativeWorkspaceContextValue = {
   conversations: ConversationSummary[];
   messages: AiMessage[];
   selectedProjectId: string | null;
+  selectedDirectoryId: string | null;
+  selectDirectory(directoryId: string | null): void;
   selectedTargetValue: string | null;
   selectedConversationId: string | null;
   selectedContextId: string | null;
@@ -177,6 +179,7 @@ function NativeWorkspaceSession({
     [client],
   );
   const [selectedProjectId, setSelectedProjectId] = React.useState<string | null>(null);
+  const [selectedDirectoryId, setSelectedDirectoryId] = React.useState<string | null>(null);
   const [selectedTargetValue, setSelectedTargetValue] = React.useState<string | null>(null);
   const [selectedConversationId, setSelectedConversationId] = React.useState<string | null>(null);
   const [selectedContextId, setSelectedContextId] = React.useState<string | null>(null);
@@ -379,6 +382,19 @@ function NativeWorkspaceSession({
     [agentflows, agents, selectedProjectId],
   );
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
+  React.useEffect(() => {
+    setSelectedDirectoryId(null);
+  }, [selectedProjectId]);
+  React.useEffect(() => {
+    if (
+      selectedDirectoryId &&
+      !selectedProject?.additionalDirectories?.some(
+        (directory) => directory.id === selectedDirectoryId,
+      )
+    ) {
+      setSelectedDirectoryId(null);
+    }
+  }, [selectedDirectoryId, selectedProject]);
   const selectedTarget =
     targets.find((target) => getTargetValue(target) === selectedTargetValue) ?? null;
   const permissionCapabilities = useQuery({
@@ -1210,6 +1226,8 @@ function NativeWorkspaceSession({
       conversations,
       messages,
       selectedProjectId,
+      selectedDirectoryId,
+      selectDirectory: setSelectedDirectoryId,
       selectedTargetValue,
       selectedConversationId,
       selectedContextId,
@@ -1286,6 +1304,7 @@ function NativeWorkspaceSession({
       conversations,
       messages,
       selectedProjectId,
+      selectedDirectoryId,
       selectedTargetValue,
       selectedConversationId,
       selectedContextId,

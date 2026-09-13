@@ -11,6 +11,8 @@ using Agw.Files.Abstracts;
 using Agw.Projects.Contracts.Execution;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
+using Agw.Shared.Utils;
 
 namespace Agw.Agents.Execution.Runtimes.InProcess;
 
@@ -71,6 +73,18 @@ public sealed class RuntimeFactory : IRuntimeFactory
 
     public async Task<RuntimeStartResult> StartAsync(RuntimeStartRequest request, CancellationToken cancellationToken)
     {
+        var workspace = request.TurnContext.WorkspaceSnapshot;
+        using var workspaceContext =
+            workspace == null ? null : ProjectWorkspaceContext.Push(request.Task.ProjectId, workspace);
+        if (workspace != null)
+        {
+            ProjectWorkspacePaths.EnsureAvailable(request.Task.ProjectId, workspace);
+            if (request.CurrentRuntime != null && request.CurrentRuntime.WorkspaceFingerprint != workspace.Fingerprint)
+            {
+                await DisposeRuntimeAsync(request.CurrentRuntime);
+                request = request with { CurrentRuntime = null };
+            }
+        }
         using var sessionContext = ConversationSessionContext.Push(
             request.Task.ProjectId,
             request.Task.ContextId,
@@ -91,6 +105,10 @@ public sealed class RuntimeFactory : IRuntimeFactory
         try
         {
             var result = await StartCoreAsync(request, ownership.Token);
+            if (result.Runtime != null)
+            {
+                result.Runtime.WorkspaceFingerprint = workspace?.Fingerprint;
+            }
             if (result.ActiveTurn == null)
             {
                 if (lease != null)
@@ -389,7 +407,11 @@ public sealed class RuntimeFactory : IRuntimeFactory
 
     private async Task EnsureWorkspaceAsync(Guid projectId, CancellationToken cancellationToken)
     {
-        var fs = await _fileSystemResolver.ResolveAsync(projectId, cancellationToken);
+        var workspace = ProjectWorkspaceContext.Get(projectId);
+        var fs =
+            workspace == null
+                ? await _fileSystemResolver.ResolveAsync(projectId, cancellationToken)
+                : await _fileSystemResolver.ResolveSnapshotAsync(projectId, workspace, null, cancellationToken);
         if (fs == null)
         {
             throw new AgwException(ErrorCodes.ResourceNotFound, "Project was not found.");

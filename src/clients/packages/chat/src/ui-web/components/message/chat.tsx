@@ -85,6 +85,7 @@ export type ConversationChangeOptions = {
 export interface ChatProps {
   target: Pick<ChatTargetOption, "id" | "type"> | null;
   projectId: string | null;
+  directoryId?: string | null;
   conversationId: string | null;
   sessionSeed: ChatSessionSeed;
   isLoadingConversation?: boolean;
@@ -161,6 +162,7 @@ function prependUniqueMessages(
 export function Chat({
   target,
   projectId,
+  directoryId,
   conversationId,
   sessionSeed,
   isLoadingConversation = false,
@@ -1679,6 +1681,7 @@ export function Chat({
             canResume={!checkpointResumeDisabled && latestAvailableCheckpoint !== null}
             onResume={() => handleResumeCheckpoint()}
             projectId={projectId}
+            directoryId={directoryId}
             commandSource={commandSource}
             permissionMode={permissionMode}
             activePermissionMode={activePermissionMode}

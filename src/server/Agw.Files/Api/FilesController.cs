@@ -27,11 +27,19 @@ public class FilesController : ControllerBase
         [FromQuery, BindRequired] Guid projectId,
         [FromQuery] string? path = "",
         [FromQuery] bool diff = false,
-        [FromQuery] bool recursive = false
+        [FromQuery] bool recursive = false,
+        [FromQuery] Guid? directoryId = null
     )
     {
         TrackRequestedPath(projectId, path);
-        var result = await _fileAppService.ListAsync(projectId, path, diff, recursive, RequestCancellationToken);
+        var result = await _fileAppService.ListAsync(
+            projectId,
+            path,
+            diff,
+            recursive,
+            RequestCancellationToken,
+            directoryId
+        );
         if (result.Status != FileOperationStatus.Success)
         {
             return MapError(result);
@@ -40,6 +48,7 @@ public class FilesController : ControllerBase
         var items = result
             .Value!.Items.Select(entry => new FileItem
             {
+                DirectoryId = directoryId,
                 Name = entry.Name,
                 Path = entry.Path,
                 Type = entry.Type,
@@ -57,10 +66,14 @@ public class FilesController : ControllerBase
     [ProducesResponseType(typeof(ApiResult<string>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> ReadAsync([FromQuery, BindRequired] Guid projectId, [FromQuery] string? path)
+    public async Task<IActionResult> ReadAsync(
+        [FromQuery, BindRequired] Guid projectId,
+        [FromQuery] string? path,
+        [FromQuery] Guid? directoryId = null
+    )
     {
         TrackRequestedPath(projectId, path);
-        var result = await _fileAppService.ReadAsync(projectId, path, RequestCancellationToken);
+        var result = await _fileAppService.ReadAsync(projectId, path, RequestCancellationToken, directoryId);
         return result.Status == FileOperationStatus.Success ? ApiResult.Ok(result.Value) : MapError(result);
     }
 
@@ -71,11 +84,12 @@ public class FilesController : ControllerBase
     public async Task<IActionResult> DiffAsync(
         [FromQuery, BindRequired] Guid projectId,
         [FromQuery] string? path,
-        [FromQuery] string? scope = null
+        [FromQuery] string? scope = null,
+        [FromQuery] Guid? directoryId = null
     )
     {
         TrackRequestedPath(projectId, path);
-        var result = await _fileAppService.DiffAsync(projectId, path, scope, RequestCancellationToken);
+        var result = await _fileAppService.DiffAsync(projectId, path, scope, RequestCancellationToken, directoryId);
         if (result.Status != FileOperationStatus.Success)
         {
             return MapError(result);
@@ -101,10 +115,14 @@ public class FilesController : ControllerBase
     [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeleteAsync([FromQuery, BindRequired] Guid projectId, [FromQuery] string? path)
+    public async Task<IActionResult> DeleteAsync(
+        [FromQuery, BindRequired] Guid projectId,
+        [FromQuery] string? path,
+        [FromQuery] Guid? directoryId = null
+    )
     {
         TrackRequestedPath(projectId, path);
-        var result = await _fileAppService.DeleteAsync(projectId, path, RequestCancellationToken);
+        var result = await _fileAppService.DeleteAsync(projectId, path, RequestCancellationToken, directoryId);
         return MapMutationResult(result);
     }
 
@@ -113,10 +131,14 @@ public class FilesController : ControllerBase
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> ResetAsync([FromQuery, BindRequired] Guid projectId, [FromQuery] string? path)
+    public async Task<IActionResult> ResetAsync(
+        [FromQuery, BindRequired] Guid projectId,
+        [FromQuery] string? path,
+        [FromQuery] Guid? directoryId = null
+    )
     {
         TrackRequestedPath(projectId, path);
-        var result = await _fileAppService.ResetAsync(projectId, path, RequestCancellationToken);
+        var result = await _fileAppService.ResetAsync(projectId, path, RequestCancellationToken, directoryId);
         return MapMutationResult(result);
     }
 
@@ -124,26 +146,34 @@ public class FilesController : ControllerBase
     [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> StageAsync([FromQuery, BindRequired] Guid projectId, [FromQuery] string? path)
+    public async Task<IActionResult> StageAsync(
+        [FromQuery, BindRequired] Guid projectId,
+        [FromQuery] string? path,
+        [FromQuery] Guid? directoryId = null
+    )
     {
-        return await SetStagedAsync(projectId, path, staged: true);
+        return await SetStagedAsync(projectId, path, staged: true, directoryId);
     }
 
     [HttpPost("unstage")]
     [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResult), StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> UnstageAsync([FromQuery, BindRequired] Guid projectId, [FromQuery] string? path)
+    public async Task<IActionResult> UnstageAsync(
+        [FromQuery, BindRequired] Guid projectId,
+        [FromQuery] string? path,
+        [FromQuery] Guid? directoryId = null
+    )
     {
-        return await SetStagedAsync(projectId, path, staged: false);
+        return await SetStagedAsync(projectId, path, staged: false, directoryId);
     }
 
-    private async Task<IActionResult> SetStagedAsync(Guid projectId, string? path, bool staged)
+    private async Task<IActionResult> SetStagedAsync(Guid projectId, string? path, bool staged, Guid? directoryId)
     {
         TrackRequestedPath(projectId, path);
         var result = staged
-            ? await _fileAppService.StageAsync(projectId, path, RequestCancellationToken)
-            : await _fileAppService.UnstageAsync(projectId, path, RequestCancellationToken);
+            ? await _fileAppService.StageAsync(projectId, path, RequestCancellationToken, directoryId)
+            : await _fileAppService.UnstageAsync(projectId, path, RequestCancellationToken, directoryId);
         return MapMutationResult(result);
     }
 
@@ -156,7 +186,8 @@ public class FilesController : ControllerBase
         [FromQuery] string? path = "",
         [FromQuery] string? keyword = null,
         [FromQuery] int limit = 10,
-        [FromQuery] bool recursive = true
+        [FromQuery] bool recursive = true,
+        [FromQuery] Guid? directoryId = null
     )
     {
         TrackRequestedPath(projectId, path);
@@ -166,7 +197,8 @@ public class FilesController : ControllerBase
             keyword,
             limit,
             recursive,
-            RequestCancellationToken
+            RequestCancellationToken,
+            directoryId
         );
         if (result.Status != FileOperationStatus.Success)
         {
@@ -176,6 +208,7 @@ public class FilesController : ControllerBase
         var results = result
             .Value!.Results.Select(entry => new FileSearchResult
             {
+                DirectoryId = directoryId,
                 FullPath = entry.FullPath,
                 RelativePath = entry.RelativePath,
                 Type = entry.Type,

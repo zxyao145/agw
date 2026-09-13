@@ -13,6 +13,7 @@ export type NativeChatBindings = {
   conversations: ConversationSummary[];
   targets: ChatTargetOption[];
   selectedProjectId: string | null;
+  selectedDirectoryId?: string | null;
   selectedConversationId: string | null;
   selectedContextId: string | null;
   selectedTargetValue: string | null;

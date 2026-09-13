@@ -3,6 +3,8 @@ using Agw.Files.Abstracts;
 using Agw.Files.Application.Storage.Local;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Runtime;
+using Agw.Shared.Utils;
 using Agw.Tools.Impl.ToolBlocks.FileAccess;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -11,6 +13,75 @@ namespace Agw.Tools.Tests;
 
 public sealed class FileAccessPermissionTests
 {
+    [Theory]
+    [InlineData("file_access_read")]
+    [InlineData("file_access_write")]
+    public async Task RunAsync_AdditionalDirectory_RoutesSdkToolUsingCapturedSnapshot(string toolName)
+    {
+        var token = TestContext.Current.CancellationToken;
+        var root = Directory.CreateTempSubdirectory("agw-file-directories-");
+        try
+        {
+            var primary = root.CreateSubdirectory("primary").FullName;
+            var extra = root.CreateSubdirectory("extra").FullName;
+            await File.WriteAllTextAsync(Path.Combine(primary, "README.md"), "primary content", token);
+            await File.WriteAllTextAsync(Path.Combine(extra, "README.md"), "extra content", token);
+            var projectId = Guid.CreateVersion7();
+            var directoryId = Guid.CreateVersion7();
+            var snapshot = ProjectWorkspacePaths.CreateSnapshot(
+                projectId,
+                primary,
+                [new ProjectWorkspaceDirectory(directoryId, extra)]
+            );
+            await using var contribution = await new FileAccessToolBlock(
+                new FileSystemResolver(primary)
+            ).MaterializeAsync(
+                new FileAccessToolBlockDefinition(),
+                new ToolMaterializationContext
+                {
+                    Agent = new Agent(),
+                    Project = new Project { Id = projectId, Workspace = primary },
+                    Workspace = primary,
+                    WorkspaceSnapshot = snapshot,
+                    DefaultMode = "execute",
+                },
+                token
+            );
+            using var model = new FileToolModel(
+                toolName,
+                new Dictionary<string, object?>
+                {
+                    ["fileName"] = "README.md",
+                    ["overwrite"] = true,
+                    ["content"] = "updated extra",
+                    ["directoryId"] = directoryId.ToString(),
+                }
+            );
+            var agent = new ChatClientAgent(
+                model,
+                new ChatClientAgentOptions { AIContextProviders = contribution.ContextProviders }
+            );
+            var response = await agent.RunAsync(
+                "use selected directory",
+                await agent.CreateSessionAsync(token),
+                cancellationToken: token
+            );
+            var result = Assert.Single(
+                response.Messages.SelectMany(message => message.Contents).OfType<FunctionResultContent>()
+            );
+            Assert.Null(result.Exception);
+            if (toolName == "file_access_read")
+                Assert.Contains("extra content", System.Text.Json.JsonSerializer.Serialize(result.Result));
+            else
+                Assert.Equal("updated extra", await File.ReadAllTextAsync(Path.Combine(extra, "README.md"), token));
+            Assert.Equal("primary content", await File.ReadAllTextAsync(Path.Combine(primary, "README.md"), token));
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("file_access_ls", false)]
     [InlineData("file_access_write", true)]
@@ -73,16 +144,32 @@ public sealed class FileAccessPermissionTests
 
         public Task<IAgwFileSystem?> ResolveAsync(Guid projectId, CancellationToken ct) =>
             Task.FromResult<IAgwFileSystem?>(_fileSystem);
+
+        public Task<IAgwFileSystem?> ResolveSnapshotAsync(
+            Guid projectId,
+            ProjectWorkspaceSnapshot snapshot,
+            Guid? directoryId,
+            CancellationToken ct
+        )
+        {
+            var path =
+                directoryId == null
+                    ? snapshot.Workspace
+                    : snapshot.AdditionalDirectories.Single(directory => directory.Id == directoryId).Path;
+            return Task.FromResult<IAgwFileSystem?>(new LocalFileSystem(path));
+        }
     }
 
     private sealed class FileToolModel : IChatClient
     {
         private readonly string _toolName;
         private bool _requested;
+        private readonly Dictionary<string, object?>? _arguments;
 
-        public FileToolModel(string toolName)
+        public FileToolModel(string toolName, Dictionary<string, object?>? arguments = null)
         {
             _toolName = toolName;
+            _arguments = arguments;
         }
 
         public void Dispose() { }
@@ -100,9 +187,12 @@ public sealed class FileAccessPermissionTests
                 return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, "done")));
             _requested = true;
             var arguments =
-                _toolName == "file_access_ls"
-                    ? new Dictionary<string, object?>()
-                    : new Dictionary<string, object?> { ["path"] = "new.txt", ["content"] = "new content" };
+                _arguments
+                ?? (
+                    _toolName == "file_access_ls"
+                        ? new Dictionary<string, object?>()
+                        : new Dictionary<string, object?> { ["path"] = "new.txt", ["content"] = "new content" }
+                );
             return Task.FromResult(
                 new ChatResponse(
                     new ChatMessage(ChatRole.Assistant, [new FunctionCallContent("file-call", _toolName, arguments)])

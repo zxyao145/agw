@@ -20,6 +20,8 @@ using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.References;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
+using Agw.Shared.Utils;
 using Microsoft.Agents.AI;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -31,6 +33,59 @@ namespace Agw.Agents.Tests;
 
 public sealed class RuntimeDefinitionRefreshTests
 {
+    [Theory]
+    [InlineData(ExternalAgentKind.ClaudeCode)]
+    [InlineData(ExternalAgentKind.Codex)]
+    [InlineData(ExternalAgentKind.Pi)]
+    public async Task StartAsync_DirectoriesChangeDuringTurn_FreezesActiveAndChildContextThenRebuilds(
+        ExternalAgentKind kind
+    )
+    {
+        await using var fixture = new Fixture(kind);
+        await fixture.InitializeAsync();
+        var extra = Directory.CreateTempSubdirectory("agw-runtime-directory-");
+        try
+        {
+            var projectId = fixture.Request.Task.ProjectId;
+            var original = ProjectWorkspacePaths.CreateSnapshot(
+                projectId,
+                Path.GetTempPath(),
+                [new ProjectWorkspaceDirectory(Guid.CreateVersion7(), extra.FullName)]
+            );
+            fixture.Request = fixture.Request with { WorkspaceSnapshot = original };
+            fixture.Service.HoldTurn = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            await fixture.Starter.StartAsync(fixture.Request, TestContext.Current.CancellationToken);
+            var active = Assert.IsType<AgentRuntime>(fixture.Starter.Runtime);
+            fixture.Request = fixture.Request with
+            {
+                WorkspaceSnapshot = ProjectWorkspacePaths.CreateSnapshot(projectId, Path.GetTempPath()),
+            };
+            Assert.True(active.HasActiveTurn);
+            Assert.False(active.IsDisposed);
+            fixture.Service.HoldTurn.SetResult();
+            await active.WhenIdleAsync();
+            fixture.Service.HoldTurn = null;
+            Assert.Equal(original.Fingerprint, Assert.Single(fixture.Service.ExecutedWorkspaces)!.Fingerprint);
+            Assert.Equal(original.Fingerprint, Assert.Single(fixture.Service.ChildWorkspaces)!.Fingerprint);
+
+            var next = await fixture.RunTurnAsync();
+            Assert.NotSame(active, next);
+            Assert.True(active.IsDisposed);
+            Assert.Equal(
+                active.SessionStateScope!.ProjectConversationId,
+                next.SessionStateScope!.ProjectConversationId
+            );
+            Assert.Equal(active.SessionStateScope.ContextId, next.SessionStateScope.ContextId);
+            Assert.Equal(active.SessionStateScope.Generation, next.SessionStateScope.Generation);
+            Assert.Empty(fixture.Service.ExecutedWorkspaces[1]!.AdditionalDirectories);
+            Assert.Same(next, await fixture.RunTurnAsync());
+        }
+        finally
+        {
+            extra.Delete();
+        }
+    }
+
     [Fact]
     public async Task StartAsync_UnchangedDefinition_ReusesRuntime()
     {
@@ -241,7 +296,7 @@ public sealed class RuntimeDefinitionRefreshTests
         public Agent Definition { get; }
         public RecordingRuntimeService Service { get; }
         public InProcessExecutionStarter Starter { get; }
-        public ExecutionStartRequest Request { get; }
+        public ExecutionStartRequest Request { get; set; }
 
         public Fixture(ExternalAgentKind kind = ExternalAgentKind.ClaudeCode)
         {
@@ -362,6 +417,8 @@ public sealed class RuntimeDefinitionRefreshTests
         private readonly AgentRuntimeService _checker;
         private readonly AgentRuntimeConfiguration _configuration;
         public List<RecordingAgent> CreatedAgents { get; } = [];
+        public List<ProjectWorkspaceSnapshot?> ExecutedWorkspaces { get; } = [];
+        public List<ProjectWorkspaceSnapshot?> ChildWorkspaces { get; } = [];
         public bool FailCreation { get; set; }
         public TaskCompletionSource? HoldTurn { get; set; }
 
@@ -428,6 +485,13 @@ public sealed class RuntimeDefinitionRefreshTests
         {
             if (HoldTurn != null)
                 await HoldTurn.Task.WaitAsync(cancellationToken);
+            ExecutedWorkspaces.Add(ProjectWorkspaceContext.Get(session.SessionStateScope!.ProjectId));
+            ChildWorkspaces.Add(
+                await Task.Run(
+                    () => ProjectWorkspaceContext.Get(session.SessionStateScope.ProjectId),
+                    cancellationToken
+                )
+            );
             return [];
         }
 

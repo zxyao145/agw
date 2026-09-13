@@ -33,6 +33,8 @@ function hasScrollPosition(element: HTMLDivElement, position: ScrollPosition): b
   );
 }
 
+import { useProjectFileScope } from "./project-file-scope";
+
 export function DiffViewer({
   diff,
   className,
@@ -41,6 +43,7 @@ export function DiffViewer({
   setComments,
   scope,
 }: DiffViewerProps) {
+  const fileScope = useProjectFileScope();
   const { original: originalLines, modified: modifiedLines } = React.useMemo(
     () => parseUnifiedDiff(diff),
     [diff],
@@ -69,17 +72,25 @@ export function DiffViewer({
   const isOriginalComment = React.useCallback(
     (comment: LineComment) =>
       comment.filePath === filePath &&
+      (comment.directoryId ?? null) === (fileScope.directoryId ?? null) &&
+      (comment.projectId == null ||
+        fileScope.projectId == null ||
+        comment.projectId === fileScope.projectId) &&
       comment.side === CommentSide.Original &&
       comment.diffScope === scope,
-    [filePath, scope],
+    [filePath, scope, fileScope.directoryId, fileScope.projectId],
   );
 
   const isModifiedComment = React.useCallback(
     (comment: LineComment) =>
       comment.filePath === filePath &&
+      (comment.directoryId ?? null) === (fileScope.directoryId ?? null) &&
+      (comment.projectId == null ||
+        fileScope.projectId == null ||
+        comment.projectId === fileScope.projectId) &&
       comment.side === CommentSide.Modified &&
       comment.diffScope === scope,
-    [filePath, scope],
+    [filePath, scope, fileScope.directoryId, fileScope.projectId],
   );
 
   const originalComments = React.useMemo(

@@ -353,7 +353,7 @@ public partial class ExecutionCommandHandlerTests
     }
 
     [Fact]
-    public async Task ExecCommand_ReusesResolvedTaskWorkspaceAndRuntimeForSameTarget()
+    public async Task ExecCommand_ReusesTaskAndRuntimeButReloadsWorkspaceEachTurn()
     {
         var task = CreateTask("resolved");
         var projectTasks = new FakeProjectTaskFacade(task);
@@ -367,7 +367,7 @@ public partial class ExecutionCommandHandlerTests
         await handler.HandleAsync(command, context, TestContext.Current.CancellationToken);
 
         Assert.Equal(1, projectTasks.ResolveCount);
-        Assert.Equal(1, projects.GetCount);
+        Assert.Equal(2, projects.GetCount);
         Assert.Equal(2, runtimeFactory.StartRequests.Count);
         Assert.Null(runtimeFactory.StartRequests[0].CurrentRuntime);
         Assert.Same(runtimeFactory.CreatedRuntimes[0], runtimeFactory.StartRequests[1].CurrentRuntime);

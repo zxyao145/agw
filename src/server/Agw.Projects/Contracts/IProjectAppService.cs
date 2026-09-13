@@ -28,6 +28,12 @@ public interface IProjectAppService
 
     Task<Project?> GetForCurrentUserAsync(Guid id);
 
+    async Task<string?> GetOwnerUserIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return (await GetForCurrentUserAsync(id).ConfigureAwait(false))?.CreateBy;
+    }
+
     Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction);
 
     Task<Project?> UpdateAsync(

@@ -33,7 +33,7 @@ public sealed partial class InitialMigrationTests
         Assert.False(dbContext.Database.HasPendingModelChanges());
 
         var migrations = dbContext.Database.GetMigrations().ToArray();
-        Assert.Equal(15, migrations.Length);
+        Assert.Equal(16, migrations.Length);
         Assert.EndsWith("_Init", migrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", migrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", migrations[2], StringComparison.Ordinal);
@@ -48,7 +48,8 @@ public sealed partial class InitialMigrationTests
         Assert.EndsWith("_ConversationSessionGeneration", migrations[11], StringComparison.Ordinal);
         Assert.EndsWith(BindingRenameMigrationSuffix, migrations[12], StringComparison.Ordinal);
         Assert.EndsWith("_AddExternalAgentKind", migrations[13], StringComparison.Ordinal);
-        Assert.EndsWith("_AddSettings", migrations[14], StringComparison.Ordinal);
+        Assert.EndsWith("_AddProjectAdditionalDirectories", migrations[14], StringComparison.Ordinal);
+        Assert.EndsWith("_AddSettings", migrations[15], StringComparison.Ordinal);
 
         var script = dbContext
             .GetService<IMigrator>()
@@ -69,6 +70,9 @@ public sealed partial class InitialMigrationTests
         Assert.Contains("execution_stream_entry", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("agentflow_checkpoint", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("external_agent_kind", script, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("additional_directories", script, StringComparison.OrdinalIgnoreCase);
+        var directoryScript = dbContext.GetService<IMigrator>().GenerateScript(migrations[13], migrations[14]);
+        Assert.DoesNotContain("FOREIGN KEY", directoryScript, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("api_token", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("user_memory", script, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("normalized_name", script, StringComparison.OrdinalIgnoreCase);
@@ -145,7 +149,7 @@ public sealed partial class InitialMigrationTests
         await dbContext.Database.MigrateAsync(cancellationToken);
 
         var appliedMigrations = (await dbContext.Database.GetAppliedMigrationsAsync(cancellationToken)).ToArray();
-        Assert.Equal(15, appliedMigrations.Length);
+        Assert.Equal(16, appliedMigrations.Length);
         Assert.EndsWith("_Init", appliedMigrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", appliedMigrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", appliedMigrations[2], StringComparison.Ordinal);
@@ -160,7 +164,13 @@ public sealed partial class InitialMigrationTests
         Assert.EndsWith("_ConversationSessionGeneration", appliedMigrations[11], StringComparison.Ordinal);
         Assert.EndsWith(BindingRenameMigrationSuffix, appliedMigrations[12], StringComparison.Ordinal);
         Assert.EndsWith("_AddExternalAgentKind", appliedMigrations[13], StringComparison.Ordinal);
-        Assert.EndsWith("_AddSettings", appliedMigrations[14], StringComparison.Ordinal);
+        Assert.EndsWith("_AddProjectAdditionalDirectories", appliedMigrations[14], StringComparison.Ordinal);
+        Assert.True(await ColumnIsNotNullAsync(connection, "project", "additional_directories", cancellationToken));
+        Assert.Equal(
+            "'[]'",
+            await ColumnDefaultAsync(connection, "project", "additional_directories", cancellationToken)
+        );
+        Assert.EndsWith("_AddSettings", appliedMigrations[15], StringComparison.Ordinal);
         Assert.True(await TableExistsAsync(connection, "setting", cancellationToken));
         Assert.False(await TableExistsAsync(connection, "server_auth_state", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "durable_execution", "project_id", cancellationToken));

@@ -1,3 +1,4 @@
+using Agw.Shared.Runtime;
 using Agw.Shared.Tooling;
 
 namespace Agw.Projects.Contracts.Runtime;
@@ -11,7 +12,8 @@ public sealed record ProjectRuntimeSnapshot(
     IReadOnlyDictionary<string, string> EnvironmentVariables,
     IReadOnlyList<Guid> SkillIds,
     IReadOnlyList<Guid> McpServerIds,
-    IReadOnlyList<Guid> ConnectionIds
+    IReadOnlyList<Guid> ConnectionIds,
+    IReadOnlyList<ProjectWorkspaceDirectory>? AdditionalDirectories = null
 );
 
 public interface IProjectRuntimeFacade

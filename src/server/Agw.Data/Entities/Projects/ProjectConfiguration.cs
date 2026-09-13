@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Agw.Shared.Tooling;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -17,6 +18,24 @@ public class ProjectConfiguration : IEntityTypeConfiguration<Project>
         builder.Property(e => e.Type).HasConversion<int>();
         builder.Property(e => e.Description).HasMaxLength(1000);
         builder.Property(e => e.Workspace).HasMaxLength(1000);
+        var directories = builder
+            .Property(e => e.AdditionalDirectories)
+            .HasColumnName("additional_directories")
+            .HasConversion(
+                value => JsonSerializer.Serialize(value, (JsonSerializerOptions?)null),
+                value =>
+                    JsonSerializer.Deserialize<List<ProjectDirectory>>(value, (JsonSerializerOptions?)null)
+                    ?? new List<ProjectDirectory>()
+            )
+            .HasDefaultValueSql("'[]'")
+            .IsRequired();
+        directories.Metadata.SetValueComparer(
+            new ValueComparer<List<ProjectDirectory>>(
+                (left, right) => left != null && right != null && left.SequenceEqual(right),
+                value => value.Aggregate(0, (hash, item) => HashCode.Combine(hash, item)),
+                value => value.ToList()
+            )
+        );
         builder.Property(e => e.ExtraSetting).HasMaxLength(16000);
         var tools = builder
             .Property(e => e.Tools)

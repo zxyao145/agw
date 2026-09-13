@@ -30,6 +30,7 @@ export type SuggestionReplacement = {
 };
 
 export type FileSuggestionCandidate = {
+  directoryId?: string | null;
   fullPath: string;
   relativePath: string;
 };
@@ -192,9 +193,10 @@ export function toFileSuggestions(
   candidates: readonly FileSuggestionCandidate[],
 ): SuggestionItem[] {
   return candidates.slice(0, 5).map((candidate) => {
-    const path = candidate.relativePath.includes(" ")
-      ? `"${candidate.relativePath}"`
+    const reference = candidate.directoryId
+      ? `${candidate.directoryId}:${candidate.relativePath}`
       : candidate.relativePath;
+    const path = reference.includes(" ") ? `"${reference}"` : reference;
     return {
       text: `@${path}`,
       description: candidate.fullPath,

@@ -51,6 +51,9 @@ export const GitStatusBadgeLabel: Record<GitStatus, string> = {
 };
 
 export interface LineComment {
+  projectId?: string;
+  directoryId?: string | null;
+  directoryName?: string;
   id: string;
   side: CommentSide;
   diffScope?: GitDiffScope;

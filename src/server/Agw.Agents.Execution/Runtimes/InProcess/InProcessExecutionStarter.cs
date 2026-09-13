@@ -67,6 +67,7 @@ internal sealed class InProcessExecutionStarter : IExecutionStarter
         )
         {
             UserId = _userId,
+            WorkspaceSnapshot = request.WorkspaceSnapshot,
         };
         RuntimeStartResult start;
         try

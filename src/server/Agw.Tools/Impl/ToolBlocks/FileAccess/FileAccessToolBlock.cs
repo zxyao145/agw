@@ -1,7 +1,5 @@
 using Agw.Files.Abstracts;
-using Agw.Tools.Impl.ToolBlocks.Storage;
 using Agw.Tools.ToolBlocks;
-using Microsoft.Agents.AI;
 
 namespace Agw.Tools.Impl.ToolBlocks.FileAccess;
 
@@ -42,14 +40,18 @@ public sealed class FileAccessToolBlock : IToolBlock
         contribution.PlanModeAllowedToolNames.UnionWith(
             Descriptor.Members.Where(static member => member.AllowInPlanMode).Select(static member => member.Name)
         );
-        contribution.ContextProviders.Add(
-            new FileAccessProvider(
-                new ProjectAgentFileStore(_fileSystemResolver, context.ProjectId),
-                // SDK 默认连只读函数也要求审批。由 Registry 按 Members 的权限统一添加审批包装，
-                // 避免 SDK 的默认标记残留在 ReadOnly 工具内部，同时保留 Write 成员的审批。
-                new FileAccessProviderOptions { DisableReadOnlyToolApproval = true, DisableWriteToolApproval = true }
-            )
-        );
+        var snapshot =
+            context.WorkspaceSnapshot
+            ?? ProjectWorkspacePaths.CreateSnapshot(
+                context.ProjectId,
+                context.Project.Workspace,
+                context.Project.AdditionalDirectories.Select(
+                    directory => new Agw.Shared.Runtime.ProjectWorkspaceDirectory(directory.Id, directory.Path)
+                )
+            );
+        var provider = new DirectoryFileAccessProvider(_fileSystemResolver, context.ProjectId, snapshot);
+        contribution.ContextProviders.Add(provider);
+        contribution.AddResource(provider);
         return ValueTask.FromResult(contribution);
     }
 }

@@ -6,7 +6,14 @@ import { useQuery } from "@agw/components/query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
-import { getFileDiff, readFile, type GitDiffResponse, type GitDiffScope } from "@agw/projects";
+import {
+  getProjectDirectories,
+  getFileDiff,
+  readFile,
+  type GitDiffResponse,
+  type GitDiffScope,
+  type ProjectDirectory,
+} from "@agw/projects";
 import { apiGet } from "@agw/api";
 import {
   getProjectConversationDetails,
@@ -72,6 +79,7 @@ type ProjectDto = {
   id: string;
   name: string;
   workspace?: string | null;
+  additionalDirectories?: ProjectDirectory[] | null;
 };
 
 type AgentDto = {
@@ -339,6 +347,7 @@ export function ChatWorkspace({
   const [isLoadingConversation, setIsLoadingConversation] = React.useState(false);
   const [conversationListRefreshSignal, setConversationListRefreshSignal] = React.useState(0);
   const [drawerContent, setDrawerContent] = React.useState<"chat" | "files" | null>(null);
+  const [selectedDirectoryId, setSelectedDirectoryId] = React.useState<string | null>(null);
   const [selectedFile, setSelectedFile] = React.useState<string | null>(null);
   const [selectedDiffScope, setSelectedDiffScope] = React.useState<GitDiffScope | undefined>();
   const [fileContent, setFileContent] = React.useState("");
@@ -398,10 +407,25 @@ export function ChatWorkspace({
     [projects, selectedProjectId],
   );
 
-  const resolvedWorkspace = React.useMemo(
-    () => selectedProject?.workspace?.trim() || "",
+  const projectDirectories = React.useMemo(
+    () => (selectedProject ? getProjectDirectories(selectedProject) : []),
     [selectedProject],
   );
+  const selectedDirectory =
+    projectDirectories.find((directory) => directory.id === selectedDirectoryId) ??
+    projectDirectories[0];
+  const resolvedWorkspace = selectedDirectory?.path ?? "";
+  React.useEffect(() => {
+    setSelectedDirectoryId(null);
+  }, [selectedProjectId]);
+  React.useEffect(() => {
+    if (
+      selectedDirectoryId &&
+      !projectDirectories.some((directory) => directory.id === selectedDirectoryId)
+    ) {
+      setSelectedDirectoryId(null);
+    }
+  }, [projectDirectories, selectedDirectoryId]);
 
   const hasProjectFileSystem = selectedProjectId !== null;
 
@@ -438,7 +462,7 @@ export function ChatWorkspace({
     }));
   }, []);
 
-  const clearFilePreview = React.useCallback(() => {
+  const clearFilePreview = React.useCallback((clearComments = true) => {
     fileLoadGenerationRef.current += 1;
     setIsLoadingContent(false);
     setSelectedFile(null);
@@ -446,7 +470,7 @@ export function ChatWorkspace({
     setFileContent("");
     setContentError(null);
     setDiffContentData(null);
-    setComments([]);
+    if (clearComments) setComments([]);
   }, []);
 
   const handlePendingFileCommentsRemove = React.useCallback((commentIds: readonly string[]) => {
@@ -504,7 +528,13 @@ export function ChatWorkspace({
           if (!selectedProjectId) {
             throw new Error("Select a project before loading files");
           }
-          const diff = await getFileDiff(selectedProjectId, filePath, diffScope);
+          const diff = await getFileDiff(
+            selectedProjectId,
+            filePath,
+            diffScope,
+            undefined,
+            selectedDirectory?.id,
+          );
           if (generation !== fileLoadGenerationRef.current) {
             return;
           }
@@ -516,7 +546,12 @@ export function ChatWorkspace({
           if (!selectedProjectId) {
             throw new Error("Select a project before loading files");
           }
-          const content = await readFile(selectedProjectId, filePath);
+          const content = await readFile(
+            selectedProjectId,
+            filePath,
+            undefined,
+            selectedDirectory?.id,
+          );
           if (generation !== fileLoadGenerationRef.current) {
             return;
           }
@@ -539,7 +574,7 @@ export function ChatWorkspace({
         }
       }
     },
-    [onlyDiff, selectedProjectId],
+    [onlyDiff, selectedProjectId, selectedDirectory?.id],
   );
 
   const handleOnFileDeleted = React.useCallback(
@@ -698,8 +733,11 @@ export function ChatWorkspace({
   }, [loadFileContent, onlyDiff, selectedDiffScope, selectedFile]);
 
   React.useEffect(() => {
-    clearFilePreview();
-  }, [clearFilePreview, resolvedWorkspace, selectedProjectId]);
+    clearFilePreview(false);
+  }, [clearFilePreview, resolvedWorkspace, selectedProjectId, selectedDirectory?.id]);
+  React.useEffect(() => {
+    setComments([]);
+  }, [selectedProjectId]);
 
   React.useEffect(() => {
     if (projects.length === 0) {
@@ -1200,6 +1238,7 @@ export function ChatWorkspace({
                     onConversationAccepted={handleConversationAccepted}
                     onContextIdChange={handleChatContextIdChange}
                     onConversationChange={refreshConversationList}
+                    directoryId={selectedDirectory?.id}
                     pendingFileComments={comments}
                     onPendingFileCommentsRemove={handlePendingFileCommentsRemove}
                     onReconnectStateChange={setExecutionReconnectState}
@@ -1215,7 +1254,11 @@ export function ChatWorkspace({
             {!isMobile && hasProjectFileSystem && showFileExplorer ? (
               <ColResizeSplit.Left minWidth={260} maxWidth={520}>
                 <Explorer
+                  key={`${selectedProjectId}:${selectedDirectory?.id ?? "primary"}:${resolvedWorkspace}`}
                   projectId={selectedProjectId!}
+                  directoryId={selectedDirectory?.id}
+                  directories={projectDirectories}
+                  onDirectoryChange={setSelectedDirectoryId}
                   rootDirectory={resolvedWorkspace || "/"}
                   onlyDiff={onlyDiff}
                   recursiveMode={recursiveMode}
@@ -1232,6 +1275,11 @@ export function ChatWorkspace({
               <div className="flex justify-center flex-1 overflow-hidden">
                 {hasProjectFileSystem ? (
                   <FileContent
+                    projectId={selectedProjectId!}
+                    directoryId={selectedDirectory?.id}
+                    directoryName={
+                      projectDirectories.length > 1 ? selectedDirectory?.path : undefined
+                    }
                     selectedFile={selectedFile}
                     isLoadingContent={isLoadingContent}
                     contentError={contentError}
@@ -1262,7 +1310,11 @@ export function ChatWorkspace({
             {drawerContent === "files" ? (
               hasProjectFileSystem ? (
                 <Explorer
+                  key={`${selectedProjectId}:${selectedDirectory?.id ?? "primary"}:${resolvedWorkspace}`}
                   projectId={selectedProjectId!}
+                  directoryId={selectedDirectory?.id}
+                  directories={projectDirectories}
+                  onDirectoryChange={setSelectedDirectoryId}
                   rootDirectory={resolvedWorkspace || "/"}
                   onlyDiff={onlyDiff}
                   recursiveMode={recursiveMode}

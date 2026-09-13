@@ -29,6 +29,98 @@ public class ProjectAppServiceTests : IDisposable
     public void Dispose() => _userScope.Dispose();
 
     [Fact]
+    public async Task UpdateAsync_AdditionalDirectories_PreserveIdentityUntilPathChanges()
+    {
+        var token = TestContext.Current.CancellationToken;
+        var root = Directory.CreateTempSubdirectory("agw-project-directories-").FullName;
+        try
+        {
+            var first = Directory.CreateDirectory(Path.Combine(root, "first")).FullName;
+            var second = Directory.CreateDirectory(Path.Combine(root, "second")).FullName;
+            await using var scope = await ProjectAppServiceTestScope.CreateAsync(token);
+            var project = CreateProject("Directories");
+            project.Workspace = Path.Combine(root, "primary");
+            project.AdditionalDirectories = [new ProjectDirectory { Path = first }];
+            var created = (await scope.Service.CreateAsync(project))!;
+            var original = Assert.Single(created.AdditionalDirectories);
+            Assert.NotEqual(Guid.Empty, original.Id);
+
+            // Old clients omit the new field; a normal update must preserve it.
+            await scope.Service.UpdateAsync(created.Id, item => item.Description = "legacy update");
+            await using (var db = scope.CreateDbContext())
+            {
+                Assert.Equal(
+                    original,
+                    Assert.Single(
+                        (await db.Projects.SingleAsync(item => item.Id == created.Id, token)).AdditionalDirectories
+                    )
+                );
+            }
+            var normalized = (
+                await scope.Service.UpdateAsync(
+                    created.Id,
+                    item =>
+                        item.AdditionalDirectories = [
+                            original with
+                            {
+                                Path = first + Path.DirectorySeparatorChar + ".",
+                            },
+                        ]
+                )
+            )!;
+            Assert.Equal(original.Id, Assert.Single(normalized.AdditionalDirectories).Id);
+            Assert.Equal(first, normalized.AdditionalDirectories[0].Path);
+            var replaced = (
+                await scope.Service.UpdateAsync(
+                    created.Id,
+                    item => item.AdditionalDirectories = [original with { Path = second }]
+                )
+            )!;
+            Assert.NotEqual(original.Id, Assert.Single(replaced.AdditionalDirectories).Id);
+            var cleared = (await scope.Service.UpdateAsync(created.Id, item => item.AdditionalDirectories = []))!;
+            Assert.Empty(cleared.AdditionalDirectories);
+            Assert.True(Directory.Exists(first));
+            Assert.True(Directory.Exists(second));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("primary")]
+    [InlineData("duplicate")]
+    [InlineData("relative")]
+    [InlineData("missing")]
+    [InlineData("invalid")]
+    public async Task CreateAsync_InvalidAdditionalDirectory_RejectsConfiguration(string scenario)
+    {
+        var root = Directory.CreateTempSubdirectory("agw-project-validation-").FullName;
+        try
+        {
+            await using var scope = await ProjectAppServiceTestScope.CreateAsync(TestContext.Current.CancellationToken);
+            var extra = Directory.CreateDirectory(Path.Combine(root, "extra")).FullName;
+            var project = CreateProject("Directories");
+            project.Workspace = root;
+            project.AdditionalDirectories = scenario switch
+            {
+                "primary" => [new ProjectDirectory { Path = root + "/." }],
+                "duplicate" => [new ProjectDirectory { Path = extra }, new ProjectDirectory { Path = extra + "/." }],
+                "relative" => [new ProjectDirectory { Path = "relative/path" }],
+                "invalid" => [new ProjectDirectory { Path = root + "\0" }],
+                _ => [new ProjectDirectory { Path = Path.Combine(root, "missing") }],
+            };
+            var exception = await Assert.ThrowsAsync<AgwException>(() => scope.Service.CreateAsync(project));
+            Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ProjectFileSystemConfigurationProvider_WhenCanceled_StopsBeforeLookup()
     {
         await using var scope = await ProjectAppServiceTestScope.CreateAsync(TestContext.Current.CancellationToken);

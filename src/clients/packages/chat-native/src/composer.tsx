@@ -129,6 +129,7 @@ export function NativeChatComposer({
           "",
           keyword,
           true,
+          workspace.selectedDirectoryId,
         );
         return toFileSuggestions(response.results);
       },
@@ -158,6 +159,7 @@ export function NativeChatComposer({
     workspace.filesService,
     workspace.isExecuting,
     workspace.selectedProjectId,
+    workspace.selectedDirectoryId,
     workspace.selectedTargetValue,
   ]);
 

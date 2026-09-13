@@ -2,6 +2,8 @@ using Agw.Agents.Execution.Agents.Contracts;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
+using Agw.Shared.Runtime;
+using Agw.Shared.Utils;
 using Microsoft.Agents.AI;
 
 namespace Agw.Agents.Execution.Agents.Runtime;
@@ -153,6 +155,24 @@ public partial class AgentRuntimeService
             return null;
         }
         var project = MapProject(projectSnapshot);
+        var workspace =
+            ProjectWorkspaceContext.Get(project.Id)
+            ?? ProjectWorkspacePaths.CreateSnapshot(
+                project.Id,
+                project.Workspace,
+                project.AdditionalDirectories.Select(directory => new ProjectWorkspaceDirectory(
+                    directory.Id,
+                    directory.Path
+                ))
+            );
+        project.Workspace = workspace.Workspace;
+        project.AdditionalDirectories = workspace
+            .AdditionalDirectories.Select(directory => new ProjectDirectory
+            {
+                Id = directory.Id,
+                Path = directory.Path,
+            })
+            .ToList();
         var environmentVariables = AgentRuntimeServiceUtil.MergeEnvironmentVariables(
             request.Agent.EnvironmentVariables,
             project.EnvironmentVariables,
@@ -184,6 +204,15 @@ public partial class AgentRuntimeService
             Id = project.Id,
             Name = project.Name,
             Workspace = project.Workspace,
+            AdditionalDirectories =
+                project
+                    .AdditionalDirectories?.Select(directory => new ProjectDirectory
+                    {
+                        Id = directory.Id,
+                        Path = directory.Path,
+                    })
+                    .ToList()
+                ?? [],
             Tools = project.Tools.ToList(),
             EnvironmentVariables = project.EnvironmentVariables.ToDictionary(),
         };

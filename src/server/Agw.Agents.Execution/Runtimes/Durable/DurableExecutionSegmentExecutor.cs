@@ -8,6 +8,8 @@ using Agw.Agents.Execution.Outbound.Durable;
 using Agw.Agents.Execution.Persistence.Durable;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Auth.Contracts;
+using Agw.Shared.Runtime;
+using Agw.Shared.Utils;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -86,6 +88,9 @@ internal sealed class DurableExecutionSegmentExecutor : IDurableExecutionSegment
             manifest = (await _store.GetAsync(input.ExecutionId, cancellationToken).ConfigureAwait(false)).Manifest;
         }
         using var userScope = UserInfoUtil.Push(CreateUserPrincipal(manifest.ResolveUserId()));
+        manifest = await _store.EnsureWorkspaceSnapshotAsync(manifest, cancellationToken).ConfigureAwait(false);
+        using var workspaceScope = ProjectWorkspaceContext.Push(manifest.Task.ProjectId, manifest.WorkspaceSnapshot!);
+        ProjectWorkspacePaths.EnsureAvailable(manifest.Task.ProjectId, manifest.WorkspaceSnapshot!);
         using var sessionContext = ConversationSessionContext.Push(
             manifest.Task.ProjectId,
             manifest.Task.ContextId,

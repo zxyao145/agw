@@ -4,13 +4,14 @@ import { toFileSuggestions, type SuggestionItem } from "@agw/chat-core";
 export async function searchFile(
   projectId: string | null,
   keyword: string,
+  directoryId?: string | null,
 ): Promise<SuggestionItem[]> {
   if (!projectId) {
     return [];
   }
 
   try {
-    const response = await searchFiles(projectId, "", keyword, true);
+    const response = await searchFiles(projectId, "", keyword, true, undefined, directoryId);
     return toFileSuggestions(response.results);
   } catch (error) {
     console.error("Failed to search files:", error);

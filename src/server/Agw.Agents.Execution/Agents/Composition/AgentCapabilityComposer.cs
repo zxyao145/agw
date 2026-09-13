@@ -6,7 +6,9 @@ using Agw.Integrations.Mcp;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
 using Agw.Shared.Tooling;
+using Agw.Shared.Utils;
 using Agw.Tools;
 using Agw.Tools.Abstractions.ToolBlocks;
 using Agw.Tools.HumanInteraction;
@@ -105,6 +107,16 @@ public sealed class AgentCapabilityComposer
                 Project = project,
                 ConversationId = conversationId,
                 Workspace = project.Workspace ?? string.Empty,
+                WorkspaceSnapshot =
+                    ProjectWorkspaceContext.Get(project.Id)
+                    ?? ProjectWorkspacePaths.CreateSnapshot(
+                        project.Id,
+                        project.Workspace,
+                        (project.AdditionalDirectories ?? []).Select(directory => new ProjectWorkspaceDirectory(
+                            directory.Id,
+                            directory.Path
+                        ))
+                    ),
                 DefaultMode = defaultMode,
                 EnvironmentVariables = environmentVariables,
                 BackgroundAgentFactory = backgroundAgentFactory,

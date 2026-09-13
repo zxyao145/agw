@@ -1908,6 +1908,14 @@
               "type": "boolean",
               "default": false
             }
+          },
+          {
+            "name": "directoryId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
@@ -1994,6 +2002,14 @@
             "in": "query",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "directoryId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -2089,6 +2105,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "directoryId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
@@ -2176,6 +2200,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "directoryId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
@@ -2262,6 +2294,14 @@
             "in": "query",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "directoryId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -2370,6 +2410,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "directoryId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         ],
         "responses": {
@@ -2456,6 +2504,14 @@
             "in": "query",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "directoryId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -2568,6 +2624,14 @@
             "schema": {
               "type": "boolean",
               "default": true
+            }
+          },
+          {
+            "name": "directoryId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
             }
           }
         ],
@@ -8931,6 +8995,13 @@
         ],
         "type": "object",
         "properties": {
+          "directoryId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
           "name": {
             "type": "string"
           },
@@ -9006,6 +9077,13 @@
         ],
         "type": "object",
         "properties": {
+          "directoryId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
           "fullPath": {
             "type": "string"
           },
@@ -10989,6 +11067,15 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "additionalDirectories": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ProjectDirectory"
+            }
           }
         }
       },
@@ -11126,6 +11213,15 @@
               "null",
               "string"
             ]
+          },
+          "additionalDirectories": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ProjectDirectory"
+            }
           }
         }
       },
@@ -11225,6 +11321,15 @@
             ],
             "additionalProperties": {
               "type": "string"
+            }
+          },
+          "additionalDirectories": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/ProjectDirectory"
             }
           }
         }
@@ -12419,6 +12524,22 @@
           "alwaysAsk",
           "allowSameArguments"
         ]
+      },
+      "ProjectDirectory": {
+        "required": [
+          "path",
+          "id"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "path": {
+            "type": "string"
+          }
+        }
       }
     }
   },

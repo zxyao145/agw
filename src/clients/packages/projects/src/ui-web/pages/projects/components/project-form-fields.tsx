@@ -1,3 +1,6 @@
+import type { ProjectDirectory } from "@agw/projects-core";
+import { Button } from "@agw/components";
+
 import type { UseQueryResult } from "@agw/components/query";
 
 import {
@@ -23,6 +26,8 @@ export interface ProjectFormFieldsProps {
   setDescription: (value: string) => void;
   workspace: string;
   setWorkspace: (value: string) => void;
+  additionalDirectories: ProjectDirectory[];
+  setAdditionalDirectories: (value: ProjectDirectory[]) => void;
   environmentVariables: EnvironmentVariableEntry[];
   setEnvironmentVariables: (entries: EnvironmentVariableEntry[]) => void;
   selectedSkillIds: string[];
@@ -47,6 +52,8 @@ export function ProjectFormFields({
   setDescription,
   workspace,
   setWorkspace,
+  additionalDirectories,
+  setAdditionalDirectories,
   environmentVariables,
   setEnvironmentVariables,
   selectedSkillIds,
@@ -89,13 +96,63 @@ export function ProjectFormFields({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor={`${idPrefix}workspace`}>Workspace (Optional)</Label>
+            <Label htmlFor={`${idPrefix}workspace`}>Primary directory</Label>
             <Input
               id={`${idPrefix}workspace`}
               value={workspace}
               onChange={(event) => setWorkspace(event.target.value)}
               placeholder="~/.agw/demo-project"
             />
+          </div>
+
+          <div className="grid gap-2">
+            <Label>Additional directories</Label>
+            {additionalDirectories.map((directory, index) => (
+              <div key={directory.id ?? index} className="flex items-center gap-2">
+                <Input
+                  aria-label={`Additional directory ${index + 1}`}
+                  value={directory.path}
+                  placeholder="~/source/repos/docs"
+                  onChange={(event) =>
+                    setAdditionalDirectories(
+                      additionalDirectories.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, path: event.target.value } : item,
+                      ),
+                    )
+                  }
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Remove directory ${index + 1}`}
+                  onClick={() =>
+                    setAdditionalDirectories(
+                      additionalDirectories.filter((_, itemIndex) => itemIndex !== index),
+                    )
+                  }
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setAdditionalDirectories([
+                  ...additionalDirectories,
+                  { id: crypto.randomUUID(), path: "" },
+                ])
+              }
+            >
+              Add directory
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Link existing directories. Removing a link keeps its files. Agent changes take effect
+              next turn.
+            </p>
           </div>
 
           <div className="grid gap-2">

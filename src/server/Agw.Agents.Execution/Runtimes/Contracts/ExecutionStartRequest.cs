@@ -1,5 +1,6 @@
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Inbound.Connections;
+using Agw.Shared.Runtime;
 
 namespace Agw.Agents.Execution.Runtimes.Contracts;
 
@@ -16,6 +17,8 @@ internal sealed record ExecutionStartRequest(
     string Workspace
 )
 {
+    public ProjectWorkspaceSnapshot? WorkspaceSnapshot { get; init; }
+
     public string? RequestedMode { get; init; }
 
     public AgentflowCheckpointSnapshot? ResumeCheckpoint { get; init; }

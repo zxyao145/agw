@@ -18,6 +18,7 @@ using Agw.Auth.Contracts;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
 using Agw.Shared.Utils;
 using Microsoft.Extensions.AI;
 
@@ -42,6 +43,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
     private RuntimeBase? Runtime => _inProcessStarter?.Runtime;
     private AgentExecutionTask? _resolvedTask;
     private string? _workspace;
+    private ProjectWorkspaceSnapshot? _workspaceSnapshot;
     private ExecutionTarget? _target;
     private PendingModeChange? _pendingModeChange;
     private Guid? _lastResumeExecutionId;
@@ -236,6 +238,7 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
                 _workspace!
             )
             {
+                WorkspaceSnapshot = _workspaceSnapshot,
                 RequestedMode = requestedMode,
                 ResumeCheckpoint = command.ResumeCheckpoint,
             },
@@ -607,18 +610,18 @@ public sealed class ExecutionConnectionContext : IAsyncDisposable
             }
         }
 
-        if (_workspace != null)
-        {
-            return;
-        }
-
         var project =
             await _projects.GetForCurrentUserAsync(_resolvedTask.ProjectId, cancellationToken)
             ?? throw new AgwException(ErrorCodes.InvalidParam, $"Project '{_resolvedTask.ProjectId}' was not found.");
-        var configuredWorkspace = string.IsNullOrEmpty(project.Workspace)
-            ? $"~/.agw/projects/{project.Id:N}"
-            : project.Workspace;
-        _workspace = Path.GetFullPath(PathUtil.ExpandTilde(configuredWorkspace.Trim()));
+        _workspaceSnapshot = ProjectWorkspacePaths.CreateSnapshot(
+            project.Id,
+            project.Workspace,
+            (project.AdditionalDirectories ?? []).Select(directory => new ProjectWorkspaceDirectory(
+                directory.Id,
+                directory.Path
+            ))
+        );
+        _workspace = _workspaceSnapshot.Workspace;
     }
 
     private async Task<Guid> ResolveProjectIdAsync(ExecutionSettings settings, CancellationToken cancellationToken)

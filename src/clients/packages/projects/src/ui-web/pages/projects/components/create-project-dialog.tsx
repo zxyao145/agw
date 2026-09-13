@@ -37,6 +37,7 @@ export function CreateProjectDialog({
   name,
   description,
   workspace,
+  additionalDirectories,
   environmentVariables,
   tools,
   selectedSkillIds,
@@ -64,6 +65,7 @@ export function CreateProjectDialog({
       name: normalizedName,
       description: description.length ? description : null,
       workspace: resolveCreateProjectWorkspace(normalizedName, workspace),
+      additionalDirectories,
       extraSetting: null,
       ...capabilities,
     });
@@ -134,6 +136,7 @@ export function CreateProjectDialog({
             name={name}
             description={description}
             workspace={workspace}
+            additionalDirectories={additionalDirectories}
             environmentVariables={environmentVariables}
             tools={tools}
             selectedSkillIds={selectedSkillIds}

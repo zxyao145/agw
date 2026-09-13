@@ -232,6 +232,14 @@ Definition Agent 的 Skill provider 明确把 Skill 内容与 Project Workspace 
 
 External Agent 通过持久化的 `Agent.ExternalAgentKind` 选择 Claude Code、Codex 或 Pi，`Agent.Name` 只是用户定义的稳定标识，不参与运行时分派。同一种外部实现可以有多个独立定义。三种 SDK 配置统一从 `Agent.Extra` 解析；创建时为空或空 JSON 对象会保存该实现的默认配置，运行时仍保留同样的兜底行为。`Project.ExtraSetting` 不参与外部 Agent 配置，也不作为回退来源。工作目录继续由 `Project.Workspace` 提供，环境变量按 Agent、Project、本次执行的顺序合并。Pi 的显式扩展和历史持久化超时分别配置在 `Agent.Extra` 的 `sessionOptions.extensions` 和 `historyPersistenceTimeout` 中。
 
+### Project 目录快照
+
+每轮执行入口捕获主目录、附加目录和配置指纹，保存在 `RuntimeTurnContext.WorkspaceSnapshot`，并通过 `ProjectWorkspaceContext` 传到 Agent、Agentflow、工具和后台子执行。目录设置保存后文件面板立即刷新，本轮不变，下一轮按新指纹重建 runtime；conversation ID、provider session ID 与持久化历史沿用原值。
+
+Durable manifest 保存同一快照，重复注册相同 executionId、恢复 segment 和人工交互续跑均复用它。旧清单缺少快照时在 execution lease 内补齐单主目录配置并持久化，不把新增附加目录带入旧执行。目录无法访问时报告该目录错误，不切回主目录。
+
+Claude Code 的 `AddDirectories` 和 Codex 的 `ThreadOptions.AdditionalDirectories` 合并项目附加目录与 SDK 显式配置，再按规范化路径去重。Pi 通过每轮上下文获取目录清单；三种 Agent 的默认 cwd 均保持主目录。`file_access_*` 的可选 `directoryId` 绑定本轮目录，文件引用使用 `@<directoryId>:<relativePath>`；省略目录标识表示主目录。Docker Shell 把附加目录挂载到 `/project-directories/{id}`，默认 cwd 为 `/workspace`。目录关联沿用现有权限模式，不增加逐目录授权或 OS 沙箱。
+
 ### `Turns`
 
 turn 是一次用户输入到执行结束的完整过程。`RuntimeTurnContext` 是不可变快照，包含 settings、task、target、project/context/agent 标识、当前用户、绝对 workspace、消息 sink 和 HumanGate 状态回调。`RuntimeTurnContextAccessor` 使用 `AsyncLocal` 在执行任务内部暴露该快照，作用域在 turn 结束后恢复；connection 级可变状态不会进入 `AsyncLocal`。
@@ -689,7 +697,7 @@ Execution__Distributed__EventStream__Redis__ConnectionString=<redis-connection-s
 
 1. 所有 Server 连接同一个 PostgreSQL；选择 Redis event stream 时还必须连接同一个 Redis。
 2. 所有 Server 共享 Data Protection key ring；否则新 Server 无法解密 manifest、checkpoint、pending、response 和 PostgreSQL stream payload。
-3. `Project.Workspace` 对所有可能执行 segment 的 Server 可见，并具有相同语义的挂载路径。
+3. 主目录与所有附加目录对可能执行 segment 的 Server 可见，并具有相同语义的挂载路径；发布时按数据库 provider 应用 `AddProjectAdditionalDirectories` 迁移。
 4. 在启动副本前应用当前 PostgreSQL migration，确保 `durable_execution`、`execution_stream_entry` 和 Agentflow checkpoint 表存在；只有后续模型变更才需要生成新的双 Provider migration。
 5. 配置足够的 graceful termination 时间，并让有副作用的 Tool 实现业务幂等。
 6. 制定 PostgreSQL execution/stream 记录的清理策略；选择 Redis 时配置 Stream TTL。清理消息只影响中间回放，不会丢失 execution 状态、checkpoint 或 pending request。

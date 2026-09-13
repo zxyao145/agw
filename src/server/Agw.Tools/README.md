@@ -27,7 +27,7 @@ Current Tool Blocks:
 - `user-memory`: database-only Markdown memory bound to the authenticated user.
   It follows that user across Agents, Projects, and conversations without being
   visible to other users.
-- `file-access`: Harness file-access tools scoped to `Project.Workspace`.
+- `file-access`: Harness file-access tools bound to the turn's directory snapshot. Optional `directoryId` selects an additional Project directory; omission uses the primary `Project.Workspace`. Project Memory remains in the primary directory. Docker Shell mounts additional roots at `/project-directories/{id}` and reports these paths in its context.
 - `background-agents`: one-level background delegation tools.
 - All `background-agents` members declare `ReadOnly` and require no parent-tool approval, including starting, continuing, and clearing tasks. Plan-mode availability remains independently declared.
 

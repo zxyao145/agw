@@ -161,3 +161,16 @@ test("routes an explicitly entered hidden path to file search", async () => {
 
   assert.equal(query, "./.github/w");
 });
+
+test("same-name file mentions retain the additional directory identity", () => {
+  const suggestions = toFileSuggestions([
+    { relativePath: "README.md", fullPath: "/primary/README.md" },
+    { relativePath: "README.md", fullPath: "/additional/README.md", directoryId: "extra-id" },
+    { relativePath: "Read me.md", fullPath: "/additional/Read me.md", directoryId: "extra-id" },
+  ]);
+  assert.deepEqual(
+    suggestions.map((item) => item.text),
+    ["@README.md", "@extra-id:README.md", '@"extra-id:Read me.md"'],
+  );
+  assert.equal(suggestions[1].description, "/additional/README.md");
+});

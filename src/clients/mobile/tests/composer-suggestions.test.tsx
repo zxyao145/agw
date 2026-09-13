@@ -177,7 +177,7 @@ test("searches project files for an at trigger and applies the mapped result", a
   });
 
   const suggestion = await view.findByLabelText("Use suggestion @src/app.ts");
-  expect(searchFiles).toHaveBeenCalledWith("project-1", "", "src", true);
+  expect(searchFiles).toHaveBeenCalledWith("project-1", "", "src", true, undefined);
   await fireEvent.press(suggestion);
 
   expect(setTextCalls.at(-1)).toBe("@src/app.ts ");
@@ -204,10 +204,14 @@ test("ignores a stale asynchronous file result", async () => {
   await fireEvent(input, "selectionChange", {
     nativeEvent: { selection: { start: 4, end: 4 } },
   });
-  await waitFor(() => expect(searchFiles).toHaveBeenCalledWith("project-1", "", "old", true));
+  await waitFor(() =>
+    expect(searchFiles).toHaveBeenCalledWith("project-1", "", "old", true, undefined),
+  );
 
   await fireEvent.changeText(input, "@new");
-  await waitFor(() => expect(searchFiles).toHaveBeenCalledWith("project-1", "", "new", true));
+  await waitFor(() =>
+    expect(searchFiles).toHaveBeenCalledWith("project-1", "", "new", true, undefined),
+  );
 
   await act(async () => {
     resolveNew({

@@ -3,6 +3,7 @@ using Agw.Agents.Execution.Agents.Sessions;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Auth.Contracts;
+using Agw.Shared.Runtime;
 
 namespace Agw.Agents.Execution.Agents.Runtime;
 
@@ -84,7 +85,11 @@ public partial class AgentRuntimeService
             settings.Resume
         );
 
-        var fs = await _fileSystemResolver.ResolveAsync(projectId, cancellationToken);
+        var workspace = ProjectWorkspaceContext.Get(projectId);
+        var fs =
+            workspace == null
+                ? await _fileSystemResolver.ResolveAsync(projectId, cancellationToken)
+                : await _fileSystemResolver.ResolveSnapshotAsync(projectId, workspace, null, cancellationToken);
         if (fs == null)
         {
             return null;

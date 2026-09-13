@@ -89,3 +89,21 @@ test("prompt composition supports text-only, comment-only, and empty input", () 
   assert.equal(buildFileCommentPrompt("   ", []), "");
   assert.match(buildFileCommentPrompt("", [createComment({})]), /^<file_comments>/u);
 });
+
+test("comments on identical relative paths retain project and directory identity", () => {
+  const payload = readPayload(
+    buildFileCommentPrompt("", [
+      createComment({ projectId: "project", directoryId: null, filePath: "README.md" }),
+      createComment({
+        projectId: "project",
+        directoryId: "extra",
+        directoryName: "/data/extra",
+        filePath: "README.md",
+      }),
+    ]),
+  );
+  assert.equal(payload[0].projectId, "project");
+  assert.equal(payload[1].directoryId, "extra");
+  assert.equal(payload[1].directoryName, "/data/extra");
+  assert.equal(payload[1].projectRelativePath, "README.md");
+});

@@ -34,6 +34,7 @@ export function EditProjectDialog({
   name,
   description,
   workspace,
+  additionalDirectories,
   environmentVariables,
   tools,
   selectedSkillIds,
@@ -62,6 +63,7 @@ export function EditProjectDialog({
         name,
         description: description.length ? description : null,
         workspace: workspace.trim().length ? workspace.trim() : null,
+        additionalDirectories,
         extraSetting: editingProject.extraSetting ?? null,
         ...capabilities,
       },
@@ -134,6 +136,7 @@ export function EditProjectDialog({
             name={name}
             description={description}
             workspace={workspace}
+            additionalDirectories={additionalDirectories}
             environmentVariables={environmentVariables}
             tools={tools}
             selectedSkillIds={selectedSkillIds}

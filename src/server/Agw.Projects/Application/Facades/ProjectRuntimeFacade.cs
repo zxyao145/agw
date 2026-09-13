@@ -1,4 +1,5 @@
 using Agw.Projects.Contracts.Runtime;
+using Agw.Shared.Runtime;
 
 namespace Agw.Projects.Application.Facades;
 
@@ -38,6 +39,9 @@ public sealed class ProjectRuntimeFacade : IProjectRuntimeFacade
             project.EnvironmentVariables,
             project.ProjectSkillRelations.Select(relation => relation.SkillId).ToArray(),
             project.ProjectMcpToolServers.Select(relation => relation.McpToolServerId).ToArray(),
-            project.ProjectConnectionRelations.Select(relation => relation.ConnectionId).ToArray()
+            project.ProjectConnectionRelations.Select(relation => relation.ConnectionId).ToArray(),
+            project
+                .AdditionalDirectories.Select(directory => new ProjectWorkspaceDirectory(directory.Id, directory.Path))
+                .ToArray()
         );
 }

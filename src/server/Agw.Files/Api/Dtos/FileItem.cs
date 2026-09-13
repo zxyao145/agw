@@ -2,6 +2,7 @@ namespace Agw.Files.Api.Dtos;
 
 public class FileItem
 {
+    public Guid? DirectoryId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Path { get; set; } = string.Empty;
     public string Type { get; set; } = string.Empty;

@@ -12,7 +12,8 @@ public record ProjectCreateRequest(
     List<Guid>? McpToolServerIds = null,
     List<Guid>? SkillIds = null,
     List<Guid>? ConnectionIds = null,
-    Dictionary<string, string>? EnvironmentVariables = null
+    Dictionary<string, string>? EnvironmentVariables = null,
+    List<ProjectDirectory>? AdditionalDirectories = null
 );
 
 public record ProjectUpdateRequest(
@@ -24,7 +25,8 @@ public record ProjectUpdateRequest(
     List<Guid>? McpToolServerIds = null,
     List<Guid>? SkillIds = null,
     List<Guid>? ConnectionIds = null,
-    Dictionary<string, string>? EnvironmentVariables = null
+    Dictionary<string, string>? EnvironmentVariables = null,
+    List<ProjectDirectory>? AdditionalDirectories = null
 );
 
 public sealed record ProjectMcpToolServerRelationResponse(Guid ProjectId, Guid McpToolServerId)
@@ -60,7 +62,8 @@ public sealed record ProjectResponse(
     DateTimeOffset CreateTime,
     string? CreateBy,
     DateTimeOffset? UpdateTime,
-    string? UpdateBy
+    string? UpdateBy,
+    IReadOnlyList<ProjectDirectory>? AdditionalDirectories = null
 )
 {
     public static ProjectResponse FromDomain(Project project) =>
@@ -79,6 +82,7 @@ public sealed record ProjectResponse(
             project.CreateTime,
             project.CreateBy,
             project.UpdateTime,
-            project.UpdateBy
+            project.UpdateBy,
+            project.AdditionalDirectories
         );
 }

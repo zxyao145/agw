@@ -1,3 +1,4 @@
+import { useProjectFileScope } from "./project-file-scope";
 import { Plus } from "lucide-react";
 import { CodeViewerProps as FileViewerProps, CommentSide, LineComment } from "./types";
 import React from "react";
@@ -14,6 +15,7 @@ function FileViewer({
   commentSide = CommentSide.Current,
   diffScope,
 }: FileViewerProps) {
+  const fileScope = useProjectFileScope();
   const [activeCommentLine, setActiveCommentLine] = React.useState<number | null>(null);
   const [hoveredLine, setHoveredLine] = React.useState<number | null>(null);
 
@@ -39,6 +41,10 @@ function FileViewer({
     comments.forEach((comment) => {
       if (
         comment.filePath !== filePath ||
+        (comment.directoryId ?? null) !== (fileScope.directoryId ?? null) ||
+        (comment.projectId != null &&
+          fileScope.projectId != null &&
+          comment.projectId !== fileScope.projectId) ||
         comment.side !== commentSide ||
         comment.diffScope !== diffScope
       ) {
@@ -50,12 +56,13 @@ function FileViewer({
       groupedComments.set(comment.lineNumber, lineComments);
     });
     return groupedComments;
-  }, [commentSide, comments, diffScope, filePath]);
+  }, [commentSide, comments, diffScope, filePath, fileScope.directoryId, fileScope.projectId]);
 
   const handleAddComment = (lineNumber: number, content: string) => {
     if (!content.trim()) return;
 
     const newComment: LineComment = {
+      ...fileScope,
       id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       side: commentSide,
       ...(diffScope ? { diffScope } : {}),

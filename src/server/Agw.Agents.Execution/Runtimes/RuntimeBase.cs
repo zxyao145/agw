@@ -10,6 +10,8 @@ public abstract class RuntimeBase : IAsyncDisposable
     private Task _whenIdle = Task.CompletedTask;
     private bool _disposed;
 
+    internal string? WorkspaceFingerprint { get; set; }
+
     public ActiveTurn? ActiveTurn
     {
         get

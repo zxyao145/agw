@@ -1,6 +1,7 @@
 using Agw.Files.Abstracts;
 using Agw.Files.Abstracts.Dtos;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
 using Microsoft.Agents.AI;
 
 namespace Agw.Tools.Impl.ToolBlocks.Storage;
@@ -32,14 +33,24 @@ public sealed class ProjectAgentFileStore : AgentFileStore
     private readonly IAgwFileSystemResolver _resolver;
     private readonly Guid _projectId;
     private readonly string? _rootPath;
+    private readonly ProjectWorkspaceSnapshot? _workspaceSnapshot;
+    private readonly Guid? _directoryId;
 
     public ProjectAgentFileStore(IAgwFileSystemResolver resolver, Guid projectId)
         : this(resolver, projectId, null) { }
 
-    public ProjectAgentFileStore(IAgwFileSystemResolver resolver, Guid projectId, string? rootPath)
+    public ProjectAgentFileStore(
+        IAgwFileSystemResolver resolver,
+        Guid projectId,
+        string? rootPath,
+        ProjectWorkspaceSnapshot? workspaceSnapshot = null,
+        Guid? directoryId = null
+    )
     {
         _resolver = resolver;
         _projectId = projectId;
+        _workspaceSnapshot = workspaceSnapshot ?? ProjectWorkspaceContext.Get(projectId);
+        _directoryId = directoryId;
         _rootPath = string.IsNullOrWhiteSpace(rootPath) ? null : NormalizeScopedPath(rootPath, allowEmpty: false);
     }
 
@@ -206,8 +217,13 @@ public sealed class ProjectAgentFileStore : AgentFileStore
     }
 
     private async Task<IAgwFileSystem> ResolveAsync(CancellationToken cancellationToken) =>
-        await _resolver.ResolveAsync(_projectId, cancellationToken).ConfigureAwait(false)
-        ?? throw new AgwException(ErrorCodes.ResourceNotFound, "Project was not found.");
+        (
+            _workspaceSnapshot == null
+                ? await _resolver.ResolveAsync(_projectId, _directoryId, cancellationToken).ConfigureAwait(false)
+                : await _resolver
+                    .ResolveSnapshotAsync(_projectId, _workspaceSnapshot, _directoryId, cancellationToken)
+                    .ConfigureAwait(false)
+        ) ?? throw new AgwException(ErrorCodes.ResourceNotFound, "Project was not found.");
 
     private static string TruncateSearchLine(string line, int maxCharacters)
     {

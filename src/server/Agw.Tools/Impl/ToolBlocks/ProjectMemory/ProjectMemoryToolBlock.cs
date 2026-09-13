@@ -85,7 +85,8 @@ public sealed class ProjectMemoryToolBlock : IToolBlock
             ProjectMemoryStorage.FileSystem => new ProjectAgentFileStore(
                 _fileSystemResolver,
                 context.ProjectId,
-                FileSystemRoot
+                FileSystemRoot,
+                context.WorkspaceSnapshot
             ),
             _ => throw new AgwException(
                 ErrorCodes.InvalidParam,

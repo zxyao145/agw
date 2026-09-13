@@ -1,3 +1,5 @@
+using Agw.Shared.Runtime;
+
 namespace Agw.Files.Abstracts;
 
 /// <summary>
@@ -12,6 +14,16 @@ public interface IAgwFileSystemResolver
     /// <param name="ct">A token used to cancel the resolution operation.</param>
     /// <returns>The file system configured for the project.</returns>
     Task<IAgwFileSystem?> ResolveAsync(Guid projectId, CancellationToken ct);
+
+    Task<IAgwFileSystem?> ResolveAsync(Guid projectId, Guid? directoryId, CancellationToken ct) =>
+        directoryId.HasValue ? Task.FromResult<IAgwFileSystem?>(null) : ResolveAsync(projectId, ct);
+
+    Task<IAgwFileSystem?> ResolveSnapshotAsync(
+        Guid projectId,
+        ProjectWorkspaceSnapshot snapshot,
+        Guid? directoryId,
+        CancellationToken ct
+    ) => ResolveAsync(projectId, directoryId, ct);
 }
 
 public interface IProjectFileSystemCacheInvalidator
