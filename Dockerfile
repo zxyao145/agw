@@ -26,6 +26,7 @@ COPY src/server/Agw.ControlPlane.Host/Agw.ControlPlane.Host.csproj ./src/server/
 COPY src/server/Agw.DataPlane.Host/Agw.DataPlane.Host.csproj ./src/server/Agw.DataPlane.Host/
 COPY src/server/Agw.Host/Agw.Host.csproj ./src/server/Agw.Host/
 COPY src/server/Agw.Infrastructure/Agw.Infrastructure.csproj ./src/server/Agw.Infrastructure/
+COPY src/server/Agw.Integrations.Contracts/Agw.Integrations.Contracts.csproj ./src/server/Agw.Integrations.Contracts/
 COPY src/server/Agw.Integrations/Agw.Integrations.csproj ./src/server/Agw.Integrations/
 COPY src/server/Agw.Jobs.Contracts/Agw.Jobs.Contracts.csproj ./src/server/Agw.Jobs.Contracts/
 COPY src/server/Agw.Jobs/Agw.Jobs.csproj ./src/server/Agw.Jobs/
@@ -33,10 +34,12 @@ COPY src/server/Agw.Migrations.Postgres/Agw.Migrations.Postgres.csproj ./src/ser
 COPY src/server/Agw.Migrations.Sqlite/Agw.Migrations.Sqlite.csproj ./src/server/Agw.Migrations.Sqlite/
 COPY src/server/Agw.Projects.Contracts/Agw.Projects.Contracts.csproj ./src/server/Agw.Projects.Contracts/
 COPY src/server/Agw.Projects/Agw.Projects.csproj ./src/server/Agw.Projects/
+COPY src/server/Agw.Providers.Contracts/Agw.Providers.Contracts.csproj ./src/server/Agw.Providers.Contracts/
 COPY src/server/Agw.Providers/Agw.Providers.csproj ./src/server/Agw.Providers/
 COPY src/server/Agw.Setup/Agw.Setup.csproj ./src/server/Agw.Setup/
 COPY src/server/Agw.Settings/Agw.Settings.csproj ./src/server/Agw.Settings/
 COPY src/server/Agw.Shared/Agw.Shared.csproj ./src/server/Agw.Shared/
+COPY src/server/Agw.Skills.Contracts/Agw.Skills.Contracts.csproj ./src/server/Agw.Skills.Contracts/
 COPY src/server/Agw.Skills/Agw.Skills.csproj ./src/server/Agw.Skills/
 COPY src/server/Agw.Standalone.Host/Agw.Standalone.Host.csproj ./src/server/Agw.Standalone.Host/
 COPY src/server/Agw.Tools/Agw.Tools.csproj ./src/server/Agw.Tools/
