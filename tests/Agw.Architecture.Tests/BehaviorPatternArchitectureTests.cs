@@ -233,10 +233,7 @@ public sealed partial class BackendArchitectureTests
         return parameterType.Split('.').Last() == entity;
     }
 
-    private static readonly IReadOnlySet<string> AllowedLegacyDataBehaviorMembers = Set(
-        "Agw.Data/Entities/Auth/ApiToken.cs:NormalizeName",
-        "Agw.Data/Entities/Projects/Project.cs:GetMustWorkspace"
-    );
+    private static readonly IReadOnlySet<string> AllowedLegacyDataBehaviorMembers = Set();
 
     private static readonly IReadOnlySet<string> AllowedLegacyEntityDomainServices = Set();
 

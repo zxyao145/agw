@@ -10,11 +10,12 @@ public sealed class WebSearchContextualToolTests
     [Fact]
     public async Task MaterializeAsync_HostedSupported_UsesHostedMarker()
     {
-        await using var contribution = await new WebSearchContextualTool().MaterializeAsync(
-            new WebSearchToolDefinition(),
-            CreateContext(supportsHosted: true),
-            TestContext.Current.CancellationToken
-        );
+        await using var contribution = await CreateTool()
+            .MaterializeAsync(
+                new WebSearchToolDefinition(),
+                CreateContext(supportsHosted: true),
+                TestContext.Current.CancellationToken
+            );
 
         Assert.IsType<HostedWebSearchTool>(Assert.Single(contribution.Tools));
         Assert.Empty(contribution.Warnings);
@@ -24,11 +25,12 @@ public sealed class WebSearchContextualToolTests
     [Fact]
     public async Task MaterializeAsync_HostedUnsupported_RegistersInvocationWarning()
     {
-        await using var contribution = await new WebSearchContextualTool().MaterializeAsync(
-            new WebSearchToolDefinition(),
-            CreateContext(supportsHosted: false),
-            TestContext.Current.CancellationToken
-        );
+        await using var contribution = await CreateTool()
+            .MaterializeAsync(
+                new WebSearchToolDefinition(),
+                CreateContext(supportsHosted: false),
+                TestContext.Current.CancellationToken
+            );
 
         Assert.Equal("web_search", Assert.Single(contribution.Tools).Name);
         Assert.Empty(contribution.Warnings);
@@ -40,7 +42,7 @@ public sealed class WebSearchContextualToolTests
     [Fact]
     public void Metadata_DeclaresIndependentReadOnlyTool()
     {
-        var tool = new WebSearchContextualTool();
+        var tool = CreateTool();
 
         Assert.Equal("web_search", tool.Name);
         Assert.Equal("Web", tool.Category);
@@ -56,4 +58,22 @@ public sealed class WebSearchContextualToolTests
             DefaultMode = "plan",
             SupportsHostedWebSearch = supportsHosted,
         };
+
+    private static WebSearchContextualTool CreateTool()
+    {
+        return new WebSearchContextualTool(new StubHttpClientFactory());
+    }
+
+    private sealed class StubHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name = "") => new(new StubHttpMessageHandler());
+    }
+
+    private sealed class StubHttpMessageHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken
+        ) => Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.InternalServerError));
+    }
 }

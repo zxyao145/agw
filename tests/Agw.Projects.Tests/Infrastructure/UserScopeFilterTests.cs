@@ -712,7 +712,7 @@ public sealed class UserScopeFilterTests
         {
             Id = Guid.CreateVersion7(),
             Name = name,
-            NormalizedName = ApiToken.NormalizeName(name),
+            NormalizedName = ApiTokenNameRules.NormalizeName(name),
             Prefix = "agw_test",
             SecretHash = new string('a', 64),
             CreateBy = owner,

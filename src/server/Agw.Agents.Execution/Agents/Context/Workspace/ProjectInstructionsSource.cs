@@ -9,7 +9,12 @@ internal sealed class ProjectInstructionsSource : IAgentInstructionsSource
         CancellationToken cancellationToken = default
     )
     {
-        var workspace = PathUtil.ExpandTilde(context.Project.GetMustWorkspace());
+        var configuredWorkspace = context.Project.Workspace;
+        var workspace = PathUtil.ExpandTilde(
+            string.IsNullOrEmpty(configuredWorkspace)
+                ? ProjectDefaults.GetDefaultWorkspace(context.Project.Id)
+                : configuredWorkspace
+        );
         var instructions = $"""
             # others
 

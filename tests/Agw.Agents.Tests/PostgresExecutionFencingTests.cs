@@ -203,7 +203,8 @@ public sealed class PostgresExecutionFencingTests
                         .Abstractions
                         .NullLogger<Agw.Infrastructure.Agents.DurableExecutionScopeMaintenance>
                         .Instance
-                )
+                ),
+                TimeProvider.System
             );
             var target = new Agw.Projects.Application.Persistence.ProjectConversationDeletionTarget(
                 task.ProjectId,

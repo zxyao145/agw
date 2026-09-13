@@ -624,10 +624,10 @@ public class AgentRuntimeServiceSystemCompositionTests
 
     private static ToolRegistryService CreateToolRegistry()
     {
-        return new ToolRegistryService(
-            NullLogger<ToolRegistryService>.Instance,
-            new ServiceCollection().BuildServiceProvider()
-        );
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHttpClient();
+        return new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, services.BuildServiceProvider());
     }
 
     private static T FindInObjectGraph<T>(object root)

@@ -35,7 +35,7 @@ public sealed class EfApiTokenStore : IApiTokenStore
     public async Task<CreatedApiToken> CreateTokenAsync(string name, CancellationToken cancellationToken = default)
     {
         var ownerUserId = ResolveOwnerUserId();
-        var normalizedName = ApiToken.NormalizeName(name);
+        var normalizedName = ApiTokenNameRules.NormalizeName(name);
         if (
             await _context.ApiTokens.AnyAsync(
                 token => token.NormalizedName == normalizedName && token.CreateBy == ownerUserId,

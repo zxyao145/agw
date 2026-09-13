@@ -15,6 +15,4 @@ public class ApiToken : BaseEntity
 
     [JsonIgnore]
     public string SecretHash { get; set; } = string.Empty;
-
-    public static string NormalizeName(string name) => name.Trim().ToUpperInvariant();
 }

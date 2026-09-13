@@ -8,6 +8,8 @@ public static class ProjectDefaults
     public const string DefaultBuiltInName = "default-built-in";
     public const string A2AName = "a2a";
 
+    public static string GetDefaultWorkspace(Guid projectId) => $"~/.agw/projects/{projectId:N}";
+
     public static Guid GetDefaultProjectIdentifier(Guid? projectId) =>
         projectId == null ? DefaultBuiltInId : projectId.Value;
 }

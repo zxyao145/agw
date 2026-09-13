@@ -190,7 +190,8 @@ public class ProjectTraceCleanupTests
                         .Abstractions
                         .NullLogger<Agw.Infrastructure.Agents.DurableExecutionScopeMaintenance>
                         .Instance
-                )
+                ),
+                TimeProvider.System
             ),
             TimeProvider.System
         );
@@ -217,7 +218,8 @@ public class ProjectTraceCleanupTests
                         .Abstractions
                         .NullLogger<Agw.Infrastructure.Agents.DurableExecutionScopeMaintenance>
                         .Instance
-                )
+                ),
+                TimeProvider.System
             ),
             new ProjectResolver(dbContext, userInfo),
             userInfo

@@ -35,6 +35,15 @@ public class WebFetchToolResult
 
 internal class WebFetchTool : IAgwTool
 {
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILogger<WebFetchTool> _logger;
+
+    public WebFetchTool(IHttpClientFactory httpClientFactory, ILogger<WebFetchTool> logger)
+    {
+        _httpClientFactory = httpClientFactory;
+        _logger = logger;
+    }
+
     public string Name => "web_fetch";
 
     public string Category => "Web";
@@ -51,7 +60,10 @@ internal class WebFetchTool : IAgwTool
             If so, look for a specialized MCP tool that provides authenticated access.
             """
     )]
-    public WebFetchToolResult Execute(WebFetchToolParams toolParams)
+    public async Task<WebFetchToolResult> ExecuteAsync(
+        WebFetchToolParams toolParams,
+        CancellationToken cancellationToken
+    )
     {
         ArgumentNullException.ThrowIfNull(toolParams);
 
@@ -67,23 +79,22 @@ internal class WebFetchTool : IAgwTool
 
         var stopwatch = Stopwatch.StartNew();
 
-        var httpClientFactory = IocUtil.GetSingletonRequiredService<IHttpClientFactory>();
-        using var client = httpClientFactory.CreateClient();
+        using var client = _httpClientFactory.CreateClient();
         client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (compatible; AgwBot/1.0)");
 
         HttpResponseMessage response;
         try
         {
-            response = client.GetAsync(uri).GetAwaiter().GetResult();
+            response = await client.GetAsync(uri, cancellationToken).ConfigureAwait(false);
         }
         catch (HttpRequestException ex)
         {
-            var logger = IocUtil.CreateLogger<WebFetchTool>();
-            logger.LogError(ex, "HTTP request failed for URL: {Url}", toolParams.Url);
+            _logger.LogError(ex, "HTTP request failed for URL: {Url}", toolParams.Url);
             throw new AgwException(ErrorCodes.FetchFailed, $"Failed to fetch URL: {ex.Message}");
         }
 
-        var content = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        using var responseScope = response;
+        var content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
         var bytes = System.Text.Encoding.UTF8.GetByteCount(content);
         var codeText = response.StatusCode.ToString();
 
@@ -130,7 +141,7 @@ internal class WebFetchTool : IAgwTool
 
     public AITool ToAITool()
     {
-        Func<WebFetchToolParams, WebFetchToolResult> func = Execute;
+        Func<WebFetchToolParams, CancellationToken, Task<WebFetchToolResult>> func = ExecuteAsync;
         return AgwAIFunctionFactory.CreateParameterObjectFunction(func, Name);
     }
 
