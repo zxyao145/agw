@@ -43,7 +43,9 @@ public sealed class SummaryChatClientFactory : ISummaryChatClientFactory
         return configuration.Provider.ProviderType switch
         {
             ProviderType.OpenAIChatCompletions => CreateOpenAiClient(configuration, authConfig),
+            ProviderType.OpenAIResponses => CreateOpenAiResponsesClient(configuration, authConfig),
             ProviderType.Anthropic => CreateAnthropicClient(configuration, authConfig),
+
             _ => throw new AgwException(
                 ErrorCodes.UnsupportedProviderType,
                 $"Provider type '{configuration.Provider.ProviderType}' is not supported"
@@ -61,6 +63,20 @@ public sealed class SummaryChatClientFactory : ISummaryChatClientFactory
             new OpenAIClientOptions { Endpoint = new Uri(configuration.Provider.Endpoint) }
         );
         return client.GetChatClient(configuration.Model.Name).AsIChatClient();
+    }
+
+    private static IChatClient CreateOpenAiResponsesClient(
+        AgentModelRuntimeConfiguration configuration,
+        ProviderAuthConfigSnapshot authConfig
+    )
+    {
+        var client = new OpenAIClient(
+            new ApiKeyCredential(ResolveApiKey(authConfig)),
+            new OpenAIClientOptions { Endpoint = new Uri(configuration.Provider.Endpoint) }
+        );
+#pragma warning disable OPENAI001
+        return client.GetResponsesClient().AsIChatClient(configuration.Model.Name);
+#pragma warning restore OPENAI001
     }
 
     private static IChatClient CreateAnthropicClient(
