@@ -24,7 +24,7 @@ test("createToolBlockValue creates strong default options", () => {
     definition: {
       name: "project-memory",
       options: {
-        storage: "database",
+        storage: "filesystem",
       },
     },
   });

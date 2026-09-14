@@ -66,6 +66,24 @@ public sealed class ProjectMemoryToolBlockTests
         );
     }
 
+    [Theory]
+    [InlineData("{}", ProjectMemoryStorage.FileSystem)]
+    [InlineData("{\"storage\":\"database\"}", ProjectMemoryStorage.Database)]
+    [InlineData("{\"storage\":\"filesystem\"}", ProjectMemoryStorage.FileSystem)]
+    public void Deserialize_StorageOptions_DefaultsToWorkspaceAndPreservesExplicitStorage(
+        string options,
+        ProjectMemoryStorage expected
+    )
+    {
+        var json = """[{"kind":"toolBlock","definition":{"name":"project-memory","options":""" + options + "}}]";
+
+        var values = ToolValueObjectJson.Deserialize(json);
+
+        var value = Assert.IsType<ToolBlockValue>(Assert.Single(values));
+        var definition = Assert.IsType<ProjectMemoryToolBlockDefinition>(value.Definition);
+        Assert.Equal(expected, definition.Options.Storage);
+    }
+
     [Fact]
     public void Serialize_FileSystemStorage_UsesStableJsonValue()
     {

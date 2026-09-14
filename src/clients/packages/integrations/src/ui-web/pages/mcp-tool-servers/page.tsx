@@ -85,7 +85,7 @@ type FormState = {
 const defaultForm: FormState = {
   name: "",
   description: "",
-  transportType: "stdio",
+  transportType: "http",
   command: "",
   argumentsText: "",
   workingDirectory: "",

@@ -189,7 +189,7 @@ public sealed record UserMemoryToolBlockDefinition : ToolBlockDefinition<EmptyTo
 
 public sealed record ProjectMemoryToolBlockOptions
 {
-    public ProjectMemoryStorage Storage { get; init; } = ProjectMemoryStorage.Database;
+    public ProjectMemoryStorage Storage { get; init; } = ProjectMemoryStorage.FileSystem;
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<ProjectMemoryStorage>))]
