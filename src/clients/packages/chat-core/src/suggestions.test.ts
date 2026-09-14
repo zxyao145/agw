@@ -107,8 +107,8 @@ test("converts API modes and enables queries only for single agents", () => {
   });
 });
 
-test("maps file results and routes file suggestions through the shared resolver", async () => {
-  const candidates = Array.from({ length: 7 }, (_, index) => ({
+test("maps file results and keeps the caller-selected suggestion limit", async () => {
+  const candidates = Array.from({ length: 10 }, (_, index) => ({
     relativePath: `src/file-${index}.ts`,
     fullPath: `/workspace/src/file-${index}.ts`,
   }));
@@ -129,6 +129,7 @@ test("maps file results and routes file suggestions through the shared resolver"
     },
   );
   assert.equal(toFileSuggestions(candidates).length, 5);
+  assert.equal(toFileSuggestions(candidates, false, 8).length, 8);
 
   let query = "";
   const resolved = await resolveInputSuggestions(

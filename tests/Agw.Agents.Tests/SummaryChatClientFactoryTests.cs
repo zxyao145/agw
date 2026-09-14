@@ -13,8 +13,10 @@ namespace Agw.Agents.Tests;
 
 public class SummaryChatClientFactoryTests
 {
-    [Fact]
-    public async Task CreateAsync_OpenAiRuntimeConfiguration_ReturnsOneShotChatClient()
+    [Theory]
+    [InlineData(ProviderType.OpenAIChatCompletions)]
+    [InlineData(ProviderType.OpenAIResponses)]
+    public async Task CreateAsync_OpenAiRuntimeConfiguration_ReturnsOneShotChatClient(ProviderType providerType)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -30,7 +32,7 @@ public class SummaryChatClientFactoryTests
         {
             Id = Guid.CreateVersion7(),
             Name = "OpenAI",
-            ProviderType = ProviderType.OpenAIChatCompletions,
+            ProviderType = providerType,
             Endpoint = "https://example.invalid",
             CreateBy = "tester",
             AuthConfigs =
@@ -80,6 +82,19 @@ public class SummaryChatClientFactoryTests
         using var client = await factory.CreateAsync(modelProvider.Id, cancellationToken);
 
         Assert.NotNull(client);
-        Assert.NotNull(client.GetService<ChatClientMetadata>());
+        var metadata = client.GetService<ChatClientMetadata>();
+        Assert.NotNull(metadata);
+        Assert.Equal(model.Name, metadata.DefaultModelId);
+        Assert.Equal(new Uri(provider.Endpoint), metadata.ProviderUri);
+        if (providerType == ProviderType.OpenAIResponses)
+        {
+#pragma warning disable OPENAI001
+            Assert.NotNull(client.GetService<OpenAI.Responses.ResponsesClient>());
+#pragma warning restore OPENAI001
+        }
+        else
+        {
+            Assert.NotNull(client.GetService<OpenAI.Chat.ChatClient>());
+        }
     }
 }
