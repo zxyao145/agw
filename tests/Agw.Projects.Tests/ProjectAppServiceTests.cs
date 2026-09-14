@@ -199,6 +199,22 @@ public class ProjectAppServiceTests : IDisposable
         }
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task UpdateAsync_WhenWorkspaceIsBlank_RejectsUpdate(string? workspace)
+    {
+        await using var scope = await ProjectAppServiceTestScope.CreateAsync(TestContext.Current.CancellationToken);
+        var project = await scope.Service.CreateAsync(CreateProject("Project A"));
+
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            scope.Service.UpdateAsync(project!.Id, item => item.Workspace = workspace)
+        );
+
+        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
+    }
+
     [Fact]
     public async Task CreateAsync_RelationIdsContainInvalidValues_ThrowsInvalidParam()
     {

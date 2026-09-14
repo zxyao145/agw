@@ -161,6 +161,11 @@ public class ProjectAppService : IProjectAppService
             return null;
         }
 
+        if (string.IsNullOrWhiteSpace(existing.Workspace))
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "Project primary directory is required.");
+        }
+
         NormalizeAdditionalDirectories(existing, originalDirectories);
         EnsureWorkspaceDirectory(existing.Workspace);
         // Preserve audit stamping even when only bindings change or the update is a no-op.

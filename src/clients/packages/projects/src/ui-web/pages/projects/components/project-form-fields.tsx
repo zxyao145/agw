@@ -75,6 +75,8 @@ export function ProjectFormFields({
   nameReadOnly = false,
   idPrefix = "",
 }: ProjectFormFieldsProps) {
+  const primaryDirectoryMissing = Boolean(name.trim()) && !workspace.trim();
+
   return (
     <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,45%)_minmax(0,1fr)] overflow-hidden lg:grid-cols-[360px_minmax(0,1fr)] lg:grid-rows-1">
       <div className="overflow-y-auto agw-scrollbar border-b bg-muted/20 p-4 lg:border-r lg:border-b-0">
@@ -107,8 +109,15 @@ export function ProjectFormFields({
               id={`${idPrefix}workspace`}
               value={workspace}
               onChange={(event) => setWorkspace(event.target.value)}
+              required
+              aria-invalid={primaryDirectoryMissing}
               placeholder="~/.agw/demo-project"
             />
+            {primaryDirectoryMissing && (
+              <p className="text-sm text-destructive" role="alert">
+                Primary directory is required.
+              </p>
+            )}
           </div>
 
           <div className="grid gap-2">

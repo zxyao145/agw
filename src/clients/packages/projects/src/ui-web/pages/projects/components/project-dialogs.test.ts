@@ -77,6 +77,8 @@ test("Project form has the 360px metadata column and one combined Tools tab", as
   assert.match(source, /projectType = "User Defined"/);
   assert.match(source, /value=\{projectType\}/);
   assert.match(source, /readOnly=\{nameReadOnly\}/);
+  assert.match(source, /required/);
+  assert.match(source, /Primary directory is required\./);
   assert.match(source, /readOnly/);
   assert.doesNotMatch(source, /Extra Settings/);
   assert.doesNotMatch(source, /extraSetting/);
@@ -144,6 +146,17 @@ test("Built-in Projects can be edited while keeping their name and type read-onl
   );
   assert.match(editSource, /nameReadOnly=\{editingProject\?\.type !== 0\}/);
   assert.doesNotMatch(editSource, /editingProject\.type !== 0/);
+});
+
+test("Create and Edit require a primary directory before submitting", async () => {
+  const [createSource, editSource] = await Promise.all([
+    readSource(CREATE_DIALOG_URL, "Create Project dialog"),
+    readSource(EDIT_DIALOG_URL, "Edit Project dialog"),
+  ]);
+
+  assert.match(createSource, /!workspace\.trim\(\)/);
+  assert.match(editSource, /!workspace\.trim\(\)/);
+  assert.match(editSource, /workspace: workspace\.trim\(\)/);
 });
 
 test("Projects page wires immediate copy creation and disables copy for built-in projects", async () => {

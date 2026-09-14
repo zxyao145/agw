@@ -45,7 +45,7 @@ export function EditProjectDialog({
   const environmentVariablesError = getEnvironmentVariablesError(environmentVariables);
 
   const handleUpdate = () => {
-    if (!editingProject || !name.trim() || environmentVariablesError) {
+    if (!editingProject || !name.trim() || !workspace.trim() || environmentVariablesError) {
       return;
     }
 
@@ -62,7 +62,7 @@ export function EditProjectDialog({
       body: {
         name: editingProject.type === 0 ? name : editingProject.name,
         description: description.length ? description : null,
-        workspace: workspace.trim().length ? workspace.trim() : null,
+        workspace: workspace.trim(),
         additionalDirectories,
         extraSetting: editingProject.extraSetting ?? null,
         ...capabilities,
@@ -115,6 +115,7 @@ export function EditProjectDialog({
                   disabled={
                     !editingProject ||
                     !name.trim() ||
+                    !workspace.trim() ||
                     Boolean(environmentVariablesError) ||
                     updateProjectMutation.isPending
                   }

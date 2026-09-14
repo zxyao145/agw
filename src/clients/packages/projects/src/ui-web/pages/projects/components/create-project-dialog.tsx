@@ -49,7 +49,7 @@ export function CreateProjectDialog({
   const environmentVariablesError = getEnvironmentVariablesError(environmentVariables);
 
   const handleCreate = () => {
-    if (!normalizedName || environmentVariablesError) {
+    if (!normalizedName || !workspace.trim() || environmentVariablesError) {
       return;
     }
 
@@ -121,6 +121,7 @@ export function CreateProjectDialog({
                   className="cursor-pointer"
                   disabled={
                     !normalizedName ||
+                    !workspace.trim() ||
                     Boolean(environmentVariablesError) ||
                     createProjectMutation.isPending
                   }
