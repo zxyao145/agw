@@ -277,7 +277,6 @@ function ChatShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="agw-app-shell">
       <header className={cn("agw-titlebar", `platform-${platform}`)}>
-        <span className="ml-4"></span>
         <nav className="agw-project-tabs" aria-label="Open projects">
           <div className="flex min-w-0 max-w-full items-center gap-1 overflow-hidden">
             {tabs.map((projectId) => {
@@ -452,7 +451,7 @@ function SettingsShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="agw-app-shell">
       <header className={cn("agw-titlebar agw-settings-titlebar", `platform-${platform}`)}>
-        <Link href={chatReturnHref} className="agw-back-button agw-titlebar-control ml-4">
+        <Link href={chatReturnHref} className="agw-back-button agw-titlebar-control ml-0 pl-0">
           <ArrowLeft />
           <span>Back to chat</span>
         </Link>
