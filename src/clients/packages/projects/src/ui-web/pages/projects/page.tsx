@@ -168,10 +168,6 @@ export default function ProjectsPage() {
 
   const updateProjectMutation = useMutation({
     mutationFn: async ({ project, body }: ProjectUpdateMutationVariables) => {
-      if (project.type !== 0) {
-        throw new Error("Built-in projects cannot be edited.");
-      }
-
       return await apiPut("/api/projects/{id}", {
         params: { path: { id: project.id } },
         body,
@@ -191,10 +187,6 @@ export default function ProjectsPage() {
   const openEdit = React.useCallback(
     (project: ProjectResponse) => {
       if (updateProjectMutation.isPending) {
-        return;
-      }
-
-      if (project.type !== 0) {
         return;
       }
 
@@ -377,12 +369,7 @@ export default function ProjectsPage() {
                           className="cursor-pointer"
                           size="icon-sm"
                           onClick={() => openEdit(project)}
-                          disabled={project.type !== 0}
-                          title={
-                            project.type !== 0
-                              ? "Built-in projects cannot be edited"
-                              : "Edit project"
-                          }
+                          title="Edit project"
                         >
                           <Pencil className="w-4 h-4" />
                         </Button>

@@ -1,5 +1,6 @@
 import type { ProjectDirectory } from "@agw/projects-core";
 import { Button } from "@agw/components";
+import { Minus } from "lucide-react";
 
 import type { UseQueryResult } from "@agw/components/query";
 
@@ -42,6 +43,8 @@ export interface ProjectFormFieldsProps {
   toggleSkill: (skillId: string) => void;
   toggleConnection: (connectionId: string) => void;
   toggleMcpToolServer: (mcpToolServerId: string) => void;
+  projectType?: "User Defined" | "BuiltIn";
+  nameReadOnly?: boolean;
   idPrefix?: string;
 }
 
@@ -68,6 +71,8 @@ export function ProjectFormFields({
   toggleSkill,
   toggleConnection,
   toggleMcpToolServer,
+  projectType = "User Defined",
+  nameReadOnly = false,
   idPrefix = "",
 }: ProjectFormFieldsProps) {
   return (
@@ -80,6 +85,7 @@ export function ProjectFormFields({
               id={`${idPrefix}name`}
               value={name}
               onChange={(event) => setName(event.target.value)}
+              readOnly={nameReadOnly}
               placeholder="demo-project"
             />
           </div>
@@ -124,7 +130,7 @@ export function ProjectFormFields({
                 <Button
                   type="button"
                   variant="ghost"
-                  size="sm"
+                  size="icon-sm"
                   aria-label={`Remove directory ${index + 1}`}
                   onClick={() =>
                     setAdditionalDirectories(
@@ -132,7 +138,7 @@ export function ProjectFormFields({
                     )
                   }
                 >
-                  Remove
+                  <Minus className="h-4 w-4" />
                 </Button>
               </div>
             ))}
@@ -159,7 +165,7 @@ export function ProjectFormFields({
             <Label htmlFor={`${idPrefix}projectType`}>Project Type</Label>
             <Input
               id={`${idPrefix}projectType`}
-              value="User Defined"
+              value={projectType}
               readOnly
               className="bg-muted/50"
             />

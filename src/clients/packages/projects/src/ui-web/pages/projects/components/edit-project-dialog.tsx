@@ -45,7 +45,7 @@ export function EditProjectDialog({
   const environmentVariablesError = getEnvironmentVariablesError(environmentVariables);
 
   const handleUpdate = () => {
-    if (!editingProject || editingProject.type !== 0 || !name.trim() || environmentVariablesError) {
+    if (!editingProject || !name.trim() || environmentVariablesError) {
       return;
     }
 
@@ -60,7 +60,7 @@ export function EditProjectDialog({
     updateProjectMutation.mutate({
       project: editingProject,
       body: {
-        name,
+        name: editingProject.type === 0 ? name : editingProject.name,
         description: description.length ? description : null,
         workspace: workspace.trim().length ? workspace.trim() : null,
         additionalDirectories,
@@ -72,18 +72,14 @@ export function EditProjectDialog({
 
   return (
     <Dialog
-      open={open && editingProject?.type === 0}
-      onOpenChange={(nextOpen) => {
-        if (nextOpen && editingProject?.type !== 0) {
-          return;
-        }
-
+      open={open}
+      onOpenChange={(nextOpen) =>
         applyDialogOpenChange({
           isPending: updateProjectMutation.isPending,
           nextOpen,
           setOpen,
-        });
-      }}
+        })
+      }
     >
       <DialogContent
         size="fullscreen"
@@ -118,7 +114,6 @@ export function EditProjectDialog({
                   onClick={handleUpdate}
                   disabled={
                     !editingProject ||
-                    editingProject.type !== 0 ||
                     !name.trim() ||
                     Boolean(environmentVariablesError) ||
                     updateProjectMutation.isPending
@@ -142,6 +137,8 @@ export function EditProjectDialog({
             selectedSkillIds={selectedSkillIds}
             selectedMcpToolServerIds={selectedMcpToolServerIds}
             selectedConnectionIds={selectedConnectionIds}
+            projectType={editingProject?.type === 0 ? "User Defined" : "BuiltIn"}
+            nameReadOnly={editingProject?.type !== 0}
           />
         </div>
       </DialogContent>
