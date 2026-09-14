@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUp } from "lucide-react";
+import { ArrowUp, Blocks, FileText, Wrench } from "lucide-react";
 import { Button } from "@agw/components";
 import { Textarea } from "@agw/components";
 import {
@@ -12,7 +12,7 @@ import {
   forwardRef,
 } from "react";
 import React from "react";
-import { Item, ItemContent, ItemDescription, ItemGroup, ItemTitle } from "@agw/components";
+import { Item, ItemContent, ItemGroup } from "@agw/components";
 import { Badge } from "@agw/components";
 import { replaceSuggestion, type SuggestionItem } from "@agw/chat-core";
 
@@ -63,6 +63,9 @@ interface UserInputRootProps {
   maxHeight: string;
   input: string;
   suggestions?: ReactNode;
+  activeSuggestionId?: string;
+  suggestionListId?: string;
+  hasSuggestions: boolean;
   slots: UserInputSlots;
   onInputChange: (value: string, caretIndex: number) => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
@@ -82,6 +85,9 @@ function UserInputRoot({
   maxHeight,
   input,
   suggestions,
+  activeSuggestionId,
+  suggestionListId,
+  hasSuggestions,
   slots,
   onInputChange,
   onKeyDown,
@@ -132,6 +138,12 @@ function UserInputRoot({
             onChange={(e) => onInputChange(e.target.value, e.target.selectionStart)}
             onKeyDown={onKeyDown}
             onPaste={onPaste}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-haspopup="listbox"
+            aria-expanded={hasSuggestions}
+            aria-controls={hasSuggestions ? suggestionListId : undefined}
+            aria-activedescendant={hasSuggestions ? activeSuggestionId : undefined}
             placeholder={placeholder}
             rows={rows}
             className={`${maxHeight} agw-scrollbar min-h-[1lh] resize-none overflow-x-hidden
@@ -216,10 +228,19 @@ function getUserInputSlots(children?: ReactNode): UserInputSlots {
 
 interface UserInputSuggestionsProps {
   suggestions: SuggestionItem[];
+  activeIndex: number;
+  id: string;
   onSelect: (suggestion: SuggestionItem) => void;
+  onActiveIndexChange: (index: number) => void;
 }
 
-function UserInputSuggestions({ suggestions, onSelect }: UserInputSuggestionsProps) {
+function UserInputSuggestions({
+  suggestions,
+  activeIndex,
+  id,
+  onSelect,
+  onActiveIndexChange,
+}: UserInputSuggestionsProps) {
   if (suggestions.length === 0) {
     return null;
   }
@@ -229,38 +250,75 @@ function UserInputSuggestions({ suggestions, onSelect }: UserInputSuggestionsPro
       <div className="flex items-center justify-between px-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
         Suggestions
       </div>
-      <ItemGroup className="gap-0">
-        {suggestions.map((suggestion, index) => (
-          <Item
-            key={`${suggestion.text}-${index}`}
-            onClick={() => onSelect(suggestion)}
-            variant="outline"
-            size="sm"
-            className="p-1  cursor-pointer border-transparent rounded-sm bg-transparent text-xs text-foreground transition hover:border-border hover:bg-accent/50"
-          >
-            <ItemContent className="">
-              <ItemTitle className="font-medium text-foreground">
-                <h3 className="leading-none">{suggestion.text}</h3>
-              </ItemTitle>
-              {suggestion.description && (
-                <ItemDescription>
-                  <span className="flex item-start">
-                    {suggestion.kind ? (
-                      <Badge className="px-1.5 h-fit self-start text-xs leading-none border-0 mr-2">
-                        {suggestion.kind}
-                      </Badge>
-                    ) : null}
+      <ItemGroup id={id} role="listbox" aria-label="Suggestions" className="gap-0">
+        {suggestions.map((suggestion, index) => {
+          const isFileSuggestion = suggestion.text.startsWith("@");
+          const fileParts = isFileSuggestion ? getFileSuggestionParts(suggestion) : undefined;
+          const name = fileParts?.name ?? suggestion.text;
+          const description = fileParts ? fileParts.directory : suggestion.description;
 
-                    <span className="text-[11px]">{suggestion.description}</span>
+          return (
+            <Item
+              key={`${suggestion.text}-${index}`}
+              id={`${id}-option-${index}`}
+              role="option"
+              aria-selected={activeIndex === index}
+              onClick={() => onSelect(suggestion)}
+              onMouseEnter={() => onActiveIndexChange(index)}
+              variant="outline"
+              size="sm"
+              className={`p-2 cursor-pointer rounded-sm text-xs text-foreground transition hover:border-border hover:bg-accent/50 ${activeIndex === index ? "border-border bg-accent/50" : "border-transparent bg-transparent"}`}
+            >
+              <ItemContent className="min-w-0 flex-row items-center gap-1 overflow-hidden whitespace-nowrap">
+                {fileParts ? (
+                  <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                ) : (
+                  <Badge
+                    data-kind={suggestion.kind}
+                    className="px-1.5 h-fit shrink-0 gap-1 text-xs leading-none border-0 data-[kind=skill]:bg-orange-100 data-[kind=skill]:text-orange-900 dark:data-[kind=skill]:bg-orange-950 dark:data-[kind=skill]:text-orange-200 data-[kind=tool]:bg-blue-100 data-[kind=tool]:text-blue-900 dark:data-[kind=tool]:bg-blue-950 dark:data-[kind=tool]:text-blue-200"
+                  >
+                    {suggestion.kind === "skill" ? (
+                      <Blocks aria-hidden="true" />
+                    ) : suggestion.kind === "tool" ? (
+                      <Wrench aria-hidden="true" />
+                    ) : null}
+                    {suggestion.kind ?? "command"}
+                  </Badge>
+                )}
+                <span
+                  className="max-w-[55%] shrink-0 truncate font-medium text-foreground"
+                  title={name}
+                >
+                  {name}
+                </span>
+                {description ? (
+                  <span
+                    className="min-w-0 truncate text-[11px] text-muted-foreground"
+                    title={description}
+                  >
+                    {description}
                   </span>
-                </ItemDescription>
-              )}
-            </ItemContent>
-          </Item>
-        ))}
+                ) : null}
+              </ItemContent>
+            </Item>
+          );
+        })}
       </ItemGroup>
     </div>
   );
+}
+
+function getFileSuggestionParts(suggestion: SuggestionItem): { name: string; directory: string } {
+  const path = (suggestion.description || suggestion.text.slice(1).replace(/^"|"$/g, "")).replace(
+    /\\/g,
+    "/",
+  );
+  const separatorIndex = path.lastIndexOf("/");
+
+  return {
+    name: path.slice(separatorIndex + 1),
+    directory: separatorIndex === -1 ? "" : path.slice(0, separatorIndex),
+  };
 }
 
 export interface UserInputRef {
@@ -286,10 +344,12 @@ function UserInputContainer({
 }: UserInputProps & { inputRef: React.RefObject<UserInputRef | null> }) {
   const [input, setInput] = React.useState("");
   const [suggestions, setSuggestions] = React.useState<SuggestionItem[]>([]);
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = React.useState(0);
   const slots = getUserInputSlots(children);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const suggestionRequestRef = useRef(0);
   const suggestionCaretRef = useRef(0);
+  const suggestionListId = React.useId();
 
   useImperativeHandle(
     inputRef,
@@ -301,6 +361,7 @@ function UserInputContainer({
         suggestionRequestRef.current += 1;
         setInput(value);
         setSuggestions([]);
+        setActiveSuggestionIndex(0);
       },
       insertText: (text: string) => {
         const textarea = textareaRef.current;
@@ -312,6 +373,7 @@ function UserInputContainer({
         suggestionRequestRef.current += 1;
         setInput(newValue);
         setSuggestions([]);
+        setActiveSuggestionIndex(0);
         setTimeout(() => {
           const currentTextarea = textareaRef.current;
           if (currentTextarea) {
@@ -329,6 +391,7 @@ function UserInputContainer({
     suggestionRequestRef.current += 1;
     setInput(replacement.value);
     setSuggestions([]);
+    setActiveSuggestionIndex(0);
 
     // Focus textarea and move cursor after the selected suggestion
     setTimeout(() => {
@@ -345,6 +408,7 @@ function UserInputContainer({
     suggestionRequestRef.current = requestId;
     suggestionCaretRef.current = caretIndex;
     setInput(value);
+    setActiveSuggestionIndex(0);
     if (!onSuggestion) {
       if (suggestions.length > 0) {
         setSuggestions([]);
@@ -360,6 +424,7 @@ function UserInputContainer({
         .then((nextSuggestions) => {
           if (suggestionRequestRef.current === requestId) {
             setSuggestions(nextSuggestions);
+            setActiveSuggestionIndex(0);
           }
         })
         .catch(() => {
@@ -374,7 +439,13 @@ function UserInputContainer({
   };
 
   const suggestionContent = (
-    <UserInputSuggestions suggestions={suggestions} onSelect={handleSuggestionClick} />
+    <UserInputSuggestions
+      suggestions={suggestions}
+      activeIndex={activeSuggestionIndex}
+      id={suggestionListId}
+      onSelect={handleSuggestionClick}
+      onActiveIndexChange={setActiveSuggestionIndex}
+    />
   );
 
   const handleSend = () => {
@@ -385,13 +456,43 @@ function UserInputContainer({
     suggestionRequestRef.current += 1;
     setInput("");
     setSuggestions([]);
+    setActiveSuggestionIndex(0);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
+      return;
+    }
+
     if (event.key === "Enter" && (event.ctrlKey || event.shiftKey)) {
       event.preventDefault();
       if (input.trim() || hasAdditionalInput) {
         handleSend();
+      }
+      return;
+    }
+
+    if (suggestions.length > 0 && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+      event.preventDefault();
+      const direction = event.key === "ArrowDown" ? 1 : -1;
+      setActiveSuggestionIndex(
+        (index) => (index + direction + suggestions.length) % suggestions.length,
+      );
+      return;
+    }
+
+    if (
+      suggestions.length > 0 &&
+      event.key === "Enter" &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.shiftKey
+    ) {
+      event.preventDefault();
+      const suggestion = suggestions[activeSuggestionIndex];
+      if (suggestion) {
+        handleSuggestionClick(suggestion);
       }
     }
   };
@@ -407,6 +508,11 @@ function UserInputContainer({
       maxHeight={maxHeight}
       input={input}
       suggestions={suggestionContent}
+      activeSuggestionId={
+        suggestions.length > 0 ? `${suggestionListId}-option-${activeSuggestionIndex}` : undefined
+      }
+      suggestionListId={suggestionListId}
+      hasSuggestions={suggestions.length > 0}
       slots={slots}
       onInputChange={handleInputChange}
       onKeyDown={handleKeyDown}
