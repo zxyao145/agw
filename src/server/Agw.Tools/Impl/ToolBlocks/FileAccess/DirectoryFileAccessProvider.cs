@@ -51,7 +51,11 @@ internal sealed class DirectoryFileAccessProvider : AIContextProvider, IAsyncDis
         string? instructions = null;
         foreach (var (key, provider) in _providers)
         {
-            var provided = await provider.InvokingAsync(context, cancellationToken).ConfigureAwait(false);
+            // InvokingAsync returns a merged context, but this method must return only our contribution.
+            // Isolate each directory so upstream tools and instructions are not wrapped and emitted again.
+            var provided = await provider
+                .InvokingAsync(new InvokingContext(context.Agent, context.Session, new AIContext()), cancellationToken)
+                .ConfigureAwait(false);
             instructions ??= provided.Instructions;
             toolsByDirectory[key] = provided
                 .Tools!.OfType<AIFunction>()

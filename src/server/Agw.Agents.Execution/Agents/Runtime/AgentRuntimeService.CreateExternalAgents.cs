@@ -73,7 +73,7 @@ public partial class AgentRuntimeService
                     var memory = memoryContext == null ? null : await memoryContext(token).ConfigureAwait(false);
                     var context = new ChatMessage(
                         ChatRole.System,
-                        $"Primary working directory: {project.Workspace}\nAdditional Project directories (file references use @<directoryId>:<relativePath>):\n"
+                        $"Primary working directory: {project.Workspace}\nAdditional Project directories (file references use @<absolutePath>, with quotes around paths containing spaces):\n"
                             + string.Join(
                                 "\n",
                                 project.AdditionalDirectories.Select(directory =>

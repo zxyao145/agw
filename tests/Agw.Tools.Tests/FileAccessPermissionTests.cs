@@ -14,6 +14,89 @@ namespace Agw.Tools.Tests;
 public sealed class FileAccessPermissionTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InvokingAsync_ExistingContext_AddsOnlyFileToolsAndInstructions(bool additionalDirectory)
+    {
+        // Arrange
+        var token = TestContext.Current.CancellationToken;
+        var root = Directory.CreateTempSubdirectory("agw-file-context-");
+        try
+        {
+            const string instructions = "existing-agent-instructions";
+            var message = new ChatMessage(ChatRole.User, "inspect workspace");
+            var metadata = new AgwToolMetadata("built-in", AgwToolPermission.None);
+            var existingTool = AgwToolMetadataBinding.Bind(
+                AIFunctionFactory.Create((string before, string after) => $"{before}->{after}", "diff"),
+                metadata
+            );
+            var projectId = Guid.CreateVersion7();
+            var snapshot = ProjectWorkspacePaths.CreateSnapshot(
+                projectId,
+                root.FullName,
+                additionalDirectory
+                    ? [new ProjectWorkspaceDirectory(Guid.CreateVersion7(), root.CreateSubdirectory("extra").FullName)]
+                    : []
+            );
+            var block = new FileAccessToolBlock(new FileSystemResolver(root.FullName));
+            await using var contribution = await block.MaterializeAsync(
+                new FileAccessToolBlockDefinition(),
+                new ToolMaterializationContext
+                {
+                    Agent = new Agent(),
+                    Project = new Project { Id = projectId, Workspace = root.FullName },
+                    Workspace = root.FullName,
+                    WorkspaceSnapshot = snapshot,
+                    DefaultMode = "execute",
+                },
+                token
+            );
+            var provider = Assert.Single(contribution.ContextProviders);
+            using var model = new FileToolModel("file_access_read");
+            var agent = new ChatClientAgent(model);
+            var session = await agent.CreateSessionAsync(token);
+
+            // Act
+            var result = await provider.InvokingAsync(
+                new AIContextProvider.InvokingContext(
+                    agent,
+                    session,
+                    new AIContext
+                    {
+                        Instructions = instructions,
+                        Messages = [message],
+                        Tools = [existingTool],
+                    }
+                ),
+                token
+            );
+
+            // Assert
+            Assert.Equal(1, result.Instructions!.Split(instructions, StringSplitOptions.None).Length - 1);
+            Assert.Same(message, Assert.Single(result.Messages!));
+            var preservedTool = Assert.IsAssignableFrom<AIFunction>(
+                Assert.Single(result.Tools!, tool => tool.Name == existingTool.Name)
+            );
+            Assert.Same(existingTool, preservedTool);
+            Assert.Equal(metadata, preservedTool.GetService<AgwToolMetadata>());
+            Assert.False(preservedTool.JsonSchema.GetProperty("properties").TryGetProperty("directoryId", out _));
+            var fileTools = result
+                .Tools!.Where(tool => tool.Name != existingTool.Name)
+                .Select(tool => Assert.IsAssignableFrom<AIFunction>(tool))
+                .ToArray();
+            Assert.Equal(block.Descriptor.MemberToolNames.Order(), fileTools.Select(tool => tool.Name).Order());
+            Assert.All(
+                fileTools,
+                tool => Assert.True(tool.JsonSchema.GetProperty("properties").TryGetProperty("directoryId", out _))
+            );
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    [Theory]
     [InlineData("file_access_read")]
     [InlineData("file_access_write")]
     public async Task RunAsync_AdditionalDirectory_RoutesSdkToolUsingCapturedSnapshot(string toolName)
@@ -84,6 +167,7 @@ public sealed class FileAccessPermissionTests
 
     [Theory]
     [InlineData("file_access_ls", false)]
+    [InlineData("file_access_read", false)]
     [InlineData("file_access_write", true)]
     public async Task RunAsync_RegistryFileTools_OnlyWritesRequireApproval(string toolName, bool requiresApproval)
     {
@@ -108,7 +192,11 @@ public sealed class FileAccessPermissionTests
             using var model = new FileToolModel(toolName);
             var agent = new ChatClientAgent(
                 model,
-                new ChatClientAgentOptions { AIContextProviders = contribution.ContextProviders }
+                new ChatClientAgentOptions
+                {
+                    ChatOptions = new ChatOptions { Tools = [AIFunctionFactory.Create((string text) => text, "diff")] },
+                    AIContextProviders = contribution.ContextProviders,
+                }
             );
             var session = await agent.CreateSessionAsync(token);
             var response = await agent.RunAsync("inspect workspace", session, cancellationToken: token);
@@ -124,7 +212,10 @@ public sealed class FileAccessPermissionTests
                 Assert.Empty(contents.OfType<ToolApprovalRequestContent>());
                 var result = Assert.Single(contents.OfType<FunctionResultContent>());
                 Assert.Null(result.Exception);
-                Assert.Contains("hello.txt", System.Text.Json.JsonSerializer.Serialize(result.Result));
+                Assert.Contains(
+                    toolName == "file_access_read" ? "hello" : "hello.txt",
+                    System.Text.Json.JsonSerializer.Serialize(result.Result)
+                );
             }
         }
         finally
@@ -189,9 +280,12 @@ public sealed class FileAccessPermissionTests
             var arguments =
                 _arguments
                 ?? (
-                    _toolName == "file_access_ls"
-                        ? new Dictionary<string, object?>()
-                        : new Dictionary<string, object?> { ["path"] = "new.txt", ["content"] = "new content" }
+                    _toolName switch
+                    {
+                        "file_access_ls" => new Dictionary<string, object?>(),
+                        "file_access_read" => new Dictionary<string, object?> { ["fileName"] = "hello.txt" },
+                        _ => new Dictionary<string, object?> { ["path"] = "new.txt", ["content"] = "new content" },
+                    }
                 );
             return Task.FromResult(
                 new ChatResponse(

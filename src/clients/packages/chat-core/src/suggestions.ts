@@ -191,15 +191,14 @@ export function searchCommand(keyword: string, source: CommandSource): Suggestio
 
 export function toFileSuggestions(
   candidates: readonly FileSuggestionCandidate[],
+  useRelativePaths = false,
 ): SuggestionItem[] {
   return candidates.slice(0, 5).map((candidate) => {
-    const reference = candidate.directoryId
-      ? `${candidate.directoryId}:${candidate.relativePath}`
-      : candidate.relativePath;
+    const reference = useRelativePaths ? candidate.relativePath : candidate.fullPath;
     const path = reference.includes(" ") ? `"${reference}"` : reference;
     return {
       text: `@${path}`,
-      description: candidate.fullPath,
+      description: reference,
     };
   });
 }

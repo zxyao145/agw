@@ -23,7 +23,7 @@ internal sealed class ProjectInstructionsSource : IAgentInstructionsSource
         if (context.Project.AdditionalDirectories.Count > 0)
         {
             instructions +=
-                "\nAdditional Project directories (file mentions use @<directoryId>:<relativePath>, or @\"<directoryId>:<relative path>\" for spaces; file tools accept their directoryId; relative paths without directoryId use the primary directory):\n"
+                "\nAdditional Project directories (file mentions use @<absolutePath>, or @\"<absolute path>\" for spaces; when using relative-path file tools, match the absolute path to a listed directory and pass its directoryId with the path relative to that directory; omit directoryId for the primary directory):\n"
                 + string.Join(
                     "\n",
                     context.Project.AdditionalDirectories.Select(directory =>

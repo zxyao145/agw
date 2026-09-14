@@ -11,6 +11,7 @@ import PlanCard from "./renders/plan-card";
 import Reasoning from "./renders/reasoning";
 import TextContent from "./renders/text-content";
 import UriContent from "./renders/uri-content";
+import { ToolDirectoryInfo } from "./tool-directory";
 
 function PresentedContentView({ content }: { content: PresentedContent }) {
   if (content.type === "plan") return <PlanCard {...content} />;
@@ -106,6 +107,9 @@ function PresentedMessageView({
             </span>
           </div>
         ) : null}
+        {message.source.contents.map((content, index) => (
+          <ToolDirectoryInfo key={`directory:${index}`} content={content} />
+        ))}
         <div className={cn("agw-msg-body", isUser ? "items-end" : "")}>
           {message.contents.map((content, index) => (
             <PresentedContentView key={`${content.type}:${index}`} content={content} />

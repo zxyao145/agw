@@ -110,6 +110,64 @@ public sealed class AgwToolPermissionTests
         Assert.Contains("undeclared members: undeclared_member", exception.Message);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ContextProvider_SourceRedefinesExistingTool_RejectsUndeclaredMember(bool append)
+    {
+        // Arrange
+        var existing = AIFunctionFactory.Create((Func<string>)(() => "external"), "external_tool");
+        var redefined = AIFunctionFactory.Create((Func<string>)(() => "redefined"), "external_tool");
+        var declared = AIFunctionFactory.Create((Func<string>)(() => "declared"), "declared_member");
+        AIContextProvider sourceProvider = append
+            ? new ToolProducingProvider(redefined, declared)
+            : new ToolReplacingProvider(redefined, declared);
+        var provider = new AgwToolMetadataContextProvider(
+            [sourceProvider],
+            new Dictionary<string, AgwToolMetadata>
+            {
+                [declared.Name] = new("tool-block:test", AgwToolPermission.ReadOnly),
+            }
+        );
+
+        // Act
+        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+            await provider.InvokingAsync(
+                new AIContextProvider.InvokingContext(new TestAgent(), null, new AIContext { Tools = [existing] }),
+                TestContext.Current.CancellationToken
+            )
+        );
+
+        // Assert
+        Assert.Contains("undeclared members: external_tool", exception.Message);
+    }
+
+    [Fact]
+    public async Task ContextProvider_SourceProducesDuplicateDynamicTool_RejectsDuplicate()
+    {
+        // Arrange
+        var first = AIFunctionFactory.Create((Func<string>)(() => "first"), "dynamic_member");
+        var second = AIFunctionFactory.Create((Func<string>)(() => "second"), "dynamic_member");
+        var provider = new AgwToolMetadataContextProvider(
+            [new ToolProducingProvider(first, second)],
+            new Dictionary<string, AgwToolMetadata>
+            {
+                [first.Name] = new("tool-block:test", AgwToolPermission.ReadOnly),
+            }
+        );
+
+        // Act
+        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
+            await provider.InvokingAsync(
+                new AIContextProvider.InvokingContext(new TestAgent(), null, new AIContext()),
+                TestContext.Current.CancellationToken
+            )
+        );
+
+        // Assert
+        Assert.Contains("produced more than once", exception.Message);
+    }
+
     private sealed class ToolProducingProvider : AIContextProvider
     {
         private readonly IReadOnlyList<AITool> _tools;
@@ -127,6 +185,27 @@ public sealed class AgwToolPermissionTests
         )
         {
             context.AIContext.Tools = (context.AIContext.Tools ?? []).Concat(_tools).ToArray();
+            return ValueTask.FromResult(context.AIContext);
+        }
+    }
+
+    private sealed class ToolReplacingProvider : AIContextProvider
+    {
+        private readonly IReadOnlyList<AITool> _tools;
+
+        public ToolReplacingProvider(params AITool[] tools)
+        {
+            _tools = tools;
+        }
+
+        public override IReadOnlyList<string> StateKeys => [];
+
+        protected override ValueTask<AIContext> InvokingCoreAsync(
+            InvokingContext context,
+            CancellationToken cancellationToken = default
+        )
+        {
+            context.AIContext.Tools = _tools;
             return ValueTask.FromResult(context.AIContext);
         }
     }

@@ -18,7 +18,11 @@ export type NativeChatBindings = {
   selectedContextId: string | null;
   selectedTargetValue: string | null;
   selectedTarget: ChatTargetOption | null;
-  selectedProject: { id: string; name: string } | null;
+  selectedProject: {
+    id: string;
+    name: string;
+    additionalDirectories?: Array<{ id: string }> | null;
+  } | null;
   permissionMode: PermissionMode;
   activePermissionMode?: PermissionMode | null;
   permissionChangePending?: boolean;

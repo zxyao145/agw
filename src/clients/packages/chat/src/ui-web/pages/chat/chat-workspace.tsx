@@ -411,6 +411,10 @@ export function ChatWorkspace({
     () => (selectedProject ? getProjectDirectories(selectedProject) : []),
     [selectedProject],
   );
+  const searchDirectoryIds = React.useMemo(
+    () => projectDirectories.map((directory) => directory.id),
+    [projectDirectories],
+  );
   const selectedDirectory =
     projectDirectories.find((directory) => directory.id === selectedDirectoryId) ??
     projectDirectories[0];
@@ -1239,6 +1243,8 @@ export function ChatWorkspace({
                     onContextIdChange={handleChatContextIdChange}
                     onConversationChange={refreshConversationList}
                     directoryId={selectedDirectory?.id}
+                    searchDirectoryIds={searchDirectoryIds}
+                    directories={projectDirectories}
                     pendingFileComments={comments}
                     onPendingFileCommentsRemove={handlePendingFileCommentsRemove}
                     onReconnectStateChange={setExecutionReconnectState}

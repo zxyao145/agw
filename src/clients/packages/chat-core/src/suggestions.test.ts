@@ -113,7 +113,7 @@ test("maps file results and routes file suggestions through the shared resolver"
     fullPath: `/workspace/src/file-${index}.ts`,
   }));
   assert.deepEqual(toFileSuggestions(candidates).at(0), {
-    text: "@src/file-0.ts",
+    text: "@/workspace/src/file-0.ts",
     description: "/workspace/src/file-0.ts",
   });
   assert.deepEqual(
@@ -124,7 +124,7 @@ test("maps file results and routes file suggestions through the shared resolver"
       },
     ]).at(0),
     {
-      text: '@"post/agw/Agw 介绍.md"',
+      text: '@"/workspace/post/agw/Agw 介绍.md"',
       description: "/workspace/post/agw/Agw 介绍.md",
     },
   );
@@ -162,7 +162,7 @@ test("routes an explicitly entered hidden path to file search", async () => {
   assert.equal(query, "./.github/w");
 });
 
-test("same-name file mentions retain the additional directory identity", () => {
+test("same-name file mentions use full paths without exposing directory IDs", () => {
   const suggestions = toFileSuggestions([
     { relativePath: "README.md", fullPath: "/primary/README.md" },
     { relativePath: "README.md", fullPath: "/additional/README.md", directoryId: "extra-id" },
@@ -170,7 +170,19 @@ test("same-name file mentions retain the additional directory identity", () => {
   ]);
   assert.deepEqual(
     suggestions.map((item) => item.text),
-    ["@README.md", "@extra-id:README.md", '@"extra-id:Read me.md"'],
+    ["@/primary/README.md", "@/additional/README.md", '@"/additional/Read me.md"'],
   );
   assert.equal(suggestions[1].description, "/additional/README.md");
+});
+
+test("projects without additional directories use relative file references", () => {
+  const candidates = [
+    { fullPath: "/workspace/src/hello.txt", relativePath: "src/hello.txt" },
+    { fullPath: "/workspace/Read me.md", relativePath: "Read me.md" },
+  ];
+  assert.deepEqual(toFileSuggestions(candidates, true), [
+    { text: "@src/hello.txt", description: "src/hello.txt" },
+    { text: '@"Read me.md"', description: "Read me.md" },
+  ]);
+  assert.equal(toFileSuggestions(candidates, false)[0].text, "@/workspace/src/hello.txt");
 });

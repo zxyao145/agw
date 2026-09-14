@@ -62,7 +62,14 @@ public sealed class ProjectDirectoryTests : IDisposable
         Assert.Equal("primary", (await _files.ReadAsync(_projectId, "README.md", Token)).Value);
         Assert.Equal("additional", (await _files.ReadAsync(_projectId, "README.md", Token, _directoryId)).Value);
         var search = await _files.SearchAsync(_projectId, "", "README", 10, true, Token, _directoryId);
-        Assert.Equal("README.md", Assert.Single(search.Value!.Results).RelativePath);
+        var match = Assert.Single(search.Value!.Results);
+        Assert.Equal("README.md", match.RelativePath);
+        Assert.Equal(Path.Combine(Additional, "README.md").Replace('\\', '/'), match.FullPath);
+        var primarySearch = await _files.SearchAsync(_projectId, "", "README", 10, true, Token);
+        Assert.Equal(
+            Path.Combine(Primary, "README.md").Replace('\\', '/'),
+            Assert.Single(primarySearch.Value!.Results).FullPath
+        );
         var list = await _files.ListAsync(_projectId, "", false, false, Token, _directoryId);
         Assert.Equal("README.md", Assert.Single(list.Value!.Items).Path);
         Assert.Equal(

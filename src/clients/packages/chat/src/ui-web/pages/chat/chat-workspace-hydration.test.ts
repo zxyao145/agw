@@ -399,6 +399,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
       }
       if (kind === "directories") {
         const contextId = observed.chat?.contextId;
+        assert.deepEqual(observed.chat?.searchDirectoryIds, [null, "extra"]);
         await React.act(async () => observed.explorer!.onFileSelected("README.md"));
         assert.equal(observed.file?.selectedFile, "README.md");
         await React.act(async () => observed.explorer!.onDirectoryChange("extra"));
@@ -413,6 +414,7 @@ async function checkConversationSession(kind: string, strictMode = false) {
         }));
         await React.act(async () => renderWorkspace());
         assert.equal(observed.explorer?.directoryId, null);
+        assert.deepEqual(observed.chat?.searchDirectoryIds, [null]);
         assert.equal(observed.file?.selectedFile, null);
         return;
       }

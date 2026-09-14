@@ -130,6 +130,8 @@ public sealed class WorkspaceDocumentService
 | `POST /api/files/unstage` | `projectId`、`path` | 取消暂存一个文件或目录下的变更 |
 | `GET /api/files/search` | `projectId`、`path`、`keyword`、`limit`、`recursive` | 按相对路径名称搜索 |
 
+HTTP `search` 的 `fullPath` 返回所选目录下的完整主机路径，`relativePath` 返回相对于搜索起点的路径。聊天 `@` 建议在项目没有附加目录时使用相对路径，配置附加目录后使用完整路径；含空格时加双引号。
+
 HTTP `search` 搜索文件或目录名称；`IAgwFileSystem.SearchAsync` 搜索文件内容，两者语义不同。
 
 ## 路径与安全约束

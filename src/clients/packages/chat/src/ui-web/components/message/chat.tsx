@@ -34,6 +34,7 @@ import {
   clearProjectConversationRecords,
   getProjectConversationMessages,
   type LineComment,
+  type ProjectDirectoryOption,
 } from "@agw/projects";
 import { ChatAside } from "./chat-aside";
 import { ChatInput } from "./chat-input";
@@ -67,6 +68,7 @@ import type { AiMessage } from "@agw/api";
 import type { ChatTargetOption } from "@agw/api";
 import { buildFileCommentPrompt } from "../../../lib/chat/file-comment-prompt";
 import type { ChatImageAttachment } from "../../../lib/chat/image-attachments";
+import { ToolDirectoriesContext } from "./tool-directory";
 
 export interface ChatSessionSeed {
   revision: string | number;
@@ -86,6 +88,8 @@ export interface ChatProps {
   target: Pick<ChatTargetOption, "id" | "type"> | null;
   projectId: string | null;
   directoryId?: string | null;
+  searchDirectoryIds?: readonly (string | null)[];
+  directories?: readonly ProjectDirectoryOption[];
   conversationId: string | null;
   sessionSeed: ChatSessionSeed;
   isLoadingConversation?: boolean;
@@ -108,6 +112,7 @@ export interface ChatProps {
 }
 
 const EMPTY_FILE_COMMENTS: readonly LineComment[] = [];
+const EMPTY_PROJECT_DIRECTORIES: readonly ProjectDirectoryOption[] = [];
 
 function prepareChatHistory(messages: AiMessage[]) {
   const preparedHistory = prepareClaudeHistory(messages);
@@ -163,6 +168,8 @@ export function Chat({
   target,
   projectId,
   directoryId,
+  searchDirectoryIds,
+  directories = EMPTY_PROJECT_DIRECTORIES,
   conversationId,
   sessionSeed,
   isLoadingConversation = false,
@@ -1633,21 +1640,23 @@ export function Chat({
           ) : null}
           <div className="relative flex min-h-full min-w-0 max-w-5xl flex-1">
             {/* 对话列表 */}
-            <Conversation
-              items={renderItems}
-              scrollElementRef={conversationScrollRef}
-              userInputNavigationHost={userInputNavigationHost}
-              onUserInputNavigate={handleUserInputNavigate}
-              hasOlderMessages={hasOlderMessages}
-              isLoadingOlderMessages={isLoadingOlderMessages}
-              isInitialLoading={isLoadingConversation}
-              onLoadOlderMessages={() => void loadOlderMessages()}
-              permissionMode={activePermissionMode ?? undefined}
-              onHumanResponse={submitInteractionResponse}
-              showCheckpointResume={target?.type === "agentflow"}
-              checkpointResumeDisabled={checkpointResumeDisabled}
-              onCheckpointResume={handleResumeCheckpoint}
-            />
+            <ToolDirectoriesContext.Provider value={directories}>
+              <Conversation
+                items={renderItems}
+                scrollElementRef={conversationScrollRef}
+                userInputNavigationHost={userInputNavigationHost}
+                onUserInputNavigate={handleUserInputNavigate}
+                hasOlderMessages={hasOlderMessages}
+                isLoadingOlderMessages={isLoadingOlderMessages}
+                isInitialLoading={isLoadingConversation}
+                onLoadOlderMessages={() => void loadOlderMessages()}
+                permissionMode={activePermissionMode ?? undefined}
+                onHumanResponse={submitInteractionResponse}
+                showCheckpointResume={target?.type === "agentflow"}
+                checkpointResumeDisabled={checkpointResumeDisabled}
+                onCheckpointResume={handleResumeCheckpoint}
+              />
+            </ToolDirectoriesContext.Provider>
           </div>
 
           {renderItems.length > 0 ? (
@@ -1681,7 +1690,7 @@ export function Chat({
             canResume={!checkpointResumeDisabled && latestAvailableCheckpoint !== null}
             onResume={() => handleResumeCheckpoint()}
             projectId={projectId}
-            directoryId={directoryId}
+            directoryIds={searchDirectoryIds?.length ? searchDirectoryIds : [directoryId ?? null]}
             commandSource={commandSource}
             permissionMode={permissionMode}
             activePermissionMode={activePermissionMode}

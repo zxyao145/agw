@@ -429,6 +429,14 @@ public sealed class FileAppService
             .OrderBy(result => result.Type == "file")
             .ThenBy(result => result.RelativePath, StringComparer.OrdinalIgnoreCase)
             .Take(limit)
+            .Select(result =>
+                fileSystem is LocalFileSystem local
+                    ? result with
+                    {
+                        FullPath = NormalizePath(local.ResolvePhysicalPath(result.FullPath)),
+                    }
+                    : result
+            )
             .ToList();
 
         return FileOperationResult<FileSearchOutput>.Succeeded(new FileSearchOutput(sortedResults));

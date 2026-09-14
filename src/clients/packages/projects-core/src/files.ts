@@ -234,6 +234,26 @@ export async function searchFiles(
   }
 }
 
+export async function searchFilesInDirectories(
+  projectId: string,
+  path: string,
+  keyword: string,
+  recursive: boolean,
+  directoryIds: readonly (string | null)[],
+  client: ProjectFilesApiClient = browserClient,
+): Promise<SearchFilesResponse> {
+  const responses = await Promise.allSettled(
+    directoryIds.map((directoryId) =>
+      searchFiles(projectId, path, keyword, recursive, client, directoryId),
+    ),
+  );
+  return {
+    results: responses.flatMap((response) =>
+      response.status === "fulfilled" ? response.value.results : [],
+    ),
+  };
+}
+
 export type ProjectFilesService = {
   listFiles(
     projectId: string,
@@ -272,6 +292,13 @@ export type ProjectFilesService = {
     recursive?: boolean,
     directoryId?: string | null,
   ): Promise<SearchFilesResponse>;
+  searchFilesInDirectories(
+    projectId: string,
+    path: string,
+    keyword: string,
+    recursive: boolean,
+    directoryIds: readonly (string | null)[],
+  ): Promise<SearchFilesResponse>;
 };
 
 export function createProjectFilesService(client: ProjectFilesApiClient): ProjectFilesService {
@@ -287,5 +314,7 @@ export function createProjectFilesService(client: ProjectFilesApiClient): Projec
       setFileStaged(projectId, path, staged, client, directoryId),
     searchFiles: (projectId, path, keyword, recursive, directoryId) =>
       searchFiles(projectId, path, keyword, recursive, client, directoryId),
+    searchFilesInDirectories: (projectId, path, keyword, recursive, directoryIds) =>
+      searchFilesInDirectories(projectId, path, keyword, recursive, directoryIds, client),
   };
 }

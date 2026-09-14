@@ -46,6 +46,43 @@ test("all file and Git operations bind the selected project and directory", asyn
   assert.equal(requests.at(-1)?.query.directoryId, undefined);
 });
 
+test("searches every project directory and combines their results", async () => {
+  const requests: Array<{ path: string; query: Record<string, unknown> }> = [];
+  const capture = async (path: string, options: { params: { query: Record<string, unknown> } }) => {
+    requests.push({ path, query: options.params.query });
+    const directoryId = options.params.query.directoryId as string | undefined;
+    return {
+      results: [
+        {
+          directoryId: directoryId ?? null,
+          fullPath: directoryId ? "/extra/hello.txt" : "/primary/hello.txt",
+          relativePath: "hello.txt",
+          type: "file",
+        },
+      ],
+    };
+  };
+  const service = createProjectFilesService({
+    apiGet: capture,
+    apiPost: capture,
+    apiDelete: capture,
+  } as unknown as Parameters<typeof createProjectFilesService>[0]);
+
+  const result = await service.searchFilesInDirectories("project", "", "hello", true, [
+    null,
+    "extra",
+  ]);
+
+  assert.deepEqual(
+    requests.map((request) => request.query.directoryId),
+    [undefined, "extra"],
+  );
+  assert.deepEqual(
+    result.results.map((item) => item.directoryId),
+    [null, "extra"],
+  );
+});
+
 test("unavailable directories display the API detail", async () => {
   const fail = async () => {
     throw new ApiError({
