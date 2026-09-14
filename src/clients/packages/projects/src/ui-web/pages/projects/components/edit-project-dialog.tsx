@@ -34,6 +34,7 @@ export function EditProjectDialog({
   name,
   description,
   workspace,
+  additionalDirectories,
   environmentVariables,
   tools,
   selectedSkillIds,
@@ -44,7 +45,7 @@ export function EditProjectDialog({
   const environmentVariablesError = getEnvironmentVariablesError(environmentVariables);
 
   const handleUpdate = () => {
-    if (!editingProject || editingProject.type !== 0 || !name.trim() || environmentVariablesError) {
+    if (!editingProject || !name.trim() || !workspace.trim() || environmentVariablesError) {
       return;
     }
 
@@ -59,9 +60,10 @@ export function EditProjectDialog({
     updateProjectMutation.mutate({
       project: editingProject,
       body: {
-        name,
+        name: editingProject.type === 0 ? name : editingProject.name,
         description: description.length ? description : null,
-        workspace: workspace.trim().length ? workspace.trim() : null,
+        workspace: workspace.trim(),
+        additionalDirectories,
         extraSetting: editingProject.extraSetting ?? null,
         ...capabilities,
       },
@@ -70,18 +72,14 @@ export function EditProjectDialog({
 
   return (
     <Dialog
-      open={open && editingProject?.type === 0}
-      onOpenChange={(nextOpen) => {
-        if (nextOpen && editingProject?.type !== 0) {
-          return;
-        }
-
+      open={open}
+      onOpenChange={(nextOpen) =>
         applyDialogOpenChange({
           isPending: updateProjectMutation.isPending,
           nextOpen,
           setOpen,
-        });
-      }}
+        })
+      }
     >
       <DialogContent
         size="fullscreen"
@@ -116,8 +114,8 @@ export function EditProjectDialog({
                   onClick={handleUpdate}
                   disabled={
                     !editingProject ||
-                    editingProject.type !== 0 ||
                     !name.trim() ||
+                    !workspace.trim() ||
                     Boolean(environmentVariablesError) ||
                     updateProjectMutation.isPending
                   }
@@ -134,11 +132,14 @@ export function EditProjectDialog({
             name={name}
             description={description}
             workspace={workspace}
+            additionalDirectories={additionalDirectories}
             environmentVariables={environmentVariables}
             tools={tools}
             selectedSkillIds={selectedSkillIds}
             selectedMcpToolServerIds={selectedMcpToolServerIds}
             selectedConnectionIds={selectedConnectionIds}
+            projectType={editingProject?.type === 0 ? "User Defined" : "BuiltIn"}
+            nameReadOnly={editingProject?.type !== 0}
           />
         </div>
       </DialogContent>

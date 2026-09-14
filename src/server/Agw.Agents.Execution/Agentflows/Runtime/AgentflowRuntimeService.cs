@@ -13,6 +13,8 @@ using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Agents.Execution.Turns;
 using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
+using Agw.Shared.Utils;
 using Microsoft.Extensions.AI;
 using static Agw.Agents.Execution.Agentflows.Messaging.AgentflowMessageMapper;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
@@ -143,10 +145,23 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         {
             throw new AgwException(ErrorCodes.ResourceNotFound);
         }
-        if (!await IsProjectVisibleAsync(resolvedProjectId.Value, cancellationToken).ConfigureAwait(false))
+        var project = await _projectRuntimeFacade.GetForCurrentUserAsync(resolvedProjectId.Value, cancellationToken);
+        if (project == null)
         {
             throw new AgwException(ErrorCodes.ResourceNotFound);
         }
+        using var workspaceScope = ProjectWorkspaceContext.Push(
+            project.Id,
+            ProjectWorkspaceContext.Get(project.Id)
+                ?? ProjectWorkspacePaths.CreateSnapshot(
+                    project.Id,
+                    project.Workspace,
+                    (project.AdditionalDirectories ?? []).Select(directory => new ProjectWorkspaceDirectory(
+                        directory.Id,
+                        directory.Path
+                    ))
+                )
+        );
         var executionUserId = _workflowFactory.ResolveExecutionUserId();
         var resolvedContextId = ContextIdUtil.ResolveContextId(contextId);
         var resolvedTaskId = taskId ?? Guid.CreateVersion7();
@@ -262,6 +277,10 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         {
             return CreateDurableFailure(input, "The project was not found.");
         }
+        using var workspaceScope =
+            manifest.WorkspaceSnapshot == null
+                ? null
+                : ProjectWorkspaceContext.Push(resolvedProjectId.Value, manifest.WorkspaceSnapshot);
         var resolvedContextId = ContextIdUtil.ResolveContextId(manifest.Task.ContextId);
         var executionTraceContext = new AgentflowExecutionTraceContext(
             resolvedProjectId.Value,
@@ -369,10 +388,23 @@ public class AgentflowRuntimeService : IAgentflowRuntimeService
         AgwPermissionMode? permissionMode = null
     )
     {
-        if (!await IsProjectVisibleAsync(projectId, cancellationToken).ConfigureAwait(false))
+        var project = await _projectRuntimeFacade.GetForCurrentUserAsync(projectId, cancellationToken);
+        if (project == null)
         {
             return null;
         }
+        using var workspaceScope = ProjectWorkspaceContext.Push(
+            project.Id,
+            ProjectWorkspaceContext.Get(project.Id)
+                ?? ProjectWorkspacePaths.CreateSnapshot(
+                    project.Id,
+                    project.Workspace,
+                    (project.AdditionalDirectories ?? []).Select(directory => new ProjectWorkspaceDirectory(
+                        directory.Id,
+                        directory.Path
+                    ))
+                )
+        );
 
         var agentflow = await _workflowFactory.GetVisibleAgentflowAsync(agentflowId);
         if (agentflow == null)

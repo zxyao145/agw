@@ -90,6 +90,15 @@ public class ProjectAppService : IProjectAppService
 
     public Task<Project?> CreateAsync(Project project) => CreateAsync(project, null, null, null);
 
+    public Task<string?> GetOwnerUserIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var userId = _userInfoService.RequiredUserId;
+        return _dbContext
+            .Projects.Where(project => project.Id == id && project.CreateBy == userId)
+            .Select(project => project.CreateBy)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<Project?> CreateAsync(
         Project project,
         IEnumerable<Guid>? mcpToolServerIds,
@@ -103,6 +112,7 @@ public class ProjectAppService : IProjectAppService
             return null;
         }
 
+        NormalizeAdditionalDirectories(project, []);
         EnsureWorkspaceDirectory(project.Workspace);
         await _dbContext.Projects.AddAsync(project);
         await SyncProjectMcpToolServerRelationsAsync(project.Id, mcpToolServerIds);
@@ -133,6 +143,7 @@ public class ProjectAppService : IProjectAppService
             return null;
         }
 
+        var originalDirectories = existing.AdditionalDirectories.ToArray();
         var originalType = existing.Type;
         var originalName = existing.Name;
         if (!new ProjectBehavior(existing).TryApplyUpdate(updateAction))
@@ -150,6 +161,12 @@ public class ProjectAppService : IProjectAppService
             return null;
         }
 
+        if (string.IsNullOrWhiteSpace(existing.Workspace))
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "Project primary directory is required.");
+        }
+
+        NormalizeAdditionalDirectories(existing, originalDirectories);
         EnsureWorkspaceDirectory(existing.Workspace);
         // Preserve audit stamping even when only bindings change or the update is a no-op.
         _dbContext.Projects.Entry(existing).Property(project => project.Name).IsModified = true;
@@ -208,6 +225,53 @@ public class ProjectAppService : IProjectAppService
     {
         var project = await _projectResolver.ResolveAsync(projectId);
         return project?.Id;
+    }
+
+    private static void NormalizeAdditionalDirectories(Project project, IReadOnlyList<ProjectDirectory> previous)
+    {
+        var paths = new HashSet<string>(ProjectWorkspacePaths.Comparer)
+        {
+            ProjectWorkspacePaths.CreateSnapshot(project.Id, project.Workspace).Workspace,
+        };
+        var ids = new HashSet<Guid>();
+        var normalized = new List<ProjectDirectory>();
+        foreach (var directory in project.AdditionalDirectories ?? [])
+        {
+            if (directory == null)
+            {
+                throw new AgwException(ErrorCodes.InvalidParam, "An additional directory must contain a path.");
+            }
+            var path = directory.Path?.Trim();
+            if (
+                string.IsNullOrWhiteSpace(path)
+                || path.Length > 1000
+                || path.Contains('\0')
+                || !Path.IsPathFullyQualified(PathUtil.ExpandTilde(path))
+            )
+            {
+                throw new AgwException(
+                    ErrorCodes.InvalidParam,
+                    "Additional directories require an absolute path or a ~/ path."
+                );
+            }
+            var fullPath = ProjectWorkspacePaths.Normalize(path);
+            if (!paths.Add(fullPath) || (directory.Id != Guid.Empty && !ids.Add(directory.Id)))
+            {
+                throw new AgwException(ErrorCodes.InvalidParam, "Project directories must be unique.");
+            }
+            var original = previous.FirstOrDefault(item => item.Id == directory.Id);
+            var unchanged =
+                original != null
+                && ProjectWorkspacePaths.Comparer.Equals(ProjectWorkspacePaths.Normalize(original.Path), fullPath);
+            if (!unchanged && !Directory.Exists(fullPath))
+            {
+                throw new AgwException(ErrorCodes.InvalidParam, $"Additional directory does not exist: '{path}'.");
+            }
+            normalized.Add(
+                new ProjectDirectory { Id = unchanged ? original!.Id : Guid.CreateVersion7(), Path = fullPath }
+            );
+        }
+        project.AdditionalDirectories = normalized;
     }
 
     private static void EnsureWorkspaceDirectory(string? workspace)

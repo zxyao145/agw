@@ -124,13 +124,23 @@ export function NativeChatComposer({
           return [];
         }
 
-        const response = await workspace.filesService.searchFiles(
+        const directoryIds = [
+          null,
+          ...(workspace.selectedProject?.additionalDirectories ?? []).map(
+            (directory) => directory.id,
+          ),
+        ];
+        const response = await workspace.filesService.searchFilesInDirectories(
           workspace.selectedProjectId,
           "",
           keyword,
           true,
+          directoryIds,
         );
-        return toFileSuggestions(response.results);
+        return toFileSuggestions(
+          response.results,
+          directoryIds.every((id) => id === null),
+        );
       },
     );
 
@@ -158,6 +168,7 @@ export function NativeChatComposer({
     workspace.filesService,
     workspace.isExecuting,
     workspace.selectedProjectId,
+    workspace.selectedProject?.additionalDirectories,
     workspace.selectedTargetValue,
   ]);
 

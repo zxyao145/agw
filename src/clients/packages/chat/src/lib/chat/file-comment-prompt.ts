@@ -1,6 +1,9 @@
 import type { LineComment } from "@agw/projects";
 
 type FileCommentPromptItem = {
+  projectId?: string;
+  directoryId?: string | null;
+  directoryName?: string;
   projectRelativePath: string;
   fileVersion: "before_change" | "after_change";
   lineNumber: number;
@@ -14,6 +17,10 @@ function normalizeProjectRelativePath(filePath: string): string {
 
 function toPromptItem(comment: LineComment): FileCommentPromptItem {
   return {
+    ...(comment.projectId ? { projectId: comment.projectId } : {}),
+    ...(comment.directoryId
+      ? { directoryId: comment.directoryId, directoryName: comment.directoryName }
+      : {}),
     projectRelativePath: normalizeProjectRelativePath(comment.filePath),
     fileVersion: comment.side === "original" ? "before_change" : "after_change",
     lineNumber: comment.lineNumber,

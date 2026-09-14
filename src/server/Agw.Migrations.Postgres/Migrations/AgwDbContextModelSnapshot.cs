@@ -1414,6 +1414,13 @@ namespace Agw.Migrations.Postgres.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("AdditionalDirectories")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasColumnName("additional_directories")
+                        .HasDefaultValueSql("'[]'");
+
                     b.Property<string>("CreateBy")
                         .HasColumnType("text")
                         .HasColumnName("create_by");

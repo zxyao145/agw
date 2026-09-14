@@ -1,3 +1,4 @@
+import { ProjectFileScopeContext, type ProjectFileScope } from "./project-file-scope";
 import type { GitDiffResponse, GitDiffScope } from "../../../services/files";
 import { DiffViewer } from "./diff-viewer";
 import FileError from "./file-error";
@@ -8,7 +9,7 @@ import NoSelectedFile from "./no-selected-file";
 import { LineComment } from "./types";
 import UnChangedFile from "./unchanged-file";
 
-interface FileContentProps {
+interface FileContentProps extends ProjectFileScope {
   selectedFile: string | null;
   isLoadingContent: boolean;
   contentError: string | null;
@@ -22,6 +23,9 @@ interface FileContentProps {
 
 export default function FileContent({
   selectedFile,
+  projectId,
+  directoryId,
+  directoryName,
   isLoadingContent,
   contentError,
   onlyDiff,
@@ -33,48 +37,52 @@ export default function FileContent({
 }: FileContentProps) {
   return (
     <div className="flex h-full min-w-0 w-full flex-col px-2">
-      <div className="flex-1 min-h-0">
-        {!selectedFile ? (
-          NoSelectedFile()
-        ) : (
-          <div className="flex flex-col h-full min-h-0">
-            <FileHeader file={selectedFile} />
-            <div className="flex-1 min-h-0 overflow-y-auto agw-scrollbar">
-              {isLoadingContent ? (
-                <FileLoading />
-              ) : contentError ? (
-                <FileError message={contentError} />
-              ) : onlyDiff && diffContentData ? (
-                diffContentData.unchanged ? (
-                  <UnChangedFile
-                    diffContentData={diffContentData}
-                    selectedFile={selectedFile}
-                    diffScope={diffScope}
-                    comments={comments}
-                    setComments={setComments}
-                  />
+      <ProjectFileScopeContext.Provider value={{ projectId, directoryId, directoryName }}>
+        <div className="flex-1 min-h-0">
+          {!selectedFile ? (
+            NoSelectedFile()
+          ) : (
+            <div className="flex flex-col h-full min-h-0">
+              <FileHeader
+                file={directoryName ? `${directoryName} / ${selectedFile}` : selectedFile}
+              />
+              <div className="flex-1 min-h-0 overflow-y-auto agw-scrollbar">
+                {isLoadingContent ? (
+                  <FileLoading />
+                ) : contentError ? (
+                  <FileError message={contentError} />
+                ) : onlyDiff && diffContentData ? (
+                  diffContentData.unchanged ? (
+                    <UnChangedFile
+                      diffContentData={diffContentData}
+                      selectedFile={selectedFile}
+                      diffScope={diffScope}
+                      comments={comments}
+                      setComments={setComments}
+                    />
+                  ) : (
+                    <DiffViewer
+                      diff={diffContentData.diff}
+                      filePath={selectedFile}
+                      comments={comments}
+                      setComments={setComments}
+                      scope={diffScope}
+                    />
+                  )
                 ) : (
-                  <DiffViewer
-                    diff={diffContentData.diff}
+                  <FileViewer
+                    content={fileContent}
                     filePath={selectedFile}
                     comments={comments}
                     setComments={setComments}
-                    scope={diffScope}
+                    isDiffView={false}
                   />
-                )
-              ) : (
-                <FileViewer
-                  content={fileContent}
-                  filePath={selectedFile}
-                  comments={comments}
-                  setComments={setComments}
-                  isDiffView={false}
-                />
-              )}
+                )}
+              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      </ProjectFileScopeContext.Provider>
     </div>
   );
 }

@@ -15,6 +15,7 @@ public class Project : BaseEntity, IAggregateRoot
     public ProjectType Type { get; set; } = ProjectType.UserDefined;
     public string? Description { get; set; }
     public string? Workspace { get; set; }
+    public List<ProjectDirectory> AdditionalDirectories { get; set; } = [];
 
     public string? ExtraSetting { get; set; }
     public List<ToolValueObject> Tools { get; set; } = [];

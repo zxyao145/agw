@@ -1,4 +1,5 @@
 using Agw.Shared.Exceptions;
+using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Tools.Shell;
 using Microsoft.Extensions.Configuration;
 
@@ -51,6 +52,10 @@ public sealed class ShellContextualTool : IContextualTool
         var contribution = new ToolContribution();
         contribution.Tools.Add(executor.AsAIFunction(requireApproval: false));
         contribution.ContextProviders.Add(new ShellEnvironmentProvider(executor));
+        if (backend == "docker" && context.WorkspaceSnapshot?.AdditionalDirectories.Count > 0)
+        {
+            contribution.ContextProviders.Add(new DockerDirectoryProvider(context));
+        }
         contribution.AddResource(executor);
         return ValueTask.FromResult(contribution);
     }
@@ -77,6 +82,44 @@ public sealed class ShellContextualTool : IContextualTool
         );
     }
 
+    internal static IReadOnlyList<string> CreateAdditionalDirectoryMounts(ToolMaterializationContext context)
+    {
+        var args = new List<string>();
+        var directories =
+            context.WorkspaceSnapshot == null
+                ? context.Project.AdditionalDirectories.Select(directory => (directory.Id, directory.Path))
+                : context.WorkspaceSnapshot.AdditionalDirectories.Select(directory => (directory.Id, directory.Path));
+        foreach (var (id, directoryPath) in directories)
+        {
+            var path = ProjectWorkspacePaths.Normalize(directoryPath);
+            args.Add("--volume");
+            args.Add($"{path}:/project-directories/{id:D}:rw");
+        }
+        return args;
+    }
+
+    private sealed class DockerDirectoryProvider : AIContextProvider
+    {
+        private readonly string _instructions;
+
+        public DockerDirectoryProvider(ToolMaterializationContext context)
+        {
+            _instructions =
+                "Docker shell starts in /workspace (the primary directory). Additional directories are mounted read/write at:\n"
+                + string.Join(
+                    "\n",
+                    context.WorkspaceSnapshot!.AdditionalDirectories.Select(directory =>
+                        $"- directoryId={directory.Id:D}: /project-directories/{directory.Id:D} (host: {directory.Path})"
+                    )
+                );
+        }
+
+        protected override ValueTask<AIContext> ProvideAIContextAsync(
+            InvokingContext context,
+            CancellationToken cancellationToken = default
+        ) => ValueTask.FromResult(new AIContext { Instructions = _instructions });
+    }
+
     private static DockerShellExecutor CreateDockerExecutor(ToolMaterializationContext context, string workspace) =>
         new(
             new DockerShellExecutorOptions
@@ -85,6 +128,7 @@ public sealed class ShellContextualTool : IContextualTool
                 HostWorkdir = workspace,
                 ContainerWorkdir = "/workspace",
                 MountReadonly = false,
+                ExtraRunArgs = CreateAdditionalDirectoryMounts(context),
                 Network = DockerNetworkMode.None,
                 Environment = context.EnvironmentVariables,
                 Timeout = TimeSpan.FromSeconds(30),

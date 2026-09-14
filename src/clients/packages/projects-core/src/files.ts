@@ -13,6 +13,7 @@ export type FileGitStatus = "added" | "modified" | "deleted" | "untracked";
 export type GitDiffScope = "staged" | "unstaged";
 
 export interface FileItem {
+  directoryId?: string | null;
   name: string;
   path: string;
   type: "file" | "directory";
@@ -48,8 +49,11 @@ function toFileApiError(err: unknown, fallbackMessage: string): FileApiError {
   if (err instanceof ApiError) {
     const body = err.body;
     const message =
-      typeof body === "object" && body !== null && "error" in body && typeof body.error === "string"
-        ? body.error
+      typeof body === "object" && body !== null
+        ? ("detail" in body && typeof body.detail === "string" && body.detail) ||
+          ("error" in body && typeof body.error === "string" && body.error) ||
+          ("title" in body && typeof body.title === "string" && body.title) ||
+          fallbackMessage
         : fallbackMessage;
     return new FileApiError(message, err.status, err.statusText);
   }
@@ -69,12 +73,14 @@ export async function listFiles(
   diff: boolean = false,
   recursive: boolean = false,
   client: ProjectFilesApiClient = browserClient,
+  directoryId?: string | null,
 ): Promise<ListFilesResponse> {
   try {
     return (await client.apiGet("/api/files/list", {
       params: {
         query: {
           projectId,
+          directoryId: directoryId || undefined,
           path: path || undefined,
           diff: diff || undefined,
           recursive: recursive || undefined,
@@ -93,10 +99,11 @@ export async function readFile(
   projectId: string,
   path: string,
   client: ProjectFilesApiClient = browserClient,
+  directoryId?: string | null,
 ): Promise<string> {
   try {
     return (await client.apiGet("/api/files/read", {
-      params: { query: { projectId, path } },
+      params: { query: { projectId, path, directoryId: directoryId || undefined } },
     })) as string;
   } catch (err) {
     throw toFileApiError(err, "Failed to read file");
@@ -118,10 +125,11 @@ export async function getFileDiff(
   path: string,
   scope?: GitDiffScope,
   client: ProjectFilesApiClient = browserClient,
+  directoryId?: string | null,
 ): Promise<GitDiffResponse> {
   try {
     return (await client.apiGet("/api/files/diff", {
-      params: { query: { projectId, path, scope } },
+      params: { query: { projectId, path, scope, directoryId: directoryId || undefined } },
     })) as GitDiffResponse;
   } catch (err) {
     throw toFileApiError(err, "Failed to get diff");
@@ -135,10 +143,11 @@ export async function deleteFile(
   projectId: string,
   path: string,
   client: ProjectFilesApiClient = browserClient,
+  directoryId?: string | null,
 ): Promise<{ success: boolean; message: string }> {
   try {
     return (await client.apiDelete("/api/files/delete", {
-      params: { query: { projectId, path } },
+      params: { query: { projectId, path, directoryId: directoryId || undefined } },
     })) as { success: boolean; message: string };
   } catch (err) {
     throw toFileApiError(err, "Failed to delete");
@@ -152,10 +161,11 @@ export async function resetFile(
   projectId: string,
   path: string,
   client: ProjectFilesApiClient = browserClient,
+  directoryId?: string | null,
 ): Promise<{ success: boolean; message: string }> {
   try {
     return (await client.apiPost("/api/files/reset", {
-      params: { query: { projectId, path } },
+      params: { query: { projectId, path, directoryId: directoryId || undefined } },
     })) as { success: boolean; message: string };
   } catch (err) {
     throw toFileApiError(err, "Failed to reset");
@@ -170,11 +180,12 @@ export async function setFileStaged(
   path: string,
   staged: boolean,
   client: ProjectFilesApiClient = browserClient,
+  directoryId?: string | null,
 ): Promise<{ success: boolean; message: string }> {
   try {
     const endpoint = staged ? "/api/files/stage" : "/api/files/unstage";
     return (await client.apiPost(endpoint, {
-      params: { query: { projectId, path } },
+      params: { query: { projectId, path, directoryId: directoryId || undefined } },
     })) as { success: boolean; message: string };
   } catch (err) {
     throw toFileApiError(err, staged ? "Failed to stage changes" : "Failed to unstage changes");
@@ -182,6 +193,7 @@ export async function setFileStaged(
 }
 
 export interface FileSearchResult {
+  directoryId?: string | null;
   fullPath: string;
   relativePath: string;
   type: "file" | "directory";
@@ -203,12 +215,14 @@ export async function searchFiles(
   keyword: string,
   recursive: boolean = true,
   client: ProjectFilesApiClient = browserClient,
+  directoryId?: string | null,
 ): Promise<SearchFilesResponse> {
   try {
     return (await client.apiGet("/api/files/search", {
       params: {
         query: {
           projectId,
+          directoryId: directoryId || undefined,
           path: path || undefined,
           keyword,
           recursive: recursive || undefined,
@@ -220,40 +234,87 @@ export async function searchFiles(
   }
 }
 
+export async function searchFilesInDirectories(
+  projectId: string,
+  path: string,
+  keyword: string,
+  recursive: boolean,
+  directoryIds: readonly (string | null)[],
+  client: ProjectFilesApiClient = browserClient,
+): Promise<SearchFilesResponse> {
+  const responses = await Promise.allSettled(
+    directoryIds.map((directoryId) =>
+      searchFiles(projectId, path, keyword, recursive, client, directoryId),
+    ),
+  );
+  return {
+    results: responses.flatMap((response) =>
+      response.status === "fulfilled" ? response.value.results : [],
+    ),
+  };
+}
+
 export type ProjectFilesService = {
   listFiles(
     projectId: string,
     path: string,
     diff?: boolean,
     recursive?: boolean,
+    directoryId?: string | null,
   ): Promise<ListFilesResponse>;
-  readFile(projectId: string, path: string): Promise<string>;
-  getFileDiff(projectId: string, path: string, scope?: GitDiffScope): Promise<GitDiffResponse>;
-  deleteFile(projectId: string, path: string): Promise<{ success: boolean; message: string }>;
-  resetFile(projectId: string, path: string): Promise<{ success: boolean; message: string }>;
+  readFile(projectId: string, path: string, directoryId?: string | null): Promise<string>;
+  getFileDiff(
+    projectId: string,
+    path: string,
+    scope?: GitDiffScope,
+    directoryId?: string | null,
+  ): Promise<GitDiffResponse>;
+  deleteFile(
+    projectId: string,
+    path: string,
+    directoryId?: string | null,
+  ): Promise<{ success: boolean; message: string }>;
+  resetFile(
+    projectId: string,
+    path: string,
+    directoryId?: string | null,
+  ): Promise<{ success: boolean; message: string }>;
   setFileStaged(
     projectId: string,
     path: string,
     staged: boolean,
+    directoryId?: string | null,
   ): Promise<{ success: boolean; message: string }>;
   searchFiles(
     projectId: string,
     path: string,
     keyword: string,
     recursive?: boolean,
+    directoryId?: string | null,
+  ): Promise<SearchFilesResponse>;
+  searchFilesInDirectories(
+    projectId: string,
+    path: string,
+    keyword: string,
+    recursive: boolean,
+    directoryIds: readonly (string | null)[],
   ): Promise<SearchFilesResponse>;
 };
 
 export function createProjectFilesService(client: ProjectFilesApiClient): ProjectFilesService {
   return {
-    listFiles: (projectId, path, diff, recursive) =>
-      listFiles(projectId, path, diff, recursive, client),
-    readFile: (projectId, path) => readFile(projectId, path, client),
-    getFileDiff: (projectId, path, scope) => getFileDiff(projectId, path, scope, client),
-    deleteFile: (projectId, path) => deleteFile(projectId, path, client),
-    resetFile: (projectId, path) => resetFile(projectId, path, client),
-    setFileStaged: (projectId, path, staged) => setFileStaged(projectId, path, staged, client),
-    searchFiles: (projectId, path, keyword, recursive) =>
-      searchFiles(projectId, path, keyword, recursive, client),
+    listFiles: (projectId, path, diff, recursive, directoryId) =>
+      listFiles(projectId, path, diff, recursive, client, directoryId),
+    readFile: (projectId, path, directoryId) => readFile(projectId, path, client, directoryId),
+    getFileDiff: (projectId, path, scope, directoryId) =>
+      getFileDiff(projectId, path, scope, client, directoryId),
+    deleteFile: (projectId, path, directoryId) => deleteFile(projectId, path, client, directoryId),
+    resetFile: (projectId, path, directoryId) => resetFile(projectId, path, client, directoryId),
+    setFileStaged: (projectId, path, staged, directoryId) =>
+      setFileStaged(projectId, path, staged, client, directoryId),
+    searchFiles: (projectId, path, keyword, recursive, directoryId) =>
+      searchFiles(projectId, path, keyword, recursive, client, directoryId),
+    searchFilesInDirectories: (projectId, path, keyword, recursive, directoryIds) =>
+      searchFilesInDirectories(projectId, path, keyword, recursive, directoryIds, client),
   };
 }

@@ -1,3 +1,7 @@
+import type { ProjectDirectory } from "@agw/projects-core";
+import { Button } from "@agw/components";
+import { Minus } from "lucide-react";
+
 import type { UseQueryResult } from "@agw/components/query";
 
 import {
@@ -23,6 +27,8 @@ export interface ProjectFormFieldsProps {
   setDescription: (value: string) => void;
   workspace: string;
   setWorkspace: (value: string) => void;
+  additionalDirectories: ProjectDirectory[];
+  setAdditionalDirectories: (value: ProjectDirectory[]) => void;
   environmentVariables: EnvironmentVariableEntry[];
   setEnvironmentVariables: (entries: EnvironmentVariableEntry[]) => void;
   selectedSkillIds: string[];
@@ -37,6 +43,8 @@ export interface ProjectFormFieldsProps {
   toggleSkill: (skillId: string) => void;
   toggleConnection: (connectionId: string) => void;
   toggleMcpToolServer: (mcpToolServerId: string) => void;
+  projectType?: "User Defined" | "BuiltIn";
+  nameReadOnly?: boolean;
   idPrefix?: string;
 }
 
@@ -47,6 +55,8 @@ export function ProjectFormFields({
   setDescription,
   workspace,
   setWorkspace,
+  additionalDirectories,
+  setAdditionalDirectories,
   environmentVariables,
   setEnvironmentVariables,
   selectedSkillIds,
@@ -61,8 +71,12 @@ export function ProjectFormFields({
   toggleSkill,
   toggleConnection,
   toggleMcpToolServer,
+  projectType = "User Defined",
+  nameReadOnly = false,
   idPrefix = "",
 }: ProjectFormFieldsProps) {
+  const primaryDirectoryMissing = Boolean(name.trim()) && !workspace.trim();
+
   return (
     <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,45%)_minmax(0,1fr)] overflow-hidden lg:grid-cols-[360px_minmax(0,1fr)] lg:grid-rows-1">
       <div className="overflow-y-auto agw-scrollbar border-b bg-muted/20 p-4 lg:border-r lg:border-b-0">
@@ -73,6 +87,7 @@ export function ProjectFormFields({
               id={`${idPrefix}name`}
               value={name}
               onChange={(event) => setName(event.target.value)}
+              readOnly={nameReadOnly}
               placeholder="demo-project"
             />
           </div>
@@ -89,20 +104,77 @@ export function ProjectFormFields({
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor={`${idPrefix}workspace`}>Workspace (Optional)</Label>
+            <Label htmlFor={`${idPrefix}workspace`}>Primary directory</Label>
             <Input
               id={`${idPrefix}workspace`}
               value={workspace}
               onChange={(event) => setWorkspace(event.target.value)}
+              required
+              aria-invalid={primaryDirectoryMissing}
               placeholder="~/.agw/demo-project"
             />
+            {primaryDirectoryMissing && (
+              <p className="text-sm text-destructive" role="alert">
+                Primary directory is required.
+              </p>
+            )}
+          </div>
+
+          <div className="grid gap-2">
+            <Label>Additional directories</Label>
+            {additionalDirectories.map((directory, index) => (
+              <div key={directory.id ?? index} className="flex items-center gap-2">
+                <Input
+                  aria-label={`Additional directory ${index + 1}`}
+                  value={directory.path}
+                  placeholder="~/source/repos/docs"
+                  onChange={(event) =>
+                    setAdditionalDirectories(
+                      additionalDirectories.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, path: event.target.value } : item,
+                      ),
+                    )
+                  }
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Remove directory ${index + 1}`}
+                  onClick={() =>
+                    setAdditionalDirectories(
+                      additionalDirectories.filter((_, itemIndex) => itemIndex !== index),
+                    )
+                  }
+                >
+                  <Minus className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                setAdditionalDirectories([
+                  ...additionalDirectories,
+                  { id: crypto.randomUUID(), path: "" },
+                ])
+              }
+            >
+              Add directory
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Link existing directories. Removing a link keeps its files. Agent changes take effect
+              next turn.
+            </p>
           </div>
 
           <div className="grid gap-2">
             <Label htmlFor={`${idPrefix}projectType`}>Project Type</Label>
             <Input
               id={`${idPrefix}projectType`}
-              value="User Defined"
+              value={projectType}
               readOnly
               className="bg-muted/50"
             />

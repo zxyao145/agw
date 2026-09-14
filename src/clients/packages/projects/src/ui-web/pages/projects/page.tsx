@@ -77,6 +77,9 @@ export default function ProjectsPage() {
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [workspace, setWorkspace] = React.useState("");
+  const [additionalDirectories, setAdditionalDirectories] = React.useState<
+    import("@agw/projects-core").ProjectDirectory[]
+  >([]);
   const [selectedSkillIds, setSelectedSkillIds] = React.useState<string[]>([]);
   const [selectedConnectionIds, setSelectedConnectionIds] = React.useState<string[]>([]);
   const [tools, setTools] = React.useState<ToolValueObject[]>([]);
@@ -109,6 +112,7 @@ export default function ProjectsPage() {
       setName("");
       setDescription("");
       setWorkspace("");
+      setAdditionalDirectories([]);
       setTools([]);
       setSelectedSkillIds([]);
       setSelectedMcpToolServerIds([]);
@@ -149,6 +153,9 @@ export default function ProjectsPage() {
   const [editName, setEditName] = React.useState("");
   const [editDescription, setEditDescription] = React.useState("");
   const [editWorkspace, setEditWorkspace] = React.useState("");
+  const [editAdditionalDirectories, setEditAdditionalDirectories] = React.useState<
+    import("@agw/projects-core").ProjectDirectory[]
+  >([]);
   const [editSelectedSkillIds, setEditSelectedSkillIds] = React.useState<string[]>([]);
   const [editSelectedConnectionIds, setEditSelectedConnectionIds] = React.useState<string[]>([]);
   const [editTools, setEditTools] = React.useState<ToolValueObject[]>([]);
@@ -161,10 +168,6 @@ export default function ProjectsPage() {
 
   const updateProjectMutation = useMutation({
     mutationFn: async ({ project, body }: ProjectUpdateMutationVariables) => {
-      if (project.type !== 0) {
-        throw new Error("Built-in projects cannot be edited.");
-      }
-
       return await apiPut("/api/projects/{id}", {
         params: { path: { id: project.id } },
         body,
@@ -187,15 +190,12 @@ export default function ProjectsPage() {
         return;
       }
 
-      if (project.type !== 0) {
-        return;
-      }
-
       const capabilityState = toProjectCapabilityFormState(project);
       setEditingProject(project);
       setEditName(project.name ?? "");
       setEditDescription(project.description ?? "");
       setEditWorkspace(project.workspace ?? "");
+      setEditAdditionalDirectories(project.additionalDirectories ?? []);
       setEditTools(capabilityState.tools);
       setEditSelectedSkillIds(capabilityState.selectedSkillIds);
       setEditSelectedMcpToolServerIds(capabilityState.selectedMcpToolServerIds);
@@ -261,6 +261,8 @@ export default function ProjectsPage() {
             setName={handleCreateNameChange}
             description={description}
             setDescription={setDescription}
+            additionalDirectories={additionalDirectories}
+            setAdditionalDirectories={setAdditionalDirectories}
             workspace={workspace}
             setWorkspace={setWorkspace}
             environmentVariables={environmentVariables}
@@ -367,12 +369,7 @@ export default function ProjectsPage() {
                           className="cursor-pointer"
                           size="icon-sm"
                           onClick={() => openEdit(project)}
-                          disabled={project.type !== 0}
-                          title={
-                            project.type !== 0
-                              ? "Built-in projects cannot be edited"
-                              : "Edit project"
-                          }
+                          title="Edit project"
                         >
                           <Pencil className="w-4 h-4" />
                         </Button>
@@ -423,6 +420,8 @@ export default function ProjectsPage() {
         setName={setEditName}
         description={editDescription}
         setDescription={setEditDescription}
+        additionalDirectories={editAdditionalDirectories}
+        setAdditionalDirectories={setEditAdditionalDirectories}
         workspace={editWorkspace}
         setWorkspace={setEditWorkspace}
         environmentVariables={editEnvironmentVariables}

@@ -1,6 +1,7 @@
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Runtimes;
+using Agw.Shared.Runtime;
 
 namespace Agw.Agents.Execution.Turns;
 
@@ -42,6 +43,8 @@ public sealed record RuntimeTurnContext
     public string UserId { get; init; } = Constants.AdminUserId;
 
     public string Workspace { get; }
+
+    public ProjectWorkspaceSnapshot? WorkspaceSnapshot { get; init; }
 
     public IExecutionMessageSink MessageSink { get; }
 

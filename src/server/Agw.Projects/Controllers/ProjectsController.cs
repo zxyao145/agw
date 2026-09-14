@@ -59,6 +59,7 @@ public class ProjectsController : ControllerBase
             Name = request.Name,
             Description = request.Description,
             Workspace = request.Workspace,
+            AdditionalDirectories = request.AdditionalDirectories ?? [],
             ExtraSetting = request.ExtraSetting,
             Tools = request.Tools ?? [],
             EnvironmentVariables = request.EnvironmentVariables ?? new Dictionary<string, string>(),
@@ -103,6 +104,10 @@ public class ProjectsController : ControllerBase
                 project.Name = request.Name;
                 project.Description = request.Description;
                 project.Workspace = request.Workspace;
+                if (request.AdditionalDirectories != null)
+                {
+                    project.AdditionalDirectories = request.AdditionalDirectories;
+                }
                 project.ExtraSetting = request.ExtraSetting;
                 if (request.Tools != null)
                 {

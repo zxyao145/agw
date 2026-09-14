@@ -41,6 +41,7 @@ interface ChatInputProps {
   canResume: boolean;
   onResume: () => void;
   projectId: string | null;
+  directoryIds: readonly (string | null)[];
   commandSource: CommandSource;
   permissionMode: PermissionMode;
   activePermissionMode?: PermissionMode | null;
@@ -71,6 +72,7 @@ export function ChatInput({
   canResume,
   onResume,
   projectId,
+  directoryIds,
   commandSource,
   permissionMode,
   activePermissionMode,
@@ -151,9 +153,9 @@ export function ChatInput({
   const handleSuggestion = React.useCallback(
     (input: string, caretIndex: number) =>
       resolveInputSuggestions(input, caretIndex, commandSource, (keyword) =>
-        searchFile(projectId, keyword),
+        searchFile(projectId, keyword, directoryIds),
       ),
-    [commandSource, projectId],
+    [commandSource, projectId, directoryIds],
   );
 
   return (

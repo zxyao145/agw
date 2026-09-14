@@ -6,10 +6,13 @@ using Agw.Agents.Execution.HumanInteraction.Durable.Contracts;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.Durable.Contracts;
 using Agw.Auth.Contracts;
+using Agw.Projects.Contracts.Runtime;
 using Agw.Shared.Contracts.Coordination;
 using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Exceptions;
+using Agw.Shared.Runtime;
+using Agw.Shared.Utils;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Agents.Execution.Persistence.Durable;
@@ -117,6 +120,7 @@ internal sealed class DurableExecutionStore
     private readonly TimeProvider _timeProvider;
     private readonly IApplicationLock _applicationLock;
     private readonly IDurableExecutionScopeMaintenance _scopeMaintenance;
+    private readonly IProjectRuntimeFacade? _projects;
 
     /// <summary>
     /// 创建使用当前 scope 持久化上下文和统一时钟的 execution 状态仓储。
@@ -125,13 +129,15 @@ internal sealed class DurableExecutionStore
         IAgentsDbContext dbContext,
         TimeProvider timeProvider,
         IApplicationLock applicationLock,
-        IDurableExecutionScopeMaintenance scopeMaintenance
+        IDurableExecutionScopeMaintenance scopeMaintenance,
+        IProjectRuntimeFacade? projects = null
     )
     {
         _dbContext = dbContext;
         _timeProvider = timeProvider;
         _applicationLock = applicationLock;
         _scopeMaintenance = scopeMaintenance;
+        _projects = projects;
     }
 
     /// <summary>
@@ -179,6 +185,7 @@ internal sealed class DurableExecutionStore
             Input = input,
             Task = DurableExecutionMapper.FromProjection(task),
             Settings = DurableExecutionMapper.FromSettings(settings),
+            WorkspaceSnapshot = ProjectWorkspaceContext.Get(task.ProjectId),
         };
         var manifestJson = DurableExecutionJson.Serialize(manifest);
         await using var lifecycleLease = await _applicationLock
@@ -200,6 +207,13 @@ internal sealed class DurableExecutionStore
             return EnsureIdempotentRegistration(existing, userId, manifestJson);
         }
 
+        manifest = manifest with
+        {
+            WorkspaceSnapshot =
+                manifest.WorkspaceSnapshot
+                ?? await CaptureWorkspaceAsync(task.ProjectId, primaryOnly: false, cancellationToken),
+        };
+        manifestJson = DurableExecutionJson.Serialize(manifest);
         var now = _timeProvider.GetUtcNow();
         var record = new DurableExecutionRecord
         {
@@ -246,6 +260,66 @@ internal sealed class DurableExecutionStore
     /// <summary>
     /// 按 executionId 加载 execution 快照，供受信任的后台执行器使用。
     /// </summary>
+    internal async Task<DurableExecutionManifest> EnsureWorkspaceSnapshotAsync(
+        DurableExecutionManifest manifest,
+        CancellationToken cancellationToken
+    )
+    {
+        if (manifest.WorkspaceSnapshot != null)
+        {
+            return manifest;
+        }
+        var record =
+            await FindAsync(manifest.ExecutionId, UserInfoUtil.RequiredUserId, tracking: true, cancellationToken)
+            ?? throw new AgwException(ErrorCodes.DurableExecutionNotFound);
+        var current = ToSnapshot(record).Manifest;
+        if (current.WorkspaceSnapshot != null)
+        {
+            return current;
+        }
+        // Legacy executions predate additional directories. Capture their single root once under the execution lease.
+        current = current with
+        {
+            WorkspaceSnapshot = await CaptureWorkspaceAsync(
+                current.Task.ProjectId,
+                primaryOnly: true,
+                cancellationToken
+            ),
+        };
+        record.ManifestJson = DurableExecutionJson.Serialize(current);
+        await _dbContext.SaveConversationChangesAsync(
+            current.Task.ProjectConversationId,
+            current.Task.Generation,
+            cancellationToken
+        );
+        return current;
+    }
+
+    private async Task<ProjectWorkspaceSnapshot> CaptureWorkspaceAsync(
+        Guid projectId,
+        bool primaryOnly,
+        CancellationToken cancellationToken
+    )
+    {
+        if (_projects == null)
+        {
+            return ProjectWorkspacePaths.CreateSnapshot(projectId, null);
+        }
+        var project =
+            await _projects.GetForCurrentUserAsync(projectId, cancellationToken)
+            ?? throw new AgwException(ErrorCodes.ResourceNotFound);
+        return ProjectWorkspacePaths.CreateSnapshot(
+            projectId,
+            project.Workspace,
+            primaryOnly
+                ? null
+                : (project.AdditionalDirectories ?? []).Select(directory => new ProjectWorkspaceDirectory(
+                    directory.Id,
+                    directory.Path
+                ))
+        );
+    }
+
     internal async Task<DurableExecutionSnapshot> GetAsync(Guid executionId, CancellationToken cancellationToken)
     {
         var record =
@@ -663,10 +737,22 @@ internal sealed class DurableExecutionStore
         string manifestJson
     )
     {
-        // ManifestJson 已由 EF 加密拦截器解密；比较规范化明文即可确认请求幂等。
+        // Retrying the same execution must retain its original directories, including legacy null snapshots.
+        var original = DurableExecutionJson.DeserializeRequired<DurableExecutionManifest>(
+            existing.ManifestJson,
+            "manifest"
+        );
+        var incoming = DurableExecutionJson.DeserializeRequired<DurableExecutionManifest>(manifestJson, "manifest") with
+        {
+            WorkspaceSnapshot = original.WorkspaceSnapshot,
+        };
         if (
             !string.Equals(existing.UserId, userId, StringComparison.Ordinal)
-            || !string.Equals(existing.ManifestJson, manifestJson, StringComparison.Ordinal)
+            || !string.Equals(
+                DurableExecutionJson.Serialize(original),
+                DurableExecutionJson.Serialize(incoming),
+                StringComparison.Ordinal
+            )
         )
         {
             throw new AgwException(ErrorCodes.DurableExecutionConflict);

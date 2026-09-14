@@ -7,6 +7,8 @@ using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Extensions;
+using Agw.Shared.Runtime;
+using Agw.Shared.Utils;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Logging;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
@@ -101,6 +103,22 @@ public partial class AgentRuntimeService
         {
             return null;
         }
+        var workspaceSnapshot = ProjectWorkspaceContext.Get(projectId.Value);
+        if (workspaceSnapshot == null)
+        {
+            var project = await _projectRuntimeFacade.GetForCurrentUserAsync(projectId.Value, cancellationToken);
+            if (project == null)
+                return null;
+            workspaceSnapshot = ProjectWorkspacePaths.CreateSnapshot(
+                project.Id,
+                project.Workspace,
+                (project.AdditionalDirectories ?? []).Select(directory => new ProjectWorkspaceDirectory(
+                    directory.Id,
+                    directory.Path
+                ))
+            );
+        }
+        using var workspaceScope = ProjectWorkspaceContext.Push(projectId.Value, workspaceSnapshot);
         var resolvedContextId = ContextIdUtil.ResolveContextId(contextId);
         var conversationId = await _sessionStateStore
             .ResolveProjectConversationIdAsync(projectId.Value, resolvedContextId, cancellationToken)

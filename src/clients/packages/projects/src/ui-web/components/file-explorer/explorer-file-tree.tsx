@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useProjectFileScope } from "./project-file-scope";
 import {
   Folder,
   FolderOpen,
@@ -107,6 +108,7 @@ function FileTreeNode({
   onGitScopeChanged,
   defaultExpanded,
 }: FileTreeNodeProps) {
+  const { directoryId } = useProjectFileScope();
   const [isExpanded, setIsExpanded] = React.useState(
     defaultExpanded && item.type === FileItemType.Directory && (item.children?.length ?? 0) > 0,
   );
@@ -134,7 +136,14 @@ function FileTreeNode({
     setError(null);
 
     try {
-      const data = await listFiles(projectId, item.path, diffMode, recursiveMode);
+      const data = await listFiles(
+        projectId,
+        item.path,
+        diffMode,
+        recursiveMode,
+        undefined,
+        directoryId,
+      );
       if (generation !== childrenLoadGenerationRef.current) {
         return;
       }
@@ -180,7 +189,7 @@ function FileTreeNode({
     setIsDeleting(true);
 
     try {
-      const result = await deleteFile(projectId, item.path);
+      const result = await deleteFile(projectId, item.path, undefined, directoryId);
       if (result.success) {
         setIsDeleteDialogOpen(false);
         toast.success(result.message);
@@ -206,7 +215,7 @@ function FileTreeNode({
     }
 
     try {
-      const result = await resetFile(projectId, item.path);
+      const result = await resetFile(projectId, item.path, undefined, directoryId);
       if (result.success) {
         toast.success(result.message);
         onFileReset?.(item.path);
@@ -227,7 +236,13 @@ function FileTreeNode({
     const targetScope: GitDiffScope = item.gitScope === "staged" ? "unstaged" : "staged";
     setIsUpdatingGitScope(true);
     try {
-      const result = await setFileStaged(projectId, item.path, targetScope === "staged");
+      const result = await setFileStaged(
+        projectId,
+        item.path,
+        targetScope === "staged",
+        undefined,
+        directoryId,
+      );
       if (result.success) {
         onGitScopeChanged?.(item.path, targetScope);
       } else {

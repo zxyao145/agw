@@ -65,6 +65,32 @@ public partial class AgentRuntimeService
                 .SingleOrDefault(static provider => provider != null);
             Func<CancellationToken, ValueTask<ChatMessage?>>? createMemoryContextAsync =
                 userMemoryProvider == null ? null : userMemoryProvider.CreateContextMessageAsync;
+            if (project.AdditionalDirectories.Count > 0)
+            {
+                var memoryContext = createMemoryContextAsync;
+                createMemoryContextAsync = async token =>
+                {
+                    var memory = memoryContext == null ? null : await memoryContext(token).ConfigureAwait(false);
+                    var context = new ChatMessage(
+                        ChatRole.System,
+                        $"Primary working directory: {project.Workspace}\nAdditional Project directories (file references use @<absolutePath>, with quotes around paths containing spaces):\n"
+                            + string.Join(
+                                "\n",
+                                project.AdditionalDirectories.Select(directory =>
+                                    $"- directoryId={directory.Id:D}: {directory.Path}"
+                                )
+                            )
+                    );
+                    if (memory != null)
+                    {
+                        foreach (var content in memory.Contents)
+                        {
+                            context.Contents.Add(content);
+                        }
+                    }
+                    return context;
+                };
+            }
             if (
                 !TryCreateExternalAgent(
                     request,
@@ -359,6 +385,11 @@ public partial class AgentRuntimeService
                 : permissionMode.HasValue ? ClaudeCodeSdk.Types.PermissionMode.@default
                 : options.PermissionMode,
             WorkingDirectory = PathUtil.ExpandTilde(project.Workspace),
+            AddDirectories = MergeAdditionalDirectories(
+                options.AddDirectories,
+                project.AdditionalDirectories,
+                project.Workspace
+            ),
             IncludePartialMessages = true,
             ContinueConversation = false,
             Resume = null,
@@ -574,7 +605,12 @@ public partial class AgentRuntimeService
         {
             options = options with
             {
-                ThreadOptions = CreateCodexThreadOptionsWithWorkspace(options.ThreadOptions, workspace, permissionMode),
+                ThreadOptions = CreateCodexThreadOptionsWithWorkspace(
+                    options.ThreadOptions,
+                    workspace,
+                    permissionMode,
+                    project.AdditionalDirectories
+                ),
             };
         }
 
@@ -634,7 +670,8 @@ public partial class AgentRuntimeService
     private static ThreadOptions CreateCodexThreadOptionsWithWorkspace(
         ThreadOptions? options,
         string? workspace,
-        AgwPermissionMode? permissionMode = null
+        AgwPermissionMode? permissionMode = null,
+        IReadOnlyList<ProjectDirectory>? additionalDirectories = null
     )
     {
         options ??= new ThreadOptions();
@@ -652,8 +689,28 @@ public partial class AgentRuntimeService
             WebSearchEnabled = options.WebSearchEnabled,
             ApprovalPolicy =
                 permissionMode == AgwPermissionMode.FullAccess ? ApprovalMode.Never : options.ApprovalPolicy,
-            AdditionalDirectories = options.AdditionalDirectories,
+            AdditionalDirectories = MergeAdditionalDirectories(
+                options.AdditionalDirectories,
+                additionalDirectories ?? [],
+                workspace
+            ),
         };
+    }
+
+    internal static IReadOnlyList<string> MergeAdditionalDirectories(
+        IEnumerable<string>? configured,
+        IReadOnlyList<ProjectDirectory> directories,
+        string? workspace
+    )
+    {
+        var root = string.IsNullOrWhiteSpace(workspace)
+            ? Environment.CurrentDirectory
+            : ProjectWorkspacePaths.Normalize(workspace);
+        return (configured ?? [])
+            .Concat(directories.Select(directory => directory.Path))
+            .Select(path => Path.TrimEndingDirectorySeparator(Path.GetFullPath(PathUtil.ExpandTilde(path), root)))
+            .Distinct(ProjectWorkspacePaths.Comparer)
+            .ToArray();
     }
 
     private static CodexOptions CreateCodexOptionsWithEnvironmentVariables(

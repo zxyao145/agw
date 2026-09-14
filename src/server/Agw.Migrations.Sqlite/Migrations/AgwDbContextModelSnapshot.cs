@@ -1408,6 +1408,13 @@ namespace Agw.Migrations.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("id");
 
+                    b.Property<string>("AdditionalDirectories")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("additional_directories")
+                        .HasDefaultValueSql("'[]'");
+
                     b.Property<string>("CreateBy")
                         .HasColumnType("TEXT")
                         .HasColumnName("create_by");

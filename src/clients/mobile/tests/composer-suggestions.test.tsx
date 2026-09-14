@@ -50,7 +50,7 @@ function createWorkspace(overrides: Record<string, unknown> = {}) {
     isExecuting: false,
     permissionMode: "fullAccess",
     agentMode: "execute",
-    filesService: { searchFiles: jest.fn(async () => ({ results: [] })) },
+    filesService: { searchFilesInDirectories: jest.fn(async () => ({ results: [] })) },
     pickImages: jest.fn(),
     stopExecution: jest.fn(),
     selectTarget: jest.fn(),
@@ -157,31 +157,42 @@ test("releases the one-shot suggestion selection when the user moves to the end"
   expect(view.getByLabelText("Message").props.selection).toBeUndefined();
 });
 
-test("searches project files for an at trigger and applies the mapped result", async () => {
-  const searchFiles = jest.fn(async () => ({
+test("searches attached project directories for an at trigger and applies the mapped result", async () => {
+  const searchFilesInDirectories = jest.fn(async () => ({
     results: [
       {
-        relativePath: "src/app.ts",
-        fullPath: "/workspace/src/app.ts",
+        directoryId: "extra",
+        relativePath: "hello.txt",
+        fullPath: "/extra/hello.txt",
         type: "file" as const,
       },
     ],
   }));
-  workspaceState = createWorkspace({ filesService: { searchFiles } });
+  workspaceState = createWorkspace({
+    selectedProject: {
+      id: "project-1",
+      name: "Project",
+      additionalDirectories: [{ id: "extra", path: "/extra" }],
+    },
+    filesService: { searchFilesInDirectories },
+  });
   const view = await render(<Composer safeBottom={0} />);
   const input = view.getByLabelText("Message");
 
-  await fireEvent.changeText(input, "@src");
+  await fireEvent.changeText(input, "@hello");
   await fireEvent(input, "selectionChange", {
-    nativeEvent: { selection: { start: 4, end: 4 } },
+    nativeEvent: { selection: { start: 6, end: 6 } },
   });
 
-  const suggestion = await view.findByLabelText("Use suggestion @src/app.ts");
-  expect(searchFiles).toHaveBeenCalledWith("project-1", "", "src", true);
+  const suggestion = await view.findByLabelText("Use suggestion @/extra/hello.txt");
+  expect(searchFilesInDirectories).toHaveBeenCalledWith("project-1", "", "hello", true, [
+    null,
+    "extra",
+  ]);
   await fireEvent.press(suggestion);
 
-  expect(setTextCalls.at(-1)).toBe("@src/app.ts ");
-  expect(view.getByLabelText("Message").props.value).toBe("@src/app.ts ");
+  expect(setTextCalls.at(-1)).toBe("@/extra/hello.txt ");
+  expect(view.getByLabelText("Message").props.value).toBe("@/extra/hello.txt ");
 });
 
 test("ignores a stale asynchronous file result", async () => {
@@ -193,10 +204,10 @@ test("ignores a stale asynchronous file result", async () => {
   const newResult = new Promise<{ results: Array<Record<string, string>> }>((resolve) => {
     resolveNew = resolve;
   });
-  const searchFiles = jest.fn((_: string, __: string, keyword: string) =>
+  const searchFilesInDirectories = jest.fn((_: string, __: string, keyword: string) =>
     keyword === "old" ? oldResult : newResult,
   );
-  workspaceState = createWorkspace({ filesService: { searchFiles } });
+  workspaceState = createWorkspace({ filesService: { searchFilesInDirectories } });
   const view = await render(<Composer safeBottom={0} />);
   const input = view.getByLabelText("Message");
 
@@ -204,10 +215,14 @@ test("ignores a stale asynchronous file result", async () => {
   await fireEvent(input, "selectionChange", {
     nativeEvent: { selection: { start: 4, end: 4 } },
   });
-  await waitFor(() => expect(searchFiles).toHaveBeenCalledWith("project-1", "", "old", true));
+  await waitFor(() =>
+    expect(searchFilesInDirectories).toHaveBeenCalledWith("project-1", "", "old", true, [null]),
+  );
 
   await fireEvent.changeText(input, "@new");
-  await waitFor(() => expect(searchFiles).toHaveBeenCalledWith("project-1", "", "new", true));
+  await waitFor(() =>
+    expect(searchFilesInDirectories).toHaveBeenCalledWith("project-1", "", "new", true, [null]),
+  );
 
   await act(async () => {
     resolveNew({

@@ -20,7 +20,14 @@ import { useWorkspace } from "@/features/workspace/workspace-provider";
 import { getErrorMessage } from "@/lib/errors";
 import { colors, layout, radius, typography } from "@/theme/tokens";
 
-type LineComment = { id: string; line: number; text: string };
+type LineComment = {
+  id: string;
+  line: number;
+  text: string;
+  projectId: string;
+  directoryId: string | null;
+  path: string;
+};
 type PreviewLine = {
   key: string;
   line: number;
@@ -31,35 +38,58 @@ type PreviewLine = {
 export function FilePreviewScreen({
   path,
   diff,
+  directoryId,
+  projectId: requestedProjectId,
 }: {
   path: string;
   diff: boolean;
+  directoryId?: string;
+  projectId?: string;
 }): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const workspace = useWorkspace();
+  const projectId = requestedProjectId ?? workspace.selectedProjectId;
+  const directoryPath = workspace.projects
+    .find((project) => project.id === projectId)
+    ?.additionalDirectories?.find((directory) => directory.id === directoryId)?.path;
   const [lines, setLines] = React.useState<PreviewLine[]>([]);
   const [comments, setComments] = React.useState<LineComment[]>([]);
   const [selectedLine, setSelectedLine] = React.useState<number | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const loadGenerationRef = React.useRef(0);
 
   const load = React.useCallback(async () => {
-    if (!workspace.filesService || !workspace.selectedProjectId || !path) return;
+    if (!workspace.filesService || !projectId || !path) return;
+    const generation = ++loadGenerationRef.current;
     setLoading(true);
     setError(null);
     try {
       const content = diff
-        ? (await workspace.filesService.getFileDiff(workspace.selectedProjectId, path)).diff
-        : await workspace.filesService.readFile(workspace.selectedProjectId, path);
+        ? (
+            await workspace.filesService.getFileDiff(
+              projectId,
+              path,
+              undefined,
+              directoryId || null,
+            )
+          ).diff
+        : await workspace.filesService.readFile(projectId, path, directoryId || null);
+      if (generation !== loadGenerationRef.current) return;
       setLines(toPreviewLines(content, diff));
     } catch (caught) {
-      setError(getErrorMessage(caught));
+      if (generation === loadGenerationRef.current) setError(getErrorMessage(caught));
     } finally {
-      setLoading(false);
+      if (generation === loadGenerationRef.current) setLoading(false);
     }
-  }, [diff, path, workspace.filesService, workspace.selectedProjectId]);
+  }, [diff, path, directoryId, workspace.filesService, projectId]);
   React.useEffect(() => {
+    setComments([]);
+    setSelectedLine(null);
     void load();
+    return () => {
+      loadGenerationRef.current += 1;
+    };
   }, [load]);
 
   const deleteFile = () =>
@@ -70,7 +100,7 @@ export function FilePreviewScreen({
         style: "destructive",
         onPress: () =>
           void workspace
-            .filesService!.deleteFile(workspace.selectedProjectId!, path)
+            .filesService!.deleteFile(projectId!, path, directoryId || null)
             .then(() => router.back())
             .catch((caught) => setError(getErrorMessage(caught))),
       },
@@ -86,7 +116,7 @@ export function FilePreviewScreen({
           style: "destructive",
           onPress: () =>
             void workspace
-              .filesService!.resetFile(workspace.selectedProjectId!, path)
+              .filesService!.resetFile(projectId!, path, directoryId || null)
               .then(load)
               .catch((caught) => setError(getErrorMessage(caught))),
         },
@@ -118,7 +148,7 @@ export function FilePreviewScreen({
             {fileName(path)}
           </Text>
           <Text numberOfLines={1} style={styles.path}>
-            {path}
+            {directoryPath ? `${directoryPath} / ${path}` : path}
           </Text>
         </View>
         <IconButton icon={MoreHorizontal} label="File actions" onPress={showActions} />
@@ -179,7 +209,14 @@ export function FilePreviewScreen({
         onSave={(text) => {
           setComments((current) => [
             ...current,
-            { id: `${Date.now()}-${selectedLine}`, line: selectedLine!, text },
+            {
+              id: `${Date.now()}-${selectedLine}`,
+              line: selectedLine!,
+              text,
+              projectId: projectId!,
+              directoryId: directoryId || null,
+              path,
+            },
           ]);
           setSelectedLine(null);
         }}

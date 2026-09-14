@@ -1,4 +1,4 @@
-import type { FileItem } from "@agw/projects-core";
+import { getProjectDirectories, type FileItem } from "@agw/projects-core";
 import { router } from "expo-router";
 import {
   ChevronDown,
@@ -37,12 +37,26 @@ export const FilesScreen = React.forwardRef<WorkspacePaneHandle>(function FilesS
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const listRef = React.useRef<FlatList<TreeItem>>(null);
+  const [directoryMenuOpen, setDirectoryMenuOpen] = React.useState(false);
+  const directories = workspace.selectedProject
+    ? getProjectDirectories(workspace.selectedProject)
+    : [];
+  const selectedDirectory =
+    directories.find((directory) => directory.id === workspace.selectedDirectoryId) ??
+    directories[0];
+  const directoryId = selectedDirectory?.id;
+  const loadGenerationRef = React.useRef(0);
+  const selectionKey = `${workspace.selectedProjectId}:${directoryId ?? "primary"}:${selectedDirectory?.path ?? ""}`;
+  const currentSelectionRef = React.useRef(selectionKey);
+  currentSelectionRef.current = selectionKey;
 
   const load = React.useCallback(async () => {
     if (!workspace.filesService || !workspace.selectedProjectId) {
       setItems([]);
       return;
     }
+    if (currentSelectionRef.current !== selectionKey) return;
+    const generation = ++loadGenerationRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -51,20 +65,31 @@ export const FilesScreen = React.forwardRef<WorkspacePaneHandle>(function FilesS
         "",
         onlyChanged,
         true,
+        directoryId,
       );
+      if (generation !== loadGenerationRef.current || currentSelectionRef.current !== selectionKey)
+        return;
       const tree = onlyChanged ? buildFileTree(response.items) : response.items;
       setItems(tree);
       setExpanded(onlyChanged ? new Set(collectDirectories(tree)) : new Set());
     } catch (caught) {
+      if (generation !== loadGenerationRef.current || currentSelectionRef.current !== selectionKey)
+        return;
       setItems([]);
       setError(getErrorMessage(caught));
     } finally {
-      setLoading(false);
+      if (generation === loadGenerationRef.current && currentSelectionRef.current === selectionKey)
+        setLoading(false);
     }
-  }, [onlyChanged, workspace.filesService, workspace.selectedProjectId]);
+  }, [onlyChanged, workspace.filesService, workspace.selectedProjectId, directoryId, selectionKey]);
 
   React.useEffect(() => {
+    setItems([]);
+    setDirectoryMenuOpen(false);
     void load();
+    return () => {
+      loadGenerationRef.current += 1;
+    };
   }, [load]);
 
   React.useImperativeHandle(
@@ -91,10 +116,12 @@ export const FilesScreen = React.forwardRef<WorkspacePaneHandle>(function FilesS
           item.path,
           onlyChanged,
           false,
+          directoryId,
         );
+        if (currentSelectionRef.current !== selectionKey) return;
         setItems((current) => updateChildren(current, item.path, response.items));
       } catch (caught) {
-        setError(getErrorMessage(caught));
+        if (currentSelectionRef.current === selectionKey) setError(getErrorMessage(caught));
         return;
       }
     }
@@ -124,9 +151,11 @@ export const FilesScreen = React.forwardRef<WorkspacePaneHandle>(function FilesS
         style: "destructive",
         onPress: () =>
           void workspace
-            .filesService!.deleteFile(workspace.selectedProjectId!, item.path)
+            .filesService!.deleteFile(workspace.selectedProjectId!, item.path, directoryId)
             .then(load)
-            .catch((caught) => setError(getErrorMessage(caught))),
+            .catch((caught) => {
+              if (currentSelectionRef.current === selectionKey) setError(getErrorMessage(caught));
+            }),
       },
     ]);
   const confirmReset = (item: FileItem) =>
@@ -137,9 +166,11 @@ export const FilesScreen = React.forwardRef<WorkspacePaneHandle>(function FilesS
         style: "destructive",
         onPress: () =>
           void workspace
-            .filesService!.resetFile(workspace.selectedProjectId!, item.path)
+            .filesService!.resetFile(workspace.selectedProjectId!, item.path, directoryId)
             .then(load)
-            .catch((caught) => setError(getErrorMessage(caught))),
+            .catch((caught) => {
+              if (currentSelectionRef.current === selectionKey) setError(getErrorMessage(caught));
+            }),
       },
     ]);
 
@@ -170,6 +201,55 @@ export const FilesScreen = React.forwardRef<WorkspacePaneHandle>(function FilesS
           />
         </View>
       </View>
+      {directories.length > 1 && (
+        <View style={{ paddingHorizontal: 20, paddingBottom: 12 }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Select project directory"
+            accessibilityState={{ expanded: directoryMenuOpen }}
+            onPress={() => setDirectoryMenuOpen((open) => !open)}
+            style={{
+              borderWidth: 1,
+              borderColor: colors.border,
+              borderRadius: 8,
+              padding: 10,
+              flexDirection: "row",
+              justifyContent: "space-between",
+            }}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.ink }}>
+                {selectedDirectory?.name}
+                {selectedDirectory?.isPrimary ? " · Primary" : ""}
+              </Text>
+              <Text numberOfLines={1} style={styles.subtitle}>
+                {selectedDirectory?.path}
+              </Text>
+            </View>
+            <ChevronDown size={18} color={colors.primary} />
+          </Pressable>
+          {directoryMenuOpen &&
+            directories.map((directory) => (
+              <Pressable
+                key={directory.id ?? "primary"}
+                accessibilityRole="button"
+                onPress={() => {
+                  workspace.selectDirectory(directory.id);
+                  setDirectoryMenuOpen(false);
+                }}
+                style={{ padding: 10, borderBottomWidth: 1, borderBottomColor: colors.border }}
+              >
+                <Text style={{ color: directory.id === directoryId ? colors.primary : colors.ink }}>
+                  {directory.name}
+                  {directory.isPrimary ? " · Primary" : ""}
+                </Text>
+                <Text numberOfLines={1} style={styles.subtitle}>
+                  {directory.path}
+                </Text>
+              </Pressable>
+            ))}
+        </View>
+      )}
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator color={colors.primary} />
@@ -199,7 +279,12 @@ export const FilesScreen = React.forwardRef<WorkspacePaneHandle>(function FilesS
                   ? void toggleDirectory(item)
                   : router.push({
                       pathname: "/file-preview",
-                      params: { path: item.path, diff: String(onlyChanged) },
+                      params: {
+                        path: item.path,
+                        diff: String(onlyChanged),
+                        projectId: workspace.selectedProjectId!,
+                        directoryId: directoryId ?? "",
+                      },
                     })
               }
               onLongPress={() => action(item)}

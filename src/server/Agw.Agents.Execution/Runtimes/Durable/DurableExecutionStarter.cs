@@ -1,4 +1,5 @@
 using Agw.Agents.Execution.Runtimes.Contracts;
+using Agw.Shared.Runtime;
 
 namespace Agw.Agents.Execution.Runtimes.Durable;
 
@@ -17,6 +18,10 @@ internal sealed class DurableExecutionStarter : IExecutionStarter
     public async Task<ExecutionReceipt> StartAsync(ExecutionStartRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        using var workspaceScope =
+            request.WorkspaceSnapshot == null
+                ? null
+                : ProjectWorkspaceContext.Push(request.Task.ProjectId, request.WorkspaceSnapshot);
         var command = ExecutionStartCommandMapper.Map(request);
         await _session.StartAsync(command, request.Task, request.Settings, cancellationToken);
         return new ExecutionReceipt(command.ExecutionId!.Value, true);

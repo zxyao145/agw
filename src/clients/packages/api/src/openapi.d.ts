@@ -1735,6 +1735,7 @@ export interface paths {
           path?: string;
           diff?: boolean;
           recursive?: boolean;
+          directoryId?: string;
         };
         header?: never;
         path?: never;
@@ -1797,6 +1798,7 @@ export interface paths {
         query: {
           projectId: string;
           path?: string;
+          directoryId?: string;
         };
         header?: never;
         path?: never;
@@ -1860,6 +1862,7 @@ export interface paths {
           projectId: string;
           path?: string;
           scope?: string;
+          directoryId?: string;
         };
         header?: never;
         path?: never;
@@ -1925,6 +1928,7 @@ export interface paths {
         query: {
           projectId: string;
           path?: string;
+          directoryId?: string;
         };
         header?: never;
         path?: never;
@@ -1986,6 +1990,7 @@ export interface paths {
         query: {
           projectId: string;
           path?: string;
+          directoryId?: string;
         };
         header?: never;
         path?: never;
@@ -2059,6 +2064,7 @@ export interface paths {
         query: {
           projectId: string;
           path?: string;
+          directoryId?: string;
         };
         header?: never;
         path?: never;
@@ -2121,6 +2127,7 @@ export interface paths {
         query: {
           projectId: string;
           path?: string;
+          directoryId?: string;
         };
         header?: never;
         path?: never;
@@ -2184,6 +2191,7 @@ export interface paths {
           keyword?: string;
           limit?: number;
           recursive?: boolean;
+          directoryId?: string;
         };
         header?: never;
         path?: never;
@@ -5093,6 +5101,8 @@ export interface components {
       supportedProviderTypes: components["schemas"]["ProviderType"][];
     };
     FileItem: {
+      /** Format: uuid */
+      directoryId?: null | string;
       name: string;
       path: string;
       type: string;
@@ -5111,6 +5121,8 @@ export interface components {
       results?: components["schemas"]["FileSearchResult"][];
     };
     FileSearchResult: {
+      /** Format: uuid */
+      directoryId?: null | string;
       fullPath: string;
       relativePath: string;
       type: string;
@@ -5637,6 +5649,7 @@ export interface components {
       environmentVariables?: null | {
         [key: string]: string;
       };
+      additionalDirectories?: null | components["schemas"]["ProjectDirectory"][];
     };
     ProjectMcpToolServerRelationResponse: {
       /** Format: uuid */
@@ -5670,6 +5683,7 @@ export interface components {
       /** Format: date-time */
       updateTime: null | string;
       updateBy: null | string;
+      additionalDirectories?: null | components["schemas"]["ProjectDirectory"][];
     };
     ProjectSkillRelationResponse: {
       /** Format: uuid */
@@ -5690,6 +5704,7 @@ export interface components {
       environmentVariables?: null | {
         [key: string]: string;
       };
+      additionalDirectories?: null | components["schemas"]["ProjectDirectory"][];
     };
     Provider: {
       /** Format: uuid */
@@ -5982,6 +5997,11 @@ export interface components {
     };
     /** @enum {unknown} */
     AgwPermissionMode: "fullAccess" | "alwaysAsk" | "allowSameArguments";
+    ProjectDirectory: {
+      /** Format: uuid */
+      id: string;
+      path: string;
+    };
   };
   responses: never;
   parameters: never;

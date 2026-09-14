@@ -35,7 +35,8 @@ public sealed class FileAppService
         string? path,
         bool diff,
         bool recursive,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        Guid? directoryId = null
     )
     {
         if (projectId == Guid.Empty)
@@ -43,10 +44,12 @@ public sealed class FileAppService
             return FileOperationResult<FileListOutput>.Invalid("Project ID is required");
         }
 
-        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
+        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken, directoryId);
         if (fileSystem == null)
         {
-            return FileOperationResult<FileListOutput>.Missing("Project not found");
+            return FileOperationResult<FileListOutput>.Missing(
+                directoryId.HasValue ? "Project directory not found" : "Project not found"
+            );
         }
 
         path ??= string.Empty;
@@ -153,7 +156,8 @@ public sealed class FileAppService
     public async Task<FileOperationResult<string>> ReadAsync(
         Guid projectId,
         string? path,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        Guid? directoryId = null
     )
     {
         if (projectId == Guid.Empty)
@@ -161,10 +165,12 @@ public sealed class FileAppService
             return FileOperationResult<string>.Invalid("Project ID is required");
         }
 
-        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
+        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken, directoryId);
         if (fileSystem == null)
         {
-            return FileOperationResult<string>.Missing("Project not found");
+            return FileOperationResult<string>.Missing(
+                directoryId.HasValue ? "Project directory not found" : "Project not found"
+            );
         }
 
         if (string.IsNullOrWhiteSpace(path))
@@ -185,7 +191,8 @@ public sealed class FileAppService
         Guid projectId,
         string? path,
         string? scope,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        Guid? directoryId = null
     )
     {
         if (projectId == Guid.Empty)
@@ -193,10 +200,12 @@ public sealed class FileAppService
             return FileOperationResult<FileDiffOutput>.Invalid("Project ID is required");
         }
 
-        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
+        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken, directoryId);
         if (fileSystem == null)
         {
-            return FileOperationResult<FileDiffOutput>.Missing("Project not found");
+            return FileOperationResult<FileDiffOutput>.Missing(
+                directoryId.HasValue ? "Project directory not found" : "Project not found"
+            );
         }
 
         if (string.IsNullOrWhiteSpace(path))
@@ -243,7 +252,8 @@ public sealed class FileAppService
     public async Task<FileOperationResult<FileMutationOutput>> DeleteAsync(
         Guid projectId,
         string? path,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        Guid? directoryId = null
     )
     {
         if (projectId == Guid.Empty)
@@ -251,15 +261,22 @@ public sealed class FileAppService
             return FileOperationResult<FileMutationOutput>.Invalid("Project ID is required");
         }
 
-        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
+        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken, directoryId);
         if (fileSystem == null)
         {
-            return FileOperationResult<FileMutationOutput>.Missing("Project not found");
+            return FileOperationResult<FileMutationOutput>.Missing(
+                directoryId.HasValue ? "Project directory not found" : "Project not found"
+            );
         }
 
         if (string.IsNullOrWhiteSpace(path))
         {
             return FileOperationResult<FileMutationOutput>.Invalid("Path parameter is required");
+        }
+
+        if (TargetsWorkspaceRoot(path))
+        {
+            return FileOperationResult<FileMutationOutput>.Invalid("Project directory root cannot be deleted");
         }
 
         var isFile = await fileSystem.ExistsFileAsync(path, cancellationToken);
@@ -285,7 +302,8 @@ public sealed class FileAppService
     public async Task<FileOperationResult<FileMutationOutput>> ResetAsync(
         Guid projectId,
         string? path,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        Guid? directoryId = null
     )
     {
         if (projectId == Guid.Empty)
@@ -293,10 +311,12 @@ public sealed class FileAppService
             return FileOperationResult<FileMutationOutput>.Invalid("Project ID is required");
         }
 
-        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
+        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken, directoryId);
         if (fileSystem == null)
         {
-            return FileOperationResult<FileMutationOutput>.Missing("Project not found");
+            return FileOperationResult<FileMutationOutput>.Missing(
+                directoryId.HasValue ? "Project directory not found" : "Project not found"
+            );
         }
 
         if (string.IsNullOrWhiteSpace(path))
@@ -339,19 +359,21 @@ public sealed class FileAppService
     public Task<FileOperationResult<FileMutationOutput>> StageAsync(
         Guid projectId,
         string? path,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        Guid? directoryId = null
     )
     {
-        return SetStagedAsync(projectId, path, staged: true, cancellationToken);
+        return SetStagedAsync(projectId, path, staged: true, cancellationToken, directoryId);
     }
 
     public Task<FileOperationResult<FileMutationOutput>> UnstageAsync(
         Guid projectId,
         string? path,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        Guid? directoryId = null
     )
     {
-        return SetStagedAsync(projectId, path, staged: false, cancellationToken);
+        return SetStagedAsync(projectId, path, staged: false, cancellationToken, directoryId);
     }
 
     public async Task<FileOperationResult<FileSearchOutput>> SearchAsync(
@@ -360,7 +382,8 @@ public sealed class FileAppService
         string? keyword,
         int limit,
         bool recursive,
-        CancellationToken cancellationToken = default
+        CancellationToken cancellationToken = default,
+        Guid? directoryId = null
     )
     {
         if (projectId == Guid.Empty)
@@ -368,10 +391,12 @@ public sealed class FileAppService
             return FileOperationResult<FileSearchOutput>.Invalid("Project ID is required");
         }
 
-        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
+        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken, directoryId);
         if (fileSystem == null)
         {
-            return FileOperationResult<FileSearchOutput>.Missing("Project not found");
+            return FileOperationResult<FileSearchOutput>.Missing(
+                directoryId.HasValue ? "Project directory not found" : "Project not found"
+            );
         }
 
         path ??= string.Empty;
@@ -404,6 +429,14 @@ public sealed class FileAppService
             .OrderBy(result => result.Type == "file")
             .ThenBy(result => result.RelativePath, StringComparer.OrdinalIgnoreCase)
             .Take(limit)
+            .Select(result =>
+                fileSystem is LocalFileSystem local
+                    ? result with
+                    {
+                        FullPath = NormalizePath(local.ResolvePhysicalPath(result.FullPath)),
+                    }
+                    : result
+            )
             .ToList();
 
         return FileOperationResult<FileSearchOutput>.Succeeded(new FileSearchOutput(sortedResults));
@@ -413,16 +446,23 @@ public sealed class FileAppService
         ? StringComparison.OrdinalIgnoreCase
         : StringComparison.Ordinal;
 
-    private async Task<IAgwFileSystem?> ResolveFileSystemAsync(Guid projectId, CancellationToken cancellationToken)
+    private async Task<IAgwFileSystem?> ResolveFileSystemAsync(
+        Guid projectId,
+        CancellationToken cancellationToken,
+        Guid? directoryId
+    )
     {
-        return projectId == Guid.Empty ? null : await _fileSystemResolver.ResolveAsync(projectId, cancellationToken);
+        return projectId == Guid.Empty
+            ? null
+            : await _fileSystemResolver.ResolveAsync(projectId, directoryId, cancellationToken);
     }
 
     private async Task<FileOperationResult<FileMutationOutput>> SetStagedAsync(
         Guid projectId,
         string? path,
         bool staged,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        Guid? directoryId
     )
     {
         if (projectId == Guid.Empty)
@@ -430,10 +470,12 @@ public sealed class FileAppService
             return FileOperationResult<FileMutationOutput>.Invalid("Project ID is required");
         }
 
-        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken);
+        var fileSystem = await ResolveFileSystemAsync(projectId, cancellationToken, directoryId);
         if (fileSystem == null)
         {
-            return FileOperationResult<FileMutationOutput>.Missing("Project not found");
+            return FileOperationResult<FileMutationOutput>.Missing(
+                directoryId.HasValue ? "Project directory not found" : "Project not found"
+            );
         }
 
         if (string.IsNullOrWhiteSpace(path))

@@ -21,6 +21,8 @@ import type {
 
 async function checkConversationSession(kind: string, strictMode = false) {
   const failHistory = kind === "restore-failure";
+  let hasAdditionalDirectory = kind === "directories";
+  const fileReads: unknown[][] = [];
   const conversation = {
     conversationId: "conversation-1",
     contextId: "original-context",
@@ -69,6 +71,12 @@ async function checkConversationSession(kind: string, strictMode = false) {
   let detailsRequests = 0;
   let messageRequests = 0;
   const observed: {
+    explorer?: {
+      directoryId?: string | null;
+      onDirectoryChange: (value: string | null) => void;
+      onFileSelected: (path: string) => void;
+    };
+    file?: { selectedFile: string | null };
     chat?: ChatProps;
     input?: {
       onClearSession: () => void;
@@ -147,8 +155,28 @@ async function checkConversationSession(kind: string, strictMode = false) {
     "next/navigation": { useRouter: () => router, useSearchParams: () => searchParams },
     sonner: { toast: { error: (error: unknown) => errors.push(error) } },
     "@agw/projects": {
-      Explorer: () => null,
-      FileContent: () => null,
+      getProjectDirectories: () => [
+        { id: null, name: "primary", path: "/primary", isPrimary: true },
+        ...(hasAdditionalDirectory
+          ? [{ id: "extra", name: "extra", path: "/extra", isPrimary: false }]
+          : []),
+      ],
+      Explorer: (props: NonNullable<typeof observed.explorer>) => {
+        observed.explorer = props;
+        return null;
+      },
+      FileContent: (props: NonNullable<typeof observed.file>) => {
+        observed.file = props;
+        return null;
+      },
+      readFile: async (...args: unknown[]) => {
+        fileReads.push(args);
+        return "contents";
+      },
+      getFileDiff: async (...args: unknown[]) => {
+        fileReads.push(args);
+        return { diff: "", unchanged: true };
+      },
       clearProjectConversationRecords: async () => true,
       getProjectConversationDetails: async (_project: string, id: string) => {
         if (id !== "conversation-1") return pending.get(id)!.promise;
@@ -369,6 +397,27 @@ async function checkConversationSession(kind: string, strictMode = false) {
         assert.equal(dom.window.document.querySelector("[inert]"), null);
         return;
       }
+      if (kind === "directories") {
+        const contextId = observed.chat?.contextId;
+        assert.deepEqual(observed.chat?.searchDirectoryIds, [null, "extra"]);
+        await React.act(async () => observed.explorer!.onFileSelected("README.md"));
+        assert.equal(observed.file?.selectedFile, "README.md");
+        await React.act(async () => observed.explorer!.onDirectoryChange("extra"));
+        assert.equal(observed.file?.selectedFile, null);
+        assert.equal(observed.chat?.directoryId, "extra");
+        assert.equal(observed.chat?.contextId, contextId);
+        await React.act(async () => observed.explorer!.onFileSelected("README.md"));
+        assert.equal(fileReads.at(-1)?.at(-1), "extra");
+        hasAdditionalDirectory = false;
+        queryData.projects = queryData.projects.map((project) => ({
+          ...(project as Record<string, unknown>),
+        }));
+        await React.act(async () => renderWorkspace());
+        assert.equal(observed.explorer?.directoryId, null);
+        assert.deepEqual(observed.chat?.searchDirectoryIds, [null]);
+        assert.equal(observed.file?.selectedFile, null);
+        return;
+      }
       if (kind === "restore-active") {
         assert.equal(
           observed.input?.isTransitioning,
@@ -570,3 +619,5 @@ test("Chat stays interactive during silent retries and blocks only for the visib
   checkConversationSession("reconnect"));
 
 test("Chat accepts input during silent retries", () => checkConversationSession("reconnect-send"));
+test("switching the browsing directory clears preview and removal restores primary without changing the conversation", () =>
+  checkConversationSession("directories"));

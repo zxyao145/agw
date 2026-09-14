@@ -74,7 +74,11 @@ test("Project form has the 360px metadata column and one combined Tools tab", as
     /<TabsTrigger value="environment-variables">Environment Variables<\/TabsTrigger>/,
   );
   assert.match(source, /Project Type/);
-  assert.match(source, /value="User Defined"/);
+  assert.match(source, /projectType = "User Defined"/);
+  assert.match(source, /value=\{projectType\}/);
+  assert.match(source, /readOnly=\{nameReadOnly\}/);
+  assert.match(source, /required/);
+  assert.match(source, /Primary directory is required\./);
   assert.match(source, /readOnly/);
   assert.doesNotMatch(source, /Extra Settings/);
   assert.doesNotMatch(source, /extraSetting/);
@@ -122,15 +126,37 @@ test("Projects page backfills Edit capabilities and resets every Create capabili
   assert.match(source, /<EditProjectDialog/);
 });
 
-test("Built-in Projects cannot open or submit the edit dialog", async () => {
+test("Built-in Projects can be edited while keeping their name and type read-only", async () => {
   const [pageSource, editSource] = await Promise.all([
     readSource(PAGE_URL, "Projects page"),
     readSource(EDIT_DIALOG_URL, "Edit Project dialog"),
   ]);
 
-  assert.match(pageSource, /if \(project\.type !== 0\) \{\s*return;\s*\}/);
-  assert.match(pageSource, /disabled=\{project\.type !== 0\}/);
-  assert.match(editSource, /editingProject\.type !== 0/);
+  const openEditSource = pageSource.slice(
+    pageSource.indexOf("const openEdit ="),
+    pageSource.indexOf("const [deleteOpen"),
+  );
+  assert.doesNotMatch(openEditSource, /project\.type !== 0/);
+  assert.doesNotMatch(pageSource, /Built-in projects cannot be edited/);
+  assert.match(pageSource, /const capabilityState = toProjectCapabilityFormState\(project\)/);
+  assert.match(editSource, /name: editingProject\.type === 0 \? name : editingProject\.name/);
+  assert.match(
+    editSource,
+    /projectType=\{editingProject\?\.type === 0 \? "User Defined" : "BuiltIn"\}/,
+  );
+  assert.match(editSource, /nameReadOnly=\{editingProject\?\.type !== 0\}/);
+  assert.doesNotMatch(editSource, /editingProject\.type !== 0/);
+});
+
+test("Create and Edit require a primary directory before submitting", async () => {
+  const [createSource, editSource] = await Promise.all([
+    readSource(CREATE_DIALOG_URL, "Create Project dialog"),
+    readSource(EDIT_DIALOG_URL, "Edit Project dialog"),
+  ]);
+
+  assert.match(createSource, /!workspace\.trim\(\)/);
+  assert.match(editSource, /!workspace\.trim\(\)/);
+  assert.match(editSource, /workspace: workspace\.trim\(\)/);
 });
 
 test("Projects page wires immediate copy creation and disables copy for built-in projects", async () => {

@@ -28,6 +28,43 @@ namespace Agw.Agents.Tests;
 public class AgentRuntimeServiceCompositionTests
 {
     [Fact]
+    public void BuildExternalOptions_AdditionalDirectories_MergeNativeConfigurationAndPreserveSession()
+    {
+        var workspace = Path.GetTempPath();
+        var additional = Path.Combine(workspace, "additional");
+        var configured = Path.Combine(workspace, "configured");
+        var sessionId = Guid.CreateVersion7();
+        var directories = new List<ProjectDirectory>
+        {
+            new() { Id = Guid.CreateVersion7(), Path = additional },
+        };
+        var claude = BuildClaudeCodeAIAgentOptions(
+            JsonSerializer.Serialize(new { addDirectories = new[] { configured, additional + "/." } }),
+            workspace,
+            sessionId,
+            true,
+            additionalDirectories: directories
+        )!;
+        var codex = BuildCodexAIAgentOptions(
+            JsonSerializer.Serialize(
+                new { threadOptions = new { additionalDirectories = new[] { configured, additional + "/." } } }
+            ),
+            workspace,
+            sessionId,
+            true,
+            additionalDirectories: directories
+        )!;
+
+        Assert.Equal(new[] { configured, additional }, claude.AddDirectories);
+        Assert.Equal(new[] { configured, additional }, codex.ThreadOptions!.AdditionalDirectories);
+        Assert.Equal(workspace, claude.WorkingDirectory);
+        Assert.Equal(workspace, codex.ThreadOptions.WorkingDirectory);
+        Assert.Equal(sessionId.Normalize(), claude.Resume);
+        Assert.Equal(sessionId, codex.ThreadId);
+        Assert.True(codex.IsResume);
+    }
+
+    [Fact]
     public void BuildInstructions_WhenPromptProvided_ReturnsPrompt()
     {
         var instructions = AgentRuntimeServiceUtil.BuildInstructions("System prompt");
@@ -907,7 +944,8 @@ public class AgentRuntimeServiceCompositionTests
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         Func<string, CancellationToken, ValueTask>? onThreadStartedAsync = null,
         string? projectExtra = null,
-        Agw.Agents.Contracts.Execution.AgwPermissionMode? permissionMode = null
+        Agw.Agents.Contracts.Execution.AgwPermissionMode? permissionMode = null,
+        List<ProjectDirectory>? additionalDirectories = null
     )
     {
         var method = typeof(AgentRuntimeService).GetMethod(
@@ -921,7 +959,12 @@ public class AgentRuntimeServiceCompositionTests
                 null,
                 [
                     new Agent { Extra = extra },
-                    new Project { Workspace = workspace, ExtraSetting = projectExtra },
+                    new Project
+                    {
+                        Workspace = workspace,
+                        ExtraSetting = projectExtra,
+                        AdditionalDirectories = additionalDirectories ?? [],
+                    },
                     threadId,
                     resume,
                     environmentVariables,
@@ -940,7 +983,8 @@ public class AgentRuntimeServiceCompositionTests
         IReadOnlyDictionary<string, string>? environmentVariables = null,
         ChatHistoryProvider? chatHistoryProvider = null,
         string? projectExtra = null,
-        Agw.Agents.Contracts.Execution.AgwPermissionMode? permissionMode = null
+        Agw.Agents.Contracts.Execution.AgwPermissionMode? permissionMode = null,
+        List<ProjectDirectory>? additionalDirectories = null
     )
     {
         var method = typeof(AgentRuntimeService).GetMethod(
@@ -954,7 +998,12 @@ public class AgentRuntimeServiceCompositionTests
                 null,
                 [
                     new Agent { Extra = extra },
-                    new Project { Workspace = workspace, ExtraSetting = projectExtra },
+                    new Project
+                    {
+                        Workspace = workspace,
+                        ExtraSetting = projectExtra,
+                        AdditionalDirectories = additionalDirectories ?? [],
+                    },
                     providerSessionId,
                     isResume,
                     environmentVariables,

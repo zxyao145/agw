@@ -31,7 +31,10 @@ test("git change tree exposes hover controls for staging files and directories",
     source,
     /const targetScope: GitDiffScope = item\.gitScope === "staged" \? "unstaged" : "staged"/,
   );
-  assert.match(source, /setFileStaged\(projectId, item\.path, targetScope === "staged"\)/);
+  assert.match(
+    source,
+    /setFileStaged\(\s*projectId,\s*item\.path,\s*targetScope === "staged",\s*undefined,\s*directoryId,?\s*\)/,
+  );
   assert.match(
     source,
     /group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100/,

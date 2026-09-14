@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Agw.Shared.Runtime;
 
 namespace Agw.Agents.Application.Persistence;
 
@@ -51,6 +52,9 @@ public sealed record DurableExecutionManifest
     /// 获取重建运行时所需的执行设置。
     /// </summary>
     public required DurableExecutionSettings Settings { get; init; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ProjectWorkspaceSnapshot? WorkspaceSnapshot { get; init; }
 
     /// <summary>
     /// 获取创建当前分支的历史 Agentflow checkpoint occurrence。
