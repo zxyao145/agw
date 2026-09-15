@@ -15,9 +15,10 @@ namespace Agw.Agents.Execution.Inbound.Connections;
 /// <summary>
 /// 根据全局执行提供程序，为 SignalR 连接创建进程内或 durable 执行上下文。
 /// </summary>
-internal sealed class ExecutionConnectionContextFactory
+internal sealed class ExecutionConnectionContextFactory : IAsyncDisposable
 {
-    private readonly IRuntimeFactory _runtimeFactory;
+    private readonly IServiceProvider _serviceProvider;
+    private AsyncServiceScope? _runtimeScope;
     private readonly IProjectTaskFacade _projectTasks;
     private readonly IProjectRuntimeFacade _projects;
     private readonly ExecutionProvider _executionProvider;
@@ -30,7 +31,6 @@ internal sealed class ExecutionConnectionContextFactory
     /// 初始化连接上下文工厂，并只在启用 Distributed 时解析其协调器。
     /// </summary>
     public ExecutionConnectionContextFactory(
-        IRuntimeFactory runtimeFactory,
         IProjectTaskFacade projectTasks,
         IProjectRuntimeFacade projects,
         IProjectDefaultResolver projectDefaults,
@@ -39,7 +39,7 @@ internal sealed class ExecutionConnectionContextFactory
     )
     {
         _permissions = serviceProvider.GetRequiredService<ExecutionPermissionService>();
-        _runtimeFactory = runtimeFactory;
+        _serviceProvider = serviceProvider;
         _projectTasks = projectTasks;
         _projects = projects;
         _projectDefaults = projectDefaults;
@@ -70,11 +70,18 @@ internal sealed class ExecutionConnectionContextFactory
                         )
                 )
                 : null;
+        // Commands remain on the connection scope while an InProcess turn runs in the background.
+        // Keep their scoped persistence services separate so both paths can query concurrently.
+        if (_executionProvider == ExecutionProvider.InProcess)
+        {
+            _runtimeScope ??= _serviceProvider.CreateAsyncScope();
+        }
+        var runtimeFactory = (_runtimeScope?.ServiceProvider ?? _serviceProvider).GetRequiredService<IRuntimeFactory>();
         return new ExecutionConnectionContext(
             userId,
             messageSink,
             hostToken,
-            _runtimeFactory,
+            runtimeFactory,
             _projectTasks,
             _projects,
             durableSession,
@@ -82,5 +89,15 @@ internal sealed class ExecutionConnectionContextFactory
             _projectDefaults,
             _permissions
         );
+    }
+
+    // The connection disposes its runtime before disposing the owning DI scope and this factory.
+    public async ValueTask DisposeAsync()
+    {
+        if (_runtimeScope is { } scope)
+        {
+            _runtimeScope = null;
+            await scope.DisposeAsync();
+        }
     }
 }

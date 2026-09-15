@@ -20,6 +20,8 @@ Connection 生命周期、Command Handler 扩展方式与状态所有权的决�
 
 `Microsoft.Agents.AI.AgentSession` 只存在于 `AgentRuntime` 内部，不承担 SignalR connection 或 turn 的职责。
 
+InProcess 连接的控制查询与后台 Runtime 使用独立的 DI scope，避免查询 checkpoint 或切换权限时与执行中的数据库操作共享 DbContext。Runtime scope 随连接保留以支持多轮复用；连接先等待并释放 Runtime，再释放其 scope。
+
 ## Agentflow Runtime 协作边界
 
 `IAgentflowRuntimeService` 保持稳定入口。`AgentflowRuntimeService` 解析执行目标与 Project，通过 Execution Context Factory 准备会话，委托 Workflow Factory 构建 Workflow，再调用对应 Runner，并在执行结束或枚举器释放时释放 Workflow Lease。

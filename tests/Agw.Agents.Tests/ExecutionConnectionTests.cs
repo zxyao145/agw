@@ -1,15 +1,31 @@
 using System.Collections.Concurrent;
+using System.Data.Common;
 using System.Reflection;
+using Agw.Agents.Application.Persistence;
+using Agw.Agents.Definitions.Agents;
+using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Commands;
 using Agw.Agents.Execution.Commands.Exec;
+using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Inbound.SignalR;
 using Agw.Agents.Execution.Outbound;
 using Agw.Agents.Execution.Runtimes;
 using Agw.Agents.Execution.Runtimes.InProcess;
 using Agw.Agents.Execution.Turns;
+using Agw.Auth.Application;
+using Agw.Infrastructure.Data;
+using Agw.Projects.Application;
+using Agw.Projects.Application.Persistence;
 using Agw.Projects.Contracts.Execution;
 using Agw.Projects.Contracts.Runtime;
+using Agw.Shared.Contracts.Coordination;
+using Agw.Shared.Coordination;
+using Agw.Shared.Data.Entities.Agents;
+using Agw.Shared.Data.Entities.Projects;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -18,6 +34,175 @@ namespace Agw.Agents.Tests;
 
 public class ExecutionConnectionTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ConnectionQueries_WhileRuntimeQueryIsPending_UseIndependentDbContext(bool changePermission)
+    {
+        // Arrange: real SQLite queries, with the runtime query paused inside EF's concurrency guard.
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = $"Data Source={Guid.NewGuid():N};Mode=Memory;Cache=Shared";
+        await using var database = new SqliteConnection(connectionString);
+        await database.OpenAsync(ct);
+        var blocker = new BlockingQueryInterceptor();
+        var task = new AgentExecutionTask
+        {
+            TaskId = Guid.CreateVersion7(),
+            ProjectConversationId = Guid.CreateVersion7(),
+            ProjectId = Guid.CreateVersion7(),
+            ContextId = "context",
+        };
+        var command = CreateExecCommand();
+        var factories = new List<DatabaseRuntimeFactory>();
+        var services = new ServiceCollection();
+        services.AddOptions<ExecutionRuntimeOptions>();
+        services.AddDbContext<AgwDbContext>(options => options.UseSqlite(connectionString).AddInterceptors(blocker));
+        services.AddScoped<IAgentsDbContext>(sp => sp.GetRequiredService<AgwDbContext>());
+        services.AddScoped<IProjectsDbContext>(sp => sp.GetRequiredService<AgwDbContext>());
+        services.AddScoped<IUserInfoService, UserInfoService>();
+        services.AddScoped<ProjectResolver>();
+        services.AddScoped<IProjectDefaultResolver, ProjectDefaultResolver>();
+        services.AddScoped<ExecutionPermissionService>();
+        services.AddSingleton<IApplicationLock>(InMemoryApplicationLock.Shared);
+        services.AddSingleton(TimeProvider.System);
+        services.AddScoped<AgentflowCheckpointStore>();
+        services.AddSingleton<IProjectTaskFacade>(new FakeProjectTaskFacade(task));
+        services.AddSingleton<IProjectRuntimeFacade>(new FakeProjectRuntimeFacade());
+        services.AddScoped<IRuntimeFactory>(sp =>
+        {
+            var factory = new DatabaseRuntimeFactory(sp.GetRequiredService<AgwDbContext>(), blocker);
+            factories.Add(factory);
+            return factory;
+        });
+        services.AddScoped<ExecutionConnectionContextFactory>();
+        await using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
+        await using (var seedScope = provider.CreateAsyncScope())
+        {
+            var db = seedScope.ServiceProvider.GetRequiredService<AgwDbContext>();
+            await db.Database.EnsureCreatedAsync(ct);
+            db.Projects.Add(
+                new Project
+                {
+                    Id = task.ProjectId,
+                    Name = ProjectDefaults.DefaultBuiltInName,
+                    Type = ProjectType.DefaultBuiltIn,
+                    CreateBy = "user-id",
+                }
+            );
+            db.Agents.Add(
+                new Agent
+                {
+                    Id = command.AgentId!.Value,
+                    Name = "test",
+                    CreateBy = "user-id",
+                }
+            );
+            await db.SaveChangesAsync(ct);
+        }
+        var scope = provider.CreateAsyncScope();
+        var context = scope
+            .ServiceProvider.GetRequiredService<ExecutionConnectionContextFactory>()
+            .Create("user-id", new NullSink(), CancellationToken.None);
+        await using var connection = new ExecutionConnection(
+            "connection",
+            "user-id",
+            scope,
+            new ExecutionCommandDispatcher([]),
+            context,
+            NullLogger.Instance
+        );
+        await context.ApplySettingsAsync(ExecutionSettings.CreateDefault(), ct);
+        await context.StartTurnAsync(command, ct);
+        await blocker.Started.Task.WaitAsync(TimeSpan.FromSeconds(10), ct);
+        var runtimeFactory = Assert.Single(factories);
+        try
+        {
+            // Act: a connection command must finish while the runtime still owns an active database operation.
+            if (changePermission)
+            {
+                await context.SetPermissionModeAsync(AgwPermissionMode.AlwaysAsk, ct);
+                Assert.Equal(AgwPermissionMode.AlwaysAsk, context.Settings!.PermissionMode);
+            }
+            else
+            {
+                var checkpoints = await connection.GetAgentflowCheckpointsAsync(Guid.CreateVersion7(), ct);
+                Assert.Empty(checkpoints);
+            }
+            Assert.True(context.HasActiveTurn);
+            Assert.False(runtimeFactory.Disposed);
+        }
+        finally
+        {
+            blocker.Release.TrySetResult();
+            await runtimeFactory.Runtime.WhenIdleAsync().WaitAsync(TimeSpan.FromSeconds(10), ct);
+        }
+
+        // Assert: the runtime scope remains valid through completion and is released with the connection.
+        Assert.Equal(1, runtimeFactory.AgentCount);
+        await connection.DisposeAsync();
+        Assert.True(runtimeFactory.Runtime.Disposed);
+        Assert.True(runtimeFactory.Disposed);
+    }
+
+    private sealed class BlockingQueryInterceptor : DbCommandInterceptor
+    {
+        public DbContext? RuntimeContext { get; set; }
+        public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public override async ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default
+        )
+        {
+            if (ReferenceEquals(eventData.Context, RuntimeContext))
+            {
+                Started.TrySetResult();
+                await Release.Task.WaitAsync(cancellationToken);
+            }
+            return result;
+        }
+    }
+
+    private sealed class DatabaseRuntimeFactory : IRuntimeFactory, IAsyncDisposable
+    {
+        private readonly AgwDbContext _db;
+        private readonly BlockingQueryInterceptor _blocker;
+        public TestRuntime Runtime { get; } = new();
+        public bool Disposed { get; private set; }
+        public int AgentCount { get; private set; }
+
+        public DatabaseRuntimeFactory(AgwDbContext db, BlockingQueryInterceptor blocker)
+        {
+            _db = db;
+            _blocker = blocker;
+        }
+
+        public Task<RuntimeStartResult> StartAsync(RuntimeStartRequest request, CancellationToken cancellationToken)
+        {
+            _blocker.RuntimeContext = _db;
+            var turn = Runtime.StartTurn(
+                request.TurnContext,
+                new RuntimeTurnContextAccessor(),
+                new CancellationTokenSource(),
+                () => { },
+                async ct =>
+                {
+                    AgentCount = await _db.Agents.CountAsync(ct);
+                }
+            );
+            return Task.FromResult(new RuntimeStartResult(Runtime, turn));
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Disposed = true;
+            return ValueTask.CompletedTask;
+        }
+    }
+
     [Fact]
     public async Task DetachAsync_IdleRuntime_DisposesAndRemovesImmediately()
     {
