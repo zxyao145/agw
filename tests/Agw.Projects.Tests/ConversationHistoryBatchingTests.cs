@@ -60,6 +60,10 @@ public partial class EfCoreChatHistoryProviderTests
         await using var fixture = await HistoryBatchFixture.CreateAsync(ConversationHistoryWriteMode.Interval);
         await using var scope = fixture.BeginScope();
         await fixture.AppendAsync([new(ChatRole.User, "pending")]);
+        // Arm the background delay before advancing virtual time past its deadline.
+        await fixture
+            .Clock.WaitForTimerAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken)
+            .WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
         fixture.Clock.Advance(TimeSpan.FromSeconds(4));
         Assert.Empty(await fixture.ReadRowsAsync());
 

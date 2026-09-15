@@ -129,12 +129,12 @@ public partial class AgentflowRuntimeServiceTests
             )
         );
 
-        Assert.Equal(["input", "turn-finished"], messages.Select(MessageShape));
+        Assert.Equal(["input", "done", "done", "turn-finished"], messages.Select(MessageShape));
         var gate = Assert.IsType<WorkflowGateInteraction>(Assert.Single(handler.Requests));
         Assert.Equal("review", gate.Mode);
         Assert.Equal("Approve now", gate.Prompt);
         Assert.Equal("input", gate.InputPreview);
-        Assert.Empty(agent.Inputs);
+        Assert.Single(agent.Inputs);
     }
 
     [Fact]
@@ -235,7 +235,10 @@ public partial class AgentflowRuntimeServiceTests
 
         Assert.Equal(DurableExecutionSegmentStatus.Completed, result.Status);
         Assert.Equal(1, result.SegmentIndex);
-        Assert.Equal(approved ? ["input"] : ["input", "human-gate-rejected"], sink.Messages.Select(MessageShape));
+        Assert.Equal(
+            approved ? ["input", "done", "done"] : ["input", "human-gate-rejected"],
+            sink.Messages.Select(MessageShape)
+        );
         Assert.All(fixture.Agents.CreatedAgents, agent => Assert.True(agent.Disposed));
     }
 

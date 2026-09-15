@@ -176,7 +176,7 @@ Advanced Config JSON 是节点附加设置的 JSON 表示，与右侧的表单�
 | Clear Messages | 无 | 不显示高级配置框 |
 | Human Gate | `humanMode`、`humanPrompt` | 模式和给用户的提示语，示例见下方 |
 | Checkpoint | `checkpointName` | 通过 Checkpoint Name 输入框填写；不显示高级配置框 |
-| Output | `enableSummary` | 是否追加模型总结，默认为 false |
+| Output | 无（由 Generate Summary UI 配置） | 使用 Generate Summary 开关和 Summary Model Provider；不显示高级 JSON 编辑框 |
 
 Human Gate 示例：
 
@@ -195,17 +195,22 @@ Checkpoint Name 在保存的数据中对应：
 { "checkpointName": "资料收集完成" }
 ```
 
-Output 示例：
+Output 的底层配置当前只有一个运行时字段 `enableSummary`，但 Output 节点不显示 Advanced Config JSON 编辑框，直接使用 Inspector 中的 **Generate Summary** UI 配置：
 
-```json
-{ "enableSummary": true }
-```
+- `enableSummary: false`（默认）：Output 原样传递流入的消息，不额外调用模型。
+- `enableSummary: true`：Output 在主流程成功后，使用所选的 Model Provider 生成一段 Markdown 总结，并追加到最终输出末尾。
 
-启用总结后，还需在界面选择总结用的 Model Provider。模型选择属于工作流配置，不能通过在节点 JSON 中添加 `modelProviderId` 来替代。
+启用总结后，必须同时满足以下条件：
+
+1. 在 Output 节点的 **Summary Model Provider** 中选择有效的模型。
+2. 整个流程只能有一个 Output 节点。
+3. Output 节点的 `Instructions`（如果填写）会作为额外的总结要求；总结模型接收的是流入该 Output 的消息。
+
+模型选择属于工作流配置，不能通过在节点 JSON 中添加 `modelProviderId` 或 `summaryModelProviderId` 来替代。已有流程中的 `enableSummary` 配置仍会被兼容读取；任意其他字段不会自动增加 Output 能力。
 
 ### 编排块的成员配置
 
-四种编排块都使用 `participantNodeIds`，值是成员的**画布节点 ID**，不是 Agent 定义 ID，也不是显示名称。建议通过成员控件添加，让编辑器生成这些引用。
+四种编排块都使用 `participantNodeIds`，值是成员的**画布节点 ID**，不是 Agent 定义 ID，也不是显示名称。编辑器已提供 Members、Max Rounds、Manager 等控件，编排块不显示 Advanced Config JSON；以下 JSON 仅用于说明保存格式和旧数据兼容，不需要手动填写。
 
 下面的 `node-a`、`node-b` 是占位示例，使用时必须替换为当前画布中真实的 Agent 或 Workflow as Agent 节点 ID。Concurrent 至少需要一个成员；Handoff、Group Chat 和 Magentic 至少需要两个成员。
 

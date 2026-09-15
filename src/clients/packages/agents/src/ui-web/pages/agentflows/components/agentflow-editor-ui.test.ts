@@ -116,7 +116,7 @@ test("Agentflow Agent inspectors can switch runtime agents with smart name synci
   assert.match(source, /relateId: node\.relateId/);
 });
 
-test("Agentflow Clear Messages and Checkpoint hide advanced JSON", async () => {
+test("Agentflow Output, orchestration blocks, Clear Messages, and Checkpoint hide advanced JSON", async () => {
   const source = await readFile(BUILDER_URL, "utf8");
 
   assert.match(
@@ -133,7 +133,7 @@ test("Agentflow Clear Messages and Checkpoint hide advanced JSON", async () => {
   );
   assert.match(
     source,
-    /const usesAdvancedConfig =\s*node\.data\.kind !== AgentflowNodeKind\.ClearMessages &&\s*node\.data\.kind !== AgentflowNodeKind\.CheckpointMarker/,
+    /const usesAdvancedConfig =\s*node\.data\.kind !== AgentflowNodeKind\.ClearMessages &&\s*node\.data\.kind !== AgentflowNodeKind\.CheckpointMarker &&\s*node\.data\.kind !== AgentflowNodeKind\.Output &&\s*!isBlockNodeKind\(node\.data\.kind\)/,
   );
   assert.match(source, /\{usesAdvancedConfig \? \([\s\S]*?<Label>Advanced Config JSON<\/Label>/);
 });
@@ -152,8 +152,11 @@ test("Agentflow editor creates one Zustand store per dialog session", async () =
 test("Agentflow editor exposes undo, redo, dirty status, and guarded close actions", async () => {
   const source = await readFile(DIALOG_URL, "utf8");
 
-  assert.match(source, /aria-label="Undo"/);
-  assert.match(source, /aria-label="Redo"/);
+  const builder = await readFile(BUILDER_URL, "utf8");
+  assert.match(builder, /aria-label="Canvas history"/);
+  assert.match(builder, /aria-label="Undo"/);
+  assert.match(builder, /aria-label="Redo"/);
+  assert.doesNotMatch(source, /aria-label="(?:Undo|Redo)"/);
   assert.match(source, /Unsaved changes/);
   assert.match(source, /Discard unsaved changes\?/);
   assert.match(source, /Keep editing/);

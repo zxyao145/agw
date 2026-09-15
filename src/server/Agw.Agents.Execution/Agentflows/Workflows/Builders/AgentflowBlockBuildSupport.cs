@@ -97,7 +97,8 @@ internal static class AgentflowBlockBuildSupport
             context.AgentflowId,
             shouldTrace ? participantNode.NodeId : null,
             shouldTrace ? participantNode.RelateId : null,
-            historyNodeId: participantNode.NodeId
+            historyNodeId: participantNode.NodeId,
+            isWorkflow: participantNode.Kind == AgentflowNodeKind.WorkflowAsAgent
         );
     }
 
@@ -120,7 +121,8 @@ internal static class AgentflowBlockBuildSupport
             blockNode.Name,
             blockNode.Instructions,
             context.SessionScope,
-            agentflowId: context.AgentflowId
+            agentflowId: context.AgentflowId,
+            isWorkflow: true
         ).BindAsExecutor(context.AgentHostOptions);
     }
 }

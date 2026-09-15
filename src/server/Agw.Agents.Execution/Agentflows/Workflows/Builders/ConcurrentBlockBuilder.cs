@@ -1,6 +1,4 @@
-using Agw.Agents.Execution.Agentflows.Messaging;
 using Microsoft.Agents.AI.Workflows;
-using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace Agw.Agents.Execution.Agentflows.Workflows.Builders;
 
@@ -17,31 +15,10 @@ internal static class ConcurrentBlockBuilder
             return null;
         }
 
-        Func<List<ChatMessage>, CancellationToken, ValueTask<List<ChatMessage>>> runConcurrentAsync = async (
-            messages,
-            cancellationToken
-        ) =>
-        {
-            var input = AgentflowMessageTransforms.ApplyInstructions(messages, context.BlockNode.Instructions);
-            var tasks = participants
-                .Select(participant =>
-                    participant.Agent.RunAsync(
-                        AgentflowMessageTransforms.ReassignOtherAgentsAsUsers(
-                            input,
-                            participant.Agent.Name ?? participant.Agent.Id
-                        ),
-                        cancellationToken: cancellationToken
-                    )
-                )
-                .ToArray();
-            var responses = await Task.WhenAll(tasks).ConfigureAwait(false);
-            return responses.SelectMany(response => response.Messages).ToList();
-        };
-
-        return runConcurrentAsync.BindAsExecutor<List<ChatMessage>, List<ChatMessage>>(
-            context.BlockNode.NodeId,
-            ExecutorOptions.Default,
-            threadsafe: true
+        var workflow = AgentWorkflowBuilder.BuildConcurrent(
+            participants.Select(participant => participant.Agent),
+            responses => responses.SelectMany(messages => messages).ToList()
         );
+        return AgentflowBlockBuildSupport.BindWorkflow(context, workflow);
     }
 }

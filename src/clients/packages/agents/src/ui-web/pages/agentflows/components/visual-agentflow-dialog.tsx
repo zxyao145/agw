@@ -29,7 +29,7 @@ import {
   selectCanUndo,
   useAgentflowEditorStore,
 } from "./agentflow-editor-store";
-import { Redo2, Undo2, X } from "lucide-react";
+import { X } from "lucide-react";
 import type {
   AgentDto,
   AgentflowDetailDto,
@@ -156,28 +156,6 @@ function VisualAgentflowDialogSession({
                     Unsaved changes
                   </span>
                 ) : null}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon-sm"
-                  title="Undo (Cmd/Ctrl+Z)"
-                  aria-label="Undo"
-                  disabled={!canUndo || isSaving}
-                  onClick={undo}
-                >
-                  <Undo2 className="h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon-sm"
-                  title="Redo (Cmd/Ctrl+Shift+Z or Ctrl+Y)"
-                  aria-label="Redo"
-                  disabled={!canRedo || isSaving}
-                  onClick={redo}
-                >
-                  <Redo2 className="h-4 w-4" />
-                </Button>
                 <Button
                   type="button"
                   variant="outline"
