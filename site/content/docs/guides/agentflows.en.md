@@ -176,7 +176,7 @@ Use double quotes, literal `true` or `false` for switches, and unquoted numbers.
 | Clear Messages | None | No advanced configuration field |
 | Human Gate | `humanMode`, `humanPrompt` | Interaction mode and user-facing prompt |
 | Checkpoint | `checkpointName` | Use Checkpoint Name; no advanced configuration field |
-| Output | `enableSummary` | Append a model summary; defaults to false |
+| Output | None (configured through the Generate Summary UI) | Use Generate Summary and Summary Model Provider; no advanced JSON editor is shown |
 
 Human Gate example:
 
@@ -195,17 +195,18 @@ Checkpoint Name is stored as:
 { "checkpointName": "Research complete" }
 ```
 
-Output example:
+The Output runtime configuration currently has one field, `enableSummary`, but Output does not show an Advanced Config JSON editor. Configure it directly through the **Generate Summary** controls in the Inspector:
 
-```json
-{ "enableSummary": true }
-```
+- `false` (default): pass through the messages entering the Output without an extra model call.
+- `true`: after the main flow succeeds, use the selected Model Provider to append a Markdown summary to the final output.
 
-Also select a summary Model Provider in the UI. That selection belongs to the workflow configuration; adding `modelProviderId` to node JSON does not replace it.
+When summary generation is enabled, the workflow must have exactly one Output node, and the Output Inspector must have a valid **Summary Model Provider** selected. Output `Instructions`, when present, are additional requirements for the summary; the summary model receives the messages entering that Output.
+
+The Model Provider is workflow configuration. Adding `modelProviderId` or `summaryModelProviderId` to node JSON does not replace it. Existing flows still read the legacy `enableSummary` value; arbitrary additional keys do not add Output capabilities.
 
 ### Block members
 
-All four blocks use `participantNodeIds`: **canvas node IDs**, not Agent definition IDs or display names. Add members through the editor controls to generate these references.
+All four blocks use `participantNodeIds`: **canvas node IDs**, not Agent definition IDs or display names. The editor provides Members, Max Rounds, Manager, and the other block-specific controls, so orchestration blocks do not show an Advanced Config JSON editor. The JSON below documents the persisted shape and legacy compatibility; users do not need to enter it manually.
 
 Replace the example IDs `node-a` and `node-b` with real Agent or Workflow as Agent node IDs in the current graph. Concurrent requires at least one member; Handoff, Group Chat, and Magentic require at least two.
 
@@ -260,7 +261,7 @@ Members take turns in array order. Set `maxRounds` to a positive integer limitin
 
 ### Before saving
 
-Check that member IDs exist, values have the correct types, and fields belong to the selected node. Advanced Config JSON is not a script entry point; arbitrary keys do not add capabilities. After editing, check the form values, save, and verify with a small task.
+Check that members and values are correct, then save and verify with a small task. Advanced Config JSON is not a script entry point; arbitrary keys do not add capabilities. Existing JSON configuration is still read for compatibility, while the Inspector controls are the supported editing surface.
 
 Branch predicates belong to an **edge’s** Condition JSON. Switch ordering uses the edge configuration field `switchCaseOrder`. Neither belongs in node Advanced Config JSON.
 

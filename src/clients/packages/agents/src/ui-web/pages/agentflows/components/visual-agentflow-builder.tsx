@@ -53,6 +53,8 @@ import {
   ArrowUp,
   ChevronRight,
   Crown,
+  Redo2,
+  Undo2,
   ExternalLink,
   Grid,
   Maximize2,
@@ -103,6 +105,8 @@ import {
   type AgentflowEditorEdgeData,
   type AgentflowEditorHistoryMode,
   type AgentflowEditorNodeData,
+  selectCanUndo,
+  selectCanRedo,
   useAgentflowEditorStore,
 } from "./agentflow-editor-store";
 
@@ -502,6 +506,10 @@ export function VisualAgentflowBuilder({
   const isSaving = useAgentflowEditorStore((state) => state.isSaving);
   const updateDocument = useAgentflowEditorStore((state) => state.updateDocument);
   const commitHistoryGroup = useAgentflowEditorStore((state) => state.commitHistoryGroup);
+  const canUndo = useAgentflowEditorStore(selectCanUndo);
+  const canRedo = useAgentflowEditorStore(selectCanRedo);
+  const undo = useAgentflowEditorStore((state) => state.undo);
+  const redo = useAgentflowEditorStore((state) => state.redo);
   const markSaved = useAgentflowEditorStore((state) => state.markSaved);
   const setSaving = useAgentflowEditorStore((state) => state.setSaving);
   const selectNode = useAgentflowEditorStore((state) => state.selectNode);
@@ -1223,6 +1231,34 @@ export function VisualAgentflowBuilder({
         <ResizableHandle aria-label="Resize node palette" />
         <ResizablePanel id="agentflow-canvas" minSize={0}>
           <section className="relative h-full min-h-0 overflow-hidden bg-background">
+            <div
+              className="absolute right-3 top-3 z-20 flex items-center gap-2"
+              role="group"
+              aria-label="Canvas history"
+            >
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                title="Undo (Cmd/Ctrl+Z)"
+                aria-label="Undo"
+                disabled={!canUndo || isSaving}
+                onClick={undo}
+              >
+                <Undo2 className="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                title="Redo (Cmd/Ctrl+Shift+Z or Ctrl+Y)"
+                aria-label="Redo"
+                disabled={!canRedo || isSaving}
+                onClick={redo}
+              >
+                <Redo2 className="h-4 w-4" />
+              </Button>
+            </div>
             <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
               <ScopeBar
                 scope={canvasScope}
@@ -1657,7 +1693,8 @@ function NodeInspector({
   const usesAdvancedConfig =
     node.data.kind !== AgentflowNodeKind.ClearMessages &&
     node.data.kind !== AgentflowNodeKind.CheckpointMarker &&
-    node.data.kind !== AgentflowNodeKind.Output;
+    node.data.kind !== AgentflowNodeKind.Output &&
+    !isBlockNodeKind(node.data.kind);
   const configIsInvalid =
     usesAdvancedConfig &&
     node.data.configJson.trim().length > 0 &&
@@ -1916,6 +1953,7 @@ function BlockConfigInspector({
   onSelectParticipant: (blockId: string, participantNodeId: string) => void;
 }) {
   const config = readConfigJson(node.data.configJson) ?? {};
+  const isCurrentBlockScope = canvasScope.kind === "block" && canvasScope.blockId === node.id;
   const nodeById = React.useMemo(() => new Map(nodes.map((item) => [item.id, item])), [nodes]);
   const members = blockMembership.membersByBlockId.get(node.id) ?? [];
   const selectedParticipants = members
@@ -1937,54 +1975,60 @@ function BlockConfigInspector({
     onChange(node.id, { configJson: updateConfigJson(node.data.configJson, update) }, historyMode);
   };
 
+  if (isCurrentBlockScope && node.data.kind === AgentflowNodeKind.ConcurrentBlock) return null;
+
   return (
     <div className="space-y-3 rounded-md border bg-background p-3">
-      <div className="flex items-center justify-between gap-2">
-        <Label>Members</Label>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline">{members.length} total</Badge>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-7"
-            onClick={() => onOpenBlock(node.id)}
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-            Open
-          </Button>
-        </div>
-      </div>
+      {!isCurrentBlockScope ? (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <Label>Members</Label>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline">{members.length} total</Badge>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7"
+                onClick={() => onOpenBlock(node.id)}
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Open
+              </Button>
+            </div>
+          </div>
 
-      <BlockMemberAddControls
-        idPrefix={`block-inspector-${node.id}`}
-        blockId={node.id}
-        agents={agents}
-        agentflows={agentflows}
-        agentSelectOptions={agentSelectOptions}
-        agentflowSelectOptions={agentflowSelectOptions}
-        onAddParticipant={onAddParticipant}
-      />
+          <BlockMemberAddControls
+            idPrefix={`block-inspector-${node.id}`}
+            blockId={node.id}
+            agents={agents}
+            agentflows={agentflows}
+            agentSelectOptions={agentSelectOptions}
+            agentflowSelectOptions={agentflowSelectOptions}
+            onAddParticipant={onAddParticipant}
+          />
 
-      {members.length === 0 ? (
-        <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-          No members.
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {members.map((member) => (
-            <BlockMemberListItem
-              key={member.nodeId}
-              blockId={node.id}
-              member={member}
-              memberNode={nodeById.get(member.nodeId) ?? null}
-              isCurrentBlockScope={canvasScope.kind === "block" && canvasScope.blockId === node.id}
-              onSelect={onSelectParticipant}
-              onRemove={onRemoveParticipant}
-            />
-          ))}
-        </div>
-      )}
+          {members.length === 0 ? (
+            <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+              No members.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {members.map((member) => (
+                <BlockMemberListItem
+                  key={member.nodeId}
+                  blockId={node.id}
+                  member={member}
+                  memberNode={nodeById.get(member.nodeId) ?? null}
+                  isCurrentBlockScope={isCurrentBlockScope}
+                  onSelect={onSelectParticipant}
+                  onRemove={onRemoveParticipant}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      ) : null}
 
       {node.data.kind === AgentflowNodeKind.GroupChatBlock ||
       node.data.kind === AgentflowNodeKind.MagenticBlock ? (

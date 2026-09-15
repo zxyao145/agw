@@ -210,7 +210,7 @@ Output 的底层配置当前只有一个运行时字段 `enableSummary`，但 Ou
 
 ### 编排块的成员配置
 
-四种编排块都使用 `participantNodeIds`，值是成员的**画布节点 ID**，不是 Agent 定义 ID，也不是显示名称。建议通过成员控件添加，让编辑器生成这些引用。
+四种编排块都使用 `participantNodeIds`，值是成员的**画布节点 ID**，不是 Agent 定义 ID，也不是显示名称。编辑器已提供 Members、Max Rounds、Manager 等控件，编排块不显示 Advanced Config JSON；以下 JSON 仅用于说明保存格式和旧数据兼容，不需要手动填写。
 
 下面的 `node-a`、`node-b` 是占位示例，使用时必须替换为当前画布中真实的 Agent 或 Workflow as Agent 节点 ID。Concurrent 至少需要一个成员；Handoff、Group Chat 和 Magentic 至少需要两个成员。
 
