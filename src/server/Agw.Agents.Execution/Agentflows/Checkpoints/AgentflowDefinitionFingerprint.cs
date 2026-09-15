@@ -8,7 +8,7 @@ namespace Agw.Agents.Execution.Agentflows.Checkpoints;
 
 internal static class AgentflowDefinitionFingerprint
 {
-    private const int CheckpointRuntimeVersion = 2;
+    private const int CheckpointRuntimeVersion = 3;
 
     public static async Task<string?> CreateAsync(
         IAgentsDbContext dbContext,

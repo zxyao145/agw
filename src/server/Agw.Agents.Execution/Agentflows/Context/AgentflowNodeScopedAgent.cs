@@ -6,6 +6,7 @@ using Agw.Agents.Execution.Agents.Tools;
 using Agw.Agents.Execution.HumanInteraction.Infrastructure.Maf;
 using Agw.Tools.HumanInteraction;
 using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
@@ -27,6 +28,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
     private readonly Guid? _agentflowId;
     private readonly string? _traceNodeId;
     private readonly Guid? _agentId;
+    private readonly bool _isWorkflow;
 
     /// <summary>
     /// 创建限定运行时节点标识、指令、会话作用域和执行跟踪信息的 Agent 包装器。
@@ -41,7 +43,8 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         Guid? agentflowId = null,
         string? traceNodeId = null,
         Guid? agentId = null,
-        string? historyNodeId = null
+        string? historyNodeId = null,
+        bool isWorkflow = false
     )
         : base(innerAgent)
     {
@@ -55,6 +58,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         _agentflowId = agentflowId;
         _traceNodeId = traceNodeId;
         _agentId = agentId;
+        _isWorkflow = isWorkflow;
     }
 
     protected override string? IdCore => _nodeId;
@@ -73,6 +77,11 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         CancellationToken cancellationToken = default
     )
     {
+        if (_isWorkflow)
+            return await RunCoreStreamingAsync(messages, session, options, cancellationToken)
+                .ToAgentResponseAsync(cancellationToken: cancellationToken)
+                .ConfigureAwait(false);
+
         options = CreateInteractionOptions(options);
         var interactionNodeId = (
             (InteractionSource)options.AdditionalProperties![HumanInteractionToolMetadata.SourceKey]!
@@ -152,6 +161,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         using var activity = StartExecutionActivity(input);
         var turnPersistence = new ToolTurnPersistence(InnerAgent, scopedSession, PersistToolBlockMessagesAsync);
         Exception? executionFailure = null;
+        var observedCalls = new Dictionary<string, FunctionCallContent>(StringComparer.Ordinal);
         try
         {
             await using var enumerator = InnerAgent
@@ -167,7 +177,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
                         break;
                     }
 
-                    update = enumerator.Current;
+                    update = ProjectWorkflowObservation(enumerator.Current, observedCalls);
                     AddNodeAttribution(update, interactionNodeId);
                     var responseMessage = ToolStateSnapshots.ToMessage(update);
                     turnPersistence.Record(responseMessage);
@@ -205,6 +215,45 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         {
             await FinalizeTurnAsync(turnPersistence, scopedSession, activity, executionFailure).ConfigureAwait(false);
         }
+    }
+
+    private AgentResponseUpdate ProjectWorkflowObservation(
+        AgentResponseUpdate update,
+        Dictionary<string, FunctionCallContent> observedCalls
+    )
+    {
+        if (!_isWorkflow || update.RawRepresentation is RequestInfoEvent)
+            return update;
+
+        // The nested workflow owns child calls. Expose handled calls with their results;
+        // only its RequestInfoEvent may ask the parent to execute an unresolved call.
+        // MAF's host collector does not honor FunctionCallContent.InformationalOnly.
+        var contents = new List<AIContent>();
+        foreach (var content in update.Contents)
+        {
+            if (content is FunctionCallContent call)
+                observedCalls[call.CallId] = call;
+            else if (content is FunctionResultContent result)
+            {
+                if (observedCalls.Remove(result.CallId, out var handledCall))
+                    contents.Add(handledCall);
+                contents.Add(result);
+            }
+            else if (content is not ToolApprovalRequestContent)
+                contents.Add(content);
+        }
+        return new AgentResponseUpdate(update.Role, contents)
+        {
+            AgentId = update.AgentId,
+            AuthorName = update.AuthorName,
+            ResponseId = update.ResponseId,
+            MessageId = update.MessageId,
+            CreatedAt = update.CreatedAt,
+            FinishReason = update.FinishReason,
+            ContinuationToken = update.ContinuationToken,
+            RawRepresentation = update.RawRepresentation,
+            AdditionalProperties = update.AdditionalProperties,
+        };
     }
 
     private AgentRunOptions CreateInteractionOptions(AgentRunOptions? options)

@@ -458,7 +458,7 @@ public class AgentflowWorkflowCompilerTests
         Assert.NotNull(workflow);
 
         var events = await ExecuteAsync(workflow!, "start");
-        Assert.Equal(2, events.Count(evt => HasChatInput(evt, "b")));
+        Assert.Single(events, evt => HasChatInput(evt, "b"));
         Assert.Single(events, evt => HasTurnTokenInput(evt, "b"));
         var cInput = Assert.Single(
             events

@@ -166,7 +166,7 @@ public partial class AgentflowRuntimeServiceTests
         Assert.Equal(DurableExecutionSegmentStatus.Completed, resumed.Status);
         Assert.Empty(resumed.PendingInteractions);
         Assert.Null(resumed.Checkpoint);
-        Assert.Equal(["input", "done", "agentflow-checkpoint"], sink.Messages.Select(MessageShape));
+        Assert.Equal(["input", "done", "agentflow-checkpoint", "done", "done"], sink.Messages.Select(MessageShape));
         Assert.All(fixture.Agents.CreatedAgents, agent => Assert.True(agent.Disposed));
     }
 
