@@ -34,6 +34,7 @@ import { Input } from "@agw/components";
 import { Label } from "@agw/components";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@agw/components";
 import { Switch } from "@agw/components";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@agw/components";
 import { Textarea } from "@agw/components";
 import {
   AgentDto,
@@ -760,7 +761,8 @@ export function VisualAgentflowBuilder({
           title,
           relateId,
           instructions: "",
-          configJson: "",
+          configJson:
+            kind === AgentflowNodeKind.Output ? JSON.stringify({ enableSummary: true }) : "",
         },
       };
 
@@ -1165,149 +1167,157 @@ export function VisualAgentflowBuilder({
 
   return (
     <div
-      className="grid h-full min-h-0 grid-cols-[320px_minmax(0,1fr)_340px]"
+      className="h-full min-h-0 overflow-x-auto"
       inert={isSaving}
       aria-busy={isSaving}
       onBlurCapture={commitHistoryGroup}
     >
-      <aside className="min-h-0 overflow-auto agw-scrollbar border-r bg-muted/20 p-3">
-        <div className="space-y-3">
-          <div className="space-y-2">
-            <Label htmlFor="agentflowName">Agentflow Name *</Label>
-            <Input
-              id="agentflowName"
-              value={agentflowName}
-              onChange={(event) => setAgentflowName(event.target.value)}
-              placeholder="Release review pipeline"
-            />
-          </div>
+      <ResizablePanelGroup orientation="horizontal" className="min-w-[calc(30rem+2px)]">
+        <ResizablePanel id="agentflow-palette" defaultSize="320px" minSize="15rem">
+          <aside className="h-full min-h-0 min-w-60 overflow-auto agw-scrollbar bg-muted/20 p-3">
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="agentflowName">Agentflow Name *</Label>
+                <Input
+                  id="agentflowName"
+                  value={agentflowName}
+                  onChange={(event) => setAgentflowName(event.target.value)}
+                  placeholder="Release review pipeline"
+                />
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="agentflowDescription">Description</Label>
-            <Textarea
-              id="agentflowDescription"
-              value={agentflowDescription}
-              onChange={(event) => setAgentflowDescription(event.target.value)}
-              placeholder="Optional notes"
-              className="min-h-20"
-            />
-          </div>
-        </div>
-
-        {canvasScope.kind === "block" && activeBlockNode ? (
-          <BlockScopePalette
-            blockNode={activeBlockNode}
-            members={activeBlockMembers}
-            agents={agents}
-            agentflows={availableAgentflows}
-            agentSelectOptions={agentSelectOptions}
-            agentflowSelectOptions={agentflowSelectOptions}
-            onAddParticipant={addBlockParticipant}
-            onSelectParticipant={selectBlockParticipant}
-          />
-        ) : (
-          <RootScopePalette
-            agents={agents}
-            availableAgentflows={availableAgentflows}
-            agentSelectOptions={agentSelectOptions}
-            agentflowSelectOptions={agentflowSelectOptions}
-            onAddNode={addDagNode}
-          />
-        )}
-      </aside>
-
-      <section className="relative min-h-0 overflow-hidden bg-background">
-        <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
-          <ScopeBar
-            scope={canvasScope}
-            activeBlockNode={activeBlockNode}
-            validationMessage={graphValidation.message}
-            validationOk={graphValidation.ok}
-            onExitBlock={exitBlockScope}
-          />
-        </div>
-        <ReactFlow
-          key={canvasKey}
-          nodes={canvasNodes}
-          edges={canvasEdges}
-          nodeTypes={nodeTypes}
-          onNodesChange={handleNodesChange}
-          onEdgesChange={handleEdgesChange}
-          onConnect={onConnect}
-          onInit={(instance) => setReactFlowCanvas({ key: canvasKey, instance })}
-          onSelectionChange={onSelectionChange}
-          onNodeDragStart={commitHistoryGroup}
-          onNodeDragStop={commitHistoryGroup}
-          onNodeClick={(_, node) => {
-            selectNode(node.id);
-          }}
-          onNodeDoubleClick={(_, node) => {
-            if (isBlockNodeKind(node.data.kind)) {
-              openBlockScope(node.id);
-            }
-          }}
-          onEdgeClick={(_, edge) => {
-            if (canvasScope.kind === "block") return;
-            selectEdge(edge.id);
-          }}
-          onPaneClick={() => {
-            if (canvasScope.kind === "block") {
-              selectNode(canvasScope.blockId);
-              return;
-            }
-
-            clearSelection();
-          }}
-          nodesConnectable={canvasScope.kind === "root"}
-          deleteKeyCode={null}
-          fitView
-        >
-          <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
-          <FlowControls onAutoLayout={handleAutoLayout} />
-        </ReactFlow>
-      </section>
-
-      <aside className="flex min-h-0 flex-col overflow-hidden border-l bg-muted/20">
-        <div className="border-b p-3">
-          <p className="text-sm font-medium">Inspector</p>
-          <p className="text-xs text-muted-foreground">Edit selected node or edge.</p>
-        </div>
-        <div className="min-h-0 flex-1 overflow-auto agw-scrollbar p-3">
-          {inspectorNode ? (
-            <NodeInspector
-              node={inspectorNode}
-              nodes={nodes}
-              agents={agents}
-              agentflows={availableAgentflows}
-              agentSelectOptions={agentSelectOptions}
-              agentflowSelectOptions={agentflowSelectOptions}
-              modelProviders={modelProviders}
-              summaryModelProviderId={summaryModelProviderId}
-              blockMembership={blockMembership}
-              canvasScope={canvasScope}
-              activeBlockNode={activeBlockNode}
-              onChange={updateNodeData}
-              onSummaryModelProviderIdChange={setSummaryModelProviderId}
-              onAddBlockParticipant={addBlockParticipant}
-              onRemoveBlockParticipant={removeBlockParticipant}
-              onOpenBlock={openBlockScope}
-              onSelectBlockParticipant={selectBlockParticipant}
-            />
-          ) : selectedEdge ? (
-            <EdgeInspector
-              edge={selectedEdge}
-              edges={edges}
-              onChange={updateEdgeData}
-              onDelete={deleteFlowEdge}
-              onMoveSwitchCase={moveSwitchCase}
-            />
-          ) : (
-            <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-              Select a node or edge on the canvas.
+              <div className="space-y-2">
+                <Label htmlFor="agentflowDescription">Description</Label>
+                <Textarea
+                  id="agentflowDescription"
+                  value={agentflowDescription}
+                  onChange={(event) => setAgentflowDescription(event.target.value)}
+                  placeholder="Optional notes"
+                  className="min-h-20"
+                />
+              </div>
             </div>
-          )}
-        </div>
-      </aside>
+
+            {canvasScope.kind === "block" && activeBlockNode ? (
+              <BlockScopePalette
+                blockNode={activeBlockNode}
+                members={activeBlockMembers}
+                agents={agents}
+                agentflows={availableAgentflows}
+                agentSelectOptions={agentSelectOptions}
+                agentflowSelectOptions={agentflowSelectOptions}
+                onAddParticipant={addBlockParticipant}
+                onSelectParticipant={selectBlockParticipant}
+              />
+            ) : (
+              <RootScopePalette
+                agents={agents}
+                availableAgentflows={availableAgentflows}
+                agentSelectOptions={agentSelectOptions}
+                agentflowSelectOptions={agentflowSelectOptions}
+                onAddNode={addDagNode}
+              />
+            )}
+          </aside>
+        </ResizablePanel>
+        <ResizableHandle aria-label="Resize node palette" />
+        <ResizablePanel id="agentflow-canvas" minSize={0}>
+          <section className="relative h-full min-h-0 overflow-hidden bg-background">
+            <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
+              <ScopeBar
+                scope={canvasScope}
+                activeBlockNode={activeBlockNode}
+                validationMessage={graphValidation.message}
+                validationOk={graphValidation.ok}
+                onExitBlock={exitBlockScope}
+              />
+            </div>
+            <ReactFlow
+              key={canvasKey}
+              nodes={canvasNodes}
+              edges={canvasEdges}
+              nodeTypes={nodeTypes}
+              onNodesChange={handleNodesChange}
+              onEdgesChange={handleEdgesChange}
+              onConnect={onConnect}
+              onInit={(instance) => setReactFlowCanvas({ key: canvasKey, instance })}
+              onSelectionChange={onSelectionChange}
+              onNodeDragStart={commitHistoryGroup}
+              onNodeDragStop={commitHistoryGroup}
+              onNodeClick={(_, node) => {
+                selectNode(node.id);
+              }}
+              onNodeDoubleClick={(_, node) => {
+                if (isBlockNodeKind(node.data.kind)) {
+                  openBlockScope(node.id);
+                }
+              }}
+              onEdgeClick={(_, edge) => {
+                if (canvasScope.kind === "block") return;
+                selectEdge(edge.id);
+              }}
+              onPaneClick={() => {
+                if (canvasScope.kind === "block") {
+                  selectNode(canvasScope.blockId);
+                  return;
+                }
+
+                clearSelection();
+              }}
+              nodesConnectable={canvasScope.kind === "root"}
+              deleteKeyCode={null}
+              fitView
+            >
+              <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
+              <FlowControls onAutoLayout={handleAutoLayout} />
+            </ReactFlow>
+          </section>
+        </ResizablePanel>
+        <ResizableHandle aria-label="Resize inspector" />
+        <ResizablePanel id="agentflow-inspector" defaultSize="340px" minSize="15rem">
+          <aside className="flex h-full min-h-0 min-w-60 flex-col overflow-hidden bg-muted/20">
+            <div className="border-b p-3">
+              <p className="text-sm font-medium">Inspector</p>
+              <p className="text-xs text-muted-foreground">Edit selected node or edge.</p>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto agw-scrollbar p-3">
+              {inspectorNode ? (
+                <NodeInspector
+                  node={inspectorNode}
+                  nodes={nodes}
+                  agents={agents}
+                  agentflows={availableAgentflows}
+                  agentSelectOptions={agentSelectOptions}
+                  agentflowSelectOptions={agentflowSelectOptions}
+                  modelProviders={modelProviders}
+                  summaryModelProviderId={summaryModelProviderId}
+                  blockMembership={blockMembership}
+                  canvasScope={canvasScope}
+                  activeBlockNode={activeBlockNode}
+                  onChange={updateNodeData}
+                  onSummaryModelProviderIdChange={setSummaryModelProviderId}
+                  onAddBlockParticipant={addBlockParticipant}
+                  onRemoveBlockParticipant={removeBlockParticipant}
+                  onOpenBlock={openBlockScope}
+                  onSelectBlockParticipant={selectBlockParticipant}
+                />
+              ) : selectedEdge ? (
+                <EdgeInspector
+                  edge={selectedEdge}
+                  edges={edges}
+                  onChange={updateEdgeData}
+                  onDelete={deleteFlowEdge}
+                  onMoveSwitchCase={moveSwitchCase}
+                />
+              ) : (
+                <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                  Select a node or edge on the canvas.
+                </div>
+              )}
+            </div>
+          </aside>
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
   );
 }
@@ -1646,7 +1656,8 @@ function NodeInspector({
   const meta = NODE_META[node.data.kind];
   const usesAdvancedConfig =
     node.data.kind !== AgentflowNodeKind.ClearMessages &&
-    node.data.kind !== AgentflowNodeKind.CheckpointMarker;
+    node.data.kind !== AgentflowNodeKind.CheckpointMarker &&
+    node.data.kind !== AgentflowNodeKind.Output;
   const configIsInvalid =
     usesAdvancedConfig &&
     node.data.configJson.trim().length > 0 &&

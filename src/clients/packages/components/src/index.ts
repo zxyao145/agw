@@ -33,6 +33,7 @@ export * from "./ui-web/shadcn/popover";
 export * from "./ui-web/shadcn/radio-group";
 export * from "./ui-web/shadcn/scroll-area";
 export * from "./ui-web/shadcn/select";
+export * from "./ui-web/shadcn/resizable";
 export * from "./ui-web/shadcn/separator";
 export * from "./ui-web/shadcn/sheet";
 export * from "./ui-web/shadcn/sidebar";

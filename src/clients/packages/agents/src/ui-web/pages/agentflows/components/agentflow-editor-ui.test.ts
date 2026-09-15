@@ -116,7 +116,7 @@ test("Agentflow Agent inspectors can switch runtime agents with smart name synci
   assert.match(source, /relateId: node\.relateId/);
 });
 
-test("Agentflow Clear Messages and Checkpoint hide advanced JSON", async () => {
+test("Agentflow Output, Clear Messages, and Checkpoint hide advanced JSON", async () => {
   const source = await readFile(BUILDER_URL, "utf8");
 
   assert.match(
@@ -133,7 +133,7 @@ test("Agentflow Clear Messages and Checkpoint hide advanced JSON", async () => {
   );
   assert.match(
     source,
-    /const usesAdvancedConfig =\s*node\.data\.kind !== AgentflowNodeKind\.ClearMessages &&\s*node\.data\.kind !== AgentflowNodeKind\.CheckpointMarker/,
+    /const usesAdvancedConfig =\s*node\.data\.kind !== AgentflowNodeKind\.ClearMessages &&\s*node\.data\.kind !== AgentflowNodeKind\.CheckpointMarker &&\s*node\.data\.kind !== AgentflowNodeKind\.Output/,
   );
   assert.match(source, /\{usesAdvancedConfig \? \([\s\S]*?<Label>Advanced Config JSON<\/Label>/);
 });
