@@ -1,12 +1,12 @@
 ---
-title: "Agentflow 与人工审批"
+title: "Agentflow"
 description: "构建可验证的工作流，理解分支、汇合与检查点。"
 weight: 60
 lastmod: 2026-09-15
 translationKey: docs/guides/agentflows
 ---
 
-Agentflow 把多个处理步骤连接成工作流。例如，先由一个 Agent 整理材料，再由另一个 Agent 审查，最后请人确认结果。各步骤的输入、输出和先后关系都可以在画布中查看。
+Agentflow 指 **Agent Workflow（Agent 工作流）**，把多个处理步骤连接起来。例如，先由一个 Agent 整理材料，再由另一个 Agent 审查，最后请人确认结果。各步骤的输入、输出和先后关系都可以在画布中查看。
 
 先单独验证每个 Agent 能完成自己的任务，再把它们接成流程。第一版建议只保留一条从输入到输出的路径，验证后再添加分支和审批。
 
@@ -158,6 +158,111 @@ Group Chat 适合有明确讨论规则的有限轮协作。它不会自动等到
 为 Manager 写清目标、完成标准及成员职责，并根据任务设置轮次、停滞和重置上限。启用计划确认时，需要可交互的执行入口。Manager 完成协调后，块的输出继续交给主流程下游；任务不保证按固定成员顺序执行，也不保证每个成员都会被调用。
 
 与固定顺序或并行执行相比，这种模式通常需要额外的模型调用来规划和协调。若步骤已经明确，先采用普通节点连线或 Concurrent 更容易检查结果。
+
+## Advanced Config JSON：高级配置
+
+Advanced Config JSON 是节点附加设置的 JSON 表示，与右侧的表单控件编辑的是同一份配置。通常先用表单选择成员、填写参数；需要检查或调整完整配置时，再编辑 JSON。
+
+使用双引号，开关写成 `true` 或 `false`，数字不加引号；不要添加注释或末尾多余的逗号。这里填写一个对象，例如 `{}`，而不是整份工作流。名称、Agent 或子流程选择、System Prompt / Instructions 都有独立字段，不放进这个 JSON。
+
+### 基础节点支持哪些字段
+
+| 节点 | JSON 配置 | 填写方式 |
+| --- | --- | --- |
+| Input | 无 | 固定入口，不显示高级配置框 |
+| Agent | 当前没有专用字段 | 留空或 `{}`；通过 Agent 选择器和指令框配置 |
+| Workflow as Agent | 当前没有专用字段 | 留空或 `{}`；通过工作流选择器引用子流程 |
+| Prompt Adapter | 当前没有专用字段 | 留空或 `{}`；在指令框填写要补充的说明 |
+| Clear Messages | 无 | 不显示高级配置框 |
+| Human Gate | `humanMode`、`humanPrompt` | 模式和给用户的提示语，示例见下方 |
+| Checkpoint | `checkpointName` | 通过 Checkpoint Name 输入框填写；不显示高级配置框 |
+| Output | `enableSummary` | 是否追加模型总结，默认为 false |
+
+Human Gate 示例：
+
+```json
+{
+  "humanMode": "approval",
+  "humanPrompt": "请确认审查结果，通过后继续。"
+}
+```
+
+`humanMode` 使用 `input`（补充信息）或 `approval`（审批）。建议明确选择模式：界面未填写时显示 Input，而运行时缺少该字段会采用 approval。`humanPrompt` 是用户看到的提示文字。
+
+Checkpoint Name 在保存的数据中对应：
+
+```json
+{ "checkpointName": "资料收集完成" }
+```
+
+Output 示例：
+
+```json
+{ "enableSummary": true }
+```
+
+启用总结后，还需在界面选择总结用的 Model Provider。模型选择属于工作流配置，不能通过在节点 JSON 中添加 `modelProviderId` 来替代。
+
+### 编排块的成员配置
+
+四种编排块都使用 `participantNodeIds`，值是成员的**画布节点 ID**，不是 Agent 定义 ID，也不是显示名称。建议通过成员控件添加，让编辑器生成这些引用。
+
+下面的 `node-a`、`node-b` 是占位示例，使用时必须替换为当前画布中真实的 Agent 或 Workflow as Agent 节点 ID。Concurrent 至少需要一个成员；Handoff、Group Chat 和 Magentic 至少需要两个成员。
+
+### Concurrent
+
+只需指定并行成员，没有轮次或 Manager 配置：
+
+```json
+{ "participantNodeIds": ["node-a", "node-b"] }
+```
+
+### Handoff
+
+```json
+{
+  "participantNodeIds": ["node-a", "node-b"],
+  "handoffInstructions": "由入口成员判断问题类型，需要专业分析时交给另一位成员。",
+  "enableReturnToPrevious": true,
+  "autonomous": true,
+  "autonomousTurnLimit": 6,
+  "continuationPrompt": "继续处理尚未完成的任务。"
+}
+```
+
+数组中的第一个成员先接收任务。`handoffInstructions` 描述交接规则；`enableReturnToPrevious` 允许返回上一成员；`autonomous` 开启自动继续。后两个字段仅在 autonomous 为 true 时使用，分别指定继续轮次上限和继续时的提示词。两个开关省略时均不开启；数字示例不是默认值。
+
+### Group Chat
+
+```json
+{
+  "participantNodeIds": ["node-a", "node-b"],
+  "maxRounds": 6
+}
+```
+
+按成员顺序轮流执行。`maxRounds` 是调度迭代上限，填写正整数；省略时 AGW 使用 10。它不是每个成员分别发言的次数。
+
+### Magentic
+
+```json
+{
+  "participantNodeIds": ["node-a", "node-b"],
+  "managerNodeId": "node-a",
+  "maxRounds": 10,
+  "maxStalls": 3,
+  "maxResets": 2,
+  "requirePlanSignoff": true
+}
+```
+
+`managerNodeId` 必须是成员列表中的节点 ID，省略时由第一个成员担任 Manager。`maxRounds` 限制调度轮次，`maxStalls` 控制无进展状态的容忍次数，`maxResets` 限制重新规划或重置次数；在编辑器中填写正整数。`requirePlanSignoff` 控制是否要求确认计划。示例值用于说明格式；省略这些可选限制或确认开关时，采用底层工作流框架的默认行为。
+
+### 保存前检查
+
+确认成员 ID 存在、字段类型正确，并且参数属于当前节点。高级配置框不是脚本入口，添加任意键也不会自动获得新功能。修改 JSON 后检查表单显示是否符合预期，再保存并用小任务验证。
+
+分支条件属于**连线**的 Condition JSON，Switch 顺序属于连线配置中的 `switchCaseOrder`；它们不放在节点的 Advanced Config JSON 中。
 
 ## 路由与约束
 

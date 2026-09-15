@@ -1,12 +1,12 @@
 ---
-title: "Agentflows and human approval"
+title: "Agentflow"
 description: "Build valid workflows with branches, joins, and checkpoints."
 weight: 60
 lastmod: 2026-09-15
 translationKey: docs/guides/agentflows
 ---
 
-An Agentflow connects several steps into a workflow. One agent might prepare material, another review it, and a person approve the result. The canvas shows the steps, their inputs and outputs, and their order.
+Agentflow means **Agent Workflow**: a workflow that connects several processing steps. One agent might prepare material, another review it, and a person approve the result. The canvas shows the steps, their inputs and outputs, and their order.
 
 Verify each agent independently before connecting it. Start with one path from input to output, then add branches and approvals once it works.
 
@@ -158,6 +158,111 @@ Add participants and select a **Manager**. If none is specified, the first parti
 Give the Manager clear goals, completion criteria, and member responsibilities. Set round, stall, and reset limits appropriate to the task. Plan signoff requires an interactive execution entry point. After coordination completes, block output continues downstream. Execution does not guarantee a fixed participant order or a call to every member.
 
 Planning and coordination usually require additional model calls compared with fixed sequential or parallel execution. When the steps are already clear, ordinary node connections or Concurrent are easier to verify.
+
+## Advanced Config JSON
+
+Advanced Config JSON is the JSON representation of a node’s additional settings. It edits the same configuration as the Inspector controls. Start with the form, then use JSON to inspect or adjust the complete settings.
+
+Use double quotes, literal `true` or `false` for switches, and unquoted numbers. Do not include comments or trailing commas. Enter one object, such as `{}`, rather than an entire workflow. Names, Agent or workflow selections, and System Prompt / Instructions have separate fields and do not belong here.
+
+### Primitive node fields
+
+| Node | JSON fields | How to configure |
+| --- | --- | --- |
+| Input | None | Fixed entry; no advanced configuration field |
+| Agent | No dedicated fields currently | Leave empty or use `{}`; use the Agent selector and instructions |
+| Workflow as Agent | No dedicated fields currently | Leave empty or use `{}`; select the subflow separately |
+| Prompt Adapter | No dedicated fields currently | Leave empty or use `{}`; enter instructions separately |
+| Clear Messages | None | No advanced configuration field |
+| Human Gate | `humanMode`, `humanPrompt` | Interaction mode and user-facing prompt |
+| Checkpoint | `checkpointName` | Use Checkpoint Name; no advanced configuration field |
+| Output | `enableSummary` | Append a model summary; defaults to false |
+
+Human Gate example:
+
+```json
+{
+  "humanMode": "approval",
+  "humanPrompt": "Confirm the review results before continuing."
+}
+```
+
+Use `input` to request information or `approval` for approval. Choose explicitly: the UI displays Input when unset, while the runtime defaults a missing mode to approval. `humanPrompt` is the text shown to the user.
+
+Checkpoint Name is stored as:
+
+```json
+{ "checkpointName": "Research complete" }
+```
+
+Output example:
+
+```json
+{ "enableSummary": true }
+```
+
+Also select a summary Model Provider in the UI. That selection belongs to the workflow configuration; adding `modelProviderId` to node JSON does not replace it.
+
+### Block members
+
+All four blocks use `participantNodeIds`: **canvas node IDs**, not Agent definition IDs or display names. Add members through the editor controls to generate these references.
+
+Replace the example IDs `node-a` and `node-b` with real Agent or Workflow as Agent node IDs in the current graph. Concurrent requires at least one member; Handoff, Group Chat, and Magentic require at least two.
+
+### Concurrent
+
+Specify parallel members. There are no round-limit or Manager settings:
+
+```json
+{ "participantNodeIds": ["node-a", "node-b"] }
+```
+
+### Handoff
+
+```json
+{
+  "participantNodeIds": ["node-a", "node-b"],
+  "handoffInstructions": "The first member triages the question and transfers specialist work to the other member.",
+  "enableReturnToPrevious": true,
+  "autonomous": true,
+  "autonomousTurnLimit": 6,
+  "continuationPrompt": "Continue working on the unfinished task."
+}
+```
+
+The first member receives the task. `handoffInstructions` describes transfer rules; `enableReturnToPrevious` allows returning to the previous member; `autonomous` enables automatic continuation. The last two fields apply only when autonomous is true and specify its turn limit and continuation prompt. Both switches remain off when omitted. The example number is not a default.
+
+### Group Chat
+
+```json
+{
+  "participantNodeIds": ["node-a", "node-b"],
+  "maxRounds": 6
+}
+```
+
+Members take turns in array order. Set `maxRounds` to a positive integer limiting scheduling iterations; AGW uses 10 when omitted. It is not a separate speaking allowance for each member.
+
+### Magentic
+
+```json
+{
+  "participantNodeIds": ["node-a", "node-b"],
+  "managerNodeId": "node-a",
+  "maxRounds": 10,
+  "maxStalls": 3,
+  "maxResets": 2,
+  "requirePlanSignoff": true
+}
+```
+
+`managerNodeId` must identify a listed member; the first member is used when omitted. `maxRounds` limits scheduling rounds, `maxStalls` controls tolerance for lack of progress, and `maxResets` bounds replanning or resets. Enter positive integers in the editor. `requirePlanSignoff` requests plan confirmation. These are illustrative values; omitted optional limits and signoff settings use the underlying workflow framework’s defaults.
+
+### Before saving
+
+Check that member IDs exist, values have the correct types, and fields belong to the selected node. Advanced Config JSON is not a script entry point; arbitrary keys do not add capabilities. After editing, check the form values, save, and verify with a small task.
+
+Branch predicates belong to an **edge’s** Condition JSON. Switch ordering uses the edge configuration field `switchCaseOrder`. Neither belongs in node Advanced Config JSON.
 
 ## Routing and constraints
 
