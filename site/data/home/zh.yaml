@@ -1,0 +1,109 @@
+sections:
+  - hero
+  - cards
+  - capabilities
+  - type: cards
+    key: paths
+  - faq
+  - cta
+hero:
+  align: center
+  eyebrow: AGW · 自托管 Agent 工作平台
+  title_lines:
+    - 让 AI 助手
+    - 在项目中协作。
+  lead: 接入模型或已有的 Claude Code、Codex、Pi，在项目中管理对话和文件。让不同 Agent 分工，按步骤完成任务，再把验证过的工作设为定时执行。
+  note: 自定义 Agent · Claude Code · Codex · Pi
+  actions:
+    - {label: 快速开始, url: docs/start/first-chat/, icon: fa-solid fa-arrow-right, style: primary}
+    - {label: 阅读文档, url: docs/, icon: fa-solid fa-book-open, style: ghost}
+    - {label: GitHub, url: 'https://github.com/zxyao145/agw', icon: fa-brands fa-github, style: ghost, external: true}
+cards:
+  eyebrow: 从对话到持续运行的任务
+  title: 对话、项目与自动化
+  desc: 从一个 Agent 开始，逐步配置工作目录、工具和定时任务。
+  columns: 3
+  link_label: 查看指南
+  items:
+    - title: Agents
+      meta: 01 / 执行能力
+      icon: fa-solid fa-robot
+      desc: 用指令、模型与工具定义自己的 Agent，也可以接入已有的外部 Agent CLI。
+      url: docs/guides/agents/
+    - title: Chat & Projects
+      meta: 02 / 工作上下文
+      icon: fa-solid fa-comments
+      desc: 围绕项目组织对话、文件和 Git 工作目录，在执行中处理审批与用户输入。
+      url: docs/guides/projects/
+    - title: Agentflows
+      meta: 03 / 多步协作
+      icon: fa-solid fa-diagram-project
+      desc: 把收集资料、整理结果和人工确认等步骤连起来，按需要顺序执行、选择分支或同时处理。
+      url: docs/guides/agentflows/
+    - title: Jobs
+      meta: 04 / 定时任务
+      icon: fa-solid fa-clock
+      desc: 按一次性、固定间隔或 Cron 执行 Agent 和工作流，并查看每次尝试的运行记录。
+      url: docs/guides/jobs/
+    - title: Tools & Integrations
+      meta: 05 / 外部能力
+      icon: fa-solid fa-plug
+      desc: 通过工具、Skills、MCP 和配置好的集成连接，让 Agent 使用任务需要的能力。
+      url: docs/guides/integrations/
+    - title: Web · Desktop · Mobile
+      meta: 06 / 访问方式
+      icon: fa-solid fa-laptop
+      desc: 从浏览器、独立桌面客户端或移动端连接自己的 Server，按场景选择使用入口。
+      url: docs/guides/clients/
+capabilities:
+  eyebrow: 使用方式
+  title: 先完成一次任务，再设置自动化
+  items:
+    - ref: WORKSPACE / EXECUTION
+      title: 按项目组织工作
+      motto: 在项目中管理文件、对话和执行记录
+      bullets:
+        - 为 Project 指定服务端可见的工作目录。
+        - 在 Chat 运行 Agent，查看工具活动并处理人工输入。
+        - 步骤稳定后用 Agentflow 编排，用 Job 安排下一次执行。
+      value: Server、数据和工作目录由你部署；模型请求发送到你配置的提供商。
+      url: docs/start/overview/
+      visual:
+        type: code
+        title: 一个任务的路径 / TASK PATH
+        aria_label: 项目到 Agent 执行和历史记录的概念路径
+        lines:
+          - {class: c, text: 'PROJECT / 工作目录与上下文'}
+          - {class: p, text: '  ↓'}
+          - {class: ok, text: 'AGENT / 模型 · 工具 · Skills'}
+          - {class: p, text: '  ↓'}
+          - {class: ok, text: 'CHAT / 执行 · 审批 · 记录'}
+          - {class: p, text: '  ↓'}
+          - {class: c, text: 'AGENTFLOW + JOB / 编排与调度'}
+paths:
+  eyebrow: 文档导航
+  title: 安装、部署与开发
+  columns: 3
+  link_label: 打开文档
+  items:
+    - {title: 第一次使用, icon: fa-solid fa-rocket, desc: '选择安装方式，初始化服务，完成第一次模型对话。', url: docs/start/}
+    - {title: 部署自己的服务, icon: fa-solid fa-server, desc: '从单机到 Control/Data Plane，了解配置、认证和备份。', url: docs/operations/}
+    - {title: 参与开发, icon: fa-solid fa-code, desc: '运行源码，理解模块边界，扩展工具与集成。', url: docs/development/}
+faq:
+  eyebrow: 开始之前
+  title: 常见问题
+  items:
+    - question: AGW 包含模型服务吗？
+      answer: AGW 连接你配置的模型提供商，或调用已经配置好的外部 Agent CLI。它不附带模型额度；远程模型的使用按对应提供商规则计费。
+    - question: 桌面版选 Full 还是 Client？
+      answer: 第一次在本机使用，选 Full：它包含客户端和 Server 后台服务。如果已经有可连接的 Server，选 Client。两种安装包使用相同的应用标识，只需安装其中一种。
+    - question: 可以自动执行定时任务吗？
+      answer: 可以。用 Jobs 设置执行时间，用 Agentflows 组织多个步骤。先手动验证任务能正常完成，再设置自动运行。无人值守任务无法自动完成需要人工审批或补充信息的步骤，应先调整任务要求和权限。
+    - question: 当前版本稳定吗？
+      answer: AGW 处于 1.0 之前的开发阶段。数据库结构、接口和界面可能随版本变化，升级前应阅读发布说明并备份数据。
+cta:
+  title: 开始使用 AGW
+  text: 选择适合你的安装方式，配置模型，开始第一次对话。
+  label: 选择安装方式
+  url: docs/start/install/
+  style: primary

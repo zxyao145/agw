@@ -1,0 +1,9 @@
+{{- $content := partialCached "print/page-content.html" (dict "page" .Page) .Page.RelPermalink -}}
+{{- $content = partial "book/namespace-print-headings.html" (dict "page" .Page "content" $content) -}}
+{{- $break := cond .DoPageBreak "page-break-before: always" "" -}}
+<div class="td-content" style="{{ $break }}">
+  <h1 id="pg-{{ .Page.File.UniqueID }}">{{ .PageNum }} - {{ .Page.Title }}</h1>
+  {{ partial "page-updated.html" .Page }}
+  {{ with .Page.Params.description }}<div class="lead">{{ . | markdownify }}</div>{{ end }}
+  {{ $content }}
+</div>

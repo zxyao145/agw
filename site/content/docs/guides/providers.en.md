@@ -1,0 +1,43 @@
+---
+title: "Model providers"
+description: "Configure providers, models, and model-provider links with accurate limits."
+weight: 10
+lastmod: 2026-09-15
+translationKey: docs/guides/providers
+---
+
+Before a custom agent can answer, AGW needs to know which model to use, where to send requests, and how to authenticate. Prepare the API endpoint, model ID, and API key supplied by your model service.
+
+This page covers model configuration in AGW. To use an existing command-line setup, see [External agents]({{< relref "/docs/guides/external-agents" >}}).
+
+## Three configuration objects
+
+A **Provider** describes the endpoint and authentication. A **Model** describes a model and its limits. A **Model Provider** links the two for agent selection. Creating a Model alone does not establish a connection.
+
+1. In Providers, select the matching protocol and enter the endpoint and credentials.
+2. In Models, add or discover a model and verify its identifier.
+3. Set the context window and maximum output tokens, then create the Model Provider link.
+4. Select that link in an agent and test it with a short question.
+
+Current protocols include OpenAI Chat Completions, OpenAI Responses, and Anthropic. Compatible services must match the actual protocol; “OpenAI” in a name is not sufficient.
+
+![AGW Desktop: create a Model Provider with its protocol, endpoint, authentication, and models. No credentials have been entered.](/images/screenshots/provider-create.png)
+{caption="AGW Desktop: create a Model Provider with its protocol, endpoint, authentication, and models. No credentials have been entered."}
+
+## Context limits
+
+Each model has length limits. Configure these two values separately:
+
+- **Context window**: the total content a single request can accommodate, including conversation history, the current question, tool results, and the model’s reply.
+- **Maximum output tokens**: the maximum length of a single reply. Tokens are units used to measure content length; they are not the same as words or characters.
+
+AGW uses these values to leave room for the reply and compact the content sent to the model when a conversation grows too long.
+
+When discovering a model, AGW may fill in `256,000` for the context window and `64,000` for maximum output tokens as defaults. These values do not guarantee that the selected model supports those lengths. Use the limits published by your model service provider. Values that are too high can cause requests to be rejected. If short conversations work but longer ones fail, check these two settings first, then consult the Server logs for the specific error.
+
+Success means an agent completes a conversation. Fix invalid credentials, endpoints, or unavailable models before adding tools. Keep real API keys out of shared prompts and Git files.
+
+## Implementation and references
+
+- [Provider UI](https://github.com/zxyao145/agw/tree/main/src/clients/packages/providers)
+- [Execution behavior](https://github.com/zxyao145/agw/blob/main/src/server/Agw.Agents.Execution/README.md)

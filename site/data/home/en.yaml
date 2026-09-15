@@ -1,0 +1,109 @@
+sections:
+  - hero
+  - cards
+  - capabilities
+  - type: cards
+    key: paths
+  - faq
+  - cta
+hero:
+  align: center
+  eyebrow: AGW · A self-hosted agent workspace
+  title_lines:
+    - Let AI assistants
+    - work together on your project.
+  lead: Connect a model or an existing Claude Code, Codex, or Pi setup. Organize conversations and files by project, assign work to different agents, and schedule tasks after verifying them.
+  note: Custom agents · Claude Code · Codex · Pi
+  actions:
+    - {label: Quick start, url: docs/start/first-chat/, icon: fa-solid fa-arrow-right, style: primary}
+    - {label: Read the docs, url: docs/, icon: fa-solid fa-book-open, style: ghost}
+    - {label: GitHub, url: 'https://github.com/zxyao145/agw', icon: fa-brands fa-github, style: ghost, external: true}
+cards:
+  eyebrow: From a conversation to recurring work
+  title: Bring your work together
+  desc: Start with one working agent. Add projects, tools, and automation as you need them.
+  columns: 3
+  link_label: Read the guide
+  items:
+    - title: Agents
+      meta: 01 / EXECUTION
+      icon: fa-solid fa-robot
+      desc: Define an agent with instructions, a model, and tools, or connect an existing external agent CLI.
+      url: docs/guides/agents/
+    - title: Chat & Projects
+      meta: 02 / CONTEXT
+      icon: fa-solid fa-comments
+      desc: Organize conversations, files, and Git working directories around projects. Handle approvals and input during execution.
+      url: docs/guides/projects/
+    - title: Agentflows
+      meta: 03 / COLLABORATION
+      icon: fa-solid fa-diagram-project
+      desc: Connect steps such as collecting material, summarizing results, and human review. Run them in order, choose a branch, or process work in parallel.
+      url: docs/guides/agentflows/
+    - title: Jobs
+      meta: 04 / SCHEDULING
+      icon: fa-solid fa-clock
+      desc: Run agents and workflows once, at fixed intervals, or on Cron schedules. Inspect records for each attempt.
+      url: docs/guides/jobs/
+    - title: Tools & Integrations
+      meta: 05 / CAPABILITIES
+      icon: fa-solid fa-plug
+      desc: Equip agents with tools, Skills, MCP, and configured integration connections for the task at hand.
+      url: docs/guides/integrations/
+    - title: Web · Desktop · Mobile
+      meta: 06 / ACCESS
+      icon: fa-solid fa-laptop
+      desc: Connect to your Server from a browser, an independent desktop client, or mobile. Choose the entry point that fits your work.
+      url: docs/guides/clients/
+capabilities:
+  eyebrow: Execution you organize
+  title: From a question to repeatable work
+  items:
+    - ref: WORKSPACE / EXECUTION
+      title: Context belongs with the project
+      motto: Files, conversations, and execution records stay organized
+      bullets:
+        - Give the Project a working directory visible to the Server.
+        - Run an agent in Chat, inspect tool activity, and answer human input requests.
+        - Use an Agentflow when the steps settle, and a Job to schedule the next run.
+      value: You host the Server, data, and workspaces. Model requests go to the provider you configure.
+      url: docs/start/overview/
+      visual:
+        type: code
+        title: TASK PATH
+        aria_label: Conceptual path from project context to agent execution and history
+        lines:
+          - {class: c, text: 'PROJECT / Working directory + context'}
+          - {class: p, text: '  ↓'}
+          - {class: ok, text: 'AGENT / Model · Tools · Skills'}
+          - {class: p, text: '  ↓'}
+          - {class: ok, text: 'CHAT / Execution · Approval · History'}
+          - {class: p, text: '  ↓'}
+          - {class: c, text: 'AGENTFLOW + JOB / Orchestrate + schedule'}
+paths:
+  eyebrow: Choose your entry point
+  title: Start using it. Or start building.
+  columns: 3
+  link_label: Open the docs
+  items:
+    - {title: New to AGW, icon: fa-solid fa-rocket, desc: 'Choose an installation, initialize the Server, and complete your first model conversation.', url: docs/start/}
+    - {title: Host your own service, icon: fa-solid fa-server, desc: 'From Standalone to Control/Data Plane, learn configuration, authentication, and backups.', url: docs/operations/}
+    - {title: Build with AGW, icon: fa-solid fa-code, desc: 'Run from source, understand module boundaries, and extend tools and integrations.', url: docs/development/}
+faq:
+  eyebrow: Before you start
+  title: A few practical questions
+  items:
+    - question: Does AGW include model hosting?
+      answer: AGW connects to your configured model providers or invokes external agent CLIs you have set up. Model credits are not included; remote model usage follows the provider's billing rules.
+    - question: Should I install Desktop Full or Client?
+      answer: Full includes a current-user Server daemon and suits a local start. Client connects to an existing Server. Both share an application identity, so install one variant.
+    - question: Can I run unattended tasks?
+      answer: Jobs support scheduled and recurring execution, and Agentflows orchestrate multiple steps. Verify the target agent, tool permissions, and inputs first, then inspect execution records. Unattended jobs cannot automatically complete steps requiring human approval or input; adjust the task and permissions before scheduling.
+    - question: Is the current version stable?
+      answer: AGW is in active development before 1.0. Database schemas, APIs, and interfaces may change between releases. Read the release notes and back up your data before upgrading.
+cta:
+  title: Get your first agent running.
+  text: Start with a simple conversation. Bring in your work from there.
+  label: Choose an installation
+  url: docs/start/install/
+  style: primary
