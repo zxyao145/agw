@@ -90,7 +90,7 @@ export function createToolValue(name: ToolName): ToolValue {
 export function createToolBlockValue(name: ToolBlockName): ToolBlockValue {
   const definition: ToolBlockDefinition =
     name === "project-memory"
-      ? { name, options: { storage: "database" } }
+      ? { name, options: { storage: "filesystem" } }
       : name === "background-agents"
         ? { name, options: { allowedAgentIds: [] } }
         : { name, options: {} };
