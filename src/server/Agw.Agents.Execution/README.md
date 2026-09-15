@@ -444,7 +444,7 @@ Provider 状态保存在现有 `AgentSession.StateBag`，并随 `AgentSessionSta
 
 工具审批续跑可以附带新的用户文字。历史读取按 `CallId` 保留完整的调用/结果组，允许配对跨过用户补充文字，但不跨过下一条 Assistant 响应；模型请求将匹配的工具结果放在调用之后，再附加这些文字。`FunctionResultOrderingChatClient` 在逐次历史持久化之前整理注入的上下文，在读取历史之后整理完整请求；历史清理继续移除不完整调用和孤立结果。
 
-第三方 Chat Completions 端点收到的 `TextReasoningContent` 会由 `OpenAiReasoningChatClient` 回填到对应 Assistant 消息的 `reasoning_content`，覆盖工具循环、审批恢复和持久化历史回放。兼容层在 SDK 完成消息转换后补字段，每个请求独立持有推理内容，共享原有 HTTP transport。没有推理内容时不添加字段；官方 OpenAI 和 Azure OpenAI 端点沿用原 SDK 协议，Responses/Anthropic 路径也不使用此扩展。自定义网关需兼容其模型返回的 `reasoning_content` 协议；已经缺失的原始推理内容无法凭空恢复。
+第三方 Chat Completions 端点收到的 `TextReasoningContent` 会由 `OpenAiReasoningChatClient` 回填到对应 Assistant 消息的 `reasoning_content`，覆盖工具循环、审批恢复和持久化历史回放。同一作者的连续纯推理消息若紧接一条缺少推理的工具调用消息，也会将该推理前缀回填到工具调用；不会跨越其他消息、作者或覆盖工具调用已有的推理。兼容层在 SDK 完成消息转换后补字段，每个请求独立持有推理内容，共享原有 HTTP transport。DeepSeek 的历史 Assistant 消息必须携带该字段，未记录推理时补空字符串，并保留 SDK 已有的原生推理字段；其他兼容端点没有推理内容时不添加字段。官方 OpenAI 和 Azure OpenAI 端点沿用原 SDK 协议，Responses/Anthropic 路径也不使用此扩展。自定义网关需兼容其模型返回的 `reasoning_content` 协议；已经缺失的原始推理内容无法凭空恢复。
 
 ### Result Summary
 
