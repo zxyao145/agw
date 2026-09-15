@@ -80,6 +80,7 @@ export function getMessageTextContent(message: ExecutionMessage): string {
 export function isUserTurnMessage(message: ExecutionMessage): boolean {
   return (
     message.role === "user" &&
+    message.additionalProperties?.agentflowInput !== true &&
     message.additionalProperties?.modelHistoryExcluded !== true &&
     !message.contents.some((content) => content.type === FUNCTION_RESULT_CONTENT_TYPE)
   );
@@ -171,6 +172,9 @@ export function mergeStreamingMessages<T extends ExecutionMessage>(
       mutableIndexes.add(appendedIndex);
       continue;
     }
+
+    // Node inputs are complete snapshots. Replaying an event must not concatenate its text.
+    if (incoming.additionalProperties?.agentflowInput === true) continue;
 
     if (!hasSameStreamingIdentity(updated[existingIndex], incoming)) {
       continue;

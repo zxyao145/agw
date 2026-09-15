@@ -358,3 +358,47 @@ test("selecting Full access preserves the current tool approval and consumes ser
   assert.equal(controller.getSnapshot().permissionChangePending, true);
   await controller.dispose();
 });
+
+test("controller accepts live node inputs and deduplicates replay without creating another turn", async () => {
+  let handlers!: ExecutionHubHandlers;
+  const session = {
+    configure: async () => ({ restoredDurableExecution: false }),
+    execute: async () => undefined,
+    dispose: async () => undefined,
+  } as unknown as ExecutionSession;
+  const controller = new ConversationController({
+    adapter: {
+      execution: { baseUrl: "https://agw.test", token: null },
+      createSession: (value) => {
+        handlers = value;
+        return session;
+      },
+    },
+    projectId: "project-1",
+    target: { id: "flow-1", type: "agentflow" },
+    sessionSeed: {
+      revision: 1,
+      conversationId: "conversation-1",
+      contextId: "context-1",
+      messages: [],
+    },
+  });
+  await controller.send("review", []);
+  const user = controller.getSnapshot().rawMessages[0];
+  const input: AiMessage = {
+    messageId: "node-input",
+    role: "user",
+    author: "pi",
+    contents: [{ type: "TextContent", content: "review result" }],
+    additionalProperties: { agentflowInput: true, nodeName: "Review" },
+  };
+  handlers.onMessage(user);
+  handlers.onMessage(input);
+  handlers.onMessage(input);
+  const messages = controller.getSnapshot().rawMessages;
+  assert.equal(messages.length, 2);
+  assert.equal(messages[1].streamingScopeId, messages[0].streamingScopeId);
+  assert.equal(messages[1].contents[0].content, "review result");
+  assert.equal(controller.getSnapshot().isExecuting, true);
+  await controller.dispose();
+});

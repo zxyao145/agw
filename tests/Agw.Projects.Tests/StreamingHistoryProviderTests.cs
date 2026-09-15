@@ -9,6 +9,52 @@ namespace Agw.Projects.Tests;
 
 public partial class EfCoreChatHistoryProviderTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task NodeInput_StreamingAndHistory_PreserveIdentitySourceAndNodeIsolation(bool complete)
+    {
+        // Arrange
+        await using var fixture = await HistoryBatchFixture.CreateAsync(ConversationHistoryWriteMode.TurnEnd);
+        var token = TestContext.Current.CancellationToken;
+        var input = new ChatMessage(ChatRole.User, "upstream review")
+        {
+            MessageId = Guid.CreateVersion7().ToString("N"),
+            AuthorName = "pi",
+            AdditionalProperties = new()
+            {
+                [ConversationHistoryMetadata.AgentflowInputKey] = true,
+                ["nodeName"] = "Review",
+            },
+        };
+
+        // Act: both a completed call and an interrupted call retain their prepared input.
+        await using (fixture.BeginScope())
+        {
+            var session = new FakeAgentSession();
+            fixture.Provider.InitializeSessionState(session, "buffered", fixture.ProjectId, "node:b", "Implement");
+            var stream = await fixture.Provider.BeginStreamingResponseAsync(new FakeAgent(), session, [input], token);
+            Assert.NotNull(stream);
+            if (complete)
+                await stream.CompleteAsync([new(ChatRole.Assistant, "done")], token);
+        }
+
+        // Assert
+        var rows = await fixture.ReadRowsAsync();
+        var restored = rows[0].ToChatMessage()!;
+        Assert.Equal(input.MessageId, restored.MessageId);
+        Assert.Equal(input.Text, restored.Text);
+        Assert.Equal(input.AuthorName, restored.AuthorName);
+        Assert.Equal("Review", restored.AdditionalProperties!["nodeName"]?.ToString());
+        Assert.Equal(
+            bool.TrueString,
+            restored.AdditionalProperties[ConversationHistoryMetadata.AgentflowInputKey]?.ToString()
+        );
+        Assert.Equal(complete ? 2 : 1, rows.Count);
+        Assert.Contains("upstream review", await fixture.ReadModelTextsAsync("node:b"));
+        Assert.Empty(await fixture.ReadModelTextsAsync("node:c"));
+    }
+
     [Fact]
     public async Task StreamingResponse_OnlyTailChanges_ReusesPrefixAndRetrySnapshots()
     {

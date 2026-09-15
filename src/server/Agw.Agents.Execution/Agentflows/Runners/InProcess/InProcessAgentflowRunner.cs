@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Agentflows.Context;
+using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Agentflows.Observability;
 using Agw.Agents.Execution.Agentflows.Runtime;
 using Agw.Agents.Execution.Agentflows.Workflows;
@@ -52,6 +53,7 @@ public sealed class InProcessAgentflowRunner
         [EnumeratorCancellation] CancellationToken cancellationToken
     )
     {
+        using var inputs = new AgentflowInputMessages(sessionScope);
         var workflow = workflowLease.Workflow;
         var checkpointNodeNames = workflowLease.Metadata.CheckpointNodes;
 
@@ -102,7 +104,9 @@ public sealed class InProcessAgentflowRunner
         using var interactionCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cancellationToken = interactionCancellation.Token;
         var pendingInteractions = new List<Task<AgwMessage?>>();
-        await using var events = run.WatchStreamAsync(cancellationToken).GetAsyncEnumerator(cancellationToken);
+        await using var events = inputs
+            .ObserveAsync(run.WatchStreamAsync(cancellationToken), cancellationToken)
+            .GetAsyncEnumerator(cancellationToken);
         Task<bool>? nextEvent = null;
         try
         {
@@ -148,6 +152,10 @@ public sealed class InProcessAgentflowRunner
                 _logger.LogInformation("WorkflowEvent Type {Type}", evt.GetType().Name);
                 switch (evt)
                 {
+                    case AgentflowInputEvent inputEvent:
+                        yield return inputEvent.Message;
+                        break;
+
                     case ExecutorInvokedEvent invoke:
                         _logger.LogInformation("Starting {ExecutorId}", invoke.ExecutorId);
                         break;

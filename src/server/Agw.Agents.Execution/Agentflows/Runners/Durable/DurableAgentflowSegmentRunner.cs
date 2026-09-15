@@ -2,6 +2,7 @@ using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Agentflows.Checkpoints;
 using Agw.Agents.Execution.Agentflows.Checkpoints.Durable;
 using Agw.Agents.Execution.Agentflows.Context;
+using Agw.Agents.Execution.Agentflows.Messaging;
 using Agw.Agents.Execution.Agentflows.Workflows;
 using Agw.Agents.Execution.HumanInteraction;
 using Agw.Agents.Execution.HumanInteraction.Application;
@@ -84,6 +85,7 @@ public sealed class DurableAgentflowSegmentRunner
             registry,
             sessionScope.PermissionState.Permissions
         );
+        using var inputs = new AgentflowInputMessages(sessionScope);
         var workflow = workflowLease.Workflow;
         var humanGateNodes = workflowLease.Metadata.HumanGateNodes;
         var checkpointNodeNames = workflowLease.Metadata.CheckpointNodes;
@@ -152,10 +154,18 @@ public sealed class DurableAgentflowSegmentRunner
                 input.SegmentIndex == 1 && manifest.ResumeCheckpointOccurrenceId.HasValue
                     ? manifest.ResumeCheckpointNodeIds.ToHashSet(StringComparer.Ordinal)
                     : [];
-            await foreach (var evt in run.WatchStreamAsync(cancellationToken).ConfigureAwait(false))
+            await foreach (
+                var evt in inputs
+                    .ObserveAsync(run.WatchStreamAsync(cancellationToken), cancellationToken)
+                    .ConfigureAwait(false)
+            )
             {
                 switch (evt)
                 {
+                    case AgentflowInputEvent inputEvent:
+                        await sink.WriteAsync(inputEvent.Message, cancellationToken).ConfigureAwait(false);
+                        break;
+
                     case RequestInfoEvent requestInfo:
                     {
                         var externalRequest = requestInfo.Request;

@@ -22,14 +22,19 @@ internal static class AgentflowMessageTransforms
         var result = new List<ChatMessage>(messages.Count);
         foreach (var message in messages)
         {
-            if (message.Role != ChatRole.Assistant && message.Role != ChatRole.Tool)
+            if (
+                message.Role != ChatRole.Assistant
+                && message.Role != ChatRole.Tool
+                && !IsNodeInput(message)
+                && !HasNodeSource(message)
+            )
             {
                 result.Add(message);
                 continue;
             }
 
             // 外部工具结果会回到同一个 workflow executor；只允许当前会话正在等待的调用继续保留协议角色。
-            if (message.Role == ChatRole.Tool)
+            if (message.Role == ChatRole.Tool || message.Role == ChatRole.User)
             {
                 var continuationContents = message
                     .Contents.Where(content =>
@@ -65,6 +70,7 @@ internal static class AgentflowMessageTransforms
             var portableMessage = message.Clone();
             portableMessage.Role = ChatRole.User;
             portableMessage.Contents = contents;
+            MarkNodeInput(portableMessage);
             result.Add(portableMessage);
         }
 
@@ -161,7 +167,43 @@ internal static class AgentflowMessageTransforms
 
                 var reassignedMessage = message.Clone();
                 reassignedMessage.Role = ChatRole.User;
+                MarkNodeInput(reassignedMessage);
                 return reassignedMessage;
+            })
+            .ToList();
+    }
+
+    // MAF may already have reassigned an upstream response to user before invoking the node wrapper.
+    private static bool HasNodeSource(ChatMessage message) =>
+        message.Role == ChatRole.User
+        && (
+            message.AdditionalProperties?.ContainsKey("nodeName") == true
+            || message.AdditionalProperties?.ContainsKey("interactionNodeId") == true
+        );
+
+    private static void MarkNodeInput(ChatMessage message)
+    {
+        message.AdditionalProperties = message.AdditionalProperties == null ? [] : new(message.AdditionalProperties);
+        message.AdditionalProperties[ConversationHistoryMetadata.AgentflowInputKey] = true;
+    }
+
+    internal static bool IsNodeInput(ChatMessage message) =>
+        message.Role == ChatRole.User
+        && message.AdditionalProperties?.TryGetValue(ConversationHistoryMetadata.AgentflowInputKey, out var value)
+            == true
+        && string.Equals(value?.ToString(), bool.TrueString, StringComparison.OrdinalIgnoreCase);
+
+    internal static List<ChatMessage> PrepareNodeInputs(IReadOnlyList<ChatMessage> messages)
+    {
+        return messages
+            .Select(message =>
+            {
+                if (!IsNodeInput(message))
+                    return message;
+                var input = message.Clone();
+                MarkNodeInput(input);
+                input.MessageId = Guid.CreateVersion7().ToString("N");
+                return input;
             })
             .ToList();
     }
@@ -193,6 +235,8 @@ internal static class AgentflowMessageTransforms
         var result = message.Clone();
         result.Role = ChatRole.User;
         result.Contents = contents;
+        if (!IsHumanReply(message))
+            MarkNodeInput(result);
         return result;
     }
 }
