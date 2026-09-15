@@ -205,7 +205,7 @@ export function ToolsPanel({
                     <div className="mt-4 border-t pt-3">
                       <Label className="text-xs">Storage</Label>
                       <Select
-                        value={projectMemoryDefinition?.options?.storage ?? "database"}
+                        value={projectMemoryDefinition?.options?.storage ?? "filesystem"}
                         onValueChange={(storage) =>
                           updateProjectMemoryStorage(
                             storage === "filesystem" ? "filesystem" : "database",
@@ -219,7 +219,7 @@ export function ToolsPanel({
                         <SelectContent position="popper">
                           <SelectItem value="database">Database</SelectItem>
                           <SelectItem value="filesystem">
-                            Project Workspace (.agw/memory)
+                            Project Workspace (Primary directory: .agw/memory)
                           </SelectItem>
                         </SelectContent>
                       </Select>
