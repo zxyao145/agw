@@ -1899,6 +1899,111 @@ public class AgentflowWorkflowCompilerTests
         );
     }
 
+    [Theory]
+    [InlineData(AgentflowEdgeKind.Direct, false)]
+    [InlineData(AgentflowEdgeKind.Direct, true)]
+    [InlineData(AgentflowEdgeKind.FanOut, false)]
+    [InlineData(AgentflowEdgeKind.FanOut, true)]
+    [InlineData(AgentflowEdgeKind.FanInBarrier, false)]
+    [InlineData(AgentflowEdgeKind.FanInBarrier, true)]
+    [InlineData(AgentflowEdgeKind.SwitchCase, false)]
+    [InlineData(AgentflowEdgeKind.SwitchCase, true)]
+    public async Task Compile_OutputAfterExternalFunctionResult_EmitsOnlyCompletedTurn(
+        AgentflowEdgeKind edgeKind,
+        bool enableSummary
+    )
+    {
+        // Arrange
+        var agent = new ExternalFunctionCallAgent();
+        var summaryService = new RecordingSummaryService();
+        var modelProviderId = Guid.CreateVersion7();
+        var workflow = _compiler.Compile(
+            new Agentflow { Id = Guid.CreateVersion7(), Name = "commit-push" },
+            [
+                new AgentflowNode { NodeId = "input", Kind = AgentflowNodeKind.Input },
+                new AgentflowNode { NodeId = "commit", Kind = AgentflowNodeKind.Agent },
+                new AgentflowNode { NodeId = "clear", Kind = AgentflowNodeKind.ClearMessages },
+                new AgentflowNode
+                {
+                    NodeId = "push",
+                    Kind = AgentflowNodeKind.Agent,
+                    Name = "Push And PR",
+                },
+                new AgentflowNode
+                {
+                    NodeId = "output",
+                    Kind = AgentflowNodeKind.Output,
+                    ConfigJson = enableSummary ? """{"enableSummary":true}""" : """{"enableSummary":false}""",
+                },
+            ],
+            [
+                Edge("input-commit", "input", "commit", AgentflowEdgeKind.FanOut),
+                Edge("commit-clear", "commit", "clear"),
+                Edge("clear-push", "clear", "push"),
+                Edge(
+                    "push-output",
+                    "push",
+                    "output",
+                    edgeKind,
+                    edgeKind == AgentflowEdgeKind.SwitchCase ? """{"always":true}""" : null,
+                    edgeKind == AgentflowEdgeKind.SwitchCase ? """{"switchCaseOrder":0}""" : null
+                ),
+            ],
+            new Dictionary<string, AIAgent> { ["commit"] = CreateAgent("commit", "Commit"), ["push"] = agent },
+            sessionScope: null,
+            executionTraceContext: null,
+            new AgentflowSummaryContext(summaryService, modelProviderId, Guid.CreateVersion7(), "context-1")
+        );
+        Assert.NotNull(workflow);
+        var cancellationToken = TestContext.Current.CancellationToken;
+
+        // Act
+        await using var run = await InProcessExecution.RunStreamingAsync(
+            workflow,
+            new List<ChatMessage> { new(ChatRole.User, "commit and push") },
+            cancellationToken: cancellationToken
+        );
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+        var events = new List<WorkflowEvent>();
+        await foreach (var evt in run.WatchStreamAsync(cancellationToken))
+        {
+            events.Add(evt);
+            if (evt is RequestInfoEvent request && request.Request.TryGetDataAs<FunctionCallContent>(out var call))
+            {
+                await run.SendResponseAsync(
+                    request.Request.CreateResponse(new FunctionResultContent(call.CallId, "external result"))
+                );
+            }
+        }
+
+        // Assert
+        Assert.True(agent.ReceivedFunctionResult);
+        Assert.DoesNotContain(events, evt => evt is WorkflowErrorEvent);
+        var outputEvent = Assert.Single(events.OfType<WorkflowOutputEvent>(), evt => evt.Data is List<ChatMessage>);
+        var output = Assert.IsType<List<ChatMessage>>(outputEvent.Data);
+        var completedUpdateIndex = events.FindIndex(evt =>
+            evt is AgentResponseUpdateEvent { Data: AgentResponseUpdate update } && update.Text == "completed"
+        );
+        Assert.True(completedUpdateIndex >= 0 && completedUpdateIndex < events.IndexOf(outputEvent));
+        var expectedText = new[] { "checking repository", "completed" };
+        Assert.Equal(
+            enableSummary ? [.. expectedText, "summary"] : expectedText,
+            output.Select(message => message.Text).Where(text => !string.IsNullOrEmpty(text))
+        );
+        if (enableSummary)
+        {
+            var summary = Assert.Single(summaryService.Calls);
+            Assert.Equal(
+                expectedText,
+                summary.Messages.Select(message => message.Text).Where(text => !string.IsNullOrEmpty(text))
+            );
+        }
+        else
+        {
+            Assert.Empty(summaryService.Calls);
+        }
+    }
+
     [Fact]
     public async Task Compile_SummaryEnabledOutput_AppendsResultFromIncomingMessages()
     {
@@ -2340,6 +2445,10 @@ public class AgentflowWorkflowCompilerTests
             await Task.Yield();
             if (Interlocked.Increment(ref _callCount) == 1)
             {
+                yield return new AgentResponseUpdate(ChatRole.Assistant, "checking repository")
+                {
+                    MessageId = "progress",
+                };
                 yield return new AgentResponseUpdate
                 {
                     Role = ChatRole.Assistant,

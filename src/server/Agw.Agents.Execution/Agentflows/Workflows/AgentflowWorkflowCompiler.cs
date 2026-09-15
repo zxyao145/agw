@@ -146,6 +146,7 @@ public sealed class AgentflowWorkflowCompiler
 {
     private const string GeneratedStartNodeId = "__agw_start";
     private const string GeneratedOutputNodeId = "__agw_output";
+    private const string AgentOutputSuffix = "__agw_agent_output";
     private const string HumanGateOutputSuffix = "__agw_human_gate_output";
     private const string CheckpointRequestSuffix = "__agw_checkpoint_request";
     private const string CheckpointOutputSuffix = "__agw_checkpoint_output";
@@ -210,7 +211,7 @@ public sealed class AgentflowWorkflowCompiler
             .ToHashSet(StringComparer.Ordinal);
         var bindings = new Dictionary<string, ExecutorBinding>(StringComparer.Ordinal);
         var requestPortBindings = new Dictionary<string, ExecutorBinding>(StringComparer.Ordinal);
-        var requestPortOutputBindings = new Dictionary<string, ExecutorBinding>(StringComparer.Ordinal);
+        var sourceOutputBindings = new Dictionary<string, ExecutorBinding>(StringComparer.Ordinal);
 
         foreach (var node in orderedNodes)
         {
@@ -234,7 +235,7 @@ public sealed class AgentflowWorkflowCompiler
                 if (node.Kind == AgentflowNodeKind.HumanGate)
                 {
                     requestPortBindings[node.NodeId] = binding;
-                    requestPortOutputBindings[node.NodeId] = BindChatTransform(
+                    sourceOutputBindings[node.NodeId] = BindChatTransform(
                         $"{node.NodeId}.{HumanGateOutputSuffix}",
                         messages => messages
                     );
@@ -244,8 +245,23 @@ public sealed class AgentflowWorkflowCompiler
                     requestPortBindings[node.NodeId] = RequestPort
                         .Create<List<ChatMessage>, List<ChatMessage>>(GetCheckpointRequestPortId(node.NodeId))
                         .BindAsExecutor();
-                    requestPortOutputBindings[node.NodeId] = BindChatRoutingBridge(
+                    sourceOutputBindings[node.NodeId] = BindChatRoutingBridge(
                         $"{node.NodeId}.{CheckpointOutputSuffix}"
+                    );
+                }
+                else if (
+                    node.Kind
+                    is AgentflowNodeKind.Agent
+                        or AgentflowNodeKind.WorkflowAsAgent
+                        or AgentflowNodeKind.HandoffBlock
+                        or AgentflowNodeKind.GroupChatBlock
+                        or AgentflowNodeKind.MagenticBlock
+                )
+                {
+                    // Agent 等待外部 Tool 时也会发送部分消息；收到 TurnToken 后才交给下游路由和 Output。
+                    sourceOutputBindings[node.NodeId] = BindChatProtocolTransform(
+                        $"{node.NodeId}.{AgentOutputSuffix}",
+                        messages => messages
                     );
                 }
             }
@@ -279,13 +295,20 @@ public sealed class AgentflowWorkflowCompiler
             builder.AddFanOutEdge(start, roots, "start");
         }
 
-        AddRequestPortOutputEdges(builder, nodeMap, bindings, requestPortBindings, requestPortOutputBindings);
+        AddRequestPortOutputEdges(builder, nodeMap, bindings, requestPortBindings, sourceOutputBindings);
+        foreach (var (nodeId, outputBinding) in sourceOutputBindings)
+        {
+            if (!requestPortBindings.ContainsKey(nodeId))
+            {
+                builder.AddEdge(bindings[nodeId], outputBinding, "agent-completed", idempotent: true);
+            }
+        }
         var cyclicComponents = AgentflowTopology.FindCyclicComponents(
             orderedNodes.Select(node => node.NodeId).ToList(),
             runtimeEdges
         );
-        AddRuntimeEdges(builder, runtimeEdges, nodeMap, bindings, requestPortOutputBindings, cyclicComponents);
-        AddWorkflowOutputs(builder, orderedNodes, runtimeEdges, bindings, requestPortOutputBindings);
+        AddRuntimeEdges(builder, runtimeEdges, nodeMap, bindings, sourceOutputBindings, cyclicComponents);
+        AddWorkflowOutputs(builder, orderedNodes, runtimeEdges, bindings, sourceOutputBindings);
 
         return builder.Build(validateOrphans: false);
     }
@@ -404,13 +427,13 @@ public sealed class AgentflowWorkflowCompiler
         IReadOnlyList<AgentflowEdge> edges,
         IReadOnlyDictionary<string, AgentflowNode> nodeMap,
         IReadOnlyDictionary<string, ExecutorBinding> bindings,
-        IReadOnlyDictionary<string, ExecutorBinding> requestPortOutputBindings,
+        IReadOnlyDictionary<string, ExecutorBinding> sourceOutputBindings,
         IReadOnlyList<HashSet<string>> cyclicComponents
     )
     {
         foreach (var edge in edges.Where(edge => edge.Kind == AgentflowEdgeKind.Direct))
         {
-            var source = GetSourceBinding(edge.SourceNodeId, bindings, requestPortOutputBindings);
+            var source = GetSourceBinding(edge.SourceNodeId, bindings, sourceOutputBindings);
             var target = bindings[edge.TargetNodeId];
             var label = edge.Label ?? edge.EdgeId;
             var compactHumanFeedback = IsCyclicHumanGateAgentEdge(edge, nodeMap, cyclicComponents);
@@ -442,7 +465,7 @@ public sealed class AgentflowWorkflowCompiler
             var group in edges.Where(edge => edge.Kind == AgentflowEdgeKind.FanOut).GroupBy(edge => edge.SourceNodeId)
         )
         {
-            var source = GetSourceBinding(group.Key, bindings, requestPortOutputBindings);
+            var source = GetSourceBinding(group.Key, bindings, sourceOutputBindings);
             var fanOutEdges = group.OrderBy(edge => edge.EdgeId, StringComparer.Ordinal).ToList();
             var bridges = fanOutEdges.ToDictionary(
                 edge => edge.EdgeId,
@@ -520,13 +543,13 @@ public sealed class AgentflowWorkflowCompiler
                     reusableInputEdges,
                     repeatedEdges,
                     bindings,
-                    requestPortOutputBindings
+                    sourceOutputBindings
                 );
                 continue;
             }
 
             var sources = barrierEdges
-                .Select(edge => GetSourceBinding(edge.SourceNodeId, bindings, requestPortOutputBindings))
+                .Select(edge => GetSourceBinding(edge.SourceNodeId, bindings, sourceOutputBindings))
                 .ToList();
             if (sources.Count > 0)
             {
@@ -541,7 +564,7 @@ public sealed class AgentflowWorkflowCompiler
                 .GroupBy(edge => edge.SourceNodeId)
         )
         {
-            var source = GetSourceBinding(group.Key, bindings, requestPortOutputBindings);
+            var source = GetSourceBinding(group.Key, bindings, sourceOutputBindings);
             var cases = group
                 .Where(edge => edge.Kind == AgentflowEdgeKind.SwitchCase)
                 .OrderBy(edge => GetSwitchCaseOrder(edge))
@@ -604,7 +627,7 @@ public sealed class AgentflowWorkflowCompiler
         IReadOnlyList<AgentflowEdge> reusableInputEdges,
         IReadOnlyList<AgentflowEdge> repeatedEdges,
         IReadOnlyDictionary<string, ExecutorBinding> bindings,
-        IReadOnlyDictionary<string, ExecutorBinding> requestPortOutputBindings
+        IReadOnlyDictionary<string, ExecutorBinding> sourceOutputBindings
     )
     {
         var repeatedSourceNodeIds = repeatedEdges.Select(edge => edge.SourceNodeId).ToList();
@@ -615,7 +638,7 @@ public sealed class AgentflowWorkflowCompiler
 
         foreach (var (edge, reuseAcrossIterations) in barrierEdges)
         {
-            var source = GetSourceBinding(edge.SourceNodeId, bindings, requestPortOutputBindings);
+            var source = GetSourceBinding(edge.SourceNodeId, bindings, sourceOutputBindings);
             var bridge = BindLoopBarrierSource(
                 $"{edge.EdgeId}.{LoopBarrierSourceSuffix}",
                 edge.SourceNodeId,
@@ -682,7 +705,7 @@ public sealed class AgentflowWorkflowCompiler
         IReadOnlyList<AgentflowNode> orderedNodes,
         IReadOnlyList<AgentflowEdge> runtimeEdges,
         IReadOnlyDictionary<string, ExecutorBinding> bindings,
-        IReadOnlyDictionary<string, ExecutorBinding> requestPortOutputBindings
+        IReadOnlyDictionary<string, ExecutorBinding> sourceOutputBindings
     )
     {
         var explicitOutputs = orderedNodes
@@ -697,7 +720,7 @@ public sealed class AgentflowWorkflowCompiler
 
         var terminalNodes = bindings
             .Keys.Where(nodeId => runtimeEdges.All(edge => edge.SourceNodeId != nodeId))
-            .Select(nodeId => GetSourceBinding(nodeId, bindings, requestPortOutputBindings))
+            .Select(nodeId => GetSourceBinding(nodeId, bindings, sourceOutputBindings))
             .ToList();
         if (terminalNodes.Count == 0)
         {
@@ -718,12 +741,12 @@ public sealed class AgentflowWorkflowCompiler
         IReadOnlyDictionary<string, AgentflowNode> nodeMap,
         IReadOnlyDictionary<string, ExecutorBinding> bindings,
         IReadOnlyDictionary<string, ExecutorBinding> requestPortBindings,
-        IReadOnlyDictionary<string, ExecutorBinding> requestPortOutputBindings
+        IReadOnlyDictionary<string, ExecutorBinding> sourceOutputBindings
     )
     {
-        foreach (var (nodeId, outputBinding) in requestPortOutputBindings)
+        foreach (var (nodeId, requestPortBinding) in requestPortBindings)
         {
-            var requestPortBinding = requestPortBindings[nodeId];
+            var outputBinding = sourceOutputBindings[nodeId];
             if (nodeMap[nodeId].Kind == AgentflowNodeKind.CheckpointMarker)
             {
                 builder.AddEdge(bindings[nodeId], requestPortBinding, "checkpoint-request", idempotent: true);
@@ -739,10 +762,10 @@ public sealed class AgentflowWorkflowCompiler
     private static ExecutorBinding GetSourceBinding(
         string nodeId,
         IReadOnlyDictionary<string, ExecutorBinding> bindings,
-        IReadOnlyDictionary<string, ExecutorBinding> requestPortOutputBindings
+        IReadOnlyDictionary<string, ExecutorBinding> sourceOutputBindings
     )
     {
-        return requestPortOutputBindings.TryGetValue(nodeId, out var outputBinding) ? outputBinding : bindings[nodeId];
+        return sourceOutputBindings.TryGetValue(nodeId, out var outputBinding) ? outputBinding : bindings[nodeId];
     }
 
     private static Func<List<ChatMessage>?, bool>? BuildCondition(

@@ -14,11 +14,13 @@ namespace Agw.Agents.Execution.Agents.Middleware;
 internal sealed class OpenAiReasoningChatClient : DelegatingChatClient
 {
     private readonly ChatClient _client;
+    private readonly bool _requiresReasoningContent;
 
-    private OpenAiReasoningChatClient(ChatClient client)
+    private OpenAiReasoningChatClient(ChatClient client, bool requiresReasoningContent)
         : base(client.AsIChatClient())
     {
         _client = client;
+        _requiresReasoningContent = requiresReasoningContent;
     }
 
     public static IChatClient Create(ChatClient client, Uri endpoint) =>
@@ -27,7 +29,10 @@ internal sealed class OpenAiReasoningChatClient : DelegatingChatClient
         endpoint.Host.Equals("api.openai.com", StringComparison.OrdinalIgnoreCase)
         || endpoint.Host.EndsWith(".openai.azure.com", StringComparison.OrdinalIgnoreCase)
             ? client.AsIChatClient()
-            : new OpenAiReasoningChatClient(client);
+            : new OpenAiReasoningChatClient(
+                client,
+                endpoint.Host.Equals("api.deepseek.com", StringComparison.OrdinalIgnoreCase)
+            );
 
     public override async Task<ChatResponse> GetResponseAsync(
         IEnumerable<ChatMessage> messages,
@@ -58,14 +63,42 @@ internal sealed class OpenAiReasoningChatClient : DelegatingChatClient
     {
         var reasoningByIndex = new Dictionary<int, string>();
         var wireIndex = string.IsNullOrWhiteSpace(options?.Instructions) ? 0 : 1;
+        string? precedingReasoning = null;
+        string? precedingAuthor = null;
         foreach (var message in messages)
         {
+            if (message.Role != ChatRole.Assistant || message.AuthorName != precedingAuthor)
+                precedingReasoning = null;
+
+            var reasoningOnly = false;
             if (message.Role == ChatRole.Assistant)
             {
                 var reasoning = message.Contents.OfType<TextReasoningContent>().ToList();
                 if (reasoning.Count > 0)
                     reasoningByIndex.Add(wireIndex, string.Concat(reasoning.Select(content => content.Text)));
+                else if (
+                    precedingReasoning != null
+                    && message.RawRepresentation is not OpenAI.Chat.ChatMessage
+                    && message.Contents.OfType<FunctionCallContent>().Any()
+                )
+                    reasoningByIndex.Add(wireIndex, precedingReasoning);
+
+                // MAF may split reasoning and tool calls into adjacent assistant messages.
+                // Echo only that contiguous reasoning prefix; never borrow from an earlier turn or author.
+                reasoningOnly =
+                    reasoning.Count > 0
+                    && message.RawRepresentation is not OpenAI.Chat.ChatMessage
+                    && message.Contents.All(content =>
+                        content is TextReasoningContent or TextContent { Text.Length: 0 }
+                    );
+                if (reasoningOnly)
+                {
+                    precedingReasoning += string.Concat(reasoning.Select(content => content.Text));
+                    precedingAuthor = message.AuthorName;
+                }
             }
+            if (!reasoningOnly)
+                precedingReasoning = null;
 
             // MEAI expands a tool message into one wire message per function result.
             // Native SDK messages bypass that conversion; unknown roles are omitted.
@@ -85,9 +118,11 @@ internal sealed class OpenAiReasoningChatClient : DelegatingChatClient
         // The SDK transport is shared; only this lightweight adapter and its policy are
         // per request, so concurrent calls cannot share reasoning or retain old patches.
         var client = _client.AsIChatClient();
-        if (reasoningByIndex.Count > 0)
+        if (reasoningByIndex.Count > 0 || _requiresReasoningContent)
 #pragma warning disable MEAI001 // The SDK exposes request policies as an experimental extension seam.
-            client.GetRequiredService<OpenAIRequestPolicies>().AddPolicy(new ReasoningPolicy(reasoningByIndex));
+            client
+                .GetRequiredService<OpenAIRequestPolicies>()
+                .AddPolicy(new ReasoningPolicy(reasoningByIndex, _requiresReasoningContent));
 #pragma warning restore MEAI001
         return client;
     }
@@ -95,10 +130,12 @@ internal sealed class OpenAiReasoningChatClient : DelegatingChatClient
     private sealed class ReasoningPolicy : PipelinePolicy
     {
         private readonly IReadOnlyDictionary<int, string> _reasoningByIndex;
+        private readonly bool _requiresReasoningContent;
 
-        public ReasoningPolicy(IReadOnlyDictionary<int, string> reasoningByIndex)
+        public ReasoningPolicy(IReadOnlyDictionary<int, string> reasoningByIndex, bool requiresReasoningContent)
         {
             _reasoningByIndex = reasoningByIndex;
+            _requiresReasoningContent = requiresReasoningContent;
         }
 
         public override void Process(PipelineMessage message, IReadOnlyList<PipelinePolicy> pipeline, int currentIndex)
@@ -129,6 +166,14 @@ internal sealed class OpenAiReasoningChatClient : DelegatingChatClient
             var messages = payload["messages"]!.AsArray();
             foreach (var (index, reasoning) in _reasoningByIndex)
                 messages[index]!["reasoning_content"] = reasoning;
+            if (_requiresReasoningContent)
+            {
+                // DeepSeek requires this field on plain historical answers too, not only tool calls.
+                // Empty means no recorded reasoning; preserve any native SDK reasoning already present.
+                foreach (var input in messages)
+                    if ((string?)input?["role"] == "assistant" && input["reasoning_content"] == null)
+                        input["reasoning_content"] = string.Empty;
+            }
             var original = message.Request.Content;
             message.Request.Content = BinaryContent.Create(BinaryData.FromObjectAsJson(payload));
             original?.Dispose();

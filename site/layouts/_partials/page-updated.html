@@ -1,0 +1,9 @@
+{{ if eq .Type "docs" }}
+  {{ if .Lastmod.IsZero }}
+    {{ errorf "Documentation page %s requires lastmod front matter" .Path }}
+  {{ else }}
+    <p class="agw-page-updated text-body-secondary mt-2 mb-0 small">
+      {{ if eq .Language.Lang "zh" }}最近更新：{{ else }}Last updated: {{ end }}<time datetime="{{ .Lastmod.Format "2006-01-02" }}">{{ .Lastmod.Format "2006-01-02" }}</time>
+    </p>
+  {{ end }}
+{{ end }}

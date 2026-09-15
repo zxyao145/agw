@@ -1,0 +1,69 @@
+title: AGW
+baseURL: http://localhost:1313/
+defaultContentLanguage: zh
+defaultContentLanguageInSubdir: false
+enableRobotsTXT: true
+timeZone: UTC
+frontmatter:
+  lastmod: [lastmod]
+languages:
+  zh:
+    label: 简体中文
+    locale: zh-CN
+    weight: 1
+    hasCJKLanguage: true
+    params:
+      description: 自托管的 Agent 工作平台。连接模型、工具与项目，让对话、工作流和定时任务在同一处运行。
+    menus:
+      main:
+        - {name: 快速开始, pageRef: /docs/start/first-chat, weight: 10}
+        - {name: 下载, url: 'https://github.com/zxyao145/agw/releases', weight: 30}
+  en:
+    label: English
+    locale: en-US
+    weight: 2
+    params:
+      description: A self-hosted workspace for agents. Connect models, tools, and projects to run conversations, workflows, and scheduled jobs in one place.
+    menus:
+      main:
+        - {name: Quick start, pageRef: /docs/start/first-chat, weight: 10}
+        - {name: Downloads, url: 'https://github.com/zxyao145/agw/releases', weight: 30}
+markup:
+  goldmark:
+    renderer:
+      unsafe: true
+    parser:
+      attribute:
+        block: true
+      wrapStandAloneImageWithinParagraph: false
+  highlight:
+    noClasses: false
+outputs:
+  home: [HTML, RSS, markdown, LLMS]
+  page: [HTML, markdown]
+  section: [HTML, RSS, print, markdown]
+params:
+  logo: icons/logo.svg
+  offline_search: true
+  github_repo: https://github.com/zxyao145/agw
+  github_branch: main
+  github_subdir: site
+  copyright:
+    authors: '[AGW contributors](https://github.com/zxyao145/agw)'
+    from_year: 2026
+  ui:
+    theme_color: '#3155d9'
+    typography: system
+    dark_mode: true
+    image_zoom: true
+    section_index: cards
+    sidebar_menu_foldable: true
+    sidebar_icon_policy: groups
+    backlinks: true
+    footer_style: slim
+module:
+  imports:
+    - path: github.com/pgsty/oink
+  hugoVersion:
+    extended: true
+    min: 0.165.0

@@ -1,0 +1,97 @@
+name: Site Build and Deploy
+
+on:
+  pull_request:
+    paths:
+      - "site/**"
+      - ".github/workflows/site.yml"
+  push:
+    branches: ["main"]
+    paths:
+      - "site/**"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build and validate site
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: read
+    defaults:
+      run:
+        shell: bash
+        working-directory: site
+    env:
+      HUGO_VERSION: "0.165.0"
+      AGW_SITE_URL: https://zxyao145.github.io/agw/
+      TZ: UTC
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: site/go.mod
+          cache: false
+
+      - name: Read GitHub Pages configuration
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/configure-pages@v6
+
+      - name: Install Hugo Extended
+        run: |
+          set -euo pipefail
+          archive="hugo_extended_${HUGO_VERSION}_linux-amd64.tar.gz"
+          release="https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}"
+          curl --fail --silent --show-error --location --retry 3 \
+            "$release/$archive" --output "$RUNNER_TEMP/$archive"
+          curl --fail --silent --show-error --location --retry 3 \
+            "$release/hugo_${HUGO_VERSION}_checksums.txt" --output "$RUNNER_TEMP/hugo-checksums.txt"
+          cd "$RUNNER_TEMP"
+          awk -v archive="$archive" '$2 == archive { print }' hugo-checksums.txt > hugo-checksum.txt
+          test -s hugo-checksum.txt
+          sha256sum --check hugo-checksum.txt
+          mkdir -p "$RUNNER_TEMP/hugo-bin"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/hugo-bin" hugo
+          echo "$RUNNER_TEMP/hugo-bin" >> "$GITHUB_PATH"
+
+      - name: Build and check
+        run: |
+          ./scripts/hugo.sh --cleanDestinationDir --gc --minify \
+            --environment production --printPathWarnings --panicOnWarning \
+            --baseURL "$AGW_SITE_URL"
+          python3 scripts/check-site.py public --base-url "$AGW_SITE_URL"
+
+      - name: Upload verified site
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: site/public
+
+  deploy:
+    name: Deploy to GitHub Pages
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy verified artifact
+        id: deployment
+        uses: actions/deploy-pages@v5

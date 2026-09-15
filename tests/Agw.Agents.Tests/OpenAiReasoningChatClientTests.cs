@@ -19,6 +19,132 @@ public sealed class OpenAiReasoningChatClientTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task DeepSeek_ToolContinuationAfterPlainAnswer_IncludesReasoningOnEveryAssistant(bool streaming)
+    {
+        // Arrange: the failing conversation contains an older plain answer before a new thinking tool call.
+        await using var fixture = new ClientFixture("https://api.deepseek.com/v1");
+        var history = new List<ChatMessage>
+        {
+            new(ChatRole.User, "previous request"),
+            new(ChatRole.Assistant, "previous answer without reasoning"),
+            new(ChatRole.User, "continue"),
+            new(
+                ChatRole.Assistant,
+                [
+                    new TextReasoningContent("current reasoning"),
+                    new FunctionCallContent("call-1", "lookup", new Dictionary<string, object?>()),
+                ]
+            ),
+            new(ChatRole.Tool, [new FunctionResultContent("call-1", "tool result")]),
+        };
+        var original = JsonSerializer.Serialize(history);
+        var options = new ChatOptions { Tools = [AIFunctionFactory.Create(() => "result", "lookup")] };
+
+        // Act
+        if (streaming)
+            await fixture
+                .Client.GetStreamingResponseAsync(history, options, TestContext.Current.CancellationToken)
+                .ToChatResponseAsync(cancellationToken: TestContext.Current.CancellationToken);
+        else
+            await fixture.Client.GetResponseAsync(history, options, TestContext.Current.CancellationToken);
+
+        // Assert
+        var messages = Assert.Single(fixture.Handler.Requests).GetProperty("messages");
+        Assert.True(messages[1].TryGetProperty("reasoning_content", out var previousReasoning));
+        Assert.Equal(string.Empty, previousReasoning.GetString());
+        Assert.Equal("current reasoning", messages[3].GetProperty("reasoning_content").GetString());
+        Assert.False(messages[0].TryGetProperty("reasoning_content", out _));
+        Assert.False(messages[4].TryGetProperty("reasoning_content", out _));
+        Assert.Equal(original, JsonSerializer.Serialize(history));
+    }
+
+    [Theory]
+    [InlineData("https://api.deepseek.com/v1", true)]
+    [InlineData("https://gateway.example.test/v1", false)]
+    [InlineData("https://api.openai.com/v1", false)]
+    public async Task PlainAssistantHistory_AddsEmptyReasoningOnlyForDeepSeek(string endpoint, bool expected)
+    {
+        await using var fixture = new ClientFixture(endpoint);
+        await fixture.Client.GetResponseAsync(
+            [new(ChatRole.User, "request"), new(ChatRole.Assistant, "plain answer")],
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+        var assistant = Assert.Single(fixture.Handler.Requests).GetProperty("messages")[1];
+        Assert.Equal(expected, assistant.TryGetProperty("reasoning_content", out var reasoning));
+        if (expected)
+            Assert.Equal(string.Empty, reasoning.GetString());
+    }
+
+    [Fact]
+    public async Task DeepSeek_NativeReasoning_PreservesOriginalField()
+    {
+        await using var fixture = new ClientFixture("https://api.deepseek.com/v1");
+        var native = new AssistantChatMessage("answer");
+        native.Patch.Set("$.reasoning_content"u8, "native reasoning");
+        await fixture.Client.GetResponseAsync(
+            [new(ChatRole.Assistant, "answer") { RawRepresentation = native }],
+            cancellationToken: TestContext.Current.CancellationToken
+        );
+        Assert.Equal(
+            "native reasoning",
+            Assert
+                .Single(fixture.Handler.Requests)
+                .GetProperty("messages")[0]
+                .GetProperty("reasoning_content")
+                .GetString()
+        );
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ToolContinuation_SeparateReasoningMessage_ReturnsReasoningOnToolCall(bool streaming)
+    {
+        // Arrange
+        await using var fixture = new ClientFixture("https://gateway.example.test/v1");
+        var history = new List<ChatMessage>
+        {
+            new(ChatRole.User, "start"),
+            new(ChatRole.Assistant, [new TextReasoningContent("checking "), new TextContent("")])
+            {
+                AuthorName = "agent",
+                MessageId = "reasoning-1",
+            },
+            new(ChatRole.Assistant, [new TextReasoningContent("the repository")])
+            {
+                AuthorName = "agent",
+                MessageId = "reasoning-2",
+            },
+            new(ChatRole.Assistant, [new FunctionCallContent("call-1", "lookup", new Dictionary<string, object?>())])
+            {
+                AuthorName = "agent",
+                MessageId = "tool-call",
+            },
+            new(ChatRole.Tool, [new FunctionResultContent("call-1", "tool result")]),
+        };
+        var original = JsonSerializer.Serialize(history);
+        var options = new ChatOptions { Instructions = "system instructions" };
+
+        // Act
+        if (streaming)
+            await fixture
+                .Client.GetStreamingResponseAsync(history, options, TestContext.Current.CancellationToken)
+                .ToChatResponseAsync(cancellationToken: TestContext.Current.CancellationToken);
+        else
+            await fixture.Client.GetResponseAsync(history, options, TestContext.Current.CancellationToken);
+
+        // Assert
+        var messages = Assert.Single(fixture.Handler.Requests).GetProperty("messages");
+        var toolCall = Assert.Single(messages.EnumerateArray(), message => message.TryGetProperty("tool_calls", out _));
+        Assert.True(toolCall.TryGetProperty("reasoning_content", out var reasoning));
+        Assert.Equal("checking the repository", reasoning.GetString());
+        Assert.Equal("call-1", toolCall.GetProperty("tool_calls")[0].GetProperty("id").GetString());
+        Assert.Equal(original, JsonSerializer.Serialize(history));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task ToolContinuation_AfterSerialization_ReturnsReasoningInHttpPayload(bool streaming)
     {
         await using var fixture = new ClientFixture("https://gateway.example.test/v1");
@@ -90,6 +216,67 @@ public sealed class OpenAiReasoningChatClientTests
         Assert.Equal(0.25, payload.GetProperty("temperature").GetDouble());
         Assert.Same(originalFactory, options.RawRepresentationFactory);
         Assert.Equal(originalHistory, JsonSerializer.Serialize(history, jsonOptions));
+    }
+
+    [Theory]
+    [InlineData("user")]
+    [InlineData("system")]
+    [InlineData("assistant")]
+    [InlineData("other-author")]
+    public async Task ToolContinuation_ReasoningPrefix_DoesNotCrossMessageBoundaries(string boundary)
+    {
+        // Arrange
+        await using var fixture = new ClientFixture("https://gateway.example.test/v1");
+        var history = new List<ChatMessage>
+        {
+            new(ChatRole.Assistant, [new TextReasoningContent("unrelated reasoning")]) { AuthorName = "agent" },
+        };
+        if (boundary != "other-author")
+            history.Add(new(new ChatRole(boundary), "new message") { AuthorName = "agent" });
+        history.Add(
+            new(ChatRole.Assistant, [new FunctionCallContent("call", "lookup", new Dictionary<string, object?>())])
+            {
+                AuthorName = boundary == "other-author" ? "another-agent" : "agent",
+            }
+        );
+
+        // Act
+        await fixture.Client.GetResponseAsync(history, cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var call = Assert.Single(
+            Assert.Single(fixture.Handler.Requests).GetProperty("messages").EnumerateArray(),
+            message => message.TryGetProperty("tool_calls", out _)
+        );
+        Assert.False(call.TryGetProperty("reasoning_content", out _));
+    }
+
+    [Fact]
+    public async Task ToolContinuation_WithOwnReasoning_DoesNotOverwriteItWithPreviousReasoning()
+    {
+        // Arrange
+        await using var fixture = new ClientFixture("https://gateway.example.test/v1");
+        var history = new List<ChatMessage>
+        {
+            new(ChatRole.Assistant, [new TextReasoningContent("previous reasoning")]),
+            new(
+                ChatRole.Assistant,
+                [
+                    new TextReasoningContent("own reasoning"),
+                    new FunctionCallContent("call", "lookup", new Dictionary<string, object?>()),
+                ]
+            ),
+        };
+
+        // Act
+        await fixture.Client.GetResponseAsync(history, cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        var call = Assert.Single(
+            Assert.Single(fixture.Handler.Requests).GetProperty("messages").EnumerateArray(),
+            message => message.TryGetProperty("tool_calls", out _)
+        );
+        Assert.Equal("own reasoning", call.GetProperty("reasoning_content").GetString());
     }
 
     [Theory]
@@ -184,7 +371,7 @@ public sealed class OpenAiReasoningChatClientTests
         Assert.Equal("original reasoning", messages[2].GetProperty("reasoning_content").GetString());
     }
 
-    private sealed class ClientFixture : IAsyncDisposable
+    internal sealed class ClientFixture : IAsyncDisposable
     {
         private readonly ServiceProvider _services;
         public RecordingHandler Handler { get; } = new();
@@ -216,9 +403,10 @@ public sealed class OpenAiReasoningChatClientTests
         }
     }
 
-    private sealed class RecordingHandler : HttpMessageHandler
+    internal sealed class RecordingHandler : HttpMessageHandler
     {
         public List<JsonElement> Requests { get; } = [];
+        public bool CompleteAfterTools { get; set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -244,6 +432,21 @@ public sealed class OpenAiReasoningChatClientTests
                     }
                 }]}
                 """;
+            if (
+                CompleteAfterTools
+                && payload.GetProperty("messages").EnumerateArray().Last().GetProperty("role").GetString() == "tool"
+            )
+            {
+                json = $$$"""
+                    {"id":"final-response","object":"{{{(
+                        streaming ? "chat.completion.chunk" : "chat.completion"
+                    )}}}","created":2,"model":"thinking-model","choices":[{
+                        "index":0,"finish_reason":"stop","{{{(streaming ? "delta" : "message")}}}":{
+                            "role":"assistant","content":"finished","reasoning_content":"final reasoning"
+                        }
+                    }]}
+                    """;
+            }
             return new(HttpStatusCode.OK)
             {
                 Content = new StringContent(

@@ -2,6 +2,7 @@ using System.Data.Common;
 using System.Runtime.CompilerServices;
 using System.Security.Claims;
 using System.Threading.Channels;
+using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Tools;
 using Agw.Infrastructure.Data;
 using Agw.Projects.Application.History;
@@ -10,6 +11,7 @@ using Agw.Shared.Coordination;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Testing;
 using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Compaction;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.AI;
@@ -21,6 +23,61 @@ namespace Agw.Agents.Tests;
 
 public sealed partial class AgentRequestContextAgentTests
 {
+    [Fact]
+    public async Task StreamingHistory_ThinkingToolLoop_ReturnsReasoningInContinuationRequest()
+    {
+        // Arrange
+        using var owner = UserInfoUtil.Push(
+            new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "tester")], "Test"))
+        );
+        await using var fixture = await StreamingHistoryFixture.CreateAsync();
+        await using var model = new OpenAiReasoningChatClientTests.ClientFixture("https://gateway.example.test/v1");
+        model.Handler.CompleteAfterTools = true;
+        await using var capabilities = CreateCapabilities([AIFunctionFactory.Create(() => "tool result", "lookup")]);
+        var definition = new ResolvedAgentDefinition
+        {
+            Id = "thinking-agent",
+            Name = "Thinking agent",
+            ModelId = "thinking-model",
+            OpenTelemetrySourceName = "test-source",
+            ChatHistoryProvider = fixture.Provider,
+            CompactionProvider = new CompactionProvider(new ContextWindowCompactionStrategy(100_000, 10_000)),
+        };
+        var agent = CreateAgent(
+            model.Client.AsAgwAgent(definition, capabilities, NullLoggerFactory.Instance, fixture.Services),
+            fixture.Provider,
+            null
+        );
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        var session = await agent.CreateSessionAsync(timeout.Token);
+        fixture.Provider.InitializeSessionState(session, "streaming", fixture.ProjectId);
+
+        // Act
+        await foreach (
+            var _ in ConversationHistoryPersistenceContext.RunStreaming(
+                agent.RunStreamingAsync(
+                    [new ChatMessage(ChatRole.User, "question")],
+                    session,
+                    cancellationToken: timeout.Token
+                ),
+                fixture.Provider,
+                fixture.ProjectId,
+                "streaming",
+                0
+            )
+        ) { }
+
+        // Assert
+        Assert.Equal(2, model.Handler.Requests.Count);
+        var toolCall = Assert.Single(
+            model.Handler.Requests[1].GetProperty("messages").EnumerateArray(),
+            message => message.TryGetProperty("tool_calls", out _)
+        );
+        Assert.True(toolCall.TryGetProperty("reasoning_content", out var reasoning));
+        Assert.Equal("original reasoning", reasoning.GetString());
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
