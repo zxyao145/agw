@@ -5,10 +5,11 @@ using Microsoft.Extensions.AI;
 namespace Agw.Agents.Contracts.Execution;
 
 /// <summary>
-/// Internal message metadata used to keep display-only history out of model context.
+/// Internal message metadata for history visibility and execution input attribution.
 /// </summary>
 public static class ConversationHistoryMetadata
 {
+    public const string AgentflowInputKey = "agentflowInput";
     public const string ModelHistoryExcludedKey = "modelHistoryExcluded";
     public const string PersistenceExcludedKey = "persistenceExcluded";
     public const string UserMemorySourceId = "Agw.UserMemory";

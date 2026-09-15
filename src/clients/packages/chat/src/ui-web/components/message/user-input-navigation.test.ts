@@ -96,3 +96,14 @@ test("marker layout skips anchors whose virtual row is unavailable", () => {
   assert.deepEqual(markers, []);
   assert.equal(getActiveUserInputMarkerKey(markers, 0), null);
 });
+
+test("node handoff inputs remain navigation anchors within the current user turn", () => {
+  const input = messageItem("node-input", "user", [
+    { type: "markdown", markdown: "Review result", sourceType: "TextContent" },
+  ]);
+  if (input.type !== "message") throw new Error("expected a message");
+  input.message.source.additionalProperties = { agentflowInput: true, nodeName: "Review" };
+  assert.deepEqual(buildUserInputAnchors([input]), [
+    { key: "node-input", itemIndex: 0, preview: "Review result" },
+  ]);
+});

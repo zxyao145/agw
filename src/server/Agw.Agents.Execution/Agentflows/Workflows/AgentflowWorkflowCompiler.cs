@@ -51,6 +51,8 @@ internal sealed class AgentflowAgentSessionScope
 
     public MafPermissionState PermissionState { get; }
 
+    public Func<ChatMessage, CancellationToken, ValueTask>? InputObserver { get; set; }
+
     private AgentSessionStateStore? SessionStateStore { get; }
 
     private IConversationHistoryWriter? ConversationHistoryWriter { get; }

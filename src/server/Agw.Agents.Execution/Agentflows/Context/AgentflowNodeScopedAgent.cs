@@ -92,6 +92,8 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
             AgentflowMessageTransforms.CreatePortableAgentInput(messages.ToList(), pendingFunctionCallIds),
             _instructions
         );
+        if (!_isWorkflow)
+            input = AgentflowMessageTransforms.PrepareNodeInputs(input);
         UpdatePendingFunctionCallIds(input.SelectMany(message => message.Contents), pendingFunctionCallIds);
         SavePendingFunctionCallIds(scopedSession, pendingFunctionCallIds);
         using var activity = StartExecutionActivity(input);
@@ -99,6 +101,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         Exception? executionFailure = null;
         try
         {
+            await ObserveInputsAsync(input, cancellationToken).ConfigureAwait(false);
             var response = await InnerAgent
                 .RunAsync(input, scopedSession, options, cancellationToken)
                 .ConfigureAwait(false);
@@ -156,6 +159,8 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
             AgentflowMessageTransforms.CreatePortableAgentInput(messages.ToList(), pendingFunctionCallIds),
             _instructions
         );
+        if (!_isWorkflow)
+            input = AgentflowMessageTransforms.PrepareNodeInputs(input);
         UpdatePendingFunctionCallIds(input.SelectMany(message => message.Contents), pendingFunctionCallIds);
         SavePendingFunctionCallIds(scopedSession, pendingFunctionCallIds);
         using var activity = StartExecutionActivity(input);
@@ -164,6 +169,7 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         var observedCalls = new Dictionary<string, FunctionCallContent>(StringComparer.Ordinal);
         try
         {
+            await ObserveInputsAsync(input, cancellationToken).ConfigureAwait(false);
             await using var enumerator = InnerAgent
                 .RunStreamingAsync(input, scopedSession, options, cancellationToken)
                 .GetAsyncEnumerator(cancellationToken);
@@ -214,6 +220,24 @@ internal sealed class AgentflowNodeScopedAgent : DelegatingAIAgent
         finally
         {
             await FinalizeTurnAsync(turnPersistence, scopedSession, activity, executionFailure).ConfigureAwait(false);
+        }
+    }
+
+    private async ValueTask ObserveInputsAsync(IReadOnlyList<ChatMessage> input, CancellationToken cancellationToken)
+    {
+        if (_isWorkflow || _sessionScope?.InputObserver is not { } observer)
+            return;
+        foreach (var message in input)
+        {
+            if (
+                AgentflowMessageTransforms.IsNodeInput(message)
+                && !ConversationHistoryMetadata.IsPersistenceExcluded(message)
+                && !ConversationHistoryMetadata.IsModelHistoryExcluded(message)
+                && !ConversationHandoffMetadata.IsHandoffMessage(message)
+                && message.Contents.All(content => content is TextContent or DataContent or UriContent)
+                && message.GetAgentRequestMessageSourceType() == AgentRequestMessageSourceType.External
+            )
+                await observer(message, cancellationToken).ConfigureAwait(false);
         }
     }
 

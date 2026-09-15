@@ -567,3 +567,35 @@ test("replaces only the requested scope when message ids repeat", () => {
     ["updated", "second"],
   );
 });
+
+test("node inputs stay in their user turn and repeated activations retain separate identities", () => {
+  const user = textMessage({
+    messageId: "user-1",
+    role: "user",
+    author: "$agw",
+    content: "review",
+  });
+  const input = textMessage({
+    messageId: "input-b",
+    role: "user",
+    author: "pi",
+    content: "review result",
+    additionalProperties: { agentflowInput: true, nodeName: "Review" },
+  });
+  const secondInput = { ...input, messageId: "input-c" };
+  const history = scopeMessagesByUserTurn([user, input, secondInput]);
+  const live = mergeStreamingMessages(
+    [scopeStreamingMessage(user, "user-1")],
+    [
+      scopeStreamingMessage(input, "user-1"),
+      scopeStreamingMessage(input, "user-1"),
+      scopeStreamingMessage(secondInput, "user-1"),
+    ],
+  );
+  assert.deepEqual(live, history);
+  assert.deepEqual(
+    history.map((message) => message.streamingScopeId),
+    ["user-1", "user-1", "user-1"],
+  );
+  assert.equal(getMessageTextContent(live[1]), "review result");
+});

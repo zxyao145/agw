@@ -176,6 +176,84 @@ public sealed class AgentflowNodeScopedAgentTests
         Assert.False(message.AdditionalProperties!.ContainsKey("nodeName"));
     }
 
+    [Theory]
+    [InlineData("assistant")]
+    [InlineData("user")]
+    public async Task RunStreamingAsync_RepeatedNestedHandoff_ObservesOnlyPortableInputsWithFreshIds(string sourceRole)
+    {
+        // Arrange
+        var observed = new List<ChatMessage>();
+        var scope = new AgentflowAgentSessionScope(
+            new StubProviderSessionState(),
+            Guid.CreateVersion7(),
+            "context",
+            null
+        )
+        {
+            InputObserver = (input, _) =>
+            {
+                observed.Add(input);
+                return ValueTask.CompletedTask;
+            },
+        };
+        var leaf = new AgentflowNodeScopedAgent(new ToolMessageAgent(), "leaf", "Leaf", "node instructions", scope);
+        var nested = new AgentflowNodeScopedAgent(leaf, "nested", "Nested", null, scope, isWorkflow: true);
+        var upstream = new ChatMessage(
+            new ChatRole(sourceRole),
+            [
+                new TextContent("review"),
+                new TextReasoningContent("private reasoning"),
+                new FunctionCallContent("call", "tool"),
+                new UsageContent(new UsageDetails { TotalTokenCount = 42 }),
+            ]
+        )
+        {
+            MessageId = "upstream",
+            AuthorName = "pi",
+            AdditionalProperties = new() { ["nodeName"] = "Review" },
+        };
+        var context = new ChatMessage(ChatRole.User, "injected context")
+        {
+            AdditionalProperties = new() { ["nodeName"] = "Context" },
+        }.WithAgentRequestMessageSource(AgentRequestMessageSourceType.AIContextProvider, "test");
+        var session = await nested.CreateSessionAsync(TestContext.Current.CancellationToken);
+
+        // Act: the same upstream value can be consumed again on a later loop activation.
+        for (var activation = 0; activation < 2; activation++)
+        {
+            await foreach (
+                var update in nested.RunStreamingAsync(
+                    [
+                        new(ChatRole.User, "original"),
+                        context,
+                        upstream,
+                        new(ChatRole.Tool, [new FunctionResultContent("orphan", "tool result")]),
+                    ],
+                    session,
+                    cancellationToken: TestContext.Current.CancellationToken
+                )
+            )
+                Assert.NotEqual(ChatRole.User, update.Role);
+        }
+
+        // Assert: the nested container never publishes a second copy.
+        Assert.Equal(2, observed.Count);
+        Assert.NotEqual(observed[0].MessageId, observed[1].MessageId);
+        Assert.All(
+            observed,
+            input =>
+            {
+                Assert.Equal("review", Assert.IsType<TextContent>(Assert.Single(input.Contents)).Text);
+                Assert.Equal(ChatRole.User, input.Role);
+                Assert.Equal("pi", input.AuthorName);
+                Assert.Equal("Review", input.AdditionalProperties!["nodeName"]);
+            }
+        );
+        Assert.Equal("upstream", upstream.MessageId);
+        Assert.Equal(new ChatRole(sourceRole), upstream.Role);
+        Assert.False(upstream.AdditionalProperties!.ContainsKey(ConversationHistoryMetadata.AgentflowInputKey));
+    }
+
     private sealed class RecordingConversationHistoryWriter : IConversationHistoryWriter
     {
         public List<IReadOnlyList<ChatMessage>> Calls { get; } = [];
