@@ -92,6 +92,12 @@ public static class AgwHostApplication
                     )
                     .Build()
             )
+            // Raw protocol logs can contain upstream payloads. Agw.Auth.Oidc emits safe
+            // stage/category/exception-type/trace diagnostics instead.
+            .MinimumLevel.Override(
+                "Microsoft.AspNetCore.Authentication.OpenIdConnect",
+                Serilog.Events.LogEventLevel.Fatal
+            )
             .Enrich.FromLogContext()
             .Enrich.WithMachineName()
             .Enrich.WithThreadId()
@@ -345,6 +351,9 @@ public static class AgwHostApplication
                 .AddAuth()
                 .AddSetup(builder.Configuration, readOnly: profile == AgwHostProfile.DataPlane)
                 .AddIntegrations(builder.Configuration);
+
+            if (hasControlPlane)
+                builder.Services.AddOidcAuthentication(builder.Configuration, builder.Environment);
 
             // 数据库 AuditUserId 提供者
             builder.Services.AddScoped<IEntityAuditUserIdProvider, EntityAuditUserIdProvider>();

@@ -74,6 +74,10 @@ public partial class AgwDbContext
     public DbSet<Provider> Providers => Set<Provider>();
     public DbSet<ProviderAuthConfig> ProviderAuthConfigs => Set<ProviderAuthConfig>();
     public DbSet<ApiToken> ApiTokens => Set<ApiToken>();
+    public DbSet<AuthUser> AuthUsers => Set<AuthUser>();
+    public DbSet<AuthExternalIdentity> AuthExternalIdentities => Set<AuthExternalIdentity>();
+    public DbSet<AuthDesktopLoginGrant> AuthDesktopLoginGrants => Set<AuthDesktopLoginGrant>();
+    public DbSet<AuthUserIdSequence> AuthUserIdSequences => Set<AuthUserIdSequence>();
     public DbSet<Setting> Settings => Set<Setting>();
 
     public DbSet<AgwAiModel> Models => Set<AgwAiModel>();
@@ -138,6 +142,11 @@ public partial class AgwDbContext
         base.OnModelCreating(modelBuilder);
         ConfigureVersion7GuidKeys(modelBuilder);
         ConfigureProviderSpecificColumnTypes(modelBuilder);
+        if (Database.IsNpgsql())
+        {
+            modelBuilder.Entity<AuthExternalIdentity>().Property(identity => identity.Issuer).UseCollation("C");
+            modelBuilder.Entity<AuthExternalIdentity>().Property(identity => identity.Subject).UseCollation("C");
+        }
         EncryptedEntityMetadata.Validate(modelBuilder);
         modelBuilder.ApplySoftDeleteQueryFilters();
         modelBuilder.ApplyUserScopeQueryFilters(this);

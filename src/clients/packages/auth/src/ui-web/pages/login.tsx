@@ -1,22 +1,48 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { LockKeyhole } from "lucide-react";
 
-import { login } from "../../services/auth";
+import { getOidcProviders, oidcLoginUrl, type OidcProvider, login } from "../../services/auth";
 import { AgwLogo, Button } from "@agw/components";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@agw/components";
 import { Input } from "@agw/components";
 import { Label } from "@agw/components";
 
 export default function LoginPage() {
-  const router = useRouter();
+  const [providers, setProviders] = React.useState<OidcProvider[]>([]);
+  const [loadingProviders, setLoadingProviders] = React.useState(true);
+  const [providerError, setProviderError] = React.useState(false);
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
 
   React.useEffect(() => {
+    let active = true;
+    getOidcProviders()
+      .then((items) => {
+        if (active) setProviders(items);
+      })
+      .catch(() => {
+        if (active) setProviderError(true);
+      })
+      .finally(() => {
+        if (active) setLoadingProviders(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    const loginError = new URLSearchParams(window.location.search).get("error");
+    if (loginError?.startsWith("oidc-")) {
+      setError(
+        loginError === "oidc-authorization-denied"
+          ? "Sign-in was cancelled. Choose a provider to try again."
+          : "Sign-in could not be completed. Please start again.",
+      );
+    }
     if (new URLSearchParams(window.location.search).get("error") === "incompatible-server") {
       setError("This Web UI is not compatible with the connected Agw Server API version.");
     }
@@ -33,7 +59,7 @@ export default function LoginPage() {
         returnUrl && returnUrl.startsWith("/") && !returnUrl.startsWith("//")
           ? returnUrl
           : "/dashboard/";
-      router.replace(destination);
+      window.location.assign(destination);
     } catch {
       setError("The administrator password was not accepted.");
     } finally {
@@ -58,6 +84,40 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="space-y-3" aria-busy={loadingProviders}>
+            {loadingProviders ? (
+              <p className="text-sm text-muted-foreground">Loading sign-in options…</p>
+            ) : null}
+            {providerError ? (
+              <p className="text-sm text-muted-foreground" role="status">
+                Sign-in providers are unavailable. You can still use the administrator password.
+              </p>
+            ) : null}
+            {providers.map((provider) => (
+              <Button
+                key={provider.id}
+                className="w-full"
+                variant="outline"
+                disabled={submitting}
+                onClick={() => {
+                  setSubmitting(true);
+                  const requested = new URLSearchParams(window.location.search).get("returnUrl");
+                  const returnUrl =
+                    requested?.startsWith("/") && !requested.startsWith("//")
+                      ? requested
+                      : "/dashboard/";
+                  window.location.assign(oidcLoginUrl(provider.id, returnUrl));
+                }}
+              >
+                Continue with {provider.displayName}
+              </Button>
+            ))}
+            {providers.length > 0 ? (
+              <div className="py-2 text-center text-xs text-muted-foreground">
+                Administrator access
+              </div>
+            ) : null}
+          </div>
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="space-y-2">
               <Label htmlFor="password">Administrator password</Label>

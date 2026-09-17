@@ -44,12 +44,26 @@ public sealed class AgwAuthenticationMiddleware
             {
                 context.User = CreatePrincipal(
                     tokenIdentity.UserId,
-                    Constants.ApiTokenUserName,
+                    tokenIdentity.DisplayName ?? Constants.ApiTokenUserName,
                     AgwAuthDefaults.BearerScheme,
                     stateStore.GetAuthenticationSnapshot().SessionVersion
                 );
+                if (tokenIdentity.LoginProvider is { } provider)
+                    ((ClaimsIdentity)context.User.Identity!).AddClaim(new Claim(OidcPrincipal.ProviderClaim, provider));
+                if (tokenIdentity.TokenId is { } tokenId)
+                    ((ClaimsIdentity)context.User.Identity!).AddClaim(
+                        new Claim(OidcPrincipal.TokenIdClaim, tokenId.ToString())
+                    );
             }
-            else if (LocalTrustedRequest.IsLocalTrusted(context))
+            else if (
+                bearerToken == null
+                && !context.Request.Query.ContainsKey(SignalRAccessTokenQueryParameter)
+                && !context.Request.Headers.ContainsKey("Authorization")
+                && !context.Request.Headers.ContainsKey(OidcFlow.ExplicitHeader)
+                && !context.Request.Cookies.ContainsKey(OidcFlow.ExplicitCookie)
+                && !context.Items.ContainsKey(OidcPrincipal.AuthenticationRejected)
+                && LocalTrustedRequest.IsLocalTrusted(context)
+            )
             {
                 context.User = CreatePrincipal(
                     Constants.AdminUserId,

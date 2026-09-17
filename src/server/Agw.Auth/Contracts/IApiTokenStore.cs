@@ -1,6 +1,11 @@
 namespace Agw.Auth.Contracts;
 
-public sealed record ApiTokenIdentity(string UserId);
+public sealed record ApiTokenIdentity(
+    string UserId,
+    Guid? TokenId = null,
+    string? DisplayName = null,
+    string? LoginProvider = null
+);
 
 public interface IApiTokenStore
 {

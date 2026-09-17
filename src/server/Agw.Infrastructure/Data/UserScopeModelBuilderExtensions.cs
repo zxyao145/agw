@@ -29,6 +29,26 @@ internal static class UserScopeModelBuilderExtensions
 {
     public static void ApplyUserScopeQueryFilters(this ModelBuilder modelBuilder, AgwDbContext context)
     {
+        modelBuilder
+            .Entity<AuthUser>()
+            .HasQueryFilter(
+                UserScopeQueryFilterNames.UserScope,
+                user => context.UserScopeBypass || context.UserScopeIsActive && user.CreateBy == context.CurrentUserId
+            );
+        modelBuilder
+            .Entity<AuthExternalIdentity>()
+            .HasQueryFilter(
+                UserScopeQueryFilterNames.UserScope,
+                identity =>
+                    context.UserScopeBypass || context.UserScopeIsActive && identity.CreateBy == context.CurrentUserId
+            );
+        modelBuilder
+            .Entity<AuthDesktopLoginGrant>()
+            .HasQueryFilter(
+                UserScopeQueryFilterNames.UserScope,
+                grant => context.UserScopeBypass || context.UserScopeIsActive && grant.CreateBy == context.CurrentUserId
+            );
+
         // Global groups are available only through the explicit Infrastructure global-settings path.
         modelBuilder
             .Entity<Setting>()

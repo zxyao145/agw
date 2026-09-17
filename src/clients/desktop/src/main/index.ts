@@ -1,3 +1,5 @@
+import { DesktopOidcLogin } from "./oidc-login";
+
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { homedir, release } from "node:os";
@@ -159,6 +161,8 @@ function senderUrl(event: IpcMainInvokeEvent): string {
   return event.senderFrame?.url ?? event.sender.getURL();
 }
 
+let oidcLogin: DesktopOidcLogin | null = null;
+
 async function runtimeState(): Promise<DesktopRuntimeState> {
   const activeToken = await settingsStore.loadToken(currentSettings.activeServerId);
   return {
@@ -169,6 +173,7 @@ async function runtimeState(): Promise<DesktopRuntimeState> {
     packageFlavor: currentSettings.packageFlavor,
     settings: currentSettings,
     activeToken,
+    activeCredentialSource: await settingsStore.credentialSource(currentSettings.activeServerId),
     localServerRuntime: await readLocalServerRuntime(),
   };
 }
@@ -461,6 +466,10 @@ function showWindowSafely(pathname?: string): void {
 }
 
 function handleOAuthDeepLink(value: string): boolean {
+  if (oidcLogin?.handleRedirect(value)) {
+    showWindowSafely();
+    return true;
+  }
   const route = parseOAuthDeepLink(value);
   if (!route) return false;
   if (!rendererReady) {
@@ -569,6 +578,22 @@ function windowsDistribution(): "squirrel" | "portable" {
 }
 
 function registerIpc(): void {
+  ipcMain.handle("agw:oidc-providers", async (event, profileId: string) => {
+    assertTrustedSender(senderUrl(event));
+    return oidcLogin!.providers(profileId);
+  });
+  ipcMain.handle("agw:oidc-login", async (event, profileId: string, providerId: string) => {
+    assertTrustedSender(senderUrl(event));
+    return oidcLogin!.login(profileId, providerId);
+  });
+  ipcMain.handle("agw:oidc-cancel", async (event, profileId: string) => {
+    assertTrustedSender(senderUrl(event));
+    oidcLogin!.cancel(profileId);
+  });
+  ipcMain.handle("agw:oidc-logout", async (event, profileId: string) => {
+    assertTrustedSender(senderUrl(event));
+    return oidcLogin!.logout(profileId);
+  });
   ipcMain.handle("agw:get-runtime-state", async (event) => {
     assertTrustedSender(senderUrl(event));
     return runtimeState();
@@ -585,6 +610,7 @@ function registerIpc(): void {
   });
   ipcMain.handle("agw:save-settings", async (event, settings: DesktopSettingsUpdate) => {
     assertTrustedSender(senderUrl(event));
+    if (settings.profiles) oidcLogin?.cancelAll();
     await settingsStore.save(settings);
     currentSettings = await settingsStore.load();
     return runtimeState();
@@ -669,6 +695,7 @@ function registerIpc(): void {
 app.on("before-quit", () => {
   isQuitting = true;
   rendererRecoveryGuard.dispose();
+  oidcLogin?.cancelAll();
 });
 
 app.on("activate", () => showWindowSafely());
@@ -698,6 +725,21 @@ void app
     const flavor = packageMetadata.packageFlavor;
     settingsStore = new DesktopSettingsStore(app.getPath("userData"), flavor, createSecretCodec());
     currentSettings = await settingsStore.load();
+    oidcLogin = new DesktopOidcLogin({
+      getProfile: async (profileId) => {
+        const settings = await settingsStore.load();
+        const profile = settings.profiles.find((item) => item.id === profileId);
+        if (!profile) throw new Error("The Server profile no longer exists.");
+        const local = profile.kind === "local" ? await readLocalServerRuntime() : null;
+        return local ? { ...profile, baseUrl: local.baseUrl } : profile;
+      },
+      fetch: (url, init) => net.fetch(url, init),
+      openExternal: (url) => shell.openExternal(url),
+      saveToken: (profileId, token, beforeCommit) =>
+        settingsStore.saveToken(profileId, token, "oidc", beforeCommit),
+      loadToken: (profileId) => settingsStore.loadToken(profileId),
+      deleteToken: (profileId) => settingsStore.deleteToken(profileId),
+    });
     daemonManager = new DaemonManager(process.platform, serverExecutablePath());
 
     registerStaticProtocol();

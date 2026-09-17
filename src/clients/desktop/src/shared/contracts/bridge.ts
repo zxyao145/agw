@@ -25,6 +25,10 @@ export type AgwDesktopBridge = {
   saveToken(profileId: string, token: string): Promise<void>;
   deleteToken(profileId: string): Promise<void>;
   provisionLocalToken(): Promise<string>;
+  getOidcProviders(profileId: string): Promise<Array<{ id: string; displayName: string }>>;
+  loginWithOidc(profileId: string, providerId: string): Promise<void>;
+  cancelOidcLogin(profileId: string): Promise<void>;
+  logoutOidc(profileId: string): Promise<void>;
   openExternal(url: string): Promise<void>;
   openSetup(baseUrl: string): Promise<void>;
   setActiveTaskCount(count: number): Promise<void>;

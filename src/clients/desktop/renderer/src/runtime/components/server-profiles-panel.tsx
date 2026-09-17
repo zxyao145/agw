@@ -18,6 +18,7 @@ import {
   Input,
   Label,
 } from "@agw/components";
+import { OidcServerLogin } from "./oidc-server-login";
 import { useDesktopRuntime } from "../runtime-provider";
 
 type ProfileDraft = {
@@ -217,6 +218,7 @@ export function ServerProfilesPanel() {
                         </Button>
                       ) : null}
                     </div>
+                    <OidcServerLogin profileId={profile.id} baseUrl={profile.baseUrl} />
                   </div>
                 );
               })

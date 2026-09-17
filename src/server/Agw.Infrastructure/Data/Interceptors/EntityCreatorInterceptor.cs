@@ -70,7 +70,10 @@ public sealed class EntityCreatorInterceptor : SaveChangesInterceptor
                 continue;
             }
 
-            var value = entry.Property(propertyName).CurrentValue as string;
+            var rawValue = entry.Property(propertyName).CurrentValue;
+            var value = rawValue is long numericId
+                ? numericId.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : rawValue as string;
             if (string.IsNullOrWhiteSpace(value))
             {
                 if (propertyName == "UserId")

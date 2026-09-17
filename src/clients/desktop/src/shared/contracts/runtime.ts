@@ -19,5 +19,6 @@ export type DesktopRuntimeState = {
   packageFlavor: PackageFlavor;
   settings: DesktopSettings;
   activeToken: string | null;
+  activeCredentialSource?: "manual" | "oidc";
   localServerRuntime: LocalServerRuntime | null;
 };

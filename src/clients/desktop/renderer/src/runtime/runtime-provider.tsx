@@ -80,10 +80,19 @@ async function hasBearerAccess(
   return response.ok && body.data?.accessMode === "bearer";
 }
 
-function configureClients(profile: ServerProfile, token: string | null): void {
-  const config = { baseUrl: profile.baseUrl, token };
+function configureClients(
+  profile: ServerProfile,
+  token: string | null,
+  explicitAuth = false,
+): void {
+  const config = { baseUrl: profile.baseUrl, token, explicitAuth };
   configureApiRuntime(config);
-  configureExecutionRuntime(config);
+  // Browser WebSockets cannot carry the explicit-auth header. An invalid bearer
+  // sentinel prevents LocalTrusted fallback while an OIDC profile is signed out.
+  configureExecutionRuntime({
+    ...config,
+    token: explicitAuth && !token ? "agw_signed_out" : token,
+  });
 }
 
 export function DesktopRuntimeProvider({ children }: { children: React.ReactNode }) {
@@ -201,7 +210,7 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
 
         let profile = getEffectiveActiveServerProfile(nextState);
         let token = nextState.activeToken;
-        configureClients(profile, token);
+        configureClients(profile, token, nextState.activeCredentialSource === "oidc");
         activateQueryClient(profile, token);
 
         // Keep local settings editable even when the Server probe or authentication fails.
@@ -234,7 +243,12 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
           nextState = { ...nextState, activeToken: null };
         }
 
-        if (info.initialized && profile.kind === "local" && !token) {
+        if (
+          info.initialized &&
+          profile.kind === "local" &&
+          !token &&
+          nextState.activeCredentialSource !== "oidc"
+        ) {
           token = await bridge.provisionLocalToken();
           if (generation !== connectGenerationRef.current) return;
 
@@ -243,7 +257,7 @@ export function DesktopRuntimeProvider({ children }: { children: React.ReactNode
 
         if (generation !== connectGenerationRef.current) return;
 
-        configureClients(profile, token);
+        configureClients(profile, token, nextState.activeCredentialSource === "oidc");
         activateQueryClient(profile, token);
 
         setRuntimeState(nextState);

@@ -210,3 +210,46 @@ test("profile deletion prunes its tabs without reverting a concurrent server sel
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("OIDC credentials keep explicit-login mode after logout and are invalidated on URL changes", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "agw-desktop-oidc-"));
+  try {
+    const store = new DesktopSettingsStore(directory, "client", codec);
+    const settings = await store.load();
+    await store.saveToken("local", "agw_oidc-token", "oidc");
+    assert.equal(await store.credentialSource("local"), "oidc");
+    await store.deleteToken("local");
+    assert.equal(await store.credentialSource("local"), "oidc");
+    await store.saveToken("local", "agw_oidc-token", "oidc");
+    await store.save({
+      profiles: settings.profiles.map((profile) => ({
+        ...profile,
+        baseUrl: "http://127.0.0.1:40000",
+      })),
+    });
+    assert.equal(await store.loadToken("local"), null);
+    assert.equal(await store.credentialSource("local"), "oidc");
+    await store.saveToken("local", "agw_manual-token");
+    assert.equal(await store.credentialSource("local"), "manual");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("cancelled OIDC save leaves the previous token and credential source intact", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "agw-desktop-oidc-cancel-"));
+  try {
+    const store = new DesktopSettingsStore(directory, "client", codec);
+    await store.saveToken("local", "agw_existing-token");
+    await assert.rejects(
+      store.saveToken("local", "agw_new-token", "oidc", async () => {
+        throw new Error("cancelled");
+      }),
+      /cancelled/u,
+    );
+    assert.equal(await store.loadToken("local"), "agw_existing-token");
+    assert.equal(await store.credentialSource("local"), "manual");
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

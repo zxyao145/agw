@@ -60,7 +60,10 @@ public sealed class DependencyInjectionTests
         );
         var principal = new ClaimsPrincipal(
             new ClaimsIdentity(
-                [new Claim(AgwAuthDefaults.SessionVersionClaimType, sessionVersion)],
+                [
+                    new Claim(ClaimTypes.NameIdentifier, "1001"),
+                    new Claim(AgwAuthDefaults.SessionVersionClaimType, sessionVersion),
+                ],
                 AgwAuthDefaults.CookieScheme
             )
         );

@@ -46,7 +46,14 @@ public class EntityTypeConfigurationTests
     [Fact]
     public void AuthEntities_DeclareMatchingConfigurations()
     {
-        AssertConfigured(typeof(ApiToken), typeof(Setting));
+        AssertConfigured(
+            typeof(ApiToken),
+            typeof(Setting),
+            typeof(AuthUser),
+            typeof(AuthExternalIdentity),
+            typeof(AuthDesktopLoginGrant),
+            typeof(AuthUserIdSequence)
+        );
     }
 
     [Fact]
@@ -183,7 +190,7 @@ public class EntityTypeConfigurationTests
             .OrderBy(type => type.FullName)
             .ToArray();
 
-        Assert.Equal(37, entityTypes.Length);
+        Assert.Equal(41, entityTypes.Length);
         AssertConfigured(entityTypes);
     }
 

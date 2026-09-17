@@ -16,6 +16,7 @@ export type ApiMethod = "get" | "post" | "put" | "delete";
 export type ApiRuntimeConfig = {
   baseUrl: string;
   token: string | null;
+  explicitAuth?: boolean;
 };
 
 export type BearerApiClientConfig = {
@@ -35,6 +36,7 @@ export function configureApiRuntime(config: ApiRuntimeConfig): void {
   apiRuntime = {
     baseUrl: config.baseUrl.trim().replace(/\/+$/u, ""),
     token: config.token,
+    ...(config.explicitAuth ? { explicitAuth: true } : {}),
     antiforgeryToken: null,
   };
 }
@@ -44,7 +46,11 @@ export function resetApiRuntime(): void {
 }
 
 export function getApiRuntime(): ApiRuntimeConfig {
-  return { baseUrl: apiRuntime.baseUrl, token: apiRuntime.token };
+  return {
+    baseUrl: apiRuntime.baseUrl,
+    token: apiRuntime.token,
+    ...(apiRuntime.explicitAuth ? { explicitAuth: true } : {}),
+  };
 }
 
 function resolveApiUrl(runtime: ApiRuntimeConfig, path: string): string {
@@ -61,8 +67,13 @@ async function getAntiforgeryToken(
   try {
     response = await fetch(url, {
       ...(signal ? { signal } : {}),
+      ...(runtime.explicitAuth ? { headers: { "X-Agw-Explicit-Auth": "1" } } : {}),
       credentials:
-        runtime.baseUrl && runtime.token ? "omit" : runtime.baseUrl ? "include" : "same-origin",
+        runtime.explicitAuth || (runtime.baseUrl && runtime.token)
+          ? "omit"
+          : runtime.baseUrl
+            ? "include"
+            : "same-origin",
     });
   } catch (caught) {
     throw new ApiTransportError({ url, cause: caught });
@@ -198,6 +209,7 @@ export async function apiRequest(
   while (true) {
     const headers: HeadersInit = { ...opts.headers };
 
+    if (runtime.explicitAuth) (headers as Record<string, string>)["X-Agw-Explicit-Auth"] = "1";
     if (runtime.token) {
       (headers as Record<string, string>).Authorization = `Bearer ${runtime.token}`;
     }
@@ -214,7 +226,11 @@ export async function apiRequest(
       headers,
       signal: opts.signal,
       credentials:
-        runtime.baseUrl && runtime.token ? "omit" : runtime.baseUrl ? "include" : "same-origin",
+        runtime.explicitAuth || (runtime.baseUrl && runtime.token)
+          ? "omit"
+          : runtime.baseUrl
+            ? "include"
+            : "same-origin",
     };
 
     if (opts.body !== undefined) {

@@ -63,7 +63,10 @@ public sealed class AuthController : ControllerBase
                     _ => "anonymous",
                 },
                 1,
-                authenticated ? _userInfoService.RequiredUserId : null
+                authenticated ? _userInfoService.RequiredUserId : null,
+                authenticated ? identity?.Name : null,
+                authenticated ? User.FindFirst(OidcPrincipal.ProviderClaim)?.Value : null,
+                authenticated && _userInfoService.RequiredUserId == Constants.AdminUserId
             )
         );
     }
@@ -209,7 +212,7 @@ public sealed class AuthController : ControllerBase
     }
 
     private bool IsInteractiveAdmin() =>
-        User.Identity?.AuthenticationType is AgwAuthDefaults.CookieScheme or AgwAuthDefaults.LocalTrustedScheme;
+        IsInteractiveUser() && _userInfoService.RequiredUserId == Constants.AdminUserId;
 
     private bool IsInteractiveUser() =>
         User.Identity?.AuthenticationType is AgwAuthDefaults.CookieScheme or AgwAuthDefaults.LocalTrustedScheme;

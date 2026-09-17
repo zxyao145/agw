@@ -339,6 +339,12 @@ public static class ErrorCodes
         HttpStatusCode.Unauthorized
     );
 
+    public static readonly ErrorCode DesktopLoginInvalid = new(
+        401_0005,
+        "Desktop login request is invalid or expired.",
+        HttpStatusCode.Unauthorized
+    );
+
     public static readonly ErrorCode InteractiveAdminRequired = new(
         403_0002,
         "An interactive administrator session is required.",

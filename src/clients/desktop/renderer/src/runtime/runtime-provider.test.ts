@@ -46,12 +46,13 @@ test("Desktop publishes saved settings before reconnecting", async () => {
   );
 });
 
-test("Desktop refreshes an invalid local Bearer token before becoming ready", async () => {
+test("Desktop refreshes invalid local manual credentials without elevating an OIDC login", async () => {
   const source = await readFile(RUNTIME_URL, "utf8");
 
   assert.match(source, /\/api\/auth\/session/);
   assert.match(source, /body\.data\?\.accessMode === "bearer"/);
-  assert.match(source, /profile\.kind === "local" && !token/);
+  assert.match(source, /profile\.kind === "local"\s*&&\s*!token/);
+  assert.match(source, /nextState\.activeCredentialSource !== "oidc"/);
   assert.match(source, /token = await bridge\.provisionLocalToken\(\)/);
 });
 
@@ -111,7 +112,7 @@ test("Desktop ignores stale runtime state before mutating shared clients", async
   );
   assert.match(
     source,
-    /if \(generation !== connectGenerationRef\.current\) return;\s+configureClients\(profile, token\);\s+activateQueryClient/,
+    /if \(generation !== connectGenerationRef\.current\) return;\s+configureClients\(profile, token, nextState\.activeCredentialSource === "oidc"\);\s+activateQueryClient/,
   );
 });
 

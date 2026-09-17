@@ -69,7 +69,7 @@ export function QuickTextDialog({ quickCommands, onCommandSelect }: QuickTextDia
                 <button
                   key={`${option.kind ?? "user"}:${option.id}`}
                   onClick={() => handleSelect(option.text)}
-                  className="text-left p-2 rounded-md border hover:bg-accent/50 transition-colors"
+                  className="cursor-pointer text-left p-2 rounded-md border hover:bg-accent/50 transition-colors"
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
