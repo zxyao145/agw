@@ -16,6 +16,7 @@ This project is primarily built on [MAF](https://github.com/microsoft/agent-fram
 
 > [!NOTE]
 > Agw is still under active development before version 1.0. The database schema, APIs, and interfaces may change between different versions.
+> Agw currently has no sandbox isolation and is intended only for trusted small teams or deployments in trusted environments.
 
 ## Use Cases
 
