@@ -1,10 +1,10 @@
 ---
 title: "AGW features"
-description: "Explore agent handoffs, image input, memory, and execution controls."
+description: "Explore custom agents, Agentflow, agent handoffs, and execution controls."
 weight: 15
-lastmod: 2026-09-15
+lastmod: 2026-09-17
 translationKey: docs/features/_index
 icon: fa-solid fa-star
 ---
 
-Explore six ways AGW supports everyday work. Each page explains a use case, where to start, and the limits to keep in mind.
+Explore eight ways AGW supports everyday work. Each page explains a use case, where to start, and the limits to keep in mind.
