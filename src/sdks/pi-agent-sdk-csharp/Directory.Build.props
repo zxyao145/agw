@@ -7,5 +7,6 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);NU1507;MAAI001</NoWarn>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
   </PropertyGroup>
 </Project>

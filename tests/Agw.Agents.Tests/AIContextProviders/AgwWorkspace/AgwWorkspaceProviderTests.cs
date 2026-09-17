@@ -101,7 +101,9 @@ public class AgwWorkspaceProviderTests
 
             - Your default workspace or working directory is '{PathUtil.ExpandTilde(workspace)}'.
             """;
-        Assert.Equal(expected, result);
+        // Raw string literals embed each source file's checkout line endings, which differ
+        // under mixed core.autocrlf states; the test targets tilde expansion, not EOL.
+        Assert.Equal(expected.ReplaceLineEndings("\n"), result?.ReplaceLineEndings("\n"));
     }
 
     [Fact]
