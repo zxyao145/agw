@@ -7,6 +7,7 @@ export const ToolDirectoriesContext = React.createContext<readonly ProjectDirect
 
 const FILE_TOOL_NAMES = new Set([
   "file_access_read",
+  "file_access_read_lines",
   "file_access_ls",
   "file_access_grep",
   "file_access_write",
