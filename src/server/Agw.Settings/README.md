@@ -12,4 +12,6 @@ Keys are case-sensitive, 1–128 characters, with no surrounding whitespace. Val
 
 Authentication uses only the global `auth` group. Its JSON contains `passwordHash`, `sessionVersion`, and `initializedAt`. SessionVersion is distinct from the storage Version. A user group with the same key cannot affect authentication. Password hashes and JSON values must not be logged or exposed through generic configuration APIs.
 
+Quick prompts use the dedicated `quick-prompts` key. The global row stores system prompts and the current-user row stores personal prompts. The Quick Prompts API returns a merged system-first list and marks each item with `kind` (`system` or `user`); management writes use optimistic versions and only the administrator may write the system list.
+
 `AddSettings` directly creates the audited configuration-group table and its filtered unique indexes; rollback drops only `setting`. There is no intermediate authentication table or data-copy step. Back up settings before rollback. Apply migrations through the deployment process, never automatically as part of a normal configuration write.

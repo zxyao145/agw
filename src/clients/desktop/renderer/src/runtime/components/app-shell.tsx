@@ -103,6 +103,7 @@ const SETTINGS_GROUPS = [
       // { href: "/settings/#local-server", label: "Local server", icon: KeyRound },
       { href: "/settings/#appearance", label: "Appearance & close", icon: Moon },
       { href: "/settings/#about", label: "About", icon: Info },
+      { href: "/quick-prompts/", label: "Quick prompts", icon: Sparkles },
     ],
   },
 ] as const;

@@ -4,6 +4,7 @@ import {
   toFileSuggestions,
   type SuggestionItem,
 } from "@agw/chat-core";
+import { listQuickPrompts, type QuickPrompt } from "@agw/api";
 import type { PermissionMode } from "@agw/execution-core";
 import { Image as ExpoImage } from "expo-image";
 import {
@@ -60,17 +61,6 @@ const typography = {
   medium: "Inter_500Medium",
   semibold: "Inter_600SemiBold",
 } as const;
-
-const quickCommands = [
-  ["Analyze Code", "Please analyze the code and provide actionable insights about"],
-  ["Refactor", "Please refactor this code to improve"],
-  ["Explain", "Please explain how this code works"],
-  ["Write Tests", "Please write unit tests for this code"],
-  ["Debug", "Please help me debug this issue"],
-  ["Optimize", "Please optimize this code for better performance"],
-  ["Add Docs", "Please add documentation comments to this code"],
-  ["Review", "Please review this code for potential issues"],
-] as const;
 
 const permissionLabels: Record<PermissionMode, string> = {
   fullAccess: "Full access",
@@ -699,6 +689,13 @@ function PermissionPicker({
 
 function QuickTextPicker(): React.JSX.Element {
   const composer = useNativeComposer();
+  const [quickCommands, setQuickCommands] = React.useState<QuickPrompt[]>([]);
+  React.useEffect(() => {
+    if (!composer.quickTextOpen) return;
+    void listQuickPrompts()
+      .then(setQuickCommands)
+      .catch(() => setQuickCommands([]));
+  }, [composer.quickTextOpen]);
   return (
     <Modal
       animationType="slide"
@@ -712,13 +709,17 @@ function QuickTextPicker(): React.JSX.Element {
             <Text style={styles.sheetTitle}>Quick Text</Text>
             <IconButton icon={X} label="Close quick text" onPress={composer.closeQuickText} />
           </View>
-          {quickCommands.map(([label, value]) => (
+          {quickCommands.map((item) => (
             <Pressable
-              key={label}
-              onPress={() => composer.selectQuickText(value)}
+              key={`${item.kind}:${item.id}`}
+              onPress={() => composer.selectQuickText(item.text)}
               style={styles.option}
             >
-              <Text style={styles.optionTitle}>{label}</Text>
+              <Text style={styles.optionTitle}>{item.label}</Text>
+              {item.description ? (
+                <Text style={styles.optionDescription}>{item.description}</Text>
+              ) : null}
+              <Text style={styles.optionKind}>{item.kind === "system" ? "System" : "Mine"}</Text>
             </Pressable>
           ))}
         </View>
@@ -983,6 +984,19 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   optionTitle: { color: colors.ink, fontFamily: typography.medium, fontSize: 14 },
+  optionDescription: {
+    color: colors.subtle,
+    fontFamily: typography.regular,
+    fontSize: 12,
+    marginTop: 2,
+  },
+  optionKind: {
+    color: colors.primary,
+    fontFamily: typography.medium,
+    fontSize: 10,
+    marginTop: 4,
+    textTransform: "uppercase",
+  },
   permissionOptionCopy: { flexDirection: "row", alignItems: "center", gap: 8 },
   selectedDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.primary },
   addBackdrop: {
