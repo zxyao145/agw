@@ -6,6 +6,7 @@ using Agw.Host.Hosting;
 using Agw.Integrations.Controllers;
 using Agw.Jobs.Api;
 using Agw.Projects.Controllers;
+using Agw.Settings.Api;
 using Agw.Setup.Controllers;
 using Agw.Skills.Controllers;
 using Agw.Tools.Api.Controllers;
@@ -26,6 +27,7 @@ public sealed class ControlPlaneHostModule : IAgwHostModule
         AddAssembly(applicationParts, typeof(AuthController));
         AddAssembly(applicationParts, typeof(OAuthController));
         AddAssembly(applicationParts, typeof(ToolsController));
+        AddAssembly(applicationParts, typeof(QuickPromptsController));
     }
 
     public void MapEndpoints(WebApplication app)

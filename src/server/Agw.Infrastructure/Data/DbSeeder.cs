@@ -1,14 +1,17 @@
 using System.IO.Compression;
+using System.Text.Json;
 using Agw.Agents.Application.Persistence;
 using Agw.Agents.ExternalAgents;
 using Agw.Auth.Contracts;
 using Agw.Projects.Contracts;
 using Agw.Providers.Contracts;
+using Agw.Settings.Contracts;
 using Agw.Shared;
 using Agw.Shared.Data.Entities.Agentflows;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
 using Agw.Shared.Data.Entities.Providers;
+using Agw.Shared.Data.Entities.Settings;
 using Agw.Shared.Data.Entities.Skills;
 using Agw.Shared.Exceptions;
 using Agw.Shared.Runtime;
@@ -105,6 +108,7 @@ public class DbSeeder
                 await SeedAgentSkillRelationAsync(agents["amap-poi-search"].Id, skill.Id);
             }
             await SeedDefaultAgentflowAsync(agents);
+            await SeedQuickPromptsAsync();
 
             await _context.SaveChangesAsync();
             _logger.LogInformation("Database seeding completed successfully");
@@ -114,6 +118,47 @@ public class DbSeeder
             _logger.LogError(ex, "Error occurred during database seeding");
             throw;
         }
+    }
+
+    private async Task SeedQuickPromptsAsync()
+    {
+        if (await _context.Settings.AnyAsync(x => x.Key == QuickPromptSettings.Key && x.UserId == null))
+            return;
+        var items = new[]
+        {
+            new
+            {
+                id = "implement-current-branch",
+                label = "Implement",
+                description = "On the current branch",
+                text = "Execute on the current branch.",
+            },
+            new
+            {
+                id = "review",
+                label = "Review",
+                description = "Review the changes",
+                text = "Review the current git diff code.",
+            },
+            new
+            {
+                id = "implement-new-branch",
+                label = "Implement",
+                description = "On a new branch",
+                text = "Create a new branch and then execute it",
+            },
+        };
+        _context.Settings.Add(
+            new Setting
+            {
+                Id = Guid.CreateVersion7(),
+                Key = QuickPromptSettings.Key,
+                ValueJson = JsonSerializer.Serialize(new { items }),
+                Version = 1,
+                CreateBy = Constants.AdminUserId,
+                UpdateBy = Constants.AdminUserId,
+            }
+        );
     }
 
     /// <summary>

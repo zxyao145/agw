@@ -128,6 +128,12 @@ const navItems: SidebarMenuGroupProps[] = [
         icon: <BookOpenText />,
       },
       {
+        url: "/quick-prompts",
+        title: "Quick prompts",
+        isActive: true,
+        icon: <Sparkle />,
+      },
+      {
         url: "/skills",
         title: "Skills",
         isActive: true,

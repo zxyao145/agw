@@ -501,6 +501,11 @@ public static class ErrorCodes
         "A Job with an active attempt cannot be updated or deleted.",
         HttpStatusCode.Conflict
     );
+    public static readonly ErrorCode QuickPromptConflict = new(
+        409_0020,
+        "Quick prompts changed. Reload and try again.",
+        HttpStatusCode.Conflict
+    );
 
     public static readonly ErrorCode TooManyAuthenticationAttempts = new(
         429_0001,
