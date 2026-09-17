@@ -3,6 +3,8 @@ using Agw.Shared.Exceptions;
 using ClaudeCodeSdk.MAF;
 using Microsoft.Extensions.AI;
 
+using OpenAI.CodexSdk.MAF;
+
 namespace Agw.Agents.Execution.Messaging;
 
 internal static class AgwMessageUtil
@@ -192,7 +194,8 @@ internal static class AgwMessageUtil
 
     public static bool IsResult(AgentRuntime session, AgwMessage agwMessage)
     {
-        if (session.Agent is ClaudeCodeAIAgent)
+        // claude code result message or codex finalresponse
+        if (session.Agent is ClaudeCodeAIAgent or CodexAIAgent)
         {
             if (
                 agwMessage.AdditionalProperties != null

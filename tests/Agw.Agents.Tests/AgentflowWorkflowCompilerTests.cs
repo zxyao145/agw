@@ -2064,7 +2064,7 @@ public class AgentflowWorkflowCompilerTests
         Assert.Equal(2, output.Count);
         Assert.Equal("ok", output[0].Text);
         Assert.Equal("summary", output[1].Text);
-        Assert.Equal(ChatRole.System, output[1].Role);
+        Assert.Equal(ChatRole.Assistant, output[1].Role);
         Assert.Equal(Constants.DefaultAgentAuthor, output[1].AuthorName);
         Assert.Equal("result", output[1].AdditionalProperties!["type"]);
 
