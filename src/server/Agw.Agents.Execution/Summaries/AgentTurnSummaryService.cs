@@ -93,7 +93,7 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService
             .ConfigureAwait(false);
         return result;
     }
-    
+
     internal static ChatMessage CreateResultMessage(string text) =>
         new(ChatRole.Assistant, [new TextContent(text)])
         {
