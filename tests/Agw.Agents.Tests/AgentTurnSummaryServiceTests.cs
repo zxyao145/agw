@@ -43,7 +43,7 @@ public class AgentTurnSummaryServiceTests
             TestContext.Current.CancellationToken
         );
 
-        Assert.Equal(ChatRole.System, result.Role);
+        Assert.Equal(ChatRole.Assistant, result.Role);
         Assert.Equal(Constants.DefaultAgentAuthor, result.AuthorName);
         Assert.Equal("result", result.AdditionalProperties!["type"]);
         var text = Assert.IsType<TextContent>(Assert.Single(result.Contents));

@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
 
     <IsTestProject>true</IsTestProject>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
 
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);MAAI001;CS1591;NU1507</NoWarn>

@@ -21,7 +21,7 @@ public sealed class PlanModeToolBlockMetadataTests
         );
 
         Assert.Equal(
-            ["file_access_grep", "file_access_ls", "file_access_read"],
+            ["file_access_grep", "file_access_ls", "file_access_read", "file_access_read_lines"],
             contribution.PlanModeAllowedToolNames.Order(StringComparer.Ordinal)
         );
     }

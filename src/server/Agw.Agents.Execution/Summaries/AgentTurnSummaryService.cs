@@ -95,7 +95,7 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService
     }
 
     internal static ChatMessage CreateResultMessage(string text) =>
-        new(ChatRole.System, [new TextContent(text)])
+        new(ChatRole.Assistant, [new TextContent(text)])
         {
             MessageId = Guid.CreateVersion7().ToString(),
             AuthorName = Constants.DefaultAgentAuthor,

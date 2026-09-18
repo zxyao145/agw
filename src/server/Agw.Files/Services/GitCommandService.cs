@@ -246,15 +246,12 @@ public class GitCommandService : IGitCommandService
             return new GitResetResult(false, "File is not in a git repository", null, true);
         }
 
-        var gitRootResult = await RunGitAsync(gitDirectory, ["rev-parse", "--show-toplevel"], cancellationToken);
-        if (gitRootResult.ExitCode != 0)
-        {
-            return new GitResetResult(false, "Failed to get git root directory", gitRootResult.StandardError, false);
-        }
-
-        var gitRoot = gitRootResult.StandardOutput.Trim();
-        var relativePath = Path.GetRelativePath(gitRoot, filePath).Replace("\\", "/");
-        var statusResult = await RunGitAsync(gitDirectory, ["status", "--porcelain", relativePath], cancellationToken);
+        var relativePath = Path.GetRelativePath(gitDirectory, filePath).Replace("\\", "/");
+        var statusResult = await RunGitAsync(
+            gitDirectory,
+            ["status", "--porcelain", "--", relativePath],
+            cancellationToken
+        );
         if (statusResult.ExitCode != 0)
         {
             return new GitResetResult(false, "Failed to check git status", statusResult.StandardError, true);

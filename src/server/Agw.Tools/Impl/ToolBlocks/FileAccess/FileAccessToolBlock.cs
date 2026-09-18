@@ -20,6 +20,7 @@ public sealed class FileAccessToolBlock : IToolBlock
             ToolBlockScope.Agent | ToolBlockScope.Project,
             [
                 new("file_access_read", AgwToolPermission.ReadOnly, allowInPlanMode: true),
+                new("file_access_read_lines", AgwToolPermission.ReadOnly, allowInPlanMode: true),
                 new("file_access_ls", AgwToolPermission.ReadOnly, allowInPlanMode: true),
                 new("file_access_grep", AgwToolPermission.ReadOnly, allowInPlanMode: true),
                 new("file_access_write", AgwToolPermission.Write),

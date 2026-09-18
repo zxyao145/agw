@@ -66,10 +66,13 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
+      - name: Build test project
+        run: dotnet build tests/Agw.Agents.Tests -c Release
       - name: Test PostgreSQL fencing and concurrent event writes
         run: >-
-          dotnet test tests/Agw.Agents.Tests -c Release
-          --filter "FullyQualifiedName~PostgresExecutionFencingTests|FullyQualifiedName~PostgresBatch_ConcurrentOverlappingBatches"
-          --logger trx --results-directory TestResults/Postgres
+          tests/Agw.Agents.Tests/bin/Release/net10.0/Agw.Agents.Tests
+          -filterVSTest "FullyQualifiedName~PostgresExecutionFencingTests|FullyQualifiedName~PostgresBatch_ConcurrentOverlappingBatches"
+          -result-trx TestResults/Postgres/results.trx
+          -failSkips
       - name: Require actual PostgreSQL test execution
         run: python3 .github/scripts/verify-postgres-tests.py TestResults/Postgres
