@@ -5,6 +5,8 @@ import { Copy, KeyRound, LogOut, Plus, Trash2 } from "lucide-react";
 
 import {
   changePassword,
+  getAuthSession,
+  type AuthSession,
   createApiToken,
   listApiTokens,
   logout,
@@ -40,6 +42,7 @@ function encodeBase64Config(token: string): string {
 }
 
 export default function SettingsPage() {
+  const [session, setSession] = React.useState<AuthSession | null>(null);
   const [tokens, setTokens] = React.useState<ApiTokenSummary[]>([]);
   const [name, setName] = React.useState("");
   const [created, setCreated] = React.useState<CreatedApiToken | null>(null);
@@ -50,6 +53,9 @@ export default function SettingsPage() {
   const refresh = React.useCallback(async () => setTokens(await listApiTokens()), []);
   React.useEffect(() => {
     void refresh();
+    void getAuthSession()
+      .then(setSession)
+      .catch(() => setSession(null));
   }, [refresh]);
 
   const handleCreate = async () => {
@@ -182,49 +188,51 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Administrator password</CardTitle>
-          <CardDescription>
-            Changing the password invalidates every existing Web session. Locally trusted access may
-            leave the current password empty.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="current-password">Current password</Label>
-            <Input
-              id="current-password"
-              type="password"
-              autoComplete="current-password"
-              value={currentPassword}
-              onChange={(event) => setCurrentPassword(event.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="new-password">New password</Label>
-            <Input
-              id="new-password"
-              type="password"
-              autoComplete="new-password"
-              minLength={8}
-              maxLength={256}
-              value={newPassword}
-              onChange={(event) => setNewPassword(event.target.value)}
-            />
-          </div>
-          <Button
-            variant="outline"
-            disabled={newPassword.length < 8}
-            onClick={async () => {
-              await changePassword(currentPassword, newPassword);
-              window.location.assign("/login/");
-            }}
-          >
-            Change password
-          </Button>
-        </CardContent>
-      </Card>
+      {session?.isAdmin ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Administrator password</CardTitle>
+            <CardDescription>
+              Changing the password invalidates existing administrator Web sessions. Locally trusted
+              access may leave the current password empty.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="current-password">Current password</Label>
+              <Input
+                id="current-password"
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-password">New password</Label>
+              <Input
+                id="new-password"
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                maxLength={256}
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+              />
+            </div>
+            <Button
+              variant="outline"
+              disabled={newPassword.length < 8}
+              onClick={async () => {
+                await changePassword(currentPassword, newPassword);
+                window.location.assign("/login/");
+              }}
+            >
+              Change password
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

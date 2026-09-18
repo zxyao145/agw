@@ -206,6 +206,8 @@ public sealed partial class BackendArchitectureTests
         var allowed = new HashSet<string>(
             [
                 "Agw.Infrastructure/Auth/EfApiTokenStore.cs",
+                // Verified OIDC identities and proof-bound desktop grants cross the auth boundary.
+                "Agw.Infrastructure/Auth/EfOidcIdentityStore.cs",
                 "Agw.Infrastructure/Settings/EfSettingsPersistence.cs",
                 "Agw.Infrastructure/Repositories/JobRepo.cs",
                 "Agw.Infrastructure/Projects/ProjectDeletionCoordinator.cs",

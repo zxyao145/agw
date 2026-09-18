@@ -14,6 +14,9 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddAuth(this IServiceCollection services)
     {
+        services.TryAddSingleton<OidcOptions>();
+        services.TryAddSingleton<IOidcProviderAvailability>(provider => provider.GetRequiredService<OidcOptions>());
+        services.TryAddSingleton(TimeProvider.System);
         services.AddAntiforgery(options =>
         {
             options.HeaderName = "X-CSRF-TOKEN";
@@ -30,7 +33,7 @@ public static class DependencyInjection
                 {
                     options.Cookie.Name = "agw.session";
                     options.Cookie.HttpOnly = true;
-                    options.Cookie.SameSite = SameSiteMode.Strict;
+                    options.Cookie.SameSite = SameSiteMode.Lax;
                     options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
                     options.ExpireTimeSpan = TimeSpan.FromHours(12);
                     options.SlidingExpiration = true;
@@ -46,23 +49,7 @@ public static class DependencyInjection
                             context.Response.StatusCode = StatusCodes.Status403Forbidden;
                             return Task.CompletedTask;
                         },
-                        OnValidatePrincipal = context =>
-                        {
-                            var store =
-                                context.HttpContext.RequestServices.GetRequiredService<IAuthenticationStateReader>();
-                            var expected = store.GetAuthenticationSnapshot().SessionVersion.ToString();
-                            if (
-                                !string.Equals(
-                                    context.Principal?.FindFirst(AgwAuthDefaults.SessionVersionClaimType)?.Value,
-                                    expected,
-                                    StringComparison.Ordinal
-                                )
-                            )
-                            {
-                                context.RejectPrincipal();
-                            }
-                            return Task.CompletedTask;
-                        },
+                        OnValidatePrincipal = OidcCookieValidator.ValidateAsync,
                     };
                 }
             );

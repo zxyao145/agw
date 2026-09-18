@@ -8,28 +8,44 @@ import { getAuthSession } from "../../services/auth";
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const currentUserId = React.useRef<string | null | undefined>(undefined);
   const [ready, setReady] = React.useState(false);
 
   React.useEffect(() => {
     let active = true;
-    getAuthSession()
-      .then((session) => {
-        if (!active) return;
-        if (session.apiMajorVersion !== 1) {
-          router.replace("/login/?error=incompatible-server");
-          return;
-        }
-        if (!session.authenticated) {
-          const query = window.location.search.replace(/^\?/, "");
-          const returnUrl = `${pathname}${query ? `?${query}` : ""}`;
-          router.replace(`/login/?returnUrl=${encodeURIComponent(returnUrl)}`);
-          return;
-        }
-        setReady(true);
-      })
-      .catch(() => router.replace("/login/?error=unavailable"));
+    const check = () => {
+      return getAuthSession()
+        .then((session) => {
+          if (!active) return;
+          if (session.apiMajorVersion !== 1) {
+            router.replace("/login/?error=incompatible-server");
+            return;
+          }
+          if (!session.authenticated) {
+            const query = window.location.search.replace(/^\?/, "");
+            const returnUrl = `${pathname}${query ? `?${query}` : ""}`;
+            router.replace(`/login/?returnUrl=${encodeURIComponent(returnUrl)}`);
+            return;
+          }
+          if (currentUserId.current !== undefined && currentUserId.current !== session.userId) {
+            window.location.reload();
+            return;
+          }
+          currentUserId.current = session.userId;
+          setReady(true);
+        })
+        .catch(() => {
+          if (active) router.replace("/login/?error=unavailable");
+        });
+    };
+    void check();
+    const onFocus = () => {
+      void check();
+    };
+    window.addEventListener("focus", onFocus);
     return () => {
       active = false;
+      window.removeEventListener("focus", onFocus);
     };
   }, [pathname, router]);
 

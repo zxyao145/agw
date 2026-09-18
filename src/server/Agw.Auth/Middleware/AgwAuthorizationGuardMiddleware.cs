@@ -30,7 +30,11 @@ public sealed class AgwAuthorizationGuardMiddleware
     {
         var path = context.Request.Path;
         var isProtectedProtocol = path.StartsWithSegments("/api") || path.StartsWithSegments("/a2a");
-        var isAnonymousPath = AnonymousApiPaths.Any(value => path.StartsWithSegments(value));
+        var isAnonymousPath =
+            AnonymousApiPaths.Any(value => path.StartsWithSegments(value))
+            || HttpMethods.IsGet(context.Request.Method)
+                && (path.Equals("/api/auth/oidc/providers") || path.Equals("/api/auth/oidc/login"))
+            || HttpMethods.IsPost(context.Request.Method) && path.Equals("/api/auth/desktop/exchange");
 
         if (isProtectedProtocol && !isAnonymousPath && !initializationState.IsInitialized)
         {

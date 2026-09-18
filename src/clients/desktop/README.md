@@ -9,7 +9,7 @@ The Electron entry points are `src/main/index.ts` and `src/preload/index.ts`; th
 - The default profile connects to `http://127.0.0.1:30816`.
 - A Full package installs the bundled self-contained `Agw.Standalone.Host` as a current-user daemon. A Client package contains no Server.
 - If port 30816 is occupied, Server chooses an available loopback port and publishes it to `~/agw/runtime/server.json`; Desktop validates that descriptor and follows the live process.
-- Desktop uses named Bearer tokens. Local first-run setup is the Server-owned `/setup` Razor page in a sandboxed modal window; after setup, the main process provisions a unique token and encrypts it with the operating system credential store.
+- Desktop uses named Bearer tokens, either entered manually or issued after third-party OIDC login in the system browser. Local first-run setup is the Server-owned `/setup` Razor page in a sandboxed modal window; after setup, the main process provisions a unique token and encrypts it with the operating system credential store.
 - Multiple remote profiles are supported. HTTPS is required unless the user explicitly accepts the HTTP warning for a profile.
 - Each Server profile owns an isolated React Query cache. Changing its URL or Token retires that cache, and switching profiles aborts stale connection probes and queries so data from the previous Server cannot overwrite the active view.
 - Packaged renderer files are served only inside Electron through `agw://app`. OAuth completion uses the separately registered external protocol `agw-desktop://oauth/complete`, which always opens the Desktop Integrations route.
@@ -75,3 +75,14 @@ Opening About checks GitHub's latest stable Release and offers the artifact matc
 ## Close and uninstall behavior
 
 Closing the window minimizes to the tray by default; users can change it to quit Desktop. The Server daemon continues in either case. In-app uninstall preparation unregisters the daemon and asks whether to retain or delete `~/agw`. Direct operating-system uninstall preserves `~/agw` by default.
+
+
+## Third-party Server login
+
+In Connections and app, each saved Server profile loads the providers enabled by that Server. Choose a provider to complete sign-in in the system browser. The main process keeps the pending state and Desktop PKCE verifier, validates the fixed `agw-desktop://auth/complete` callback, and receives the Agw Token directly over HTTPS. The IdP client secret and upstream Tokens stay on Server.
+
+A login expires after ten minutes; the Server handoff code lasts two minutes. Cancelled, stale, duplicate, or changed-profile callbacks do not overwrite stored credentials. The OS-encrypted token and its OIDC credential-source marker are saved together. A failed local save attempts to revoke the newly issued Token.
+
+Signing out removes the local credential and revokes that Token on Server. If the Server cannot be reached, the UI reports that revocation was not confirmed. The profile remains in explicit-login mode after logout or expiry, so a local profile cannot silently become the administrator. Use the explicit local-administrator action or sign in again.
+
+Changing a profile's URL invalidates its saved OIDC credential. Switching between unchanged profiles does not revoke their Tokens. Existing manual-token profiles and integration OAuth callbacks retain their behavior.

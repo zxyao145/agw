@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { DesktopSettings, DesktopSettingsUpdate, PackageFlavor } from "../../shared/contracts";
@@ -12,6 +12,7 @@ export type SecretCodec = {
 type SecretFile = {
   schemaVersion: 1;
   tokens: Record<string, string>;
+  oidcProfiles?: Record<string, boolean>;
 };
 
 export class DesktopSettingsStore {
@@ -71,6 +72,22 @@ export class DesktopSettingsStore {
           ([profileId]) => profileIds.has(profileId),
         ),
       );
+      if (update.profiles) {
+        const secrets = await this.loadSecretFile();
+        let changed = false;
+        for (const oldProfile of current.profiles) {
+          const next = profiles.find((profile) => profile.id === oldProfile.id);
+          if (
+            secrets.oidcProfiles?.[oldProfile.id] &&
+            (!next || next.baseUrl !== oldProfile.baseUrl)
+          ) {
+            delete secrets.tokens[oldProfile.id];
+            if (!next) delete secrets.oidcProfiles[oldProfile.id];
+            changed = true;
+          }
+        }
+        if (changed) await this.writeJson(this.secretsFile, secrets);
+      }
       await this.writeJson(this.settingsFile, {
         ...current,
         closeBehavior: update.closeBehavior ?? current.closeBehavior,
@@ -81,13 +98,25 @@ export class DesktopSettingsStore {
     });
   }
 
-  public async saveToken(profileId: string, token: string): Promise<void> {
+  public async saveToken(
+    profileId: string,
+    token: string,
+    source: "manual" | "oidc" = "manual",
+    beforeCommit?: () => Promise<void>,
+  ): Promise<void> {
     if (!token.startsWith("agw_")) throw new Error("Agw API tokens must start with agw_.");
     await this.enqueueWrite(async () => {
       const secrets = await this.loadSecretFile();
       secrets.tokens[profileId] = this.secretCodec.encrypt(token).toString("base64");
-      await this.writeJson(this.secretsFile, secrets);
+      secrets.oidcProfiles ??= {};
+      if (source === "oidc") secrets.oidcProfiles[profileId] = true;
+      else delete secrets.oidcProfiles[profileId];
+      await this.writeJson(this.secretsFile, secrets, beforeCommit);
     });
+  }
+
+  public async credentialSource(profileId: string): Promise<"manual" | "oidc"> {
+    return (await this.loadSecretFile()).oidcProfiles?.[profileId] ? "oidc" : "manual";
   }
 
   public async loadToken(profileId: string): Promise<string | null> {
@@ -118,7 +147,11 @@ export class DesktopSettingsStore {
   private async loadSecretFile(): Promise<SecretFile> {
     try {
       const parsed = JSON.parse(await readFile(this.secretsFile, "utf8")) as Partial<SecretFile>;
-      return { schemaVersion: 1, tokens: parsed.tokens ?? {} };
+      return {
+        schemaVersion: 1,
+        tokens: parsed.tokens ?? {},
+        oidcProfiles: parsed.oidcProfiles ?? {},
+      };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       return { schemaVersion: 1, tokens: {} };
@@ -131,13 +164,22 @@ export class DesktopSettingsStore {
     return pending;
   }
 
-  private async writeJson(file: string, value: unknown): Promise<void> {
+  private async writeJson(
+    file: string,
+    value: unknown,
+    beforeCommit?: () => Promise<void>,
+  ): Promise<void> {
     await mkdir(this.directory, { recursive: true });
     const temporaryFile = `${file}.${process.pid}.tmp`;
     await writeFile(temporaryFile, `${JSON.stringify(value, null, 2)}\n`, {
       encoding: "utf8",
       mode: 0o600,
     });
-    await rename(temporaryFile, file);
+    try {
+      await beforeCommit?.();
+      await rename(temporaryFile, file);
+    } finally {
+      await rm(temporaryFile, { force: true });
+    }
   }
 }

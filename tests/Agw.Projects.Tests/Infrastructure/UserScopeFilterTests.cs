@@ -32,6 +32,8 @@ public sealed class UserScopeFilterTests
         var unfilteredEntities = context
             .Model.GetEntityTypes()
             .Where(entityType => entityType.GetTableName() != null)
+            // Auth owns the deployment-wide allocator; it contains no per-user data.
+            .Where(entityType => entityType.ClrType != typeof(AuthUserIdSequence))
             .Where(entityType => entityType.FindDeclaredQueryFilter(UserScopeQueryFilterNames.UserScope) == null)
             .Select(entityType => entityType.ClrType.FullName ?? entityType.Name)
             .OrderBy(static entityName => entityName, StringComparer.Ordinal)

@@ -1,10 +1,21 @@
-import { apiDelete, apiGet, apiPost, apiPut, clearAntiforgeryToken } from "@agw/api";
+import {
+  apiDelete,
+  apiGet,
+  apiPost,
+  apiPut,
+  clearAntiforgeryToken,
+  ApiError,
+  getApiRuntime,
+} from "@agw/api";
 
 export type AuthSession = {
   authenticated: boolean;
   accessMode: "anonymous" | "localTrusted" | "cookie" | "bearer";
   apiMajorVersion: number;
   userId: string | null;
+  displayName: string | null;
+  loginProvider: string | null;
+  isAdmin: boolean;
 };
 
 export const ADMIN_USER_ID = "1001";
@@ -19,8 +30,13 @@ export type ApiTokenSummary = {
 export type CreatedApiToken = ApiTokenSummary & { token: string };
 
 export async function getAuthSession(): Promise<AuthSession> {
-  // These Auth responses do not yet declare a response body in OpenAPI.
-  return (await apiGet("/api/auth/session")) as AuthSession;
+  const session = (await apiGet("/api/auth/session")) as AuthSession;
+  return {
+    ...session,
+    displayName: session.displayName ?? null,
+    loginProvider: session.loginProvider ?? null,
+    isAdmin: session.isAdmin ?? (session.authenticated && session.userId === ADMIN_USER_ID),
+  };
 }
 
 export async function login(password: string): Promise<void> {
@@ -48,4 +64,29 @@ export async function revokeApiToken(id: string): Promise<void> {
 export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
   await apiPut("/api/auth/password", { body: { currentPassword, newPassword } });
   clearAntiforgeryToken();
+}
+
+export type OidcProvider = { id: string; displayName: string; type: "Oidc" | "OAuth2" };
+
+export async function getOidcProviders(): Promise<OidcProvider[]> {
+  try {
+    const providers = (await apiGet("/api/auth/oidc/providers")) as Array<{
+      id: string;
+      displayName: string;
+      type?: string;
+    }>;
+    return providers.map((provider) => ({
+      ...provider,
+      type: provider.type === "OAuth2" ? "OAuth2" : "Oidc",
+    }));
+  } catch (error) {
+    // Older Servers protect unknown routes before returning 404.
+    if (error instanceof ApiError && (error.status === 404 || error.status === 401)) return [];
+    throw error;
+  }
+}
+
+export function oidcLoginUrl(providerId: string, returnUrl: string): string {
+  const query = new URLSearchParams({ providerId, client: "web", returnUrl });
+  return getApiRuntime().baseUrl + "/api/auth/oidc/login?" + query.toString();
 }

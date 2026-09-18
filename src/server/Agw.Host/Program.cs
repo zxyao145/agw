@@ -92,6 +92,13 @@ public static class AgwHostApplication
                     )
                     .Build()
             )
+            // Keep framework protocol errors visible for configuration and callback
+            // diagnostics; Agw.Auth.Oidc also emits bounded stage/category details.
+            .MinimumLevel.Override(
+                "Microsoft.AspNetCore.Authentication.OpenIdConnect",
+                Serilog.Events.LogEventLevel.Error
+            )
+            .MinimumLevel.Override("Microsoft.AspNetCore.Authentication.OAuth", Serilog.Events.LogEventLevel.Error)
             .Enrich.FromLogContext()
             .Enrich.WithMachineName()
             .Enrich.WithThreadId()
@@ -345,6 +352,9 @@ public static class AgwHostApplication
                 .AddAuth()
                 .AddSetup(builder.Configuration, readOnly: profile == AgwHostProfile.DataPlane)
                 .AddIntegrations(builder.Configuration);
+
+            if (hasControlPlane)
+                builder.Services.AddOidcAuthentication(builder.Configuration, builder.Environment);
 
             // 数据库 AuditUserId 提供者
             builder.Services.AddScoped<IEntityAuditUserIdProvider, EntityAuditUserIdProvider>();

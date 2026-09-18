@@ -22,6 +22,11 @@ const bridge: AgwDesktopBridge = {
   deleteToken: (profileId: string) =>
     ipcRenderer.invoke("agw:delete-token", profileId) as Promise<void>,
   provisionLocalToken: () => ipcRenderer.invoke("agw:provision-local-token") as Promise<string>,
+  getOidcProviders: (profileId: string) => ipcRenderer.invoke("agw:oidc-providers", profileId),
+  loginWithOidc: (profileId: string, providerId: string) =>
+    ipcRenderer.invoke("agw:oidc-login", profileId, providerId),
+  cancelOidcLogin: (profileId: string) => ipcRenderer.invoke("agw:oidc-cancel", profileId),
+  logoutOidc: (profileId: string) => ipcRenderer.invoke("agw:oidc-logout", profileId),
   openExternal: (url: string) => ipcRenderer.invoke("agw:open-external", url) as Promise<void>,
   openSetup: (baseUrl: string) => ipcRenderer.invoke("agw:open-setup", baseUrl) as Promise<void>,
   setActiveTaskCount: (count: number) =>

@@ -108,7 +108,12 @@ public sealed class EfApiTokenStore : IApiTokenStore
             .ApiTokens.AsNoTracking()
             .IgnoreUserScope()
             .Where(candidate => candidate.Prefix == prefix)
-            .Select(candidate => new { candidate.SecretHash, candidate.CreateBy })
+            .Select(candidate => new
+            {
+                candidate.Id,
+                candidate.SecretHash,
+                candidate.CreateBy,
+            })
             .ToArrayAsync(cancellationToken);
         var candidateHash = Convert.FromHexString(Hash(token));
 
@@ -128,7 +133,24 @@ public sealed class EfApiTokenStore : IApiTokenStore
             {
                 if (!string.IsNullOrWhiteSpace(candidate.CreateBy))
                 {
-                    return new ApiTokenIdentity(candidate.CreateBy.Trim());
+                    var userId = candidate.CreateBy.Trim();
+                    if (long.TryParse(userId, out var id) && id >= 10000)
+                    {
+                        var user = await _context
+                            .AuthUsers.AsNoTracking()
+                            .IgnoreUserScope()
+                            .SingleOrDefaultAsync(user => user.Id == id, cancellationToken);
+                        if (user == null)
+                            return null;
+                        var provider = await _context
+                            .AuthExternalIdentities.AsNoTracking()
+                            .IgnoreUserScope()
+                            .Where(identity => identity.UserId == id)
+                            .Select(identity => identity.ProviderId)
+                            .SingleOrDefaultAsync(cancellationToken);
+                        return new ApiTokenIdentity(userId, candidate.Id, user.DisplayName, provider);
+                    }
+                    return new ApiTokenIdentity(userId, candidate.Id);
                 }
             }
         }

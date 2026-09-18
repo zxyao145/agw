@@ -27,7 +27,14 @@ public sealed class AgwAntiforgeryMiddleware
                 is AgwAuthDefaults.CookieScheme
                     or AgwAuthDefaults.LocalTrustedScheme
             && !context.WebSockets.IsWebSocketRequest
-            && !isExecutionHubNegotiate;
+            && !isExecutionHubNegotiate
+            && !(
+                HttpMethods.IsPost(method)
+                && (
+                    context.Request.Path.Equals("/api/auth/desktop/exchange")
+                    || context.Request.Path.Equals("/api/auth/desktop/logout")
+                )
+            );
 
         if (requiresValidation)
         {

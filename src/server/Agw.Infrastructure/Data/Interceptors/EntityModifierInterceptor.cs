@@ -96,7 +96,10 @@ public sealed class EntityModifierInterceptor : SaveChangesInterceptor
                 continue;
             }
 
-            var value = entry.Property(propertyName).CurrentValue as string;
+            var rawValue = entry.Property(propertyName).CurrentValue;
+            var value = rawValue is long numericId
+                ? numericId.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : rawValue as string;
             if (propertyName == "UserId" && string.IsNullOrWhiteSpace(value))
             {
                 throw new AgwException(ErrorCodes.InvalidParam, "UserId is required.");

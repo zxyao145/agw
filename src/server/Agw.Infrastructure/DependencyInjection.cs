@@ -108,6 +108,7 @@ public static class DependencyInjection
         // Register database seeder
         services.AddScoped<DbSeeder>();
         services.AddScoped<IDatabaseBootstrapper, DatabaseBootstrapper>();
+        services.AddScoped<IOidcIdentityStore, EfOidcIdentityStore>();
         services.AddScoped<EfApiTokenStore>();
         services.AddScoped<IApiTokenStore>(serviceProvider => serviceProvider.GetRequiredService<EfApiTokenStore>());
         services.AddScoped<IServerAuthStatePersistence, SettingsServerAuthStatePersistence>();

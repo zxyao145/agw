@@ -273,3 +273,29 @@ test("Bearer API clients are isolated and never request antiforgery tokens", asy
   assert.equal(headers?.["X-CSRF-TOKEN"], undefined);
   assert.equal(requests[0]?.init?.credentials, "omit");
 });
+
+test("explicit OIDC mode never falls back to ambient cookies after Desktop logout", async (t) => {
+  const { apiGet, apiPost, configureApiRuntime, resetApiRuntime } = await import("./client.ts");
+  const originalFetch = globalThis.fetch;
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  globalThis.fetch = async (input, init) => {
+    calls.push({ url: String(input), init });
+    return Response.json({
+      code: 0,
+      title: "ok",
+      data: String(input).endsWith("/antiforgery") ? { requestToken: "csrf" } : [],
+    });
+  };
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    resetApiRuntime();
+  });
+  configureApiRuntime({ baseUrl: "http://127.0.0.1:30816", token: null, explicitAuth: true });
+  await apiGet("/api/agents");
+  await apiPost("/api/auth/logout");
+  assert.ok(calls.length >= 3);
+  for (const call of calls) {
+    assert.equal(call.init?.credentials, "omit");
+    assert.equal(new Headers(call.init?.headers).get("X-Agw-Explicit-Auth"), "1");
+  }
+});

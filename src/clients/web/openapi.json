@@ -6,7 +6,7 @@
   },
   "servers": [
     {
-      "url": "http://127.0.0.1:39816/"
+      "url": "http://127.0.0.1:30816/"
     }
   ],
   "paths": {
@@ -1107,6 +1107,52 @@
         }
       }
     },
+    "/api/agents/permission-capabilities": {
+      "get": {
+        "tags": [
+          "ExecutionPermissions"
+        ],
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/AgentRuntimeType"
+            }
+          },
+          {
+            "name": "id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExecutionPermissionCapabilities"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExecutionPermissionCapabilities"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfExecutionPermissionCapabilities"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/mcp-tool-servers": {
       "get": {
         "tags": [
@@ -1863,6 +1909,210 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/desktop/exchange": {
+      "post": {
+        "tags": [
+          "DesktopAuth"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DesktopExchangeRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DesktopExchangeRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/DesktopExchangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfDesktopExchangeResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfDesktopExchangeResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfDesktopExchangeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/desktop/logout": {
+      "post": {
+        "tags": [
+          "DesktopAuth"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/oidc/providers": {
+      "get": {
+        "tags": [
+          "Oidc"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfOidcProviderResponse[]"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfOidcProviderResponse[]"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfOidcProviderResponse[]"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/oidc/login": {
+      "get": {
+        "tags": [
+          "Oidc"
+        ],
+        "parameters": [
+          {
+            "name": "providerId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "client",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "default": "web"
+            }
+          },
+          {
+            "name": "returnUrl",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "clientState",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "codeChallenge",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "codeChallengeMethod",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
                 }
               }
             }
@@ -3213,8 +3463,7 @@
               "maximum": 2147483647,
               "minimum": 1,
               "type": "integer",
-              "format": "int32",
-              "default": 1
+              "format": "int32"
             }
           },
           {
@@ -3222,18 +3471,14 @@
             "in": "query",
             "schema": {
               "type": "integer",
-              "format": "int32",
-              "default": 20
+              "format": "int32"
             }
           },
           {
             "name": "contextId",
             "in": "query",
             "schema": {
-              "type": [
-                "null",
-                "string"
-              ]
+              "type": "string"
             }
           }
         ],
@@ -4501,6 +4746,120 @@
         }
       }
     },
+    "/api/quick-prompts": {
+      "get": {
+        "tags": [
+          "QuickPrompts"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfIReadOnlyListOfQuickPromptResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfIReadOnlyListOfQuickPromptResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfIReadOnlyListOfQuickPromptResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "QuickPrompts"
+        ],
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuickPromptUpdateRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuickPromptUpdateRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuickPromptUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/quick-prompts/manage": {
+      "get": {
+        "tags": [
+          "QuickPrompts"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfQuickPromptManageResponse"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfQuickPromptManageResponse"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResultOfQuickPromptManageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/skills": {
       "get": {
         "tags": [
@@ -5087,52 +5446,6 @@
               "text/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ApiResult"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/agents/permission-capabilities": {
-      "get": {
-        "tags": [
-          "ExecutionPermissions"
-        ],
-        "parameters": [
-          {
-            "name": "type",
-            "in": "query",
-            "schema": {
-              "$ref": "#/components/schemas/AgentRuntimeType"
-            }
-          },
-          {
-            "name": "id",
-            "in": "query",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfExecutionPermissionCapabilities"
-                }
-              },
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfExecutionPermissionCapabilities"
-                }
-              },
-              "text/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ApiResultOfExecutionPermissionCapabilities"
                 }
               }
             }
@@ -6768,6 +7081,22 @@
         },
         "description": "AI message with role, author, and content blocks."
       },
+      "AgwPermissionMode": {
+        "enum": [
+          "fullAccess",
+          "alwaysAsk",
+          "allowSameArguments"
+        ]
+      },
+      "AgwToolPermission": {
+        "enum": [
+          "none",
+          "readOnly",
+          "write",
+          "execute",
+          null
+        ]
+      },
       "AiRole": {
         "description": "copy from ChatRole\nhttps://github.com/dotnet/extensions/blob/main/src/Libraries/Microsoft.Extensions.AI.Abstractions/ChatCompletion/ChatRole.cs"
       },
@@ -7197,6 +7526,40 @@
           }
         }
       },
+      "ApiResultOfDesktopExchangeResponse": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DesktopExchangeResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ApiResultOfDictionaryOfstringAndListOfToolLiteInfo": {
         "required": [
           "code",
@@ -7217,6 +7580,40 @@
                 "$ref": "#/components/schemas/ToolLiteInfo"
               }
             }
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfExecutionPermissionCapabilities": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ExecutionPermissionCapabilities"
+              }
+            ]
           },
           "code": {
             "type": "integer",
@@ -7318,6 +7715,39 @@
                 "$ref": "#/components/schemas/FileSearchResponse"
               }
             ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfIReadOnlyListOfQuickPromptResponse": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/QuickPromptResponse"
+            }
           },
           "code": {
             "type": "integer",
@@ -7726,6 +8156,39 @@
           }
         }
       },
+      "ApiResultOfOidcProviderResponse[]": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/OidcProviderResponse"
+            }
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "ApiResultOfPagedResultOfAgentflow": {
         "required": [
           "code",
@@ -7844,6 +8307,40 @@
               },
               {
                 "$ref": "#/components/schemas/PagedResultOfMcpServer"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfPagedResultOfProjectConversationSummaryResponse": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PagedResultOfProjectConversationSummaryResponse"
               }
             ]
           },
@@ -8065,40 +8562,6 @@
           }
         }
       },
-      "ApiResultOfPagedResultOfProjectConversationSummaryResponse": {
-        "required": [
-          "code",
-          "title",
-          "detail",
-          "contentType"
-        ],
-        "type": "object",
-        "properties": {
-          "data": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/PagedResultOfProjectConversationSummaryResponse"
-              }
-            ]
-          },
-          "code": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "title": {
-            "type": "string"
-          },
-          "detail": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
       "ApiResultOfProjectResponse": {
         "required": [
           "code",
@@ -8249,6 +8712,40 @@
               },
               {
                 "$ref": "#/components/schemas/ProviderModelDiscoveryResponse"
+              }
+            ]
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ApiResultOfQuickPromptManageResponse": {
+        "required": [
+          "code",
+          "title",
+          "detail",
+          "contentType"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/QuickPromptManageResponse"
               }
             ]
           },
@@ -8952,8 +9449,72 @@
           }
         }
       },
+      "DesktopExchangeRequest": {
+        "required": [
+          "code",
+          "codeVerifier"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "codeVerifier": {
+            "type": "string"
+          }
+        }
+      },
+      "DesktopExchangeResponse": {
+        "required": [
+          "token",
+          "tokenId",
+          "userId",
+          "displayName",
+          "loginProvider"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "tokenId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "loginProvider": {
+            "type": "string"
+          }
+        }
+      },
       "EmptyToolOptions": {
         "type": "object"
+      },
+      "ExecutionPermissionCapabilities": {
+        "required": [
+          "supportedPermissionModes",
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "supportedPermissionModes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgwPermissionMode"
+            }
+          },
+          "reason": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
       },
       "ExternalAgentKind": {
         "type": "integer"
@@ -10254,6 +10815,29 @@
           "IdToken"
         ]
       },
+      "OidcProviderResponse": {
+        "required": [
+          "id",
+          "displayName",
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "Oidc",
+              "OAuth2"
+            ],
+            "type": "string"
+          }
+        }
+      },
       "PagedResultOfAgentflow": {
         "required": [
           "items",
@@ -10353,7 +10937,7 @@
           }
         }
       },
-      "PagedResultOfProjectConversationSummaryResponse": {
+      "PagedResultOfMcpServer": {
         "required": [
           "items",
           "total",
@@ -10365,7 +10949,7 @@
           "items": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/ProjectConversationSummaryResponse"
+              "$ref": "#/components/schemas/McpServer"
             }
           },
           "total": {
@@ -10386,7 +10970,7 @@
           }
         }
       },
-      "PagedResultOfMcpServer": {
+      "PagedResultOfProjectConversationSummaryResponse": {
         "required": [
           "items",
           "total",
@@ -10398,7 +10982,7 @@
           "items": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/McpServer"
+              "$ref": "#/components/schemas/ProjectConversationSummaryResponse"
             }
           },
           "total": {
@@ -11079,6 +11663,23 @@
           }
         }
       },
+      "ProjectDirectory": {
+        "required": [
+          "path",
+          "id"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "description": "A value object representing an additional directory associated with a Project."
+      },
       "ProjectMcpToolServerRelationResponse": {
         "required": [
           "projectId",
@@ -11643,6 +12244,139 @@
           }
         }
       },
+      "QuickPromptItem": {
+        "required": [
+          "id",
+          "label",
+          "text",
+          "description"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "QuickPromptList": {
+        "required": [
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuickPromptResponse"
+            }
+          }
+        }
+      },
+      "QuickPromptManageResponse": {
+        "required": [
+          "system",
+          "systemVersion",
+          "user",
+          "userVersion",
+          "canManageSystem"
+        ],
+        "type": "object",
+        "properties": {
+          "system": {
+            "$ref": "#/components/schemas/QuickPromptList"
+          },
+          "systemVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "user": {
+            "$ref": "#/components/schemas/QuickPromptList"
+          },
+          "userVersion": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "canManageSystem": {
+            "type": "boolean"
+          }
+        }
+      },
+      "QuickPromptResponse": {
+        "required": [
+          "id",
+          "label",
+          "text",
+          "description",
+          "kind"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          }
+        }
+      },
+      "QuickPromptUpdateRequest": {
+        "required": [
+          "version",
+          "items"
+        ],
+        "type": "object",
+        "properties": {
+          "version": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QuickPromptItem"
+            }
+          }
+        }
+      },
       "SecretFieldStateResponse": {
         "required": [
           "configured"
@@ -11906,15 +12640,6 @@
         "enum": [
           "tool",
           "toolBlock"
-        ]
-      },
-      "AgwToolPermission": {
-        "enum": [
-          "none",
-          "readOnly",
-          "write",
-          "execute",
-          null
         ]
       },
       "ToolDefinition": {
@@ -12462,84 +13187,6 @@
             "type": "string"
           }
         }
-      },
-      "ApiResultOfExecutionPermissionCapabilities": {
-        "required": [
-          "code",
-          "title",
-          "detail",
-          "contentType"
-        ],
-        "type": "object",
-        "properties": {
-          "data": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/ExecutionPermissionCapabilities"
-              }
-            ]
-          },
-          "code": {
-            "type": "integer",
-            "format": "int32"
-          },
-          "title": {
-            "type": "string"
-          },
-          "detail": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
-      "ExecutionPermissionCapabilities": {
-        "required": [
-          "supportedPermissionModes",
-          "reason"
-        ],
-        "type": "object",
-        "properties": {
-          "supportedPermissionModes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/AgwPermissionMode"
-            }
-          },
-          "reason": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        }
-      },
-      "AgwPermissionMode": {
-        "enum": [
-          "fullAccess",
-          "alwaysAsk",
-          "allowSameArguments"
-        ]
-      },
-      "ProjectDirectory": {
-        "required": [
-          "path",
-          "id"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "path": {
-            "type": "string"
-          }
-        }
       }
     }
   },
@@ -12560,6 +13207,9 @@
       "name": "Agents"
     },
     {
+      "name": "ExecutionPermissions"
+    },
+    {
       "name": "McpToolServers"
     },
     {
@@ -12567,6 +13217,12 @@
     },
     {
       "name": "Auth"
+    },
+    {
+      "name": "DesktopAuth"
+    },
+    {
+      "name": "Oidc"
     },
     {
       "name": "Files"
@@ -12600,6 +13256,9 @@
     },
     {
       "name": "Providers"
+    },
+    {
+      "name": "QuickPrompts"
     },
     {
       "name": "Skills"

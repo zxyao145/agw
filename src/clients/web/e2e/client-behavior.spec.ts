@@ -18,6 +18,7 @@ async function mockApi(page: Page, handleWrite?: (route: Route) => Promise<void>
         userId: "1001",
       },
       "/api/auth/antiforgery": { requestToken: "test-csrf" },
+      "/api/auth/oidc/providers": [],
       "/api/agentflows/paged": { items: [agentflow], total: 1 },
       "/api/agentflows": [agentflow],
       "/api/agents": [{ id: "agent-1", name: "Reviewer", enable: true }],

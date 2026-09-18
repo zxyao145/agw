@@ -1060,6 +1060,46 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/agents/permission-capabilities": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          type?: components["schemas"]["AgentRuntimeType"];
+          id?: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfExecutionPermissionCapabilities"];
+            "application/json": components["schemas"]["ApiResultOfExecutionPermissionCapabilities"];
+            "text/json": components["schemas"]["ApiResultOfExecutionPermissionCapabilities"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/mcp-tool-servers": {
     parameters: {
       query?: never;
@@ -1716,6 +1756,185 @@ export interface paths {
         };
       };
     };
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/auth/desktop/exchange": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["DesktopExchangeRequest"];
+          "text/json": components["schemas"]["DesktopExchangeRequest"];
+          "application/*+json": components["schemas"]["DesktopExchangeRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfDesktopExchangeResponse"];
+            "application/json": components["schemas"]["ApiResultOfDesktopExchangeResponse"];
+            "text/json": components["schemas"]["ApiResultOfDesktopExchangeResponse"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/auth/desktop/logout": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/auth/oidc/providers": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfOidcProviderResponse[]"];
+            "application/json": components["schemas"]["ApiResultOfOidcProviderResponse[]"];
+            "text/json": components["schemas"]["ApiResultOfOidcProviderResponse[]"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/auth/oidc/login": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: {
+          providerId?: string;
+          client?: string;
+          returnUrl?: string;
+          clientState?: string;
+          codeChallenge?: string;
+          codeChallengeMethod?: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description Found */
+        302: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content?: never;
+        };
+        /** @description Bad Request */
+        400: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+        /** @description Too Many Requests */
+        429: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
     options?: never;
     head?: never;
     patch?: never;
@@ -2754,7 +2973,7 @@ export interface paths {
         query?: {
           pageIndex?: number;
           pageSize?: number;
-          contextId?: null | string;
+          contextId?: string;
         };
         header?: never;
         path: {
@@ -3668,6 +3887,109 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/quick-prompts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfIReadOnlyListOfQuickPromptResponse"];
+            "application/json": components["schemas"]["ApiResultOfIReadOnlyListOfQuickPromptResponse"];
+            "text/json": components["schemas"]["ApiResultOfIReadOnlyListOfQuickPromptResponse"];
+          };
+        };
+      };
+    };
+    put: {
+      parameters: {
+        query?: {
+          kind?: string;
+        };
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["QuickPromptUpdateRequest"];
+          "text/json": components["schemas"]["QuickPromptUpdateRequest"];
+          "application/*+json": components["schemas"]["QuickPromptUpdateRequest"];
+        };
+      };
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResult"];
+            "application/json": components["schemas"]["ApiResult"];
+            "text/json": components["schemas"]["ApiResult"];
+          };
+        };
+      };
+    };
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/quick-prompts/manage": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: {
+      parameters: {
+        query?: never;
+        header?: never;
+        path?: never;
+        cookie?: never;
+      };
+      requestBody?: never;
+      responses: {
+        /** @description OK */
+        200: {
+          headers: {
+            [name: string]: unknown;
+          };
+          content: {
+            "text/plain": components["schemas"]["ApiResultOfQuickPromptManageResponse"];
+            "application/json": components["schemas"]["ApiResultOfQuickPromptManageResponse"];
+            "text/json": components["schemas"]["ApiResultOfQuickPromptManageResponse"];
+          };
+        };
+      };
+    };
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/skills": {
     parameters: {
       query?: never;
@@ -4158,46 +4480,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/api/agents/permission-capabilities": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: {
-      parameters: {
-        query?: {
-          type?: components["schemas"]["AgentRuntimeType"];
-          id?: string;
-        };
-        header?: never;
-        path?: never;
-        cookie?: never;
-      };
-      requestBody?: never;
-      responses: {
-        /** @description OK */
-        200: {
-          headers: {
-            [name: string]: unknown;
-          };
-          content: {
-            "text/plain": components["schemas"]["ApiResultOfExecutionPermissionCapabilities"];
-            "application/json": components["schemas"]["ApiResultOfExecutionPermissionCapabilities"];
-            "text/json": components["schemas"]["ApiResultOfExecutionPermissionCapabilities"];
-          };
-        };
-      };
-    };
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4593,6 +4875,10 @@ export interface components {
       contents: components["schemas"]["AgwContent"][];
       additionalProperties?: null | Record<string, never>;
     };
+    /** @enum {unknown} */
+    AgwPermissionMode: "fullAccess" | "alwaysAsk" | "allowSameArguments";
+    /** @enum {unknown} */
+    AgwToolPermission: "none" | "readOnly" | "write" | "execute" | null;
     /**
      * @description copy from ChatRole
      *     https://github.com/dotnet/extensions/blob/main/src/Libraries/Microsoft.Extensions.AI.Abstractions/ChatCompletion/ChatRole.cs
@@ -4688,10 +4974,24 @@ export interface components {
       title: string;
       detail: null | string;
     };
+    ApiResultOfDesktopExchangeResponse: {
+      data?: null | components["schemas"]["DesktopExchangeResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
     ApiResultOfDictionaryOfstringAndListOfToolLiteInfo: {
       data?: null | {
         [key: string]: components["schemas"]["ToolLiteInfo"][];
       };
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
+    ApiResultOfExecutionPermissionCapabilities: {
+      data?: null | components["schemas"]["ExecutionPermissionCapabilities"];
       /** Format: int32 */
       code: number;
       title: string;
@@ -4713,6 +5013,13 @@ export interface components {
     };
     ApiResultOfFileSearchResponse: {
       data?: null | components["schemas"]["FileSearchResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
+    ApiResultOfIReadOnlyListOfQuickPromptResponse: {
+      data?: null | components["schemas"]["QuickPromptResponse"][];
       /** Format: int32 */
       code: number;
       title: string;
@@ -4802,6 +5109,13 @@ export interface components {
       title: string;
       detail: null | string;
     };
+    "ApiResultOfOidcProviderResponse[]": {
+      data?: null | components["schemas"]["OidcProviderResponse"][];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
     ApiResultOfPagedResultOfAgentflow: {
       data?: null | components["schemas"]["PagedResultOfAgentflow"];
       /** Format: int32 */
@@ -4825,6 +5139,13 @@ export interface components {
     };
     ApiResultOfPagedResultOfMcpServer: {
       data?: null | components["schemas"]["PagedResultOfMcpServer"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
+    ApiResultOfPagedResultOfProjectConversationSummaryResponse: {
+      data?: null | components["schemas"]["PagedResultOfProjectConversationSummaryResponse"];
       /** Format: int32 */
       code: number;
       title: string;
@@ -4872,13 +5193,6 @@ export interface components {
       title: string;
       detail: null | string;
     };
-    ApiResultOfPagedResultOfProjectConversationSummaryResponse: {
-      data?: null | components["schemas"]["PagedResultOfProjectConversationSummaryResponse"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
     ApiResultOfProjectResponse: {
       data?: null | components["schemas"]["ProjectResponse"];
       /** Format: int32 */
@@ -4909,6 +5223,13 @@ export interface components {
     };
     ApiResultOfProviderModelDiscoveryResponse: {
       data?: null | components["schemas"]["ProviderModelDiscoveryResponse"];
+      /** Format: int32 */
+      code: number;
+      title: string;
+      detail: null | string;
+    };
+    ApiResultOfQuickPromptManageResponse: {
+      data?: null | components["schemas"]["QuickPromptManageResponse"];
       /** Format: int32 */
       code: number;
       title: string;
@@ -5092,7 +5413,23 @@ export interface components {
       /** Format: int64 */
       usageTotalTokenCount: number | string;
     };
+    DesktopExchangeRequest: {
+      code: string;
+      codeVerifier: string;
+    };
+    DesktopExchangeResponse: {
+      token: string;
+      /** Format: uuid */
+      tokenId: string;
+      userId: string;
+      displayName: string;
+      loginProvider: string;
+    };
     EmptyToolOptions: Record<string, never>;
+    ExecutionPermissionCapabilities: {
+      supportedPermissionModes: components["schemas"]["AgwPermissionMode"][];
+      reason: null | string;
+    };
     ExternalAgentKind: number;
     ExternalAgentOptionResponse: {
       kind: components["schemas"]["ExternalAgentKind"];
@@ -5442,6 +5779,12 @@ export interface components {
     };
     /** @enum {unknown} */
     OAuthSubjectSourceResponse: "UserInfo" | "TokenResponse" | "IdToken";
+    OidcProviderResponse: {
+      id: string;
+      displayName: string;
+      /** @enum {string} */
+      type: "Oidc" | "OAuth2";
+    };
     PagedResultOfAgentflow: {
       items: components["schemas"]["Agentflow"][];
       /** Format: int64 */
@@ -5469,8 +5812,8 @@ export interface components {
       /** Format: int32 */
       pageSize: number;
     };
-    PagedResultOfProjectConversationSummaryResponse: {
-      items: components["schemas"]["ProjectConversationSummaryResponse"][];
+    PagedResultOfMcpServer: {
+      items: components["schemas"]["McpServer"][];
       /** Format: int64 */
       total: number | string;
       /** Format: int32 */
@@ -5478,8 +5821,8 @@ export interface components {
       /** Format: int32 */
       pageSize: number;
     };
-    PagedResultOfMcpServer: {
-      items: components["schemas"]["McpServer"][];
+    PagedResultOfProjectConversationSummaryResponse: {
+      items: components["schemas"]["ProjectConversationSummaryResponse"][];
       /** Format: int64 */
       total: number | string;
       /** Format: int32 */
@@ -5651,6 +5994,12 @@ export interface components {
       };
       additionalDirectories?: null | components["schemas"]["ProjectDirectory"][];
     };
+    /** @description A value object representing an additional directory associated with a Project. */
+    ProjectDirectory: {
+      /** Format: uuid */
+      id: string;
+      path: string;
+    };
     ProjectMcpToolServerRelationResponse: {
       /** Format: uuid */
       projectId: string;
@@ -5774,6 +6123,36 @@ export interface components {
       authConfigs: null | components["schemas"]["ProviderAuthConfigRequest"][];
       modelNames?: null | string[];
     };
+    QuickPromptItem: {
+      id: string;
+      label: string;
+      text: string;
+      description: null | string;
+    };
+    QuickPromptList: {
+      items: components["schemas"]["QuickPromptResponse"][];
+    };
+    QuickPromptManageResponse: {
+      system: components["schemas"]["QuickPromptList"];
+      /** Format: int64 */
+      systemVersion: null | number | string;
+      user: components["schemas"]["QuickPromptList"];
+      /** Format: int64 */
+      userVersion: null | number | string;
+      canManageSystem: boolean;
+    };
+    QuickPromptResponse: {
+      id: string;
+      label: string;
+      text: string;
+      description: null | string;
+      kind: string;
+    };
+    QuickPromptUpdateRequest: {
+      /** Format: int64 */
+      version: null | number | string;
+      items: components["schemas"]["QuickPromptItem"][];
+    };
     SecretFieldStateResponse: {
       configured: boolean;
     };
@@ -5842,8 +6221,6 @@ export interface components {
     };
     /** @enum {unknown} */
     ToolCatalogItemKind: "tool" | "toolBlock";
-    /** @enum {unknown} */
-    AgwToolPermission: "none" | "readOnly" | "write" | "execute" | null;
     ToolDefinition:
       | components["schemas"]["ToolDefinitionAskUserQuestionToolDefinition"]
       | components["schemas"]["ToolDefinitionBashToolDefinition"]
@@ -5983,24 +6360,6 @@ export interface components {
       name: string;
       description: null | string;
       content: string;
-    };
-    ApiResultOfExecutionPermissionCapabilities: {
-      data?: null | components["schemas"]["ExecutionPermissionCapabilities"];
-      /** Format: int32 */
-      code: number;
-      title: string;
-      detail: null | string;
-    };
-    ExecutionPermissionCapabilities: {
-      supportedPermissionModes: components["schemas"]["AgwPermissionMode"][];
-      reason: null | string;
-    };
-    /** @enum {unknown} */
-    AgwPermissionMode: "fullAccess" | "alwaysAsk" | "allowSameArguments";
-    ProjectDirectory: {
-      /** Format: uuid */
-      id: string;
-      path: string;
     };
   };
   responses: never;

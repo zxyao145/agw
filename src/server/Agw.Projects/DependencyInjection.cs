@@ -14,6 +14,10 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddProjects(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddScoped<
+            Agw.Projects.Contracts.IUserProjectInitializer,
+            Agw.Projects.Application.UserProjectInitializer
+        >();
         services.AddScoped<ITaskAppService, TaskAppService>();
         services.AddScoped<IProjectAppService, ProjectAppService>();
         services.AddScoped<IProjectFileSystemConfigurationProvider, ProjectFileSystemConfigurationProvider>();

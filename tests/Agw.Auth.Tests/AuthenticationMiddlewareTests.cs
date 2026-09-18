@@ -80,7 +80,7 @@ public sealed class AuthenticationMiddlewareTests
     }
 
     [Fact]
-    public async Task InvokeAsync_InvalidBearerTokenOnLoopback_FallsBackToLocalTrustedPrincipal()
+    public async Task InvokeAsync_InvalidBearerTokenOnLoopback_DoesNotElevateToAdministrator()
     {
         var context = new DefaultHttpContext();
         context.Connection.RemoteIpAddress = IPAddress.Loopback;
@@ -90,7 +90,24 @@ public sealed class AuthenticationMiddlewareTests
 
         await InvokeAsync(middleware, context, new StateStoreStub("agw_valid"));
 
-        Assert.Equal(AgwAuthDefaults.LocalTrustedScheme, context.User.Identity?.AuthenticationType);
+        Assert.False(context.User.Identity?.IsAuthenticated ?? false);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task InvokeAsync_ExplicitSignedOutRequestOnLoopback_DoesNotElevate(bool queryCredential)
+    {
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Loopback;
+        context.Request.Host = new HostString("localhost", 5015);
+        if (queryCredential)
+            context.Request.QueryString = new QueryString("?access_token=agw_signed_out");
+        else
+            context.Request.Headers["X-Agw-Explicit-Auth"] = "1";
+        var middleware = new AgwAuthenticationMiddleware(_ => Task.CompletedTask);
+        await InvokeAsync(middleware, context, new StateStoreStub());
+        Assert.False(context.User.Identity?.IsAuthenticated ?? false);
     }
 
     [Fact]

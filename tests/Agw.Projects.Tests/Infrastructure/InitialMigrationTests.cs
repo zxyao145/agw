@@ -33,7 +33,7 @@ public sealed partial class InitialMigrationTests
         Assert.False(dbContext.Database.HasPendingModelChanges());
 
         var migrations = dbContext.Database.GetMigrations().ToArray();
-        Assert.Equal(16, migrations.Length);
+        Assert.Equal(17, migrations.Length);
         Assert.EndsWith("_Init", migrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", migrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", migrations[2], StringComparison.Ordinal);
@@ -50,6 +50,7 @@ public sealed partial class InitialMigrationTests
         Assert.EndsWith("_AddExternalAgentKind", migrations[13], StringComparison.Ordinal);
         Assert.EndsWith("_AddProjectAdditionalDirectories", migrations[14], StringComparison.Ordinal);
         Assert.EndsWith("_AddSettings", migrations[15], StringComparison.Ordinal);
+        Assert.EndsWith("_AddOidcLogin", migrations[16], StringComparison.Ordinal);
 
         var script = dbContext
             .GetService<IMigrator>()
@@ -149,7 +150,7 @@ public sealed partial class InitialMigrationTests
         await dbContext.Database.MigrateAsync(cancellationToken);
 
         var appliedMigrations = (await dbContext.Database.GetAppliedMigrationsAsync(cancellationToken)).ToArray();
-        Assert.Equal(16, appliedMigrations.Length);
+        Assert.Equal(17, appliedMigrations.Length);
         Assert.EndsWith("_Init", appliedMigrations[0], StringComparison.Ordinal);
         Assert.EndsWith("_AddApiTokenTable", appliedMigrations[1], StringComparison.Ordinal);
         Assert.EndsWith("_AddUserMemory", appliedMigrations[2], StringComparison.Ordinal);
@@ -171,6 +172,7 @@ public sealed partial class InitialMigrationTests
             await ColumnDefaultAsync(connection, "project", "additional_directories", cancellationToken)
         );
         Assert.EndsWith("_AddSettings", appliedMigrations[15], StringComparison.Ordinal);
+        Assert.EndsWith("_AddOidcLogin", appliedMigrations[16], StringComparison.Ordinal);
         Assert.True(await TableExistsAsync(connection, "setting", cancellationToken));
         Assert.False(await TableExistsAsync(connection, "server_auth_state", cancellationToken));
         Assert.True(await ColumnExistsAsync(connection, "durable_execution", "project_id", cancellationToken));

@@ -17,6 +17,11 @@ Agw is a modular-monolith agent gateway for Agents, Jobs, Agentflows, and Chat: 
 | [Files](src/server/Agw.Files/README.zh-CN.md) | Workspace resolution, path security, and Git |
 | [Desktop](src/clients/desktop/README.md) | Electron runtime, packaging, and server profiles |
 
+### Immutable approach documents
+
+- Documents under `docs/approachs/` are append-only records. New documents MUST use the filename format `{时间：yyyy-MM-dd}-{方案名}`.
+- Once a document under `docs/approachs/` has been committed to Git, it MUST NOT be modified, deleted, or renamed. This is an absolute repository rule.
+
 ## Repository Map
 
 `Agw.slnx` is the root solution; backend projects live under `src/server/`:
@@ -57,7 +62,7 @@ Agw is a modular-monolith agent gateway for Agents, Jobs, Agentflows, and Chat: 
 - Catalog definitions are globally readable to authenticated users. `PluginInstallation` is per-user `(CreateBy, PluginId)` setup; changes invalidate only that user's Connections. Seed owner `1001` is not a setup bypass.
 - `Connection.CreateBy` is its owner. Alias is immutable and unique within `(CreateBy, Alias)`. CRUD, OAuth, credentials, binding projection, and Native/MCP invocation must reject foreign IDs without disclosing ownership. Only owner-matched Ready Connections contribute runtime capabilities.
 - Agent/Project Connection bindings are owner overlays; preserve other users' bindings when editing.
-- Do not add a User table, OIDC provisioning, or a user-ID counter in this phase. A future numeric User primary key starts at `10010`; claims and owner contracts retain its decimal-string representation.
+- Auth owns local users, external identities, the transactional user-ID allocator, and one-time Desktop login grants. New user IDs start at `10000`; administrator `1001` is preserved. Claims and owner contracts retain decimal-string IDs. OIDC identities use verified `(issuer, sub)`, never email-based linking. Auth Infrastructure may bypass only the named user filter for verified identity lookup, proof-bound grant exchange, and expired-grant cleanup; business queries remain owner-scoped.
 
 ## APIs, Tools, and Coding
 
@@ -129,7 +134,7 @@ pnpm gen:api
 - Defaults: SQLite (`Data Source=agw.db`) and InProcess. Split Hosts require PostgreSQL database/locks and Distributed execution; initialize Control Plane before Data Plane. Replay defaults to PostgreSQL; Redis is optional.
 - `DistributedLock:Provider` supports `inmemory`/`postgres`; absent/null follows `Database:Provider`. An empty PostgreSQL lock connection string reuses `Database:ConnectionString`.
 - First run: `/setup` at port `30816` or injected `Setup:AdminPassword`; successful setup initializes the database and the global auth configuration group without restart. Existing auth wins; old Setup deployment fields are rejected before initialization.
-- Initialization and administrator password hashes/session versions live in the global `auth` group in the Settings-owned `setting` table; all Hosts read the same database. API Token hashes/audit live in `api_token`. Never read or write `server-state.json`, import legacy JSON Tokens, or restore legacy deployment fallback, `SystemInitialization`, or `X-API-Key`. Remote Web uses admin cookies; Desktop/Mobile/automation use named `Authorization: Bearer agw_...` Tokens.
+- Initialization and administrator password hashes/session versions live in the global `auth` group in the Settings-owned `setting` table; all Hosts read the same database. API Token hashes/audit live in `api_token`. Never read or write `server-state.json`, import legacy JSON Tokens, or restore legacy deployment fallback, `SystemInitialization`, or `X-API-Key`. Remote Web uses administrator or OIDC user cookies; Desktop uses OIDC-issued or manually configured Tokens, and Mobile/automation use named `Authorization: Bearer agw_...` Tokens.
 - `AgwDataDir` defaults to `~/agw`; legacy `AGW_DATA_DIR` retains environment priority, losing ties to `AgwDataDir`. Independent `AgwLogDir` defaults to `./logs`. Both use standard precedence, expand `~`, resolve other relative paths from the working directory, and require restart.
 - History uses `ConversationHistory:Mode=Interval`: the Host template sets `FlushIntervalSeconds=10`, with a 5-second code fallback when omitted. Blank/missing `OpenTelemetry:OtlpEndpoint` falls back to `http://localhost:4317`. Inject secrets through environment/Secrets, never appsettings or frontend env files.
 - Web proxies `/api/*` and `/openapi/*` unless `NEXT_OUTPUT_MODE=export`. Target precedence is `BACKEND_API_BASE_URL`, `NEXT_PUBLIC_API_BASE_URL`, then `http://localhost:30816`.
