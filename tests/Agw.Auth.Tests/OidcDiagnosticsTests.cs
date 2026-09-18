@@ -1,3 +1,4 @@
+using System.Net;
 using Agw.Auth.Application;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
@@ -51,6 +52,38 @@ public sealed class OidcDiagnosticsTests
             )
         );
         Assert.DoesNotContain("secret-nonce", logger.Message);
+    }
+
+    [Fact]
+    public void Failure_HttpRequestExceptionWithStatusCode_RecordsProviderRejectedAndStatus()
+    {
+        var logger = new RecordingLogger();
+        using var services = new ServiceCollection().AddSingleton<ILoggerFactory>(logger).BuildServiceProvider();
+        var context = new DefaultHttpContext { RequestServices = services, TraceIdentifier = "trace-test" };
+        var exception = new HttpRequestException("upstream", null, HttpStatusCode.Forbidden);
+
+        Assert.Equal(
+            "provider-rejected",
+            OidcDiagnostics.Failure(context, "github", "web", "oauth-userinfo", exception)
+        );
+        Assert.Contains("provider-rejected", logger.Message);
+        Assert.Contains("403", logger.Message);
+        Assert.Null(logger.Exception);
+    }
+
+    [Fact]
+    public void Failure_HttpRequestExceptionWithoutStatusCode_RecordsProviderUnavailable()
+    {
+        var logger = new RecordingLogger();
+        using var services = new ServiceCollection().AddSingleton<ILoggerFactory>(logger).BuildServiceProvider();
+        var context = new DefaultHttpContext { RequestServices = services, TraceIdentifier = "trace-test" };
+        var exception = new HttpRequestException("connection reset");
+
+        Assert.Equal(
+            "provider-unavailable",
+            OidcDiagnostics.Failure(context, "github", "web", "oauth-userinfo", exception)
+        );
+        Assert.Contains("provider-unavailable", logger.Message);
     }
 
     private sealed class RecordingLogger : ILoggerFactory, ILogger

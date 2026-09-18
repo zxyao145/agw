@@ -10818,7 +10818,8 @@
       "OidcProviderResponse": {
         "required": [
           "id",
-          "displayName"
+          "displayName",
+          "type"
         ],
         "type": "object",
         "properties": {
@@ -10826,6 +10827,13 @@
             "type": "string"
           },
           "displayName": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "Oidc",
+              "OAuth2"
+            ],
             "type": "string"
           }
         }

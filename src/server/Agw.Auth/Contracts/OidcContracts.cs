@@ -1,6 +1,29 @@
+using System.Text.Json.Serialization;
+
 namespace Agw.Auth.Contracts;
 
-public sealed record OidcProviderResponse(string Id, string DisplayName);
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum AuthProviderType
+{
+    Oidc,
+    OAuth2,
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum OAuth2ClientAuthMethod
+{
+    Post,
+    Basic,
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum OAuth2IdentitySource
+{
+    UserInfo,
+    AccessToken,
+}
+
+public sealed record OidcProviderResponse(string Id, string DisplayName, AuthProviderType Type);
 
 public sealed record VerifiedOidcIdentity(
     string ProviderId,

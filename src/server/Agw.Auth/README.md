@@ -1,10 +1,10 @@
 # Agw.Auth
 
-Agw.Auth owns administrator and OIDC authentication, local user identities, browser sessions, Desktop login handoff, named API Tokens, CSRF validation, and authorization guards.
+Agw.Auth owns administrator, OIDC and OAuth2 authentication, local user identities, browser sessions, Desktop login handoff, named API Tokens, CSRF validation, and authorization guards.
 
 ## Authentication modes
 
-- Web signs in with the administrator password or a configured OIDC provider and receives the `agw.session` Cookie.
+- Web signs in with the administrator password or a configured OIDC/OAuth2 provider and receives the `agw.session` Cookie.
 - Desktop can sign in through the system browser or use a manually configured `Authorization: Bearer agw_...` Token. Mobile and automation retain the named Token flow.
 - Direct loopback requests with a localhost Host and no forwarding headers can use `LocalTrusted`. Explicit invalid credentials, rejected OIDC sessions, and the Desktop explicit-auth marker must never fall back to the administrator.
 
@@ -12,7 +12,7 @@ Administrator `1001` remains unchanged. New OIDC user IDs start at `10000` and a
 
 ## The two authentication exchanges
 
-1. **Server → IdP:** the OIDC handler generates its own PKCE proof, exchanges the IdP authorization code using the server-side client credentials, and validates the ID Token.
+1. **Server → IdP:** the OIDC or OAuth2 handler exchanges the authorization code using server-side client credentials. OIDC validates the ID Token; OAuth2 uses configured UserInfo or a signed JWT access token. OAuth2 can enable its own S256 PKCE proof.
 2. **Desktop → Server:** after successful authentication, Server returns a two-minute handoff code through `agw-desktop://auth/complete`. Desktop submits that code and its independently generated verifier over HTTPS; Server then creates and returns an Agw Token.
 
 The Desktop verifier is not the Server's OIDC verifier. Desktop never receives the IdP client secret or upstream Token. Web signs in directly with a local Cookie and does not use the Desktop exchange.
@@ -21,7 +21,7 @@ The `auth_desktop_login_grant` table is an application handoff mechanism, not an
 
 ## Registration and pipeline
 
-`AddAuth()` registers local Cookie authentication, antiforgery, password hashing, authentication-attempt limiting, and the scoped current-user service. `AddOidcAuthentication(configuration, environment)` registers the configured remote schemes and grant cleanup only on Control Plane and Standalone. Data Plane validates local Cookie/Bearer credentials without exposing OIDC callbacks.
+`AddAuth()` registers local Cookie authentication, antiforgery, password hashing, authentication-attempt limiting, and the scoped current-user service. `AddOidcAuthentication(configuration, environment)` registers the configured OIDC/OAuth2 schemes and grant cleanup only on Control Plane and Standalone. Data Plane validates local Cookie/Bearer credentials without exposing login callbacks.
 
 `UseAgwAuth()` maintains this order:
 
@@ -34,7 +34,7 @@ The `auth_desktop_login_grant` table is an application handoff mechanism, not an
 
 The Host calls `UseAuthorization()` after routing. A2A and the execution Hub also require authentication.
 
-Default OIDC claim actions remove `iss` before `OnTicketReceived`. The handler captures the validated issuer in `OnTokenValidated`, but performs no provisioning there: all protocol checks, including nonce, must finish before resolving or creating a local user.
+Default OIDC claim actions remove `iss` before `OnTicketReceived`. The OIDC handler captures the validated issuer in `OnTokenValidated`; the OAuth2 handler obtains a verified issuer and subject from UserInfo or JWT validation. OAuth2 callbacks start timing at the remote-handler entry and reject non-GET or uninitialized callbacks before code exchange. Neither handler provisions in the token-validation callback: all protocol checks must finish before resolving or creating a local user.
 
 ## Persistence and ownership
 
@@ -56,13 +56,13 @@ The global `auth` group in the Settings-owned `setting` table still holds the ad
 
 ## Configuration and endpoints
 
-Configure `Auth:Oidc:PublicBaseUrl` and `Auth:Oidc:Providers:<id>`. Each enabled provider requires Authority, ClientId and ClientSecret; secrets come from environment variables or Secrets. Changes require restart. Production requires HTTPS. Development alone permits HTTP loopback.
+Configure `Auth:Oidc:PublicBaseUrl` and `Auth:Oidc:Providers:<id>`. OIDC providers require Authority; OAuth2 providers require explicit authorization and Token endpoints, an Issuer, ClientId and ClientSecret. Secrets come from environment variables or Secrets. Changes require restart. Production requires HTTPS. Development alone permits HTTP loopback.
 
-See [OIDC deployment instructions](../../../docs/4.Deployment.md#oidc-login) and the [full design](../../../docs/approachs/oidc.md).
+See [OIDC/OAuth2 deployment instructions](../../../docs/4.Deployment.md#oidc-login), the [OIDC design](../../../docs/approachs/2026-09-17-oidc.md) and the [OAuth2 design](../../../docs/approachs/2026-09-18-oauth2.md).
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/api/auth/oidc/providers` | Public enabled-provider IDs and display names |
+| GET | `/api/auth/oidc/providers` | Public enabled-provider IDs, display names and types |
 | GET | `/api/auth/oidc/login` | Explicit browser challenge |
 | GET | `/api/auth/oidc/callback/{providerId}` | Handler-owned protocol callback |
 | POST | `/api/auth/desktop/exchange` | One-time handoff code and Desktop verifier |
@@ -77,6 +77,6 @@ Desktop exchanges are single-use: an expired, invalid or consumed grant returns 
 
 ## Observability and compatibility
 
-The `Agw.Auth` meter reports login outcomes, callback duration, exchange outcomes/duration, and cleanup failures. Logs use bounded provider/client/result fields and local user IDs after authentication. Do not log raw callbacks, either verifier, authorization/handoff codes, credentials, upstream responses or Tokens. The Host suppresses unsanitized framework OIDC diagnostics and uses the module's sanitized events. Failure events record stage, category, exception type and TraceId without exception messages or payloads; `agw.auth.oidc.failure` carries stage/category labels. Provisioning and Desktop grant failures are distinct from IdP availability failures.
+The `Agw.Auth` meter reports OIDC/OAuth2 login outcomes, callback duration, OAuth2 Token/UserInfo/JWT validation, PKCE, exchange outcomes/duration, and cleanup failures. Logs use bounded provider/client/result fields and local user IDs after authentication. Do not log raw callbacks, either verifier, authorization/handoff codes, credentials, upstream responses or Tokens. The Host keeps framework OIDC/OAuth2 protocol errors at `Error` for diagnosis and uses the module's sanitized events for bounded failure details; verbose protocol logging remains disabled. Failure events record stage, category, exception type and TraceId without exception messages or payloads; provisioning and Desktop grant failures are distinct from IdP availability failures.
 
 No authentication state file, legacy JSON Token import, or `X-API-Key` fallback is introduced. Session responses retain API major version 1 and add displayName, loginProvider and isAdmin. Provider failure affects new login; existing local sessions follow their local lifetime or Token revocation.

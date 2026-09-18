@@ -81,6 +81,11 @@ public static class OidcFlow
                 DesktopRedirect,
                 new Dictionary<string, string?> { ["error"] = error, ["state"] = state }
             );
-        return QueryHelpers.AddQueryString(options.PublicBaseUrl + "/login/", "error", "oidc-" + error);
+        return QueryHelpers.AddQueryString(WebOrigin(options) + "/login/", "error", "oidc-" + error);
     }
+
+    // Browser-facing origin: the configured web origin, falling back to the callback origin so
+    // single-origin deployments keep working without setting WebBaseUrl.
+    public static string WebOrigin(OidcOptions options) =>
+        string.IsNullOrEmpty(options.WebBaseUrl) ? options.PublicBaseUrl : options.WebBaseUrl;
 }

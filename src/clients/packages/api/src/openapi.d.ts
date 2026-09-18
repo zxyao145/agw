@@ -5782,6 +5782,8 @@ export interface components {
     OidcProviderResponse: {
       id: string;
       displayName: string;
+      /** @enum {string} */
+      type: "Oidc" | "OAuth2";
     };
     PagedResultOfAgentflow: {
       items: components["schemas"]["Agentflow"][];

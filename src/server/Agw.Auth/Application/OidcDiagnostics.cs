@@ -21,12 +21,16 @@ public static class OidcDiagnostics
             _ => "protocol-validation-failed",
         };
         var cause = failure;
+        int? status = null;
         for (var depth = 0; depth < 8 && cause != null; depth++)
         {
             // Local persistence failures must not be mistaken for an unavailable IdP.
             if (stage is not ("provisioning" or "desktop-grant" or "session"))
                 category = cause switch
                 {
+                    // A status code means the provider answered (e.g. 403); a status-less
+                    // HttpRequestException means the request never completed (network failure).
+                    HttpRequestException { StatusCode: not null } => "provider-rejected",
                     HttpRequestException => "provider-unavailable",
                     OperationCanceledException => "provider-timeout",
                     OpenIdConnectProtocolInvalidNonceException => "invalid-nonce",
@@ -35,6 +39,8 @@ public static class OidcDiagnostics
                     OpenIdConnectProtocolException => "protocol-rejected",
                     _ => category,
                 };
+            if (status == null && cause is HttpRequestException { StatusCode: { } code })
+                status = (int)code;
             if (cause.InnerException == null)
                 break;
             cause = cause.InnerException;
@@ -44,12 +50,13 @@ public static class OidcDiagnostics
             .RequestServices.GetRequiredService<ILoggerFactory>()
             .CreateLogger("Agw.Auth.Oidc")
             .LogWarning(
-                "OIDC failure for {ProviderId}, {Client}, stage {Stage}, category {FailureCategory}, exception {ExceptionType}, trace {TraceId}.",
+                "OIDC/OAuth2 failure for {ProviderId}, {Client}, stage {Stage}, category {FailureCategory}, exception {ExceptionType}, status {StatusCode}, trace {TraceId}.",
                 provider,
                 client,
                 stage,
                 category,
                 cause?.GetType().FullName ?? "none",
+                status,
                 Activity.Current?.TraceId.ToString() ?? context.TraceIdentifier
             );
         OidcTelemetry.Failure(provider, client, stage, category);

@@ -92,12 +92,13 @@ public static class AgwHostApplication
                     )
                     .Build()
             )
-            // Raw protocol logs can contain upstream payloads. Agw.Auth.Oidc emits safe
-            // stage/category/exception-type/trace diagnostics instead.
+            // Keep framework protocol errors visible for configuration and callback
+            // diagnostics; Agw.Auth.Oidc also emits bounded stage/category details.
             .MinimumLevel.Override(
                 "Microsoft.AspNetCore.Authentication.OpenIdConnect",
-                Serilog.Events.LogEventLevel.Fatal
+                Serilog.Events.LogEventLevel.Error
             )
+            .MinimumLevel.Override("Microsoft.AspNetCore.Authentication.OAuth", Serilog.Events.LogEventLevel.Error)
             .Enrich.FromLogContext()
             .Enrich.WithMachineName()
             .Enrich.WithThreadId()

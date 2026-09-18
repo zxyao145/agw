@@ -56,9 +56,15 @@ public sealed class OidcController : ControllerBase
     )
     {
         EnsureInitialized();
-        _options.RequireProvider(providerId);
+        var provider = _options.RequireProvider(providerId);
         var properties = OidcFlow.Properties(client, returnUrl, clientState, codeChallenge, codeChallengeMethod);
-        if (_limiter.IsBlocked("oidc:" + AuthenticationAttemptLimiter.GetClientKey(HttpContext), _clock.GetUtcNow()))
+        var limiterPrefix = provider.Type == AuthProviderType.OAuth2 ? "oauth2:" : "oidc:";
+        if (
+            _limiter.IsBlocked(
+                limiterPrefix + AuthenticationAttemptLimiter.GetClientKey(HttpContext),
+                _clock.GetUtcNow()
+            )
+        )
             return ErrorCodes.TooManyAuthenticationAttempts.ToApiResult();
         Response.Headers.CacheControl = "no-store";
         // Correlation cookies must be set on the public callback origin.
@@ -70,15 +76,23 @@ public sealed class OidcController : ControllerBase
         )
             return Redirect(_options.PublicBaseUrl + Request.Path + Request.QueryString);
         OidcTelemetry.Login(providerId, client, "started");
+        if (provider.Type == AuthProviderType.OAuth2)
+        {
+            OidcTelemetry.OAuth2Login(providerId, client, "started");
+            OidcTelemetry.OAuth2Pkce(providerId, provider.UsePkce);
+        }
         try
         {
-            await HttpContext.ChallengeAsync("oidc:" + providerId, properties);
+            var scheme = (provider.Type == AuthProviderType.OAuth2 ? "oauth2:" : "oidc:") + providerId;
+            await HttpContext.ChallengeAsync(scheme, properties);
             return new EmptyResult();
         }
         catch (Exception exception) when (!HttpContext.RequestAborted.IsCancellationRequested && !Response.HasStarted)
         {
             var category = OidcDiagnostics.Failure(HttpContext, providerId, client, "challenge", exception);
             OidcTelemetry.Login(providerId, client, "failure");
+            if (provider.Type == AuthProviderType.OAuth2)
+                OidcTelemetry.OAuth2Login(providerId, client, "failure");
             return Redirect(OidcFlow.FailureRedirect(_options, properties, category));
         }
     }

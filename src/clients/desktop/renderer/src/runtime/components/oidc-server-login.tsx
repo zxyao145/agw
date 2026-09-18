@@ -7,7 +7,9 @@ import { useDesktopRuntime } from "../runtime-provider";
 
 export function OidcServerLogin({ profileId, baseUrl }: { profileId: string; baseUrl: string }) {
   const desktop = useDesktopRuntime();
-  const [providers, setProviders] = React.useState<Array<{ id: string; displayName: string }>>([]);
+  const [providers, setProviders] = React.useState<
+    Array<{ id: string; displayName: string; type?: "Oidc" | "OAuth2" }>
+  >([]);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const active = desktop.activeProfile?.id === profileId;

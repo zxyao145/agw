@@ -20,6 +20,22 @@ public static class OidcTelemetry
         "agw.auth.desktop.cleanup.failure"
     );
 
+    private static readonly Counter<long> OAuth2Logins = Meter.CreateCounter<long>("agw.auth.oauth2.login");
+    private static readonly Counter<long> OAuth2TokenExchanges = Meter.CreateCounter<long>(
+        "agw.auth.oauth2.token_exchange"
+    );
+    private static readonly Counter<long> OAuth2UserInfoRequests = Meter.CreateCounter<long>(
+        "agw.auth.oauth2.userinfo"
+    );
+    private static readonly Counter<long> OAuth2AccessTokenValidations = Meter.CreateCounter<long>(
+        "agw.auth.oauth2.access_token_validation"
+    );
+    private static readonly Counter<long> OAuth2PkceRequests = Meter.CreateCounter<long>("agw.auth.oauth2.pkce");
+    private static readonly Histogram<double> OAuth2Callbacks = Meter.CreateHistogram<double>(
+        "agw.auth.oauth2.callback.duration",
+        "s"
+    );
+
     public static void Login(string provider, string client, string result) =>
         Logins.Add(1, new("provider", provider), new("client", client), new("result", result));
 
@@ -51,4 +67,26 @@ public static class OidcTelemetry
         );
 
     public static void CleanupFailed() => CleanupFailures.Add(1);
+
+    public static void OAuth2Login(string provider, string client, string result) =>
+        OAuth2Logins.Add(1, new("provider", provider), new("client", client), new("result", result));
+
+    public static void OAuth2TokenExchange(string provider, string result) =>
+        OAuth2TokenExchanges.Add(1, new("provider", provider), new("result", result));
+
+    public static void OAuth2UserInfo(string provider, string result) =>
+        OAuth2UserInfoRequests.Add(1, new("provider", provider), new("result", result));
+
+    public static void OAuth2AccessTokenValidation(string provider, string result) =>
+        OAuth2AccessTokenValidations.Add(1, new("provider", provider), new("result", result));
+
+    public static void OAuth2Pkce(string provider, bool enabled) =>
+        OAuth2PkceRequests.Add(1, new("provider", provider), new("enabled", enabled ? "true" : "false"));
+
+    public static void OAuth2Callback(string provider, string result, long started) =>
+        OAuth2Callbacks.Record(
+            Stopwatch.GetElapsedTime(started).TotalSeconds,
+            new("provider", provider),
+            new("result", result)
+        );
 }

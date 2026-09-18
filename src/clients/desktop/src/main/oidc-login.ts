@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 
 import type { ServerProfile } from "../shared/contracts";
 
-export type LoginProvider = { id: string; displayName: string };
+export type LoginProvider = { id: string; displayName: string; type?: "Oidc" | "OAuth2" };
 type AuthRedirect = { state: string; code?: string; error?: string };
 type PendingLogin = {
   profileId: string;

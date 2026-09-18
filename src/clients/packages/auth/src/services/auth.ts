@@ -66,11 +66,19 @@ export async function changePassword(currentPassword: string, newPassword: strin
   clearAntiforgeryToken();
 }
 
-export type OidcProvider = { id: string; displayName: string };
+export type OidcProvider = { id: string; displayName: string; type: "Oidc" | "OAuth2" };
 
 export async function getOidcProviders(): Promise<OidcProvider[]> {
   try {
-    return (await apiGet("/api/auth/oidc/providers")) as OidcProvider[];
+    const providers = (await apiGet("/api/auth/oidc/providers")) as Array<{
+      id: string;
+      displayName: string;
+      type?: string;
+    }>;
+    return providers.map((provider) => ({
+      ...provider,
+      type: provider.type === "OAuth2" ? "OAuth2" : "Oidc",
+    }));
   } catch (error) {
     // Older Servers protect unknown routes before returning 404.
     if (error instanceof ApiError && (error.status === 404 || error.status === 401)) return [];
