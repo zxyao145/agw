@@ -17,6 +17,11 @@ Agw is a modular-monolith agent gateway for Agents, Jobs, Agentflows, and Chat: 
 | [Files](src/server/Agw.Files/README.zh-CN.md) | Workspace resolution, path security, and Git |
 | [Desktop](src/clients/desktop/README.md) | Electron runtime, packaging, and server profiles |
 
+### Immutable approach documents
+
+- Documents under `docs/approachs/` are append-only records. New documents MUST use the filename format `{时间：yyyy-MM-dd}-{方案名}`.
+- Once a document under `docs/approachs/` has been committed to Git, it MUST NOT be modified, deleted, or renamed. This is an absolute repository rule.
+
 ## Repository Map
 
 `Agw.slnx` is the root solution; backend projects live under `src/server/`:
