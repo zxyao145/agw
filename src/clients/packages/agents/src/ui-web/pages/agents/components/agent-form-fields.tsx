@@ -415,8 +415,12 @@ export function AgentFormFields({
               <TabsTrigger value="mcp-tool-servers">MCP Tool Server</TabsTrigger>
               <TabsTrigger value="connections">Integrations</TabsTrigger>
               <TabsTrigger value="environment-variables">Environment Variables</TabsTrigger>
-              <TabsTrigger value="response-schema" disabled={!supportsResponseSchema}>Response Schema</TabsTrigger>
-              <TabsTrigger value="extra-settings" disabled={!canEditExtra}>Extra Settings</TabsTrigger>
+              <TabsTrigger value="response-schema" disabled={!supportsResponseSchema}>
+                Response Schema
+              </TabsTrigger>
+              <TabsTrigger value="extra-settings" disabled={!canEditExtra}>
+                Extra Settings
+              </TabsTrigger>
             </TabsList>
             <p className="mt-2 max-w-4xl text-xs text-muted-foreground">
               Agw recommends configuring Skills, Tools, MCP Tool Servers, Integrations, and

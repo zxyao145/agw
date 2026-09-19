@@ -448,6 +448,10 @@ Provider 状态保存在现有 `AgentSession.StateBag`，并随 `AgentSessionSta
 
 第三方 Chat Completions 端点收到的 `TextReasoningContent` 会由 `OpenAiReasoningChatClient` 回填到对应 Assistant 消息的 `reasoning_content`，覆盖工具循环、审批恢复和持久化历史回放。同一作者的连续纯推理消息若紧接一条缺少推理的工具调用消息，也会将该推理前缀回填到工具调用；不会跨越其他消息、作者或覆盖工具调用已有的推理。兼容层在 SDK 完成消息转换后补字段，每个请求独立持有推理内容，共享原有 HTTP transport。DeepSeek 的历史 Assistant 消息必须携带该字段，未记录推理时补空字符串，并保留 SDK 已有的原生推理字段；其他兼容端点没有推理内容时不添加字段。官方 OpenAI 和 Azure OpenAI 端点沿用原 SDK 协议，Responses/Anthropic 路径也不使用此扩展。自定义网关需兼容其模型返回的 `reasoning_content` 协议；已经缺失的原始推理内容无法凭空恢复。
 
+Anthropic 路径使用 `AnthropicReasoningChatClient` 在响应及流式片段的 `AdditionalProperties` 中保留原始 thinking 类型，供聚合与历史持久化后回放。空文本加签名仍可能是普通 `thinking`，不能按文本是否为空推断为 `redacted_thinking`；请求通过原生内容块保留普通 thinking 的空文本及签名，真正的 redacted 数据保持不变。仅对 `api.deepseek.com`，没有类型标记的旧推理按该端点支持的普通 thinking 回放，没有推理记录的旧 Assistant 消息补空 thinking；其他端点不做此推断或补块。请求适配只修改副本，不改写历史，不借用其他消息的推理。历史持久化保留所有 `TextReasoningContent`，包括空文本、纯空白和只有签名的内容；界面展示仍可过滤空文本，不能将展示过滤应用到模型协议历史。
+
+DeepSeek 的 Responses 端点使用 `OpenAiResponsesReasoningChatClient`：普通响应从 `reasoning.content` 读取文本，流式响应沿用 SDK 的 `reasoning_text.delta` 转换，工具续接与历史回放通过原生 reasoning item 写回 `content`。该端点不支持 `summary` 或 `encrypted_content`，因此出站副本只携带可读推理，保留 item ID 与工具调用对应关系，不改写存储中的不透明数据。此投影仅匹配 `api.deepseek.com`；官方 OpenAI、Azure 和自定义 Responses 网关保持 SDK 行为。
+
 ### Result Summary
 
 Definition 创建的 System Agent 可通过 `EnableSummary` 在一次主执行成功后追加本轮总结。总结复用该 Agent 的 `ModelProviderId`，以一次性 `IChatClient` 调用执行；输入只包含本轮用户文字和本轮 Assistant 的 `TextContent`，不加载历史、工具或技能。External Agent 不支持该开关。

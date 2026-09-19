@@ -458,7 +458,15 @@ public sealed partial class EfCoreChatHistoryProvider
 
     private static ChatMessage? RemoveBlankTextualContent(ChatMessage message)
     {
-        var contents = message.Contents.WithoutBlankTextualContent(message.AdditionalProperties);
+        // History is protocol state, not a display projection. Empty reasoning may carry
+        // a signature or an explicit empty thinking block required by the next request.
+        var contents = message
+            .Contents.Where(content =>
+                content is not TextContent text
+                || message.AdditionalProperties.IsToolMessage()
+                || !string.IsNullOrWhiteSpace(text.Text)
+            )
+            .ToList();
         if (contents.Count == 0)
         {
             return null;

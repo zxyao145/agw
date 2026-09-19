@@ -216,7 +216,7 @@ public partial class AgentRuntimeService
             BaseUrl = provider.Endpoint,
         };
         var client = new AnthropicClient(anthropicClientOptions);
-        return client.AsIChatClient(model.Name);
+        return AnthropicReasoningChatClient.Create(client.AsIChatClient(model.Name), new Uri(provider.Endpoint));
     }
 
     private IChatClient CreateOpenAiResponsesChatClient(
@@ -230,7 +230,10 @@ public partial class AgentRuntimeService
         var options = new OpenAIClientOptions { Endpoint = new Uri(provider.Endpoint) };
         var client = new OpenAIClient(credential, options);
 #pragma warning disable OPENAI001
-        return client.GetResponsesClient().AsIChatClient(model.Name);
+        return OpenAiResponsesReasoningChatClient.Create(
+            client.GetResponsesClient().AsIChatClient(model.Name),
+            options.Endpoint
+        );
 #pragma warning restore OPENAI001
     }
 
