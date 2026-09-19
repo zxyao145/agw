@@ -14,6 +14,13 @@ import UriContent from "./renders/uri-content";
 import { ToolDirectoryInfo } from "./tool-directory";
 
 function PresentedContentView({ content }: { content: PresentedContent }) {
+  if (content.type === "json") {
+    return (
+      <pre className="max-w-full whitespace-pre-wrap break-words font-mono text-sm leading-relaxed">
+        {content.text}
+      </pre>
+    );
+  }
   if (content.type === "plan") return <PlanCard {...content} />;
   if (content.type === "image") {
     return (

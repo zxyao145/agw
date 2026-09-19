@@ -1,6 +1,8 @@
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using Agw.Agents.Execution.Summaries;
 using Agw.Shared;
+using Agw.Shared.Exceptions;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -8,6 +10,117 @@ namespace Agw.Agents.Tests;
 
 public class AgentTurnSummaryServiceTests
 {
+    [Theory]
+    [InlineData("  {\"value\":\"```<tag>\"}\n ", "{\"value\":\"```<tag>\"}")]
+    [InlineData("```json\n{\"approved\":false}\n```\n\n小结：请修改代码。", "{\"approved\":false}")]
+    [InlineData("结果如下：\n~~~json\n[{\"score\":38},null]\n~~~\n完成。", "[{\"score\":38},null]")]
+    [InlineData("{\"id\":9007199254740993,\"score\":1.00}\n小结：完成。", "{\"id\":9007199254740993,\"score\":1.00}")]
+    [InlineData(
+        "[1, {\"text\":\"braces {} [] and \\\"quotes\\\"\"}]",
+        "[1, {\"text\":\"braces {} [] and \\\"quotes\\\"\"}]"
+    )]
+    [InlineData("[]", "[]")]
+    [InlineData("{}", "{}")]
+    public async Task CreateStructuredResultAsync_ValidContainer_PersistsOnlyJsonWithoutModelUsage(
+        string finalText,
+        string expectedJson
+    )
+    {
+        // Arrange
+        var projectId = Guid.CreateVersion7();
+        var client = new RecordingChatClient(new ChatResponse([]));
+        var writer = new RecordingConversationHistoryWriter();
+        var usageRecorder = new RecordingUsageRecorder();
+        var clientFactory = new StubSummaryChatClientFactory(client);
+        var service = new AgentTurnSummaryService(
+            clientFactory,
+            writer,
+            usageRecorder,
+            NullLogger<AgentTurnSummaryService>.Instance
+        );
+
+        // Act
+        var result = await service.CreateStructuredResultAsync(
+            finalText,
+            projectId,
+            "context-1",
+            TestContext.Current.CancellationToken
+        );
+
+        // Assert
+        Assert.Equal(ChatRole.Assistant, result.Role);
+        Assert.Equal(Constants.DefaultAgentAuthor, result.AuthorName);
+        Assert.Equal("result", result.AdditionalProperties!["type"]);
+        Assert.Equal("json", result.AdditionalProperties["resultFormat"]);
+        Assert.Equal(expectedJson, Assert.IsType<TextContent>(Assert.Single(result.Contents)).Text);
+        using var document = JsonDocument.Parse(result.Text);
+        Assert.True(document.RootElement.ValueKind is JsonValueKind.Object or JsonValueKind.Array);
+        Assert.Empty(clientFactory.RequestedIds);
+        Assert.Empty(client.Messages);
+        Assert.Empty(usageRecorder.Entries);
+        var persisted = Assert.Single(writer.Entries);
+        Assert.Equal(projectId, persisted.ProjectId);
+        Assert.Equal("context-1", persisted.ContextId);
+        Assert.Same(result, Assert.Single(persisted.Messages));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("Only a summary.")]
+    [InlineData("42")]
+    [InlineData("true")]
+    [InlineData("null")]
+    [InlineData("\"{}\"")]
+    [InlineData("```json\ntrue\n```")]
+    [InlineData("```json\n\"{}\"\n```")]
+    [InlineData("```json\n{}")]
+    [InlineData("{\"x\":1}}")]
+    [InlineData("[1]]")]
+    [InlineData("```json\n{\"value\":}\n```")]
+    [InlineData("{\"nested\":{}, invalid}")]
+    [InlineData("[{\"x\":1}")]
+    [InlineData("{\"x\":1,}")]
+    [InlineData("{}\n[]")]
+    [InlineData("```json\n{}\n```\n```json\n[]\n```")]
+    public async Task CreateStructuredResultAsync_InvalidOrAmbiguousOutput_FailsWithoutPersisting(string finalText)
+    {
+        // Arrange
+        var writer = new RecordingConversationHistoryWriter();
+        var service = CreateService(new RecordingChatClient(new ChatResponse([])), writer);
+
+        // Act
+        var exception = await Assert.ThrowsAsync<AgwException>(() =>
+            service.CreateStructuredResultAsync(
+                finalText,
+                Guid.CreateVersion7(),
+                "context-1",
+                TestContext.Current.CancellationToken
+            )
+        );
+
+        // Assert
+        Assert.Equal(ErrorCodes.AgentExecutionFailed.Code, exception.Code);
+        Assert.Empty(writer.Entries);
+    }
+
+    [Fact]
+    public async Task CreateStructuredResultAsync_Canceled_DoesNotPersistResult()
+    {
+        // Arrange
+        var writer = new RecordingConversationHistoryWriter();
+        var service = CreateService(new RecordingChatClient(new ChatResponse([])), writer);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        // Act
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            service.CreateStructuredResultAsync("{}", Guid.CreateVersion7(), "context-1", cancellation.Token)
+        );
+
+        // Assert
+        Assert.Empty(writer.Entries);
+    }
+
     [Fact]
     public async Task CreateResultAsync_Success_ReturnsAndPersistsTextResultWithUsage()
     {

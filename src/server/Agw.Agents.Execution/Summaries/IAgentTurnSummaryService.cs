@@ -13,3 +13,13 @@ public interface IAgentTurnSummaryService
         CancellationToken cancellationToken = default
     );
 }
+
+public interface IAgentStructuredResultService
+{
+    Task<ChatMessage> CreateStructuredResultAsync(
+        string finalText,
+        Guid projectId,
+        string contextId,
+        CancellationToken cancellationToken = default
+    );
+}

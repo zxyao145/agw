@@ -27,6 +27,7 @@ public sealed class AgentRuntime : RuntimeBase
 
     private readonly ILogger _logger;
     private readonly bool _enableSummary;
+    private readonly bool _useStructuredResult;
     private readonly Guid? _summaryModelProviderId;
     private readonly IAgentTurnSummaryService? _summaryService;
     private readonly IConversationHistoryWriter? _conversationHistoryWriter;
@@ -48,7 +49,8 @@ public sealed class AgentRuntime : RuntimeBase
         bool enableSummary = false,
         Guid? summaryModelProviderId = null,
         IAgentTurnSummaryService? summaryService = null,
-        IConversationHistoryWriter? conversationHistoryWriter = null
+        IConversationHistoryWriter? conversationHistoryWriter = null,
+        bool useStructuredResult = false
     )
     {
         Agent = agent ?? throw new AgwException(ErrorCodes.InvalidParam, "agent cannot be null.");
@@ -59,6 +61,7 @@ public sealed class AgentRuntime : RuntimeBase
         AgentType = agentType;
         _logger = logger ?? throw new AgwException(ErrorCodes.InvalidParam, "logger cannot be null.");
         _enableSummary = enableSummary;
+        _useStructuredResult = useStructuredResult;
         _summaryModelProviderId = summaryModelProviderId;
         _summaryService = summaryService;
         _conversationHistoryWriter = conversationHistoryWriter;
@@ -126,6 +129,7 @@ public sealed class AgentRuntime : RuntimeBase
         try
         {
             IEnumerable<ChatMessage> currentRequestMessages = requestMessages;
+            IReadOnlyList<ChatMessage> finalResponseMessages = [];
             var approvalPending = false;
             for (var approvalCount = 0; approvalCount < MaxToolApprovalRounds; approvalCount++)
             {
@@ -135,6 +139,7 @@ public sealed class AgentRuntime : RuntimeBase
                     cancellationToken: cancellationToken
                 );
                 turnPersistence.RecordRange(response.Messages);
+                finalResponseMessages = response.Messages.ToList();
                 var approvals = response
                     .Messages.SelectMany(static item => item.Contents)
                     .OfType<ToolApprovalRequestContent>()
@@ -182,7 +187,7 @@ public sealed class AgentRuntime : RuntimeBase
             messages.AddRange(
                 stateSnapshots.Select(static stateMessage => stateMessage.ToAiMessage()).OfType<AgwMessage>()
             );
-            var result = await CreateSummaryAsync(summaryInput, turnPersistence.ResponseMessages, cancellationToken)
+            var result = await CreateResultAsync(summaryInput, finalResponseMessages, cancellationToken)
                 .ConfigureAwait(false);
             if (result != null)
             {
@@ -315,15 +320,16 @@ public sealed class AgentRuntime : RuntimeBase
         [EnumeratorCancellation] CancellationToken cancellationToken
     )
     {
-        var assistantText = new List<string>();
         var turnPersistence = new ToolTurnPersistence(Agent, Session, PersistToolBlockMessagesAsync);
         try
         {
             IEnumerable<ChatMessage> currentRequestMessages = requestMessages;
+            IReadOnlyList<ChatMessage> finalResponseMessages = [];
             var approvalPending = false;
             for (var approvalCount = 0; approvalCount < MaxToolApprovalRounds; approvalCount++)
             {
                 var approvals = new List<ToolApprovalRequestContent>();
+                var responseUpdates = new List<AgentResponseUpdate>();
                 await foreach (
                     var update in Agent.RunStreamingAsync(
                         currentRequestMessages,
@@ -333,7 +339,7 @@ public sealed class AgentRuntime : RuntimeBase
                 )
                 {
                     turnPersistence.Record(ToolStateSnapshots.ToMessage(update));
-                    assistantText.AddRange(update.Contents.OfType<TextContent>().Select(content => content.Text));
+                    responseUpdates.Add(update);
                     approvals.AddRange(update.Contents.OfType<ToolApprovalRequestContent>());
 
                     var aiMessage = update.ToAiMessage();
@@ -342,6 +348,7 @@ public sealed class AgentRuntime : RuntimeBase
                         yield return aiMessage;
                     }
                 }
+                finalResponseMessages = responseUpdates.ToAgentResponse().Messages.ToList();
 
                 if (approvals.Count == 0)
                 {
@@ -388,9 +395,9 @@ public sealed class AgentRuntime : RuntimeBase
                 }
             }
 
-            var result = await CreateSummaryAsync(
+            var result = await CreateResultAsync(
                     input: summaryInput,
-                    assistantMessages: [new ChatMessage(ChatRole.Assistant, string.Concat(assistantText))],
+                    assistantMessages: finalResponseMessages,
                     cancellationToken
                 )
                 .ConfigureAwait(false);
@@ -483,13 +490,37 @@ public sealed class AgentRuntime : RuntimeBase
             : _conversationHistoryWriter.AppendAsync(_projectId, _contextId, messages, cancellationToken);
     }
 
-    private async Task<AgwMessage?> CreateSummaryAsync(
+    private async Task<AgwMessage?> CreateResultAsync(
         AgwUserInput input,
         IReadOnlyList<ChatMessage> assistantMessages,
         CancellationToken cancellationToken
     )
     {
-        if (!_enableSummary || !_summaryModelProviderId.HasValue || _summaryService == null)
+        if (!_enableSummary || _summaryService == null)
+        {
+            return null;
+        }
+
+        var assistantText = AgentTurnResultText.ExtractLastAssistantText(assistantMessages);
+        if (assistantText == null)
+        {
+            return null;
+        }
+
+        if (_useStructuredResult)
+        {
+            if (_summaryService is not IAgentStructuredResultService structuredResultService)
+            {
+                return null;
+            }
+
+            var structuredResult = await structuredResultService
+                .CreateStructuredResultAsync(assistantText, _projectId, _contextId, cancellationToken)
+                .ConfigureAwait(false);
+            return structuredResult.ToAiMessage();
+        }
+
+        if (!_summaryModelProviderId.HasValue)
         {
             return null;
         }
@@ -501,18 +532,7 @@ public sealed class AgentRuntime : RuntimeBase
             sourceMessages.Add(new ChatMessage(ChatRole.User, userText));
         }
 
-        var assistantText = string.Concat(
-                assistantMessages
-                    .Where(message => message.Role == ChatRole.Assistant)
-                    .SelectMany(message => message.Contents)
-                    .OfType<TextContent>()
-                    .Select(content => content.Text)
-            )
-            .Trim();
-        if (!string.IsNullOrWhiteSpace(assistantText))
-        {
-            sourceMessages.Add(new ChatMessage(ChatRole.Assistant, assistantText));
-        }
+        sourceMessages.Add(new ChatMessage(ChatRole.Assistant, assistantText.Trim()));
 
         var result = await _summaryService
             .CreateResultAsync(

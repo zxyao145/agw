@@ -27,6 +27,7 @@ import {
 } from "./message-presentation";
 import { isSystemInjectedMessage } from "./message-source";
 import { parseMessageProposedPlan, type ProposedPlanPresentation } from "./proposed-plan";
+import { normalizeStructuredResult } from "./structured-result";
 
 const HIDDEN_CONTROL_TYPES = new Set([
   "turn-start",
@@ -139,6 +140,7 @@ export type TodoPresentationItem = {
 
 export type PresentedContent =
   | { type: "markdown"; markdown: string; sourceType: string }
+  | { type: "json"; text: string }
   | { type: "plain"; text: string; sourceType: string }
   | { type: "error"; text: string }
   | { type: "reasoning"; markdown: string; preview: string }
@@ -722,6 +724,16 @@ function presentContent(message: AiMessage, content: AiMessageContent): Presente
   }
 
   const raw = stringifyContentValue(content.content);
+  if (
+    content.type === MessageContentType.TextContent &&
+    isResultMessage(message) &&
+    message.additionalProperties?.resultFormat === "json"
+  ) {
+    const json = normalizeStructuredResult(raw);
+    return json !== null
+      ? [{ type: "json", text: json }]
+      : [{ type: "error", text: "Invalid structured result: expected one JSON object or array." }];
+  }
   const hookEvent = getClaudeHookEventName(raw);
   if (hookEvent) return [{ type: "plain", text: hookEvent, sourceType: content.type }];
   if (content.type === MessageContentType.ErrorContent) {

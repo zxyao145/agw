@@ -71,6 +71,7 @@ public sealed class UnattendedAgentExecutionTests
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
         agent.ApprovalRounds = approvalRounds;
         var persisted = new List<ChatMessage>();
+        var finalResponseMessages = new List<ChatMessage>();
         var persistence = new ToolTurnPersistence(
             agent,
             session,
@@ -87,7 +88,8 @@ public sealed class UnattendedAgentExecutionTests
             session,
             persistence,
             TestContext.Current.CancellationToken,
-            new UnattendedInteractionHandler(AgwPermissionMode.FullAccess)
+            new UnattendedInteractionHandler(AgwPermissionMode.FullAccess),
+            finalResponseMessages
         );
 
         Assert.Equal(approvalRounds, agent.ExecutedTools);
@@ -95,6 +97,7 @@ public sealed class UnattendedAgentExecutionTests
             messages,
             message => message.Contents.OfType<AgwTextContent>().Any(text => text.Content == "done")
         );
+        Assert.Equal("done", finalResponseMessages.Last(message => message.Role == ChatRole.Assistant).Text);
         Assert.NotEmpty(persisted);
     }
 

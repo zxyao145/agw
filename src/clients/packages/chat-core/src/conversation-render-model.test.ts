@@ -356,6 +356,55 @@ test("render model emits plan, full result, right user, image, and red error sem
   );
 });
 
+test("JSON results render directly without Markdown or changing source tokens", () => {
+  const json = '{"value":"```<tag>"}';
+  const source = {
+    ...message("result-json", "assistant", json, { type: "result", resultFormat: "json" }),
+    additionalProperties: { type: "result", resultFormat: "json" },
+  };
+
+  const items = buildConversationRenderModel([source]);
+
+  assert.equal(items.length, 1);
+  const item = items[0]!;
+  assert.equal(item.type, "result");
+  assert.deepEqual(item.type === "result" ? item.message.contents : [], [
+    { type: "json", text: json },
+  ]);
+  assert.equal(source.contents[0]?.content, json);
+});
+
+test("historical JSON results strip model fences and trailing summaries in presentation", () => {
+  const json = '[{"approved":false,"id":9007199254740993}]';
+  const source = message("legacy-result", "assistant", `\`\`\`json\n${json}\n\`\`\`\n小结：完成。`);
+  source.additionalProperties = { type: "result", resultFormat: "json" };
+  const originalText = source.contents[0]?.content;
+
+  const items = buildConversationRenderModel([source]);
+
+  assert.equal(items.length, 1);
+  const item = items[0]!;
+  assert.deepEqual(item.type === "result" ? item.message.contents : [], [
+    { type: "json", text: json },
+  ]);
+  assert.equal(source.contents[0]?.content, originalText);
+});
+
+test("invalid historical JSON results show an error instead of returning the original prose", () => {
+  for (const text of ["### Summary", "true", "null", '"{}"', "{}\n[]", "{invalid}"]) {
+    const source = message("invalid-result", "assistant", text);
+    source.additionalProperties = { type: "result", resultFormat: "json" };
+
+    const item = buildConversationRenderModel([source])[0]!;
+
+    assert.equal(item.type, "result");
+    assert.deepEqual(
+      item.type === "result" ? item.message.contents.map((content) => content.type) : [],
+      ["error"],
+    );
+  }
+});
+
 test("tool calls pair per scope and completed questions use a dedicated result item", () => {
   const call: AiMessage = {
     messageId: "call",

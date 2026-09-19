@@ -204,6 +204,13 @@ test("Agent forms expose summary settings but disable them for External Agents",
   assert.match(formSource, /checked=\{enableSummary\}/);
   assert.match(formSource, /onCheckedChange=\{setEnableSummary\}/);
   assert.match(formSource, /disabled=\{isExternalAgent\}/);
+  assert.match(
+    formSource,
+    /const usesStructuredResult = supportsResponseSchema && responseSchema\.trim\(\)\.length > 0/,
+  );
+  assert.match(formSource, /Append the Agent's final JSON response directly/);
+  assert.match(formSource, /disabled=\{isExternalAgent \|\| usesStructuredResult\}/);
+  assert.match(formSource, /This selection is preserved for later use/);
   assert.match(formSource, /External agents do not support turn summary configuration/);
   assert.match(createSource, /enableSummary,/);
   assert.match(createSource, /summaryModelProviderId: summaryModelProviderId \|\| null/);

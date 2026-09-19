@@ -73,6 +73,55 @@ public class AgentRuntimeServiceSummaryTests
         Assert.Equal(agentModelProviderId, Assert.Single(summaryService.Calls).ModelProviderId);
     }
 
+    [Fact]
+    public async Task AppendDefinitionSummaryAsync_ResponseSchema_ReusesFinalResponseWithoutSummaryCall()
+    {
+        // Arrange
+        const string finalText = " {\"approved\":false} ";
+        var projectId = Guid.CreateVersion7();
+        var summaryService = new RecordingSummaryService();
+        var service = CreateService(summaryService);
+        var output = new AgwMessage(
+            "assistant-1",
+            "agent",
+            AiRole.Assistant,
+            [new AgwTextContent { Content = finalText }]
+        );
+
+        // Act
+        var result = await service.AppendDefinitionSummaryAsync(
+            new Agent
+            {
+                Type = AgentType.System,
+                EnableSummary = true,
+                ResponseSchema = "{\"type\":\"object\"}",
+                ModelProviderId = Guid.CreateVersion7(),
+            },
+            [new ChatMessage(ChatRole.User, "request")],
+            [output],
+            projectId,
+            "context-1",
+            TestContext.Current.CancellationToken,
+            [
+                new ChatMessage(ChatRole.Assistant, "before tool"),
+                new ChatMessage(ChatRole.Tool, "tool output"),
+                new ChatMessage(ChatRole.Assistant, finalText),
+            ]
+        );
+
+        // Assert
+        Assert.Equal(2, result.Count);
+        var resultMessage = result[1];
+        Assert.Equal("result", resultMessage.AdditionalProperties!["type"]);
+        Assert.Equal("json", resultMessage.AdditionalProperties["resultFormat"]);
+        Assert.Equal(finalText, Assert.IsType<AgwTextContent>(Assert.Single(resultMessage.Contents)).Content);
+        var call = Assert.Single(summaryService.StructuredCalls);
+        Assert.Equal(finalText, call.FinalText);
+        Assert.Equal(projectId, call.ProjectId);
+        Assert.Equal("context-1", call.ContextId);
+        Assert.Empty(summaryService.Calls);
+    }
+
     [Theory]
     [InlineData(AgentType.System, false)]
     [InlineData(AgentType.External, false)]
@@ -91,6 +140,7 @@ public class AgentRuntimeServiceSummaryTests
                 Type = agentType,
                 EnableSummary = enableSummary,
                 ModelProviderId = Guid.CreateVersion7(),
+                ResponseSchema = "{\"type\":\"object\"}",
             },
             [new ChatMessage(ChatRole.User, "request")],
             [output],
@@ -124,9 +174,10 @@ public class AgentRuntimeServiceSummaryTests
             configuration: null!
         );
 
-    private sealed class RecordingSummaryService : IAgentTurnSummaryService
+    private sealed class RecordingSummaryService : IAgentTurnSummaryService, IAgentStructuredResultService
     {
         public List<Call> Calls { get; } = [];
+        public List<StructuredCall> StructuredCalls { get; } = [];
 
         public Task<ChatMessage> CreateResultAsync(
             Guid modelProviderId,
@@ -140,7 +191,22 @@ public class AgentRuntimeServiceSummaryTests
             Calls.Add(new Call(modelProviderId, sourceMessages));
             return Task.FromResult(AgentTurnSummaryService.CreateResultMessage("summary"));
         }
+
+        public Task<ChatMessage> CreateStructuredResultAsync(
+            string finalText,
+            Guid projectId,
+            string contextId,
+            CancellationToken cancellationToken = default
+        )
+        {
+            StructuredCalls.Add(new StructuredCall(finalText, projectId, contextId));
+            return Task.FromResult(
+                AgentTurnSummaryService.CreateResultMessage(finalText, AgentTurnSummaryService.JsonResultFormat)
+            );
+        }
     }
 
     private sealed record Call(Guid ModelProviderId, IReadOnlyList<ChatMessage> Messages);
+
+    private sealed record StructuredCall(string FinalText, Guid ProjectId, string ContextId);
 }

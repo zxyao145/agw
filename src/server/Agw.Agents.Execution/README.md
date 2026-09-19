@@ -456,6 +456,8 @@ DeepSeek 的 Responses 端点使用 `OpenAiResponsesReasoningChatClient`：普�
 
 Definition 创建的 System Agent 可通过 `EnableSummary` 在一次主执行成功后追加本轮总结。总结复用该 Agent 的 `ModelProviderId`，以一次性 `IChatClient` 调用执行；输入只包含本轮用户文字和本轮 Assistant 的 `TextContent`，不加载历史、工具或技能。External Agent 不支持该开关。
 
+当 Definition Agent 同时配置 `ResponseSchema` 与 `EnableSummary` 时，`result` 从本轮最后一条完整 Assistant 回复中提取唯一的 JSON 对象或数组，不再调用摘要模型，也不产生摘要用量。服务端移除 Markdown 围栏、外围说明和首尾空白，严格检查 JSON 语法及根类型，但不重新序列化字段和值；无有效 JSON、JSON 不完整或含多个对象/数组时明确失败，不保存文本 Result。消息设置 `additionalProperties.resultFormat = json`；没有最终 Assistant 文本时不追加 `result`。流式执行先聚合当前最后一次模型调用的更新，因此 Tool 调用前的说明和更早的模型轮次不会混入结构化 Result。客户端直接按字面展示 JSON，不经过 Markdown 渲染；带该标记的旧历史也在展示时移除围栏和外围说明。
+
 Agentflow 不读取内部 Agent 节点的 `EnableSummary`。流程总结只发生在显式 Output 节点：`ConfigJson.enableSummary` 为 `true` 时，流程必须只有一个 Output，并配置有效的 `SummaryModelProviderId`。传入总结模型的是流入 Output 的消息，Output 的 `Instructions` 会作为额外总结要求。
 
 两种路径都保留原始输出并在末尾追加一条 `result`：
@@ -463,6 +465,7 @@ Agentflow 不读取内部 Agent 节点的 `EnableSummary`。流程总结只发�
 - `role = system`；
 - `author = $agw-server`；
 - 顶层 `additionalProperties.type = result`；
+- 结构化 Result 额外设置顶层 `additionalProperties.resultFormat = json`；
 - `contents` 只有一个 `TextContent`。
 
 总结文字可在有助于可读性时使用 Markdown（如标题、列表、强调或代码块），也可以保持纯文本；服务端除去首尾空白外不会改写模型返回的 Markdown。

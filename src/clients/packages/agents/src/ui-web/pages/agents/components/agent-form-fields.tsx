@@ -142,6 +142,7 @@ export function AgentFormFields({
   const responseSchemaError = getAgentResponseSchemaError(responseSchema);
   // pi 暂时不支持 ResponseSchema
   const supportsResponseSchema = !(isExternalAgent && externalAgentKind === ExternalAgentKind.Pi);
+  const usesStructuredResult = supportsResponseSchema && responseSchema.trim().length > 0;
   const modelProviderOptions = React.useMemo<SearchableSelectOption[]>(
     () =>
       (modelProvidersQuery.data ?? []).map((modelProvider) => ({
@@ -366,8 +367,9 @@ export function AgentFormFields({
                 Generate Turn Summary
               </Label>
               <p className="text-xs text-muted-foreground">
-                Append a Markdown summary after each successful turn using the selected Summary
-                Model Provider.
+                {usesStructuredResult
+                  ? "Append the Agent's final JSON response directly after each successful turn."
+                  : "Append a Markdown summary after each successful turn using the selected Summary Model Provider."}
               </p>
             </div>
             <Switch
@@ -398,8 +400,14 @@ export function AgentFormFields({
                 searchPlaceholder="Search model providers..."
                 isLoading={modelProvidersQuery.isLoading}
                 clearable={!isExternalAgent && Boolean(summaryModelProviderId)}
-                disabled={isExternalAgent}
+                disabled={isExternalAgent || usesStructuredResult}
               />
+              {usesStructuredResult ? (
+                <p className="text-xs text-muted-foreground">
+                  Response Schema mode reuses the final JSON and does not call the Summary Model
+                  Provider. This selection is preserved for later use.
+                </p>
+              ) : null}
             </div>
           ) : null}
         </div>

@@ -460,6 +460,13 @@ function NativeContent({
     );
   }
   if (content.type === "error") return <Text style={styles.contentError}>{content.text}</Text>;
+  if (content.type === "json") {
+    return (
+      <Text selectable style={styles.plainText}>
+        {content.text}
+      </Text>
+    );
+  }
   if (content.type === "plain") return <Text style={styles.plainText}>{content.text}</Text>;
   if (content.type === "reasoning") {
     return (
