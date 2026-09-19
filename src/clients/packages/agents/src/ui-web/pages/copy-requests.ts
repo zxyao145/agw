@@ -4,7 +4,7 @@ import type {
   AgentflowDto,
   AgentflowSaveRequest,
 } from "../../types/agentflow";
-import type { AgentCreateRequest } from "./agents/components/types";
+import { ExternalAgentKind, type AgentCreateRequest } from "./agents/components/types";
 
 const MAX_DEFINITION_NAME_LENGTH = 200;
 const COPY_DISPLAY_SUFFIX = " Copy";
@@ -44,6 +44,9 @@ export function createAgentCopyRequest(agent: AgentDto): AgentCreateRequest {
     type: agent.type,
     externalAgentKind: agent.externalAgentKind,
     extra: isExternalAgent ? (agent.extra ?? null) : null,
+    // Pi agents cannot enforce a response schema; the API rejects configured values.
+    responseSchema:
+      agent.externalAgentKind === ExternalAgentKind.Pi ? null : (agent.responseSchema ?? null),
   };
 }
 

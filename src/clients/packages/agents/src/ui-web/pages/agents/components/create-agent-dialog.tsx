@@ -15,6 +15,7 @@ import {
 import { AgentFormFields } from "./agent-form-fields";
 import { getExternalModelProviderError } from "./external-model-provider";
 import { getAgentExtraSettingsError, normalizeAgentExtraSettings } from "./agent-extra-settings";
+import { getAgentResponseSchemaError, normalizeAgentResponseSchema } from "./agent-response-schema";
 import {
   getAgentEnvironmentVariablesError,
   normalizeAgentEnvironmentVariables,
@@ -57,6 +58,8 @@ interface CreateAgentDialogProps {
   externalAgentOptionsQuery: UseQueryResult<ExternalAgentOptionDto[], Error>;
   extra: string;
   setExtra: (value: string) => void;
+  responseSchema: string;
+  setResponseSchema: (value: string) => void;
   environmentVariables: AgentEnvironmentVariableEntry[];
   setEnvironmentVariables: (entries: AgentEnvironmentVariableEntry[]) => void;
   selectedSkillIds: string[];
@@ -100,6 +103,8 @@ export function CreateAgentDialog({
   externalAgentOptionsQuery,
   extra,
   setExtra,
+  responseSchema,
+  setResponseSchema,
   environmentVariables,
   setEnvironmentVariables,
   selectedSkillIds,
@@ -128,10 +133,12 @@ export function CreateAgentDialog({
       )
     : null;
   const extraError = isExternalAgent ? getAgentExtraSettingsError(extra) : null;
+  const responseSchemaError = getAgentResponseSchemaError(responseSchema);
   const environmentVariablesError = getAgentEnvironmentVariablesError(environmentVariables);
 
   const handleCreate = () => {
     const environment = normalizeAgentEnvironmentVariables(environmentVariables);
+    const schema = normalizeAgentResponseSchema(responseSchema);
     const body: AgentCreateRequest = isExternalAgent
       ? {
           displayName,
@@ -149,6 +156,7 @@ export function CreateAgentDialog({
           type: agentType,
           externalAgentKind,
           extra: normalizeAgentExtraSettings(extra),
+          responseSchema: schema,
         }
       : {
           displayName,
@@ -166,6 +174,7 @@ export function CreateAgentDialog({
           type: agentType,
           externalAgentKind,
           extra: null,
+          responseSchema: schema,
         };
     createAgentMutation.mutate(body);
   };
@@ -221,6 +230,7 @@ export function CreateAgentDialog({
                     (isExternalAgent && externalAgentKind === 0) ||
                     Boolean(modelProviderError) ||
                     Boolean(extraError) ||
+                    Boolean(responseSchemaError) ||
                     Boolean(environmentVariablesError) ||
                     createAgentMutation.isPending
                   }
@@ -254,6 +264,8 @@ export function CreateAgentDialog({
             externalAgentOptionsQuery={externalAgentOptionsQuery}
             extra={extra}
             setExtra={setExtra}
+            responseSchema={responseSchema}
+            setResponseSchema={setResponseSchema}
             environmentVariables={environmentVariables}
             setEnvironmentVariables={setEnvironmentVariables}
             selectedSkillIds={selectedSkillIds}

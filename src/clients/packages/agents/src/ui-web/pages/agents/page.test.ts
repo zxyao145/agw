@@ -16,6 +16,23 @@ test("agents page loads connections and passes connection selection state into b
   assert.match(source, /setEditModelProviderId\(agent\.modelProviderId \?\? ""\)/);
 });
 
+test("agents page owns Create and Edit response-schema state with backfill and reset", async () => {
+  const source = await readFile(PAGE_URL, "utf8");
+
+  assert.match(source, /const \[responseSchema, setResponseSchema\] = React\.useState\(""\)/);
+  assert.match(
+    source,
+    /const \[editResponseSchema, setEditResponseSchema\] = React\.useState\(""\)/,
+  );
+  assert.match(
+    source,
+    /agent\.externalAgentKind === ExternalAgentKind\.Pi \? "" : \(agent\.responseSchema \?\? ""\)/,
+  );
+  assert.match(source, /setResponseSchema\(""\)/);
+  assert.match(source, /responseSchema=\{responseSchema\}/);
+  assert.match(source, /responseSchema=\{editResponseSchema\}/);
+});
+
 test("agents page owns Create and Edit environment-variable state", async () => {
   const source = await readFile(PAGE_URL, "utf8");
 

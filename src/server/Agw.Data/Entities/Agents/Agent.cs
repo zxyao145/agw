@@ -39,6 +39,12 @@ public class Agent : BaseEntity, IAggregateRoot
     /// </summary>
     public string? Extra { get; set; }
 
+    /// <summary>
+    /// Raw user-configured JSON Schema text enforcing the agent's final response structure.
+    /// <see langword="null"/> means structured output is disabled.
+    /// </summary>
+    public string? ResponseSchema { get; set; }
+
     public List<ToolValueObject> Tools { get; set; } = [];
 
     public Dictionary<string, string> EnvironmentVariables { get; set; } = new();

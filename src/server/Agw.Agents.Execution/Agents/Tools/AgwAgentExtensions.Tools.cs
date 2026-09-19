@@ -81,6 +81,8 @@ public static class AgwAgentExtensions
             Instructions = AgentRuntimeServiceUtil.BuildInstructions(definition.SystemPrompt),
             Tools = capabilities.Tools.Count == 0 ? null : capabilities.Tools.ToList(),
             MaxOutputTokens = definition.MaxOutputTokens,
+            // 配置了 Response Schema 时启用结构化输出；未配置时保持现有行为。
+            ResponseFormat = definition.ResponseFormat,
         };
         // 等所有 Provider 生成 Tool 后再添加 Plan 限制；受限 Tool 会对 Model 隐藏，调用时也会被拒绝。
         var contextProviders = capabilities.ContextProviders.ToList();

@@ -117,6 +117,7 @@ public partial class AgentRuntimeService
 
             _logger.LogInformation("Creating definition agent {AgentName}", agentDefinition.Name);
 
+            var responseFormat = AgentResponseSchemaFormat.Create(agentDefinition, provider.ProviderType);
             aiAgent = chatClient.AsAgwAgent(
                 new ResolvedAgentDefinition
                 {
@@ -133,6 +134,7 @@ public partial class AgentRuntimeService
                         loggerFactory: _loggerFactory
                     ),
                     MaxOutputTokens = model.MaxOutputTokens,
+                    ResponseFormat = responseFormat,
                 },
                 capabilities,
                 _loggerFactory,
@@ -164,6 +166,16 @@ public partial class AgentRuntimeService
             }
 
             aiAgent = agentBuilder.Build();
+            if (responseFormat != null)
+            {
+                aiAgent = new AgentResponseSchemaExecutionAgent(
+                    aiAgent,
+                    "system",
+                    "none",
+                    provider.ProviderType.ToString()
+                );
+            }
+
             return new ResourceOwningAIAgent(aiAgent, capabilities);
         }
         catch

@@ -75,6 +75,7 @@ test("createAgentCopyRequest copies all System Agent configuration with a new id
     type: 0,
     externalAgentKind: 0,
     extra: null,
+    responseSchema: null,
   });
   assert.notStrictEqual(request.tools, sourceAgent.tools);
   assert.notStrictEqual(request.environmentVariables, sourceAgent.environmentVariables);
@@ -104,6 +105,34 @@ test("createAgentCopyRequest preserves External Agent kind and Extra Settings", 
   assert.equal(request.mcpToolServerIds, null);
   assert.equal(request.skillIds, null);
   assert.equal(request.connectionIds, null);
+});
+
+test("createAgentCopyRequest preserves the Response Schema for System and External agents", () => {
+  const schema =
+    '{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"]}';
+
+  const systemCopy = createAgentCopyRequest({ ...sourceAgent, responseSchema: schema });
+  assert.equal(systemCopy.responseSchema, schema);
+
+  const externalCopy = createAgentCopyRequest({
+    ...sourceAgent,
+    type: 1,
+    externalAgentKind: 1,
+    responseSchema: schema,
+  });
+  assert.equal(externalCopy.responseSchema, schema);
+});
+
+test("createAgentCopyRequest drops the Response Schema for Pi agents", () => {
+  const schema = '{"type":"object"}';
+
+  const piCopy = createAgentCopyRequest({
+    ...sourceAgent,
+    type: 1,
+    externalAgentKind: 3,
+    responseSchema: schema,
+  });
+  assert.equal(piCopy.responseSchema, null);
 });
 
 test("createAgentCopyRequest keeps generated names within the database length limit", () => {

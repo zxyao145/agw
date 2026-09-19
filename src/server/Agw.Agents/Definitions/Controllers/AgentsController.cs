@@ -25,11 +25,11 @@ public class AgentsController : ControllerBase
     }
 
     [HttpGet]
-    [ProducesApiResult(typeof(AgentResponse[]))]
+    [ProducesApiResult(typeof(AgentListResponse[]))]
     public async Task<IActionResult> ListAsync()
     {
         var agents = await _agentAppService.ListAgentsForCurrentUserAsync();
-        return ApiResult.Ok(agents.Select(AgentResponse.FromDomain).ToArray());
+        return ApiResult.Ok(agents.Select(AgentListResponse.FromDomain).ToArray());
     }
 
     [HttpGet("paged")]
@@ -110,6 +110,7 @@ public class AgentsController : ControllerBase
             Type = request.Type ?? AgentType.System,
             ExternalAgentKind = request.ExternalAgentKind ?? ExternalAgentKind.None,
             Extra = request.Extra,
+            ResponseSchema = request.ResponseSchema,
         };
 
         var created = await _agentAppService.CreateAgentAsync(

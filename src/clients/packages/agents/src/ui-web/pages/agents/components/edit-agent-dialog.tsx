@@ -12,6 +12,7 @@ import {
 } from "@agw/components";
 
 import { getAgentExtraSettingsError, normalizeAgentExtraSettings } from "./agent-extra-settings";
+import { getAgentResponseSchemaError, normalizeAgentResponseSchema } from "./agent-response-schema";
 import {
   getAgentEnvironmentVariablesError,
   normalizeAgentEnvironmentVariables,
@@ -51,6 +52,8 @@ interface EditAgentDialogProps {
   setEnableSummary: (value: boolean) => void;
   extra: string;
   setExtra: (value: string) => void;
+  responseSchema: string;
+  setResponseSchema: (value: string) => void;
   environmentVariables: AgentEnvironmentVariableEntry[];
   setEnvironmentVariables: (entries: AgentEnvironmentVariableEntry[]) => void;
   selectedSkillIds: string[];
@@ -96,6 +99,8 @@ export function EditAgentDialog({
   setEnableSummary,
   extra,
   setExtra,
+  responseSchema,
+  setResponseSchema,
   environmentVariables,
   setEnvironmentVariables,
   selectedSkillIds,
@@ -128,6 +133,7 @@ export function EditAgentDialog({
       )
     : null;
   const extraError = isExternalAgent ? getAgentExtraSettingsError(extra) : null;
+  const responseSchemaError = getAgentResponseSchemaError(responseSchema);
   const environmentVariablesError = getAgentEnvironmentVariablesError(environmentVariables);
 
   const handleUpdate = () => {
@@ -135,6 +141,7 @@ export function EditAgentDialog({
       return;
     }
 
+    const schema = normalizeAgentResponseSchema(responseSchema);
     const body: AgentUpdateRequest = isExternalAgent
       ? {
           displayName,
@@ -142,6 +149,7 @@ export function EditAgentDialog({
           modelProviderId: modelProviderId || null,
           extra: normalizeAgentExtraSettings(extra),
           environmentVariables: normalizeAgentEnvironmentVariables(environmentVariables),
+          responseSchema: schema,
         }
       : {
           displayName,
@@ -156,6 +164,7 @@ export function EditAgentDialog({
           connectionIds: selectedConnectionIds.length > 0 ? selectedConnectionIds : null,
           extra: null,
           environmentVariables: normalizeAgentEnvironmentVariables(environmentVariables),
+          responseSchema: schema,
         };
 
     updateAgentMutation.mutate({
@@ -214,6 +223,7 @@ export function EditAgentDialog({
                         (enableSummary && !effectiveSummaryModelProviderId))) ||
                     Boolean(modelProviderError) ||
                     Boolean(extraError) ||
+                    Boolean(responseSchemaError) ||
                     Boolean(environmentVariablesError) ||
                     updateAgentMutation.isPending
                   }
@@ -245,6 +255,8 @@ export function EditAgentDialog({
             externalAgentOptionsQuery={externalAgentOptionsQuery}
             extra={extra}
             setExtra={setExtra}
+            responseSchema={responseSchema}
+            setResponseSchema={setResponseSchema}
             environmentVariables={environmentVariables}
             setEnvironmentVariables={setEnvironmentVariables}
             selectedSkillIds={selectedSkillIds}

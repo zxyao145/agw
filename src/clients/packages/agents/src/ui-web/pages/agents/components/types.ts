@@ -40,6 +40,7 @@ export interface AgentCreateRequest {
   type: AgentType;
   externalAgentKind: ExternalAgentKind;
   extra: string | null;
+  responseSchema: string | null;
 }
 
 export interface SystemAgentUpdateRequest {
@@ -55,6 +56,7 @@ export interface SystemAgentUpdateRequest {
   connectionIds?: string[] | null;
   extra: string | null;
   environmentVariables: Record<string, string>;
+  responseSchema?: string | null;
 }
 
 export interface ExternalAgentUpdateRequest {
@@ -63,6 +65,7 @@ export interface ExternalAgentUpdateRequest {
   modelProviderId?: string | null;
   extra?: string | null;
   environmentVariables?: Record<string, string> | null;
+  responseSchema?: string | null;
 }
 
 export type AgentUpdateRequest = SystemAgentUpdateRequest | ExternalAgentUpdateRequest;

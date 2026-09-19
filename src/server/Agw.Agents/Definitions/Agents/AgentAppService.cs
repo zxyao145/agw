@@ -227,6 +227,8 @@ public class AgentAppService
         }
         if (agent.Type == AgentType.External)
             agent.Extra = AgentExtraSettings.Normalize(agent.Extra);
+        agent.ResponseSchema = AgentResponseSchema.Normalize(agent.ResponseSchema);
+        EnsureResponseSchemaSupported(agent.ExternalAgentKind, agent.ResponseSchema);
         new AgentBehavior(agent).PrepareForCreate();
         if (await _dbContext.Agents.AnyAsync(existing => existing.CreateBy == user && existing.Name == agent.Name))
         {
@@ -261,6 +263,13 @@ public class AgentAppService
         if (existing.Type == AgentType.External)
         {
             ValidateExternalAgentUpdate(command);
+            if (command.IsSpecified(AgentUpdateField.ResponseSchema))
+            {
+                EnsureResponseSchemaSupported(
+                    existing.ExternalAgentKind,
+                    AgentResponseSchema.Normalize(command.ResponseSchema)
+                );
+            }
             var modelProviderId = command.IsSpecified(AgentUpdateField.ModelProviderId)
                 ? command.ModelProviderId
                 : existing.ModelProviderId;
@@ -433,6 +442,8 @@ public class AgentAppService
         {
             agent.EnvironmentVariables = command.EnvironmentVariables ?? new Dictionary<string, string>();
         }
+
+        ApplyResponseSchemaUpdate(agent, command);
     }
 
     private static void ApplySystemAgentUpdate(Agent agent, AgentUpdateCommand command)
@@ -446,6 +457,25 @@ public class AgentAppService
         agent.Tools = command.Tools ?? [];
         agent.Extra = command.Extra;
         agent.EnvironmentVariables = command.EnvironmentVariables ?? new Dictionary<string, string>();
+        ApplyResponseSchemaUpdate(agent, command);
+    }
+
+    // Pi runs cannot enforce a response schema, so configuration is rejected instead of degrading silently.
+    private static void EnsureResponseSchemaSupported(ExternalAgentKind kind, string? responseSchema)
+    {
+        if (kind == ExternalAgentKind.Pi && responseSchema != null)
+        {
+            throw new AgwException(ErrorCodes.InvalidParam, "Pi agents do not support responseSchema.");
+        }
+    }
+
+    // Missing field keeps the current value; null or whitespace clears it; a non-blank value replaces it.
+    private static void ApplyResponseSchemaUpdate(Agent agent, AgentUpdateCommand command)
+    {
+        if (command.IsSpecified(AgentUpdateField.ResponseSchema))
+        {
+            agent.ResponseSchema = AgentResponseSchema.Normalize(command.ResponseSchema);
+        }
     }
 
     private async Task SyncAgentMcpToolServerRelationsAsync(
