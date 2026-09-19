@@ -7,8 +7,8 @@ using Microsoft.Extensions.AI;
 namespace Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode;
 
 /// <summary>
-/// <para>从 Claude Code 初始化消息中捕获 Provider 会话 ID，并保持响应内容不变。</para>
-/// <para>Captures the provider session ID from Claude Code initialization messages without changing response content.</para>
+/// <para>从 Claude Code 初始化消息中捕获 Provider 会话 ID，并过滤传输通知。</para>
+/// <para>Captures the provider session ID from Claude Code initialization messages and filters transport notifications.</para>
 /// </summary>
 /// <remarks>
 /// <para>每个包装器仅领取一次有效会话 ID 的通知权；回调使用不可取消令牌。领取后即使回调失败，也不会自动重试。</para>
@@ -16,7 +16,7 @@ namespace Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode;
 /// </remarks>
 internal sealed class ClaudeCodeProviderSessionTrackingAgent : DelegatingAIAgent
 {
-    private readonly Func<string, CancellationToken, ValueTask> _onProviderSessionStartedAsync;
+    private readonly Func<string, CancellationToken, ValueTask>? _onProviderSessionStartedAsync;
     private int _providerSessionCaptured;
 
     /// <summary>
@@ -33,7 +33,7 @@ internal sealed class ClaudeCodeProviderSessionTrackingAgent : DelegatingAIAgent
     /// </param>
     public ClaudeCodeProviderSessionTrackingAgent(
         AIAgent innerAgent,
-        Func<string, CancellationToken, ValueTask> onProviderSessionStartedAsync
+        Func<string, CancellationToken, ValueTask>? onProviderSessionStartedAsync
     )
         : base(innerAgent)
     {
@@ -77,6 +77,11 @@ internal sealed class ClaudeCodeProviderSessionTrackingAgent : DelegatingAIAgent
             await CaptureProviderSessionIdAsync(message.AdditionalProperties, message.Contents).ConfigureAwait(false);
         }
 
+        response.Messages = response
+            .Messages.Where(message =>
+                !ClaudeCodeMessagePolicy.IsTransportEvent(message.Role, message.AdditionalProperties, message.Contents)
+            )
+            .ToList();
         return response;
     }
 
@@ -118,7 +123,10 @@ internal sealed class ClaudeCodeProviderSessionTrackingAgent : DelegatingAIAgent
         )
         {
             await CaptureProviderSessionIdAsync(update.AdditionalProperties, update.Contents).ConfigureAwait(false);
-            yield return update;
+            if (!ClaudeCodeMessagePolicy.IsTransportEvent(update.Role, update.AdditionalProperties, update.Contents))
+            {
+                yield return update;
+            }
         }
     }
 
@@ -144,7 +152,8 @@ internal sealed class ClaudeCodeProviderSessionTrackingAgent : DelegatingAIAgent
     )
     {
         if (
-            Volatile.Read(ref _providerSessionCaptured) != 0
+            _onProviderSessionStartedAsync == null
+            || Volatile.Read(ref _providerSessionCaptured) != 0
             || !TryGetProviderSessionId(additionalProperties, contents, out var providerSessionId)
             || Interlocked.CompareExchange(ref _providerSessionCaptured, 1, 0) != 0
         )
@@ -158,8 +167,8 @@ internal sealed class ClaudeCodeProviderSessionTrackingAgent : DelegatingAIAgent
     }
 
     /// <summary>
-    /// <para>仅解析 init 消息首个文本中的非空 GUID 会话 ID，并将其规范化；无效 JSON 返回失败。</para>
-    /// <para>Parses and normalizes a nonempty GUID session ID from the first text of an init message, returning failure for invalid JSON.</para>
+    /// <para>从 init 元数据读取会话 ID，兼容旧 SDK 的 JSON 正文，并规范化非空 GUID。</para>
+    /// <para>Reads and normalizes a nonempty GUID from init metadata, with a legacy JSON-text fallback.</para>
     /// </summary>
     /// <param name="additionalProperties">
     /// <para>响应附加属性，包含初始化消息的 subtype 标记。</para>
@@ -190,6 +199,16 @@ internal sealed class ClaudeCodeProviderSessionTrackingAgent : DelegatingAIAgent
         )
         {
             return false;
+        }
+
+        if (additionalProperties.TryGetValue("session_id", out var metadataSessionId))
+        {
+            if (!Guid.TryParse(metadataSessionId?.ToString(), out var parsedId) || parsedId == Guid.Empty)
+            {
+                return false;
+            }
+            providerSessionId = parsedId.Normalize();
+            return true;
         }
 
         // 只解释 init 消息中的文本 JSON，其他普通输出不能改变 Provider 会话绑定。

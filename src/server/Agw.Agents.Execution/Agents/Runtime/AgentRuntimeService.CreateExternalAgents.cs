@@ -254,10 +254,7 @@ public partial class AgentRuntimeService
     )
     {
         var ownedResource = aiAgent as IAsyncDisposable;
-        if (onProviderSessionStartedAsync != null)
-        {
-            aiAgent = new ClaudeCodeProviderSessionTrackingAgent(aiAgent, onProviderSessionStartedAsync);
-        }
+        aiAgent = new ClaudeCodeProviderSessionTrackingAgent(aiAgent, onProviderSessionStartedAsync);
 
         var decorated = DecorateExternalAgent(aiAgent, historyProvider, isBackground, createMemoryContextAsync);
         return ownedResource == null ? decorated : new ResourceOwningAIAgent(decorated, ownedResource);
