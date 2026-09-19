@@ -1,6 +1,6 @@
 using Agw.Agents.Definitions.Agents;
 using Agw.Agents.Execution.Agents.Composition;
-using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Agents.Sessions;
 using Agw.Agents.Execution.HumanInteraction;
 using Agw.Agents.Execution.Summaries;
@@ -29,8 +29,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
     private readonly AgwDataPaths _dataPaths;
     private readonly IAgwFileSystemResolver _fileSystemResolver;
     private readonly AgentSessionStateStore _sessionStateStore;
-    private readonly ObservabilityMiddleware _observabilityMiddleware;
-    private readonly UsageTrackingMiddleware _usageTrackingMiddleware;
+    private readonly AgentTelemetryMiddleware _telemetryMiddleware;
     private readonly IAgentTurnSummaryService _summaryService;
     private readonly IConversationHistoryWriter? _conversationHistoryWriter;
     private readonly IReadOnlyDictionary<Guid, IAgentSkillRegistration> _skillRegistrations;
@@ -58,8 +57,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         IAgwFileSystemResolver fileSystemResolver,
         AgentSessionStateStore sessionStateStore,
         ILogger<AgentRuntimeService> logger,
-        ObservabilityMiddleware observabilityMiddleware,
-        UsageTrackingMiddleware usageTrackingMiddleware,
+        AgentTelemetryMiddleware telemetryMiddleware,
         IAgentTurnSummaryService summaryService,
         IServiceProvider services,
         IProjectDefaultResolver projectDefaults,
@@ -85,8 +83,7 @@ public partial class AgentRuntimeService : IAgentRuntimeService
         _fileSystemResolver = fileSystemResolver;
         _sessionStateStore = sessionStateStore;
         _logger = logger;
-        _observabilityMiddleware = observabilityMiddleware;
-        _usageTrackingMiddleware = usageTrackingMiddleware;
+        _telemetryMiddleware = telemetryMiddleware;
         _summaryService = summaryService;
         _timeProvider = timeProvider ?? TimeProvider.System;
         _conversationHistoryWriter = conversationHistoryWriter ?? chatHistoryProvider as IConversationHistoryWriter;

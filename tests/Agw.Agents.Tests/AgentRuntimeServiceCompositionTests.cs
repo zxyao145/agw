@@ -4,7 +4,7 @@ using Agw.Agents.Execution.Agents.ExternalAgents;
 using Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode;
 using Agw.Agents.Execution.Agents.ExternalAgents.Pi;
 using Agw.Agents.Execution.Agents.History;
-using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.ExternalAgents;
 using Agw.Shared.Data.Entities.Agents;
@@ -278,7 +278,7 @@ public class AgentRuntimeServiceCompositionTests
     public async Task WrapExternalAgent_UserMemory_LogsOriginalRequestAndInjectsMemoryOnlyIntoSdk()
     {
         // Arrange
-        var logger = new CapturingLogger<ObservabilityMiddleware>();
+        var logger = new CapturingLogger<AgentTelemetryMiddleware>();
         var innerAgent = new CapturingStubAIAgent();
         var service = CreateRuntimeService(new StubRequestHistoryProvider(), logger);
         var agent = service.WrapExternalAgent(
@@ -308,7 +308,7 @@ public class AgentRuntimeServiceCompositionTests
     public async Task WrapExternalAgent_UserMemory_StreamingLogsOriginalRequestAndInjectsMemoryOnlyIntoSdk()
     {
         // Arrange
-        var logger = new CapturingLogger<ObservabilityMiddleware>();
+        var logger = new CapturingLogger<AgentTelemetryMiddleware>();
         var innerAgent = new CapturingStubAIAgent();
         var service = CreateRuntimeService(new StubRequestHistoryProvider(), logger);
         var agent = service.WrapExternalAgent(
@@ -1016,7 +1016,7 @@ public class AgentRuntimeServiceCompositionTests
 
     private static AgentRuntimeService CreateRuntimeService(
         ChatHistoryProvider historyProvider,
-        ILogger<ObservabilityMiddleware>? observabilityLogger = null
+        ILogger<AgentTelemetryMiddleware>? observabilityLogger = null
     ) =>
         new(
             agentAppService: null!,
@@ -1029,11 +1029,10 @@ public class AgentRuntimeServiceCompositionTests
             fileSystemResolver: null!,
             sessionStateStore: null!,
             NullLogger<AgentRuntimeService>.Instance,
-            new ObservabilityMiddleware(observabilityLogger ?? NullLogger<ObservabilityMiddleware>.Instance),
-            new UsageTrackingMiddleware(
+            new AgentTelemetryMiddleware(
                 providerSessionState: null!,
                 usageRecorder: null!,
-                NullLogger<UsageTrackingMiddleware>.Instance
+                observabilityLogger ?? NullLogger<AgentTelemetryMiddleware>.Instance
             ),
             summaryService: null!,
             services: new Microsoft.Extensions.DependencyInjection.ServiceCollection().BuildServiceProvider(),

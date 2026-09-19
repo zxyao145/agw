@@ -144,7 +144,12 @@ Agw.Agents.Execution/
 │   ├── Sessions/           # SDK Session 状态与作用域
 │   ├── ExternalAgents/     # 外部 SDK 适配与交互桥接
 │   ├── Tools/              # 工具执行和状态持久化
-│   ├── Middleware/         # 执行中间件
+│   ├── Middleware/         # 按功能组织的执行中间件和 ChatClient 包装
+│   │   ├── ToolFeedback/   # 工具告警与 Todo / Mode 状态快照
+│   │   ├── Telemetry/      # 执行日志、用量统计和结构化输出指标
+│   │   ├── History/        # 消息隔离、结果排序和本地压缩作用域
+│   │   ├── ModelInput/     # 输入过滤和 Provider 推理内容适配
+│   │   └── Approval/       # 后台 Agent 审批限制
 │   └── Contracts/          # Agent 执行请求和结果
 ├── Agentflows/
 │   ├── Runtime/            # AgentflowRuntime、RuntimeService 和接口
@@ -171,6 +176,12 @@ Agw.Agents.Execution/
 `Runtimes/Durable` 负责协调与领取，`Persistence/Durable` 保存执行事实，`Messaging/Durable` 提供事件存储与回放。`Outbound/Durable` 中的 Sink 将分段消息批量写入事件流；`Outbound/SignalR` 中的 Sink 向客户端发送消息，两种执行方式都使用它。只有持久执行需要 Worker、事件存储和持久状态机，不为这些能力创建空的 InProcess 实现。
 
 Agent 的进程内执行继续由 `Agents/Runtime` 中的 RuntimeService 驱动；Agentflow 的两种 Runner 分别位于其 `Runners` 子目录。Skills、模型构造和执行仍为同一个 `AgentRuntimeService` 的 partial，不因物理归类拆成新服务。
+
+### `Agents/Middleware`
+
+`ToolFeedbackMiddleware` 统一发送工具初始化告警、调用告警和 Todo / Mode 快照：初始化告警在响应开头，调用告警在对应结果之前，快照在结果之后；同一更新包含两类结果时先 Todo 后 Mode。Todo 只在流式中间件补充快照；启用 Todo 时，普通执行仍通过流式执行聚合结果，保留每次变更的快照。告警和快照分别保留调用识别及去重规则，追踪状态仅属于当前执行。
+
+`AgentTelemetryMiddleware` 由普通 Agent 和外部 Agent 共用，依次记录开始日志、执行、用量和成功完成日志。流式用量在 `finally` 中结算，异常、取消或提前释放仍记录已收到的用量；统计失败不会覆盖执行结果。结构化输出指标保持独立的执行边界。历史和模型输入包装器保留原有注册位置，包括历史读写前后的两次工具结果排序。
 
 ### `Commands`
 

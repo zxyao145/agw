@@ -1,13 +1,13 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
-using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Middleware.ToolFeedback;
 using Agw.Agents.Execution.Agents.Tools;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
 namespace Agw.Agents.Tests;
 
-public sealed class ToolInvocationWarningMiddlewareTests
+public sealed class ToolFeedbackWarningTests
 {
     private const string Warning = "Hosted web search is not supported by this provider; using local search.";
 
@@ -79,8 +79,13 @@ public sealed class ToolInvocationWarningMiddlewareTests
         Assert.IsType<FunctionResultContent>(Assert.Single(response.Messages[2].Contents));
     }
 
-    private static ToolInvocationWarningMiddleware CreateMiddleware() =>
-        new(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["web_search"] = Warning });
+    private static ToolFeedbackMiddleware CreateMiddleware() =>
+        new(
+            null,
+            null,
+            [],
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["web_search"] = Warning }
+        );
 
     private static bool IsWarning(AgentResponseUpdate update) =>
         update.AdditionalProperties?.TryGetValue("type", out var type) == true

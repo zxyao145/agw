@@ -1,22 +1,22 @@
 using System.Diagnostics;
-using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 namespace Agw.Agents.Tests;
 
-public class ObservabilityMiddlewareTests
+public class AgentTelemetryLoggingTests
 {
     [Fact]
-    public async Task LogRunMiddleware_AgentCompletes_LogsNameInputAndOutput()
+    public async Task RunAsync_AgentCompletes_LogsNameInputAndOutput()
     {
-        var logger = new CapturingLogger<ObservabilityMiddleware>();
-        var middleware = new ObservabilityMiddleware(logger);
+        var logger = new CapturingLogger<AgentTelemetryMiddleware>();
+        var middleware = new AgentTelemetryMiddleware(providerSessionState: null!, usageRecorder: null!, logger);
         var agent = CreateAgent("persisted-agent");
         var input = new List<ChatMessage> { new(ChatRole.User, "hello") };
 
-        var response = await middleware.LogRunMiddleware(
+        var response = await middleware.RunAsync(
             input,
             session: null,
             options: null,
@@ -46,16 +46,16 @@ public class ObservabilityMiddlewareTests
     }
 
     [Fact]
-    public async Task LogStreamingMiddleware_AgentCompletes_ForwardsUpdatesAndLogsOutput()
+    public async Task RunStreamingAsync_AgentCompletes_ForwardsUpdatesAndLogsOutput()
     {
-        var logger = new CapturingLogger<ObservabilityMiddleware>();
-        var middleware = new ObservabilityMiddleware(logger);
+        var logger = new CapturingLogger<AgentTelemetryMiddleware>();
+        var middleware = new AgentTelemetryMiddleware(providerSessionState: null!, usageRecorder: null!, logger);
         var agent = CreateAgent("persisted-agent");
         var input = new List<ChatMessage> { new(ChatRole.User, "hello") };
         var updates = new List<AgentResponseUpdate>();
 
         await foreach (
-            var update in middleware.LogStreamingMiddleware(
+            var update in middleware.RunStreamingAsync(
                 input,
                 session: null,
                 options: null,
@@ -85,7 +85,7 @@ public class ObservabilityMiddlewareTests
     }
 
     [Fact]
-    public async Task LogRunMiddleware_WorkflowExecutorSpan_DoesNotAddAgentNameTag()
+    public async Task RunAsync_WorkflowExecutorSpan_DoesNotAddAgentNameTag()
     {
         using var listener = new ActivityListener
         {
@@ -97,10 +97,14 @@ public class ObservabilityMiddlewareTests
         using var activity = source.StartActivity("executor.process node-alias");
         Assert.NotNull(activity);
 
-        var middleware = new ObservabilityMiddleware(new CapturingLogger<ObservabilityMiddleware>());
+        var middleware = new AgentTelemetryMiddleware(
+            providerSessionState: null!,
+            usageRecorder: null!,
+            new CapturingLogger<AgentTelemetryMiddleware>()
+        );
         var agent = CreateAgent("persisted-agent");
 
-        await middleware.LogRunMiddleware(
+        await middleware.RunAsync(
             [new ChatMessage(ChatRole.User, "hello")],
             session: null,
             options: null,

@@ -1,4 +1,3 @@
-using Agw.Agents.Execution.Agents.Middleware;
 using Agw.Agents.Execution.Agents.Runtime;
 using Agw.Agents.Execution.Summaries;
 using Agw.Shared.Data.Entities.Agents;
@@ -165,8 +164,7 @@ public class AgentRuntimeServiceSummaryTests
             fileSystemResolver: null!,
             sessionStateStore: null!,
             logger: NullLogger<AgentRuntimeService>.Instance,
-            observabilityMiddleware: new ObservabilityMiddleware(NullLogger<ObservabilityMiddleware>.Instance),
-            usageTrackingMiddleware: null!,
+            telemetryMiddleware: null!,
             summaryService,
             services: new Microsoft.Extensions.DependencyInjection.ServiceCollection().BuildServiceProvider(),
             projectDefaults: new TestProjectDefaultResolver(),

@@ -7,7 +7,8 @@ using Agw.Agents.Execution.Agents.ExternalAgents;
 using Agw.Agents.Execution.Agents.ExternalAgents.ClaudeCode;
 using Agw.Agents.Execution.Agents.ExternalAgents.Pi;
 using Agw.Agents.Execution.Agents.History;
-using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Middleware.Approval;
+using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.ExternalAgents;
 using Agw.Shared.Data.Entities.Agents;
 using Agw.Shared.Data.Entities.Projects;
@@ -294,14 +295,7 @@ public partial class AgentRuntimeService
 
         var agentBuilder = aiAgent
             .AsBuilder()
-            .Use(
-                runFunc: _observabilityMiddleware.LogRunMiddleware,
-                runStreamingFunc: _observabilityMiddleware.LogStreamingMiddleware
-            )
-            .Use(
-                runFunc: _usageTrackingMiddleware.TrackRunMiddleware,
-                runStreamingFunc: _usageTrackingMiddleware.TrackStreamingMiddleware
-            );
+            .Use(runFunc: _telemetryMiddleware.RunAsync, runStreamingFunc: _telemetryMiddleware.RunStreamingAsync);
         if (isBackground)
         {
             var approvalMiddleware = new BackgroundAgentApprovalMiddleware(_humanInteractionContextAccessor);

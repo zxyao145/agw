@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Middleware.ModelInput;
 using Anthropic;
 using Anthropic.Core;
 using Microsoft.Extensions.AI;

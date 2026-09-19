@@ -2,7 +2,9 @@ using System.ClientModel;
 using Agw.Agents.Execution.Agents.Composition;
 using Agw.Agents.Execution.Agents.Context;
 using Agw.Agents.Execution.Agents.Contracts;
-using Agw.Agents.Execution.Agents.Middleware;
+using Agw.Agents.Execution.Agents.Middleware.Approval;
+using Agw.Agents.Execution.Agents.Middleware.ModelInput;
+using Agw.Agents.Execution.Agents.Middleware.Telemetry;
 using Agw.Agents.Execution.Agents.Tools;
 using Agw.Providers.Contracts;
 using Agw.Providers.Contracts.References;
@@ -148,14 +150,7 @@ public partial class AgentRuntimeService
             aiAgent = new AgentRequestContextAgent(aiAgent, _chatHistoryProvider, createMemoryContextAsync, _logger);
             var agentBuilder = aiAgent
                 .AsBuilder()
-                .Use(
-                    runFunc: _usageTrackingMiddleware.TrackRunMiddleware,
-                    runStreamingFunc: _usageTrackingMiddleware.TrackStreamingMiddleware
-                )
-                .Use(
-                    runFunc: _observabilityMiddleware.LogRunMiddleware,
-                    runStreamingFunc: _observabilityMiddleware.LogStreamingMiddleware
-                );
+                .Use(runFunc: _telemetryMiddleware.RunAsync, runStreamingFunc: _telemetryMiddleware.RunStreamingAsync);
             if (backgroundDepth > 0)
             {
                 var approvalMiddleware = new BackgroundAgentApprovalMiddleware(_humanInteractionContextAccessor);
