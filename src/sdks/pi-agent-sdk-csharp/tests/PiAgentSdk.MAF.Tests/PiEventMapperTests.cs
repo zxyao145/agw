@@ -7,6 +7,175 @@ namespace PiAgentSdk.MAF.Tests;
 
 public sealed class PiEventMapperTests
 {
+    [Theory]
+    [InlineData("stop")]
+    [InlineData("STOP")]
+    public void ToUpdate_CustomMessageAfterAgentEnd_PreservesResult(string stopReason)
+    {
+        // Arrange
+        var mapper = new PiEventMapper();
+        mapper.ToUpdate(
+            new PiAgentEndEvent
+            {
+                Messages =
+                [
+                    new PiAssistantMessage { StopReason = stopReason, Content = [new PiTextContent { Text = "done" }] },
+                ],
+            }
+        );
+        mapper.ToUpdate(
+            new PiMessageEvent("message_start")
+            {
+                Message = new PiUnknownMessage("custom", JsonSerializer.SerializeToElement(new { role = "custom" })),
+            }
+        );
+
+        // Act
+        var result = mapper.ToUpdate(new PiMarkerEvent("agent_settled"));
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal("done", Assert.IsType<TextContent>(Assert.Single(result.Contents)).Text);
+    }
+
+    [Fact]
+    public void ToUpdate_AgentSettled_EmitsFinalTextOnceWithSeparateIdentityAndNoUsage()
+    {
+        // Arrange
+        var mapper = new PiEventMapper("configured-model");
+        var delta = mapper.ToUpdate(
+            new PiMessageUpdateEvent
+            {
+                AssistantMessageEvent = new PiTextDelta { Delta = "done", ContentIndex = 0 },
+            }
+        );
+        var assistant = new PiAssistantMessage
+        {
+            Model = "reported-model",
+            StopReason = "stop",
+            Content = [new PiThinkingContent { Thinking = "private reasoning" }, new PiTextContent { Text = "done" }],
+            Usage = new PiUsage { TotalTokens = 12 },
+        };
+        mapper.ToUpdate(new PiTurnEndEvent { Message = assistant });
+
+        // Act
+        var end = mapper.ToUpdate(new PiAgentEndEvent { Messages = [assistant] });
+        var result = mapper.ToUpdate(new PiMarkerEvent("agent_settled"));
+
+        // Assert
+        Assert.Null(end);
+        Assert.NotNull(result);
+        Assert.Equal("result", result.AdditionalProperties!["type"]);
+        Assert.Equal("reported-model", result.AdditionalProperties["modelName"]);
+        Assert.Equal("pi", result.AuthorName);
+        Assert.Equal(ChatRole.Assistant, result.Role);
+        Assert.Equal("done", Assert.IsType<TextContent>(Assert.Single(result.Contents)).Text);
+        Assert.Equal(delta!.ResponseId, result.ResponseId);
+        Assert.NotEqual(delta.MessageId, result.MessageId);
+        Assert.Null(mapper.ToUpdate(new PiMarkerEvent("agent_settled")));
+    }
+
+    [Theory]
+    [InlineData("toolUse")]
+    [InlineData("error")]
+    [InlineData("aborted")]
+    public void ToUpdate_AgentEndsWithoutSuccessfulAnswer_DoesNotEmitResult(string stopReason)
+    {
+        // Arrange
+        var mapper = new PiEventMapper();
+        mapper.ToUpdate(
+            new PiAgentEndEvent
+            {
+                Messages =
+                [
+                    new PiAssistantMessage
+                    {
+                        StopReason = stopReason,
+                        Content = [new PiTextContent { Text = "partial" }],
+                    },
+                ],
+            }
+        );
+
+        // Act
+        var result = mapper.ToUpdate(new PiMarkerEvent("agent_settled"));
+
+        // Assert
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ToUpdate_Continuation_UsesOnlyLastPassAnswer()
+    {
+        // Arrange
+        var mapper = new PiEventMapper();
+        mapper.ToUpdate(
+            new PiAgentEndEvent
+            {
+                Messages =
+                [
+                    new PiAssistantMessage { StopReason = "stop", Content = [new PiTextContent { Text = "first" }] },
+                ],
+            }
+        );
+        mapper.ToUpdate(new PiMarkerEvent("agent_start"));
+        mapper.ToUpdate(
+            new PiTurnEndEvent
+            {
+                Message = new PiAssistantMessage
+                {
+                    StopReason = "toolUse",
+                    Content = [new PiTextContent { Text = "working" }],
+                },
+            }
+        );
+        var final = new PiAssistantMessage { StopReason = "stop", Content = [new PiTextContent { Text = "final" }] };
+        mapper.ToUpdate(new PiTurnEndEvent { Message = final });
+        mapper.ToUpdate(new PiAgentEndEvent { Messages = [final] });
+
+        // Act
+        var result = mapper.ToUpdate(new PiMarkerEvent("agent_settled"));
+
+        // Assert
+        Assert.Equal("final", Assert.IsType<TextContent>(Assert.Single(result!.Contents)).Text);
+    }
+
+    [Theory]
+    [InlineData("agent_start")]
+    [InlineData("turn_start")]
+    [InlineData("auto_retry_start")]
+    [InlineData("retry.failed")]
+    [InlineData("compaction.failed")]
+    [InlineData("willRetry")]
+    public void ToUpdate_InterruptedFinalAnswer_DoesNotEmitStaleResult(string interruption)
+    {
+        // Arrange
+        var mapper = new PiEventMapper();
+        mapper.ToUpdate(
+            new PiAgentEndEvent
+            {
+                Messages =
+                [
+                    new PiAssistantMessage { StopReason = "stop", Content = [new PiTextContent { Text = "stale" }] },
+                ],
+            }
+        );
+        PiEvent evt = interruption switch
+        {
+            "retry.failed" => new PiRetryEvent("auto_retry_end") { Success = false, FinalError = "failed" },
+            "compaction.failed" => new PiCompactionEvent("compaction_end") { ErrorMessage = "failed" },
+            "willRetry" => new PiAgentEndEvent { WillRetry = true },
+            _ => new PiMarkerEvent(interruption),
+        };
+        mapper.ToUpdate(evt);
+
+        // Act
+        var result = mapper.ToUpdate(new PiMarkerEvent("agent_settled"));
+
+        // Assert
+        Assert.Null(result);
+    }
+
     [Fact]
     public void ToUpdate_ToolCallEnd_PreservesJsonArgumentTypesAndIsInformational()
     {
@@ -186,7 +355,7 @@ public sealed class PiEventMapperTests
         };
 
         // Act & Assert
-        Assert.Throws<PiProtocolException>(() => PiEventMapper.ToHistoryMessages(evt));
+        Assert.Throws<PiProtocolException>(() => new PiEventMapper().ToHistoryMessages(evt));
     }
 
     [Fact]
@@ -208,7 +377,7 @@ public sealed class PiEventMapperTests
         };
 
         // Act
-        var messages = PiEventMapper.ToHistoryMessages(evt);
+        var messages = new PiEventMapper().ToHistoryMessages(evt);
 
         // Assert
         Assert.All(

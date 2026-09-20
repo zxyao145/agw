@@ -15,6 +15,8 @@ internal sealed class PiEventMapper
     private string _activeModelName;
     private int _messageSequence;
     private bool _assistantErrorEmitted;
+    private PiAssistantMessage? _finalAssistantMessage;
+    private ChatMessage? _lastAssistantHistoryMessage;
 
     public PiEventMapper(string? configuredModelName = null)
     {
@@ -24,6 +26,30 @@ internal sealed class PiEventMapper
 
     public AgentResponseUpdate? ToUpdate(PiEvent evt)
     {
+        if (evt.Type == "agent_settled")
+        {
+            return MapSettledResult();
+        }
+
+        if (
+            evt.Type is "agent_start" or "turn_start" or "auto_retry_start"
+            || evt is PiMessageEvent { Type: "message_start", Message: PiAssistantMessage }
+        )
+        {
+            _finalAssistantMessage = null;
+            _lastAssistantHistoryMessage = null;
+        }
+        else if (evt is PiTurnEndEvent turn)
+        {
+            _finalAssistantMessage = turn.Message as PiAssistantMessage;
+        }
+        else if (evt is PiAgentEndEvent end)
+        {
+            _finalAssistantMessage = end.WillRetry
+                ? null
+                : end.Messages.OfType<PiAssistantMessage>().LastOrDefault() ?? _finalAssistantMessage;
+        }
+
         if (evt is PiMessageEvent { Type: "message_start", Message: PiAssistantMessage startingAssistant })
         {
             _activeAssistantMessageId = CreateMessageId("assistant");
@@ -59,6 +85,16 @@ internal sealed class PiEventMapper
 
         if (update != null)
         {
+            if (
+                update
+                    .Contents.OfType<ErrorContent>()
+                    .Any(error =>
+                        error.AdditionalProperties?.TryGetValue("isFatalError", out var fatal) == true && fatal is true
+                    )
+            )
+            {
+                _finalAssistantMessage = null;
+            }
             update.AuthorName = AgentName;
             update.ResponseId = _responseId;
             update.MessageId = ResolveMessageId(evt, update.Role);
@@ -80,13 +116,43 @@ internal sealed class PiEventMapper
         return update;
     }
 
-    public static IReadOnlyList<ChatMessage> ToHistoryMessages(
-        PiTurnEndEvent turnEnd,
-        string? configuredModelName = null
-    )
+    private AgentResponseUpdate? MapSettledResult()
+    {
+        var assistant = _finalAssistantMessage;
+        _finalAssistantMessage = null;
+        var sourceMessage = _lastAssistantHistoryMessage;
+        _lastAssistantHistoryMessage = null;
+        if (
+            assistant == null
+            || !string.Equals(assistant.StopReason, "stop", StringComparison.OrdinalIgnoreCase)
+            || assistant.Content.Any(content => content is PiToolCallContent)
+        )
+        {
+            return null;
+        }
+
+        var text = string.Concat(assistant.Content.OfType<PiTextContent>().Select(content => content.Text));
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        // A separate result repeats the authoritative answer, never its reasoning, tool calls, or usage.
+        var update = CreateUpdate(ChatRole.Assistant, "result", new TextContent(text));
+        update.ResponseId = _responseId;
+        update.MessageId = CreateMessageId("result");
+        if (sourceMessage?.Text == text && !sourceMessage.Contents.OfType<FunctionCallContent>().Any())
+        {
+            update.AdditionalProperties!["resultSourceMessageId"] = sourceMessage.MessageId;
+        }
+        SetModelName(update.AdditionalProperties, ResolveModelName(assistant.Model, _configuredModelName));
+        return update;
+    }
+
+    public IReadOnlyList<ChatMessage> ToHistoryMessages(PiTurnEndEvent turnEnd)
     {
         var messages = new List<ChatMessage>();
-        var modelName = ResolveModelName((turnEnd.Message as PiAssistantMessage)?.Model, configuredModelName);
+        var modelName = ResolveModelName((turnEnd.Message as PiAssistantMessage)?.Model, _configuredModelName);
         if (turnEnd.Message is PiAssistantMessage assistant)
         {
             var contents = assistant.Content.Select(MapContent).OfType<AIContent>().ToList();
@@ -109,6 +175,7 @@ internal sealed class PiEventMapper
             }
         }
 
+        _lastAssistantHistoryMessage = messages.FirstOrDefault();
         foreach (var result in turnEnd.ToolResults.OfType<PiToolResultMessage>())
         {
             var contents = new List<AIContent>

@@ -76,7 +76,7 @@ public sealed class AgentTurnExecutor
                     .ConfigureAwait(false)
             )
             {
-                yield return AgwMessageUtil.PostAgwMessage(session, message);
+                yield return message;
             }
         }
         finally
@@ -148,7 +148,7 @@ public sealed class AgentTurnExecutor
                     .ConfigureAwait(false)
             )
             {
-                yield return AgwMessageUtil.PostAgwMessage(session, output);
+                yield return output;
             }
         }
         finally
@@ -183,7 +183,7 @@ public sealed class AgentTurnExecutor
             var messages = await ConversationHistoryPersistenceContext
                 .ObserveAsync(session.ExecuteAsync(requestMessages, input, approvalHandler, cancellationToken))
                 .ConfigureAwait(false);
-            return messages.Select(message => AgwMessageUtil.PostAgwMessage(session, message)).ToArray();
+            return messages;
         }
         finally
         {

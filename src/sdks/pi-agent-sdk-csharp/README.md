@@ -11,7 +11,7 @@ The initial compatibility baseline is `@earendil-works/pi-coding-agent` 0.84.4.
 
 ## Overall Data Flow
 
-Core callers work directly with `PiSession` and receive `PiEvent` values. MAF callers enter through `PiAgentAIAgent`, which builds a Pi prompt from the current invocation, maps the same event stream into MAF updates, and persists only requests and authoritative `turn_end` messages.
+Core callers work directly with `PiSession` and receive `PiEvent` values. MAF callers enter through `PiAgentAIAgent`, which builds a Pi prompt from the current invocation, maps the same event stream into MAF updates, and persists requests, authoritative `turn_end` messages, and one final text Result after successful settlement.
 
 ```mermaid
 flowchart LR
@@ -49,7 +49,7 @@ flowchart LR
     Session -->|"PiEvent stream"| EventMapper
     EventMapper -->|"AgentResponseUpdate"| AiAgent
     AiAgent -->|"stream / response"| MafCaller
-    AiAgent -->|"request + authoritative turn_end"| History
+    AiAgent -->|"request + authoritative turn_end + settled Result"| History
 
     Agent --> Session
     Session -->|"RPC commands"| Rpc

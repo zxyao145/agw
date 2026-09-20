@@ -7,6 +7,43 @@ namespace Agw.Agents.Tests;
 
 public class AgentRequestsTests
 {
+    [Theory]
+    [InlineData(ExternalAgentKind.None, false)]
+    [InlineData(ExternalAgentKind.None, true)]
+    [InlineData(ExternalAgentKind.ClaudeCode, true)]
+    [InlineData(ExternalAgentKind.Codex, true)]
+    [InlineData(ExternalAgentKind.Pi, true)]
+    [InlineData(ExternalAgentKind.Pi, false)]
+    public void FromDomain_AgentResponses_ReportEffectiveSummaryWithoutChangingStoredConfiguration(
+        ExternalAgentKind kind,
+        bool enableSummary
+    )
+    {
+        // Arrange
+        var summaryModelProviderId = Guid.CreateVersion7();
+        var agent = new Agent
+        {
+            Type = kind == ExternalAgentKind.None ? AgentType.System : AgentType.External,
+            ExternalAgentKind = kind,
+            EnableSummary = enableSummary,
+            SummaryModelProviderId = summaryModelProviderId,
+        };
+
+        // Act
+        var detail = AgentResponse.FromDomain(agent);
+        var list = AgentListResponse.FromDomain(agent);
+
+        // Assert
+        var expectedEnabled = agent.Type == AgentType.System && enableSummary;
+        Guid? expectedProvider = agent.Type == AgentType.System ? summaryModelProviderId : null;
+        Assert.Equal(expectedEnabled, detail.EnableSummary);
+        Assert.Equal(expectedEnabled, list.EnableSummary);
+        Assert.Equal(expectedProvider, detail.SummaryModelProviderId);
+        Assert.Equal(expectedProvider, list.SummaryModelProviderId);
+        Assert.Equal(enableSummary, agent.EnableSummary);
+        Assert.Equal(summaryModelProviderId, agent.SummaryModelProviderId);
+    }
+
     [Fact]
     public void AgentUpdateRequest_StoresExternalAgentExtraSettings()
     {

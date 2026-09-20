@@ -300,7 +300,7 @@ public partial class AgentRuntimeService
         IReadOnlyList<ChatMessage>? finalResponseMessages = null
     )
     {
-        if (!agent.EnableSummary)
+        if (agent.Type != AgentType.System || !agent.EnableSummary)
         {
             return outputMessages.ToList();
         }

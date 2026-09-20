@@ -37,12 +37,16 @@ public sealed class PiAgentAIAgentTests
         Assert.Equal("value", stateValue);
     }
 
-    [Fact]
-    public async Task RunStreamingAsync_PersistsRequestAndAuthoritativeTurnOnly()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("done")]
+    [InlineData("corrected final answer")]
+    public async Task RunStreamingAsync_PersistsAuthoritativeTurnAndOneSettledResult(string? agentEndText)
     {
         // Arrange
         var transport = new FakePiTransport();
-        transport.OnWrite = line => EmitRun(transport, line);
+        transport.OnWrite = line => EmitRun(transport, line, agentEndText);
         var piAgent = new PiAgent(
             new PiAgentOptions { CommandTimeout = TimeSpan.FromSeconds(2) },
             logger: null,
@@ -70,7 +74,7 @@ public sealed class PiAgentAIAgentTests
         }
 
         // Assert
-        Assert.Equal(2, history.Stored.Count);
+        Assert.Equal(3, history.Stored.Count);
         Assert.Single(history.Stored[0].Requests);
         Assert.Empty(history.Stored[0].Responses);
         Assert.Empty(history.Stored[1].Requests);
@@ -84,6 +88,27 @@ public sealed class PiAgentAIAgentTests
         );
         Assert.False(textUpdate.AdditionalProperties!.ContainsKey("agentName"));
         Assert.Equal("deepseek-v4-flash-vision-exp", textUpdate.AdditionalProperties!["modelName"]);
+        var resultUpdate = Assert.Single(updates, update => Equals(update.AdditionalProperties?["type"], "result"));
+        var result = Assert.Single(history.Stored[2].Responses);
+        Assert.Equal(string.IsNullOrEmpty(agentEndText) ? "done" : agentEndText, result.Text);
+        Assert.Equal("result", result.AdditionalProperties!["type"]);
+        Assert.Equal("deepseek-v4-flash-vision-exp", result.AdditionalProperties["modelName"]);
+        Assert.Equal(resultUpdate.MessageId, result.MessageId);
+        Assert.NotEqual(assistant.MessageId, result.MessageId);
+        Assert.Equal(result.Text, Assert.IsType<TextContent>(Assert.Single(resultUpdate.Contents)).Text);
+        Assert.Equal("pi", result.AuthorName);
+        if (result.Text == assistant.Text)
+        {
+            Assert.Equal(assistant.MessageId, result.AdditionalProperties["resultSourceMessageId"]);
+        }
+        else
+        {
+            Assert.False(result.AdditionalProperties.ContainsKey("resultSourceMessageId"));
+        }
+        Assert.Equal(
+            3,
+            Assert.Single(updates.SelectMany(update => update.Contents).OfType<UsageContent>()).Details.TotalTokenCount
+        );
     }
 
     [Fact]
@@ -97,7 +122,12 @@ public sealed class PiAgentAIAgentTests
             logger: null,
             (_, _) => transport
         );
-        await using var agent = new PiAgentAIAgent(new PiAgentAIAgentOptions(), logger: null, piAgent);
+        var history = new RecordingHistoryProvider();
+        await using var agent = new PiAgentAIAgent(
+            new PiAgentAIAgentOptions { ChatHistoryProvider = history },
+            logger: null,
+            piAgent
+        );
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
 
         // Act
@@ -110,6 +140,68 @@ public sealed class PiAgentAIAgentTests
         // Assert
         Assert.NotNull(response.Usage);
         Assert.Equal(1, response.Usage.ReasoningTokenCount);
+        var result = Assert.Single(
+            response.Messages,
+            message => Equals(message.AdditionalProperties?.GetValueOrDefault("type"), "result")
+        );
+        Assert.Equal("done", result.Text);
+        Assert.Equal(result.MessageId, Assert.Single(history.Stored.Last().Responses).MessageId);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RunStreamingAsync_StoppedBeforeSettlement_PreservesTurnWithoutResult(bool cancel)
+    {
+        // Arrange
+        var transport = new FakePiTransport();
+        transport.OnWrite = line =>
+        {
+            var command = JsonDocument.Parse(line).RootElement;
+            if (command.GetProperty("type").GetString() == "abort")
+            {
+                var id = command.GetProperty("id").GetString();
+                transport.Emit($"{{\"type\":\"response\",\"id\":\"{id}\",\"command\":\"abort\",\"success\":true}}");
+            }
+            else
+            {
+                EmitRun(transport, line);
+            }
+        };
+        var piAgent = new PiAgent(new PiAgentOptions(), logger: null, (_, _) => transport);
+        var history = new RecordingHistoryProvider();
+        await using var agent = new PiAgentAIAgent(
+            new PiAgentAIAgentOptions { ChatHistoryProvider = history },
+            logger: null,
+            piAgent
+        );
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        await using var updates = agent
+            .RunStreamingAsync([new ChatMessage(ChatRole.User, "hello")], cancellationToken: cancellation.Token)
+            .GetAsyncEnumerator(cancellation.Token);
+
+        // Act
+        while (await updates.MoveNextAsync())
+        {
+            if (updates.Current.Contents.OfType<UsageContent>().Any())
+            {
+                break;
+            }
+        }
+        if (cancel)
+        {
+            cancellation.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => await updates.MoveNextAsync());
+        }
+        else
+        {
+            await updates.DisposeAsync();
+        }
+
+        // Assert
+        var response = Assert.Single(history.Stored.SelectMany(call => call.Responses));
+        Assert.Equal("done", response.Text);
+        Assert.False(response.AdditionalProperties!.ContainsKey("type"));
     }
 
     [Fact]
@@ -295,7 +387,7 @@ public sealed class PiAgentAIAgentTests
         }
     }
 
-    private static void EmitRun(FakePiTransport transport, string line)
+    private static void EmitRun(FakePiTransport transport, string line, string? agentEndText = null)
     {
         var command = JsonDocument.Parse(line).RootElement;
         var type = command.GetProperty("type").GetString();
@@ -323,6 +415,35 @@ public sealed class PiAgentAIAgentTests
         transport.Emit(
             """{"type":"turn_end","message":{"role":"assistant","content":[{"type":"text","text":"done"}],"provider":"deepseek","model":"deepseek-v4-flash-vision-exp","usage":{"input":2,"output":1,"cacheRead":0,"cacheWrite":0,"reasoning":1,"totalTokens":3},"stopReason":"stop","timestamp":1},"toolResults":[]}"""
         );
+        if (agentEndText != null)
+        {
+            var messages = string.IsNullOrEmpty(agentEndText)
+                ? Array.Empty<object>()
+                :
+                [
+                    new
+                    {
+                        role = "assistant",
+                        content = new[] { new { type = "text", text = agentEndText } },
+                        model = "deepseek-v4-flash-vision-exp",
+                        stopReason = "stop",
+                    },
+                ];
+            transport.Emit(
+                JsonSerializer.Serialize(
+                    new
+                    {
+                        type = "agent_end",
+                        messages,
+                        willRetry = false,
+                    }
+                )
+            );
+            transport.Emit(
+                """{"type":"message_start","message":{"role":"custom","content":[],"customType":"status"}}"""
+            );
+            transport.Emit("""{"type":"message_end","message":{"role":"custom","content":[],"customType":"status"}}""");
+        }
         transport.Emit("""{"type":"agent_settled"}""");
     }
 

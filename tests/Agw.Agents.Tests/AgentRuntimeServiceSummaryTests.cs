@@ -11,7 +11,6 @@ public class AgentRuntimeServiceSummaryTests
 {
     [Theory]
     [InlineData(AgentType.System)]
-    [InlineData(AgentType.External)]
     public async Task AppendDefinitionSummaryAsync_EnabledAgent_AppendsResult(AgentType agentType)
     {
         var projectId = Guid.CreateVersion7();
@@ -124,6 +123,7 @@ public class AgentRuntimeServiceSummaryTests
     [Theory]
     [InlineData(AgentType.System, false)]
     [InlineData(AgentType.External, false)]
+    [InlineData(AgentType.External, true)]
     public async Task AppendDefinitionSummaryAsync_SummaryDisabled_ReturnsOriginalMessages(
         AgentType agentType,
         bool enableSummary
@@ -139,6 +139,7 @@ public class AgentRuntimeServiceSummaryTests
                 Type = agentType,
                 EnableSummary = enableSummary,
                 ModelProviderId = Guid.CreateVersion7(),
+                SummaryModelProviderId = Guid.CreateVersion7(),
                 ResponseSchema = "{\"type\":\"object\"}",
             },
             [new ChatMessage(ChatRole.User, "request")],
@@ -150,6 +151,7 @@ public class AgentRuntimeServiceSummaryTests
 
         Assert.Same(output, Assert.Single(result));
         Assert.Empty(summaryService.Calls);
+        Assert.Empty(summaryService.StructuredCalls);
     }
 
     private static AgentRuntimeService CreateService(IAgentTurnSummaryService summaryService) =>

@@ -83,6 +83,7 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
             .OfType<HandoffCandidate>()
             .ToList();
         candidates = DeduplicateByMessageId(candidates);
+        candidates = DeduplicateResultCopies(candidates);
 
         var selected = SelectRecentMessages(candidates);
         return new ConversationHandoff(selected, throughSequence >= 0 ? throughSequence : null);
@@ -257,7 +258,10 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
         return new HandoffCandidate(
             item.Sequence,
             handoffMessage,
-            textContents.OfType<TextContent>().Sum(content => content.Text.Length)
+            textContents.OfType<TextContent>().Sum(content => content.Text.Length),
+            isResult && message.AdditionalProperties?.TryGetValue("resultSourceMessageId", out var sourceId) == true
+                ? sourceId?.ToString()
+                : null
         );
     }
 
@@ -300,6 +304,26 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
             .ToList();
     }
 
+    private static List<HandoffCandidate> DeduplicateResultCopies(IReadOnlyList<HandoffCandidate> candidates)
+    {
+        var messagesById = candidates.ToLookup(candidate => candidate.Message.MessageId);
+        var copiedSourceIds = candidates
+            .Where(candidate =>
+                !string.IsNullOrWhiteSpace(candidate.ResultSourceMessageId)
+                && messagesById[candidate.ResultSourceMessageId]
+                    .Any(source =>
+                        source.ResultSourceMessageId == null && source.Message.Text == candidate.Message.Text
+                    )
+            )
+            .Select(candidate => candidate.ResultSourceMessageId!)
+            .ToHashSet(StringComparer.Ordinal);
+
+        // Keep the final Result when its exact source is also in this handoff. Never deduplicate unrelated equal text.
+        return candidates
+            .Where(candidate => !copiedSourceIds.Contains(candidate.Message.MessageId ?? string.Empty))
+            .ToList();
+    }
+
     private static IReadOnlyList<ChatMessage> SelectRecentMessages(IReadOnlyList<HandoffCandidate> candidates)
     {
         var selected = new List<HandoffCandidate>();
@@ -328,5 +352,10 @@ public sealed class ConversationHandoffProvider : IConversationHandoffProvider
         TargetIdentity? Target
     );
 
-    private sealed record HandoffCandidate(long Sequence, ChatMessage Message, int CharacterCount);
+    private sealed record HandoffCandidate(
+        long Sequence,
+        ChatMessage Message,
+        int CharacterCount,
+        string? ResultSourceMessageId
+    );
 }
