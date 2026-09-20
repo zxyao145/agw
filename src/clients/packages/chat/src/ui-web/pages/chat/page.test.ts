@@ -249,14 +249,6 @@ test("chat routes keep project and conversation parameters without URL settings"
   );
 });
 
-test("chat page clears legacy settings URLs without restoring their values", async () => {
-  const pageSource = await readFile(CHAT_WORKSPACE_URL, "utf8");
-
-  assert.match(pageSource, /searchParams\.delete\("settings"\)/);
-  assert.match(pageSource, /window\.history\.replaceState/);
-  assert.doesNotMatch(pageSource, /decodeChatUrlSettings|getChatSettingsHashValue/);
-});
-
 test("chat page does not expose the share current URL action", async () => {
   const pageSource = await readFile(CHAT_WORKSPACE_URL, "utf8");
 

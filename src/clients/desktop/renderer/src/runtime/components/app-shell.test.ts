@@ -4,12 +4,11 @@ import test from "node:test";
 
 const APP_SHELL_URL = new URL("./app-shell.tsx", import.meta.url);
 
-test("Desktop static-export routes treat dedicated and legacy Chat paths as the workspace", async () => {
+test("Desktop static-export routes treat the dedicated Chat path as the workspace", async () => {
   const source = await readFile(APP_SHELL_URL, "utf8");
 
   assert.ok(source.includes(String.raw`pathname.replace(/\/+$/u, "")`));
-  assert.match(source, /CHAT_PATHS\.has\(normalizedPathname\)/);
-  assert.match(source, /new Set\(\["\/chat", "\/desktop\/chat"\]\)/);
+  assert.match(source, /normalizedPathname === "\/desktop\/chat"/);
 });
 
 test("Desktop shell opens Projects through the title-bar picker", async () => {

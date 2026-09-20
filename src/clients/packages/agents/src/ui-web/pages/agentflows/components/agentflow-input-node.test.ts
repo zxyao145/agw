@@ -76,33 +76,25 @@ function edge(
   };
 }
 
-test("ensureInputGraph inserts input for a new graph", async () => {
-  const { ensureInputGraph, INPUT_NODE_ID } = await loadInputNodeRules();
-
-  const result = ensureInputGraph([], []);
-
-  assert.equal(result.nodes.length, 1);
-  assert.equal(result.nodes[0].id, INPUT_NODE_ID);
-  assert.equal(result.nodes[0].data.kind, AgentflowNodeKind.Input);
-  assert.deepEqual(result.edges, []);
+test("createInputNode initializes a new graph", async () => {
+  const { createInputNode, INPUT_NODE_ID } = await loadInputNodeRules();
+  const input = createInputNode();
+  assert.equal(input.id, INPUT_NODE_ID);
+  assert.equal(input.data.kind, AgentflowNodeKind.Input);
+  assert.equal(input.deletable, false);
 });
 
-test("ensureInputGraph connects legacy roots from input with FanOut edges", async () => {
-  const { ensureInputGraph, INPUT_NODE_ID } = await loadInputNodeRules();
-  const nodes = [
-    node("adapter", AgentflowNodeKind.PromptAdapter),
-    node("agent", AgentflowNodeKind.Agent),
-    node("output", AgentflowNodeKind.Output),
-  ];
+test("existing graphs without Input fail validation without being repaired", async () => {
+  const { ensureInputGraph, validateInputGraph } = await loadInputNodeRules();
+  const nodes = [node("agent", AgentflowNodeKind.Agent), node("output", AgentflowNodeKind.Output)];
   const edges = [edge("agent-output", "agent", "output")];
-
   const result = ensureInputGraph(nodes, edges);
-  const inputEdges = result.edges.filter((item) => item.source === INPUT_NODE_ID);
-
-  assert.deepEqual(inputEdges.map((item) => [item.target, item.data?.kind]).sort(), [
-    ["adapter", AgentflowEdgeKind.FanOut],
-    ["agent", AgentflowEdgeKind.FanOut],
-  ]);
+  assert.deepEqual(result, { nodes, edges });
+  assert.deepEqual(validateInputGraph(result.nodes, result.edges), {
+    ok: false,
+    message: "Agentflow needs exactly one Input node",
+  });
+  assert.equal(validateInputGraph([], []).ok, false);
 });
 
 test("validateInputGraph rejects incoming edges to input", async () => {

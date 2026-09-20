@@ -42,7 +42,6 @@ public class AgwDataPathsTests
 
     [Theory]
     [InlineData("AgwDataDir")]
-    [InlineData("AGW_DATA_DIR")]
     public void ResolveFromConfiguration_JsonEnvironmentAndCommandLine_UseStandardPrecedence(string environmentKey)
     {
         var prefix = $"AGW_TEST_{Guid.CreateVersion7():N}_";
@@ -138,19 +137,21 @@ public class AgwDataPathsTests
     }
 
     [Fact]
-    public void ResolveFromEnvironment_WhenOverrideIsSet_UsesEnvironmentValue()
+    public void ResolveFromConfiguration_LegacyAlias_IsIgnored()
     {
-        var original = Environment.GetEnvironmentVariable("AGW_DATA_DIR");
-        var root = Path.Combine(Path.GetTempPath(), $"agw-env-{Guid.CreateVersion7():N}");
+        var prefix = $"AGW_TEST_{Guid.CreateVersion7():N}_";
+        Environment.SetEnvironmentVariable(prefix + "AGW_DATA_DIR", "./old-data");
         try
         {
-            Environment.SetEnvironmentVariable("AGW_DATA_DIR", root);
-
-            Assert.Equal(Path.GetFullPath(root), AgwDataPaths.ResolveFromEnvironment().Root);
+            var configuration = new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?> { ["AgwDataDir"] = "./current-data" })
+                .AddEnvironmentVariables(prefix)
+                .Build();
+            Assert.Equal(Path.GetFullPath("./current-data"), AgwDataPaths.ResolveFromConfiguration(configuration).Root);
         }
         finally
         {
-            Environment.SetEnvironmentVariable("AGW_DATA_DIR", original);
+            Environment.SetEnvironmentVariable(prefix + "AGW_DATA_DIR", null);
         }
     }
 

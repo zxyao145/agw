@@ -3,6 +3,45 @@ import test from "node:test";
 import { HubConnectionBuilder, HubConnectionState, type IRetryPolicy } from "@microsoft/signalr";
 import type { AiMessage } from "@agw/api";
 
+test("missing execution provider capability fails configuration without dispatching settings", async (t) => {
+  const { ExecutionSession } = await import("./execution-session.ts");
+  const calls: string[] = [];
+  let failures = 0;
+  const connection = {
+    state: HubConnectionState.Connected,
+    on() {},
+    onclose() {},
+    onreconnecting() {},
+    onreconnected() {},
+    async start() {},
+    async stop() {},
+    async invoke(method: string) {
+      calls.push(method);
+      throw new Error("Unknown hub method GetExecutionProvider");
+    },
+  };
+  t.mock.method(HubConnectionBuilder.prototype, "build", () => connection as never);
+  const session = new ExecutionSession(
+    {
+      onMessage() {},
+      onReconnectFailed() {
+        failures++;
+      },
+    },
+    { baseUrl: "https://agw.test", token: null, attachmentStore: null },
+  );
+  try {
+    await assert.rejects(
+      session.configure({ projectId: "project", contextId: "context" }),
+      /Unknown hub method/,
+    );
+    assert.deepEqual(calls, ["GetExecutionProvider"]);
+    assert.equal(failures, 1);
+  } finally {
+    await session.dispose();
+  }
+});
+
 test("concurrent Agentflow initialization and checkpoint queries share the connecting hub", async (t) => {
   const { ExecutionSession } = await import("./execution-session.ts");
   const connected = Promise.withResolvers<void>();

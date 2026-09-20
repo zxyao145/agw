@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using System.Text.Json;
 using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Projects;
@@ -204,7 +203,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
     }
 
     [Fact]
-    public async Task DeleteProjectAsync_PendingBusyExecution_DoesNotDeleteProject()
+    public async Task DeleteProjectAsync_UnindexedBusyExecution_LeavesUnknownScopeUntouched()
     {
         // Arrange
         using var userScope = PushUser("tester");
@@ -215,7 +214,14 @@ public sealed partial class ProjectDeletionCoordinatorTests
         var projectId = Guid.CreateVersion7();
         var conversationId = Guid.CreateVersion7();
         await SeedProjectGraphAsync(options, projectId, conversationId, "tester", "context-1");
-        var executionId = await SeedDurableExecutionAsync(options, projectId, conversationId, "tester", "broken");
+        var executionId = await SeedDurableExecutionAsync(
+            options,
+            projectId,
+            conversationId,
+            "tester",
+            "broken",
+            indexed: false
+        );
         await using var context = new AgwDbContext(options);
         var coordinator = TestProjectPersistence.CreateDeletionCoordinator(context);
         await using var lease = await InMemoryApplicationLock.Shared.AcquireAsync(
@@ -224,14 +230,12 @@ public sealed partial class ProjectDeletionCoordinatorTests
         );
 
         // Act
-        var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            coordinator.DeleteProjectAsync(new ProjectDeletionTarget(projectId, "tester"), token)
-        );
+        var deleted = await coordinator.DeleteProjectAsync(new ProjectDeletionTarget(projectId, "tester"), token);
 
         // Assert
-        Assert.Equal(ErrorCodes.DurableExecutionConflict.Code, exception.Code);
-        Assert.True(await context.Projects.AnyAsync(row => row.Id == projectId, token));
-        Assert.True(await context.ProjectConversations.AnyAsync(row => row.Id == conversationId, token));
+        Assert.True(deleted);
+        Assert.False(await context.Projects.AnyAsync(row => row.Id == projectId, token));
+        Assert.False(await context.ProjectConversations.AnyAsync(row => row.Id == conversationId, token));
         Assert.False(
             await context
                 .DurableExecutions.Where(row => row.Id == executionId)
@@ -375,7 +379,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
     }
 
     [Fact]
-    public async Task DeleteProjectAsync_InvalidDurableManifest_LogsExecutionIdWithoutManifestContent()
+    public async Task DeleteProjectAsync_UnindexedManifest_DoesNotInspectOrDeleteUnattributedData()
     {
         // Arrange
         using var userScope = PushUser("tester");
@@ -392,7 +396,8 @@ public sealed partial class ProjectDeletionCoordinatorTests
             projectId,
             conversationId,
             "tester",
-            invalidManifest
+            invalidManifest,
+            indexed: false
         );
         await using var dbContext = new AgwDbContext(options);
         var logger = new ListLogger<DurableExecutionScopeMaintenance>();
@@ -416,9 +421,7 @@ public sealed partial class ProjectDeletionCoordinatorTests
 
         // Assert
         Assert.True(deleted);
-        var warning = Assert.Single(logger.Messages);
-        Assert.Contains(executionId.ToString(), warning, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(invalidManifest, warning, StringComparison.Ordinal);
+        Assert.Empty(logger.Messages);
         using var systemScope = UserInfoUtil.PushSystemScope();
         await using var assertContext = new AgwDbContext(options);
         Assert.Contains(
@@ -733,7 +736,8 @@ public sealed partial class ProjectDeletionCoordinatorTests
         Guid projectId,
         Guid conversationId,
         string ownerUserId,
-        string? manifestJson = null
+        string? manifestJson = null,
+        bool indexed = true
     )
     {
         await using var context = new AgwDbContext(options);
@@ -744,14 +748,18 @@ public sealed partial class ProjectDeletionCoordinatorTests
             {
                 Id = executionId,
                 UserId = ownerUserId,
+                ProjectId = indexed ? projectId : null,
+                ProjectConversationId = indexed ? conversationId : null,
+                ScopeBackfilled = indexed,
                 ManifestJson =
                     manifestJson
-                    ?? JsonSerializer.Serialize(
+                    ?? Agw.Shared.Utils.JsonUtil.Serialize(
                         new
                         {
                             schemaVersion = 1,
                             executionId,
                             userId = ownerUserId,
+                            workspaceSnapshot = Agw.Shared.Utils.ProjectWorkspacePaths.CreateSnapshot(projectId, null),
                             agentId = Guid.CreateVersion7(),
                             agentType = 0,
                             input = new { contents = Array.Empty<object>() },

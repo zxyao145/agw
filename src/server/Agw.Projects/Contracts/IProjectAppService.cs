@@ -13,14 +13,12 @@ public interface IProjectAppService
 
     Task<Guid?> ResolveProjectIdAsync(Guid? projectId);
 
-    Task<Project?> CreateAsync(Project project);
-
     Task<Project?> CreateAsync(
         Project project,
         IEnumerable<Guid>? mcpToolServerIds,
         IEnumerable<Guid>? skillIds,
         IEnumerable<Guid>? connectionIds
-    ) => CreateAsync(project);
+    );
 
     Task<bool> DeleteAsync(Guid id);
 
@@ -34,13 +32,11 @@ public interface IProjectAppService
         return (await GetForCurrentUserAsync(id).ConfigureAwait(false))?.CreateBy;
     }
 
-    Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction);
-
     Task<Project?> UpdateAsync(
         Guid id,
         Action<Project> updateAction,
         IEnumerable<Guid>? mcpToolServerIds,
         IEnumerable<Guid>? skillIds,
         IEnumerable<Guid>? connectionIds
-    ) => UpdateAsync(id, updateAction);
+    );
 }

@@ -27,10 +27,6 @@ const NodeKind = {
   Input: 10,
 } as const;
 
-const EdgeKind = {
-  FanOut: 1,
-} as const;
-
 export function createInputNode<
   TNodeData extends AgentflowInputNodeData = AgentflowInputNodeData,
 >(): Node<TNodeData> {
@@ -57,25 +53,9 @@ export function ensureInputGraph<
   edges: Edge<TEdgeData>[],
 ): { nodes: Node<TNodeData>[]; edges: Edge<TEdgeData>[] } {
   const existingInput = nodes.find(isInputNode);
-  const inputNode = existingInput
-    ? normalizeInputNode(existingInput)
-    : createInputNode<TNodeData>();
+  if (!existingInput) return { nodes, edges };
   const nonInputNodes = nodes.filter((node) => !isInputNode(node));
-  const normalizedNodes = [inputNode, ...nonInputNodes];
-
-  if (existingInput) {
-    return { nodes: normalizedNodes, edges };
-  }
-
-  const existingInputTargets = new Set(
-    edges.filter((edge) => edge.source === INPUT_NODE_ID).map((edge) => edge.target),
-  );
-  const rootNodeIds = getRuntimeRootNodeIds(normalizedNodes, edges);
-  const inputEdges = rootNodeIds
-    .filter((rootNodeId) => !existingInputTargets.has(rootNodeId))
-    .map((rootNodeId) => createInputEdge<TEdgeData>(rootNodeId));
-
-  return { nodes: normalizedNodes, edges: [...inputEdges, ...edges] };
+  return { nodes: [normalizeInputNode(existingInput), ...nonInputNodes], edges };
 }
 
 export function validateInputGraph<
@@ -132,41 +112,6 @@ function normalizeInputNode<TNodeData extends AgentflowInputNodeData>(
       configJson: "",
     },
   };
-}
-
-function createInputEdge<TEdgeData extends AgentflowInputEdgeData>(
-  targetNodeId: string,
-): Edge<TEdgeData> {
-  return {
-    id: `edge-${INPUT_NODE_ID}-${targetNodeId}`,
-    source: INPUT_NODE_ID,
-    target: targetNodeId,
-    data: {
-      kind: EdgeKind.FanOut,
-      label: "",
-      conditionJson: "",
-      configJson: "",
-    } as TEdgeData,
-  };
-}
-
-function getRuntimeRootNodeIds<TNodeData extends { kind: number; configJson?: string | null }>(
-  nodes: Node<TNodeData>[],
-  edges: Edge[],
-) {
-  const visibleNodeIds = getRuntimeVisibleNodeIds(nodes, edges);
-  const visibleTargetIds = new Set(
-    edges
-      .filter((edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target))
-      .map((edge) => edge.target),
-  );
-
-  return nodes
-    .filter(
-      (node) =>
-        node.id !== INPUT_NODE_ID && visibleNodeIds.has(node.id) && !visibleTargetIds.has(node.id),
-    )
-    .map((node) => node.id);
 }
 
 function getRuntimeVisibleNodeIds<TNodeData extends { kind: number; configJson?: string | null }>(

@@ -3,7 +3,6 @@ using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Projects;
 using Agw.Shared.Data.Entities.Executions;
 using Agw.Shared.Data.Entities.Projects;
-using Agw.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Agw.Infrastructure.Agents;
@@ -17,18 +16,6 @@ public sealed class AgentflowCheckpointPersistence : IAgentflowCheckpointPersist
     {
         _dbContext = dbContext;
         _scopeMaintenance = scopeMaintenance;
-    }
-
-    public async Task BackfillExecutionScopesAsync(CancellationToken cancellationToken = default)
-    {
-        var result = await _scopeMaintenance.BackfillAsync(cancellationToken).ConfigureAwait(false);
-        if (result.HasPending)
-        {
-            throw new AgwException(
-                ErrorCodes.DurableExecutionConflict,
-                "Execution scope recovery is still pending. Retry after recovery completes."
-            );
-        }
     }
 
     public Task<bool> RepairAndCheckActiveExecutionsAsync(

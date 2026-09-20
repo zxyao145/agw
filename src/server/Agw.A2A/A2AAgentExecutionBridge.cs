@@ -78,11 +78,8 @@ public sealed class A2AAgentExecutionBridge : IDurableA2AExecutionBridge
         await using var scope = _scopeFactory.CreateAsyncScope();
         var services = scope.ServiceProvider;
         var ownerUserId = services.GetRequiredService<IUserInfoService>().RequiredUserId;
-        var projectDefaults = services.GetService<IProjectDefaultResolver>();
-        var projectId =
-            projectDefaults == null
-                ? ProjectDefaults.A2AId
-                : await projectDefaults.ResolveA2AProjectIdAsync(cancellationToken).ConfigureAwait(false);
+        var projectDefaults = services.GetRequiredService<IProjectDefaultResolver>();
+        var projectId = await projectDefaults.ResolveA2AProjectIdAsync(cancellationToken).ConfigureAwait(false);
         if (!projectId.HasValue)
         {
             throw new AgwException(ErrorCodes.ResourceNotFound, "A2A project was not found.");

@@ -244,34 +244,6 @@ public class ToolRegistryServiceTests
         Assert.DoesNotContain(registry.GetAllTools(), tool => removedToolNames.Contains(tool.Name));
     }
 
-    [Theory]
-    [InlineData(ToolDefinitionNames.Bash)]
-    [InlineData(ToolDefinitionNames.GenerateGuid)]
-    [InlineData(ToolDefinitionNames.PowerShell)]
-    public async Task MaterializeAsync_ObsoleteToolDefinition_ThrowsClearError(string toolName)
-    {
-        await using var serviceProvider = CreateToolServices().BuildServiceProvider();
-        var registry = new ToolRegistryService(NullLogger<ToolRegistryService>.Instance, serviceProvider);
-        ToolDefinition definition = toolName switch
-        {
-            ToolDefinitionNames.Bash => new BashToolDefinition(),
-            ToolDefinitionNames.GenerateGuid => new GenerateGuidToolDefinition(),
-            ToolDefinitionNames.PowerShell => new PowerShellToolDefinition(),
-            _ => throw new InvalidOperationException($"Unexpected Tool '{toolName}'."),
-        };
-
-        var exception = await Assert.ThrowsAsync<AgwException>(async () =>
-            await registry.MaterializeAsync(
-                [definition],
-                CreateMaterializationContext(),
-                TestContext.Current.CancellationToken
-            )
-        );
-
-        Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
-        Assert.Equal($"Tool '{toolName}' is obsolete and unavailable.", exception.Message);
-    }
-
     [Fact]
     public async Task ObsoleteContextualToolAndToolBlock_AreFilteredAndUnavailable()
     {

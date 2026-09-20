@@ -352,18 +352,6 @@ public sealed partial class EfCoreChatHistoryProvider
                 cancellationToken
             )
             .ConfigureAwait(false);
-        if (projectConversation == null && Guid.TryParse(contextId, out _))
-        {
-            projectConversation = await dbContext
-                .ProjectConversations.Where(x => x.ProjectId == projectId && x.ContextId.ToLower() == contextId)
-                .FirstOrDefaultAsync(cancellationToken)
-                .ConfigureAwait(false);
-            if (projectConversation != null)
-            {
-                projectConversation.ContextId = contextId;
-            }
-        }
-
         if (projectConversation == null)
         {
             if (isExecutionBound)

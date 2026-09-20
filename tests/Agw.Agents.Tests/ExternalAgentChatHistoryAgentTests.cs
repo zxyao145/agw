@@ -413,7 +413,7 @@ public class ExternalAgentChatHistoryAgentTests
     }
 
     [Fact]
-    public async Task RunStreamingAsync_InvalidClaudeInit_DoesNotCaptureOrChangeUpdates()
+    public async Task RunStreamingAsync_InvalidOrLegacyClaudeInit_DoesNotCaptureOrChangeUpdates()
     {
         var provider = new RecordingChatHistoryProvider();
         var innerAgent = new PausableExternalAgent();
@@ -429,6 +429,7 @@ public class ExternalAgentChatHistoryAgentTests
         );
         var session = await agent.CreateSessionAsync(TestContext.Current.CancellationToken);
         innerAgent.Emit(CreateClaudeInitUpdate("{bad json"));
+        innerAgent.Emit(CreateClaudeInitUpdate(JsonSerializer.Serialize(new { session_id = Guid.CreateVersion7() })));
         innerAgent.Emit(CreateClaudeInitUpdate(JsonSerializer.Serialize(new { session_id = "not-a-guid" })));
         innerAgent.Emit(CreateClaudeInitUpdate(JsonSerializer.Serialize(new { tools = Array.Empty<string>() })));
         innerAgent.Emit(

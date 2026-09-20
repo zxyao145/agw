@@ -44,7 +44,7 @@ declarations, search selection, and AI function creation. The internal
 fallback, and result parsing without implementing a tool registration interface.
 Request and response types live in `Contracts/WebSearch`.
 
-The existing `bash` and `powershell` Tools remain ordinary standalone Tools.
+Shell execution uses `run_shell`; the obsolete `bash` and `powershell` implementations have been removed.
 
 ## Data and selection
 
@@ -89,9 +89,8 @@ Agent and Project definitions use one strongly typed `tools` field:
 - `null` and `[]` both mean that the current layer adds nothing.
 - `background-agents` is Agent-only.
 - New Agents and Projects start with an empty `tools` list.
-- Legacy database values such as `["web_search"]` are read as typed Tool
-  values and are written back in the new shape on the next save. Unknown
-  legacy names fail instead of being ignored.
+- Only the typed object format is supported. Legacy string arrays and removed
+  `bash`, `powershell`, and `generate_guid` definitions are rejected without rewriting stored values.
 
 ToolBlock member names never appear as selectable catalog items. Selecting a
 member such as `todos_add` as a standalone Tool fails with an error directing the
@@ -293,7 +292,7 @@ ToolBlock member. It is not a flags enum or a hierarchy of user roles.
 | `None` | `none` | Not required by the permission declaration. | `diff`, Todo mutations, `ask_user_question`, `mode_set`. |
 | `ReadOnly` | `readOnly` | Not required by the permission declaration. | `web_fetch`, `web_search`, file/memory reads, `mode_get`. |
 | `Write` | `write` | Required; the execution policy decides how to resolve it. | `git_clone`, file/memory writes and deletes. |
-| `Execute` | `execute` | Required; the execution policy decides how to resolve it. | `bash`, `powershell`, `run_shell`. |
+| `Execute` | `execute` | Required; the execution policy decides how to resolve it. | `run_shell`. |
 
 These are explicit product declarations, not classifications inferred from tool
 names or arguments. `run_shell` remains `Execute` even for `pwd`. Todo mutations

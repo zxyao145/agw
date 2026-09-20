@@ -41,12 +41,12 @@ public class ProjectAppServiceTests : IDisposable
             var project = CreateProject("Directories");
             project.Workspace = Path.Combine(root, "primary");
             project.AdditionalDirectories = [new ProjectDirectory { Path = first }];
-            var created = (await scope.Service.CreateAsync(project))!;
+            var created = (await scope.Service.CreateAsync(project, null, null, null))!;
             var original = Assert.Single(created.AdditionalDirectories);
             Assert.NotEqual(Guid.Empty, original.Id);
 
             // Old clients omit the new field; a normal update must preserve it.
-            await scope.Service.UpdateAsync(created.Id, item => item.Description = "legacy update");
+            await scope.Service.UpdateAsync(created.Id, item => item.Description = "legacy update", null, null, null);
             await using (var db = scope.CreateDbContext())
             {
                 Assert.Equal(
@@ -65,7 +65,10 @@ public class ProjectAppServiceTests : IDisposable
                             {
                                 Path = first + Path.DirectorySeparatorChar + ".",
                             },
-                        ]
+                        ],
+                    null,
+                    null,
+                    null
                 )
             )!;
             Assert.Equal(original.Id, Assert.Single(normalized.AdditionalDirectories).Id);
@@ -73,11 +76,16 @@ public class ProjectAppServiceTests : IDisposable
             var replaced = (
                 await scope.Service.UpdateAsync(
                     created.Id,
-                    item => item.AdditionalDirectories = [original with { Path = second }]
+                    item => item.AdditionalDirectories = [original with { Path = second }],
+                    null,
+                    null,
+                    null
                 )
             )!;
             Assert.NotEqual(original.Id, Assert.Single(replaced.AdditionalDirectories).Id);
-            var cleared = (await scope.Service.UpdateAsync(created.Id, item => item.AdditionalDirectories = []))!;
+            var cleared = (
+                await scope.Service.UpdateAsync(created.Id, item => item.AdditionalDirectories = [], null, null, null)
+            )!;
             Assert.Empty(cleared.AdditionalDirectories);
             Assert.True(Directory.Exists(first));
             Assert.True(Directory.Exists(second));
@@ -111,7 +119,9 @@ public class ProjectAppServiceTests : IDisposable
                 "invalid" => [new ProjectDirectory { Path = root + "\0" }],
                 _ => [new ProjectDirectory { Path = Path.Combine(root, "missing") }],
             };
-            var exception = await Assert.ThrowsAsync<AgwException>(() => scope.Service.CreateAsync(project));
+            var exception = await Assert.ThrowsAsync<AgwException>(() =>
+                scope.Service.CreateAsync(project, null, null, null)
+            );
             Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
         }
         finally
@@ -142,7 +152,7 @@ public class ProjectAppServiceTests : IDisposable
             var project = CreateProject("Project A");
             project.Workspace = workspace;
             project.ExtraSetting = "{\"fileStorage\":{\"type\":\"local\"}}";
-            var created = await scope.Service.CreateAsync(project);
+            var created = await scope.Service.CreateAsync(project, null, null, null);
             IProjectFileSystemConfigurationProvider provider = new ProjectFileSystemConfigurationProvider(
                 scope.Service
             );
@@ -180,12 +190,12 @@ public class ProjectAppServiceTests : IDisposable
         await dbContext.Database.EnsureCreatedAsync(cancellationToken);
         var cache = new RecordingFileSystemCacheInvalidator();
         var service = CreateService(dbContext, fileSystemCache: cache);
-        var project = await service.CreateAsync(CreateProject("Project A"));
+        var project = await service.CreateAsync(CreateProject("Project A"), null, null, null);
         var workspace = Path.Combine(Path.GetTempPath(), "agw-project-tests", Guid.CreateVersion7().ToString("N"));
 
         try
         {
-            var updated = await service.UpdateAsync(project!.Id, item => item.Workspace = workspace);
+            var updated = await service.UpdateAsync(project!.Id, item => item.Workspace = workspace, null, null, null);
 
             Assert.NotNull(updated);
             Assert.Equal([project.Id], cache.InvalidatedProjectIds);
@@ -206,10 +216,10 @@ public class ProjectAppServiceTests : IDisposable
     public async Task UpdateAsync_WhenWorkspaceIsBlank_RejectsUpdate(string? workspace)
     {
         await using var scope = await ProjectAppServiceTestScope.CreateAsync(TestContext.Current.CancellationToken);
-        var project = await scope.Service.CreateAsync(CreateProject("Project A"));
+        var project = await scope.Service.CreateAsync(CreateProject("Project A"), null, null, null);
 
         var exception = await Assert.ThrowsAsync<AgwException>(() =>
-            scope.Service.UpdateAsync(project!.Id, item => item.Workspace = workspace)
+            scope.Service.UpdateAsync(project!.Id, item => item.Workspace = workspace, null, null, null)
         );
 
         Assert.Equal(ErrorCodes.InvalidParam.Code, exception.Code);
@@ -345,7 +355,7 @@ public class ProjectAppServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task LegacyUpdateAsync_WhenProjectHasRelations_PreservesExistingRelations()
+    public async Task UpdateAsync_NullCapabilityArguments_PreservesExistingRelations()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var scope = await ProjectAppServiceTestScope.CreateAsync(cancellationToken);
@@ -356,7 +366,13 @@ public class ProjectAppServiceTests : IDisposable
             [scope.FirstConnectionId]
         );
 
-        var updated = await scope.Service.UpdateAsync(created!.Id, project => project.Description = "Updated");
+        var updated = await scope.Service.UpdateAsync(
+            created!.Id,
+            project => project.Description = "Updated",
+            null,
+            null,
+            null
+        );
 
         Assert.NotNull(updated);
         await using var assertContext = scope.CreateDbContext();
@@ -549,7 +565,7 @@ public class ProjectAppServiceTests : IDisposable
             fileSystemCache: cache,
             deletionCoordinator: new RejectingProjectDeletionCoordinator()
         );
-        var project = await service.CreateAsync(CreateProject("Project A"));
+        var project = await service.CreateAsync(CreateProject("Project A"), null, null, null);
 
         // Act
         var deleted = await service.DeleteAsync(project!.Id);
@@ -595,7 +611,10 @@ public class ProjectAppServiceTests : IDisposable
                     Name = "Project A",
                     Type = ProjectType.UserDefined,
                     Workspace = workspace,
-                }
+                },
+                null,
+                null,
+                null
             );
 
             Assert.NotNull(created);
@@ -640,7 +659,10 @@ public class ProjectAppServiceTests : IDisposable
                     Name = "default-built-in",
                     Type = ProjectType.DefaultBuiltIn,
                     Workspace = root,
-                }
+                },
+                null,
+                null,
+                null
             );
 
             // Assert
@@ -652,7 +674,13 @@ public class ProjectAppServiceTests : IDisposable
                 context.ChangeTracker.Clear();
                 var updatedAt = createdAt.AddMinutes(update);
                 clock.SetUtcNow(updatedAt);
-                var updated = await service.UpdateAsync(project.Id, current => current.Description = "updated");
+                var updated = await service.UpdateAsync(
+                    project.Id,
+                    current => current.Description = "updated",
+                    null,
+                    null,
+                    null
+                );
                 Assert.NotNull(updated);
                 Assert.Equal("tester", updated.CreateBy);
                 Assert.Equal(createdAt, updated.CreateTime);
@@ -660,8 +688,16 @@ public class ProjectAppServiceTests : IDisposable
                 Assert.Equal(updatedAt, updated.UpdateTime);
             }
 
-            Assert.Null(await service.UpdateAsync(project.Id, current => current.Name = "renamed"));
-            Assert.Null(await service.UpdateAsync(project.Id, current => current.Type = ProjectType.UserDefined));
+            Assert.Null(await service.UpdateAsync(project.Id, current => current.Name = "renamed", null, null, null));
+            Assert.Null(
+                await service.UpdateAsync(
+                    project.Id,
+                    current => current.Type = ProjectType.UserDefined,
+                    null,
+                    null,
+                    null
+                )
+            );
             Assert.False(await service.DeleteAsync(project.Id));
             context.ChangeTracker.Clear();
             var persisted = await context.Projects.SingleAsync(cancellationToken);

@@ -86,3 +86,5 @@ A login expires after ten minutes; the Server handoff code lasts two minutes. Ca
 Signing out removes the local credential and revokes that Token on Server. If the Server cannot be reached, the UI reports that revocation was not confirmed. The profile remains in explicit-login mode after logout or expiry, so a local profile cannot silently become the administrator. Use the explicit local-administrator action or sign in again.
 
 Changing a profile's URL invalidates its saved OIDC credential. Switching between unchanged profiles does not revoke their Tokens. Existing manual-token profiles and integration OAuth callbacks retain their behavior.
+
+Desktop Chat uses `/desktop/chat`. The previous `/chat` route is no longer exported; update saved links when upgrading.

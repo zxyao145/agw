@@ -84,41 +84,6 @@ public class AgentAppServiceCapabilityTests : IDisposable
         );
     }
 
-    [Fact]
-    public async Task ListEnabledMcpToolServersByAgentAsync_AgentCompatibilityWrapper_UsesAgentRelations()
-    {
-        var agentId = Guid.CreateVersion7();
-        var server = new McpServer
-        {
-            Id = Guid.CreateVersion7(),
-            Name = "agent-mcp",
-            Enabled = true,
-        };
-        var service = CreateService(
-            mcpServers: [server],
-            agentMcpRelations: [new AgentMcpServerRelation { AgentId = agentId, McpToolServerId = server.Id }]
-        );
-
-        var servers = await service.ListEnabledMcpToolServersByAgentAsync(agentId);
-
-        Assert.Equal(server.Id, Assert.Single(servers).Id);
-    }
-
-    [Fact]
-    public async Task ListSkillsByAgentAsync_AgentCompatibilityWrapper_UsesAgentRelations()
-    {
-        var agentId = Guid.CreateVersion7();
-        var skill = new Skill { Id = Guid.CreateVersion7(), Name = "agent-skill" };
-        var service = CreateService(
-            skills: [skill],
-            agentSkillRelations: [new AgentSkillRelation { AgentId = agentId, SkillId = skill.Id }]
-        );
-
-        var skills = await service.ListSkillsByAgentAsync(agentId);
-
-        Assert.Equal(skill.Id, Assert.Single(skills).Id);
-    }
-
     private AgentAppService CreateService(
         IEnumerable<McpServer>? mcpServers = null,
         IEnumerable<Skill>? skills = null,

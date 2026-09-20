@@ -136,23 +136,6 @@ public class AgentSuggestionAppServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task GetSuggestionsAsync_SystemAgentWithObsoleteTool_OmitsObsoleteSuggestion()
-    {
-        var agent = new Agent
-        {
-            Id = Guid.CreateVersion7(),
-            Name = "system-agent",
-            Type = AgentType.System,
-            Tools = [new ToolValue { Definition = new BashToolDefinition() }],
-        };
-        var service = CreateService(agents: [agent]);
-
-        var response = await service.GetSuggestionsAsync(default, agent.Id);
-
-        Assert.Empty(response.Suggestions);
-    }
-
-    [Fact]
     public async Task GetSuggestionsAsync_SystemAgent_DeduplicatesAgentAndProjectToolBlockMembers()
     {
         var agent = new Agent

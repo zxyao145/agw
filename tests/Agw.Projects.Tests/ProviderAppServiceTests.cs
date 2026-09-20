@@ -57,8 +57,7 @@ public class ProviderAppServiceTests
                     Endpoint: "https://example.test/v1",
                     AuthConfigs: null,
                     ModelNames: [" existing-model ", "new-model", "new-model"]
-                ),
-                "tester"
+                )
             );
         }
 
@@ -126,8 +125,7 @@ public class ProviderAppServiceTests
                     Endpoint: "https://example.test/v1",
                     AuthConfigs: null,
                     ModelNames: ["keep-model", "add-model"]
-                ),
-                "tester"
+                )
             );
         }
 
@@ -172,8 +170,7 @@ public class ProviderAppServiceTests
                     Endpoint: "https://example.test/v1",
                     AuthConfigs: null,
                     ModelNames: null
-                ),
-                "tester"
+                )
             );
         }
 
@@ -262,8 +259,7 @@ public class ProviderAppServiceTests
                             ),
                         ],
                         ModelNames: []
-                    ),
-                    "tester"
+                    )
                 )
             );
 
@@ -430,8 +426,7 @@ public class ProviderAppServiceTests
                             Enable: true
                         ),
                     ]
-                ),
-                "tester"
+                )
             );
 
             Assert.NotNull(updated);

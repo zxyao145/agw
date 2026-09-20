@@ -169,7 +169,6 @@ services.AddToolCatalogTypes(typeof(ClockTools));
 | `RequiredPermission` | 方法构造参数或容器权限 | 必须显式声明或从容器继承 |
 | `AllowInPlanMode` | 容器值，再回退到 `false` | 是否允许在 Plan Mode 中使用 |
 | `TimeoutMs` | `5000` | 执行超时毫秒数；`0` 表示不设置超时 |
-| `ReturnExceptionsAsResults` | `true` | 兼容性属性；当前 Agent 执行管线始终把 Tool 异常作为结果返回 |
 
 显式名称保持原样，不执行 `Async` 处理：
 

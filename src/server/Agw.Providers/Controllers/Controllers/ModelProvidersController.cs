@@ -2,7 +2,6 @@ using Agw.Providers.Application;
 using Agw.Providers.Contracts.Manager;
 using Agw.Shared.Data.Entities.Providers;
 using Agw.Shared.Exceptions;
-using Agw.Shared.Extensions;
 using Agw.Shared.Results;
 using Bens.Results;
 using Microsoft.AspNetCore.Mvc;
@@ -60,8 +59,7 @@ public class ModelProvidersController : ControllerBase
     [ProducesApiResult(typeof(ModelProviderRelation))]
     public async Task<IActionResult> CreateAsync([FromBody] ModelProviderCreateRequest request)
     {
-        var user = User.GetUserId();
-        var created = await _service.CreateAsync(request, user);
+        var created = await _service.CreateAsync(request);
         return ApiResult.Ok(created);
     }
 
@@ -69,8 +67,7 @@ public class ModelProvidersController : ControllerBase
     [ProducesApiResult(typeof(ModelProviderRelation))]
     public async Task<IActionResult> UpdateAsync(Guid id, [FromBody] ModelProviderUpdateRequest request)
     {
-        var user = User.GetUserId();
-        var updated = await _service.UpdateAsync(id, request, user);
+        var updated = await _service.UpdateAsync(id, request);
 
         return updated == null ? ErrorCodes.ResourceNotFound.ToApiResult() : ApiResult.Ok(updated);
     }

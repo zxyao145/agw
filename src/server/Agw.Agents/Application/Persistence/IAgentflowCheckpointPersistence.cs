@@ -4,8 +4,6 @@ namespace Agw.Agents.Application.Persistence;
 
 public interface IAgentflowCheckpointPersistence
 {
-    Task BackfillExecutionScopesAsync(CancellationToken cancellationToken = default);
-
     Task<bool> RepairAndCheckActiveExecutionsAsync(
         Guid projectId,
         Guid conversationId,

@@ -12827,19 +12827,10 @@
             "$ref": "#/components/schemas/ToolDefinitionAskUserQuestionToolDefinition"
           },
           {
-            "$ref": "#/components/schemas/ToolDefinitionBashToolDefinition"
-          },
-          {
             "$ref": "#/components/schemas/ToolDefinitionDiffToolDefinition"
           },
           {
-            "$ref": "#/components/schemas/ToolDefinitionGenerateGuidToolDefinition"
-          },
-          {
             "$ref": "#/components/schemas/ToolDefinitionGitCloneToolDefinition"
-          },
-          {
-            "$ref": "#/components/schemas/ToolDefinitionPowerShellToolDefinition"
           },
           {
             "$ref": "#/components/schemas/ToolDefinitionRunShellToolDefinition"
@@ -12855,11 +12846,8 @@
           "propertyName": "name",
           "mapping": {
             "ask_user_question": "#/components/schemas/ToolDefinitionAskUserQuestionToolDefinition",
-            "bash": "#/components/schemas/ToolDefinitionBashToolDefinition",
             "diff": "#/components/schemas/ToolDefinitionDiffToolDefinition",
-            "generate_guid": "#/components/schemas/ToolDefinitionGenerateGuidToolDefinition",
             "git_clone": "#/components/schemas/ToolDefinitionGitCloneToolDefinition",
-            "powershell": "#/components/schemas/ToolDefinitionPowerShellToolDefinition",
             "run_shell": "#/components/schemas/ToolDefinitionRunShellToolDefinition",
             "web_fetch": "#/components/schemas/ToolDefinitionWebFetchToolDefinition",
             "web_search": "#/components/schemas/ToolDefinitionWebSearchToolDefinition"
@@ -12875,23 +12863,6 @@
           "name": {
             "enum": [
               "ask_user_question"
-            ],
-            "type": "string"
-          },
-          "options": {
-            "$ref": "#/components/schemas/EmptyToolOptions"
-          }
-        }
-      },
-      "ToolDefinitionBashToolDefinition": {
-        "required": [
-          "options",
-          "name"
-        ],
-        "properties": {
-          "name": {
-            "enum": [
-              "bash"
             ],
             "type": "string"
           },
@@ -12917,23 +12888,6 @@
           }
         }
       },
-      "ToolDefinitionGenerateGuidToolDefinition": {
-        "required": [
-          "options",
-          "name"
-        ],
-        "properties": {
-          "name": {
-            "enum": [
-              "generate_guid"
-            ],
-            "type": "string"
-          },
-          "options": {
-            "$ref": "#/components/schemas/EmptyToolOptions"
-          }
-        }
-      },
       "ToolDefinitionGitCloneToolDefinition": {
         "required": [
           "options",
@@ -12943,23 +12897,6 @@
           "name": {
             "enum": [
               "git_clone"
-            ],
-            "type": "string"
-          },
-          "options": {
-            "$ref": "#/components/schemas/EmptyToolOptions"
-          }
-        }
-      },
-      "ToolDefinitionPowerShellToolDefinition": {
-        "required": [
-          "options",
-          "name"
-        ],
-        "properties": {
-          "name": {
-            "enum": [
-              "powershell"
             ],
             "type": "string"
           },

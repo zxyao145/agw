@@ -367,7 +367,6 @@ public sealed class AgentflowCheckpointStore
                     cancellationToken
                 )
                 .ConfigureAwait(false);
-            await persistence.BackfillExecutionScopesAsync(cancellationToken).ConfigureAwait(false);
             if (
                 await persistence
                     .RepairAndCheckActiveExecutionsAsync(
@@ -526,16 +525,34 @@ public sealed class AgentflowCheckpointStore
         return new ValidatedResumeCheckpoint(record, ToSnapshot(record));
     }
 
+    private static DurableExecutionManifest ReadExecutionManifest(DurableExecutionRecord record)
+    {
+        var scope = DurableExecutionManifestScopeReader.Read(record.ManifestJson, record.Id, record.UserId);
+        if (
+            !record.ScopeBackfilled
+            || scope == null
+            || record.ProjectId != scope.ProjectId
+            || record.ProjectConversationId != scope.ProjectConversationId
+        )
+        {
+            throw new AgwException(
+                ErrorCodes.DurableExecutionConflict,
+                "The stored execution manifest has incomplete or inconsistent scope."
+            );
+        }
+        return DurableExecutionJson.DeserializeRequired<DurableExecutionManifest>(
+            record.ManifestJson,
+            "durable execution manifest"
+        );
+    }
+
     private static void EnsureExistingResumeMatches(
         DurableExecutionRecord existingResume,
         Guid checkpointOccurrenceId,
         string userId
     )
     {
-        var existingManifest = DurableExecutionJson.DeserializeRequired<DurableExecutionManifest>(
-            existingResume.ManifestJson,
-            "durable resume manifest"
-        );
+        var existingManifest = ReadExecutionManifest(existingResume);
         if (existingResume.UserId != userId || existingManifest.ResumeCheckpointOccurrenceId != checkpointOccurrenceId)
         {
             throw new AgwException(ErrorCodes.DurableExecutionConflict);
@@ -571,10 +588,7 @@ public sealed class AgentflowCheckpointStore
             .ConfigureAwait(false);
         if (existing != null)
         {
-            var existingManifest = DurableExecutionJson.DeserializeRequired<DurableExecutionManifest>(
-                existing.ManifestJson,
-                "durable resume manifest"
-            );
+            var existingManifest = ReadExecutionManifest(existing);
             if (existing.UserId == userId && existingManifest.ResumeCheckpointOccurrenceId == checkpointRecord.Id)
             {
                 return;
@@ -605,10 +619,7 @@ public sealed class AgentflowCheckpointStore
             );
         }
 
-        var manifest = DurableExecutionJson.DeserializeRequired<DurableExecutionManifest>(
-            source.ManifestJson,
-            "durable execution manifest"
-        ) with
+        var manifest = ReadExecutionManifest(source) with
         {
             ExecutionId = resumeExecutionId,
             ResumeCheckpointOccurrenceId = checkpointRecord.Id,

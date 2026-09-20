@@ -150,19 +150,6 @@ public class AgentAppService
         return configuration;
     }
 
-    public async Task<IReadOnlyList<McpServer>> ListEnabledMcpToolServersByAgentAsync(Guid agentId)
-    {
-        var user = _userInfoService.RequiredUserId;
-        var agentExists = await _dbContext.Agents.AnyAsync(x => x.Id == agentId && x.CreateBy == user);
-        if (!agentExists)
-        {
-            return [];
-        }
-
-        var links = await _dbContext.AgentMcpToolServers.AsNoTracking().Where(x => x.AgentId == agentId).ToListAsync();
-        return await ListEnabledMcpToolServersAsync(links.Select(x => x.McpToolServerId));
-    }
-
     public async Task<IReadOnlyList<McpServer>> ListEnabledMcpToolServersAsync(IEnumerable<Guid>? mcpToolServerIds)
     {
         var serverIds = (mcpToolServerIds ?? []).Where(static id => id != Guid.Empty).Distinct().ToList();
@@ -176,22 +163,6 @@ public class AgentAppService
             .McpToolServers.AsNoTracking()
             .Where(x => x.Enabled && serverIds.Contains(x.Id) && x.CreateBy == user)
             .ToListAsync();
-    }
-
-    public async Task<IReadOnlyList<SkillReferenceSnapshot>> ListSkillsByAgentAsync(Guid agentId)
-    {
-        var user = _userInfoService.RequiredUserId;
-        var agentExists = await _dbContext.Agents.AnyAsync(x => x.Id == agentId && x.CreateBy == user);
-        if (!agentExists)
-        {
-            return [];
-        }
-
-        var relations = await _dbContext
-            .AgentSkillRelations.AsNoTracking()
-            .Where(x => x.AgentId == agentId)
-            .ToListAsync();
-        return await ListSkillsAsync(relations.Select(x => x.SkillId));
     }
 
     public async Task<IReadOnlyList<SkillReferenceSnapshot>> ListSkillsAsync(IEnumerable<Guid>? skillIds)

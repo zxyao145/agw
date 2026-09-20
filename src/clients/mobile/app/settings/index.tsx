@@ -134,14 +134,6 @@ export default function SettingsScreen(): React.JSX.Element {
             onPress={() => router.push("/settings/server/new")}
           />
         </View>
-        {session.migratedProfileId ? (
-          <View style={styles.warningCard}>
-            <Text style={styles.warningText}>
-              A previous Mobile configuration was migrated. Confirm its HTTP warning before
-              connecting.
-            </Text>
-          </View>
-        ) : null}
         <View style={styles.serverList}>
           {session.state.profiles.length === 0 ? (
             <View style={styles.emptyState}>
@@ -324,18 +316,6 @@ const styles = StyleSheet.create({
   errorText: { color: colors.danger, fontFamily: typography.regular, fontSize: 13, lineHeight: 18 },
   retryButton: { flexDirection: "row", alignSelf: "flex-start", alignItems: "center", gap: 6 },
   retryText: { color: colors.primary, fontFamily: typography.semibold, fontSize: 13 },
-  warningCard: {
-    padding: 12,
-    backgroundColor: colors.warningSoft,
-    borderRadius: radius.md,
-    marginBottom: 10,
-  },
-  warningText: {
-    color: colors.warning,
-    fontFamily: typography.regular,
-    fontSize: 12,
-    lineHeight: 17,
-  },
   aboutSection: { marginTop: 30, gap: 14 },
   aboutRow: {
     flexDirection: "row",

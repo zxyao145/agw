@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using System.Text.Json;
 using Agw.Shared.Extensions;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -74,7 +73,7 @@ internal sealed class ClaudeCodeProviderSessionTrackingAgent : DelegatingAIAgent
         var response = await InnerAgent.RunAsync(messages, session, options, cancellationToken).ConfigureAwait(false);
         foreach (var message in response.Messages)
         {
-            await CaptureProviderSessionIdAsync(message.AdditionalProperties, message.Contents).ConfigureAwait(false);
+            await CaptureProviderSessionIdAsync(message.AdditionalProperties).ConfigureAwait(false);
         }
 
         response.Messages = response
@@ -122,7 +121,7 @@ internal sealed class ClaudeCodeProviderSessionTrackingAgent : DelegatingAIAgent
                 .ConfigureAwait(false)
         )
         {
-            await CaptureProviderSessionIdAsync(update.AdditionalProperties, update.Contents).ConfigureAwait(false);
+            await CaptureProviderSessionIdAsync(update.AdditionalProperties).ConfigureAwait(false);
             if (!ClaudeCodeMessagePolicy.IsTransportEvent(update.Role, update.AdditionalProperties, update.Contents))
             {
                 yield return update;
@@ -138,23 +137,16 @@ internal sealed class ClaudeCodeProviderSessionTrackingAgent : DelegatingAIAgent
     /// <para>响应附加属性，包含初始化消息的 subtype 标记。</para>
     /// <para>Response properties containing the initialization subtype marker.</para>
     /// </param>
-    /// <param name="contents">
-    /// <para>按原始顺序提供的消息内容项。</para>
-    /// <para>Message content items in their original order.</para>
-    /// </param>
     /// <returns>
     /// <para>表示上述异步处理完成的任务。</para>
     /// <para>Task representing completion of the asynchronous operation described above.</para>
     /// </returns>
-    private async ValueTask CaptureProviderSessionIdAsync(
-        AdditionalPropertiesDictionary? additionalProperties,
-        IEnumerable<AIContent> contents
-    )
+    private async ValueTask CaptureProviderSessionIdAsync(AdditionalPropertiesDictionary? additionalProperties)
     {
         if (
             _onProviderSessionStartedAsync == null
             || Volatile.Read(ref _providerSessionCaptured) != 0
-            || !TryGetProviderSessionId(additionalProperties, contents, out var providerSessionId)
+            || !TryGetProviderSessionId(additionalProperties, out var providerSessionId)
             || Interlocked.CompareExchange(ref _providerSessionCaptured, 1, 0) != 0
         )
         {
@@ -167,16 +159,12 @@ internal sealed class ClaudeCodeProviderSessionTrackingAgent : DelegatingAIAgent
     }
 
     /// <summary>
-    /// <para>从 init 元数据读取会话 ID，兼容旧 SDK 的 JSON 正文，并规范化非空 GUID。</para>
-    /// <para>Reads and normalizes a nonempty GUID from init metadata, with a legacy JSON-text fallback.</para>
+    /// <para>从 init 元数据读取会话 ID，并规范化非空 GUID。</para>
+    /// <para>Reads and normalizes a nonempty GUID from init metadata.</para>
     /// </summary>
     /// <param name="additionalProperties">
     /// <para>响应附加属性，包含初始化消息的 subtype 标记。</para>
     /// <para>Response properties containing the initialization subtype marker.</para>
-    /// </param>
-    /// <param name="contents">
-    /// <para>按原始顺序提供的消息内容项。</para>
-    /// <para>Message content items in their original order.</para>
     /// </param>
     /// <param name="providerSessionId">
     /// <para>成功时接收规范化会话 ID，否则为空字符串。</para>
@@ -188,7 +176,6 @@ internal sealed class ClaudeCodeProviderSessionTrackingAgent : DelegatingAIAgent
     /// </returns>
     private static bool TryGetProviderSessionId(
         AdditionalPropertiesDictionary? additionalProperties,
-        IEnumerable<AIContent> contents,
         out string providerSessionId
     )
     {
@@ -211,34 +198,6 @@ internal sealed class ClaudeCodeProviderSessionTrackingAgent : DelegatingAIAgent
             return true;
         }
 
-        // 只解释 init 消息中的文本 JSON，其他普通输出不能改变 Provider 会话绑定。
-        // Interpret text JSON only from init messages; ordinary output cannot alter the provider-session binding.
-        var json = contents.OfType<TextContent>().FirstOrDefault()?.Text;
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return false;
-        }
-
-        try
-        {
-            using var document = JsonDocument.Parse(json);
-            if (
-                document.RootElement.ValueKind != JsonValueKind.Object
-                || !document.RootElement.TryGetProperty("session_id", out var sessionIdElement)
-                || sessionIdElement.ValueKind != JsonValueKind.String
-                || !Guid.TryParse(sessionIdElement.GetString(), out var sessionId)
-                || sessionId == Guid.Empty
-            )
-            {
-                return false;
-            }
-
-            providerSessionId = sessionId.Normalize();
-            return true;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
+        return false;
     }
 }

@@ -422,20 +422,6 @@ public class TaskExecutionAppService
         conversation ??= await _dbContext.ProjectConversations.SingleOrDefaultAsync(item =>
             item.ProjectId == projectId && item.ContextId == contextId && item.CreateBy == user
         );
-        if (conversation == null && Guid.TryParse(contextId, out _))
-        {
-            var legacyContexts = await _dbContext
-                .ProjectConversations.Where(item =>
-                    item.ProjectId == projectId && item.ContextId.ToLower() == contextId && item.CreateBy == user
-                )
-                .ToListAsync();
-            conversation = legacyContexts.OrderBy(item => item.CreateTime).FirstOrDefault();
-            if (conversation != null)
-            {
-                conversation.ContextId = contextId;
-            }
-        }
-
         if (conversation != null && conversationId.HasValue && conversation.Id != conversationId.Value)
         {
             throw new AgwException(

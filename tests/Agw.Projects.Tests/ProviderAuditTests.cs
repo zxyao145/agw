@@ -51,15 +51,13 @@ public class ProviderAuditTests
                 null,
                 "https://example.test",
                 [new ProviderAuthConfigRequest(ProviderAuthType.ApiKey, "key-a", null)]
-            ),
-            "tester"
+            )
         );
         context.ChangeTracker.Clear();
-        var model = await models.CreateAsync(new ModelCreateRequest("model", null, 8192, 2048), "tester");
+        var model = await models.CreateAsync(new ModelCreateRequest("model", null, 8192, 2048));
         context.ChangeTracker.Clear();
         var relation = await relations.CreateAsync(
-            new ModelProviderCreateRequest(model.Id, provider.Id, 0, 0, 0, 0, 0),
-            "tester"
+            new ModelProviderCreateRequest(model.Id, provider.Id, 0, 0, 0, 0, 0)
         );
         context.ChangeTracker.Clear();
         var credential = await context.ProviderAuthConfigs.SingleAsync(cancellationToken);
@@ -85,13 +83,12 @@ public class ProviderAuditTests
                     "updated",
                     "https://example.test",
                     [new ProviderAuthConfigRequest(ProviderAuthType.ApiKey, $"key-{update}", null)]
-                ),
-                "tester"
+                )
             );
             context.ChangeTracker.Clear();
-            await models.UpdateAsync(model.Id, new ModelUpdateRequest("model", "updated", 8192, 2048), "tester");
+            await models.UpdateAsync(model.Id, new ModelUpdateRequest("model", "updated", 8192, 2048));
             context.ChangeTracker.Clear();
-            await relations.UpdateAsync(relation.Id, new ModelProviderUpdateRequest(1, 1, 0, 0, 1), "tester");
+            await relations.UpdateAsync(relation.Id, new ModelProviderUpdateRequest(1, 1, 0, 0, 1));
             context.ChangeTracker.Clear();
 
             foreach (

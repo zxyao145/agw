@@ -72,7 +72,7 @@ Persistence/
 | [`Agents/Sessions`](../Agents/Sessions/) | SDK Session 加载、保存与范围标识 |
 | [`Agentflows/Checkpoints`](../Agentflows/Checkpoints/) | 检查点记录、可用性查询、显式恢复和图定义指纹 |
 | [`Agw.Agents/Application/Persistence`](../../Agw.Agents/Application/Persistence/) | `IAgentsDbContext`、Session / Checkpoint 持久化接口、durable manifest 和维护接口 |
-| [`Agw.Infrastructure/Agents`](../../Agw.Infrastructure/Agents/) | Session / Checkpoint 持久化适配器、执行归属回填和隔离维护 |
+| [`Agw.Infrastructure/Agents`](../../Agw.Infrastructure/Agents/) | Session / Checkpoint 持久化适配器、执行归属校验和隔离维护 |
 | [`Agw.Data/Entities/Executions`](../../Agw.Data/Entities/Executions/) | Durable execution、Agentflow checkpoint 的数据实体和 EF 配置 |
 | [`EfCoreChatHistoryProvider`](../../Agw.Projects/Infrastructure/EfCoreChatHistoryProvider.cs) | Projects 所有的聊天历史持久化及请求生命周期管理 |
 
@@ -131,7 +131,7 @@ flowchart TB
 | `Id` | 稳定的业务 execution ID；也是 execution 锁资源名的组成部分 |
 | `UserId` / `CreateBy` | 执行的稳定用户归属；新记录两者使用相同 owner |
 | `ProjectId` / `ProjectConversationId` | 可直接查询的归属索引，用于调度、清理和恢复校验 |
-| `ScopeBackfilled` | 标记旧记录的归属是否已处理；调度还要求两个归属 ID 均非空 |
+| `ScopeBackfilled` | 新记录写入 true；未回填的旧记录不调度、不自动修复 |
 | `ManifestJson` | 加密的启动清单，保存重建运行时所需的输入 |
 | `Status` | `Queued`、`Running`、`WaitingForHuman`、`Resuming` 或终态 |
 | `SegmentIndex` | 当前待执行分段的序号；普通首次登记为 0 |
@@ -142,7 +142,7 @@ flowchart TB
 | `StateChangedAt` | 最后一次状态转换的 UTC 时间；用于筛选可能遗留的 Running 记录 |
 | `StateVersion` | EF 乐观并发 token，区分不同领取和状态更新 |
 
-[`DurableExecutionRecordConfiguration`](../../Agw.Data/Entities/Executions/DurableExecutionRecordConfiguration.cs) 配置主键、并发 token 及状态时间、用户项目会话、归属回填索引。`StateVersion` 是并发凭据，`StateChangedAt` 是状态转换时间，两者都不等同于独立的 Worker 心跳。
+[`DurableExecutionRecordConfiguration`](../../Agw.Data/Entities/Executions/DurableExecutionRecordConfiguration.cs) 配置主键、并发 token 及状态时间、用户项目会话、归属状态索引。`StateVersion` 是并发凭据，`StateChangedAt` 是状态转换时间，两者都不等同于独立的 Worker 心跳。
 
 ### 4.1 Manifest 保存什么
 
@@ -156,7 +156,7 @@ flowchart TB
 
 Manifest 保存的是启动上下文，不包含完整的 Agent 实例、DI 容器、执行线程或整个项目文件树。Runtime 恢复时仍要读取 Agent / Agentflow 定义和项目工作区，因此活动执行依赖的定义发生变化后，旧状态可能不再兼容。
 
-`DurableExecutionMapper.FromSettings` 按键排序环境变量后复制，保证相同设置的序列化顺序稳定。旧任务快照缺少 `Generation` 时按 0 读取，序列化省略默认的 0，保留既有幂等比较行为。旧清单的用户兼容默认值只用于读取旧格式；新登记要求有效且与当前认证上下文一致的用户 ID。
+`DurableExecutionMapper.FromSettings` 按键排序环境变量后复制，保证相同设置的序列化顺序稳定。旧任务快照缺少 `Generation` 时按 0 读取，序列化省略默认的 0，保留既有幂等比较行为。登记与恢复都要求明确且有效的用户 ID；缺少用户或工作区快照的清单拒绝恢复。
 
 ### 4.2 三种容易混淆的检查点
 
@@ -301,11 +301,11 @@ Manifest、checkpoint、pending、response 和错误使用实体上的 `[Encrypt
 
 执行登记的幂等、事件位置的去重和 `StateVersion` 都不能撤销已发生的外部副作用。需要幂等的 Tool 应使用业务键或稳定的 execution / request 标识实现去重。
 
-### 6.5 旧数据回填和损坏隔离
+### 6.5 归属校验和损坏隔离
 
-[`DurableExecutionScopeMaintenance`](../../Agw.Infrastructure/Agents/DurableExecutionScopeMaintenance.cs) 负责旧 manifest 的归属解析、索引回填、会话验证和损坏隔离。调度只领取 `ScopeBackfilled=true` 且项目、会话 ID 完整的记录。
+[`DurableExecutionScopeMaintenance`](../../Agw.Infrastructure/Agents/DurableExecutionScopeMaintenance.cs) 负责当前 manifest 的归属一致性、会话验证和损坏隔离，不恢复缺失字段。调度只领取 `ScopeBackfilled=true` 且项目、会话 ID 完整的记录。
 
-[`DurableExecutionScopeRecoveryService`](../../Agw.Infrastructure/Agents/DurableExecutionScopeRecoveryService.cs) 在两种执行模式中均注册，等待 Setup 完成后以独立 scope 分批处理旧记录。这是数据维护能力，不代表 InProcess 启用了 distributed Worker。
+启动、后台、删除和 checkpoint 恢复均不再回填历史记录。缺失 owner、工作区快照或索引归属的记录不能恢复；本次清理保留现有字段、索引与迁移历史。
 
 损坏的非终态记录在锁和版本条件保护下转为 `Failed`；无法信任的归属不会被猜测或用于误删其他项目。维护保留原始加密数据供诊断，不能通过手动填充 `ScopeBackfilled`、owner 或版本来绕过校验。
 
@@ -482,7 +482,7 @@ A2A、Jobs 等跨模块调用通过 [`IAgentExecutionFacade` / `IDurableAgentExe
 | [`AgentSessionStateStoreTests`](../../../../tests/Agw.Agents.Tests/AgentSessionStateStoreTests.cs) | Session 保存和恢复、范围隔离、并发插入 |
 | [`AgentflowCheckpointStoreTests`](../../../../tests/Agw.Agents.Tests/AgentflowCheckpointStoreTests.cs) | occurrence、历史边界、事务回滚、定义变更与恢复幂等 |
 | [`ConversationGenerationPersistenceTests`](../../../../tests/Agw.Agents.Tests/ConversationGenerationPersistenceTests.cs) | 会话重置后拒绝旧历史、checkpoint 和 manifest |
-| [`DurableExecutionScopeMaintenanceTests`](../../../../tests/Agw.Agents.Tests/DurableExecutionScopeMaintenanceTests.cs) | 归属回填、损坏隔离、并发保护和调度可见性 |
+| [`DurableExecutionScopeMaintenanceTests`](../../../../tests/Agw.Agents.Tests/DurableExecutionScopeMaintenanceTests.cs) | 归属校验、损坏隔离、并发保护和调度可见性 |
 | [`ExecutionEventBatchingTests`](../../../../tests/Agw.Agents.Tests/ExecutionEventBatchingTests.cs) | 批量写入、背压、作废 attempt 和终态顺序 |
 | [`ExecutionRuntimeConfigurationTests`](../../../../tests/Agw.Agents.Tests/ExecutionRuntimeConfigurationTests.cs) | 注册生命周期、默认 Provider 和无效配置拒绝 |
 

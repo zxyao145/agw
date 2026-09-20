@@ -210,7 +210,20 @@ public class TaskStoreTests
     }
 
     private static TaskStore CreateStore(AgwDbContext dbContext) =>
-        new(new ExternalTaskSnapshotStore(dbContext, new TestUserInfoService()), TimeProvider.System);
+        new(
+            new ExternalTaskSnapshotStore(dbContext, new TestUserInfoService()),
+            TimeProvider.System,
+            new TestProjectDefaults()
+        );
+
+    private sealed class TestProjectDefaults : Agw.Projects.Contracts.Runtime.IProjectDefaultResolver
+    {
+        public Task<Guid?> ResolveDefaultProjectIdAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<Guid?>(null);
+
+        public Task<Guid?> ResolveA2AProjectIdAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<Guid?>(A2AProjectId);
+    }
 
     private static AgentTask CreateTask(
         string taskId,

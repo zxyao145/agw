@@ -1,17 +1,14 @@
 using System.Security.Claims;
 using System.Text.Json;
-using Agw.Infrastructure.Agents;
 using Agw.Infrastructure.Data;
 using Agw.Infrastructure.Data.Encryption;
 using Agw.Shared;
 using Agw.Shared.Configuration;
-using Agw.Shared.Coordination;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Agw.Infrastructure.Tests;
 
@@ -241,7 +238,7 @@ public sealed partial class InitialMigrationTests
     }
 
     [Fact]
-    public async Task MigrateAsync_DurableScope_PreservesEncryptedLegacyRowsAndBackfillsThem()
+    public async Task MigrateAsync_DurableScope_PreservesEncryptedLegacyRowsWithoutRuntimeBackfill()
     {
         // Arrange
         var token = TestContext.Current.CancellationToken;
@@ -300,18 +297,11 @@ public sealed partial class InitialMigrationTests
         var pending = await context.DurableExecutions.AsNoTracking().SingleAsync(token);
         Assert.Null(pending.ProjectId);
         Assert.False(pending.ScopeBackfilled);
-        await new DurableExecutionScopeMaintenance(
-            context,
-            new InMemoryApplicationLock(),
-            TimeProvider.System,
-            NullLogger<DurableExecutionScopeMaintenance>.Instance
-        ).BackfillAsync(token);
-
         // Assert
         var row = await context.DurableExecutions.AsNoTracking().SingleAsync(token);
-        Assert.Equal(projectId, row.ProjectId);
-        Assert.Equal(conversationId, row.ProjectConversationId);
-        Assert.True(row.ScopeBackfilled);
+        Assert.Null(row.ProjectId);
+        Assert.Null(row.ProjectConversationId);
+        Assert.False(row.ScopeBackfilled);
         Assert.Equal(manifest, row.ManifestJson);
         Assert.Equal(ciphertext, await context.DurableExecutions.Select(item => item.ManifestJson).SingleAsync(token));
         Assert.False(context.Database.HasPendingModelChanges());

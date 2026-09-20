@@ -361,9 +361,7 @@ public class DbSeederTests : IDisposable
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task SeedAsync_DefaultToolRegression_BackfillsKnownSignaturesAndPreservesCustomization(
-        bool includesFileAccess
-    )
+    public async Task SeedAsync_ExistingAgentTools_PreservesConfiguration(bool includesFileAccess)
     {
         var paths = CreatePaths();
         try
@@ -381,7 +379,7 @@ public class DbSeederTests : IDisposable
                     Name = "general-agent",
                     DisplayName = "General Agent",
                     Type = AgentType.System,
-                    Tools = CreateLegacyGeneralAgentTools(includesFileAccess),
+                    Tools = CreateGeneralAgentTools(includesFileAccess),
                     CreateBy = Constants.AdminUserId,
                 },
                 new Agent
@@ -391,11 +389,7 @@ public class DbSeederTests : IDisposable
                     DisplayName = "Location Extractor",
                     Type = AgentType.System,
                     CreateBy = Constants.AdminUserId,
-                    Tools =
-                    [
-                        new ToolValue { Definition = new WebFetchToolDefinition() },
-                        new ToolValue { Definition = new BashToolDefinition() },
-                    ],
+                    Tools = [new ToolValue { Definition = new WebFetchToolDefinition() }],
                 }
             );
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -414,12 +408,9 @@ public class DbSeederTests : IDisposable
                 agent => agent.Id == GeneralAgentId,
                 TestContext.Current.CancellationToken
             );
-            Assert.Collection(
-                general.Tools,
-                value => Assert.IsType<DiffToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
-                value => Assert.IsType<GitCloneToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
-                value => Assert.IsType<RunShellToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
-                value => Assert.IsType<FileAccessToolBlockDefinition>(Assert.IsType<ToolBlockValue>(value).Definition)
+            Assert.Equal(
+                ToolValueObjectJson.Serialize(CreateGeneralAgentTools(includesFileAccess)),
+                ToolValueObjectJson.Serialize(general.Tools)
             );
             var location = await context.Agents.SingleAsync(
                 agent => agent.Id == LocationExtractorAgentId,
@@ -427,8 +418,7 @@ public class DbSeederTests : IDisposable
             );
             Assert.Collection(
                 location.Tools,
-                value => Assert.IsType<WebFetchToolDefinition>(Assert.IsType<ToolValue>(value).Definition),
-                value => Assert.IsType<BashToolDefinition>(Assert.IsType<ToolValue>(value).Definition)
+                value => Assert.IsType<WebFetchToolDefinition>(Assert.IsType<ToolValue>(value).Definition)
             );
         }
         finally
@@ -437,13 +427,13 @@ public class DbSeederTests : IDisposable
         }
     }
 
-    private static List<ToolValueObject> CreateLegacyGeneralAgentTools(bool includesFileAccess)
+    private static List<ToolValueObject> CreateGeneralAgentTools(bool includesFileAccess)
     {
         List<ToolValueObject> tools =
         [
             new ToolValue { Definition = new DiffToolDefinition() },
             new ToolValue { Definition = new GitCloneToolDefinition() },
-            new ToolValue { Definition = new BashToolDefinition() },
+            new ToolValue { Definition = new RunShellToolDefinition() },
         ];
         if (includesFileAccess)
         {

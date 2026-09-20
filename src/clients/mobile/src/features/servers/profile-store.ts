@@ -1,18 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { createUuidV7 } from "@agw/api";
 import * as SecureStore from "expo-secure-store";
 
-import { parseLegacyConfig } from "./config-codec";
 import type { ServerProfile, ServerProfilesStateV1 } from "./types";
 
 export const PROFILES_STATE_KEY = "agw.serverProfiles.v1";
-export const LEGACY_CONFIG_KEY = "agw.localConfig";
 const tokenKeyPrefix = "agw.serverProfile.token.";
-
-export type LoadedProfiles = {
-  state: ServerProfilesStateV1;
-  migratedProfileId: string | null;
-};
 
 export const emptyProfilesState = (): ServerProfilesStateV1 => ({
   version: 1,
@@ -24,33 +16,9 @@ export function getProfileTokenKey(profileId: string): string {
   return `${tokenKeyPrefix}${profileId}`;
 }
 
-export async function loadProfiles(): Promise<LoadedProfiles> {
+export async function loadProfiles(): Promise<ServerProfilesStateV1> {
   const storedState = await AsyncStorage.getItem(PROFILES_STATE_KEY);
-  if (storedState) return { state: parseProfilesState(storedState), migratedProfileId: null };
-
-  const legacyContent = await SecureStore.getItemAsync(LEGACY_CONFIG_KEY);
-  if (!legacyContent) return { state: emptyProfilesState(), migratedProfileId: null };
-
-  const legacy = parseLegacyConfig(JSON.parse(legacyContent));
-  const id = createUuidV7();
-  const usesHttp = legacy.serverUrl.startsWith("http://");
-  const profile: ServerProfile = {
-    id,
-    name: new URL(legacy.serverUrl).host,
-    serverUrl: legacy.serverUrl,
-    apiMajorVersion: 1,
-    allowInsecureHttp: false,
-  };
-  const state: ServerProfilesStateV1 = {
-    version: 1,
-    activeProfileId: usesHttp ? null : id,
-    profiles: [profile],
-  };
-
-  await SecureStore.setItemAsync(getProfileTokenKey(id), legacy.token);
-  await AsyncStorage.setItem(PROFILES_STATE_KEY, JSON.stringify(state));
-  await SecureStore.deleteItemAsync(LEGACY_CONFIG_KEY);
-  return { state, migratedProfileId: id };
+  return storedState ? parseProfilesState(storedState) : emptyProfilesState();
 }
 
 export async function persistProfilesState(state: ServerProfilesStateV1): Promise<void> {

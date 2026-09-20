@@ -88,8 +88,6 @@ public class ProjectAppService : IProjectAppService
         return project;
     }
 
-    public Task<Project?> CreateAsync(Project project) => CreateAsync(project, null, null, null);
-
     public Task<string?> GetOwnerUserIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var userId = _userInfoService.RequiredUserId;
@@ -121,9 +119,6 @@ public class ProjectAppService : IProjectAppService
         await _dbContext.SaveChangesAsync();
         return await GetForCurrentUserAsync(project.Id);
     }
-
-    public Task<Project?> UpdateAsync(Guid id, Action<Project> updateAction) =>
-        UpdateAsync(id, updateAction, null, null, null);
 
     public async Task<Project?> UpdateAsync(
         Guid id,

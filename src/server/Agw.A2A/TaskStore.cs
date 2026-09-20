@@ -11,12 +11,12 @@ public class TaskStore : ITaskStore
 {
     private readonly IExternalTaskSnapshotStore _snapshots;
     private readonly TimeProvider _timeProvider;
-    private readonly IProjectDefaultResolver? _projectDefaults;
+    private readonly IProjectDefaultResolver _projectDefaults;
 
     public TaskStore(
         IExternalTaskSnapshotStore snapshots,
         TimeProvider timeProvider,
-        IProjectDefaultResolver? projectDefaults = null
+        IProjectDefaultResolver projectDefaults
     )
     {
         _snapshots = snapshots;
@@ -221,9 +221,7 @@ public class TaskStore : ITaskStore
 
     private async Task<Guid?> ResolveA2AProjectIdAsync(CancellationToken cancellationToken)
     {
-        return _projectDefaults == null
-            ? ProjectDefaults.A2AId
-            : await _projectDefaults.ResolveA2AProjectIdAsync(cancellationToken).ConfigureAwait(false);
+        return await _projectDefaults.ResolveA2AProjectIdAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static string? ExtractFirstUserText(AgentTask task) =>

@@ -32,7 +32,7 @@ Tool 对模型暴露一个可调用操作，可以单独添加或删除。ToolBl
 
 `WebSearchContextualTool` 是唯一注册入口，负责权限声明、搜索方式选择和 AI 函数创建。`LocalWebSearchExecutor` 位于 `Impl/ContextualTools/WebSearch`，仅负责 HTTP 请求、搜索源回退和结果解析；不实现工具注册接口。请求、响应类型位于 `Contracts/WebSearch`。
 
-原有 `bash`、`powershell` 保持为普通独立 Tool。
+Shell 执行使用 `run_shell`，已删除废弃的 `bash`、`powershell` 实现。
 
 ## 数据与选择语义
 
@@ -75,7 +75,7 @@ Agent 和 Project 统一使用一个强类型 `tools` 字段：
 - `null` 与 `[]` 都表示当前层不增加配置。
 - `background-agents` 仅允许 Agent 配置。
 - 新建 Agent 和 Project 的 `tools` 默认为 `[]`。
-- 数据库中的旧值（如 `["web_search"]`）可兼容读取，并在后续保存时写回新格式；未知旧名称会明确失败，不会静默忽略。
+- 只支持当前类型化对象格式。旧字符串数组及 `bash`、`powershell`、`generate_guid` 定义会明确失败，不会自动改写存储值。
 
 ToolBlock 成员不会作为独立 catalog item 出现。若将 `todos_add` 写入
 独立 Tool 配置，系统会明确提示应选择其所属的 `todo` ToolBlock。
@@ -236,7 +236,7 @@ Tool 审批用于决定一次具体调用是否可以执行。`Agw.Tools` 声明
 | `None` | `none` | 权限声明不要求审批。 | `diff`、Todo 修改、`ask_user_question`、`mode_set`。 |
 | `ReadOnly` | `readOnly` | 权限声明不要求审批。 | `web_fetch`、`web_search`、文件与记忆读取、`mode_get`。 |
 | `Write` | `write` | 需要审批，由执行策略决定如何处理。 | `git_clone`、文件与记忆的写入和删除。 |
-| `Execute` | `execute` | 需要审批，由执行策略决定如何处理。 | `bash`、`powershell`、`run_shell`。 |
+| `Execute` | `execute` | 需要审批，由执行策略决定如何处理。 | `run_shell`。 |
 
 权限是工具显式声明的产品策略，不根据工具名或参数推断。`run_shell` 即使执行 `pwd` 也属于 `Execute`。Todo 修改声明为 `None`；`background-agents` 的全部成员，包括启动、继续和清理任务，统一声明为 `ReadOnly`。父级委派调用获准执行，不会因此给子 Agent 增加权限。`None` 也不代表“不需要人的回答”：`ask_user_question` 和 `mode_set` 还有独立的用户输入协议。
 

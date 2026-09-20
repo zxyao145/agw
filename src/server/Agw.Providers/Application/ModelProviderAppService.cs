@@ -64,7 +64,7 @@ public class ModelProviderAppService : IModelProviderAppService
             .FirstOrDefaultAsync(modelProvider => modelProvider.Id == id && modelProvider.CreateBy == ownerUserId);
     }
 
-    public async Task<ModelProviderRelation> CreateAsync(ModelProviderCreateRequest request, string user)
+    public async Task<ModelProviderRelation> CreateAsync(ModelProviderCreateRequest request)
     {
         var ownerUserId = ResolveOwnerUserId();
         var providerExists = await _dbContext.Providers.AnyAsync(provider =>
@@ -95,7 +95,7 @@ public class ModelProviderAppService : IModelProviderAppService
         return entity;
     }
 
-    public async Task<ModelProviderRelation?> UpdateAsync(Guid id, ModelProviderUpdateRequest request, string user)
+    public async Task<ModelProviderRelation?> UpdateAsync(Guid id, ModelProviderUpdateRequest request)
     {
         var ownerUserId = ResolveOwnerUserId();
         var existing = await _dbContext

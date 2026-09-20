@@ -1,4 +1,3 @@
-using Agw.Agents.Application.Persistence;
 using Agw.Agents.Execution.Configuration;
 using Agw.Agents.Execution.Inbound.Connections;
 using Agw.Agents.Execution.Outbound;
@@ -70,7 +69,7 @@ public sealed partial class DurableExecutionStoreTests
         Assert.Equal(agentType, snapshot.Manifest.AgentType);
         Assert.Equal(request.Target.AgentId, snapshot.Manifest.AgentId);
         Assert.Equal(task.ProjectConversationId, snapshot.Manifest.Task.ProjectConversationId);
-        Assert.Equal("user-id", snapshot.Manifest.ResolveUserId());
+        Assert.Equal("user-id", snapshot.Manifest.UserId);
         Assert.Single(await database.Context.DurableExecutions.ToListAsync(token));
     }
 

@@ -25,53 +25,45 @@ jest.mock("expo-secure-store", () => ({
 }));
 
 import {
-  LEGACY_CONFIG_KEY,
   PROFILES_STATE_KEY,
   getProfileTokenKey,
   loadProfiles,
 } from "@/features/servers/profile-store";
 
-describe("profile store migration", () => {
+describe("profile store", () => {
   beforeEach(() => {
     mockAsyncValues.clear();
     mockSecureValues.clear();
   });
 
-  test("migrates the legacy HTTPS configuration and activates it", async () => {
-    mockSecureValues.set(
-      LEGACY_CONFIG_KEY,
-      JSON.stringify({
-        version: 2,
-        apiMajorVersion: 1,
-        serverUrl: "https://agw.example.com",
-        token: "agw_secret",
-      }),
-    );
+  test("leaves the previous configuration untouched without importing it", async () => {
+    const content = JSON.stringify({
+      version: 2,
+      apiMajorVersion: 1,
+      serverUrl: "https://agw.example.com",
+      token: "agw_secret",
+    });
+    mockSecureValues.set("agw.localConfig", content);
 
-    const loaded = await loadProfiles();
-    const profile = loaded.state.profiles[0];
-
-    expect(loaded.state.activeProfileId).toBe(profile.id);
-    expect(mockSecureValues.get(getProfileTokenKey(profile.id))).toBe("agw_secret");
-    expect(mockSecureValues.has(LEGACY_CONFIG_KEY)).toBe(false);
-    expect(mockAsyncValues.has(PROFILES_STATE_KEY)).toBe(true);
+    expect(await loadProfiles()).toEqual({ version: 1, activeProfileId: null, profiles: [] });
+    expect(mockSecureValues.get("agw.localConfig")).toBe(content);
+    expect(mockSecureValues.size).toBe(1);
+    expect(mockAsyncValues.size).toBe(0);
   });
 
-  test("migrated HTTP profiles wait for an explicit confirmation", async () => {
-    mockSecureValues.set(
-      LEGACY_CONFIG_KEY,
-      JSON.stringify({
-        version: 2,
-        apiMajorVersion: 1,
-        serverUrl: "http://192.168.1.4:30816",
-        token: "agw_secret",
-      }),
-    );
+  test("loads current profiles without changing their token", async () => {
+    const profile = {
+      id: "profile-1",
+      name: "Server",
+      serverUrl: "https://agw.example.com",
+      apiMajorVersion: 1,
+      allowInsecureHttp: false,
+    };
+    const state = { version: 1, activeProfileId: profile.id, profiles: [profile] };
+    mockAsyncValues.set(PROFILES_STATE_KEY, JSON.stringify(state));
+    mockSecureValues.set(getProfileTokenKey(profile.id), "agw_current");
 
-    const loaded = await loadProfiles();
-
-    expect(loaded.state.activeProfileId).toBeNull();
-    expect(loaded.migratedProfileId).toBe(loaded.state.profiles[0].id);
-    expect(loaded.state.profiles[0].allowInsecureHttp).toBe(false);
+    expect(await loadProfiles()).toEqual(state);
+    expect(mockSecureValues.get(getProfileTokenKey(profile.id))).toBe("agw_current");
   });
 });

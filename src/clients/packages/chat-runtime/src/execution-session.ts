@@ -986,19 +986,18 @@ export class ExecutionSession {
     }
   }
 
-  /** 探测服务端执行提供程序，同时兼容尚未提供该 Hub 方法的旧版本。 */
+  /** 读取当前服务端的执行提供程序；失败交由连接错误流程处理。 */
   private async refreshExecutionProvider(): Promise<void> {
-    try {
-      const provider = await this.connection.invoke<string>("GetExecutionProvider");
-      this.executionProvider =
-        provider.toLowerCase() === "distributed"
-          ? "distributed"
-          : provider.toLowerCase() === "inprocess"
-            ? "in-process"
-            : null;
-    } catch {
-      // 旧服务端没有能力接口时，仍可根据消息中的 executionId 进行确认。
-      this.executionProvider = null;
+    const provider = await this.connection.invoke<string>("GetExecutionProvider");
+    switch (provider.toLowerCase()) {
+      case "distributed":
+        this.executionProvider = "distributed";
+        break;
+      case "inprocess":
+        this.executionProvider = "in-process";
+        break;
+      default:
+        throw new Error("The server returned an unsupported execution provider.");
     }
   }
 
