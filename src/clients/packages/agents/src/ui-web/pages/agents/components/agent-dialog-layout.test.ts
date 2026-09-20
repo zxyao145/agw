@@ -52,7 +52,7 @@ test("Agent form uses a responsive 360px metadata column and one combined Tools 
   assert.match(source, /<TabsTrigger value="system-prompt">Instructions<\/TabsTrigger>/);
   assert.match(
     source,
-    /<TabsTrigger value="response-schema" disabled=\{!supportsResponseSchema\}>Response Schema<\/TabsTrigger>/,
+    /<TabsTrigger value="response-schema" disabled=\{!supportsResponseSchema\}>\s*Response Schema\s*<\/TabsTrigger>/,
   );
   assert.match(source, /<TabsTrigger value="skills">Skills<\/TabsTrigger>/);
   assert.match(source, /<TabsTrigger value="tools">Tools<\/TabsTrigger>/);
@@ -65,7 +65,7 @@ test("Agent form uses a responsive 360px metadata column and one combined Tools 
   );
   assert.match(
     source,
-    /<TabsTrigger value="extra-settings" disabled=\{!canEditExtra\}>Extra Settings<\/TabsTrigger>/,
+    /<TabsTrigger value="extra-settings" disabled=\{!canEditExtra\}>\s*Extra Settings\s*<\/TabsTrigger>/,
   );
   assert.match(source, /<EnvironmentVariablesPanel/);
   assert.match(source, /External agents do not support instructions configuration/);
