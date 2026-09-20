@@ -10,6 +10,7 @@ export interface ExecutionMessageContent {
 
 export interface ExecutionMessage {
   messageId: string;
+  createdAt?: string | null;
   author?: string | null;
   role?: string;
   contents: ExecutionMessageContent[];

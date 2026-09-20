@@ -12,6 +12,7 @@ import Reasoning from "./renders/reasoning";
 import TextContent from "./renders/text-content";
 import UriContent from "./renders/uri-content";
 import { ToolDirectoryInfo } from "./tool-directory";
+import { MessageActions } from "./message-actions";
 
 function PresentedContentView({ content }: { content: PresentedContent }) {
   if (content.type === "json") {
@@ -97,6 +98,7 @@ function PresentedMessageView({
       <div
         className={cn(
           "min-w-0 max-w-full",
+          isUser || isResult ? "group/message relative" : "",
           isUser ? "agw-msg-user" : "msg-pos-left w-full",
           isResult ? "agw-msg-result" : "",
           message.width === "full" ? "w-full" : "",
@@ -123,6 +125,7 @@ function PresentedMessageView({
           ))}
         </div>
         <MessageCitations message={message.source} />
+        {isUser || isResult ? <MessageActions message={message} /> : null}
       </div>
     </div>
   );

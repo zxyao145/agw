@@ -90,6 +90,13 @@ export function appendStreamingContents(
   existing: ExecutionMessage,
   incoming: ExecutionMessage,
 ): void {
+  if (
+    (!existing.createdAt || !Number.isFinite(Date.parse(existing.createdAt))) &&
+    incoming.createdAt &&
+    Number.isFinite(Date.parse(incoming.createdAt))
+  ) {
+    existing.createdAt = incoming.createdAt;
+  }
   for (const incomingContent of incoming.contents) {
     const previousContent = existing.contents.at(-1);
     const canAppendText =

@@ -289,6 +289,7 @@ public sealed partial class EfCoreChatHistoryProvider
             .Where(message => !ConversationHistoryMetadata.IsPersistenceExcluded(message))
             .Select(RemoveBlankTextualContent)
             .OfType<ChatMessage>()
+            .Select(message => MessageTimestampMetadata.EnsureCreatedAt(message, now))
             .Select(message => new PendingHistoryRecord(
                 Guid.CreateVersion7(),
                 taskId,

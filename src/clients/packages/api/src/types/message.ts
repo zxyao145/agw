@@ -10,6 +10,7 @@ export interface AiMessageContent {
 
 export interface AiMessage {
   messageId: string;
+  createdAt?: string | null;
   author?: string;
   role?: string;
   contents: AiMessageContent[];

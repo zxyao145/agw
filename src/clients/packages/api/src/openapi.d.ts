@@ -4914,6 +4914,8 @@ export interface components {
     /** @description AI message with role, author, and content blocks. */
     AgwMessage: {
       messageId: string;
+      /** Format: date-time */
+      createdAt?: string | null;
       author: null | string;
       role: components["schemas"]["AiRole"];
       contents: components["schemas"]["AgwContent"][];

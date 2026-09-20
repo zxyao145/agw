@@ -23,7 +23,11 @@ public static class AgentRunResponseUpdateExtensions
             chatMessage.Role,
             contents,
             chatMessage.AdditionalProperties
-        );
+        )
+        {
+            CreatedAt =
+                MessageTimestampMetadata.GetCreatedAt(chatMessage.AdditionalProperties) ?? chatMessage.CreatedAt,
+        };
     }
 
     /// <summary>
@@ -42,7 +46,10 @@ public static class AgentRunResponseUpdateExtensions
             update.Role.HasValue ? update.Role.Value.Value : AiRole.Empty,
             contents,
             update.AdditionalProperties
-        );
+        )
+        {
+            CreatedAt = MessageTimestampMetadata.GetCreatedAt(update.AdditionalProperties) ?? update.CreatedAt,
+        };
     }
 
     private static List<AgwContent> ConvertContents(

@@ -829,7 +829,8 @@ public partial class EfCoreChatHistoryProviderTests : IDisposable
             ["user-1", "assistant-1", "assistant-2", "progress-1"],
             messages.Select(message => message.MessageId)
         );
-        Assert.Null(messages[0].AdditionalProperties);
+        Assert.Equal(MessageTimestampMetadata.CreatedAtKey, Assert.Single(messages[0].AdditionalProperties!).Key);
+        Assert.NotNull(MessageTimestampMetadata.GetCreatedAt(messages[0].AdditionalProperties));
         Assert.Null(messages[1].AuthorName);
         Assert.Equal("Review Node", messages[1].AdditionalProperties!["nodeName"]?.ToString());
         Assert.Equal("general-agent", messages[1].AdditionalProperties!["agentName"]?.ToString());

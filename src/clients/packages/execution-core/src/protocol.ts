@@ -7,7 +7,7 @@ export const DEFAULT_AGENT_MODE: AgentMode = "execute";
 
 export type ExecutionUserInput<T extends ExecutionMessage = ExecutionMessage> = Pick<
   T,
-  "messageId" | "author" | "contents"
+  "messageId" | "author" | "contents" | "createdAt"
 >;
 
 export type ExecutionSettingCommandInput = {

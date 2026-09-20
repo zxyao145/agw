@@ -85,7 +85,10 @@ public static class TaskExecutionMapper
         var message = record.ToChatMessage()?.ToAiMessage();
         if (message != null)
         {
-            yield return message;
+            yield return message with
+            {
+                CreatedAt = message.CreatedAt ?? record.CreateTime,
+            };
         }
     }
 

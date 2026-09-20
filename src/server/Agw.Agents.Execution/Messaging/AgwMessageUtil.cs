@@ -45,7 +45,7 @@ internal static class AgwMessageUtil
 
     #endregion
 
-    public static ChatMessage CreateUserChatMessage(AgwUserInput input)
+    public static ChatMessage CreateUserChatMessage(AgwUserInput input, TimeProvider? timeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(input.Contents);
@@ -55,6 +55,10 @@ internal static class AgwMessageUtil
         {
             MessageId = string.IsNullOrWhiteSpace(input.MessageId) ? Guid.CreateVersion7().ToString() : input.MessageId,
             AuthorName = string.IsNullOrWhiteSpace(input.Author) ? Constants.DefaultInputAuthor : input.Author,
+            AdditionalProperties = MessageTimestampMetadata.WithCreatedAt(
+                null,
+                input.CreatedAt ?? (timeProvider ?? TimeProvider.System).GetUtcNow()
+            ),
         };
     }
 

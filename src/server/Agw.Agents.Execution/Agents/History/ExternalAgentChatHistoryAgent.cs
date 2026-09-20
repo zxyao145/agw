@@ -1,4 +1,5 @@
 using System.Runtime.ExceptionServices;
+using Agw.Agents.Execution.Messaging;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
@@ -93,6 +94,9 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
             .RunAsync(requestMessages, safeSession, options, cancellationToken)
             .ConfigureAwait(false);
 
+        var timestamp = response.CreatedAt ?? _timeProvider.GetUtcNow();
+        foreach (var message in response.Messages)
+            MessageTimestampMetadata.EnsureCreatedAt(message, timestamp);
         var responseMessages = response.Messages.Select(CreatePersistableMessage).OfType<ChatMessage>().ToList();
         await PersistAsync(safeSession, [], responseMessages, CancellationToken.None).ConfigureAwait(false);
         return response;
@@ -133,6 +137,7 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
         var safeSession = session ?? await InnerAgent.CreateSessionAsync(cancellationToken).ConfigureAwait(false);
 
         var responseBuffer = new List<ChatMessage>(ResponseBatchSize);
+        var timestamps = new ResponseMessageTimestamps(_timeProvider);
 
         // Use a linked token to stop the external agent when the consumer disposes early.
         // 使用独立的关联令牌控制底层流，以便消费方提前释放时主动终止 External Agent。
@@ -177,6 +182,7 @@ internal sealed class ExternalAgentChatHistoryAgent : DelegatingAIAgent
                     }
 
                     update = enumerator.Current;
+                    timestamps.Stamp(update);
                     moveNextTask = null;
                     var responseMessage = CreatePersistableMessage(update);
                     if (responseMessage != null)

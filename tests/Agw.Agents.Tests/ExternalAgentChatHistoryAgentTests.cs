@@ -15,6 +15,42 @@ namespace Agw.Agents.Tests;
 public class ExternalAgentChatHistoryAgentTests
 {
     [Fact]
+    public async Task RunStreamingAsync_ResultDeltas_PersistTheSameTimestampAsLiveOutput()
+    {
+        // Arrange
+        var createdAt = new DateTimeOffset(2026, 9, 20, 13, 38, 0, TimeSpan.Zero);
+        var provider = new RecordingChatHistoryProvider();
+        var inner = new PausableExternalAgent();
+        var agent = CreateAgent(inner, provider);
+        foreach (var timestamp in new[] { createdAt, createdAt.AddMinutes(1) })
+        {
+            inner.Emit(
+                new AgentResponseUpdate(ChatRole.Assistant, "result text")
+                {
+                    MessageId = "result",
+                    CreatedAt = timestamp,
+                    AdditionalProperties = new() { ["type"] = "result" },
+                }
+            );
+        }
+        inner.Complete();
+
+        // Act
+        var output = new List<AgwMessage>();
+        await foreach (
+            var update in agent.RunStreamingAsync("question", cancellationToken: TestContext.Current.CancellationToken)
+        )
+            output.Add(update.ToAiMessage()!);
+
+        // Assert
+        Assert.Equal(2, output.Count);
+        Assert.All(output, message => Assert.Equal(createdAt, message.CreatedAt));
+        var saved = provider.Calls.SelectMany(call => call.ResponseMessages).ToList();
+        Assert.Equal(2, saved.Count);
+        Assert.All(saved, message => Assert.Equal(createdAt, message.ToAiMessage()!.CreatedAt));
+    }
+
+    [Fact]
     public async Task RunStreamingAsync_NoResponse_DoesNotWriteResponseHistory()
     {
         var provider = new RecordingChatHistoryProvider();

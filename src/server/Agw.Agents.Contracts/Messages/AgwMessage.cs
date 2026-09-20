@@ -9,6 +9,7 @@ namespace Agw.Agents.Contracts.Messages;
 public record AgwMessage
 {
     public string MessageId { get; init; }
+    public DateTimeOffset? CreatedAt { get; init; }
     public string? Author { get; init; }
     public AiRole Role { get; init; } = AiRole.User;
     public List<AgwContent> Contents { get; init; }

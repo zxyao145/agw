@@ -5,6 +5,7 @@ export * from "./human-interaction";
 export * from "./image-attachments";
 export * from "./math-markdown";
 export * from "./message-factory";
+export * from "./message-copy-text";
 export * from "./message-presentation";
 export * from "./proposed-plan";
 export * from "./suggestions";

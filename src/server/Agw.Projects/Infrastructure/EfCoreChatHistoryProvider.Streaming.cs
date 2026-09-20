@@ -135,6 +135,7 @@ public sealed partial class EfCoreChatHistoryProvider
                 var message = RemoveBlankTextualContent(AddResponseMetadata(source, _state.NodeName, _agentName));
                 if (message == null)
                     continue;
+                MessageTimestampMetadata.EnsureCreatedAt(message, Timestamp);
                 if (!_completed)
                 {
                     message = message.Clone();

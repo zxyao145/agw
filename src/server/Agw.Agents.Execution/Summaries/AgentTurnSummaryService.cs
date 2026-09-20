@@ -19,18 +19,21 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService, IAgentSt
     private readonly IConversationHistoryWriter _conversationHistoryWriter;
     private readonly IAgentUsageRecorder _usageRecorder;
     private readonly ILogger<AgentTurnSummaryService> _logger;
+    private readonly TimeProvider _timeProvider;
 
     public AgentTurnSummaryService(
         ISummaryChatClientFactory chatClientFactory,
         IConversationHistoryWriter conversationHistoryWriter,
         IAgentUsageRecorder usageRecorder,
-        ILogger<AgentTurnSummaryService> logger
+        ILogger<AgentTurnSummaryService> logger,
+        TimeProvider? timeProvider = null
     )
     {
         _chatClientFactory = chatClientFactory;
         _conversationHistoryWriter = conversationHistoryWriter;
         _usageRecorder = usageRecorder;
         _logger = logger;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     public async Task<ChatMessage> CreateResultAsync(
@@ -88,7 +91,7 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService, IAgentSt
             resultText = FailureText;
         }
 
-        var result = CreateResultMessage(resultText);
+        var result = CreateResultMessage(resultText, createdAt: _timeProvider.GetUtcNow());
         await _conversationHistoryWriter
             .AppendAsync(projectId, contextId, [result], cancellationToken)
             .ConfigureAwait(false);
@@ -104,18 +107,23 @@ public sealed class AgentTurnSummaryService : IAgentTurnSummaryService, IAgentSt
     {
         cancellationToken.ThrowIfCancellationRequested();
         var json = AgentTurnResultText.NormalizeJson(finalText);
-        var result = CreateResultMessage(json, ResultFormat.Json);
+        var result = CreateResultMessage(json, ResultFormat.Json, _timeProvider.GetUtcNow());
         await _conversationHistoryWriter
             .AppendAsync(projectId, contextId, [result], cancellationToken)
             .ConfigureAwait(false);
         return result;
     }
 
-    internal static ChatMessage CreateResultMessage(string text, ResultFormat resultFormat = ResultFormat.Markdown)
+    internal static ChatMessage CreateResultMessage(
+        string text,
+        ResultFormat resultFormat = ResultFormat.Markdown,
+        DateTimeOffset? createdAt = null
+    )
     {
         var additionalProperties = new AdditionalPropertiesDictionary
         {
             ["type"] = "result",
+            [MessageTimestampMetadata.CreatedAtKey] = createdAt ?? TimeProvider.System.GetUtcNow(),
             ["resultFormat"] = JsonSerializer.SerializeToElement(resultFormat).GetString()!,
         };
 

@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using Agw.Agents.Execution.Messaging;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 
@@ -15,6 +16,7 @@ namespace Agw.Agents.Execution.Agents.History;
 internal sealed class StreamingChatHistoryClient : DelegatingChatClient
 {
     private readonly IStreamingConversationHistoryProvider _history;
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// <para>创建 StreamingChatHistoryClient 实例并保存本包装层使用的依赖和配置。</para>
@@ -28,10 +30,29 @@ internal sealed class StreamingChatHistoryClient : DelegatingChatClient
     /// <para>为模型调用建立流式响应记录的历史服务。</para>
     /// <para>History service creating streaming response records for model calls.</para>
     /// </param>
-    public StreamingChatHistoryClient(IChatClient innerClient, IStreamingConversationHistoryProvider history)
+    /// <param name="timeProvider">Clock used when a provider omits message timestamps.</param>
+    public StreamingChatHistoryClient(
+        IChatClient innerClient,
+        IStreamingConversationHistoryProvider history,
+        TimeProvider? timeProvider = null
+    )
         : base(innerClient)
     {
         _history = history;
+        _timeProvider = timeProvider ?? TimeProvider.System;
+    }
+
+    public override async Task<ChatResponse> GetResponseAsync(
+        IEnumerable<ChatMessage> messages,
+        ChatOptions? options = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        var response = await base.GetResponseAsync(messages, options, cancellationToken).ConfigureAwait(false);
+        var timestamp = response.CreatedAt ?? _timeProvider.GetUtcNow();
+        foreach (var message in response.Messages)
+            MessageTimestampMetadata.EnsureCreatedAt(message, timestamp);
+        return response;
     }
 
     /// <summary>
@@ -62,6 +83,7 @@ internal sealed class StreamingChatHistoryClient : DelegatingChatClient
     {
         var context = AIAgent.CurrentRunContext;
         var input = messages.ToList();
+        var timestamps = new ResponseMessageTimestamps(_timeProvider);
         // 此时历史已由 SDK 加载；用当前会话建立本次模型响应的增量记录。
         // History is already loaded by the SDK; use the current session to start this model response's delta record.
         var history =
@@ -76,6 +98,7 @@ internal sealed class StreamingChatHistoryClient : DelegatingChatClient
         {
             // 先捕获不可变历史增量再转发，避免消费者推进或修改更新后再读取。
             // Capture history deltas before forwarding, rather than reading updates after consumer advancement or mutation.
+            timestamps.Stamp(update);
             if (history != null)
                 await history.AppendAsync(update, cancellationToken).ConfigureAwait(false);
             yield return update;

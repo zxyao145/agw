@@ -125,6 +125,8 @@ public sealed partial class AgentRequestContextAgentTests
 
         model.Emit("first ");
         Assert.True(await first);
+        var messageCreatedAt = enumerator.Current.ToAiMessage()!.CreatedAt;
+        Assert.NotNull(messageCreatedAt);
         var second = enumerator.MoveNextAsync().AsTask();
         await fixture.AdvanceFlushTimerAsync();
         await fixture.WaitForCommitAsync();
@@ -132,9 +134,11 @@ public sealed partial class AgentRequestContextAgentTests
         Assert.Equal(["question", "first "], partial.Select(row => row.GetText()));
         Assert.True(ConversationHistoryMetadata.IsModelHistoryExcluded(partial[1].ToChatMessage()!));
         Assert.Equal(partial[0].TaskId, partial[1].TaskId);
+        Assert.Equal(messageCreatedAt, partial[1].ToChatMessage()!.ToAiMessage()!.CreatedAt);
 
         model.Emit("second");
         Assert.True(await second);
+        Assert.Equal(messageCreatedAt, enumerator.Current.ToAiMessage()!.CreatedAt);
         var end = enumerator.MoveNextAsync().AsTask();
         await fixture.AdvanceFlushTimerAsync();
         await fixture.WaitForCommitAsync();
@@ -153,6 +157,7 @@ public sealed partial class AgentRequestContextAgentTests
         Assert.Equal(partial[1].CreateTime, completed[1].CreateTime);
         Assert.True(completed[1].UpdateTime > partial[1].UpdateTime);
         Assert.Equal("first second", completed[1].GetText());
+        Assert.Equal(messageCreatedAt, completed[1].ToChatMessage()!.ToAiMessage()!.CreatedAt);
         Assert.False(ConversationHistoryMetadata.IsModelHistoryExcluded(completed[1].ToChatMessage()!));
         var replay = await fixture.Provider.InvokingAsync(
             new ChatHistoryProvider.InvokingContext(agent, session, []),
